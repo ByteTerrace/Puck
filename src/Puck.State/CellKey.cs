@@ -59,6 +59,9 @@ public sealed class CellKeyTable {
     // the invalid default where no local key does. A derived view of local membership, kept by the only doors that
     // change it (TryIntern and the fork add, Rewind releases), so a read never writes it.
     private CellKey[] m_indexKeys = [];
+    // Each local key's participant index (StateReader.TryParseCandidateIndex over its name), -1 where the name spells
+    // none, by ordinal: a derived view of m_names kept by the same doors, so a scan reads an index without parsing.
+    private readonly List<int> m_candidateIndices;
 
     /// <summary>Initializes an empty table.</summary>
     public CellKeyTable() {
@@ -67,6 +70,7 @@ public sealed class CellKeyTable {
         m_names = [];
         m_keys = [];
         m_nameDigests = [];
+        m_candidateIndices = [];
         m_readOnlyNames = m_names.AsReadOnly();
     }
 
@@ -77,6 +81,7 @@ public sealed class CellKeyTable {
         m_names = source.m_names.GetRange(count: m_initialCount, index: 0);
         m_keys = source.m_keys.GetRange(count: m_initialCount, index: 0);
         m_nameDigests = source.m_nameDigests.GetRange(count: m_initialCount, index: 0);
+        m_candidateIndices = source.m_candidateIndices.GetRange(count: m_initialCount, index: 0);
         m_byName = new Dictionary<string, CellKey>(capacity: m_initialCount, comparer: StringComparer.Ordinal);
         for (var index = 0; (index < m_initialCount); index++) {
             m_byName.Add(key: m_names[index].Value, value: m_keys[index]);
@@ -153,6 +158,7 @@ public sealed class CellKeyTable {
             }
         }
         m_nameDigests.RemoveRange(index: count, count: (m_nameDigests.Count - count));
+        m_candidateIndices.RemoveRange(index: count, count: (m_candidateIndices.Count - count));
         m_keys.RemoveRange(index: count, count: (m_keys.Count - count));
         m_names.RemoveRange(index: count, count: (m_names.Count - count));
         // A reused ordinal gets a new generation without allocating an identity object. Renew the identity
@@ -236,6 +242,7 @@ public sealed class CellKeyTable {
         var digest = NameDigest(name: name.Value);
 
         m_nameDigests.Add(item: digest);
+        m_candidateIndices.Add(item: (StateReader.TryParseCandidateIndex(index: out var candidate, key: name.Value) ? candidate : -1));
         m_bytes += EntryBytes(name: name);
         m_ledger = m_ledger.Add(element: digest);
         NoteIndex(key: key, name: name.Value);
@@ -258,6 +265,23 @@ public sealed class CellKeyTable {
         }
 
         return TryResolve(key: out key, name: IndexKeyCache.Get(index: index).AsSpan());
+    }
+    /// <summary>Attempts to read the participant index a key's name spells (the answer
+    /// <see cref="StateReader.TryParseCandidateIndex"/> gives for that name) without parsing it again.</summary>
+    /// <param name="key">The key to read.</param>
+    /// <param name="index">The non-negative index on success; otherwise <c>-1</c>.</param>
+    /// <returns><see langword="true"/> when the key addresses this table and its name spells a non-negative
+    /// integer.</returns>
+    public bool TryCandidateIndex(CellKey key, out int index) {
+        if (!TryGetAddress(key: key, name: out var name, ordinal: out var ordinal)) {
+            index = -1;
+            return false;
+        }
+        if (ordinal >= 0) {
+            index = m_candidateIndices[ordinal];
+            return (index >= 0);
+        }
+        return StateReader.TryParseCandidateIndex(index: out index, key: name.Value);
     }
     /// <summary>Attempts to read the name behind a key this table minted.</summary>
     /// <param name="key">The key to render.</param>

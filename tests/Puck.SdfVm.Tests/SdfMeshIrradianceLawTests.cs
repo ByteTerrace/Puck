@@ -578,45 +578,43 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
 
         // One frame a step; the worker that traces runs on the thread pool, which the liveness bound waits for.
         TestLiveness.Until(reason: volume.Describe, step: () => {
-            var wrote = false;
 
             Step(volume: volume);
             parameters = volume.Stage(bakePending: false, frame: frame, tier: tier, write: memory => {
-                wrote = true;
                 words = memory.ToArray();
             });
-            // A publication holds every slot of every level it publishes, each its own cell's probe.
-            if (wrote) {
-                var first = 0;
-
-                for (var level = 0; (level < SdfMeshIrradianceProbe.Levels); level++) {
-                    var window = parameters.Window(level: level);
-
-                    for (var z = window.Low.Z; window.Present && (z < (window.Low.Z + window.Dims.Z)); z++) {
-                        for (var y = window.Low.Y; (y < (window.Low.Y + window.Dims.Y)); y++) {
-                            for (var x = window.Low.X; (x < (window.Low.X + window.Dims.X)); x++) {
-                                var slot = (first + SdfMeshIrradiance.SlotOf(dims: window.Dims, x: x, y: y, z: z));
-
-                                Assert.Equal(expected: SdfMeshIrradiance.KeyOf(x: x, y: y, z: z) | SdfMeshIrradianceProbe.WrittenFlag,
-                                    actual: words[(slot * SdfMeshIrradianceProbe.ProbeWords)] & ~SdfMeshIrradianceProbe.InvalidFlag);
-                            }
-                        }
-                    }
-                    first += window.Count;
-                }
-            }
             return !volume.Settling;
         });
 
         Assert.True(condition: (words.Length > 0), userMessage: volume.Describe());
 
+        // During refill a cell may still be missing. Once settled, every published slot belongs to its exact world cell.
+        var first = 0;
+        for (var level = 0; level < SdfMeshIrradianceProbe.Levels; level++) {
+            var window = parameters.Window(level);
+            for (var z = window.Low.Z; window.Present && z < window.Low.Z + window.Dims.Z; z++) {
+                for (var y = window.Low.Y; y < window.Low.Y + window.Dims.Y; y++) {
+                    for (var x = window.Low.X; x < window.Low.X + window.Dims.X; x++) {
+                        var at = (first + SdfMeshIrradiance.SlotOf(x, y, z, window.Dims)) * SdfMeshIrradianceProbe.ProbeWords;
+                        Assert.NotEqual(0u, words[at] & SdfMeshIrradianceProbe.WrittenFlag);
+                        Assert.Equal((uint)x, words[at + SdfMeshIrradianceProbe.CellWord]);
+                        Assert.Equal((uint)y, words[at + SdfMeshIrradianceProbe.CellWord + 1]);
+                        Assert.Equal((uint)z, words[at + SdfMeshIrradianceProbe.CellWord + 2]);
+                    }
+                }
+            }
+            first += window.Count;
+        }
         return (parameters, words);
     }
     private static ReadOnlySpan<uint> Probe(uint[] words, in SdfMeshIrradianceParameters parameters, int x, int y, int z) {
         var slot = SdfMeshIrradiance.SlotOf(dims: parameters.Finest.Dims, x: x, y: y, z: z);
         var probe = words.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (slot * SdfMeshIrradianceProbe.ProbeWords));
 
-        Assert.Equal(expected: SdfMeshIrradiance.KeyOf(x: x, y: y, z: z) | SdfMeshIrradianceProbe.WrittenFlag, actual: probe[0]);
+        Assert.Equal(expected: SdfMeshIrradianceProbe.WrittenFlag, actual: probe[0]);
+        Assert.Equal((uint)x, probe[SdfMeshIrradianceProbe.CellWord]);
+        Assert.Equal((uint)y, probe[SdfMeshIrradianceProbe.CellWord + 1]);
+        Assert.Equal((uint)z, probe[SdfMeshIrradianceProbe.CellWord + 2]);
 
         return probe;
     }

@@ -12,18 +12,18 @@ public sealed partial class SdfMeshIrradiance {
     private GpuCameraSampleReading? m_gpuCameraSample;
     // What the last scheduled camera sample asked: its distinct positions, the volume key and scene, and each view's cut.
     private Vector3[] m_gpuCameraSampleAsked = [];
-    private long[] m_gpuCameraSampleAskedCuts = [];
+    private SdfViewCut[] m_gpuCameraSampleAskedCuts = [];
     private (int Geometry, int Window, int Lighting, long Relit) m_gpuCameraSampleKey;
     private SdfMeshIrradianceScene? m_gpuCameraSampleScene;
     private SdfMeshProbeGpuWork? m_gpuCameraSampleAskedOf;
     private long m_gpuCameraSampleAt;
     // The frame's views as the latest Stage saw them, so TrySampleCamera, which names a position, finds its view's row.
     private Vector3[] m_gpuCameraSampleViewPositions = [];
-    private long[] m_gpuCameraSampleViewCuts = [];
+    private SdfViewCut[] m_gpuCameraSampleViewCuts = [];
 
     // One completed reading: SdfMeshProbeRelight.CameraSampleOutputWords words a distinct position, and for each view its row
     // (or -1) and its cut revision.
-    private sealed record GpuCameraSampleReading(SdfMeshProbeGpuWork Client, uint[] Words, Vector3[] Positions, int[] Rows, long[] Cuts);
+    private sealed record GpuCameraSampleReading(SdfMeshProbeGpuWork Client, uint[] Words, Vector3[] Positions, int[] Rows, SdfViewCut[] Cuts);
 
     // Enqueue after dropping the volume gate: service admission takes its own gate before reading this volume.
     // A converged frame also awaits its final camera sample, so its lighting never depends on asynchronous progress.
@@ -32,7 +32,7 @@ public sealed partial class SdfMeshIrradiance {
         Snapshot snapshot;
         Vector3[] positions;
         int[] rows;
-        long[] cuts;
+        SdfViewCut[] cuts;
         Vector4[] origins;
         Vector4[] lighting;
         int words;
@@ -40,18 +40,18 @@ public sealed partial class SdfMeshIrradiance {
             var count = frame.Views.Count;
             if (m_gpuCameraSampleViewPositions.Length != count) {
                 m_gpuCameraSampleViewPositions = new Vector3[count];
-                m_gpuCameraSampleViewCuts = new long[count];
+                m_gpuCameraSampleViewCuts = new SdfViewCut[count];
             }
             for (var view = 0; view < count; view++) {
                 m_gpuCameraSampleViewPositions[view] = frame.Views[view].Camera.Position;
-                m_gpuCameraSampleViewCuts[view] = frame.Views[view].CutRevision;
+                m_gpuCameraSampleViewCuts[view] = frame.Views[view].Cut;
             }
             if (GpuTrace is not { } client || m_disposed || !m_windowValid || m_gpuVolume is null) { return; }
             // A fault is Stage's to report, once, as the worker's is.
             if (m_gpuCameraSampleTask is { IsCompleted: false } or { IsFaulted: true }) { return; }
             if (frame.ConvergesLighting && (m_owed || m_worker is { IsCompleted: false })) { return; }
             rows = new int[count];
-            cuts = new long[count];
+            cuts = new SdfViewCut[count];
             var distinct = new List<Vector3>(count);
             for (var view = 0; view < count; view++) {
                 cuts[view] = m_gpuCameraSampleViewCuts[view];
@@ -96,7 +96,7 @@ public sealed partial class SdfMeshIrradiance {
     // A method of its own rather than a local function of ScheduleGpuCameraSamples: a local function that captures the schedule's
     // locals makes the compiler allocate their closure on entry, on every frame, though most frames return before they
     // are set.
-    private async Task ReadCameraSample(SdfMeshProbeGpuWork gpu, Snapshot snapshot, Vector4[] origins, Vector4[] lighting, int words, Vector3[] positions, int[] rows, long[] cuts) {
+    private async Task ReadCameraSample(SdfMeshProbeGpuWork gpu, Snapshot snapshot, Vector4[] origins, Vector4[] lighting, int words, Vector3[] positions, int[] rows, SdfViewCut[] cuts) {
         try {
             var answer = await gpu.CameraSample(snapshot.Scene, origins, lighting, words, snapshot.Geometry, snapshot.WindowVersion).ConfigureAwait(false);
             // Admission checked the scene and window, and the device read the volume they stood for, so the reading

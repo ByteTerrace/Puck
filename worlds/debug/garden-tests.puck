@@ -1,8 +1,7 @@
 // The garden's pond plot (pond.puck), each scenario booted in the garden at its own count: `puck test
 // worlds/debug/garden-tests.puck`, and `--reproduce` to show the flocks, the stalkers, the crawl and the rumour replay
 // bit for bit. The spiders are bodies 8 to 11 and the hounds 12 to 17 (pond.puck's numbering); the visitor is body 0.
-// The garden's frames are dropped: each shows the debug world through a session of its own, which would boot and tick
-// the whole debug world beside every scenario, and none of these reads it.
+// Drop the frames to the debug world and the hearth so the pond scenarios run only the garden authority.
 
 schema: "puck.world.definition.v1"
 basis: "garden"
@@ -19,6 +18,9 @@ placements {
     $drop: true
   }
   placement "far" {
+    $drop: true
+  }
+  placement "hearth" {
     $drop: true
   }
 }

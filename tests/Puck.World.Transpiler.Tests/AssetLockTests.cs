@@ -359,7 +359,7 @@ public sealed class AssetLockTests {
         );
 
         Assert.Contains(collection: compilation.Diagnostics, filter: static diagnostic =>
-            ((diagnostic.Code == PuckDiagnosticCodes.InvalidValue) &&
+            ((diagnostic.Code == PuckDiagnosticCodes.UnknownTemplate) &&
             diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "missing")));
         Assert.Single(collection: compilation.Assets!.PendingReferences);
         Assert.False(condition: File.Exists(path: AssetLock.DeriveLockPath(sourcePath: sourcePath)));

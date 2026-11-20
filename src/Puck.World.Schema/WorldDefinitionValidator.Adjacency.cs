@@ -72,7 +72,7 @@ public static partial class WorldDefinitionValidator {
                     errors: errors,
                     max: WorldBodiesLimits.CapacityCeiling,
                     min: 1,
-                    name: $"{path}.capacity",
+                    name: new Subject(Member: ".capacity", Path: path),
                     value: borderCapacity
                 );
             }
@@ -82,14 +82,14 @@ public static partial class WorldDefinitionValidator {
                 value: adjacency.LivenessGraceSeconds,
                 min: 0f,
                 max: 600f,
-                name: $"{path}.livenessGraceSeconds",
+                name: new Subject(Member: ".livenessGraceSeconds", Path: path),
                 errors: errors
             );
             RequireRange(
                 value: adjacency.Hysteresis,
                 min: 0f,
                 max: float.MaxValue,
-                name: $"{path}.hysteresis",
+                name: new Subject(Member: ".hysteresis", Path: path),
                 errors: errors
             );
             if (!proveNeighbours) {

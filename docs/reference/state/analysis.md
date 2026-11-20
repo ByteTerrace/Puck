@@ -436,9 +436,12 @@ The rules a family evaluates directly walk a **due list**
 (`RuleEvaluator.EvaluateDue`, `RuleDueList`) in document order instead of the
 rule array. A rule is due when its schedule is volatile, when its last verdict
 asks for it (a Level gate that held, a refusal, a fault), when its deadline
-comes, or when a row or host fact it names moves. A host-owned rule (a
-decision, an interaction), a rule with live rows or a `maxFirings`, and a
-sweep over a set no version names (a pool, a zone table) are due every tick.
+comes, or when a row or host fact it names moves. Interactions have their own
+due list after the groups. A distance interaction follows its carriers' positions,
+and a region interaction follows the event feed's occupancy for its placement.
+Both follow carrier membership and pool instance lifetimes. When due, each visits
+pairs in its original order. Decisions, rules with live rows or a `maxFirings`,
+and sweeps over a set no version names are due every tick.
 
 Moves are pushed, not polled. Every row version moves through one door in the
 arena (`BumpRowVersion`), which makes the row the most recently moved in the

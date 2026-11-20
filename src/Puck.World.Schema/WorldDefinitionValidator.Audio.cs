@@ -193,14 +193,14 @@ public static partial class WorldDefinitionValidator {
             value: emission.Level,
             min: 0f,
             max: Puck.World.Authoring.CreationSoundDocument.MaxLevel,
-            name: $"{path}.level",
+            name: new Subject(Member: ".level", Path: path),
             errors: errors
         );
 
         if (emission.Radius is { } radius) {
             RequirePositive(
                 errors: errors,
-                name: $"{path}.radius",
+                name: new Subject(Member: ".radius", Path: path),
                 value: radius
             );
         }
@@ -334,7 +334,7 @@ public static partial class WorldDefinitionValidator {
 
                     RequirePositive(
                         value: bed.Radius,
-                        name: $"{path}.radius",
+                        name: new Subject(Member: ".radius", Path: path),
                         errors: errors
                     );
 
@@ -351,7 +351,7 @@ public static partial class WorldDefinitionValidator {
                     if (bed.FadeSeconds is { } fadeSeconds) {
                         RequireNonNegative(
                             errors: errors,
-                            name: $"{path}.fadeSeconds",
+                            name: new Subject(Member: ".fadeSeconds", Path: path),
                             value: fadeSeconds
                         );
                     }
@@ -377,7 +377,7 @@ public static partial class WorldDefinitionValidator {
             if (speaker.Attenuation is { } attenuation) {
                 RequirePositive(
                     value: attenuation.Radius,
-                    name: $"{path}.attenuation.radius",
+                    name: new Subject(Member: ".attenuation.radius", Path: path),
                     errors: errors
                 );
 

@@ -23,7 +23,7 @@ public static partial class WorldDefinitionValidator {
 
                 RequirePositive(
                     value: recently.WindowSeconds,
-                    name: $"{path}.windowSeconds",
+                    name: new Subject(Member: ".windowSeconds", Path: path),
                     errors: errors
                 );
 

@@ -37,16 +37,19 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         cameraSampleSky[axis * SDF_PROBE_GROUP_SIZE + lane] = 0;
     }
     if (lane < 8) {
-        float3 spacing = sdfProbeLighting[4].xyz;
+        uint level = 0;
+        [unroll] for (uint finer = 0; finer + 1 < SDF_MESH_IRRADIANCE_LEVELS; finer++) {
+            if (sdfMeshIrradianceSpacing(finer).x == 0) { level = finer + 1; }
+        }
+        float3 spacing = sdfMeshIrradianceSpacing(level);
         float3 sample = origin.xyz / spacing - 0.5;
         int3 cell = (int3)floor(sample);
         float3 fraction = frac(sample);
         int3 high = int3(lane & 1, (lane >> 1) & 1, lane >> 2);
         cell += high;
-        uint dims = (uint)sdfProbeLighting[3].w;
-        uint address = sdfMeshIrradianceSlot(cell, int3(dims & 1023, (dims >> 10) & 1023, dims >> 20)) * SDF_MESH_IRRADIANCE_PROBE_WORDS;
+        uint address = (sdfMeshIrradianceBase(level) + sdfMeshIrradianceSlot(cell, sdfMeshIrradianceDims(level))) * SDF_MESH_IRRADIANCE_PROBE_WORDS;
         uint key = sdfMeshIrradiance[address];
-        if (key == (sdfMeshIrradianceKey(cell) | SDF_MESH_IRRADIANCE_WRITTEN)) {
+        if ((key & SDF_MESH_IRRADIANCE_INVALID) == 0u && sdfMeshIrradianceHolds(address, key, cell)) {
             float3 toward = (cell + 0.5) * spacing + sdfMeshProbeOffset(address) - origin.xyz;
             float distance = length(toward);
             if (distance <= SDF_MESH_IRRADIANCE_CAMERA_SAMPLE_COINCIDENT || probeClear(origin.xyz, toward / distance, distance, lane)) {

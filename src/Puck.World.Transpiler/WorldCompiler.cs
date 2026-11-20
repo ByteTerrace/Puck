@@ -471,7 +471,6 @@ internal static class WorldCompiler {
             ) &&
             (content is not null) &&
             session.TryCompose(
-                chainBytes: out _,
                 composed: out var composed,
                 reason: out _,
                 rootBytes: content,

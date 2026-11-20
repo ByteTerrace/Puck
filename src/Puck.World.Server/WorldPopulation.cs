@@ -82,7 +82,8 @@ public sealed partial class WorldPopulation {
 
     private WorldColliderSet? MovingSolids => m_baseContactField switch { WorldColliderSet set => set, WorldSolidField solidField => solidField.MovingSolids, _ => null };
 
-    /// <summary>The authority-sampled moving-solid sizes for the current contact step.</summary>
+    /// <summary>The authority-sampled moving-solid sizes for the current contact step, in storage each call rewrites
+    /// and returns again (<see cref="WorldColliderSet.SampledScales"/>), borrowed until the next call.</summary>
     public WorldSolidScale[] SolidScales() => (MovingSolids?.SampledScales() ?? []);
 
     /// <summary>The live definition's analytic collider census, including placement-derived colliders even when the
@@ -508,6 +509,12 @@ public sealed partial class WorldPopulation {
             }
         }
         public Vector3 BodyColor { get; set; }
+        // The producer the body's source named in its kit's producer table, or null when the table holds none by that
+        // name, kept beside the table and name it was looked up in (by reference): a derived cache StageProducer reads
+        // instead of a lookup while neither changes.
+        public IReadOnlyDictionary<string, CompiledBodyProducer>? ProducerLookupTable;
+        public string? ProducerLookupName;
+        public CompiledBodyProducer? ProducerLookup;
         public required int Index { get; init; }
         public required WorldActionStateLane Lane { get; init; }
         // The occupant's implicit procedural rig, separate from its authority-local slot. Explicit authored looks can

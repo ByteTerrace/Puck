@@ -28,8 +28,7 @@ public sealed partial class SdfProgramBuilder {
     /// <paramref name="material"/> is negative, <paramref name="lift"/> is not a defined <see cref="SdfLift"/>, or
     /// <paramref name="smooth"/>/<paramref name="rounding"/>/<paramref name="capChamfer"/> is not finite.</exception>
     public SdfProgramBuilder Ellipse(float semiX, float semiY, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float rounding = 0f, float capChamfer = 0f, bool detail = false) {
-        // Signs are absorbed (MathF.Abs then a 1e-4 floor on both semi-axes, MathF.Max(0) on the lift); a NaN would
-        // survive both MathF.Max calls and then poison the circle-degeneracy nudge below.
+        // Absorb signs and floor the semi-axes only after validating the authored values.
         RequireFinite(
             value: semiX,
             paramName: nameof(semiX),
@@ -69,12 +68,6 @@ public sealed partial class SdfProgramBuilder {
             y: 1e-4f
         );
 
-        // The exact ellipse divides by (eb²−ea²); nudge a perfect circle apart so it never divides by zero (a circle is
-        // better served by Sphere/Cylinder anyway). Sub-pixel at any sane authoring scale.
-        if (MathF.Abs(x: (ea - eb)) < 1e-4f) {
-            eb = (ea + 1e-4f);
-        }
-
         var clampedLift = MathF.Max(
             x: 0f,
             y: liftAmount
@@ -90,7 +83,6 @@ public sealed partial class SdfProgramBuilder {
             shapeName: "ellipse"
         );
 
-        // Both semi-axes shrink by the same amount, so the 1e-4 circle-degeneracy gap above survives the inset.
         var profileInradius = MathF.Max(
             x: 0f,
             y: (MathF.Min(
@@ -535,7 +527,7 @@ public sealed partial class SdfProgramBuilder {
         // The exact 2D core projects onto the slanted side by dividing by that side's squared length, so a profile
         // whose slant vanishes has no shape to be the distance to: the fixed-point evaluator divides by zero and the
         // shader propagates NaN through every blend downstream. The bound is the representation's, not taste's — see
-        // MinTrapezoidProfileSlant. Refused here rather than nudged (as Ellipse nudges a perfect circle) because
+        // MinTrapezoidProfileSlant. Refused here because
         // there is no nearby non-degenerate trapezoid to nudge toward: both the width difference and the height are
         // vanishing at once, so the authored shape has no extent in either profile direction.
         var slant = new Vector2(

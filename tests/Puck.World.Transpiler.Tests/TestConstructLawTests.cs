@@ -33,9 +33,9 @@ public class TestConstructLawTests {
     }
 
     public static TheoryData<string, string, string> InadmissibleSubjects() => new() {
-        { "nowhere(plating: 1)", PuckDiagnosticCodes.InvalidValue, "Unknown module or template 'nowhere'" },
+        { "nowhere(plating: 1)", PuckDiagnosticCodes.UnknownTemplate, "Unknown module or template 'nowhere'" },
         { "armoury()", PuckDiagnosticCodes.InvalidValue, "Module 'armoury' requires argument 'plating'" },
-        { "armoury(plating: 1, extra: 2)", PuckDiagnosticCodes.InvalidValue, "received an unknown or duplicate argument" },
+        { "armoury(plating: 1, extra: 2)", PuckDiagnosticCodes.TemplateArgument, "has no parameter 'extra'" },
         { "tower(corner: 3)", PuckDiagnosticCodes.InvalidValue, "must be a Point" },
         { "stamp(plating: 1)", PuckDiagnosticCodes.TestShapeInadmissible, "which is a template rather than a module" },
     };

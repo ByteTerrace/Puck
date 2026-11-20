@@ -681,7 +681,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         ArgumentNullException.ThrowIfNull(argument: host);
 
         m_host = host;
-        m_evaluator = new RuleEvaluator(host: this);
+        m_evaluator = new RuleEvaluator(this, m_interactionGateHeld);
     }
 
     /// <summary>Adopts a fresh rule compilation — the rules, the ungrouped subset, the interactions, the groups and

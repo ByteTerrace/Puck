@@ -1,4 +1,4 @@
-using System.Text;
+using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Machines;
@@ -69,7 +69,7 @@ public static partial class WorldDefinitionFileSource {
     // The root members of a compact JSON object, in order. Null when the bytes are not one JSON object. The one reader
     // of a document's root members by their bytes: a held composition's layers and a definition's member slices
     // (WorldDefinitionMembers) both read through it.
-    internal static Member[]? MembersOf(byte[] json) {
+    internal static Member[]? MembersOf(ReadOnlySpan<byte> json) {
         var reader = new Utf8JsonReader(jsonData: json);
         var members = new List<Member>();
 
@@ -92,16 +92,55 @@ public static partial class WorldDefinitionFileSource {
 
         return [.. members];
     }
-    // A shaped tree held as a layer: its compact JSON, which is what JsonObject.ToJsonString writes, and its members.
+    // A tree's compact JSON as UTF-8, the bytes JsonNode.ToJsonString's text encodes to, written straight to bytes, with
+    // its root members' ranges recorded as they are written rather than read back.
+    internal static byte[] Compact(JsonObject tree, out Member[] members) {
+        var output = new ArrayBufferWriter<byte>(initialCapacity: 4096);
+
+        members = new Member[tree.Count];
+        using (var writer = new Utf8JsonWriter(bufferWriter: output)) {
+            var index = 0;
+
+            writer.WriteStartObject();
+            foreach (var (name, value) in tree) {
+                // A member after the first is preceded by the comma the property name writes.
+                var keyStart = ((int)(writer.BytesCommitted + writer.BytesPending) + ((index > 0) ? 1 : 0));
+
+                writer.WritePropertyName(propertyName: name);
+
+                var start = ((int)(writer.BytesCommitted + writer.BytesPending));
+
+                if (value is null) { writer.WriteNullValue(); } else { value.WriteTo(writer: writer); }
+                members[index++] = new Member(KeyStart: keyStart, Length: (((int)(writer.BytesCommitted + writer.BytesPending)) - start), Name: name, Start: start);
+            }
+            writer.WriteEndObject();
+        }
+
+        return output.WrittenSpan.ToArray();
+    }
+    // A node's compact JSON as UTF-8, the bytes JsonNode.ToJsonString's text encodes to; a null node is the literal null.
+    internal static byte[] Compact(JsonNode? node) {
+        if (node is JsonObject tree) { return Compact(members: out _, tree: tree); }
+        if (node is null) { return "null"u8.ToArray(); }
+
+        var output = new ArrayBufferWriter<byte>(initialCapacity: 256);
+
+        using (var writer = new Utf8JsonWriter(bufferWriter: output)) {
+            node.WriteTo(writer: writer);
+        }
+
+        return output.WrittenSpan.ToArray();
+    }
+    // A shaped tree held as a layer: its compact JSON and its members.
     private static ComposedLayer HoldLayer(JsonObject tree, string path, WorldComposedDocument? image, WorldModuleExports.Layer? walk, WorldExports? exports, string description) {
-        var json = Encoding.UTF8.GetBytes(s: tree.ToJsonString());
+        var json = Compact(members: out var members, tree: tree);
 
         return new ComposedLayer(
             Description: description,
             Exports: exports,
             Image: image,
             Json: json,
-            Members: (MembersOf(json: json) ?? []),
+            Members: members,
             Path: path,
             Walk: walk?.Detached()
         );
@@ -115,8 +154,9 @@ public static partial class WorldDefinitionFileSource {
     // holds, by slot (the basis, each import, then the own body), the layer `previous` held there, and a slot whose layer
     // is that same instance was not shaped afresh. Null when a member refuses to merge, which the whole merge then
     // refuses by name. `merged` counts the members merged.
-    private static byte[]? RecomposeMembers(byte[] composedJson, ComposedLayers previous, ComposedLayer? basis, IReadOnlyList<ComposedLayer> imports, ComposedLayer own, IReadOnlyList<ComposedLayer?> held, out int merged) {
+    private static byte[]? RecomposeMembers(byte[] composedJson, ComposedLayers previous, ComposedLayer? basis, IReadOnlyList<ComposedLayer> imports, ComposedLayer own, IReadOnlyList<ComposedLayer?> held, out int merged, out Member[] members) {
         merged = 0;
+        members = [];
 
         var moved = new SortedSet<string>(comparer: StringComparer.Ordinal);
         var slots = new List<ComposedLayer?>(capacity: (imports.Count + 2)) { basis };
@@ -149,35 +189,44 @@ public static partial class WorldDefinitionFileSource {
 
             if (!WorldDocumentBasis.TryMergeImports(
                     composed: out var importsLayer,
+                    consume: true,
                     imports: [.. imports.Where(predicate: layer => (layer.IndexOf(name: name) >= 0)).Select(selector: layer => (layer.Description, Part(layer: layer)))],
                     reason: out _,
                     restated: restated
                 ) ||
-                !WorldDocumentBasis.TryMergeInto(overlay: importsLayer!, reason: out _, target: target) ||
-                !WorldDocumentBasis.TryMergeInto(overlay: restated, reason: out _, target: target) ||
+                !WorldDocumentBasis.TryMergeInto(consume: true, overlay: importsLayer!, reason: out _, target: target) ||
+                !WorldDocumentBasis.TryMergeInto(consume: true, overlay: restated, reason: out _, target: target) ||
                 !target.TryGetPropertyValue(jsonNode: out var value, propertyName: name)) {
                 return null;
             }
 
-            values[name] = Encoding.UTF8.GetBytes(s: (value?.ToJsonString() ?? "null"));
+            values[name] = Compact(node: value);
             merged++;
         }
 
         // The members keep the order the held composition wrote them in, and every member no layer moved keeps its
         // held bytes.
-        using var buffer = new MemoryStream(capacity: composedJson.Length);
+        var buffer = new ArrayBufferWriter<byte>(initialCapacity: composedJson.Length);
 
-        buffer.WriteByte(value: (byte)'{');
+        members = new Member[previous.Composed.Length];
+        buffer.Write(value: "{"u8);
         for (var index = 0; (index < previous.Composed.Length); index++) {
             var member = previous.Composed[index];
 
-            if (index > 0) { buffer.WriteByte(value: (byte)','); }
-            buffer.Write(buffer: composedJson.AsSpan(start: member.KeyStart, length: (member.Start - member.KeyStart)));
-            buffer.Write(buffer: (values.TryGetValue(key: member.Name, value: out var remerged) ? remerged : composedJson.AsSpan(start: member.Start, length: member.Length)));
-        }
-        buffer.WriteByte(value: (byte)'}');
+            if (index > 0) { buffer.Write(value: ","u8); }
 
-        return buffer.ToArray();
+            var keyStart = buffer.WrittenCount;
+
+            buffer.Write(value: composedJson.AsSpan(start: member.KeyStart, length: (member.Start - member.KeyStart)));
+
+            var start = buffer.WrittenCount;
+
+            buffer.Write(value: (values.TryGetValue(key: member.Name, value: out var remerged) ? remerged : composedJson.AsSpan(start: member.Start, length: member.Length)));
+            members[index] = new Member(KeyStart: keyStart, Length: (buffer.WrittenCount - start), Name: member.Name, Start: start);
+        }
+        buffer.Write(value: "}"u8);
+
+        return buffer.WrittenSpan.ToArray();
     }
 
     // One slot of a composition being composed: the layer held for it (the held layer itself when it was reused, a new
@@ -211,7 +260,7 @@ public static partial class WorldDefinitionFileSource {
     // composer, shaped (relocated, aliased, exports taken), checked against the modules' exports and merged in that
     // order. A composition held by layer reuses every layer whose document composed to the image it composed from, and
     // merges again only the root members a layer shaped afresh writes differently.
-    private static bool TryComposeBody(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, bool retainImage, CompileInputLog reads, List<byte[]> touched, List<string> touchedPaths, ref int reach, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog, WorldDocumentOrigins? origins) {
+    private static bool TryComposeBody(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, bool retainImage, CompileInputLog reads, ComposedChain touched, ref int reach, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog, WorldDocumentOrigins? origins) {
         stack = null;
         composed = null;
         image = null;
@@ -266,15 +315,14 @@ public static partial class WorldDefinitionFileSource {
                     image = HoldComposedImage(
                         catalogFingerprint: catalogFingerprint,
                         composed: composed,
-                        composedJson: Encoding.UTF8.GetBytes(s: composed.ToJsonString()),
+                        composedJson: Compact(members: out _, tree: composed),
                         inputs: (recordsInputs ? reads.Inputs : null),
                         layers: null,
                         origins: origins,
                         reach: reach,
                         resolvedPath: resolvedPath,
                         source: source,
-                        touched: touched,
-                        touchedPaths: touchedPaths
+                        touched: touched
                     );
                 }
 
@@ -322,8 +370,7 @@ public static partial class WorldDefinitionFileSource {
                 serveHeldImage: true,
                 source: source,
                 stack: out _,
-                touched: out var basisTouched,
-                touchedPaths: out var basisTouchedPaths
+                touched: out var basisTouched
             )) {
                 return false;
             }
@@ -359,8 +406,7 @@ public static partial class WorldDefinitionFileSource {
                 val1: reach,
                 val2: (basisReach + 1)
             );
-            touched.AddRange(collection: basisTouched);
-            touchedPaths.AddRange(collection: basisTouchedPaths);
+            touched.AddRange(links: basisTouched.Links);
         }
 
         var imports = new List<Slot>();
@@ -422,8 +468,7 @@ public static partial class WorldDefinitionFileSource {
                     serveHeldImage: true,
                     source: source,
                     stack: out _,
-                    touched: out var importTouched,
-                    touchedPaths: out var importTouchedPaths
+                    touched: out var importTouched
                 )) {
                     return false;
                 }
@@ -508,8 +553,7 @@ public static partial class WorldDefinitionFileSource {
                     imports.Add(item: new Slot(description: importDescription, image: importImage, path: importResolvedName) { Exports = exports, Tree = importTree });
                 }
                 entries.Add(item: (importName, importAlias));
-                touched.AddRange(collection: importTouched);
-                touchedPaths.AddRange(collection: importTouchedPaths);
+                touched.AddRange(links: importTouched.Links);
             }
         }
 
@@ -553,6 +597,7 @@ public static partial class WorldDefinitionFileSource {
         }
 
         byte[]? composedJson = null;
+        Member[]? composedMembers = null;
         int merged;
 
         // Only the members a layer shaped afresh writes differently merge again, while every such layer writes the same
@@ -571,6 +616,7 @@ public static partial class WorldDefinitionFileSource {
                 composedJson: previous!.ComposedJson,
                 held: [held.Basis, .. held.ImportLayers, held.Own],
                 imports: [.. imports.Select(selector: static slot => slot.Held!)],
+                members: out composedMembers,
                 merged: out merged,
                 own: own.Held!,
                 previous: held
@@ -587,6 +633,7 @@ public static partial class WorldDefinitionFileSource {
             if (hasImports) {
                 if (!WorldDocumentBasis.TryMergeImports(
                     composed: out var mergedImports,
+                    consume: true,
                     imports: [.. imports.Select(selector: static slot => (slot.Description, slot.ShapedTree()))],
                     origins: origins,
                     reason: out var mergeReason,
@@ -601,6 +648,7 @@ public static partial class WorldDefinitionFileSource {
             }
 
             if (!WorldDocumentBasis.TryMergeInto(
+                consume: true,
                 target: basisComposed,
                 origins: origins,
                 overlay: importsLayer,
@@ -616,6 +664,7 @@ public static partial class WorldDefinitionFileSource {
             stack = serveHeldImage ? null : (JsonObject)WorldDocumentOrigins.Clone(basisComposed, origins)!;
 
             if (!WorldDocumentBasis.TryMergeInto(
+                consume: true,
                 target: basisComposed,
                 origins: origins,
                 overlay: body,
@@ -634,7 +683,9 @@ public static partial class WorldDefinitionFileSource {
         WorldBootWork.Count(kind: WorldBootWork.Compositions);
         WorldBootWork.Count(amount: merged, kind: WorldBootWork.CompositionMembers);
         if (retainImage) {
-            composedJson ??= Encoding.UTF8.GetBytes(s: composed!.ToJsonString());
+            if (composedJson is null) {
+                composedJson = Compact(members: out composedMembers, tree: composed!);
+            }
             image = HoldComposedImage(
                 catalogFingerprint: catalogFingerprint,
                 composed: composed,
@@ -644,7 +695,7 @@ public static partial class WorldDefinitionFileSource {
                     ? new ComposedLayers(
                         Basis: basis?.Held,
                         BasisName: basisName,
-                        Composed: (MembersOf(json: composedJson) ?? []),
+                        Composed: composedMembers!,
                         HasImports: hasImports,
                         ImportLayers: [.. imports.Select(selector: static slot => slot.Held!)],
                         Imports: entries,
@@ -656,8 +707,7 @@ public static partial class WorldDefinitionFileSource {
                 reach: reach,
                 resolvedPath: resolvedPath,
                 source: source,
-                touched: touched,
-                touchedPaths: touchedPaths
+                touched: touched
             );
         }
         if ((composed is null) && parseHeld) {

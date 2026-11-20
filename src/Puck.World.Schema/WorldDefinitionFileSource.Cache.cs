@@ -9,7 +9,12 @@ public static partial class WorldDefinitionFileSource {
     private static bool TryFindComposedImage(IWorldDocumentSource source, string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldComposedDocument? image) {
         if (ComposedDocuments.TryGetValue(key: key, value: out image)) { return true; }
         image = source.Compositions?.ReadComposition(key: key);
-        if (image is null) { return false; }
+        // An image this process composed holds one JSON object by construction (Compact); one read back from the
+        // store is checked to hold one once, when it is admitted, rather than on every serve.
+        if ((image is null) || (MembersOf(json: image.ComposedJson) is null)) {
+            image = null;
+            return false;
+        }
         ComposedDocuments.TryAdd(key: key, value: image);
         return true;
     }
@@ -46,23 +51,36 @@ public static partial class WorldDefinitionFileSource {
 
         return true;
     }
+    // The documents one composition read, each once, in the order first read: the composed document itself first, then
+    // what its basis read, then what each import read. A library several imports reach is read once.
+    internal sealed class ComposedChain {
+        private readonly HashSet<string> m_paths = new(comparer: PuckPaths.Comparer);
+
+        public List<WorldComposedLink> Links { get; } = [];
+
+        public void Add(WorldComposedLink link) {
+            if (m_paths.Add(item: link.Path)) { Links.Add(item: link); }
+        }
+        public void AddRange(IEnumerable<WorldComposedLink> links) {
+            foreach (var link in links) { Add(link: link); }
+        }
+    }
     // The one writer of ComposedDocuments: both of TryComposeBody's success exits hold what they are about to
     // return, so the next reader of the same path meets an image recorded together with the chain it was composed
     // from. A composition over a source whose names are not files beside their referrers is never held: nothing
     // could prove its image still stands. `composedJson` is the composed tree's compact JSON; `composed` is the tree,
     // when the caller holds one, for its origins. Returns the held image, or null when nothing was held.
-    private static WorldComposedDocument? HoldComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, byte[] composedJson, JsonObject? composed, List<byte[]> touched, List<string> touchedPaths, int reach, IReadOnlyList<CompileInput>? inputs, WorldDocumentOrigins? origins, ComposedLayers? layers) {
+    private static WorldComposedDocument? HoldComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, byte[] composedJson, JsonObject? composed, ComposedChain touched, int reach, IReadOnlyList<CompileInput>? inputs, WorldDocumentOrigins? origins, ComposedLayers? layers) {
         if (!source.ResolvesFiles) {
             return null;
         }
 
-        var chain = new List<WorldComposedLink>(capacity: touched.Count);
+        // An image its input facts prove keeps the bytes of its own document only, which a reader compares with its
+        // own; every other document it read is kept by digest, for the pin.
+        var chain = new WorldComposedLink[touched.Links.Count];
 
-        for (var index = 0; (index < touched.Count); index++) {
-            chain.Add(item: new WorldComposedLink(
-                Bytes: touched[index],
-                Path: touchedPaths[index]
-            ));
+        for (var index = 0; (index < chain.Length); index++) {
+            chain[index] = (((inputs is not null) && (index > 0)) ? touched.Links[index].WithoutBytes() : touched.Links[index]);
         }
 
         var key = CacheKey(
@@ -99,13 +117,14 @@ public static partial class WorldDefinitionFileSource {
         }
         for (var index = 0; (index < image.Chain.Count); index++) {
             var link = image.Chain[index];
-            var stands = (((index == 0) && (ownBytes is not null))
-                ? ownBytes.AsSpan().SequenceEqual(other: link.Bytes)
+            // A link held by digest alone cannot be compared by its bytes, so it proves nothing here.
+            var stands = ((link.Bytes is { } read) && (((index == 0) && (ownBytes is not null))
+                ? ownBytes.AsSpan().SequenceEqual(other: read)
                 : source.StillReads(
-                    content: link.Bytes,
+                    content: read,
                     resolvedName: link.Path
                 )
-            );
+            ));
 
             if (!stands) {
                 return false;

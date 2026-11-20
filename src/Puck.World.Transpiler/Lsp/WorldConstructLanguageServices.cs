@@ -169,13 +169,14 @@ public static class WorldConstructLanguageServices {
     /// <summary>Appends one completion per construct the cursor's position admits, and one per member of the
     /// construct it sits in, to <paramref name="items"/>.</summary>
     /// <param name="enclosing">The keyword of the construct the cursor sits in, or <see langword="null"/> for the
-    /// whole vocabulary.</param>
+    /// whole vocabulary (or root constructs only when <paramref name="scopeToRoot"/> is <see langword="true"/>).</param>
     /// <param name="items">The completion list being built.</param>
     /// <param name="table">The description every entry is taken from.</param>
+    /// <param name="scopeToRoot">When <see langword="true"/> and <paramref name="enclosing"/> is <see langword="null"/>,
+    /// offers only top-level constructs admitted at the document root rather than the entire table.</param>
     /// <remarks>With an enclosing construct, only what is legal there is offered: the constructs its body admits
-    /// and its own members. With none, the whole table is, which is what a caller with no cursor context asks
-    /// for.</remarks>
-    public static void AddCompletions(JsonArray items, WorldConstructTable table, string? enclosing = null) {
+    /// and its own members. With none and <paramref name="scopeToRoot"/> false, the whole table is offered.</remarks>
+    public static void AddCompletions(JsonArray items, WorldConstructTable table, string? enclosing = null, bool scopeToRoot = false) {
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(table);
 
@@ -186,7 +187,9 @@ public static class WorldConstructLanguageServices {
         ));
         var constructs = (scoped
             ? table.Inside(enclosing: enclosing)
-            : table.Constructs
+            : (scopeToRoot
+                ? table.Inside(enclosing: null)
+                : table.Constructs)
         );
 
         foreach (var construct in constructs) {
@@ -201,6 +204,10 @@ public static class WorldConstructLanguageServices {
                 kind: KindOf(shape: construct.Shape),
                 label: construct.Keyword
             )));
+        }
+
+        if (!scoped && scopeToRoot) {
+            return;
         }
 
         var described = (scoped

@@ -21,15 +21,15 @@ public sealed class UnknownMemberSuggestionLawTests {
     [Fact]
     public void AnUnknownMemberNamesTheDeclaredMemberNearestIt() {
         var result = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: Layout(member: "secondz"));
-        var finding = Assert.Single(collection: result.Diagnostics, predicate: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.SemanticValidation));
+        var finding = Assert.Single(collection: result.Diagnostics, predicate: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.UnknownMember));
 
-        Assert.Contains(expectedSubstring: "Unknown member 'secondz'; no document member consumes it; nearest: 'seconds'.", actualString: finding.Message);
+        Assert.Contains(expectedSubstring: "Unknown member 'secondz'; nearest: 'seconds'.", actualString: finding.Message);
     }
     [Fact]
     public void AnUnknownMemberFarFromEveryDeclaredMemberSuggestsNothing() {
         var result = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: Layout(member: "bogusMember"));
-        var finding = Assert.Single(collection: result.Diagnostics, predicate: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.SemanticValidation));
+        var finding = Assert.Single(collection: result.Diagnostics, predicate: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.UnknownMember));
 
-        Assert.Contains(expectedSubstring: "Unknown member 'bogusMember'; no document member consumes it.", actualString: finding.Message);
+        Assert.Contains(expectedSubstring: "Unknown member 'bogusMember'.", actualString: finding.Message);
     }
 }

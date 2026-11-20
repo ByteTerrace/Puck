@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.Concurrent;
 using Azure;
 using Azure.Identity;
@@ -29,6 +30,7 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
     // NOTE: initializer order is load-bearing; do not alphabetize.
     private readonly ConcurrentDictionary<string, BlobServiceClient> m_blobServiceClients = new(comparer: StringComparer.Ordinal);
     private readonly Lazy<DefaultAzureCredential> m_defaultAzureCredential = new(valueFactory: static () => new DefaultAzureCredential());
+    private readonly ConcurrentDictionary<string, Task> m_createdContainers = new(comparer: StringComparer.Ordinal);
 
     private BlobClient GetBlobClient(AzureBlobObjectStorageTarget target, ObjectBlobAddress address) {
         return GetBlobClients(
@@ -211,12 +213,56 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
         try {
             var download = await blobClient.DownloadContentAsync(cancellationToken: cancellationToken);
 
+            // The download already buffered the blob once; hand that buffer on rather than copying it.
             return new ObjectBlobContent(
-                Content: download.Value.Content.ToArray(),
+                Content: download.Value.Content.ToMemory(),
                 VersionToken: download.Value.Details.ETag.ToString()
             );
         } catch (RequestFailedException ex) when ((ex.Status == 404)) {
             return null;
+        }
+    }
+    // Streams the blob through one pooled chunk, so comparing a payload of any size holds no second copy of it.
+    public async ValueTask<bool> ContentEqualsAsync(ObjectStorageTarget target, ObjectBlobAddress address, ReadOnlyMemory<byte> expected,
+        CancellationToken cancellationToken = default) {
+        const int ChunkBytes = (64 * 1024);
+        var blobClient = GetBlobClient(
+            address: address,
+            target: ObjectStorageTarget.Require<AzureBlobObjectStorageTarget>(
+                description: "an Azure Blob target",
+                target: target
+            )
+        );
+        BlobDownloadStreamingResult download;
+
+        try {
+            download = (await blobClient.DownloadStreamingAsync(cancellationToken: cancellationToken)).Value;
+        } catch (RequestFailedException ex) when ((ex.Status == 404)) {
+            return false;
+        }
+        using (download) {
+            if (download.Details.ContentLength != expected.Length) { return false; }
+            var chunk = ArrayPool<byte>.Shared.Rent(minimumLength: ChunkBytes);
+
+            try {
+                for (var offset = 0; ;) {
+                    var read = await download.Content.ReadAsync(
+                        buffer: chunk.AsMemory(start: 0, length: ChunkBytes),
+                        cancellationToken: cancellationToken
+                    );
+
+                    if (read == 0) { return (offset == expected.Length); }
+                    if (
+                        (read > (expected.Length - offset)) ||
+                        !chunk.AsSpan(start: 0, length: read).SequenceEqual(other: expected.Span.Slice(start: offset, length: read))
+                    ) {
+                        return false;
+                    }
+                    offset += read;
+                }
+            } finally {
+                ArrayPool<byte>.Shared.Return(array: chunk);
+            }
         }
     }
     // A service-URI target authenticates with the ambient credential, so the probe asks that credential (fresh, so a
@@ -261,12 +307,67 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
         );
 
         // Through the edge, containers are platform-managed (created at onboarding) and creating one is not this
-        // client's to do; raw targets self-manage.
-        if (azureTarget.EdgeNamespace is not { Length: > 0 }) {
-            await containerClient.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
+        // client's to do; raw targets self-manage, once per container per process.
+        if (azureTarget.EdgeNamespace is { Length: > 0 }) {
+            return await WriteBlobAsync(
+                azureTarget: azureTarget,
+                blobClient: blobClient,
+                cancellationToken: cancellationToken,
+                content: content,
+                ifMatchVersion: ifMatchVersion,
+                mode: mode
+            );
         }
+        await EnsureContainerAsync(
+            cancellationToken: cancellationToken,
+            containerClient: containerClient
+        );
+        try {
+            return await WriteBlobAsync(
+                azureTarget: azureTarget,
+                blobClient: blobClient,
+                cancellationToken: cancellationToken,
+                content: content,
+                ifMatchVersion: ifMatchVersion,
+                mode: mode
+            );
+        } catch (RequestFailedException ex) when ((ex.ErrorCode == BlobErrorCode.ContainerNotFound)) {
+            // The container went away after this process created it; create it again and write once more.
+            _ = m_createdContainers.TryRemove(key: containerClient.Uri.AbsoluteUri, value: out _);
+            await EnsureContainerAsync(
+                cancellationToken: cancellationToken,
+                containerClient: containerClient
+            );
+            return await WriteBlobAsync(
+                azureTarget: azureTarget,
+                blobClient: blobClient,
+                cancellationToken: cancellationToken,
+                content: content,
+                ifMatchVersion: ifMatchVersion,
+                mode: mode
+            );
+        }
+    }
+    // A container this process has created (or found existing) is remembered, so a write costs no create round trip
+    // and no 409 after the first. A failed create is forgotten, so the next write asks again.
+    private async Task EnsureContainerAsync(BlobContainerClient containerClient, CancellationToken cancellationToken) {
+        var key = containerClient.Uri.AbsoluteUri;
+        var created = m_createdContainers.GetOrAdd(
+            key: key,
+            valueFactory: _ => containerClient.CreateIfNotExistsAsync(cancellationToken: CancellationToken.None)
+        );
 
-        var blobContent = new BinaryData(data: content.ToArray());
+        try {
+            await created.WaitAsync(cancellationToken: cancellationToken);
+        } catch when (created.IsFaulted || created.IsCanceled) {
+            _ = m_createdContainers.TryRemove(item: KeyValuePair.Create(key: key, value: created));
+            throw;
+        }
+    }
+    private static async ValueTask<ObjectBlobWriteResult> WriteBlobAsync(AzureBlobObjectStorageTarget azureTarget, BlobClient blobClient,
+        ReadOnlyMemory<byte> content, ObjectBlobWriteMode mode, string? ifMatchVersion, CancellationToken cancellationToken) {
+        // BinaryData wraps the caller's memory; the upload completes before this returns, so no copy is needed.
+        var blobContent = new BinaryData(data: content);
         // Through the edge the platform authorizes a read against the CanRead index tag STORED on the blob, so an
         // untagged write SUCCEEDS and the blob can then never be read back. The keys are case-sensitive. Raw targets
         // carry no such policy and stay untagged, which is why this rides EdgeNamespace rather than a knob of its own.

@@ -316,7 +316,7 @@ public static partial class WorldDefinitionValidator {
             value: axis.Deadband,
             min: 0f,
             max: 1f,
-            name: $"{path}.deadband",
+            name: new Subject(Member: ".deadband", Path: path),
             errors: errors,
             maxExclusive: true
         );
@@ -327,7 +327,7 @@ public static partial class WorldDefinitionValidator {
             value: axis.Hysteresis,
             min: 0f,
             max: 1f,
-            name: $"{path}.hysteresis",
+            name: new Subject(Member: ".hysteresis", Path: path),
             errors: errors,
             maxExclusive: true
         );
@@ -351,7 +351,7 @@ public static partial class WorldDefinitionValidator {
 
         RequireUnitInterval(
             value: axis.Smoothing,
-            name: $"{path}.smoothing",
+            name: new Subject(Member: ".smoothing", Path: path),
             errors: errors
         );
 
@@ -364,7 +364,7 @@ public static partial class WorldDefinitionValidator {
 
         RequirePositive(
             value: axis.MaxAgeSeconds,
-            name: $"{path}.maxAgeSeconds",
+            name: new Subject(Member: ".maxAgeSeconds", Path: path),
             errors: errors
         );
 
@@ -432,12 +432,12 @@ public static partial class WorldDefinitionValidator {
         } else {
             RequireFinite(
                 value: range.X,
-                name: $"{path}.range.x",
+                name: new Subject(Member: ".range.x", Path: path),
                 errors: errors
             );
             RequireFinite(
                 value: range.Y,
-                name: $"{path}.range.y",
+                name: new Subject(Member: ".range.y", Path: path),
                 errors: errors
             );
 
@@ -451,7 +451,7 @@ public static partial class WorldDefinitionValidator {
 
         RequirePositive(
             value: parameter.MaxAgeSeconds,
-            name: $"{path}.maxAgeSeconds",
+            name: new Subject(Member: ".maxAgeSeconds", Path: path),
             errors: errors
         );
     }
@@ -469,7 +469,7 @@ public static partial class WorldDefinitionValidator {
 
         RequirePositive(
             value: control.MaxAgeSeconds,
-            name: $"{path}.maxAgeSeconds",
+            name: new Subject(Member: ".maxAgeSeconds", Path: path),
             errors: errors
         );
     }

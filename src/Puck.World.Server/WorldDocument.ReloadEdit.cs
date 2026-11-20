@@ -10,58 +10,12 @@ public sealed partial class WorldDocument {
     // was validated off the tick as its kind needs when its preparation still stands; otherwise it is validated here.
     private bool ApplyReloadEdit(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string verb, WorldInstallKind kind, string changed,
         WorldDefinition candidate, WorldDefinition next, string contentHash, IReadOnlyList<string> conflicts, WorldReloadPreparation? prepared, byte[]? journalPatch) {
-        var previous = m_definition;
-        string detail;
+        var current = ((prepared is not null) && ReferenceEquals(objA: prepared.Candidate, objB: candidate));
 
-        if (kind == WorldInstallKind.Nothing) {
-            detail = ", nothing the session holds changed";
-        } else {
-            IReadOnlyList<string> rows;
-
-            if ((prepared is not null) && ReferenceEquals(objA: prepared.Candidate, objB: candidate)) {
-                rows = prepared.Rows;
-            } else {
-                _ = ReloadInstallKindOf(candidate: candidate, live: previous, rows: out rows);
-            }
-            if (!(prepared is { Validated: true } && ReferenceEquals(objA: prepared.Candidate, objB: candidate))) {
-                var validated = ((kind == WorldInstallKind.Value)
-                    ? WorldDefinitionValidator.TryValidateTouchedStateRows(definition: candidate, reason: out var validationReason, rowNames: rows)
-                    : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out validationReason));
-
-                if (!validated) {
-                    RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: validationReason, verb: verb);
-                    return false;
-                }
-            }
-            WorldDocumentInputs? envelopeInputs = null;
-            var plan = ((kind == WorldInstallKind.Presentation) ? PlanProducts(previous: previous, candidate: candidate).ForPresentation() : (WorldProductPlan?)null);
-
-            if (plan is { Envelope.IsEmpty: false }) {
-                if (!TryFitEnvelope(candidate: candidate, inputs: out var fitted, reason: out var capacityReason)) {
-                    RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: capacityReason, verb: verb);
-                    return false;
-                }
-                envelopeInputs = fitted;
-            }
-            if ((kind == WorldInstallKind.Value) && !Host.Arena.TryValidateLoad(rows: Host.ReplacedRows(definition: candidate, previous: previous), reason: out var loadReason)) {
-                RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: $"the state section does not load into the arena: {loadReason}", verb: verb);
-                return false;
-            }
-            if (!Host.GrantTable.TryPrepareDocument(actor: principal, candidate: candidate, current: previous, grantsWrite: false, prepared: out var authority, reason: out var authorityReason)) {
-                RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: authorityReason, verb: verb);
-                return false;
-            }
-
-            authority!.Install();
-            if (kind == WorldInstallKind.Value) {
-                InstallRuntimeStateValue(definition: candidate, rows: rows);
-                detail = $", state rows re-seeded {rows.Count}, state kept";
-            } else {
-                InstallPresentation(definition: candidate);
-                AdoptProductInputs(addons: null, envelope: envelopeInputs, machines: null);
-                NarrateProducts(plan: plan!.Value, population: false);
-                detail = ", presentation install, state kept";
-            }
+        if (!TryInstallEdit(candidate: candidate, detail: out var detail, kind: kind, principal: principal, reason: out var reason,
+            rows: (current ? prepared!.Rows : null), validated: (current && prepared!.Validated))) {
+            RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: reason, verb: verb);
+            return false;
         }
 
         var history = AcceptReload(request, next, contentHash, journalPatch);
@@ -86,6 +40,65 @@ public sealed partial class WorldDocument {
         return true;
     }
 
+    /// <summary>Installs a candidate that changes nothing, only state values, or only what presentation reads
+    /// (<see cref="ReloadInstallKindOf"/>) over the live document, keeping the arena, every compiled product but the
+    /// render envelope's fit, the solid field, the population and the authority as they stand: the one narrow install a
+    /// reload and an undo share.</summary>
+    /// <param name="kind">The candidate's install kind against the live document; never
+    /// <see cref="WorldInstallKind.Full"/>.</param>
+    /// <param name="candidate">The candidate, holding the live document's own instance of every member and row it leaves
+    /// equal.</param>
+    /// <param name="rows">The state rows a value install loads, or <see langword="null"/> to name them from the
+    /// candidate.</param>
+    /// <param name="validated">Whether the candidate was already validated as its kind needs.</param>
+    /// <param name="principal">The principal the install's authority is prepared for.</param>
+    /// <param name="detail">What the install did, for its verdict.</param>
+    /// <param name="reason">The refusal, or empty.</param>
+    /// <returns>Whether the candidate installed; nothing changes on a refusal.</returns>
+    internal bool TryInstallEdit(WorldInstallKind kind, WorldDefinition candidate, IReadOnlyList<string>? rows, bool validated, Principal principal, out string detail, out string reason) {
+        var previous = m_definition;
+
+        detail = string.Empty;
+        reason = string.Empty;
+        if (kind == WorldInstallKind.Nothing) {
+            detail = ", nothing the session holds changed";
+            return true;
+        }
+        if (rows is null) { _ = ReloadInstallKindOf(candidate: candidate, live: previous, rows: out rows); }
+        if (!validated && !((kind == WorldInstallKind.Value)
+            ? WorldDefinitionValidator.TryValidateTouchedStateRows(definition: candidate, reason: out reason, rowNames: rows)
+            : WorldDefinitionValidator.TryValidateChange(after: candidate, before: previous, compilation: out _, reason: out reason))) {
+            return false;
+        }
+
+        WorldDocumentInputs? envelopeInputs = null;
+        var plan = ((kind == WorldInstallKind.Presentation) ? PlanProducts(previous: previous, candidate: candidate).ForPresentation() : (WorldProductPlan?)null);
+
+        if (plan is { Envelope.IsEmpty: false }) {
+            if (!TryFitEnvelope(candidate: candidate, inputs: out var fitted, reason: out reason)) { return false; }
+            envelopeInputs = fitted;
+        }
+        if ((kind == WorldInstallKind.Value) && !Host.Arena.TryValidateLoad(rows: Host.ReplacedRows(definition: candidate, previous: previous), reason: out var loadReason)) {
+            reason = $"the state section does not load into the arena: {loadReason}";
+            return false;
+        }
+        if (!Host.GrantTable.TryPrepareDocument(actor: principal, candidate: candidate, current: previous, grantsWrite: false, prepared: out var authority, reason: out reason)) {
+            return false;
+        }
+
+        authority!.Install();
+        if (kind == WorldInstallKind.Value) {
+            InstallRuntimeStateValue(definition: candidate, rows: rows);
+            detail = $", state rows re-seeded {rows.Count}, state kept";
+        } else {
+            InstallPresentation(definition: candidate);
+            AdoptProductInputs(addons: null, envelope: envelopeInputs, machines: null);
+            NarrateProducts(plan: plan!.Value, population: false);
+            detail = ", presentation install, state kept";
+        }
+        return true;
+    }
+
     private string AcceptReload(WorldRebuildRequest request, WorldDefinition next, string contentHash, byte[]? patch, WorldDrawPositions? drawPositions = null) {
         m_revision = new WorldSourceRevision(ContentHash: contentHash, Definition: next);
         if (request.Origin is WorldRebuildOrigin.Store) {
@@ -102,7 +115,7 @@ public sealed partial class WorldDocument {
     }
 
     // The parts of the document a reload changed, for its verdict.
-    private static string DescribeChanged(WorldDocumentInputs changed) => (changed.IsEmpty ? string.Empty : (", changed " + changed));
+    internal static string DescribeChanged(WorldDocumentInputs changed) => (changed.IsEmpty ? string.Empty : (", changed " + changed));
     // The rows and values a reload's source won from the session's own edits, for its verdict.
     private static string DescribeConflicts(IReadOnlyList<string> conflicts) => DescribeList(items: conflicts, lead: ", the source won over the session's edits at ");
     private static string DescribeList(IReadOnlyList<string> items, string lead) => ((items.Count == 0) ? string.Empty : (lead + string.Join(separator: ", ", values: items)));

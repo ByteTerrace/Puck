@@ -14,6 +14,67 @@ public sealed partial class WorldRuleHost {
     private const int PlacementPoseSource = 3;
     private const int InputSource = 4;
     private const int ClockSource = 5;
+    private const int TagPositionSource = 6;
+    private const int OccupancySource = 7;
+
+    private readonly Dictionary<int, HashSet<int>> m_positionTags = [];
+    private readonly List<(string Name, int Ordinal, ulong Version)> m_regions = [];
+    private CompiledRule[]? m_watchedInteractions;
+    private StateArena? m_interactionArena;
+
+    // Rebuild subscriptions from the installed family. A new compilation or arena can bind the same names to other rows.
+    private void BindInteractionInputs() {
+        if (ReferenceEquals(m_interactions, m_watchedInteractions) && ReferenceEquals(Arena, m_interactionArena)) { return; }
+        m_watchedInteractions = m_interactions;
+        m_interactionArena = Arena;
+        m_factMovesAll = true;
+        m_positionTags.Clear();
+        m_regions.Clear();
+        foreach (var rule in m_interactions) {
+            if (rule is not CompiledWorldFactsRule { Interaction: { } interaction }) { continue; }
+            if (interaction.CoOccurrence == WorldInteractionCoOccurrence.Region) {
+                var ordinal = Host.PlacementOrdinalOf(id: interaction.Right);
+                if (!m_regions.Exists(region => region.Ordinal == ordinal)) {
+                    m_regions.Add((interaction.Right, ordinal, Host.Events.OccupancyVersion(interaction.Right)));
+                }
+            }
+        }
+    }
+
+    bool IRuleOwner.TryScheduleIteration(CompiledRule rule, List<int> rows, List<FactRead> facts) {
+        if (rule is not CompiledWorldFactsRule { Interaction: { } interaction }) { return false; }
+        var distance = interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance;
+        facts.Add(new FactRead(LiveBodiesSource, FactRead.Whole));
+        var tracked = Side(interaction.Left, interaction.LeftPool, interaction.LeftCarrier);
+        if (distance) {
+            tracked &= Side(interaction.Right, interaction.RightPool, interaction.RightCarrier);
+        } else {
+            facts.Add(new FactRead(OccupancySource, Host.PlacementOrdinalOf(id: interaction.Right)));
+        }
+        return tracked;
+
+        bool Side(string name, StatePoolDescriptor? pool, CompiledPoolBodyCarrier? carrier) {
+            if (pool is not null && carrier is not null) {
+                rows.Add(pool.DomainRowOrdinal);
+                rows.Add(pool.GenerationRowOrdinal);
+                rows.Add(pool.Fields[carrier.FieldOrdinal].RowOrdinal);
+                foreach (var binding in carrier.Bindings) {
+                    if (binding.Kind == CompiledBodyRefKind.Placement || (distance && binding.Index >= 0)) {
+                        _ = TrySchedulePose(body: binding, facts: facts);
+                    }
+                }
+                return true;
+            }
+            var row = CarrierRowOrdinal(name: name);
+            if (row < 0) { return false; }
+            rows.Add(row);
+            if (distance) {
+                WatchPoses();
+                facts.Add(new FactRead(TagPositionSource, row));
+            }
+            return !Arena.Layout[row].HasTraits && !Arena.Catalog.Descriptors[row].HostOwned;
+        }
+    }
 
     // What an input-history read can observe of one owner: which owner object answers, its epoch (a switch, a reset,
     // a calibration), the ring's occupancy and newest identity (an admission, an expiry), its folded image and mapping
@@ -214,6 +275,8 @@ public sealed partial class WorldRuleHost {
         PlacementPoseSource => "placementPose",
         InputSource => "input",
         ClockSource => "clock",
+        TagPositionSource => "carrierPositions",
+        OccupancySource => "regionOccupancy",
         _ => $"source {source}",
     });
 
@@ -243,6 +306,15 @@ public sealed partial class WorldRuleHost {
         }
         m_factsStale = false;
         DeriveClocks();
+        BindInteractionInputs();
+        var regions = CollectionsMarshal.AsSpan(m_regions);
+        foreach (ref var region in regions) {
+            var version = Host.Events.OccupancyVersion(region.Name);
+            if (version != region.Version) {
+                region.Version = version;
+                m_factMoves.Add(new FactRead(OccupancySource, region.Ordinal));
+            }
+        }
 
         var population = Host.Population;
         var capacity = population.Capacity;
@@ -274,7 +346,13 @@ public sealed partial class WorldRuleHost {
 
             var body = Host.Body(index: index);
 
-            if (m_watchPoses && See(move: new FactRead(Body: index, Source: BodyPoseSource), now: BodyPose.Of(body: body), seen: ref m_seenPose[index], version: ref m_poseVersions[index])) {
+            var pose = m_watchPoses ? BodyPose.Of(body: body) : default;
+            if (m_watchPoses && (pose.Position != m_seenPose[index].Position)) {
+                foreach (var (row, carriers) in m_positionTags) {
+                    if (carriers.Contains(index)) { m_factMoves.Add(new FactRead(TagPositionSource, row)); }
+                }
+            }
+            if (m_watchPoses && See(move: new FactRead(Body: index, Source: BodyPoseSource), now: pose, seen: ref m_seenPose[index], version: ref m_poseVersions[index])) {
                 placementMoved |= (m_watchPlacements && (index < m_inhabitant.Length) && m_inhabitant[index]);
             }
             if (m_watchFacts) {

@@ -42,6 +42,10 @@ public sealed class WorldLiveValues(Func<ArenaTime> clock) {
 /// </remarks>
 public static class WorldStateDocumentValues {
     private static readonly WorldDocumentWalker Walker = new(isSurface: static type => typeof(IDocumentStateValue).IsAssignableFrom(c: type));
+    [SideTable("The live binder records the authored object it copied without changing its serialized value.")]
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, object> BindingSources = new();
+
+    internal static object SourceOfBinding(object value) => BindingSources.TryGetValue(value, out var source) ? source : value;
     // The rows each definition's document values name, collected once per definition. A rewrite can drop a reference
     // (a flattening) but never add one, so a set collected earlier is never missing a row the definition names.
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, HashSet<string>> ReferencedRowSets = new();
@@ -174,6 +178,9 @@ public static class WorldStateDocumentValues {
         public void Left(object value, object rewritten) {
             if (!rewritten.GetType().IsValueType) {
                 _ = Kept.Add(item: rewritten);
+                if (!ReferenceEquals(value, rewritten)) {
+                    BindingSources.AddOrUpdate(rewritten, SourceOfBinding(value));
+                }
             }
         }
         public object Replace(object value, WorldDocumentSite site) {
@@ -324,7 +331,7 @@ public static class WorldStateDocumentValues {
     }
     // Reports whether a reference is present (any reference, or one naming a sought row), or collects every
     // referenced row's name, touching nothing; a search stops at its first hit, a collection never stops early.
-    private sealed class Finder(string? soughtRow, ISet<string>? collected, bool identityOnly = false) : IWorldDocumentVisitor {
+    private sealed class Finder(string? soughtRow, ISet<string>? collected) : IWorldDocumentVisitor {
         public bool Found { get; private set; }
         public bool Stopped => Found;
 
@@ -332,7 +339,7 @@ public static class WorldStateDocumentValues {
             if (value is not IDocumentStateValue holder) {
                 return true;
             }
-            if ((holder.Reference is not { } reference) || (identityOnly && (holder is IDocumentSpatialValue))) {
+            if (holder.Reference is not { } reference) {
                 return false;
             }
 
@@ -353,8 +360,8 @@ public static class WorldStateDocumentValues {
         }
     }
 
-    private static bool Find(object graph, string? soughtRow, bool identityOnly = false) {
-        var finder = new Finder(collected: null, soughtRow: soughtRow, identityOnly: identityOnly);
+    private static bool Find(object graph, string? soughtRow) {
+        var finder = new Finder(collected: null, soughtRow: soughtRow);
 
         Walker.Walk(
             root: graph,
@@ -531,17 +538,28 @@ public static class WorldStateDocumentValues {
 
         return !checker.Stopped;
     }
-    /// <summary>Reports whether a value bound to <paramref name="rowName"/> is an identity other units refer to (a
-    /// prototype's or a look's name, any bound value that is not a spatial one), so that writing the row renames an
-    /// entity rather than moves a value: a write whose checks reach every unit that refers to the name.</summary>
+    /// <summary>Reports whether <paramref name="rowName"/> names an entity other units refer to: a creation's id or a
+    /// look's name bound to the row, so that writing it renames the entity rather than moves a value, and every unit
+    /// naming the entity is reached. A reference to an entity (a look's creation, an assignment's rows, a binding
+    /// group) is not an identity: writing it changes what its own unit refers to, which that unit's checks judge.</summary>
     /// <param name="definition">The document whose values are read.</param>
     /// <param name="rowName">The row sought.</param>
-    /// <returns><see langword="true"/> when a non-spatial value is bound to the row.</returns>
+    /// <returns><see langword="true"/> when a creation's id or a look's name is bound to the row.</returns>
     public static bool BindsIdentity(WorldDefinition definition, string rowName) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentException.ThrowIfNullOrEmpty(argument: rowName);
 
-        return Find(graph: definition, soughtRow: rowName, identityOnly: true);
+        foreach (var creation in definition.Creations) {
+            if (Names(identifier: creation?.Id, rowName: rowName)) { return true; }
+        }
+        foreach (var look in definition.Looks) {
+            if (Names(identifier: look?.Name, rowName: rowName)) { return true; }
+        }
+        return false;
+
+        static bool Names(DocumentIdentifier? identifier, string rowName) =>
+            (identifier?.Reference is { } reference) && (StateBinding.Parse(token: reference) is (var row, _, _)) &&
+            string.Equals(a: row, b: rowName, comparisonType: StringComparison.Ordinal);
     }
     /// <summary>Returns a candidate whose every document value is resolved against the candidate's own state cells:
     /// what a row write that introduces a bound value composes, so validation and every derived rebuild read a

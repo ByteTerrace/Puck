@@ -32,7 +32,7 @@ public static partial class WorldDefinitionValidator {
                 value: row.Frequency,
                 min: 0f,
                 max: DynamicsLimits.MaxFrequencyHz,
-                name: $"{path}.f",
+                name: new Subject(Member: ".f", Path: path),
                 errors: errors,
                 minExclusive: true
             );
@@ -47,7 +47,7 @@ public static partial class WorldDefinitionValidator {
                 value: row.Damping,
                 min: 0f,
                 max: DynamicsLimits.MaxDamping,
-                name: $"{path}.zeta",
+                name: new Subject(Member: ".zeta", Path: path),
                 errors: errors
             );
 
@@ -61,7 +61,7 @@ public static partial class WorldDefinitionValidator {
                 value: row.Response,
                 min: DynamicsLimits.MinResponse,
                 max: DynamicsLimits.MaxResponse,
-                name: $"{path}.r",
+                name: new Subject(Member: ".r", Path: path),
                 errors: errors
             );
 

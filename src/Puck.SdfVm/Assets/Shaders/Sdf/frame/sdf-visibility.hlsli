@@ -114,7 +114,7 @@ float4 sdfLoadVisibilityShadows(uint record) {
     return sdfUnpackShadowVisibility(sdfVisibilityRecordBuffer[record + SdfVisibilityShadowWord]);
 }
 
-// The surface sample the shading stages read: a pixel's whole record, decoded, with its frame slot's lanes.
+// The surface sample the shading stages read: a pixel's whole record, decoded.
 struct SdfSurfaceSample {
     float t;
     bool hit;
@@ -122,7 +122,6 @@ struct SdfSurfaceSample {
     int frameSlot;
     uint meshDraw;
     uint meshTriangle;
-    float4 lanes;
     float3 normal;
     float curvature;
     float ambient;
@@ -138,7 +137,6 @@ SdfSurfaceSample sdfLoadSurfaceSample(uint record) {
     sample.frameSlot = sdfVisibilityFrameSlot(record, visibility);
     sample.meshDraw = (sample.hit ? sdfVisibilitySource(visibility.identity) : 0u);
     sample.meshTriangle = (sample.hit ? sdfVisibilityRecordBuffer[record + SdfVisibilityTriangleWord] : 0u);
-    sample.lanes = sdfFrameLanes(sample.frameSlot);
     sample.normal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord]);
     sample.curvature = f16tof32(shading & 0xFFFFu);
     sample.ambient = f16tof32(shading >> 16u);

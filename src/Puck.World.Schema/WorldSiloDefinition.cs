@@ -58,7 +58,7 @@ public sealed record WorldSiloReleaseManagement(string Group, Guid Owner, string
 /// <c>0.0.0.0</c> for every one, here.</param>
 /// <param name="Observer">Optional installed extension supplying host retirement deadlines; absent means no external observation.</param>
 /// <param name="ProgressTimeoutSeconds">Maximum age, on the silo's clock, of a completed simulation step before liveness fails; also bounds each health request.</param>
-/// <param name="CheckpointTimeoutSeconds">Maximum age, on the silo's clock, of a successful checkpoint before readiness fails.</param>
+/// <param name="CheckpointTimeoutSeconds">Longest time, on the silo's clock, a row may hold state its landed checkpoint does not cover before readiness fails.</param>
 /// <param name="JournalTimeoutSeconds">Maximum interval, on the silo's clock, without journal progress while appends are pending.</param>
 /// <param name="JournalBacklogLimit">Maximum external mutations waiting for durable journal publication, per row.</param>
 public sealed record WorldSiloLifecycle(

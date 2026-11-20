@@ -55,9 +55,30 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         public long JournalMutationsWritten;
         public long JournalBytesWritten;
         public long RetiredObjects;
+        // The landed checkpoint's retention outcome: the last failure to retire superseded objects, and how many
+        // landed checkpoints in a row have failed it. A success clears both.
+        public string? RetentionFailure;
+        public int RetentionFailures;
+        // Coverage: entries (and their encoded bytes) this activation's queue has taken (the recovered tail, then every
+        // journaled mutation and crossing record), counted under the row's authority gate, and those counts as of the
+        // landed checkpoint's capture. The row is covered while its tick equals LastCheckpointTick and the entry
+        // counts agree (IsCovered).
+        public long JournalAdmitted;
+        public long JournalAdmittedBytes;
+        public long CheckpointAdmitted;
+        public long CheckpointAdmittedBytes;
+        // When the tick thread first saw state the landed checkpoint does not cover; null while covered.
+        public long? UncoveredTimestamp;
         public bool CadenceRequested;
         public ulong CadenceRetryAfter;
         public bool CadenceDeferred;
+        public int CadenceFailures;
+        // A refusal no retry can change (the store holds different bytes, or the capture contradicts the root): the
+        // cadence stops asking until an explicit checkpoint lands.
+        public string? CadenceRefusal;
+        // The last queued capture, kept while its upload is outstanding or failed, so a retry of an unchanged row
+        // uploads the same bytes instead of capturing and encoding the image again. A landed upload clears it.
+        public RowCapture? QueuedCapture;
         public Task<WorldAuthorityStoreOutcome>? CadenceUpload;
         public volatile bool PersistenceBlocked;
         public bool Released;
@@ -200,9 +221,11 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     public WorldMachineCatalog MachineCatalog => m_machineCatalog;
     /// <summary>Gets the stable fingerprint of the selected machine metadata.</summary>
     public string MachineCatalogFingerprint => m_catalogFingerprint;
-    /// <summary>Whether all pinned worlds have established their durable startup baseline.</summary>
+    /// <summary>Gets or sets whether all pinned worlds have established their durable startup baseline. The host's
+    /// startup composition (or a release runtime) sets it once every pinned row has activated; liveness and health
+    /// refuse until then.</summary>
     public bool Ready {
-        get => Volatile.Read(location: ref m_ready); internal set => Volatile.Write(
+        get => Volatile.Read(location: ref m_ready); set => Volatile.Write(
         location: ref m_ready,
         value: value
     );
@@ -691,46 +714,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         }
 
         return true;
-    }
-    private void CaptureRowsArmedByCadence() {
-        if (m_cadence.IsArmed) {
-            foreach (var bookkeeping in m_rows.Values) {
-                bookkeeping.CadenceRequested = true;
-            }
-            // The master alarm has been delivered. Each row now holds its own request until its upload lands.
-            m_cadence.Clear();
-            m_hasCadenceRequests = m_rows.Count != 0;
-        }
-        if (!m_hasCadenceRequests) { return; }
-        m_hasCadenceRequests = false;
-        foreach (var (name, bookkeeping) in m_rows) {
-            if (!bookkeeping.CadenceRequested) { continue; }
-            if (bookkeeping.CadenceUpload is { } upload) {
-                if (!upload.IsCompleted) { m_hasCadenceRequests = true; continue; }
-                bookkeeping.CadenceUpload = null;
-                if (upload.IsCompletedSuccessfully && upload.Result.Ok) {
-                    bookkeeping.CadenceRequested = false;
-                    bookkeeping.CadenceDeferred = false;
-                    continue;
-                }
-                bookkeeping.CadenceRetryAfter = m_masterElapsedEngineTicks + Puck.Maths.FixedTickConversion.TicksPerSecond;
-            }
-            m_hasCadenceRequests = true;
-            if (bookkeeping.Initializing || bookkeeping.Released || bookkeeping.PersistenceBlocked ||
-                bookkeeping.CheckpointUpload is { IsCompleted: false } ||
-                m_masterElapsedEngineTicks < bookkeeping.CadenceRetryAfter ||
-                !Instances.TryGet(name, out var row) || row is not { AwaitingMirrors: false }) {
-                continue;
-            }
-
-            if (!TryQueueCheckpoint(row, bookkeeping.Identity, CancellationToken.None, out _, out var outcome)) {
-                if (!bookkeeping.CadenceDeferred) {
-                    bookkeeping.CheckpointDeferredCount++;
-                    bookkeeping.CadenceDeferred = true;
-                }
-                bookkeeping.LastCheckpointOutcome = outcome;
-            }
-        }
     }
     private WorldSiloWorldRow? FindWorldRow(string name) => m_definition.Worlds.FirstOrDefault(predicate: row => string.Equals(
         a: row.World.Value,
@@ -1468,6 +1451,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         : "restored"),
                         LastCheckpointTick = (checkpointBlob?.Tick ?? 0UL),
                         CheckpointTimestamp = m_clock.GetTimestamp(),
+                        // The recovered tail is state the restored checkpoint does not cover.
+                        JournalAdmitted = recovery.Journal.Entries.Count,
+                        JournalAdmittedBytes = recovery.Journal.Entries.Sum(selector: static entry => (long)entry.Encoded.Length),
                         Pinned = worldRow.Pinned,
                     };
 
@@ -1505,15 +1491,17 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             admitted = await tcs.Task;
             if (!admitted) { return false; }
             try {
-                // A journal is relative to a checkpoint. Establish that baseline before socket or console admission.
+                // A journal is relative to a checkpoint. Before socket or console admission, establish a checkpoint
+                // that covers the whole recovered state: the first one for a new row, or one over a recovered tail.
+                // An activation that returns true therefore holds a landed checkpoint covering everything it restored.
                 if (
-                    (checkpointBlob is null) &&
+                    ((checkpointBlob is null) || (recovery.Journal.Entries.Count > 0)) &&
                     !await CheckpointNowCoreAsync(
                     ct: ct,
                     identity: identity
                 )
                 ) {
-                    throw new IOException(message: "The initial authority checkpoint could not be published.");
+                    throw new IOException(message: "The activation's baseline authority checkpoint could not be published.");
                 }
                 if (extensionConfiguration is { } configuration) {
                     await AttachExtensionsAsync(
@@ -1782,6 +1770,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         m_masterElapsedEngineTicks += stepTicks;
         m_cadence.NoteMasterStep(stepTicks: stepTicks);
 
+        ObserveCoverage();
         CaptureRowsArmedByCadence();
     }
     /// <summary>Builds one row's own read-back — <c>silo.grains</c>' per-row payload and <see cref="IWorldGrain.StatusAsync"/>'s
@@ -1833,6 +1822,12 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             JournalMutationsWritten = (bookkeeping?.JournalMutationsWritten ?? 0),
             JournalBytesWritten = (bookkeeping?.JournalBytesWritten ?? 0),
             RetiredAuthorityObjects = (bookkeeping?.RetiredObjects ?? 0),
+            RetentionFailure = bookkeeping?.RetentionFailure,
+            RetentionFailures = (bookkeeping?.RetentionFailures ?? 0),
+            CadenceRefusal = bookkeeping?.CadenceRefusal,
+            JournalTailEntries = ((bookkeeping is null)
+                ? 0
+                : (Volatile.Read(location: ref bookkeeping.JournalAdmitted) - bookkeeping.CheckpointAdmitted)),
             RateHz = row.Server.Definition.SimulationRateHz,
             ScheduleAccumulatorTicks = row.ScheduleAccumulatorTicks,
             Tick = row.CompletedTicks,

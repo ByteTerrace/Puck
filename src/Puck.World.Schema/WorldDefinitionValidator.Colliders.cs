@@ -16,14 +16,14 @@ public static partial class WorldDefinitionValidator {
             case WorldCollider.Sphere sphere:
                 RequirePositive(
                     value: sphere.Radius,
-                    name: $"{path}.radius",
+                    name: new Subject(Member: ".radius", Path: path),
                     errors: errors
                 );
                 break;
             case WorldCollider.Capsule capsule:
                 RequirePositive(
                     value: capsule.Radius,
-                    name: $"{path}.radius",
+                    name: new Subject(Member: ".radius", Path: path),
                     errors: errors
                 );
 

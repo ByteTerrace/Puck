@@ -526,8 +526,8 @@ value and leaves the source file as saved
 **A saved file reaches the World as a reload.** A local operator's `.puck`
 source boot enables `world.watch` from the loader's file facts. The watch
 queues an ordinary `world.reload` after a quiet moment. `world.counters world.boot`
-reports watch pump calls, stamp queries, content reads, and delivered
-presentation rows and bytes. A value you only want to
+reports watch pump calls, stamp queries, content reads, and presentation
+deliveries (one per recipient) with the rows and bytes they carried. A value you only want to
 try goes through `world.row.set`, which installs by kind (`WorldDocument.InstallKindOf`)
 and survives a later reload that does not change the same row.
 [The authoring loop](../../../docs/plans/iteration/authoring-loop.md) holds the
@@ -614,7 +614,13 @@ device lands there with a test.
    ops. Never add a knob to a kit or tuning record beside them; where a
    hard-coded behaviour blocks a program from expressing something, move it
    into an op the program authors.
-3. Validate it in `WorldDefinitionValidator`, refusing by name.
+3. Validate it in `WorldDefinitionValidator`, refusing by name, inside the
+   validation partition that owns its part (`WorldDefinitionValidator.Partitions`,
+   in `WorldDefinitionValidator.Partitions.cs`). A partition declares every part
+   it reads, and a run that reads past them refuses the document by the
+   partition's name: add a part the check reads to its `reads`, never move the
+   check into a partition only to escape its declaration. A self-contained
+   section gets a partition of its own, so an edit to it validates it alone.
 4. Sweep the shipped worlds; parsing is strict and refuses unmapped members.
 5. Add a read-back verb that echoes the decision (`world.why`, `world.grants`,
    `world.status`, `world.hud` are the pattern).

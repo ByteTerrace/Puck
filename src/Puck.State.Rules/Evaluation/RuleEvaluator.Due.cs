@@ -1,7 +1,17 @@
 namespace Puck.State.Rules;
 
 public sealed partial class RuleEvaluator {
-    private RuleDueList? m_dueList;
+    private readonly RuleLatch[] m_additionalFamilies;
+    private readonly RuleDueList?[] m_dueLists;
+    private readonly List<FactRead> m_movedFacts = [];
+
+    // A drain consumes the host feed. Deliver it to every installed pass, including families already visited this tick.
+    internal void DrainFactMoves() {
+        m_movedFacts.Clear();
+        var all = m_host.DrainFactMoves(into: m_movedFacts);
+        if (!all && (m_movedFacts.Count == 0)) { return; }
+        foreach (var family in m_dueLists) { family?.ApplyFactMoves(all: all, moves: m_movedFacts); }
+    }
 
     private readonly List<int> m_dueLive = [];
 
@@ -25,18 +35,19 @@ public sealed partial class RuleEvaluator {
         ArgumentNullException.ThrowIfNull(argument: latch);
         ArgumentNullException.ThrowIfNull(argument: rules);
 
+        var slot = Array.IndexOf(m_additionalFamilies, latch) + 1;
         if (!SchedulingEnabled) {
-            m_dueList = null;
+            m_dueLists[slot] = null;
 
             return Evaluate(latch: latch, rules: rules, stepTicks: stepTicks);
         }
 
         m_host.RefreshFacts();
 
-        var list = m_dueList;
+        var list = m_dueLists[slot];
 
         if ((list is null) || !list.Covers(epoch: m_host.FactScheduleEpoch, latch: latch, rules: rules)) {
-            m_dueList = list = new RuleDueList(evaluator: this, latch: latch, rules: rules);
+            m_dueLists[slot] = list = new RuleDueList(evaluator: this, latch: latch, rules: rules);
         }
 
         MarkTraced(list: list);
@@ -149,5 +160,4 @@ public sealed partial class RuleEvaluator {
     }
 
     internal RuleSchedule ScheduleOf(CompiledRule rule, RuleLatch.RuleState state) => Schedule(rule: rule, state: state);
-    internal bool Owns(CompiledRule rule) => ((m_owner is { } owner) && owner.Owns(rule: rule));
 }

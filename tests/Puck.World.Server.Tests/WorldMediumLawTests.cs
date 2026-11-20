@@ -22,7 +22,7 @@ namespace Puck.World.Server.Tests;
 /// resolves for <c>emit</c>/<c>expose</c>. See <c>Puck.Physics.Tests.FieldLatticeLawTests</c> for the
 /// coupling/surface-math laws at the lattice level; this suite proves the validator's refusals and the full
 /// server-tier wiring
-/// (<see cref="WorldPopulation.SampleMediumSurfaces"/> → <c>WorldBody.SetMediumSurface</c> → the medium
+/// (<see cref="WorldPopulation.SampleFieldInputs"/> → <c>WorldBody.SetMediumSurface</c> → the medium
 /// hold's <c>InMedium</c> fact).
 /// </summary>
 public sealed class WorldMediumLawTests {

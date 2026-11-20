@@ -11,6 +11,56 @@ using Puck.Physics.Motion;
 
 namespace Puck.World;
 
+/// <summary>One validation finding returned by <see cref="WorldDefinitionValidator"/> with its document path separated
+/// from the human-readable message so callers locate findings from structured data rather than parsing text.</summary>
+/// <param name="Path">The dotted-and-bracketed document path (for example <c>prototypes[0].doc.shapes[1].blend</c>),
+/// or empty when the finding applies to the whole document.</param>
+/// <param name="Message">The authored finding message.</param>
+public sealed record WorldValidationFinding(string Path, string Message) {
+    /// <summary>Splits a raw validator message into its leading document path and clean message text.</summary>
+    internal static WorldValidationFinding FromRaw(string raw) {
+        if (string.IsNullOrEmpty(value: raw)) {
+            return new WorldValidationFinding(Path: string.Empty, Message: string.Empty);
+        }
+
+        var colon = raw.IndexOf(value: ':');
+
+        if ((colon > 0) && IsDocumentPath(span: raw.AsSpan(length: colon, start: 0))) {
+            var path = raw[..colon].Trim();
+            var body = raw[(colon + 1)..].TrimStart();
+            // Strip engine-internal `prototypes[i].doc.<path>: ` prefixes so authors read the finding itself;
+            // the path is carried as structured data in `Path`.
+            var message = (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "prototypes[") && path.Contains(comparisonType: StringComparison.Ordinal, value: ".doc."))
+                ? body
+                : raw;
+
+            return new WorldValidationFinding(Path: path, Message: message);
+        }
+
+        var space = raw.IndexOf(value: ' ');
+        var head = ((space > 0) ? raw[..space] : raw);
+
+        return new WorldValidationFinding(
+            Message: raw,
+            Path: (IsDocumentPath(span: head.AsSpan()) ? head : string.Empty)
+        );
+    }
+
+    private static bool IsDocumentPath(ReadOnlySpan<char> span) {
+        var trimmed = span.Trim();
+
+        if (trimmed.IsEmpty || !char.IsLetter(c: trimmed[0])) {
+            return false;
+        }
+        foreach (var ch in trimmed) {
+            if (!(char.IsLetterOrDigit(c: ch) || (ch is '.' or '[' or ']' or '_' or '-' or '\'' or '"'))) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
 /// <summary>The one thick startup gate for World-local authored data. Runtime systems may assume these structural and
 /// platform-facing invariants instead of silently overwriting duplicate indices or discovering bad extents on a GPU
 /// allocation path.</summary>
@@ -837,12 +887,44 @@ public static partial class WorldDefinitionValidator {
     // never populated when throwOnErrors is true, since none of those callers read it.
     private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation, bool throwOnErrors, ICollection<string>? errorSink, ICollection<string>? deferredSink, IMachineValidationCatalog? machines = null, bool proveCensusOutcomes = true) {
         ArgumentNullException.ThrowIfNull(definition);
-        WorldBootWork.Count(kind: WorldBootWork.Validations);
 
-        var errors = new List<string>();
-        var scope = new ValidationScope { Machines = machines };
+        var run = new WorldValidationRun {
+            Definition = definition,
+            Deferred = deferredSink,
+            Machines = machines,
+            Neighbours = neighbours,
+            ProveCensusOutcomes = proveCensusOutcomes,
+            RetainCompilation = retainCompilation,
+            ValidateAdjacencyClaims = validateAdjacencyClaims,
+        };
 
-        if (!ValidatePoolExpansion(definition: definition, errorSink: errorSink, throwOnErrors: throwOnErrors)) { return null; }
+        RunPartitions(run: run, plan: null);
+
+        if (throwOnErrors) {
+            RefuseCollected(errors: run.Errors);
+
+            return run.Compilation;
+        }
+        if (errorSink is not null) {
+            foreach (var error in run.Errors) {
+                errorSink.Add(item: error);
+            }
+        }
+
+        return ((run.Errors.Count == 0) ? run.Compilation : null);
+    }
+    // The document partition: every check of a part no other partition owns. It runs last, so the checks it gates on a
+    // clean collection see the other partitions' refusals, and it returns the compiled programs when the run keeps them
+    // and nothing was refused.
+    private static WorldRuleCompilation? ValidateDocumentPartition(WorldValidationRun run) {
+        var definition = run.Definition;
+        var neighbours = run.Neighbours;
+        var validateAdjacencyClaims = run.ValidateAdjacencyClaims;
+        var retainCompilation = run.RetainCompilation;
+        var deferredSink = run.Deferred;
+        var proveCensusOutcomes = run.ProveCensusOutcomes;
+        var errors = run.Errors;
+        var scope = new ValidationScope { Machines = run.Machines };
 
         if (!string.Equals(
             a: definition.Schema,
@@ -876,11 +958,6 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        ValidateMetadata(
-            metadata: definition.Metadata,
-            errors: errors
-        );
-
         ValidatePostPasses(
             views: definition.Views,
             errors: errors,
@@ -898,7 +975,6 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             errors: errors
         );
-        ValidateScopedReplays(definition: definition, errors: errors);
         ValidateKeyedValues(
             definition: definition,
             errors: errors
@@ -1274,17 +1350,6 @@ public static partial class WorldDefinitionValidator {
             iconNames: iconNames,
             iconsAuthored: iconsAuthored
         );
-        ValidateHaptics(
-            definition: definition,
-            errors: errors,
-            localSeats: localSeats
-        );
-
-        ValidateStorage(
-            storage: definition.Storage,
-            errors: errors
-        );
-
         ValidateIdentityMotionState(
             identity: definition.Identity,
             stateRows: stateRows,
@@ -1521,13 +1586,7 @@ public static partial class WorldDefinitionValidator {
         scope.FontNames = fontNames;
         scope.HasTextCatalog = (definition.Text is not null);
 
-        var prototypeIds = ValidatePrototypes(
-            definition: definition,
-            creations: definition.Creations,
-            fontNames: fontNames,
-            hasTextCatalog: (definition.Text is not null),
-            errors: errors
-        );
+        var prototypeIds = DeclaredNames(rows: definition.Creations, name: static creation => creation.Id.Value);
 
         scope.PrototypeIds = prototypeIds;
 
@@ -1670,21 +1729,6 @@ public static partial class WorldDefinitionValidator {
 
         scope.Cameras = cameras;
 
-        // An owned world (Identity not null) authors seat-scope panels: WorldHudCapacity.MaxSeatPanels of them, each
-        // capped at MaxElementsPerSeatPanel, WorldHudLayer.Replace refused (a panel confined to one seat's viewport
-        // has no base slot to take over). Either scope is capped at MaxFrameSources structurally unique frame sources.
-        // A plain world document keeps the world-scope panel/element ceilings and admits Replace. Runs here (not
-        // beside State, above) because a hud.panels Frame element's source resolves against the SAME declared camera
-        // set a screen row's own 'view' arm does — the cameras set just built above.
-        ValidateHud(
-            cameras: cameras,
-            definition: definition,
-            hud: definition.Hud,
-            stateRows: stateRows,
-            isIdentityScope: (definition.Identity is not null),
-            errors: errors
-        );
-
         // A probe socket's 'view' arm resolves against the SAME declared camera set a screen row's own 'view' arm
         // does, so this runs only once that set is fully built above — never earlier, and never twice.
         ValidateProbes(
@@ -1694,19 +1738,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        ValidateCaptures(
-            definition: definition,
-            errors: errors
-        );
-        ValidateSchedule(
-            definition: definition,
-            errors: errors
-        );
         ValidateCommands(
-            definition: definition,
-            errors: errors
-        );
-        ValidateRoutes(
             definition: definition,
             errors: errors
         );
@@ -1884,7 +1916,7 @@ public static partial class WorldDefinitionValidator {
                 if (screen.Solid is { } screenSolid) {
                     RequireFinite(
                         value: screenSolid.Margin,
-                        name: $"{path}.solid.margin",
+                        name: new Subject(Member: ".solid.margin", Path: path),
                         errors: errors
                     );
                     RequirePositiveEffectiveExtent(
@@ -1962,16 +1994,6 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        // Admission validates last of all: it references nothing else in the document except the population
-        // capacity its templates' body subjects bound against (already in scope), and it is the newest section,
-        // appended over the already-shipped set for the same reason Grants/Links are.
-        ValidateAdmission(
-            entries: definition.Admission,
-            populationCapacity: definition.Population.Capacity,
-            errors: errors,
-            deferred: deferredSink
-        );
-
         // A candidate already refused is not probed: its own refusals are the answer, and every census would repeat
         // them.
         if (
@@ -1983,30 +2005,6 @@ public static partial class WorldDefinitionValidator {
                 errors: errors,
                 machines: scope.Machines
             );
-        }
-
-        if (throwOnErrors) {
-            RefuseCollected(errors: errors);
-
-            return (retainCompilation
-                ? new WorldRuleCompilation(
-                    definition,
-                    compiledRules,
-                    compiledGroups,
-                    compiledInteractions,
-                    WorldRuleCompilation.CompileTables(
-                        context: ruleContext,
-                        definition: definition
-                    ), context: ruleContext, work: work
-                )
-                : null
-            );
-        }
-
-        if (errorSink is not null) {
-            foreach (var error in errors) {
-                errorSink.Add(item: error);
-            }
         }
 
         return ((retainCompilation && (errors.Count == 0))
@@ -2069,7 +2067,7 @@ public static partial class WorldDefinitionValidator {
         )) {
             RequirePositive(
                 value: sequence.Step,
-                name: $"{path}.step",
+                name: new Subject(Member: ".step", Path: path),
                 errors: errors
             );
         } else if (sequence.Step != 0f) {
@@ -2197,6 +2195,38 @@ public static partial class WorldDefinitionValidator {
             return false;
         }
         return true;
+    }
+    /// <summary>Validates document-local facts against an explicitly selected machine catalog, returning each refusal
+    /// and deferred check with its document path as structured data.</summary>
+    /// <param name="definition">The candidate definition.</param>
+    /// <param name="machines">The deployment's machine vocabulary, or null for structural validation with deferred provider notices.</param>
+    /// <param name="errors">The collected structural and provider refusals with their document paths.</param>
+    /// <param name="deferred">The collected checks this environment cannot prove, or null to discard them.</param>
+    /// <param name="compilation">The validated rule programs, or null on refusal.</param>
+    /// <returns>Whether validation added no errors.</returns>
+    public static bool TryValidateLocally(WorldDefinition definition, IMachineValidationCatalog? machines, ICollection<WorldValidationFinding> errors, ICollection<WorldValidationFinding>? deferred, out WorldRuleCompilation? compilation) {
+        ArgumentNullException.ThrowIfNull(argument: errors);
+
+        var rawErrors = new List<string>();
+        var rawDeferred = ((deferred is null) ? null : new List<string>());
+        var ok = TryValidateLocally(
+            compilation: out compilation,
+            deferred: rawDeferred,
+            definition: definition,
+            errors: rawErrors,
+            machines: machines
+        );
+
+        foreach (var raw in rawErrors) {
+            errors.Add(item: WorldValidationFinding.FromRaw(raw: raw));
+        }
+        if ((deferred is not null) && (rawDeferred is not null)) {
+            foreach (var raw in rawDeferred) {
+                deferred.Add(item: WorldValidationFinding.FromRaw(raw: raw));
+            }
+        }
+
+        return ok;
     }
     /// <summary>Validates local structure and machine admission using this deployment's catalog.</summary>
     /// <param name="definition">The candidate definition.</param>

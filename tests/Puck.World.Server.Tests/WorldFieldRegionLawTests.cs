@@ -149,12 +149,11 @@ public sealed class WorldFieldRegionLawTests {
         void Sample() {
             var population = fixture.Server.Population;
 
-            population.SampleMediumSurfaces();
+            fixture.Server.Tick.SampleFieldInputs(tick: 2);
             _ = population.TryFieldRegion(name: "first");
             _ = population.TryFieldRegion(name: "absent");
             _ = population.TryFieldForRow(field: out _, name: "secondValue", region: out _);
             _ = population.TryFieldForRow(field: out _, name: "absent", region: out _);
-            fixture.Server.Tick.SampleTravelResistance(tick: 2);
             fixture.Server.Tick.StepFields(tick: 2);
         }
         for (var warm = 0; (warm < 256); warm++) { Sample(); }

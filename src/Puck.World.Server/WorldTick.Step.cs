@@ -421,11 +421,10 @@ public sealed partial class WorldTick {
         // from the facet either side needs) BEFORE the advance passes, so an orphaned target re-enters rigid
         // integration and contact in the same tick its carrier disappeared rather than skipping one.
         Host.Population.PrepareCarriedBodies();
-        // Sample every active body's medium surface BEFORE either half of the tick advances it, so a medium
+        // Sample what the bodies read of the field regions BEFORE either half of the tick advances them, so a medium
         // hold's phase-4 law (inside AdvanceSimulated/AdvanceSeats' own body.Advance calls) reads this tick's
         // surface, never last tick's.
-        Host.Population.SampleMediumSurfaces();
-        SampleTravelResistance(tick: tick);
+        SampleFieldInputs(tick: tick);
         Host.Population.AdvanceSimulated(
             definition: Host.Document.Definition,
             tick: tick,
@@ -448,7 +447,11 @@ public sealed partial class WorldTick {
         // Kit effects have settled their authoritative cells. Install their input barrier before world rules
         // can observe a released action and accidentally use it to enter the old mode again.
         if (!Host.Input.TrySynchronize(activation: 0, reason: out var inputModeReason)) { throw new InvalidOperationException(message: inputModeReason); }
-        foreach (var designation in Host.Population.DesignationOutputs) {
+        var designations = Host.Population.DesignationOutputs;
+
+        for (var ordinal = 0; (ordinal < designations.Count); ordinal++) {
+            var designation = designations[ordinal];
+
             _ = Host.Document.ApplyDesignationCore(
                 designation: designation,
                 principal: Principal.Console,
@@ -465,7 +468,11 @@ public sealed partial class WorldTick {
         // first ActionEffect to write the DOCUMENT rather than per-body state, so it is the first to pay the
         // pipeline's own round trip. The acting principal is Principal.World whichever body fired it — the
         // effect is the world's authored program acting, not the seat (see that principal's remarks).
-        foreach (var invocation in Host.Population.GeneratorInvocationOutputs) {
+        var invocations = Host.Population.GeneratorInvocationOutputs;
+
+        for (var ordinal = 0; (ordinal < invocations.Count); ordinal++) {
+            var invocation = invocations[ordinal];
+
             Host.EnqueueMutation(mutation: new WorldMutation.Generate(
                 Principal: Principal.World,
                 Row: invocation.Row
@@ -474,9 +481,10 @@ public sealed partial class WorldTick {
 
         Host.Population.ClearGeneratorInvocationOutputs();
 
-        if (Host.Population.DurableStateOutputs.Count > 0) {
-            Host.DurableStateOutputTap?.Invoke(obj: Host.Population.DurableStateOutputs);
-            foreach (var output in Host.Population.DurableStateOutputs) {
+        if (Host.Population.DurableStateOutputs is { Count: > 0 } durableOutputs) {
+            Host.DurableStateOutputTap?.Invoke(obj: durableOutputs);
+            for (var ordinal = 0; (ordinal < durableOutputs.Count); ordinal++) {
+                var output = durableOutputs[ordinal];
                 var submission = new WorldDocumentSubmission(
                     SourceDocumentId: (Host.Document.Definition.DocumentId ?? string.Empty),
                     OwnerDocumentId: output.PlayerId,

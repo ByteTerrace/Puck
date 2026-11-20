@@ -9,7 +9,7 @@ public sealed partial class WorldPopulation {
     // the regions it came from. Derived: a restore records the restored regions' stamps beside the sleepers' terms.
     private ulong[] m_sleepRegionRevisions = [];
 
-    // What a body reads of the regions: every medium cell (SampleMediumSurfaces floats a body against it), and every
+    // What a body reads of the regions: every medium cell (SampleFieldInputs floats a body against it), and every
     // solid cell when the contact provider unions the lattices' solid columns, which only the field provider does
     // (WorldSolidField composes a FieldLatticeSolid over each region). Folds into ContactFieldVersion.
     private bool ContactReadsLatticeSolids => (m_baseContactField is WorldSolidField);

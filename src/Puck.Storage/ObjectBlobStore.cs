@@ -5,6 +5,11 @@ internal sealed class ObjectBlobStore : IObjectBlobStore {
         ArgumentNullException.ThrowIfNull(target);
         return target.Backend.DeleteAsync(target, address, cancellationToken);
     }
+    public ValueTask<bool> ContentEqualsAsync(ObjectStorageTarget target, ObjectBlobAddress address, ReadOnlyMemory<byte> expected,
+        CancellationToken cancellationToken = default) {
+        ArgumentNullException.ThrowIfNull(target);
+        return target.Backend.ContentEqualsAsync(target, address, expected, cancellationToken);
+    }
     public ValueTask<IReadOnlyList<string>> ListAsync(
         ObjectStorageTarget target,
         Guid objectId,

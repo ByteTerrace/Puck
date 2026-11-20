@@ -21,6 +21,7 @@ public sealed partial class WorldRuleHost {
         }
 
         InteractionCarriers(
+            trackPositions: interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance,
             into: lefts,
             name: interaction.Left,
             pool: interaction.LeftPool,
@@ -47,6 +48,7 @@ public sealed partial class WorldRuleHost {
             var rights = m_carrierScratchRight;
 
             InteractionCarriers(
+                trackPositions: true,
                 into: rights,
                 name: interaction.Right,
                 pool: interaction.RightPool,
@@ -162,36 +164,12 @@ public sealed partial class WorldRuleHost {
         : -1
     );
     // The integer keys a keyed row holds at this moment, ascending — the iteration set of a decision rule.
-    private void CarrierKeys(int rowOrdinal, List<int> into) {
-        into.Clear();
-
-        if (rowOrdinal < 0) {
-            into.Sort();
-
-            return;
-        }
-
-        var cursor = 0;
-
-        while (Host.Arena.TryNextCell(
-            cursor: ref cursor,
-            key: out var key,
-            rowOrdinal: rowOrdinal
-        )) {
-            if (
-                StateReader.TryParseCandidateIndex(
-                index: out var index,
-                key: Host.Arena.Keys[key]
-            )
-            ) {
-                into.Add(item: index);
-            }
-        }
-
-        into.Sort();
-    }
+    private void CarrierKeys(int rowOrdinal, List<int> into) => CollectIndexKeys(into: into, liveNonzero: false, rowOrdinal: rowOrdinal);
     // The active bodies whose cell in a keyed tag row reads nonzero, ascending, into the caller's scratch list.
-    private void Carriers(int rowOrdinal, List<int> into) {
+    private void Carriers(int rowOrdinal, List<int> into) => CollectIndexKeys(into: into, liveNonzero: true, rowOrdinal: rowOrdinal);
+    // The participant indices a keyed row's keys spell, ascending; with liveNonzero, only those naming an active body
+    // whose cell reads a nonzero number.
+    private void CollectIndexKeys(int rowOrdinal, List<int> into, bool liveNonzero) {
         into.Clear();
 
         if (rowOrdinal < 0) {
@@ -205,18 +183,11 @@ public sealed partial class WorldRuleHost {
             key: out var key,
             rowOrdinal: rowOrdinal
         )) {
-            if (
-                !StateReader.TryParseCandidateIndex(
-                index: out var index,
-                key: Host.Arena.Keys[key]
-            ) ||
-                (Host.Body(index: index) is null) ||
-                !Host.ReadArenaCell(
-                key: key,
-                rowOrdinal: rowOrdinal
-            ).TryFinite(raw: out var value) ||
-                (value == 0L)
-            ) {
+            if (!Host.Arena.Keys.TryCandidateIndex(index: out var index, key: key)) {
+                continue;
+            }
+            if (liveNonzero && ((Host.Body(index: index) is null) ||
+                !Host.ReadArenaCell(key: key, rowOrdinal: rowOrdinal).TryFinite(raw: out var value) || (value == 0L))) {
                 continue;
             }
 
@@ -258,11 +229,13 @@ public sealed partial class WorldRuleHost {
             );
         }
 
-        applied |= m_evaluator.Evaluate(
-            latch: m_interactionGateHeld,
-            rules: m_interactions,
-            stepTicks: stepTicks
-        );
+        if (m_interactions.Length != 0) {
+            applied |= m_evaluator.EvaluateDue(
+                latch: m_interactionGateHeld,
+                rules: m_interactions,
+                stepTicks: stepTicks
+            );
+        }
         FlushIdentityFacts();
         applied |= Host.PublishArena();
         if (applied) {

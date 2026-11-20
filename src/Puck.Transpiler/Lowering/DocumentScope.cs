@@ -173,6 +173,7 @@ public sealed partial class DocumentScope {
         locals: [],
         schema: schema,
         sourceMap: sourceMap,
+        sourcePath: null,
         templates: (templates ?? []),
         templateScopes: new(comparer: StringComparer.Ordinal),
         values: [],
@@ -189,6 +190,7 @@ public sealed partial class DocumentScope {
         Dictionary<string, ExpressionNode> constants,
         Dictionary<string, TemplateNode> templates,
         SourceMap? sourceMap,
+        string? sourcePath,
         DiagnosticBag diagnostics,
         string? schema,
         string currentPointer,
@@ -205,6 +207,7 @@ public sealed partial class DocumentScope {
         Constants = constants;
         Templates = templates;
         SourceMap = sourceMap;
+        SourcePath = sourcePath;
         Diagnostics = diagnostics;
         Schema = schema;
         CurrentPointer = currentPointer;
@@ -227,6 +230,8 @@ public sealed partial class DocumentScope {
     public Dictionary<string, TemplateNode> Templates { get; }
     /// <summary>Gets the JSON-pointer-to-span map being filled, or <see langword="null"/>.</summary>
     public SourceMap? SourceMap { get; }
+    /// <summary>Gets the defining source file for syntax evaluated in this lexical scope, or <see langword="null"/> for the compilation root.</summary>
+    public string? SourcePath { get; }
     /// <summary>Gets the bag refusals are reported into.</summary>
     public DiagnosticBag Diagnostics { get; }
     /// <summary>Gets the document's declared schema.</summary>
@@ -370,25 +375,32 @@ public sealed partial class DocumentScope {
             value = cached.Value;
             return true;
         }
+        var lexical = (m_arguments.TryGetValue(
+            key: name,
+            value: out var caller
+        )
+            ? caller
+            : ForConstant()
+        );
+        var bindingSourcePath = (lexical.SourcePath ?? DefinitionPathOf(value: expression));
+
         if (!m_evaluating.Add(item: name)) {
             throw new DocumentEvaluationException(
                 $"The binding '{name}' refers to itself.",
                 expression.Span,
                 PuckDiagnosticCodes.InvalidValue
-            );
+            ) {
+                SourceAttributed = true,
+                SourcePath = bindingSourcePath,
+            };
         }
+        using var sourceScope = Diagnostics.PushSource(sourcePath: bindingSourcePath);
         try {
-            var lexical = (m_arguments.TryGetValue(
-                key: name,
-                value: out var caller
-            )
-                ? caller
-                : ForConstant()
-            );
-
             value = EvaluateAtNoPosition(expression: expression, fieldKey: fieldKey, lexical: lexical);
             m_values[key] = (expression, value);
             return true;
+        } catch (DocumentEvaluationException error) when (!error.SourceAttributed) {
+            throw error.WithSource(sourcePath: bindingSourcePath);
         } finally {
             m_evaluating.Remove(item: name);
         }
@@ -414,18 +426,24 @@ public sealed partial class DocumentScope {
             value = cached.Value?.DeepClone();
             return true;
         }
+        var lexical = (m_arguments.TryGetValue(key: name, value: out var caller) ? caller : ForConstant());
+        var bindingSourcePath = (lexical.SourcePath ?? DefinitionPathOf(value: expression));
+
         if (!m_evaluating.Add(item: name)) {
-            throw new DocumentEvaluationException($"The binding '{name}' refers to itself.", expression.Span, PuckDiagnosticCodes.InvalidValue);
+            throw new DocumentEvaluationException($"The binding '{name}' refers to itself.", expression.Span, PuckDiagnosticCodes.InvalidValue) {
+                SourceAttributed = true,
+                SourcePath = bindingSourcePath,
+            };
         }
+        using var sourceScope = Diagnostics.PushSource(sourcePath: bindingSourcePath);
         try {
-            var lexical = (m_arguments.TryGetValue(key: name, value: out var caller) ? caller : ForConstant());
-            var start = Diagnostics.Count;
             var lowered = DocumentLowering.At(context: position, lower: () => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: lexical), scope: lexical);
 
-            Diagnostics.AttributeFrom(sourcePath: DefinitionPathOf(value: expression), startIndex: start);
             m_values[key] = (expression, lowered);
             value = lowered?.DeepClone();
             return true;
+        } catch (DocumentEvaluationException error) when (!error.SourceAttributed) {
+            throw error.WithSource(sourcePath: bindingSourcePath);
         } finally {
             m_evaluating.Remove(item: name);
         }
@@ -462,6 +480,7 @@ public sealed partial class DocumentScope {
             locals: [],
             schema: Schema,
             sourceMap: SourceMap,
+            sourcePath: SourcePath,
             templates: Templates,
             templateScopes: m_templateScopes,
             values: m_values,
@@ -470,13 +489,15 @@ public sealed partial class DocumentScope {
     );
 
     // The scope a constant declared in another file evaluates in: this scope's constants, arguments and caches, with
-    // that file's directory as its base path. One a directory, shared by every constant the directory declares.
-    private DocumentScope ConstantScopeBeside(string directory, Dictionary<string, DocumentScope> scopes) {
-        if (!scopes.TryGetValue(key: directory, value: out var beside)) {
+    // that file's directory as its base path and that file as its source path. One per defining file.
+    private DocumentScope ConstantScopeBeside(string definitionPath, Dictionary<string, DocumentScope> scopes) {
+        if (!scopes.TryGetValue(key: definitionPath, value: out var beside)) {
+            var directory = Path.GetDirectoryName(path: definitionPath);
+
             beside = new(
                 annotations: Annotations,
                 arguments: m_arguments,
-                basePath: directory,
+                basePath: (string.IsNullOrEmpty(value: directory) ? BasePath : directory),
                 budget: Budget,
                 constants: Constants,
                 currentPointer: CurrentPointer,
@@ -485,12 +506,13 @@ public sealed partial class DocumentScope {
                 locals: [],
                 schema: Schema,
                 sourceMap: SourceMap,
+                sourcePath: definitionPath,
                 templates: Templates,
                 templateScopes: m_templateScopes,
                 values: m_values,
                 vocabulary: Vocabulary
             );
-            scopes[directory] = beside;
+            scopes[definitionPath] = beside;
         }
 
         return beside;
@@ -530,8 +552,8 @@ public sealed partial class DocumentScope {
                     );
                 } else {
                     if (let.DefinitionPath is { } definitionPath) { ConstantSources.AddOrUpdate(key: let.Value, value: definitionPath); }
-                    m_arguments[let.Name] = ((Path.GetDirectoryName(path: let.DefinitionPath) is { Length: > 0 } directory)
-                        ? ConstantScopeBeside(directory: directory, scopes: (besideDefinitions ??= new(comparer: StringComparer.Ordinal)))
+                    m_arguments[let.Name] = ((let.DefinitionPath is { Length: > 0 } letSource)
+                        ? ConstantScopeBeside(definitionPath: letSource, scopes: (besideDefinitions ??= new(comparer: StringComparer.Ordinal)))
                         : ForConstant()
                     );
                 }
@@ -620,12 +642,18 @@ public sealed partial class DocumentScope {
         if (Locals.ContainsKey(key: name) || !Constants.TryGetValue(key: name, value: out var expression)) {
             return false;
         }
+        var lexical = (m_arguments.GetValueOrDefault(key: name) ?? ForConstant());
+        var bindingSourcePath = (lexical.SourcePath ?? DefinitionPathOf(value: expression));
+
         if (!m_evaluating.Add(item: name)) {
-            throw new DocumentEvaluationException($"The binding '{name}' refers to itself.", expression.Span, PuckDiagnosticCodes.InvalidValue);
+            throw new DocumentEvaluationException($"The binding '{name}' refers to itself.", expression.Span, PuckDiagnosticCodes.InvalidValue) {
+                SourceAttributed = true,
+                SourcePath = bindingSourcePath,
+            };
         }
 
+        using var sourceScope = Diagnostics.PushSource(sourcePath: bindingSourcePath);
         try {
-            var lexical = (m_arguments.GetValueOrDefault(key: name) ?? ForConstant());
             var positioned = new DocumentScope(
                 annotations: Annotations,
                 arguments: lexical.m_arguments,
@@ -638,6 +666,7 @@ public sealed partial class DocumentScope {
                 locals: lexical.Locals,
                 schema: Schema,
                 sourceMap: SourceMap,
+                sourcePath: bindingSourcePath,
                 templates: lexical.Templates,
                 templateScopes: lexical.m_templateScopes,
                 values: lexical.m_values,
@@ -646,6 +675,8 @@ public sealed partial class DocumentScope {
 
             value = DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: positioned);
             return true;
+        } catch (DocumentEvaluationException error) when (!error.SourceAttributed) {
+            throw error.WithSource(sourcePath: bindingSourcePath);
         } finally {
             m_evaluating.Remove(item: name);
         }
@@ -654,10 +685,12 @@ public sealed partial class DocumentScope {
     /// invocation's bound parameters.</summary>
     /// <param name="invocationConstants">The constants the nested scope sees.</param>
     /// <param name="annotations">An optional annotation set isolated to the invocation.</param>
+    /// <param name="sourcePath">The source file that owns the template body, or <see langword="null"/> to inherit this scope's.</param>
     /// <returns>The nested scope.</returns>
     public DocumentScope WithConstants(
         Dictionary<string, ExpressionNode> invocationConstants,
-        Dictionary<string, object?>? annotations = null
+        Dictionary<string, object?>? annotations = null,
+        string? sourcePath = null
     ) => new(
         annotations: (annotations ?? Annotations),
         arguments: new(dictionary: m_arguments, comparer: StringComparer.Ordinal),
@@ -670,6 +703,7 @@ public sealed partial class DocumentScope {
         locals: [],
         schema: Schema,
         sourceMap: SourceMap,
+        sourcePath: (sourcePath ?? SourcePath),
         templates: Templates,
         templateScopes: m_templateScopes,
         values: [],
@@ -690,6 +724,7 @@ public sealed partial class DocumentScope {
         locals: [],
         schema: Schema,
         sourceMap: SourceMap,
+        sourcePath: SourcePath,
         templates: Templates,
         templateScopes: m_templateScopes,
         values: [],
@@ -711,6 +746,7 @@ public sealed partial class DocumentScope {
         locals: lambdaLocals,
         schema: Schema,
         sourceMap: SourceMap,
+        sourcePath: SourcePath,
         templates: Templates,
         templateScopes: m_templateScopes,
         values: m_values,

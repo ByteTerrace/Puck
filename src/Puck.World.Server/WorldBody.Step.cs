@@ -1216,7 +1216,7 @@ public sealed partial class WorldBody {
             (m_gravityField is { } field) &&
             field.TryAcceleration(
             acceleration: out acceleration,
-            entityIndex: m_entityIndex
+            entityIndex: m_population is null ? m_entityIndex : m_populationIndex
         )
         );
     }

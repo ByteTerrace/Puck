@@ -514,12 +514,11 @@ public sealed partial class WorldDocument {
             try {
                 var change = (request.Delta ?? WorldReloadDelta.Between(previous: m_revision.Definition, next: next));
 
-                if (!change.TryMergeOver(m_revision.Definition, next, priorDefinition, out var merged, out conflicts, out var mergeReason)) {
+                if (!change.TryMergeOver(m_revision.Definition, next, priorDefinition, out var merged, out conflicts, out journalPatch, out var mergeReason)) {
                     RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: mergeReason, verb: verb);
                     return false;
                 }
                 candidate = merged;
-                journalPatch = change.AcceptedPatch(priorDefinition, candidate);
             } catch (InvalidDataException exception) {
                 RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: exception.Message, verb: verb);
                 return false;
@@ -1546,9 +1545,9 @@ public sealed partial class WorldDocument {
             return TryValidateStateMutation(candidate: candidate, mutation: mutation, reason: out reason);
         }
 
-        return (retainCompilation
-            ? WorldDefinitionValidator.TryValidateLocally(compilation: out compilation, definition: candidate, reason: out reason)
-            : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason));
+        // Only the units the change reaches are judged (WorldDefinitionValidator.Partitions), so a unit the mutation
+        // does not name, hidden or not, cannot refuse it.
+        return WorldDefinitionValidator.TryValidateChange(after: candidate, before: current, compilation: out compilation, reason: out reason, retainCompilation: retainCompilation);
     }
 
     // A state mutation can only have changed the rows it names, so validation covers those rows and the rows keyed

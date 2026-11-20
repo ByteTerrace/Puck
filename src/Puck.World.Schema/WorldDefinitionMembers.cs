@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Abstractions.Documents;
 using Puck.Assets;
 
 namespace Puck.World;
@@ -128,6 +129,7 @@ public sealed class WorldDefinitionMembers {
         // Slices are kept for the result only when the basis's are, so a held table always covers every member.
         var held = (Held.TryGetValue(key: basis, value: out var members) ? members : null);
         var values = new Dictionary<string, object?>(comparer: StringComparer.Ordinal);
+        var shares = new Dictionary<string, (object Read, object Basis, JsonNode BasisTree, JsonNode Tree, JsonNode Patch)>(comparer: StringComparer.Ordinal);
         var slices = new Dictionary<string, Member>(comparer: StringComparer.Ordinal);
 
         foreach (var member in (held?.Members ?? [])) { slices[member.Name] = member; }
@@ -154,21 +156,30 @@ public sealed class WorldDefinitionMembers {
 
             var read = Read(name: name, value: bytes.Span);
 
-            values[name] = (((before is not null) && (current is not null) && (read is not null) && IsModelMember(name: name))
-                ? WorldDocumentWalker.Share(basis: current, basisTree: before, patch: WorldDocumentBasis.DiffValue(basis: before, target: tree)!, value: read, valueTree: tree)
-                : read);
+            var patch = ((before is null) ? null : WorldDocumentBasis.DiffValue(basis: before, target: tree));
+
+            values[name] = ShareValue(name: name, value: read, basis: current, valueTree: tree, basisTree: before, patch: patch);
+            if (!ReferenceEquals(objA: values[name], objB: read)) { shares[name] = (read!, current!, before!, tree, patch!); }
         }
 
         var replaced = Assemble(basis: basis, documentDirectory: documentDirectory, values: new Dictionary<string, object?>(dictionary: values, comparer: StringComparer.Ordinal));
-        // Only the values read here are resolved, against the assembled document's shades and state: every other
-        // member is the basis's own, resolved (or bound live) as the basis holds it.
+        // Only what was read here is resolved, against the assembled document's shades and state: every other member,
+        // and every row a replaced member shares with the basis, is the basis's own, resolved (or bound live) as the
+        // basis holds it. A shared value is resolved as read and then shared again, because resolving gives each row
+        // holding a reference a new instance, and a row the change left alone must stay the basis's.
         var rebound = new Dictionary<string, object?>(comparer: StringComparer.Ordinal);
 
         foreach (var (name, value) in values) {
             // An extension member is JSON the author keeps, with no state reference to resolve.
             if ((value is null) || !IsModelMember(name: name) || ReferenceEquals(objA: value, objB: WorldDocumentWalker.ReadMember(name: name, root: basis))) { continue; }
-            if (!WorldStateDocumentValues.TryResolveGraph(graph: value, reason: out var reason, resolved: out var resolved, source: replaced)) {
+
+            var shared = shares.TryGetValue(key: name, value: out var share);
+
+            if (!WorldStateDocumentValues.TryResolveGraph(graph: (shared ? share.Read : value), reason: out var reason, resolved: out var resolved, source: replaced)) {
                 throw new InvalidDataException(message: reason);
+            }
+            if (shared) {
+                resolved = WorldDocumentWalker.Share(basis: share.Basis, basisTree: share.BasisTree, patch: share.Patch, value: resolved, valueTree: share.Tree);
             }
             if (!ReferenceEquals(objA: resolved, objB: value)) { rebound[name] = resolved; }
         }
@@ -176,6 +187,118 @@ public sealed class WorldDefinitionMembers {
         if (held is not null) { Held.AddOrUpdate(key: replaced, value: new WorldDefinitionMembers(members: slices.Values)); }
         return replaced;
     }
+    /// <summary>Returns <paramref name="next"/> as a document built from <paramref name="basis"/>: every root member whose
+    /// bytes the two hold alike is <paramref name="basis"/>'s own instance, and in each other member every member and
+    /// keyed row the change leaves equal is (<see cref="WorldDocumentWalker.Share{T}"/>), so a product kept by a row's
+    /// identity carries over and an instance that differs from <paramref name="basis"/>'s is a change.</summary>
+    /// <remarks>The result is held beside <paramref name="next"/>'s slices, which it serializes to.</remarks>
+    /// <param name="basis">The document whose instances are kept.</param>
+    /// <param name="next">The document whose content the result holds.</param>
+    /// <param name="patchOf">Returns a changed member's patch from its name, <paramref name="basis"/>'s tree (or
+    /// <see langword="null"/> when <paramref name="basis"/> lacks it) and <paramref name="next"/>'s tree, naming every
+    /// path the two trees differ at; <see langword="null"/> takes <see cref="WorldDocumentBasis.DiffValue"/>.</param>
+    /// <param name="patch">The object each changed member's patch is written into (a <see langword="null"/> entry for a
+    /// member <paramref name="next"/> lacks), or <see langword="null"/>.</param>
+    /// <returns>The shared document, which holds <paramref name="next"/>'s content and directory.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="basis"/> or <paramref name="next"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">A value on a path to a change cannot be copied.</exception>
+    public static WorldDefinition ShareUnchanged(WorldDefinition basis, WorldDefinition next, Func<string, JsonNode?, JsonNode?, JsonNode?>? patchOf = null, JsonObject? patch = null) {
+        ArgumentNullException.ThrowIfNull(argument: basis);
+        ArgumentNullException.ThrowIfNull(argument: next);
+
+        patchOf ??= static (_, basisTree, target) => ((basisTree is null) ? target : WorldDocumentBasis.DiffValue(basis: basisTree, target: target));
+
+        var before = Of(definition: basis);
+        var after = Of(definition: next);
+        var shared = new Dictionary<string, object?>(comparer: StringComparer.Ordinal);
+
+        foreach (var member in after.Members) {
+            if (before.TryGet(name: member.Name, member: out var held) && string.Equals(a: held.Digest, b: member.Digest, comparisonType: StringComparison.Ordinal)) { continue; }
+
+            var basisTree = (before.TryGet(name: member.Name, member: out held) ? held.Tree() : null);
+            var target = member.Tree();
+            var delta = patchOf(arg1: member.Name, arg2: basisTree, arg3: target);
+
+            if (patch is not null) { patch[member.Name] = delta; }
+            shared[member.Name] = ShareValue(name: member.Name, value: Value(definition: next, name: member.Name), basis: Value(definition: basis, name: member.Name), valueTree: target, basisTree: basisTree, patch: delta);
+        }
+        foreach (var member in before.Members) {
+            if (!after.TryGet(name: member.Name, member: out _)) {
+                if (patch is not null) { patch[member.Name] = null; }
+                shared[member.Name] = null;
+            }
+        }
+        return With(basis: basis, documentDirectory: next.DocumentDirectory, slices: after, values: shared);
+    }
+    // One member's value with every member and keyed row the patch leaves equal taken from the basis's value; the value
+    // itself when either side is absent, the member is an extension member, or nothing could be shared.
+    private static object? ShareValue(string name, object? value, object? basis, JsonNode? valueTree, JsonNode? basisTree, JsonNode? patch) =>
+        (((value is not null) && (basis is not null) && (valueTree is not null) && (basisTree is not null) && (patch is not null) && IsModelMember(name: name))
+            ? WorldDocumentWalker.Share(basis: basis, basisTree: basisTree, patch: patch, value: value, valueTree: valueTree)
+            : value);
+
+    /// <summary>Merges a reconstructed source delta over the live definition and records the change for undo.</summary>
+    /// <remarks>Keyed merges retain live rows by identity and resolve only adopted rows. A value outside the keyed
+    /// overlay vocabulary is merged as JSON and shares unchanged values through <see cref="Replace"/>.</remarks>
+    /// <param name="previous">The preceding source revision.</param>
+    /// <param name="next">The source revision reconstructed from <paramref name="patch"/>.</param>
+    /// <param name="live">The definition to merge over.</param>
+    /// <param name="patch">The patch between the source revisions.</param>
+    /// <param name="patchOf">Produces a proved patch for a member merged as JSON.</param>
+    /// <param name="conflicts">Receives the paths where the source won a conflict.</param>
+    /// <param name="accepted">The patch that replays the accepted edit over the live definition.</param>
+    /// <returns>The candidate to validate and install.</returns>
+    public static WorldDefinition MergeReload(WorldDefinition previous, WorldDefinition next, WorldDefinition live, JsonObject patch,
+        Func<string, JsonNode?, JsonNode?, JsonNode?> patchOf, ICollection<string> conflicts, out byte[] accepted) {
+        var before = Of(previous);
+        var after = Of(next);
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var pending = new Dictionary<string, Func<WorldDefinition, object?>>(StringComparer.Ordinal);
+        var merged = new List<(string Name, ReadOnlyMemory<byte>? Value)>();
+        var liveTrees = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
+        var acceptedTree = new JsonObject();
+
+        foreach (var (name, delta) in patch) {
+            var prior = Value(previous, name);
+            var current = Value(live, name);
+            var target = Value(next, name);
+            var priorTree = before.TryGet(name, out var priorMember) ? priorMember.Tree() : null;
+            var targetTree = after.TryGet(name, out var targetMember) ? targetMember.Tree() : null;
+            var path = $"$.{name}";
+
+            if (WorldDocumentWalker.MergeReloadRows(prior, current, target, priorTree, targetTree, delta, path, conflicts) is { } edit) {
+                WorldBootWork.Count(WorldBootWork.ReloadRowsMerged, edit.Rows);
+                if (ReferenceEquals(current, edit.Value)) { continue; }
+                values.Add(name, edit.Value);
+                acceptedTree.Add(name, edit.Patch);
+                if (edit.Resolve is { } resolve) { pending.Add(name, resolve); }
+            } else if (ReferenceEquals(current, prior)) {
+                if (OrderedJson.Equals(priorTree, targetTree)) { continue; }
+                values.Add(name, ShareValue(name, target, current, targetTree, priorTree, delta));
+                acceptedTree.Add(name, delta?.DeepClone());
+            } else {
+                var liveTree = Write(name, current);
+                var three = WorldDocumentBasis.MergeThree(priorTree, liveTree, targetTree, path, conflicts, countReloadRows: true);
+                if (OrderedJson.Equals(liveTree, three)) { continue; }
+                liveTrees.Add(name, liveTree);
+                merged.Add((name, three is null ? null : CanonicalJsonDocument.SerializeCompact(three)));
+            }
+        }
+
+        var installed = Replace(With(live, values, next.DocumentDirectory), merged, next.DocumentDirectory, liveTrees);
+        if (pending.Count > 0) {
+            var resolved = pending.ToDictionary(pair => pair.Key, pair => pair.Value(installed), StringComparer.Ordinal);
+            installed = With(installed, resolved, next.DocumentDirectory);
+        }
+        foreach (var (name, _) in merged) {
+            var target = Write(name, Value(installed, name));
+            if (!OrderedJson.Equals(liveTrees[name], target)) { acceptedTree.Add(name, patchOf(name, liveTrees[name], target)); }
+        }
+        accepted = CanonicalJsonDocument.SerializeCompact(acceptedTree);
+        return installed;
+    }
+
     /// <summary>Returns <paramref name="basis"/> with each named member holding a typed value already resolved, held
     /// beside <paramref name="slices"/> when given: the slices the result serializes to, which the caller vouches for
     /// (the values were read from, or share every row with, a document whose slices those are).</summary>

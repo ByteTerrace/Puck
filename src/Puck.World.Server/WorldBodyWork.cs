@@ -5,8 +5,9 @@ namespace Puck.World.Server;
 /// <summary>
 /// The work <see cref="WorldPopulation"/> spends stepping bodies, counted in a
 /// <see cref="WorkCounterSet"/> and read through <see cref="IWorkCounterSource"/> under the source name
-/// <see cref="SourceName"/>: the bodies a tick advances, the parked rigid bodies a contact-field change woke or left
-/// asleep because the change could not reach them, and the gyroscopic steps rigid bodies took, refused, or took without their rescale.
+/// <see cref="SourceName"/>: the bodies a tick advances, the sleeping bodies (parked rigid islands and idle kit
+/// bodies) a contact-field change woke or left asleep because the change could not reach them, and the gyroscopic
+/// steps rigid bodies took, refused, or took without their rescale.
 /// </summary>
 /// <remarks>Each count is a monotonic total over the ledger's life, never reset; a reader takes a window by reading
 /// twice and subtracting. None is part of simulation state: nothing hashes, exports or checkpoints them. Each kind
@@ -21,9 +22,11 @@ public sealed class WorldBodyWork : WorkLedger<WorkCounterSet> {
     /// an ownership face shortened, rejected or slowed. Delivery timing is not yet taped, so this count is
     /// pacing-dependent.</summary>
     public static WorkKind AdjacencyCorrectionClamps { get; } = new(name: "physics.bodies.adjacency-correction-clamps", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Gets the kind counting parked rigid bodies a contact-field change woke.</summary>
+    /// <summary>Gets the kind counting sleeping bodies (parked rigid bodies and idle kit bodies) a contact-field change
+    /// woke.</summary>
     public static WorkKind FieldWakes { get; } = new(name: "physics.bodies.field-wakes", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting parked rigid bodies that observed a bounded contact-field change without waking (a
+    /// <summary>Gets the kind counting sleeping bodies (parked rigid bodies and idle kit bodies) that observed a bounded
+    /// contact-field change without waking (a
     /// moving attached solid, a response swap, a field lattice's changed cells), because their bounds miss everything it
     /// changed.</summary>
     public static WorkKind FieldObserved { get; } = new(name: "physics.bodies.field-observed", unit: "count", workClass: WorkClass.Deterministic);

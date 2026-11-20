@@ -54,6 +54,9 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     /// document composed whole, and only the members a changed layer writes differently when a held composition is
     /// recomposed by layer.</summary>
     public static WorkKind CompositionMembers { get; } = Registry.Declare(name: "world.boot.composition-members", unit: "count", workClass: WorkClass.Pacing);
+
+    /// <summary>Gets the kind counting keyed rows considered by a source reload's three-way merge.</summary>
+    public static WorkKind ReloadRowsMerged { get; } = Registry.Declare("world.boot.reload-rows-merged", "count", WorkClass.Pacing);
     /// <summary>Gets the documents read while compiling a source, including its inherited basis declarations. A
     /// held compile performs none of this work.</summary>
     public static WorkKind CompileDocumentsRead { get; } = Registry.Declare(name: "world.boot.compile-documents-read", unit: "count", workClass: WorkClass.Pacing);
@@ -76,9 +79,11 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     /// parse and not its <c>DEFN</c> load. Either way a boot counts the same parses whether or not it finds a compiled
     /// world.</summary>
     public static WorkKind Parses { get; } = Registry.Declare(name: "world.boot.parses", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting whole-document validations: one per run of the validator over a
-    /// <see cref="WorldDefinition"/>, local or with its adjacency proofs. One admitted load counts one; an environment
-    /// completion over an existing receipt counts none.</summary>
+    /// <summary>Gets the kind counting validation units: one per unit a validation partition judged
+    /// (<see cref="WorldDefinitionValidator.Partitions"/>), and one per state row a state write's row walk judged. A
+    /// whole-document validation counts every unit of the document (<see cref="WorldDefinitionValidator.UnitsIn"/>); a
+    /// change validated through <see cref="WorldDefinitionValidator.TryValidateChange"/> counts the units it reached; an
+    /// environment completion over an existing receipt counts none.</summary>
     public static WorkKind Validations { get; } = Registry.Declare(name: "world.boot.validations", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting rule compilations: one per <see cref="WorldRuleCompilation"/> produced, whether
     /// a validation retained it or a host compiled it directly. A load that reuses its receipt counts one.</summary>
@@ -146,6 +151,16 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     public static WorkKind WatchStampReads { get; } = Registry.Declare("world.boot.watch-stamp-reads", "count", WorkClass.Pacing);
     /// <summary>Gets the kind counting source input queries that read file contents or directory listings.</summary>
     public static WorkKind WatchContentReads { get; } = Registry.Declare("world.boot.watch-content-reads", "count", WorkClass.Pacing);
+    /// <summary>Gets the kind counting presentation-row deliveries to local or replica clients, one per recipient per
+    /// install, so rows delivered over deliveries reads the rows each recipient received.</summary>
+    public static WorkKind PresentationDeliveries { get; } = Registry.Declare("world.boot.presentation-deliveries", "count", WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the file and directory stamps a reload's preparation read through the compile
+    /// input door (<c>Puck.Assets.CompileInputs.StampReads</c>): what proving its sources and held compositions still
+    /// stand cost it.</summary>
+    public static WorkKind CompileStampReads { get; } = Registry.Declare("world.boot.compile-stamp-reads", "count", WorkClass.Pacing);
+    /// <summary>Gets the kind counting the file contents a reload's preparation read and the directories it listed
+    /// through the compile input door (<c>Puck.Assets.CompileInputs.ContentReads</c>).</summary>
+    public static WorkKind CompileContentReads { get; } = Registry.Declare("world.boot.compile-content-reads", "count", WorkClass.Pacing);
     /// <summary>Gets the kind counting creation and shade rows delivered to local or replica clients.</summary>
     public static WorkKind PresentationRowsDelivered { get; } = Registry.Declare("world.boot.presentation-rows-delivered", "count", WorkClass.Deterministic);
     /// <summary>Gets the kind counting compact row payload bytes delivered to local or replica clients.</summary>

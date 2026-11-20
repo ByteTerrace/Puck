@@ -1104,7 +1104,9 @@ Next: fill the engine gaps first
    apart (a carve's rim meets a face at up to 125 degrees); and a lattice at its
    tier's floor still refines the cells it cannot resolve at all
    (`SdfMeshPathBake.FactorOf`), so the swallow's streamer tips are no longer
-   lost. Still open, each read in the exhibit's own vertices: the junction
+   lost. A broad sheet can also take an extra split when the ordinary
+   refinement would still leave a coarse cell (`SdfMeshPathBake.ThinSplit`).
+   Still open, each read in the exhibit's own vertices: the junction
    where a groove's lips meet a box edge (`shape-groove-union`) and where a
    rounded rim fades into a sharp edge (`shape-smooth-subtraction`), where the
    field check moves solved vertices up to half a cell or refuses a kinked one;
@@ -1135,9 +1137,8 @@ Next: fill the engine gaps first
      criterion "may still contain intersecting polygons"). Not checked: that
      the refinement takes the finest split that fits and is never skipped
      silently (a reviewer's reading).
-2. **Non-uniform scale bounds (gap 11,** [rendering](rendering.md#bake-quality))
-   and **[moving blends](moving-blends.md#engine-gaps-first) step 4 (gap 10)**
-   beside it. Then the three kinds of triangle the lattice's facing does not
+2. **Non-uniform scale bounds (gap 11,** [rendering](rendering.md#bake-quality)).
+   Then the three kinds of triangle the lattice's facing does not
    judge, which the tour's remaining reds and the Moth's shin groups share
    (below).
 
@@ -1181,8 +1182,7 @@ Next: fill the engine gaps first
   defects. Inspect the contour's narrow triangles before changing its detail.
 - [high] The walkthrough tour is still red on its mesh audits:
   `puck mesh audit --cpu --prototype <id>` (`SweepMeshAudit`) finds flipped
-  triangles on six of the fourteen blend exhibits (`shape-groove-union` and
-  `shape-blend-subtraction` worst) and on none of the primitives. Those counts
+  triangles along several of the blend exhibits' rims. Earlier counts
   came from CPU taps wider than the kernel's; on the exhibits' tiers the CPU
   now places the kernel's taps, which turned `shape-chamfer-union` from 6 folds
   and 2 flipped to 0 and 0, as on the device, so the six are read again first.
@@ -1223,8 +1223,8 @@ Next: fill the engine gaps first
   sheet, or refine it), and the non-manifold edges on the shins' soles sit on
   the same edges. The one detail rule exposes the defect and does not cause
   it.
-- [high] [Moving blends](moving-blends.md) steps 4 and 5: paints, insets and
-  lanes across a blended seam, then the quiet-window cost of a skinned
+- [high] [Moving blends](moving-blends.md) steps 4 and 5 still need the lead's
+  presented striped-neck check and the quiet-window cost of a skinned
   close-up and a crowd on both backends.
 - [medium] The curvature gate refines sharp creases as turns (toes and soles
   about twice over): the samples cannot tell a crease from a fillet narrower
@@ -1441,8 +1441,10 @@ in [sweep](#sweep-and-visual-checks).
 Owner: next lighting batch (rendering, principal-grade review) · high · Next:
 [what the GPU trace still owes](illumination.md#after-the-gpu-trace), the
 plan's step 3: the moving-sun lockstep drain and the outdoor difference from
-the CPU reference; then a cold area lit from the coarser levels or the sky
-term the moment a view arrives.
+the CPU reference. Measure the live relight backlog under an accelerated day,
+the valley at dawn and dusk, and the first frame and settled light after a
+teleport. The gather now hands missing cells to the coarser levels and the
+view can read its authored sky while its new camera sample is pending.
 [The plan](illumination.md#the-build-order) owns the steps, and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
@@ -2018,7 +2020,7 @@ valley's walls wait on [the terrain pass](terrain-pass.md#order-of-work)'s
 steps 4, 3, 6 and 7 (gaps 1 to 4), the caldera water on
 [water](water.md#order)'s gaps 5, 6 and 9 and on
 [moving blends](moving-blends.md#engine-gaps-first)' gap 8, and the Moth and
-the swallow on its gap 10 and on [bake detail](#bake-detail)'s gap 7. Then
+the swallow on [bake detail](#bake-detail)'s gap 7. Then
 the caldera water's first proof, then the per-milestone review across every
 place. The bar and its judging are in
 [the art README](../game/art/README.md#the-visual-bar); each place's look
@@ -2328,6 +2330,20 @@ grow:
   step thread from a copy-on-write image, and make checkpoints incremental;
   the document a checkpoint carries twice is
   [delivery's item](#delivery-launcher-and-ci).
+- [high] A crossing record blocks the silo's one step thread on blob round
+  trips. `WorldSiloHost.RowCrossingLog.Append` waits on the row's publication
+  queue (`GetAwaiter().GetResult()`), which checkpoint uploads also join, and
+  it is reached from the step through `WorldInstanceHost.DrainPendingTransfers`
+  and every other synchronous `WorldServer.RecordCrossingHeld` caller
+  (`WorldTransferEscrow`, `WorldServer.Custody`, the companion, departure and
+  settlement paths in `WorldInstanceHost`). Make the record asynchronous the
+  way federated transfers resume at tick boundaries: `IWorldCrossingLog`
+  answers pending, the authority holds one in-flight record per crossing
+  sequence (the sequence must stay dense) together with the step that waits
+  on it, and the step resumes at the next drain once the record is durable;
+  an arrival lands only then. Retried steps rebuild their records (a
+  settlement's lists), so the in-flight record is kept by the transfer, never
+  matched by value.
 - [medium] Hard caps with no admission story: 4096 bodies a world
   (`WorldBodiesLimits.CapacityCeiling`), 256 authenticated federation
   connections a host (`WorldPeerHost.MaximumFederationConnections`), and one
@@ -2984,12 +3000,10 @@ The edit loop:
   95 MB document); step 4's delta from the session is what removes it. The
   hundreds of milliseconds the earlier trace read on the adopting tick
   predate the keyed delta and need a new reading.
-- A shading edit still runs the whole validator over its candidate and
-  canonicalizes and digests the edited creation twice; reload's sender
-  serializes and diffs whole trees and the server validates the whole
-  candidate, off the tick but in proportion to the document, not the edit.
-  Capture the edit's allocations, then narrow the validation as
-  `TryValidateTouchedStateRows` narrows a state write.
+- A shading edit validates its one creation (`WorldDefinitionValidator.TryValidateChange`)
+  but still canonicalizes and digests the edited creation twice, and reload's
+  sender serializes and diffs whole trees, in proportion to the document, not
+  the edit. Capture the edit's allocations.
 - Every other mutation composes over `MaterializeArena`, which exports every
   document row anew. Export only the rows whose arena version moved, and
   reload a same-catalog arena in place (`StateCatalog.MatchesShape` answers

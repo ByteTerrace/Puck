@@ -136,13 +136,17 @@ internal static class WorldDocumentMembers {
                     memberType = typeof(IReadOnlyList<ShapeDocument>);
                 } else if ((shape.Kind == System.Text.Json.Serialization.Metadata.JsonTypeInfoKind.Dictionary) && (shape.ElementType is { } element)) {
                     memberType = element;
-                } else if (members.FirstOrDefault(predicate: member => ((member.Name == key) && ((member.Access & (WorldModelAccess.Read | WorldModelAccess.ExtensionData | WorldModelAccess.Ignored)) == WorldModelAccess.Read))) is { } member) {
+                } else if (ReadMembers.GetValue(key: members, derive: IndexReadMembers).TryGetValue(key: key, value: out var member)) {
                     memberType = member.Type;
                 } else if (refuse && (diagnostics is not null) && !((polymorphic && (key == "$type")) ||
                     ((pointer.Length > 0) && (key is "$replace" or "$drop" or "$before")) ||
                     ((pointer.Length == 0) && (WorldConstructs.Table.RootArmWriting(documentKey: key) is WorldRootArm.Materials or WorldRootArm.Cartridge)) ||
                     ((shape.Members.Any(predicate: static member => ((member.Access & WorldModelAccess.ExtensionData) != 0))) && DocumentExtensionsPolicy.IsReservedKey(key: key)))) {
-                    var finding = Diagnostic.Error(code: PuckDiagnosticCodes.SemanticValidation, message: $"Unknown member '{key}'; no document member consumes it{DocumentNearestNames.Suggestion(candidates: members.Where(predicate: static member => ((member.Access & (WorldModelAccess.Read | WorldModelAccess.ExtensionData | WorldModelAccess.Ignored)) == WorldModelAccess.Read)).Select(selector: static member => member.Name), name: key)}.", span: SourceSpan.None);
+                    var finding = Diagnostic.Error(
+                        code: PuckDiagnosticCodes.UnknownMember,
+                        message: $"Unknown member '{key}'{DocumentNearestNames.Suggestion(candidates: members.Where(predicate: static member => ((member.Access & (WorldModelAccess.Read | WorldModelAccess.ExtensionData | WorldModelAccess.Ignored)) == WorldModelAccess.Read)).Select(selector: static member => member.Name), name: key)}.",
+                        span: SourceSpan.None
+                    );
 
                     diagnostics.Report(diagnostic: sourceMap.Place(diagnostic: finding, jsonPointer: child));
                 }
@@ -213,4 +217,18 @@ internal static class WorldDocumentMembers {
     }
 
     private static readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldModelMember>, Dictionary<string, int>> Ranks = new();
+    // The members a document key may consume, by name, the first of a name winning: read, and neither extension data
+    // nor ignored.
+    private static readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldModelMember>, Dictionary<string, WorldModelMember>> ReadMembers = new();
+
+    private static Dictionary<string, WorldModelMember> IndexReadMembers(IReadOnlyList<WorldModelMember> members) {
+        var index = new Dictionary<string, WorldModelMember>(comparer: StringComparer.Ordinal);
+
+        foreach (var member in members) {
+            if ((member.Access & (WorldModelAccess.Read | WorldModelAccess.ExtensionData | WorldModelAccess.Ignored)) == WorldModelAccess.Read) {
+                _ = index.TryAdd(key: member.Name, value: member);
+            }
+        }
+        return index;
+    }
 }

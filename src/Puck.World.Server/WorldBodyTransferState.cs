@@ -86,8 +86,8 @@ namespace Puck.World.Server;
 /// reconstructs the body from the same seat kit row (<c>m_kits[m_seatKit]</c>), so these are byte-identical
 /// without help. <c>m_contactField</c> — wired directly by <c>RestoreDetachedSeat</c>'s own
 /// <see cref="WorldBody.SetContactField"/> call immediately after construction (the same population), always correct.
-/// <c>m_mediumSurface</c> needs no wiring at all: <see cref="Puck.World.Server.WorldPopulation.SampleMediumSurfaces"/>
-/// re-samples every active body's coupled cell fresh each tick, before that body's own Advance runs, so the
+/// <c>m_mediumSurface</c> needs no wiring at all: <see cref="Puck.World.Server.WorldPopulation.SampleFieldInputs"/>
+/// samples every body's coupled cell fresh in the tick it advances, before that Advance runs, so the
 /// restored body reads a correct surface (or none) on its very next tick regardless of what it held before
 /// detaching. <c>m_position</c>/<c>m_previousPosition</c>/
 /// <c>m_yaw</c> — captured/restored outside this struct entirely, via <c>RestoreDetachedSeat</c>'s own

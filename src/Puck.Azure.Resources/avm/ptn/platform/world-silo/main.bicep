@@ -129,7 +129,7 @@ resource worldStoreRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
   name: guid(resourceGroup().id, configuration.roleDefinitionName)
   properties: {
     roleName: configuration.roleDefinitionName
-    description: 'Read and write world definitions, checkpoints and journals in the assigned container.'
+    description: 'Read, write and retire world definitions, checkpoints and journals in the assigned container.'
     type: 'CustomRole'
     assignableScopes: [resourceGroup().id]
     permissions: [
@@ -139,9 +139,11 @@ resource worldStoreRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
           'Microsoft.Storage/storageAccounts/blobServices/containers/read'
           'Microsoft.Storage/storageAccounts/blobServices/containers/write'
         ]
+        // A landed checkpoint retires the checkpoint and journal objects it supersedes.
         dataActions: [
           'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read'
           'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write'
+          'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/delete'
         ]
       }
     ]

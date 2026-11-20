@@ -515,6 +515,12 @@ public sealed partial class WorldBody {
     /// <param name="tether">The kit's compiled tether facet (<see cref="FixedWorldKit.Tether"/>), or
     /// <see langword="null"/> for a kit that carries no rope.</param>
     public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null, WorldChannelTable? channels = null) {
+        // An idle sleeper whose program, holds or feel change would answer differently than the one it fell asleep
+        // under (a hold list that no longer supports it falls), so it wakes; a rebind to the same kit leaves it asleep.
+        if ((m_asleepSinceTick != 0UL) && ((m_tuning != tuning) || !ReferenceEquals(objA: m_holds, objB: (holds ?? [])) ||
+            !ReferenceEquals(objA: m_bodyMotionProgram, objB: program) || !SameVolumes(left: m_collider, right: collider) || (m_rigid != rigid))) {
+            WakeUp();
+        }
         SetTuning(
             holds: holds,
             tuning: tuning
@@ -787,6 +793,7 @@ public sealed partial class WorldBody {
     public void SetGravityField(WorldGravityField? field) {
         if (!ReferenceEquals(objA: m_gravityField, objB: field)) { InvalidateRigidRest(); }
         m_gravityField = field;
+        if (IdleSleepGravity.HasValue && field is not { IsActive: true }) { WakeUp(); }
     }
     /// <summary>Sets the capture latch — a PROJECTION of the owning principal's control-application set, written by
     /// <c>Server.WorldEngagement.SyncLatch</c> alone and never independently: engaged means that set omits this

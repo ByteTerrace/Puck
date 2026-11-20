@@ -72,4 +72,18 @@ public sealed class WorldGrainStatus {
     /// <summary>Superseded authority payload objects deleted by this activation.</summary>
     [Id(21)]
     public long RetiredAuthorityObjects { get; init; }
+    /// <summary>Gets the last landed checkpoint's failure to retire superseded objects, or <see langword="null"/> when
+    /// its retention succeeded.</summary>
+    [Id(22)]
+    public string? RetentionFailure { get; init; }
+    /// <summary>Gets how many landed checkpoints in a row have failed retention.</summary>
+    [Id(23)]
+    public int RetentionFailures { get; init; }
+    /// <summary>Gets the store refusal that stopped cadence checkpoints until an explicit checkpoint lands, or
+    /// <see langword="null"/> while the cadence runs.</summary>
+    [Id(24)]
+    public string? CadenceRefusal { get; init; }
+    /// <summary>Gets the journal entries this row holds above its landed checkpoint: what a recovery would replay.</summary>
+    [Id(25)]
+    public long JournalTailEntries { get; init; }
 }
