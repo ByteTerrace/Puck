@@ -142,7 +142,11 @@ internal static class WorldDocumentMembers {
                     ((pointer.Length > 0) && (key is "$replace" or "$drop" or "$before")) ||
                     ((pointer.Length == 0) && (WorldConstructs.Table.RootArmWriting(documentKey: key) is WorldRootArm.Materials or WorldRootArm.Cartridge)) ||
                     ((shape.Members.Any(predicate: static member => ((member.Access & WorldModelAccess.ExtensionData) != 0))) && DocumentExtensionsPolicy.IsReservedKey(key: key)))) {
-                    var finding = Diagnostic.Error(code: PuckDiagnosticCodes.SemanticValidation, message: $"Unknown member '{key}'; no document member consumes it{DocumentNearestNames.Suggestion(candidates: members.Where(predicate: static member => ((member.Access & (WorldModelAccess.Read | WorldModelAccess.ExtensionData | WorldModelAccess.Ignored)) == WorldModelAccess.Read)).Select(selector: static member => member.Name), name: key)}.", span: SourceSpan.None);
+                    var finding = Diagnostic.Error(
+                        code: PuckDiagnosticCodes.UnknownMember,
+                        message: $"Unknown member '{key}'{DocumentNearestNames.Suggestion(candidates: members.Where(predicate: static member => ((member.Access & (WorldModelAccess.Read | WorldModelAccess.ExtensionData | WorldModelAccess.Ignored)) == WorldModelAccess.Read)).Select(selector: static member => member.Name), name: key)}.",
+                        span: SourceSpan.None
+                    );
 
                     diagnostics.Report(diagnostic: sourceMap.Place(diagnostic: finding, jsonPointer: child));
                 }

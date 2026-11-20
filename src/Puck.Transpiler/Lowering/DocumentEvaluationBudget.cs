@@ -225,6 +225,13 @@ public sealed class DocumentEvaluationException : Exception {
     public string Code { get; }
     /// <summary>Gets the source of the refusal.</summary>
     public SourceSpan Span { get; }
+    /// <summary>Gets the source file that owns <see cref="Span"/> when it differs from the compilation root.</summary>
+    public string? SourcePath { get; init; }
+    /// <summary>Gets an optional related use-site location.</summary>
+    public DiagnosticRelated? Related { get; init; }
+    /// <summary>Gets whether <see cref="SourcePath"/> has already been explicitly attributed (including to the root
+    /// when <see cref="SourcePath"/> is <see langword="null"/>), so enclosing library scopes will not overwrite it.</summary>
+    public bool SourceAttributed { get; init; }
 
     /// <summary>Creates an evaluation refusal.</summary>
     /// <param name="message">The actionable diagnostic.</param>
@@ -234,4 +241,25 @@ public sealed class DocumentEvaluationException : Exception {
         Span = span;
         Code = code;
     }
+
+    /// <summary>Returns a copy attributed to <paramref name="sourcePath"/>, preserving the original span and message.</summary>
+    public DocumentEvaluationException WithSource(string? sourcePath, DiagnosticRelated? related = null) => new(
+        code: Code,
+        message: Message,
+        span: Span
+    ) {
+        Related = (Related ?? related),
+        SourceAttributed = true,
+        SourcePath = sourcePath,
+    };
+
+    /// <summary>Converts this exception into a <see cref="Diagnostic"/> preserving its source attribution.</summary>
+    public Diagnostic ToDiagnostic() => (Diagnostic.Error(
+        code: Code,
+        message: Message,
+        span: Span
+    ) with {
+        Related = Related,
+        SourcePath = SourcePath,
+    });
 }

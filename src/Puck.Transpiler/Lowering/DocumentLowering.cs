@@ -357,11 +357,16 @@ public static partial class DocumentLowering {
                         !scope.Templates.ContainsKey(key: call.Name) &&
                         !scope.Vocabulary.NamesArm(callName: call.Name)
                     ) {
+                        var hint = ((DocumentBuiltins.SpellingFor(written: call.Name) is { } spelling)
+                            ? $"; write '{spelling}'"
+                            : DocumentNearestNames.Suggestion(
+                                candidates: DocumentBuiltins.Names,
+                                name: call.Name
+                            ));
+
                         scope.Diagnostics.ReportError(
                             code: PuckDiagnosticCodes.BuiltinRefused,
-                            message: $"'{call.Name}' is not a compile-time function or a document arm{((DocumentBuiltins.SpellingFor(written: call.Name) is { } spelling)
-                                ? $"; the document language spells it '{spelling}'"
-                                : "")}",
+                            message: $"'{call.Name}' is not a known function or construct{hint}",
                             span: call.Span
                         );
 
@@ -497,7 +502,9 @@ public static partial class DocumentLowering {
                 : index);
 
             refusal = (((at < 0) || (at >= bound.Length))
-                ? ((argumentNames[index] is { } unknown) ? $"function '{name}' has no parameter '{unknown}'" : $"function '{name}' takes {bound.Length} argument(s)")
+                ? ((argumentNames[index] is { } unknown)
+                    ? $"function '{name}' has no parameter '{unknown}'{DocumentNearestNames.Suggestion(candidates: function.Parameters.Select(selector: static parameter => parameter.Name), name: unknown)}"
+                    : $"function '{name}' takes {bound.Length} argument(s)")
                 : ((bound[at] >= 0) ? $"function '{name}' is given '{function.Parameters[at].Name}' twice" : null));
             if (refusal is null) { bound[at] = index; }
         }
@@ -550,8 +557,20 @@ public static partial class DocumentLowering {
         for (var at = 0; (at < bound.Length); at++) {
             locals[function.Parameters[at].Name] = EvaluateValue(expr: ((bound[at] >= 0) ? call.Arguments[bound[at]].Value : function.Parameters[at].DefaultValue!), fieldKey: null, scope: scope);
         }
+        var functionSource = DocumentScope.DefinitionPathOf(value: function);
+        var useSite = ((functionSource is not null)
+            ? new DiagnosticRelated(Message: $"Called '{call.Name}' here.", SourcePath: scope.SourcePath, Span: call.Span)
+            : null);
+
         return ExpandFunction(
-            expand: () => EvaluateValue(expr: function.Body, fieldKey: fieldKey, scope: scope.WithLocals(lambdaLocals: locals)),
+            expand: () => {
+                using var sourceGuard = scope.Diagnostics.PushSource(related: useSite, sourcePath: functionSource);
+                try {
+                    return EvaluateValue(expr: function.Body, fieldKey: fieldKey, scope: scope.WithLocals(lambdaLocals: locals));
+                } catch (DocumentEvaluationException error) when (!error.SourceAttributed && (functionSource is not null)) {
+                    throw error.WithSource(related: useSite, sourcePath: functionSource);
+                }
+            },
             name: call.Name,
             refused: ((JsonNode?)null),
             scope: scope,
@@ -1651,9 +1670,14 @@ public static partial class DocumentLowering {
             key: templateName,
             value: out var template
         )) {
+            var suggestion = DocumentNearestNames.Suggestion(
+                candidates: scope.Templates.Keys,
+                name: call.Name
+            );
+
             scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.InvalidValue,
-                message: $"Unknown module or template '{call.Name}'.",
+                code: PuckDiagnosticCodes.UnknownTemplate,
+                message: $"Unknown module or template '{call.Name}'{suggestion}.",
                 span: call.Span
             );
             return;
@@ -1674,8 +1698,16 @@ public static partial class DocumentLowering {
 
         if (template.DefinitionPath is not null) { definitionScope = definitionScope.WithBasePath(basePath: Path.GetDirectoryName(path: template.DefinitionPath)); }
         var localConstants = new Dictionary<string, ExpressionNode>(dictionary: definitionScope.Constants);
-        var invocationScope = definitionScope.WithConstants(invocationConstants: localConstants, annotations: (annotations ?? scope.Annotations));
+        var invocationScope = definitionScope.WithConstants(
+            annotations: (annotations ?? scope.Annotations),
+            invocationConstants: localConstants,
+            sourcePath: template.DefinitionPath
+        );
         var consumed = new HashSet<int>();
+        var kind = (template.IsModule ? "Module" : "Template");
+        var parameterNames = template.Parameters.Select(selector: static parameter => parameter.Name).ToArray();
+        var parameterList = ((parameterNames.Length == 0) ? "none" : string.Join(separator: ", ", values: parameterNames));
+        var argumentError = false;
 
         for (var index = 0; (index < template.Parameters.Count); ++index) {
             var param = template.Parameters[index];
@@ -1691,11 +1723,13 @@ public static partial class DocumentLowering {
                 )) {
                     if (boundValue is not null) {
                         scope.Diagnostics.ReportError(
-                            code: PuckDiagnosticCodes.InvalidValue,
-                            message: $"Argument '{param.Name}' is supplied more than once.",
+                            code: PuckDiagnosticCodes.TemplateArgument,
+                            message: $"{kind} '{templateName}' received argument '{param.Name}' more than once (parameters: {parameterList}).",
                             span: arg.Span
                         );
-                        return;
+                        consumed.Add(item: argumentIndex);
+                        argumentError = true;
+                        continue;
                     }
                     boundValue = arg.Value;
                     consumed.Add(item: argumentIndex);
@@ -1716,34 +1750,71 @@ public static partial class DocumentLowering {
             boundValue ??= param.DefaultValue;
 
             if (boundValue is not null) {
-                if (!ValidateModuleArgument(parameter: param, scope: (isDefault ? invocationScope : scope), value: boundValue)) {
+                var argScope = (isDefault ? invocationScope : scope);
+                using var argSourceGuard = scope.Diagnostics.PushSource(sourcePath: argScope.SourcePath);
+
+                if (!ValidateModuleArgument(parameter: param, scope: argScope, value: boundValue)) {
                     return;
                 }
                 invocationScope.BindArgument(
                     param.Name,
-                    (bindArgument?.Invoke(param, boundValue, (isDefault ? invocationScope : scope)) ?? boundValue),
-                    (isDefault
-                    ? invocationScope
-                    : scope)
+                    (bindArgument?.Invoke(param, boundValue, argScope) ?? boundValue),
+                    argScope
                 );
             } else {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.InvalidValue,
-                    message: $"{(template.IsModule ? "Module" : "Template")} '{templateName}' requires argument '{param.Name}'.",
+                    message: $"{kind} '{templateName}' requires argument '{param.Name}'.",
                     span: call.Span
                 );
-                return;
+                argumentError = true;
             }
         }
 
         if (consumed.Count != call.Arguments.Count) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.InvalidValue,
-                message: $"{(template.IsModule ? "Module" : "Template")} '{templateName}' received an unknown or duplicate argument.",
-                span: call.Span
-            );
+            for (var argumentIndex = 0; (argumentIndex < call.Arguments.Count); ++argumentIndex) {
+                if (consumed.Contains(item: argumentIndex)) {
+                    continue;
+                }
+                var arg = call.Arguments[argumentIndex];
+
+                if (arg.Name is { } named) {
+                    var suggestion = DocumentNearestNames.Suggestion(
+                        candidates: parameterNames,
+                        name: named
+                    );
+
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.TemplateArgument,
+                        message: $"{kind} '{templateName}' has no parameter '{named}'{suggestion} (parameters: {parameterList}).",
+                        span: arg.Span
+                    );
+                } else if (argumentIndex < template.Parameters.Count) {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.TemplateArgument,
+                        message: $"{kind} '{templateName}' parameter '{template.Parameters[argumentIndex].Name}' is supplied both positionally and by name (parameters: {parameterList}).",
+                        span: arg.Span
+                    );
+                } else {
+                    scope.Diagnostics.ReportError(
+                        code: PuckDiagnosticCodes.TemplateArgument,
+                        message: $"{kind} '{templateName}' takes at most {template.Parameters.Count} argument(s) (parameters: {parameterList}).",
+                        span: arg.Span
+                    );
+                }
+            }
+            argumentError = true;
+        }
+
+        if (argumentError) {
             return;
         }
+
+        var useSite = ((template.DefinitionPath is not null)
+            ? new DiagnosticRelated(Message: $"Expanded from '{templateName}' here.", SourcePath: scope.SourcePath, Span: call.Span)
+            : null);
+
+        using var templateSourceGuard = scope.Diagnostics.PushSource(related: useSite, sourcePath: template.DefinitionPath);
 
         invocationScope.IndexDeclarations(statements: template.Body.Statements);
         initializeInvocation?.Invoke(invocationScope, template.Body.Statements);
@@ -1753,7 +1824,6 @@ public static partial class DocumentLowering {
                 count: 1,
                 span: stmt.Span
             );
-            var diagnosticStart = scope.Diagnostics.Count;
 
             try {
                 sink(
@@ -1761,10 +1831,8 @@ public static partial class DocumentLowering {
                     target,
                     invocationScope
                 );
-            } catch (DocumentEvaluationException error) when ((template.DefinitionPath is not null)) {
-                throw new DocumentEvaluationException($"{template.DefinitionPath}: {error.Message}", error.Span, error.Code);
-            } finally {
-                scope.Diagnostics.AttributeFrom(diagnosticStart, template.DefinitionPath);
+            } catch (DocumentEvaluationException error) when (!error.SourceAttributed && (template.DefinitionPath is not null)) {
+                throw error.WithSource(related: useSite, sourcePath: template.DefinitionPath);
             }
         }
     }
@@ -1890,10 +1958,16 @@ public static partial class DocumentLowering {
             sink: (statement, _, invocationScope) => captured.Add(item: (statement, invocationScope))
         );
 
-        return Produced(captured: captured, definitionPath: (scope.Templates.TryGetValue(key: call.Name, value: out var template) ? template.DefinitionPath : null), sourceMap: scope.SourceMap);
+        var definitionPath = (scope.Templates.TryGetValue(key: call.Name, value: out var template) ? template.DefinitionPath : null);
+        var useSite = ((definitionPath is not null)
+            ? new DiagnosticRelated(Message: $"Expanded from '{call.Name}' here.", SourcePath: scope.SourcePath, Span: call.Span)
+            : null);
 
-        static IEnumerable<(StatementNode Statement, DocumentScope Scope)> Produced(List<(StatementNode, DocumentScope)> captured, string? definitionPath, SourceMap? sourceMap) {
+        return Produced(captured: captured, definitionPath: definitionPath, diagnostics: scope.Diagnostics, related: useSite, sourceMap: scope.SourceMap);
+
+        static IEnumerable<(StatementNode Statement, DocumentScope Scope)> Produced(List<(StatementNode, DocumentScope)> captured, string? definitionPath, SourceMap? sourceMap, DiagnosticBag diagnostics, DiagnosticRelated? related) {
             using var origin = sourceMap?.PushOrigin(sourcePath: definitionPath);
+            using var diagSource = diagnostics.PushSource(related: related, sourcePath: definitionPath);
 
             foreach (var produced in captured) {
                 yield return produced;
@@ -2061,6 +2135,12 @@ public static partial class DocumentLowering {
                 var spliced = new List<(StatementNode Statement, DocumentScope Scope)>();
 
                 ExpandTemplate(call: call, inRuleBody: true, scope: scope, sink: (member, _, invocation) => spliced.Add(item: (member, invocation)), target: []);
+                var useSite = ((template.DefinitionPath is not null)
+                    ? new DiagnosticRelated(Message: $"Expanded from '{call.Name}' here.", SourcePath: scope.SourcePath, Span: call.Span)
+                    : null);
+                using var origin = scope.SourceMap?.PushOrigin(sourcePath: template.DefinitionPath);
+                using var diagSource = scope.Diagnostics.PushSource(related: useSite, sourcePath: template.DefinitionPath);
+
                 foreach (var (member, invocation) in spliced) {
                     foreach (var flattened in ExpandBody(scope: invocation, statements: [member])) {
                         yield return flattened;

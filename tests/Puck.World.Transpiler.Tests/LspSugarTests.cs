@@ -9,15 +9,39 @@ public class LspSugarTests {
     private const string SourceWithRuleAndStateRow = "puck: 1\nstate {\n    world: [\n        {\n            name: \"hp\"\n            kind: Int\n            capacity: 1\n        }\n    ]\n}\nrule \"heal\" {\n    when hp < 10\n    hp += 1\n}\n";
 
     [Fact]
-    public async Task CompletionOffersTheNewGateAndEffectKeywords() {
-        var labels = await LanguageServerClient.CompletionLabelsAsync(markedSource: $"|{SourceWithRuleAndStateRow}");
+    public async Task CompletionOffersContextAppropriateKeywordsAndDropsRetiredGates() {
+        var rootLabels = await LanguageServerClient.CompletionLabelsAsync(markedSource: $"|{SourceWithRuleAndStateRow}");
 
-        foreach (var keyword in new[] { "when", "and", "or", "not", "local", "push", "remove", "schedule", "transform", "transaction", "onFailure", "decision", "option", "interrupt", "onNoChoice", "rule", "shape", "placements", "placement" }) {
-            Assert.Contains(
-                expected: keyword,
-                set: labels
-            );
+        foreach (var keyword in new[] { "rule", "placements" }) {
+            Assert.Contains(expected: keyword, set: rootLabels);
         }
+        foreach (var excluded in new[] { "compareState", "compareValue", "when", "push", "remove", "schedule", "deg", "ms" }) {
+            Assert.DoesNotContain(expected: excluded, set: rootLabels);
+        }
+
+        var ruleLabels = await LanguageServerClient.CompletionLabelsAsync(markedSource: "rule \"heal\" {\n    |\n}\n");
+
+        foreach (var keyword in new[] { "when", "and", "or", "not", "local", "push", "remove", "schedule", "transform", "transaction", "decision" }) {
+            Assert.Contains(expected: keyword, set: ruleLabels);
+        }
+        Assert.DoesNotContain(expected: "compareState", set: ruleLabels);
+        Assert.DoesNotContain(expected: "compareValue", set: ruleLabels);
+        Assert.DoesNotContain(expected: "deg", set: ruleLabels);
+
+        var transactionLabels = await LanguageServerClient.CompletionLabelsAsync(markedSource: "rule \"heal\" {\n    transaction {\n        |\n    }\n}\n");
+
+        Assert.Contains(expected: "onFailure", set: transactionLabels);
+
+        var decisionLabels = await LanguageServerClient.CompletionLabelsAsync(markedSource: "rule \"heal\" {\n    decision {\n        |\n    }\n}\n");
+
+        foreach (var keyword in new[] { "option", "interrupt", "onNoChoice" }) {
+            Assert.Contains(expected: keyword, set: decisionLabels);
+        }
+
+        var unitLabels = await LanguageServerClient.CompletionLabelsAsync(markedSource: "angle: 45|\n");
+
+        Assert.Contains(expected: "deg", set: unitLabels);
+        Assert.Contains(expected: "ms", set: unitLabels);
     }
     [Fact]
     public async Task DocumentSymbolReportsARuleBlockWithItsGateAsAChild() {

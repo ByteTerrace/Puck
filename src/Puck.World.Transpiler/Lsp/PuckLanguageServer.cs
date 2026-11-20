@@ -221,134 +221,65 @@ public sealed partial class PuckLanguageServer {
             _ => false,
         });
     }
-    // Best-effort: lowers the open document and looks `word` up among its `state` declarations: an enum, reporting its
-    // members, or a row, reporting its kind. Swallows parse/lowering failures — a document mid-edit need not lower
-    // cleanly for hover to still work on the parts that do.
-    private string? GetStateHoverCard(string text, string word, string? sourcePath = null) {
-        try {
-            if (LowerStateSection(
-                sourcePath: sourcePath,
-                text: text
-            ) is not { } stateSection) {
-                return null;
+    // Looks `word` up among the buffer's `state` declarations: first directly in the parsed AST, then in the last
+    // published compile's lowered state section (never compiling synchronously on the message thread).
+    private string? GetStateHoverCard(string uri, string word, DocumentNode? parsedDocument) {
+        if (PuckSymbolResolver.FindStateRowInAst(document: parsedDocument, rowName: word) is { } astRow) {
+            if (astRow.Kind == "enum") {
+                return $"**`{word}`** — enum\n\nMembers: {string.Join(
+                    separator: ", ",
+                    values: astRow.Keys.Select(selector: static member => $"`{member}`")
+                )}";
             }
-            foreach (var (sectionName, section) in stateSection) {
-                if (section is not JsonArray rows) {
+
+            return $"**`{word}`** — state row\n\nKind: `{astRow.Kind}`";
+        }
+
+        if (
+            !m_lastCompilations.TryGetValue(key: uri, value: out var compilation) ||
+            (compilation.Json?["state"] is not JsonObject stateSection)
+        ) {
+            return null;
+        }
+
+        foreach (var (sectionName, section) in stateSection) {
+            if (section is not JsonArray rows) {
+                continue;
+            }
+            foreach (var row in rows) {
+                if (
+                    (row is not JsonObject rowObj) ||
+                    (rowObj["name"]?.ToString() != word)
+                ) {
                     continue;
                 }
-                foreach (var row in rows) {
-                    if (
-                        (row is not JsonObject rowObj) ||
-                        (rowObj["name"]?.ToString() != word)
-                    ) {
-                        continue;
-                    }
-                    // A row names its enum after `: ` as a record field does, so the name is hovered where it stands.
-                    if (sectionName == "enums") {
-                        return $"**`{word}`** — enum\n\nMembers: {string.Join(
-                            separator: ", ",
-                            values: ((rowObj["members"] as JsonArray) ?? []).Select(selector: static member => $"`{member}`")
-                        )}";
-                    }
-                    var kind = (rowObj["kind"]?.ToString() ?? "?");
-                    var facets = new List<string>();
-
-                    if (rowObj["capacity"] is JsonValue capacity) {
-                        facets.Add(item: $"capacity {capacity}");
-                    }
-                    if (rowObj["domain"] is JsonValue domain) {
-                        facets.Add(item: $"domain {domain}");
-                    }
-                    var suffix = ((facets.Count > 0)
-                        ? $" ({string.Join(
-                            separator: ", ",
-                            values: facets
-                        )})"
-                        : ""
-                    );
-
-                    return $"**`{word}`** — state row\n\nKind: `{kind}`{suffix}";
+                if (sectionName == "enums") {
+                    return $"**`{word}`** — enum\n\nMembers: {string.Join(
+                        separator: ", ",
+                        values: ((rowObj["members"] as JsonArray) ?? []).Select(selector: static member => $"`{member}`")
+                    )}";
                 }
+                var kind = (rowObj["kind"]?.ToString() ?? "?");
+                var facets = new List<string>();
+
+                if (rowObj["capacity"] is JsonValue capacity) {
+                    facets.Add(item: $"capacity {capacity}");
+                }
+                if (rowObj["domain"] is JsonValue domain) {
+                    facets.Add(item: $"domain {domain}");
+                }
+                var suffix = ((facets.Count > 0)
+                    ? $" ({string.Join(
+                        separator: ", ",
+                        values: facets
+                    )})"
+                    : ""
+                );
+
+                return $"**`{word}`** — state row\n\nKind: `{kind}`{suffix}";
             }
-        } catch {
-            return null;
         }
         return null;
-    }
-    private static string? GetWordAtPosition(string text, int targetLine, int targetCol) {
-        var lines = text.Split('\n');
-
-        if (
-            (targetLine < 0) ||
-            (targetLine >= lines.Length)
-        ) {
-            return null;
-        }
-
-        var lineText = lines[targetLine];
-
-        if (
-            (targetCol < 0) ||
-            (targetCol >= lineText.Length)
-        ) {
-            return null;
-        }
-
-        var absolute = LspJson.Offset(character: targetCol, line: targetLine, source: text);
-
-        for (var index = 0; (index <= absolute); ++index) {
-            var lexicalEnd = SourceLexemes.End(
-                offset: index,
-                source: text
-            );
-
-            if (lexicalEnd > index) {
-                if (absolute < lexicalEnd) {
-                    return (((text[index] == '`') && (lexicalEnd > (index + 1)) && (text[(lexicalEnd - 1)] == '`'))
-                        ? text.Substring(
-                            length: ((lexicalEnd - index) - 2),
-                            startIndex: (index + 1)
-                        )
-                        : null
-                    );
-                }
-                index = (lexicalEnd - 1);
-            }
-        }
-        if (!IdentifierSpelling.IsNameCharacter(character: lineText[targetCol])) {
-            return null;
-        }
-        var start = targetCol;
-
-        while (
-            (start > 0) &&
-            IdentifierSpelling.IsNameCharacter(character: lineText[(start - 1)])
-        ) {
-            start--;
-        }
-
-        if (
-            (start > 0) &&
-            (lineText[(start - 1)] == '.')
-        ) {
-            return null;
-        }
-        var end = targetCol;
-
-        while (
-            (end < lineText.Length) &&
-            IdentifierSpelling.IsNameCharacter(character: lineText[end])
-        ) {
-            end++;
-        }
-
-        return ((start < end)
-            ? lineText.Substring(
-                length: (end - start),
-                startIndex: start
-            )
-            : null
-        );
     }
     // Whether `targetLine`/`targetCol` sits right after `<row>.` or `<row>.<partial key>` — a dot-access read
     // (stage 3) with the key half not yet typed, or only partly typed. `row` excludes a leading `$` (a reserved
@@ -450,18 +381,16 @@ public sealed partial class PuckLanguageServer {
 
         return (prefix + ComputeClosingSuffix(source: prefix));
     }
-    // The `state` section `text` lowers to, or null when the text is not a world source or lowers to none. Whatever
-    // the compile reports is dropped: a document mid-edit still answers for the rows that do lower. It is the compile
-    // the buffer's diagnosis made (WorldCompileSession.CompileBuffer), so a hover over text just diagnosed compiles
-    // nothing.
-    private JsonObject? LowerStateSection(string text, string? sourcePath) {
+    // Recovery-only lowering compiled without a path key (`sourcePath: null`), so a truncated mid-edit prefix never
+    // evicts the real buffer's held compile in `WorldCompileSession`.
+    private JsonObject? LowerStateSectionWithoutPathKey(string text) {
         if (m_vocabularyResolver.Resolve(source: text) is not WorldDocumentVocabulary vocabulary) {
             return null;
         }
 
         return (m_session.CompileBuffer(
             source: text,
-            sourcePath: sourcePath,
+            sourcePath: null,
             vocabulary: vocabulary
         ).Json?["state"] as JsonObject);
     }
@@ -550,21 +479,32 @@ public sealed partial class PuckLanguageServer {
         return sb.ToString();
     }
     // Looks `rowName` up as a declared `state` row (world, body, or identity) and lists its cell keys as
-    // completion items — the dot-access counterpart to `GetStateHoverCard`'s row lookup. Returns null rather
-    // than an empty array when the row can't be found or carries no cells, so the caller falls back to the
-    // generic keyword list instead of offering zero completions for what might just be an unresolved recovery.
-    private JsonArray? GetStateRowKeyCompletions(string text, string rowName, int cursorOffset, string? sourcePath = null) {
+    // completion items. Reads from the parsed AST first, then the last published compile, and only falls back to
+    // compiling recovery text without a path key so the held compile is never evicted.
+    private JsonArray? GetStateRowKeyCompletions(string uri, string text, string rowName, int cursorOffset, DocumentNode? parsedDocument) {
         try {
-            if ((LowerStateSection(
-                sourcePath: sourcePath,
-                text: text
-            ) ?? LowerStateSection(
-                sourcePath: sourcePath,
-                text: RecoverToCursor(
-                    cursorOffset: cursorOffset,
-                    text: text
-                )
-            )) is not { } stateSection) {
+            if (
+                (PuckSymbolResolver.FindStateRowInAst(document: parsedDocument, rowName: rowName) is { Keys.Count: > 0 } astRow) &&
+                (astRow.Kind != "enum")
+            ) {
+                var astItems = new JsonArray();
+
+                foreach (var key in astRow.Keys) {
+                    LspJson.AddCompletion(
+                        detail: $"state cell — {rowName}.{key}",
+                        insertText: key,
+                        items: astItems,
+                        kind: 5,
+                        label: key
+                    );
+                }
+                return astItems;
+            }
+
+            var stateSection = ((m_lastCompilations.TryGetValue(key: uri, value: out var lastComp) ? (lastComp.Json?["state"] as JsonObject) : null)
+                ?? LowerStateSectionWithoutPathKey(text: RecoverToCursor(cursorOffset: cursorOffset, text: text)));
+
+            if (stateSection is null) {
                 return null;
             }
             foreach (var (_, section) in stateSection) {
@@ -604,6 +544,158 @@ public sealed partial class PuckLanguageServer {
         }
         return null;
     }
+    private static bool IsAfterNumber(string text, int cursorOffset) {
+        var pos = Math.Clamp(max: text.Length, min: 0, value: cursorOffset);
+
+        while ((pos > 0) && char.IsLetter(c: text[(pos - 1)])) {
+            pos--;
+        }
+        return ((pos > 0) && char.IsDigit(c: text[(pos - 1)]));
+    }
+    private static bool IsValuePosition(string text, int cursorOffset) {
+        var limit = Math.Clamp(max: text.Length, min: 0, value: cursorOffset);
+        var lineStart = ((limit == 0) ? 0 : (text.LastIndexOf(startIndex: (limit - 1), value: '\n') + 1));
+        var linePrefix = text[lineStart..limit];
+
+        // Inside a line after `:` or `=` (and not inside a `{` block opened after it).
+        var lastAssign = linePrefix.LastIndexOfAny(anyOf: [':', '=']);
+
+        if (lastAssign < 0) {
+            return false;
+        }
+        return (linePrefix[(lastAssign + 1)..].IndexOf(value: '{') < 0);
+    }
+    private static bool IsGateLine(string text, int cursorOffset) {
+        var limit = Math.Clamp(max: text.Length, min: 0, value: cursorOffset);
+        var lineStart = ((limit == 0) ? 0 : (text.LastIndexOf(startIndex: (limit - 1), value: '\n') + 1));
+        var trimmed = text[lineStart..limit].TrimStart();
+
+        return (
+            trimmed.StartsWith(comparisonType: StringComparison.Ordinal, value: "when ") ||
+            trimmed.StartsWith(comparisonType: StringComparison.Ordinal, value: "if ") ||
+            trimmed.StartsWith(comparisonType: StringComparison.Ordinal, value: "expect ")
+        );
+    }
+    private static void AddAuthorSymbolCompletions(JsonArray items, DocumentNode? document, IReadOnlyList<PuckSymbolResolver.ImportedSymbol> imported, bool inRule) {
+        var offered = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        if (document is not null) {
+            foreach (var stmt in document.Statements) {
+                switch (stmt) {
+                    case LetNode letNode when offered.Add(item: letNode.Name):
+                        if (letNode.Value is FunctionExpressionNode fn) {
+                            var fnArgs = string.Join(separator: ", ", values: fn.Parameters.Select(selector: static (p, idx) => $"${{{(idx + 1)}:{p.Name}}}"));
+
+                            LspJson.AddCompletion(
+                                detail: $"Function: {letNode.Name}({string.Join(separator: ", ", values: fn.Parameters.Select(selector: static p => p.Name))})",
+                                insertText: $"{letNode.Name}({fnArgs})",
+                                items: items,
+                                kind: 3,
+                                label: letNode.Name
+                            );
+                        } else {
+                            LspJson.AddCompletion(
+                                detail: "Constant (let)",
+                                insertText: letNode.Name,
+                                items: items,
+                                kind: 21,
+                                label: letNode.Name
+                            );
+                        }
+                        break;
+
+                    case TemplateNode tmpl when ((tmpl.IsRuleBody == inRule) && offered.Add(item: tmpl.Name)):
+                        AddTemplateCompletion(items: items, label: tmpl.Name, origin: null, template: tmpl);
+                        break;
+
+                    case ImportNode importNode when ((importNode.Alias is { Length: > 0 } alias) && offered.Add(item: alias)):
+                        LspJson.AddCompletion(
+                            detail: $"Import alias for \"{importNode.Path}\"",
+                            insertText: alias,
+                            items: items,
+                            kind: 9,
+                            label: alias
+                        );
+                        break;
+                }
+            }
+        }
+
+        foreach (var symbol in imported) {
+            // Aliased symbols are completed after `alias.`; offer unaliased imported symbols directly.
+            if (symbol.Name.Contains(value: '.') || !offered.Add(item: symbol.Name)) {
+                continue;
+            }
+            var origin = Path.GetFileName(path: symbol.SourcePath);
+
+            switch (symbol.Node) {
+                case LetNode importedLet:
+                    LspJson.AddCompletion(
+                        detail: $"Constant from {origin}",
+                        insertText: symbol.Name,
+                        items: items,
+                        kind: 21,
+                        label: symbol.Name
+                    );
+                    break;
+                case TemplateNode importedTmpl when (importedTmpl.IsRuleBody == inRule):
+                    AddTemplateCompletion(items: items, label: symbol.Name, origin: origin, template: importedTmpl);
+                    break;
+            }
+        }
+    }
+    private static void AddTemplateCompletion(JsonArray items, string label, TemplateNode template, string? origin) {
+        var kindLabel = (template.IsModule
+            ? "Module"
+            : (template.IsRuleBody ? "Rule template" : (template.IsShade ? "Shade template" : "Template")));
+        var paramList = string.Join(separator: ", ", values: template.Parameters.Select(selector: static p => p.Name));
+        var required = template.Parameters.Where(predicate: static p => (p.DefaultValue is null)).ToArray();
+        var snippetArgs = string.Join(separator: ", ", values: required.Select(selector: static (p, idx) => $"{p.Name}: ${{{(idx + 1)}:{p.Name}}}"));
+        var fromSuffix = ((origin is null) ? "" : $" ({origin})");
+
+        LspJson.AddCompletion(
+            detail: $"{kindLabel}{fromSuffix}: {label}({paramList})",
+            insertText: $"{label}({snippetArgs})",
+            items: items,
+            kind: 3,
+            label: label
+        );
+    }
+    private static JsonArray? GetAliasMemberCompletions(string alias, IReadOnlyList<PuckSymbolResolver.ImportedSymbol> imported, bool inRule) {
+        var prefix = (alias + ".");
+        var items = new JsonArray();
+
+        foreach (var symbol in imported) {
+            if (!symbol.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: prefix)) {
+                continue;
+            }
+
+            var memberName = symbol.Name[prefix.Length..];
+
+            if (memberName.Contains(value: '.')) {
+                continue;
+            }
+
+            var origin = Path.GetFileName(path: symbol.SourcePath);
+
+            switch (symbol.Node) {
+                case LetNode:
+                    LspJson.AddCompletion(
+                        detail: $"Constant from {origin}",
+                        insertText: memberName,
+                        items: items,
+                        kind: 21,
+                        label: memberName
+                    );
+                    break;
+                case TemplateNode tmpl when (tmpl.IsRuleBody == inRule):
+                    AddTemplateCompletion(items: items, label: memberName, origin: origin, template: tmpl);
+                    break;
+            }
+        }
+
+        return ((items.Count > 0) ? items : null);
+    }
     private void HandleCompletion(JsonNode? id, JsonObject? @params) {
         var uri = (@params?["textDocument"]?["uri"]?.ToString() ?? "");
 
@@ -623,38 +715,56 @@ public sealed partial class PuckLanguageServer {
             return;
         }
 
-        // A dot-access read (`vitals.`) completes the declared table's own cell keys instead of the generic
-        // keyword list — the same grammar `ExpressionSpelling` reads `row.key` through (stage 3). The cursor's
-        // line/column, not its dotted-access AST, decides the row name: the surrounding statement is very often
-        // still incomplete while this fires (trailing dot, unclosed rule), so `TryGetDotAccessRowName` reads raw
-        // text and `GetStateRowKeyCompletions` reparses with recovery rather than trusting a clean parse.
         var line = (((int?)@params?["position"]?["line"]) ?? 0);
         var col = (((int?)@params?["position"]?["character"]) ?? 0);
-
-        if (
-            m_documents.TryGetValue(
+        var completionText = (m_documents.TryGetValue(
             key: uri,
-            value: out var text
-        ) &&
-            TryGetDotAccessRowName(
-            rowName: out var dotRowName,
-            targetCol: col,
-            targetLine: line,
-            text: text
+            value: out var openText
         )
-        ) {
-            var cursorOffset = LspJson.Offset(character: col, line: line, source: text);
-            string? completionSourcePath = null;
+            ? openText
+            : ""
+        );
+        var cursorOffset = LspJson.Offset(character: col, line: line, source: completionText);
+        var enclosing = WorldConstructLanguageServices.ConstructAt(
+            offset: cursorOffset,
+            table: WorldConstructs.Table,
+            text: completionText
+        );
+        var inRule = (enclosing is "rule" or "option" or "if" or "else" or "transaction" or "onFailure");
+        var parsedDocument = ((completionText.Length > 0) ? TryParseDocumentBestEffort(cursorOffset: cursorOffset, text: completionText) : null);
+        var vocabulary = m_vocabularyResolver.Resolve(source: completionText);
+        var completionSourcePath = (TryGetLocalPath(path: out var localCompPath, uri: uri) ? localCompPath : null);
+        var imported = PuckSymbolResolver.CollectImportedDeclarations(
+            document: parsedDocument,
+            sourcePath: completionSourcePath,
+            sources: m_session.Sources,
+            vocabulary: vocabulary
+        );
 
-            if (TryGetLocalPath(path: out var localCompPath, uri: uri)) {
-                completionSourcePath = localCompPath;
+        // Dot-access completion: import alias members (`alias.`) or declared state row cell keys (`row.`).
+        if (
+            (completionText.Length > 0) &&
+            TryGetDotAccessRowName(
+                rowName: out var dotPrefix,
+                targetCol: col,
+                targetLine: line,
+                text: completionText
+            )
+        ) {
+            if (GetAliasMemberCompletions(alias: dotPrefix, imported: imported, inRule: inRule) is { Count: > 0 } aliasItems) {
+                SendResponse(
+                    id: id,
+                    result: new JsonObject { ["isIncomplete"] = false, ["items"] = aliasItems }
+                );
+                return;
             }
 
             var keyItems = GetStateRowKeyCompletions(
                 cursorOffset: cursorOffset,
-                rowName: dotRowName,
-                sourcePath: completionSourcePath,
-                text: text
+                parsedDocument: parsedDocument,
+                rowName: dotPrefix,
+                text: completionText,
+                uri: uri
             );
 
             if (keyItems is { Count: > 0 }) {
@@ -668,341 +778,269 @@ public sealed partial class PuckLanguageServer {
 
         var items = new JsonArray();
 
-        var completionText = (m_documents.TryGetValue(
-            key: uri,
-            value: out var openText
-        )
-            ? openText
-            : ""
-        );
+        // Unit suffixes apply only immediately after a numeric literal.
+        if (IsAfterNumber(cursorOffset: cursorOffset, text: completionText)) {
+            AddUnitCompletions(items: items);
+            SendResponse(
+                id: id,
+                result: new JsonObject { ["isIncomplete"] = false, ["items"] = items }
+            );
+            return;
+        }
+
+        var inValue = IsValuePosition(cursorOffset: cursorOffset, text: completionText);
+        var inGate = (IsGateLine(cursorOffset: cursorOffset, text: completionText) || (enclosing == "expect"));
+        var atRoot = ((enclosing is null) && !inValue && !inGate);
 
         PuckEmbeddingLsp.AddCompletions(items: items);
-        WorldConstructLanguageServices.AddCompletions(
-            enclosing: WorldConstructLanguageServices.ConstructAt(
-                offset: LspJson.Offset(
-                    character: col,
-                    line: line,
-                    source: completionText
-                ),
-                table: WorldConstructs.Table,
-                text: completionText
-            ),
-            items: items,
-            table: WorldConstructs.Table
+        if (!inValue && !inGate) {
+            WorldConstructLanguageServices.AddCompletions(
+                enclosing: enclosing,
+                items: items,
+                scopeToRoot: true,
+                table: WorldConstructs.Table
+            );
+        }
+
+        AddAuthorSymbolCompletions(
+            document: parsedDocument,
+            imported: imported,
+            inRule: inRule,
+            items: items
         );
 
-        // What follows is everything the construct table does not describe: the document headers, the
-        // compile-time layer the core owns, the camera and scalar function forms, the unit suffixes, the
-        // plural array properties, and the `$type` call-form escape hatches.
-        LspJson.AddCompletion(
-            detail: "Directive: Schema declaration",
-            insertText: $"schema: \"{WorldDefinition.SchemaVersion}\"",
-            items: items,
-            kind: 14,
-            label: "schema"
-        );
-        LspJson.AddCompletion(
-            detail: "Directive: Base world inheritance",
-            insertText: "basis: \"worlds/base\"",
-            items: items,
-            kind: 14,
-            label: "basis"
-        );
-        LspJson.AddCompletion(
-            detail: "Directive: Document ID tag",
-            insertText: "documentId: \"my-world-id\"",
-            items: items,
-            kind: 14,
-            label: "documentId"
-        );
-        LspJson.AddCompletion(
-            detail: "Keyword: Declare constant",
-            insertText: "let ${1:name} = ${2:value}",
-            items: items,
-            kind: 14,
-            label: "let"
-        );
-        LspJson.AddCompletion(
-            detail: "Keyword: Parametric template",
-            insertText: "template ${1:name}(${2:params}) {\n    $0\n}",
-            items: items,
-            kind: 14,
-            label: "template"
-        );
-        LspJson.AddCompletion(
-            detail: "Keyword: Typed module",
-            insertText: "module ${1:name}(${2:params}) {\n    $0\n}",
-            items: items,
-            kind: 14,
-            label: "module"
-        );
-        LspJson.AddCompletion(
-            detail: "Keyword: Instantiate module",
-            insertText: "use ${1:module} as ${2:alias}(${3:arguments})",
-            items: items,
-            kind: 14,
-            label: "use"
-        );
-        LspJson.AddCompletion(
-            detail: "Keyword: Import",
-            insertText: "import \"${1:name}\" as ${2:alias}",
-            items: items,
-            kind: 14,
-            label: "import"
-        );
-        LspJson.AddCompletion(
-            detail: "Keyword: Facet export",
-            insertText: "export ${1|action,binding,read|} ${2:names}",
-            items: items,
-            kind: 14,
-            label: "export"
-        );
+        if (atRoot) {
+            LspJson.AddCompletion(
+                detail: "Directive: Schema declaration",
+                insertText: $"schema: \"{WorldDefinition.SchemaVersion}\"",
+                items: items,
+                kind: 14,
+                label: "schema"
+            );
+            LspJson.AddCompletion(
+                detail: "Directive: Base world inheritance",
+                insertText: "basis: \"worlds/base\"",
+                items: items,
+                kind: 14,
+                label: "basis"
+            );
+            LspJson.AddCompletion(
+                detail: "Directive: Document ID tag",
+                insertText: "documentId: \"my-world-id\"",
+                items: items,
+                kind: 14,
+                label: "documentId"
+            );
+            LspJson.AddCompletion(
+                detail: "Keyword: Parametric template",
+                insertText: "template ${1:name}(${2:params}) {\n    $0\n}",
+                items: items,
+                kind: 14,
+                label: "template"
+            );
+            LspJson.AddCompletion(
+                detail: "Keyword: Typed module",
+                insertText: "module ${1:name}(${2:params}) {\n    $0\n}",
+                items: items,
+                kind: 14,
+                label: "module"
+            );
+            LspJson.AddCompletion(
+                detail: "Keyword: Instantiate module",
+                insertText: "use ${1:module} as ${2:alias}(${3:arguments})",
+                items: items,
+                kind: 14,
+                label: "use"
+            );
+            LspJson.AddCompletion(
+                detail: "Keyword: Import",
+                insertText: "import \"${1:name}\" as ${2:alias}",
+                items: items,
+                kind: 14,
+                label: "import"
+            );
+            LspJson.AddCompletion(
+                detail: "Keyword: Facet export",
+                insertText: "export ${1|action,binding,read|} ${2:names}",
+                items: items,
+                kind: 14,
+                label: "export"
+            );
 
-        // The array spelling of a row construct. A container takes no `:` — `materials: [` is PUCK040 — so the
-        // inserted text is what the language accepts, which `ConstructCompletionSnippetLawTests` parses.
-        LspJson.AddCompletion(
-            detail: "Section: Surface materials",
-            insertText: "materials [\n    $0\n]",
-            items: items,
-            kind: 7,
-            label: "materials"
-        );
-        LspJson.AddCompletion(
-            detail: "Section: Reactive state rules",
-            insertText: "rules [\n    $0\n]",
-            items: items,
-            kind: 7,
-            label: "rules"
-        );
-        LspJson.AddCompletion(
-            detail: "Section: WASM Addons",
-            insertText: "addons [\n    $0\n]",
-            items: items,
-            kind: 7,
-            label: "addons"
-        );
+            // The array spelling of a row construct. A container takes no `:` — `materials: [` is PUCK040.
+            LspJson.AddCompletion(
+                detail: "Section: Surface materials",
+                insertText: "materials [\n    $0\n]",
+                items: items,
+                kind: 7,
+                label: "materials"
+            );
+            LspJson.AddCompletion(
+                detail: "Section: Reactive state rules",
+                insertText: "rules [\n    $0\n]",
+                items: items,
+                kind: 7,
+                label: "rules"
+            );
+            LspJson.AddCompletion(
+                detail: "Section: WASM Addons",
+                insertText: "addons [\n    $0\n]",
+                items: items,
+                kind: 7,
+                label: "addons"
+            );
+        }
 
+        if (!inValue && !inGate && !inRule) {
+            LspJson.AddCompletion(
+                detail: "Keyword: Declare constant",
+                insertText: "let ${1:name} = ${2:value}",
+                items: items,
+                kind: 14,
+                label: "let"
+            );
+        }
 
-        LspJson.AddCompletion(
-            detail: "Camera orbit operation",
-            insertText: "orbit(pitch: ${1:0deg}, yaw: ${2:0deg}, distance: ${3:2.5m})",
-            items: items,
-            kind: 3,
-            label: "orbit"
-        );
-        LspJson.AddCompletion(
-            detail: "Camera field-of-view operation",
-            insertText: "fieldOfView(degrees: ${1:60})",
-            items: items,
-            kind: 3,
-            label: "fieldOfView"
-        );
-        LspJson.AddCompletion(
-            detail: "Bitwise lattice shift function",
-            insertText: "boardShift(${1:mask}, ${2:lattice}, ${3:dir})",
-            items: items,
-            kind: 3,
-            label: "boardShift"
-        );
-        LspJson.AddCompletion(
-            detail: "Math clamp function",
-            insertText: "clamp(${1:val}, ${2:min}, ${3:max})",
-            items: items,
-            kind: 3,
-            label: "clamp"
-        );
+        if (inValue || (enclosing is "camera" or "cameras")) {
+            LspJson.AddCompletion(
+                detail: "Camera orbit operation",
+                insertText: "orbit(pitch: ${1:0deg}, yaw: ${2:0deg}, distance: ${3:2.5m})",
+                items: items,
+                kind: 3,
+                label: "orbit"
+            );
+            LspJson.AddCompletion(
+                detail: "Camera field-of-view operation",
+                insertText: "fieldOfView(degrees: ${1:60})",
+                items: items,
+                kind: 3,
+                label: "fieldOfView"
+            );
+        }
 
-        LspJson.AddCompletion(
-            detail: "Unit: Seconds",
-            insertText: "s",
-            items: items,
-            kind: 11,
-            label: "s"
-        );
-        LspJson.AddCompletion(
-            detail: "Unit: Milliseconds",
-            insertText: "ms",
-            items: items,
-            kind: 11,
-            label: "ms"
-        );
-        LspJson.AddCompletion(
-            detail: "Unit: Minutes",
-            insertText: "min",
-            items: items,
-            kind: 11,
-            label: "min"
-        );
-        LspJson.AddCompletion(
-            detail: "Unit: Hours",
-            insertText: "h",
-            items: items,
-            kind: 11,
-            label: "h"
-        );
-        LspJson.AddCompletion(
-            detail: "Unit: Hertz (frequency)",
-            insertText: "hz",
-            items: items,
-            kind: 11,
-            label: "hz"
-        );
-        LspJson.AddCompletion(
-            detail: "Unit: Radians",
-            insertText: "rad",
-            items: items,
-            kind: 11,
-            label: "rad"
-        );
-        LspJson.AddCompletion(
-            detail: "Unit: Degrees",
-            insertText: "deg",
-            items: items,
-            kind: 11,
-            label: "deg"
-        );
-        LspJson.AddCompletion(
-            detail: "Unit: Meters",
-            insertText: "m",
-            items: items,
-            kind: 11,
-            label: "m"
-        );
-        LspJson.AddCompletion(
-            detail: "Unit: Centimeters",
-            insertText: "cm",
-            items: items,
-            kind: 11,
-            label: "cm"
-        );
-        LspJson.AddCompletion(
-            detail: "Unit: Millimeters",
-            insertText: "mm",
-            items: items,
-            kind: 11,
-            label: "mm"
-        );
+        if (inValue || inRule || inGate) {
+            LspJson.AddCompletion(
+                detail: "Bitwise lattice shift function",
+                insertText: "boardShift(${1:mask}, ${2:lattice}, ${3:dir})",
+                items: items,
+                kind: 3,
+                label: "boardShift"
+            );
+            LspJson.AddCompletion(
+                detail: "Math clamp function",
+                insertText: "clamp(${1:val}, ${2:min}, ${3:max})",
+                items: items,
+                kind: 3,
+                label: "clamp"
+            );
+        }
 
-        LspJson.AddCompletion(
-            detail: "Keyword: Rule/option gate",
-            insertText: "when ${1:condition}",
-            items: items,
-            kind: 14,
-            label: "when"
-        );
-        LspJson.AddCompletion(
-            detail: "Keyword: Gate conjunction",
-            insertText: "and",
-            items: items,
-            kind: 14,
-            label: "and"
-        );
-        LspJson.AddCompletion(
-            detail: "Keyword: Gate disjunction",
-            insertText: "or",
-            items: items,
-            kind: 14,
-            label: "or"
-        );
-        LspJson.AddCompletion(
-            detail: "Keyword: Gate negation",
-            insertText: "not ${1:condition}",
-            items: items,
-            kind: 14,
-            label: "not"
-        );
-        LspJson.AddCompletion(
-            detail: "Keyword: Comparison kind annotation — wrap in (...) beside and/or",
-            insertText: "as ${1|Int,Fixed|}",
-            items: items,
-            kind: 14,
-            label: "as"
-        );
-        LspJson.AddCompletion(
-            detail: "Keyword: 'if' alternate branch",
-            insertText: "else {\n    $0\n}",
-            items: items,
-            kind: 14,
-            label: "else"
-        );
+        if (inRule || inGate) {
+            LspJson.AddCompletion(
+                detail: "Keyword: Gate conjunction",
+                insertText: "and",
+                items: items,
+                kind: 14,
+                label: "and"
+            );
+            LspJson.AddCompletion(
+                detail: "Keyword: Gate disjunction",
+                insertText: "or",
+                items: items,
+                kind: 14,
+                label: "or"
+            );
+            LspJson.AddCompletion(
+                detail: "Keyword: Gate negation",
+                insertText: "not ${1:condition}",
+                items: items,
+                kind: 14,
+                label: "not"
+            );
+        }
 
-        LspJson.AddCompletion(
-            detail: "Predicate: compareState",
-            insertText: "compareState(state: \"${1:row}\", comparison: ${2|Equal,NotEqual,Less,LessOrEqual,Greater,GreaterOrEqual|}, value: ${3:0})",
-            items: items,
-            kind: 3,
-            label: "compareState"
-        );
-        LspJson.AddCompletion(
-            detail: "Predicate: compareValue",
-            insertText: "compareValue(left: \"${1:expr}\", comparison: ${2|Equal,NotEqual,Less,LessOrEqual,Greater,GreaterOrEqual|}, right: \"${3:expr}\")",
-            items: items,
-            kind: 3,
-            label: "compareValue"
-        );
-        LspJson.AddCompletion(
-            detail: "Effect: setState",
-            insertText: "setState(state: \"${1:row}\", value: ${2:0})",
-            items: items,
-            kind: 3,
-            label: "setState"
-        );
-        LspJson.AddCompletion(
-            detail: "Effect: addState",
-            insertText: "addState(state: \"${1:row}\", value: ${2:0})",
-            items: items,
-            kind: 3,
-            label: "addState"
-        );
-        LspJson.AddCompletion(
-            detail: "Effect: pushState",
-            insertText: "pushState(state: \"${1:row}\", value: ${2:0})",
-            items: items,
-            kind: 3,
-            label: "pushState"
-        );
-        LspJson.AddCompletion(
-            detail: "Effect: removeStateCell",
-            insertText: "removeStateCell(state: \"${1:row}\")",
-            items: items,
-            kind: 3,
-            label: "removeStateCell"
-        );
-        LspJson.AddCompletion(
-            detail: "Effect: scheduleState",
-            insertText: "scheduleState(state: \"${1:row}\", delaySeconds: ${2:1})",
-            items: items,
-            kind: 3,
-            label: "scheduleState"
-        );
-        LspJson.AddCompletion(
-            detail: "CellKind: exact integer domain",
-            insertText: "Int",
-            items: items,
-            kind: 13,
-            label: "Int"
-        );
-        LspJson.AddCompletion(
-            detail: "CellKind: fixed-point domain",
-            insertText: "Fixed",
-            items: items,
-            kind: 13,
-            label: "Fixed"
-        );
-        LspJson.AddCompletion(
-            detail: "CellKind: boolean domain",
-            insertText: "Bool",
-            items: items,
-            kind: 13,
-            label: "Bool"
-        );
-        LspJson.AddCompletion(
-            detail: "CellKind: string domain",
-            insertText: "Text",
-            items: items,
-            kind: 13,
-            label: "Text"
-        );
+        if (inRule && !inGate) {
+            LspJson.AddCompletion(
+                detail: "Keyword: Rule/option gate",
+                insertText: "when ${1:condition}",
+                items: items,
+                kind: 14,
+                label: "when"
+            );
+            LspJson.AddCompletion(
+                detail: "Keyword: 'if' alternate branch",
+                insertText: "else {\n    $0\n}",
+                items: items,
+                kind: 14,
+                label: "else"
+            );
+            LspJson.AddCompletion(
+                detail: "Effect: setState",
+                insertText: "setState(state: ${1:row}, value: ${2:0})",
+                items: items,
+                kind: 3,
+                label: "setState"
+            );
+            LspJson.AddCompletion(
+                detail: "Effect: addState",
+                insertText: "addState(state: ${1:row}, value: ${2:0})",
+                items: items,
+                kind: 3,
+                label: "addState"
+            );
+            LspJson.AddCompletion(
+                detail: "Effect: pushState",
+                insertText: "pushState(state: ${1:row}, value: ${2:0})",
+                items: items,
+                kind: 3,
+                label: "pushState"
+            );
+            LspJson.AddCompletion(
+                detail: "Effect: removeStateCell",
+                insertText: "removeStateCell(state: ${1:row})",
+                items: items,
+                kind: 3,
+                label: "removeStateCell"
+            );
+            LspJson.AddCompletion(
+                detail: "Effect: scheduleState",
+                insertText: "scheduleState(state: ${1:row}, delaySeconds: ${2:1})",
+                items: items,
+                kind: 3,
+                label: "scheduleState"
+            );
+        }
+
+        if (inValue || (enclosing is "state" or "world" or "table" or "slot" or "grid" or "record")) {
+            LspJson.AddCompletion(
+                detail: "CellKind: exact integer domain",
+                insertText: "Int",
+                items: items,
+                kind: 13,
+                label: "Int"
+            );
+            LspJson.AddCompletion(
+                detail: "CellKind: fixed-point domain",
+                insertText: "Fixed",
+                items: items,
+                kind: 13,
+                label: "Fixed"
+            );
+            LspJson.AddCompletion(
+                detail: "CellKind: boolean domain",
+                insertText: "Bool",
+                items: items,
+                kind: 13,
+                label: "Bool"
+            );
+            LspJson.AddCompletion(
+                detail: "CellKind: string domain",
+                insertText: "Text",
+                items: items,
+                kind: 13,
+                label: "Text"
+            );
+        }
 
         SendResponse(
             id: id,
@@ -1011,6 +1049,18 @@ public sealed partial class PuckLanguageServer {
                 ["items"] = items,
             }
         );
+    }
+    private static void AddUnitCompletions(JsonArray items) {
+        LspJson.AddCompletion(detail: "Unit: Seconds", insertText: "s", items: items, kind: 11, label: "s");
+        LspJson.AddCompletion(detail: "Unit: Milliseconds", insertText: "ms", items: items, kind: 11, label: "ms");
+        LspJson.AddCompletion(detail: "Unit: Minutes", insertText: "min", items: items, kind: 11, label: "min");
+        LspJson.AddCompletion(detail: "Unit: Hours", insertText: "h", items: items, kind: 11, label: "h");
+        LspJson.AddCompletion(detail: "Unit: Hertz (frequency)", insertText: "hz", items: items, kind: 11, label: "hz");
+        LspJson.AddCompletion(detail: "Unit: Radians", insertText: "rad", items: items, kind: 11, label: "rad");
+        LspJson.AddCompletion(detail: "Unit: Degrees", insertText: "deg", items: items, kind: 11, label: "deg");
+        LspJson.AddCompletion(detail: "Unit: Meters", insertText: "m", items: items, kind: 11, label: "m");
+        LspJson.AddCompletion(detail: "Unit: Centimeters", insertText: "cm", items: items, kind: 11, label: "cm");
+        LspJson.AddCompletion(detail: "Unit: Millimeters", insertText: "mm", items: items, kind: 11, label: "mm");
     }
     private void HandleDocumentSymbol(JsonNode? id, JsonObject? @params) {
         var uri = (@params?["textDocument"]?["uri"]?.ToString() ?? "");
@@ -1123,7 +1173,8 @@ public sealed partial class PuckLanguageServer {
         );
 
         // A document that does not parse has no tree to print, so the editor keeps what the author is typing.
-        if (printed.Value is not { } formatted) {
+        // An already-formatted document returns no edit (`[]`) rather than replacing the whole buffer unchanged.
+        if ((printed.Value is not { } formatted) || string.Equals(a: formatted, b: text, comparisonType: StringComparison.Ordinal)) {
             SendResponse(
                 id: id,
                 result: new JsonArray()
@@ -1166,12 +1217,13 @@ public sealed partial class PuckLanguageServer {
             return;
         }
 
-        var word = GetWordAtPosition(
+        var wordContext = PuckSymbolResolver.WordContextAt(
             targetCol: col,
             targetLine: line,
             text: text
         );
-
+        var word = wordContext.Word;
+        var qualified = wordContext.Qualified;
         var offset = LspJson.Offset(
             character: col,
             line: line,
@@ -1208,7 +1260,7 @@ public sealed partial class PuckLanguageServer {
             return;
         }
 
-        if (string.IsNullOrEmpty(value: word)) {
+        if (string.IsNullOrEmpty(value: word) && string.IsNullOrEmpty(value: qualified)) {
             SendResponse(
                 id: id,
                 result: null
@@ -1216,22 +1268,41 @@ public sealed partial class PuckLanguageServer {
             return;
         }
 
-        var memberPosition = IsConstructMemberPosition(
-            enclosing: enclosing,
-            offset: offset,
-            text: text,
-            word: word
+        var vocabulary = m_vocabularyResolver.Resolve(source: text);
+        var parsedDocument = PuckParser.ParseDocumentWithDiagnostics(
+            source: text,
+            vocabulary: vocabulary
+        ).Value;
+        var imported = PuckSymbolResolver.CollectImportedDeclarations(
+            document: parsedDocument,
+            sourcePath: hoverSourcePath,
+            sources: m_session.Sources,
+            vocabulary: vocabulary
         );
-        var docCard = (PuckHoverInfo.Declaration(
+
+        var docCard = PuckHoverInfo.Declaration(
+            imported: imported,
             offset: offset,
+            parsedDocument: parsedDocument,
+            qualified: qualified,
+            readSource: ReadSourceText,
             resolver: m_vocabularyResolver,
             source: text,
             word: word
-        ) ?? (PuckHoverInfo.Builtin(word: word) ?? (GetDocumentationForWord(enclosing: enclosing, memberPosition: memberPosition, word: word) ?? GetStateHoverCard(
-            sourcePath: hoverSourcePath,
-            text: text,
-            word: word
-        ))));
+        );
+
+        if ((docCard is null) && !string.IsNullOrEmpty(value: word)) {
+            var memberPosition = IsConstructMemberPosition(
+                enclosing: enclosing,
+                offset: offset,
+                text: text,
+                word: word
+            );
+
+            docCard = (PuckHoverInfo.Builtin(word: word)
+                ?? GetDocumentationForWord(enclosing: enclosing, memberPosition: memberPosition, word: word)
+                ?? GetStateHoverCard(parsedDocument: parsedDocument, uri: uri, word: word));
+        }
 
         if (docCard is null) {
             SendResponse(
@@ -1250,6 +1321,301 @@ public sealed partial class PuckLanguageServer {
                 },
             }
         );
+    }
+    private void HandleDefinition(JsonNode? id, JsonObject? @params) {
+        var uri = (@params?["textDocument"]?["uri"]?.ToString() ?? "");
+        var line = (@params?["position"]?["line"]?.GetValue<int>() ?? 0);
+        var col = (@params?["position"]?["character"]?.GetValue<int>() ?? 0);
+
+        if (!m_documents.TryGetValue(key: uri, value: out var text)) {
+            SendResponse(id: id, result: null);
+            return;
+        }
+
+        var sourcePath = (TryGetLocalPath(path: out var localPath, uri: uri) ? localPath : null);
+        var vocabulary = m_vocabularyResolver.Resolve(source: text);
+        var offset = LspJson.Offset(character: col, line: line, source: text);
+        var parsedDocument = TryParseDocumentBestEffort(cursorOffset: offset, text: text);
+        var target = PuckSymbolResolver.FindDefinition(
+            character: col,
+            document: parsedDocument,
+            line: line,
+            pathToUri: ToDocumentUri,
+            readSource: ReadSourceText,
+            source: text,
+            sourcePath: sourcePath,
+            sources: m_session.Sources,
+            uri: uri,
+            vocabulary: vocabulary
+        );
+
+        if (target is null) {
+            SendResponse(id: id, result: null);
+            return;
+        }
+
+        SendResponse(
+            id: id,
+            result: new JsonObject {
+                ["uri"] = target.Uri,
+                ["range"] = LspJson.Range(source: target.SourceText, span: target.Span),
+            }
+        );
+    }
+    private void HandleCodeAction(JsonNode? id, JsonObject? @params) {
+        var uri = (@params?["textDocument"]?["uri"]?.ToString() ?? "");
+
+        if (!m_documents.TryGetValue(key: uri, value: out var text)) {
+            SendResponse(id: id, result: new JsonArray());
+            return;
+        }
+
+        var actions = new JsonArray();
+        var requestRange = (@params?["range"] as JsonObject);
+        var diagnostics = new List<JsonObject>();
+
+        if ((@params?["context"]?["diagnostics"] is JsonArray contextDiagnostics) && (contextDiagnostics.Count > 0)) {
+            foreach (var entry in contextDiagnostics) {
+                if (entry is JsonObject diagObj) {
+                    diagnostics.Add(item: diagObj);
+                }
+            }
+        } else if (m_publishedByTarget.TryGetValue(key: uri, value: out var published)) {
+            foreach (var diagObj in published) {
+                if ((requestRange is null) || RangesOverlap(a: requestRange, b: (diagObj["range"] as JsonObject))) {
+                    diagnostics.Add(item: diagObj);
+                }
+            }
+        }
+
+        foreach (var diagnostic in diagnostics) {
+            var code = diagnostic["code"]?.ToString();
+            var message = (diagnostic["message"]?.ToString() ?? "");
+            var range = (diagnostic["range"] as JsonObject);
+
+            if ((code is null) || (range is null)) {
+                continue;
+            }
+
+            if (code == PuckDiagnosticCodes.ColonBeforeContainer) {
+                TryAddDropColonAction(actions: actions, diagnostic: diagnostic, range: range, text: text, uri: uri);
+                continue;
+            }
+
+            if (code is PuckDiagnosticCodes.UnknownTemplate
+                or PuckDiagnosticCodes.TemplateArgument
+                or PuckDiagnosticCodes.UnknownMember
+                or PuckDiagnosticCodes.LintUnresolvedState
+                or PuckDiagnosticCodes.LintUnresolvedPrototype
+                or PuckDiagnosticCodes.LintUnresolvedPlacementParent
+                or PuckDiagnosticCodes.LintUnresolvedView
+                or PuckDiagnosticCodes.UnresolvedParent) {
+                TryAddNearestNameActions(actions: actions, code: code, diagnostic: diagnostic, message: message, range: range, text: text, uri: uri);
+            }
+        }
+
+        SendResponse(id: id, result: actions);
+    }
+    private static void TryAddDropColonAction(JsonArray actions, JsonObject diagnostic, JsonObject range, string text, string uri) {
+        if (!TryRangeOffsets(range: range, source: text, endOffset: out var endOffset, startOffset: out var startOffset)) {
+            return;
+        }
+
+        var searchEnd = Math.Min(val1: text.Length, val2: (endOffset + 1));
+        var sepIndex = -1;
+
+        for (var index = Math.Max(val1: 0, val2: startOffset); (index < searchEnd); index++) {
+            if (text[index] is ':' or '=') {
+                sepIndex = index;
+            }
+        }
+
+        if (sepIndex < 0) {
+            return;
+        }
+
+        var sep = text[sepIndex];
+
+        actions.Add(item: BuildQuickFix(
+            diagnostic: diagnostic,
+            editRange: LspJson.Range(
+                end: LspJson.PositionOf(offset: (sepIndex + 1), source: text),
+                start: LspJson.PositionOf(offset: sepIndex, source: text)
+            ),
+            isPreferred: true,
+            newText: "",
+            title: $"Drop the '{sep}' before container",
+            uri: uri
+        ));
+    }
+    private static void TryAddNearestNameActions(JsonArray actions, string code, JsonObject diagnostic, string message, JsonObject range, string text, string uri) {
+        const string Marker = "; nearest: ";
+        var markerIndex = message.IndexOf(comparisonType: StringComparison.Ordinal, value: Marker);
+
+        if (markerIndex < 0) {
+            return;
+        }
+
+        var written = ExtractWrittenName(code: code, message: message);
+
+        if (string.IsNullOrEmpty(value: written)) {
+            return;
+        }
+
+        var tail = message[(markerIndex + Marker.Length)..];
+        var candidates = ExtractQuotedNames(text: tail);
+
+        if (candidates.Count == 0) {
+            return;
+        }
+        if (!TryRangeOffsets(range: range, source: text, endOffset: out var endOffset, startOffset: out var startOffset)) {
+            return;
+        }
+
+        var sliceStart = Math.Clamp(max: text.Length, min: 0, value: startOffset);
+        var sliceEnd = Math.Clamp(max: text.Length, min: sliceStart, value: endOffset);
+        var matchIndex = FindNameInRange(name: written, sliceEnd: sliceEnd, sliceStart: sliceStart, text: text);
+
+        if (matchIndex < 0) {
+            return;
+        }
+
+        var editRange = LspJson.Range(
+            end: LspJson.PositionOf(offset: (matchIndex + written.Length), source: text),
+            start: LspJson.PositionOf(offset: matchIndex, source: text)
+        );
+
+        for (var index = 0; (index < candidates.Count); index++) {
+            var candidate = candidates[index];
+
+            actions.Add(item: BuildQuickFix(
+                diagnostic: diagnostic,
+                editRange: editRange,
+                isPreferred: (index == 0),
+                newText: candidate,
+                title: $"Replace '{written}' with '{candidate}'",
+                uri: uri
+            ));
+        }
+    }
+    private static string? ExtractWrittenName(string code, string message) {
+        // For PUCK135 ("Template 'foo' has no parameter 'bar'; nearest: ..."), the written name is after "no parameter '".
+        if (code == PuckDiagnosticCodes.TemplateArgument) {
+            const string ParamMarker = "no parameter '";
+            var idx = message.IndexOf(comparisonType: StringComparison.Ordinal, value: ParamMarker);
+
+            if (idx >= 0) {
+                var start = (idx + ParamMarker.Length);
+                var close = message.IndexOf(startIndex: start, value: '\'');
+
+                return ((close > start) ? message[start..close] : null);
+            }
+            return null;
+        }
+
+        var first = message.IndexOf(value: '\'');
+
+        if (first < 0) {
+            return null;
+        }
+        var second = message.IndexOf(startIndex: (first + 1), value: '\'');
+
+        return ((second > (first + 1)) ? message[(first + 1)..second] : null);
+    }
+    private static List<string> ExtractQuotedNames(string text) {
+        var names = new List<string>();
+        var index = 0;
+
+        while (index < text.Length) {
+            var open = text.IndexOf(startIndex: index, value: '\'');
+
+            if (open < 0) {
+                break;
+            }
+            // Stop once past the nearest list (e.g. before "(parameters: ...)").
+            if ((names.Count > 0) && text[index..open].Contains(value: '(')) {
+                break;
+            }
+            var close = text.IndexOf(startIndex: (open + 1), value: '\'');
+
+            if (close < 0) {
+                break;
+            }
+            names.Add(item: text[(open + 1)..close]);
+            index = (close + 1);
+        }
+
+        return names;
+    }
+    private static int FindNameInRange(string text, int sliceStart, int sliceEnd, string name) {
+        var searchFrom = sliceStart;
+
+        while (searchFrom < sliceEnd) {
+            var found = text.IndexOf(
+                comparisonType: StringComparison.Ordinal,
+                count: (sliceEnd - searchFrom),
+                startIndex: searchFrom,
+                value: name
+            );
+
+            if (found < 0) {
+                return -1;
+            }
+
+            var leftBoundary = ((found == 0) || !IdentifierSpelling.IsPart(character: text[(found - 1)]));
+            var rightIndex = (found + name.Length);
+            var rightBoundary = ((rightIndex >= text.Length) || !IdentifierSpelling.IsPart(character: text[rightIndex]));
+
+            if (leftBoundary && rightBoundary) {
+                return found;
+            }
+            searchFrom = (found + 1);
+        }
+
+        return -1;
+    }
+    private static JsonObject BuildQuickFix(string title, string uri, JsonObject editRange, string newText, JsonObject diagnostic, bool isPreferred) => new() {
+        ["title"] = title,
+        ["kind"] = "quickfix",
+        ["isPreferred"] = isPreferred,
+        ["diagnostics"] = new JsonArray(diagnostic.DeepClone()),
+        ["edit"] = new JsonObject {
+            ["changes"] = new JsonObject {
+                [uri] = new JsonArray(new JsonObject {
+                    ["range"] = editRange.DeepClone(),
+                    ["newText"] = newText,
+                }),
+            },
+        },
+    };
+    private static bool TryRangeOffsets(JsonObject range, string source, out int startOffset, out int endOffset) {
+        startOffset = 0;
+        endOffset = 0;
+        if (
+            (range["start"] is not JsonObject startObj) ||
+            (range["end"] is not JsonObject endObj)
+        ) {
+            return false;
+        }
+        var startLine = (startObj["line"]?.GetValue<int>() ?? 0);
+        var startChar = (startObj["character"]?.GetValue<int>() ?? 0);
+        var endLine = (endObj["line"]?.GetValue<int>() ?? 0);
+        var endChar = (endObj["character"]?.GetValue<int>() ?? 0);
+
+        startOffset = LspJson.Offset(character: startChar, line: startLine, source: source);
+        endOffset = LspJson.Offset(character: endChar, line: endLine, source: source);
+        return (endOffset >= startOffset);
+    }
+    private static bool RangesOverlap(JsonObject a, JsonObject? b) {
+        if (b is null) {
+            return false;
+        }
+        var aStart = (Line: (a["start"]?["line"]?.GetValue<int>() ?? 0), Char: (a["start"]?["character"]?.GetValue<int>() ?? 0));
+        var aEnd = (Line: (a["end"]?["line"]?.GetValue<int>() ?? 0), Char: (a["end"]?["character"]?.GetValue<int>() ?? 0));
+        var bStart = (Line: (b["start"]?["line"]?.GetValue<int>() ?? 0), Char: (b["start"]?["character"]?.GetValue<int>() ?? 0));
+        var bEnd = (Line: (b["end"]?["line"]?.GetValue<int>() ?? 0), Char: (b["end"]?["character"]?.GetValue<int>() ?? 0));
+
+        return ((aStart.CompareTo(other: bEnd) <= 0) && (bStart.CompareTo(other: aEnd) <= 0));
     }
     private void HandleInitialize(JsonNode? id, JsonObject? @params) {
         // `initializationOptions.diagnostics`: "source" runs the source tier alone; anything else, or nothing, is full.
@@ -1273,6 +1639,8 @@ public sealed partial class PuckLanguageServer {
         ),
                 },
                 ["hoverProvider"] = true,
+                ["definitionProvider"] = true,
+                ["codeActionProvider"] = true,
                 ["documentSymbolProvider"] = true,
                 ["documentFormattingProvider"] = true,
                 ["semanticTokensProvider"] = new JsonObject {
@@ -1354,19 +1722,7 @@ public sealed partial class PuckLanguageServer {
                 if (@params?["textDocument"] is JsonObject closeDoc) {
                     var uri = (closeDoc["uri"]?.ToString() ?? "");
 
-                    _ = m_documents.Remove(key: uri);
-                    _ = m_versions.Remove(key: uri);
-                    _ = m_generations.Remove(key: uri);
-                    _ = m_pending.Remove(key: uri);
-                    _ = m_dependencies.Remove(key: uri);
-                    _ = m_semanticPending.Remove(key: uri);
-                    SendNotification(
-                        method: "textDocument/publishDiagnostics",
-                        @params: new JsonObject {
-                            ["uri"] = uri,
-                            ["diagnostics"] = new JsonArray(),
-                        }
-                    );
+                    Closed(uri: uri);
                 }
                 break;
 
@@ -1379,6 +1735,20 @@ public sealed partial class PuckLanguageServer {
 
             case "textDocument/hover":
                 HandleHover(
+                    id: id,
+                    @params: @params
+                );
+                break;
+
+            case "textDocument/definition":
+                HandleDefinition(
+                    id: id,
+                    @params: @params
+                );
+                break;
+
+            case "textDocument/codeAction":
+                HandleCodeAction(
                     id: id,
                     @params: @params
                 );

@@ -16,8 +16,8 @@ public static class PuckDiagnosticCodes {
     public const string LocalKindMissing = "PUCK006";
     /// <summary>PUCK041: a compile-time call refused at the call: a collection builtin (<c>map</c>, <c>filter</c>,
     /// <c>reduce</c>, <c>range</c>, <c>length</c>, <c>concat</c>, ...) or a scalar function called with arguments it
-    /// cannot evaluate at compile time, or a name that is neither a compile-time function nor an arm the vocabulary
-    /// declares (<c>min</c>, where the one spelling is <c>minimum</c>).</summary>
+    /// cannot evaluate at compile time, or a name that is neither a compile-time function nor a construct the
+    /// vocabulary declares (<c>min</c>, where the one spelling is <c>minimum</c>).</summary>
     public const string BuiltinRefused = "PUCK041";
     /// <summary>PUCK040: a colon in front of a container value. A block or a list is written without the colon
     /// (<c>host { }</c>, <c>cameras [ ]</c>); the colon is what marks a scalar leaf, so there is exactly one
@@ -343,6 +343,12 @@ public static class PuckDiagnosticCodes {
     /// one, solving last, can carry the earlier tip off its target. Not an error: declaration order is the priority, and
     /// a later contact that should win is authored this way.</summary>
     public const string EffectorContest = "PUCK133";
+    /// <summary>PUCK134: a template or module invocation naming a template or module not in scope.</summary>
+    public const string UnknownTemplate = "PUCK134";
+    /// <summary>PUCK135: a template or module invocation supplying an unknown, duplicate, or excess argument.</summary>
+    public const string TemplateArgument = "PUCK135";
+    /// <summary>PUCK136: an unknown field or member name in a document object.</summary>
+    public const string UnknownMember = "PUCK136";
 
     private static readonly FrozenSet<string> DeclaredCodes = typeof(PuckDiagnosticCodes)
         .GetFields(bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)

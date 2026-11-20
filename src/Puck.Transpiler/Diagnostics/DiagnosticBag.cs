@@ -11,6 +11,34 @@ namespace Puck.Transpiler.Diagnostics;
 public sealed class DiagnosticBag : IReadOnlyList<Diagnostic> {
     private readonly List<Diagnostic> m_diagnostics = [];
     private readonly HashSet<Diagnostic> m_held = [];
+    private string? m_activeSourcePath;
+    private DiagnosticRelated? m_activeRelated;
+
+    /// <summary>Temporarily attributes diagnostics reported without an explicit <see cref="Diagnostic.SourcePath"/>
+    /// to <paramref name="sourcePath"/> (or back to the compilation root when <paramref name="sourcePath"/> is
+    /// <see langword="null"/>), attaching <paramref name="related"/> as the use site when present.</summary>
+    /// <param name="sourcePath">The source file owning spans reported inside this scope, or <see langword="null"/> for the root.</param>
+    /// <param name="related">Optional use-site location in the caller that entered this source.</param>
+    /// <returns>A scope that restores the enclosing attribution when disposed.</returns>
+    public IDisposable PushSource(string? sourcePath, DiagnosticRelated? related = null) {
+        var previousSourcePath = m_activeSourcePath;
+        var previousRelated = m_activeRelated;
+
+        m_activeSourcePath = sourcePath;
+        m_activeRelated = related;
+
+        return new SourceScope(bag: this, previousRelated: previousRelated, previousSourcePath: previousSourcePath);
+    }
+
+    private sealed class SourceScope(DiagnosticBag bag, string? previousSourcePath, DiagnosticRelated? previousRelated) : IDisposable {
+        private DiagnosticBag? m_bag = bag;
+
+        public void Dispose() {
+            if (Interlocked.Exchange(location1: ref m_bag, value: null) is not { } current) { return; }
+            current.m_activeSourcePath = previousSourcePath;
+            current.m_activeRelated = previousRelated;
+        }
+    }
 
     /// <summary>Gets the count of diagnostics in the bag.</summary>
     public int Count => m_diagnostics.Count;
@@ -144,6 +172,14 @@ public sealed class DiagnosticBag : IReadOnlyList<Diagnostic> {
     /// <exception cref="ArgumentNullException"><paramref name="diagnostic"/> is <see langword="null"/>.</exception>
     public void Report(Diagnostic diagnostic) {
         ArgumentNullException.ThrowIfNull(diagnostic);
+        if ((diagnostic.SourcePath is null) && (m_activeSourcePath is not null)) {
+            diagnostic = (diagnostic with {
+                Related = (diagnostic.Related ?? m_activeRelated),
+                SourcePath = m_activeSourcePath,
+            });
+        } else if ((diagnostic.Related is null) && (m_activeRelated is not null) && (diagnostic.SourcePath is not null)) {
+            diagnostic = (diagnostic with { Related = m_activeRelated });
+        }
         if (m_held.Add(item: diagnostic)) {
             m_diagnostics.Add(item: diagnostic);
         }

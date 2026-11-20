@@ -11,6 +11,56 @@ using Puck.Physics.Motion;
 
 namespace Puck.World;
 
+/// <summary>One validation finding returned by <see cref="WorldDefinitionValidator"/> with its document path separated
+/// from the human-readable message so callers locate findings from structured data rather than parsing text.</summary>
+/// <param name="Path">The dotted-and-bracketed document path (for example <c>prototypes[0].doc.shapes[1].blend</c>),
+/// or empty when the finding applies to the whole document.</param>
+/// <param name="Message">The authored finding message.</param>
+public sealed record WorldValidationFinding(string Path, string Message) {
+    /// <summary>Splits a raw validator message into its leading document path and clean message text.</summary>
+    internal static WorldValidationFinding FromRaw(string raw) {
+        if (string.IsNullOrEmpty(value: raw)) {
+            return new WorldValidationFinding(Path: string.Empty, Message: string.Empty);
+        }
+
+        var colon = raw.IndexOf(value: ':');
+
+        if ((colon > 0) && IsDocumentPath(span: raw.AsSpan(length: colon, start: 0))) {
+            var path = raw[..colon].Trim();
+            var body = raw[(colon + 1)..].TrimStart();
+            // Strip engine-internal `prototypes[i].doc.<path>: ` prefixes so authors read the finding itself;
+            // the path is carried as structured data in `Path`.
+            var message = (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "prototypes[") && path.Contains(comparisonType: StringComparison.Ordinal, value: ".doc."))
+                ? body
+                : raw;
+
+            return new WorldValidationFinding(Path: path, Message: message);
+        }
+
+        var space = raw.IndexOf(value: ' ');
+        var head = ((space > 0) ? raw[..space] : raw);
+
+        return new WorldValidationFinding(
+            Message: raw,
+            Path: (IsDocumentPath(span: head.AsSpan()) ? head : string.Empty)
+        );
+    }
+
+    private static bool IsDocumentPath(ReadOnlySpan<char> span) {
+        var trimmed = span.Trim();
+
+        if (trimmed.IsEmpty || !char.IsLetter(c: trimmed[0])) {
+            return false;
+        }
+        foreach (var ch in trimmed) {
+            if (!(char.IsLetterOrDigit(c: ch) || (ch is '.' or '[' or ']' or '_' or '-' or '\'' or '"'))) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
 /// <summary>The one thick startup gate for World-local authored data. Runtime systems may assume these structural and
 /// platform-facing invariants instead of silently overwriting duplicate indices or discovering bad extents on a GPU
 /// allocation path.</summary>
@@ -2197,6 +2247,38 @@ public static partial class WorldDefinitionValidator {
             return false;
         }
         return true;
+    }
+    /// <summary>Validates document-local facts against an explicitly selected machine catalog, returning each refusal
+    /// and deferred check with its document path as structured data.</summary>
+    /// <param name="definition">The candidate definition.</param>
+    /// <param name="machines">The deployment's machine vocabulary, or null for structural validation with deferred provider notices.</param>
+    /// <param name="errors">The collected structural and provider refusals with their document paths.</param>
+    /// <param name="deferred">The collected checks this environment cannot prove, or null to discard them.</param>
+    /// <param name="compilation">The validated rule programs, or null on refusal.</param>
+    /// <returns>Whether validation added no errors.</returns>
+    public static bool TryValidateLocally(WorldDefinition definition, IMachineValidationCatalog? machines, ICollection<WorldValidationFinding> errors, ICollection<WorldValidationFinding>? deferred, out WorldRuleCompilation? compilation) {
+        ArgumentNullException.ThrowIfNull(argument: errors);
+
+        var rawErrors = new List<string>();
+        var rawDeferred = ((deferred is null) ? null : new List<string>());
+        var ok = TryValidateLocally(
+            compilation: out compilation,
+            deferred: rawDeferred,
+            definition: definition,
+            errors: rawErrors,
+            machines: machines
+        );
+
+        foreach (var raw in rawErrors) {
+            errors.Add(item: WorldValidationFinding.FromRaw(raw: raw));
+        }
+        if ((deferred is not null) && (rawDeferred is not null)) {
+            foreach (var raw in rawDeferred) {
+                deferred.Add(item: WorldValidationFinding.FromRaw(raw: raw));
+            }
+        }
+
+        return ok;
     }
     /// <summary>Validates local structure and machine admission using this deployment's catalog.</summary>
     /// <param name="definition">The candidate definition.</param>

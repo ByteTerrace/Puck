@@ -724,20 +724,19 @@ public static class CartridgeDocumentEmitter {
         }
 
         scope.IndexDeclarations(statements: document.Statements);
-        try {
-            foreach (var statement in document.Statements) {
+        foreach (var statement in document.Statements) {
+            try {
                 ProcessStatement(
                     scope: scope,
                     statement: statement,
                     target: root
                 );
+            } catch (DocumentEvaluationException error) {
+                diagnostics.Report(diagnostic: error.ToDiagnostic());
+                if ((error.Code == PuckDiagnosticCodes.EvaluationLimit) && (scope.Budget.Work >= DocumentEvaluationBudget.WorkLimit)) {
+                    break;
+                }
             }
-        } catch (DocumentEvaluationException error) {
-            diagnostics.ReportError(
-                code: error.Code,
-                message: error.Message,
-                span: error.Span
-            );
         }
 
         return new CompilationResult<JsonObject>(

@@ -44,7 +44,15 @@ public sealed partial class PuckLanguageServer {
     private readonly Dictionary<string, IReadOnlySet<string>> m_dependencies = new(comparer: StringComparer.OrdinalIgnoreCase);
     // The semantic tier each document's current source tier left pending, under that source tier's mark.
     private readonly Dictionary<string, (long Mark, WorldSourceDiagnosis Tier)> m_semanticPending = new(comparer: StringComparer.OrdinalIgnoreCase);
+    // The last published compilation per open document URI, so completion and hover never compile synchronously on the message thread.
+    private readonly Dictionary<string, WorldCompilation> m_lastCompilations = new(comparer: StringComparer.OrdinalIgnoreCase);
+    // Per diagnosing-owner URI: the diagnostics it last contributed, grouped by target document URI.
+    private readonly Dictionary<string, Dictionary<string, List<AttributedDiagnostic>>> m_publishedByOwner = new(comparer: StringComparer.OrdinalIgnoreCase);
+    // Per target URI: the merged diagnostic list last published (used by code actions when context.diagnostics is empty).
+    private readonly Dictionary<string, List<JsonObject>> m_publishedByTarget = new(comparer: StringComparer.OrdinalIgnoreCase);
     private PuckDiagnosticDepth m_depth = PuckDiagnosticDepth.Full;
+
+    private sealed record AttributedDiagnostic(Diagnostic Diagnostic, JsonObject Wire);
 
     private long m_mark;
     private int m_sourceDiagnoses;
@@ -312,6 +320,9 @@ public sealed partial class PuckLanguageServer {
                 ? new HashSet<string>(collection: sourceReads.Concat(second: dependencies), comparer: PuckPaths.Comparer)
                 : dependencies);
         }
+        if (diagnosis.SourceTier?.Compilation is { } compilation) {
+            m_lastCompilations[diagnosis.Request.Uri] = compilation;
+        }
         if (
             (diagnosis.SourceTier is { HasSemanticTier: true } tier) &&
             (m_depth == PuckDiagnosticDepth.Full)
@@ -366,14 +377,98 @@ public sealed partial class PuckLanguageServer {
         return true;
     }
 
+    private string ToDocumentUri(string path) {
+        var normalized = PuckPaths.Normalize(path: Path.GetFullPath(path: path));
+
+        foreach (var openUri in m_documents.Keys) {
+            if (
+                TryGetLocalPath(path: out var openPath, uri: openUri) &&
+                PuckPaths.Comparer.Equals(x: PuckPaths.Normalize(path: openPath), y: normalized)
+            ) {
+                return openUri;
+            }
+        }
+
+        return new Uri(uriString: Path.GetFullPath(path: path)).AbsoluteUri;
+    }
+
+    private string? ReadSourceText(string? path) {
+        if (string.IsNullOrWhiteSpace(value: path)) {
+            return null;
+        }
+
+        var normalized = PuckPaths.Normalize(path: Path.GetFullPath(path: path));
+
+        foreach (var (openUri, openText) in m_documents) {
+            if (
+                TryGetLocalPath(path: out var openPath, uri: openUri) &&
+                PuckPaths.Comparer.Equals(x: PuckPaths.Normalize(path: openPath), y: normalized)
+            ) {
+                return openText;
+            }
+        }
+
+        try {
+            var full = Path.GetFullPath(path: path);
+
+            return (File.Exists(path: full) ? File.ReadAllText(path: full) : null);
+        } catch {
+            return null;
+        }
+    }
+
+    private void Closed(string uri) {
+        _ = m_documents.Remove(key: uri);
+        _ = m_versions.Remove(key: uri);
+        _ = m_generations.Remove(key: uri);
+        _ = m_pending.Remove(key: uri);
+        _ = m_dependencies.Remove(key: uri);
+        _ = m_semanticPending.Remove(key: uri);
+        _ = m_lastCompilations.Remove(key: uri);
+
+        var affected = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase) { uri };
+
+        if (m_publishedByOwner.Remove(key: uri, value: out var previous)) {
+            foreach (var targetUri in previous.Keys) {
+                _ = affected.Add(item: targetUri);
+            }
+        }
+
+        PublishMerged(affectedUris: affected, primaryUri: uri, primaryVersion: null);
+    }
+
     private void Publish(Diagnosis diagnosis) {
-        var published = new JsonArray();
+        var ownerUri = diagnosis.Request.Uri;
+        var ownerNormalized = ((diagnosis.Request.SourcePath is { } ownerPath)
+            ? PuckPaths.Normalize(path: Path.GetFullPath(path: ownerPath))
+            : null);
+        var grouped = new Dictionary<string, List<AttributedDiagnostic>>(comparer: StringComparer.OrdinalIgnoreCase) {
+            [ownerUri] = [],
+        };
+        var sourceCache = new Dictionary<string, string?>(comparer: StringComparer.OrdinalIgnoreCase) {
+            [ownerUri] = diagnosis.Request.Text,
+        };
+
+        string? TextFor(string targetUri, string? sourcePath) {
+            if (!sourceCache.TryGetValue(key: targetUri, value: out var text)) {
+                text = (m_documents.TryGetValue(key: targetUri, value: out var openText)
+                    ? openText
+                    : ReadSourceText(path: sourcePath));
+                sourceCache[targetUri] = text;
+            }
+            return text;
+        }
 
         foreach (var diagnostic in diagnosis.Diagnostics) {
-            published.Add(item: new JsonObject {
-                // A finding an import's declaration carries has a span into that import's text, not this one.
+            var isForeign = (
+                (diagnostic.SourcePath is { Length: > 0 } foreignPath) &&
+                ((ownerNormalized is null) || !PuckPaths.Comparer.Equals(x: PuckPaths.Normalize(path: Path.GetFullPath(path: foreignPath)), y: ownerNormalized))
+            );
+            var targetUri = (isForeign ? ToDocumentUri(path: diagnostic.SourcePath!) : ownerUri);
+            var rangeSource = TextFor(sourcePath: diagnostic.SourcePath, targetUri: targetUri);
+            var wire = new JsonObject {
                 ["range"] = LspJson.Range(
-                    source: ((diagnostic.SourcePath is null) ? diagnosis.Request.Text : null),
+                    source: rangeSource,
                     span: diagnostic.Span
                 ),
                 ["severity"] = diagnostic.Severity switch {
@@ -384,20 +479,117 @@ public sealed partial class PuckLanguageServer {
                 ["code"] = diagnostic.Code,
                 ["source"] = "puck",
                 ["message"] = diagnostic.Message,
-            });
+            };
+
+            if (isForeign || (diagnostic.Related is not null)) {
+                var relatedInfo = new JsonArray();
+
+                if (diagnostic.Related is { } related) {
+                    var relatedUri = ((related.SourcePath is { Length: > 0 } relPath)
+                        ? ToDocumentUri(path: relPath)
+                        : ownerUri);
+                    var relatedText = TextFor(sourcePath: related.SourcePath, targetUri: relatedUri);
+
+                    relatedInfo.Add(item: new JsonObject {
+                        ["location"] = new JsonObject {
+                            ["uri"] = relatedUri,
+                            ["range"] = LspJson.Range(source: relatedText, span: related.Span),
+                        },
+                        ["message"] = related.Message,
+                    });
+                } else {
+                    var useSpan = SourceSpan.None;
+
+                    if (
+                        (m_lastCompilations.TryGetValue(key: ownerUri, value: out var lastComp)) &&
+                        (lastComp.SourceMap.TryGetSpan(jsonPointer: "/basis", span: out var basisSpan) || lastComp.SourceMap.TryGetSpan(jsonPointer: "/imports/0", span: out basisSpan))
+                    ) {
+                        useSpan = basisSpan;
+                    }
+
+                    var ownerLabel = ((diagnosis.Request.SourcePath is { Length: > 0 } path)
+                        ? Path.GetFileName(path: path)
+                        : ownerUri);
+
+                    relatedInfo.Add(item: new JsonObject {
+                        ["location"] = new JsonObject {
+                            ["uri"] = ownerUri,
+                            ["range"] = LspJson.Range(source: diagnosis.Request.Text, span: useSpan),
+                        },
+                        ["message"] = $"Reported while diagnosing '{ownerLabel}'.",
+                    });
+                }
+
+                wire["relatedInformation"] = relatedInfo;
+            }
+
+            if (!grouped.TryGetValue(key: targetUri, value: out var bucket)) {
+                bucket = [];
+                grouped[targetUri] = bucket;
+            }
+            bucket.Add(item: new AttributedDiagnostic(Diagnostic: diagnostic, Wire: wire));
         }
 
-        var @params = new JsonObject {
-            ["uri"] = diagnosis.Request.Uri,
-        };
+        var affected = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase) { ownerUri };
 
-        if (diagnosis.Request.Version is { } version) {
-            @params["version"] = version;
+        if (m_publishedByOwner.TryGetValue(key: ownerUri, value: out var previous)) {
+            foreach (var previousUri in previous.Keys) {
+                _ = affected.Add(item: previousUri);
+            }
         }
-        @params["diagnostics"] = published;
-        SendNotification(
-            method: "textDocument/publishDiagnostics",
-            @params: @params
-        );
+        foreach (var targetUri in grouped.Keys) {
+            _ = affected.Add(item: targetUri);
+        }
+
+        m_publishedByOwner[ownerUri] = grouped;
+        PublishMerged(affectedUris: affected, primaryUri: ownerUri, primaryVersion: diagnosis.Request.Version);
+    }
+
+    private void PublishMerged(HashSet<string> affectedUris, string primaryUri, int? primaryVersion) {
+        // Publish the primary (diagnosed) document first, then any foreign target URIs in deterministic order.
+        var ordered = affectedUris
+            .OrderByDescending(keySelector: uri => StringComparer.OrdinalIgnoreCase.Equals(x: uri, y: primaryUri))
+            .ThenBy(keySelector: static uri => uri, comparer: StringComparer.OrdinalIgnoreCase);
+
+        foreach (var targetUri in ordered) {
+            var merged = new JsonArray();
+            var snapshot = new List<JsonObject>();
+            var seen = new HashSet<Diagnostic>();
+
+            foreach (var ownerGroups in m_publishedByOwner.Values) {
+                if (!ownerGroups.TryGetValue(key: targetUri, value: out var entries)) {
+                    continue;
+                }
+                foreach (var entry in entries) {
+                    if (seen.Add(item: entry.Diagnostic)) {
+                        var clone = ((JsonObject)entry.Wire.DeepClone());
+
+                        merged.Add(item: clone);
+                        snapshot.Add(item: ((JsonObject)entry.Wire.DeepClone()));
+                    }
+                }
+            }
+
+            if (snapshot.Count > 0) {
+                m_publishedByTarget[targetUri] = snapshot;
+            } else {
+                _ = m_publishedByTarget.Remove(key: targetUri);
+            }
+
+            var @params = new JsonObject {
+                ["uri"] = targetUri,
+            };
+
+            if (StringComparer.OrdinalIgnoreCase.Equals(x: targetUri, y: primaryUri) && (primaryVersion is { } pVersion)) {
+                @params["version"] = pVersion;
+            } else if (m_versions.TryGetValue(key: targetUri, value: out var openVersion) && (openVersion is { } oVersion)) {
+                @params["version"] = oVersion;
+            }
+            @params["diagnostics"] = merged;
+            SendNotification(
+                method: "textDocument/publishDiagnostics",
+                @params: @params
+            );
+        }
     }
 }
