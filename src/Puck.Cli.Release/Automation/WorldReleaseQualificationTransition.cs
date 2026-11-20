@@ -83,12 +83,7 @@ public sealed class WorldReleaseQualificationTransition(IObjectBlobStore blobs, 
             ).ConfigureAwait(continueOnCapturedContext: false)
                 ?? throw new InvalidDataException(message: $"metadata qualification has no checkpointed authority for '{row.World}'"));
 
-            if (
-                (root.Root.FenceToken != Guid.Empty) ||
-                (root.Root.CheckpointHash is null) ||
-                (root.Root.JournalEntryCount != 0) ||
-                (root.Root.JournalSequence != root.Root.CheckpointCoverageSequence)
-            ) {
+            if (!root.Root.IsDrainedCheckpoint) {
                 throw new InvalidDataException(message: $"metadata qualification requires a drained checkpoint for '{row.World}'");
             }
             roots.Add(

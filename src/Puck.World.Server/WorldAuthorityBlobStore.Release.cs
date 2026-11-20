@@ -90,13 +90,7 @@ public sealed partial class WorldAuthorityBlobStore {
             pin: recoveryPin
         ).ConfigureAwait(continueOnCapturedContext: false);
 
-        if (
-            (saved is not { } protectedRoot) ||
-            (protectedRoot.Root.FenceToken != Guid.Empty) ||
-            (protectedRoot.Root.CheckpointHash is null) ||
-            (protectedRoot.Root.JournalEntryCount != 0) ||
-            (protectedRoot.Root.JournalSequence != protectedRoot.Root.CheckpointCoverageSequence)
-        ) {
+        if (saved is not { Root.IsDrainedCheckpoint: true } protectedRoot) {
             return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "release publication requires a fully checkpointed, unowned drain root");
         }
         var sourceBytes = await archive.ReadFileAsync(

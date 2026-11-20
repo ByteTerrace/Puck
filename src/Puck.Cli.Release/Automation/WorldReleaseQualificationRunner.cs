@@ -402,21 +402,36 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
         ) {
             throw new InvalidDataException(message: "qualification fixture must exactly match the release's local pinned inventory without production credentials");
         }
-        if (
-            (source is null) &&
-            definition.Worlds.Any(predicate: row => File.Exists(path: Path.Combine(
-            fixture,
-            "store",
-            row.Owner.ToString(format: "D"),
-            "private",
-            "puck",
-            "hosted",
-            row.World.Value,
-            "authority",
-            "root"
-        )))
-        ) {
-            throw new InvalidDataException(message: "bootstrap qualification requires a fixture without existing authority state");
+        var services = new ServiceCollection();
+
+        Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services: services);
+        using var provider = services.BuildServiceProvider();
+
+        // A bootstrap fixture holds each world's published definition under an unowned epoch-zero root and no gameplay,
+        // as the bootstrap publishes it (WorldReleaseFixtureBuilder, AzureCommand.InitializeWorldReleaseBootstrapAsync).
+        if (source is null) {
+            var fixtureAuthority = new WorldAuthorityBlobStore(
+                store: provider.GetRequiredService<IObjectBlobStore>(),
+                target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
+                    path1: fixture,
+                    path2: "store"
+                )),
+                timeProvider: m_clock
+            );
+
+            foreach (var row in definition.Worlds) {
+                var root = await fixtureAuthority.LoadRootAsync(
+                    cancellationToken: cancellationToken,
+                    identity: new WorldAuthorityIdentity(
+                        Owner: row.Owner,
+                        World: row.World
+                    )
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                if (root is { Root.HoldsGameplay: true }) {
+                    throw new InvalidDataException(message: $"bootstrap qualification requires a fixture without gameplay state; '{row.World}' holds some");
+                }
+            }
         }
         // A unique evidence directory prevents a previous successful report from satisfying a failed retry.
         var run = Path.Combine(
@@ -441,10 +456,6 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
             source: fixture
         );
         var seedHash = HashTree(directory: seed);
-        var services = new ServiceCollection();
-
-        Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services: services);
-        using var provider = services.BuildServiceProvider();
         var transition = (changesDefinitions
             ? new WorldReleaseQualificationTransition(
                 provider.GetRequiredService<IObjectBlobStore>(),

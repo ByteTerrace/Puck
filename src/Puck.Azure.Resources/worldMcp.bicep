@@ -24,8 +24,6 @@ type worldMcpConfigurationType = {
     domain: string
     subject: string
     mode: 'OAuth'
-    algorithm: string
-    publicKey: string
     disclosure: 'Replica'
     #disable-next-line use-user-defined-types
     grants: object[]
@@ -127,13 +125,13 @@ resource alert 'Microsoft.Insights/metricAlerts@2026-01-01' = {
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Outputs
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Each participant's admission row is keyless: an OAuth row names its issuer and subject and authors no algorithm or
+// public key, which the world document's admission validation refuses on a keyless mode.
 output worldMcpConfiguration worldMcpConfigurationType = {
   admission: map(settings.participants, participant => {
     domain: issuer
     subject: participant.subject
     mode: 'OAuth'
-    algorithm: ''
-    publicKey: ''
     disclosure: 'Replica'
     grants: participant.grants
   })
