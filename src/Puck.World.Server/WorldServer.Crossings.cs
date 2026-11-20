@@ -198,7 +198,7 @@ public sealed partial class WorldServer {
             cancellationToken: CancellationToken.None,
             continuationOptions: TaskContinuationOptions.ExecuteSynchronously,
             continuationAction: _ => m_pending.Writer.TryWrite(item: () => {
-                lock (m_authorityGate) {
+                using (EnterAtTickBoundary()) {
                     SettleCrossingIfAnswered();
                 }
             }),
@@ -212,7 +212,7 @@ public sealed partial class WorldServer {
     /// so a caller retiring a frozen activation awaits this before capturing its final image.</summary>
     public Task CrossingAnswered {
         get {
-            lock (m_authorityGate) {
+            using (EnterAtTickBoundary()) {
                 return ((Task?)m_crossingStep?.Answer ?? Task.CompletedTask);
             }
         }

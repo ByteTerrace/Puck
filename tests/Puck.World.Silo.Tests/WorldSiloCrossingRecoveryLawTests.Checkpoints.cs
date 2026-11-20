@@ -7,7 +7,8 @@ namespace Puck.World.Silo.Tests;
 
 public sealed partial class WorldSiloCrossingRecoveryLawTests {
     // The store pauses at its first root read, before it can publish the captured checkpoint. A crossing begins
-    // while that upload is pending. The pump is free, its upload barrier waits, and recovery retains the arrival.
+    // while that upload is pending. The pump is free: the drain sends the crossing's records and returns while the
+    // upload still waits, the destination's records queue behind it, and recovery retains the arrival.
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
@@ -61,7 +62,7 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
 
         original.DrainActivationMailbox();
         Assert.False(condition: uploads.IsCompleted);
-        var departure = pair.Store.ObserveNextJournalWrite(world: "rowa");
+        var allocation = pair.Store.ObserveNextJournalWrite(world: "rowa");
 
         _ = instances.EnqueueTransfer(
             actingPrincipal: Principal.Console,
@@ -70,16 +71,20 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
             sourceInstance: "rowa",
             sourceSlot: Slot
         );
-        var crossing = Task.Run(action: () => instances.DrainPendingTransfers(), cancellationToken: TestContext.Current.CancellationToken);
 
         try {
-            await departure.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
-            Assert.False(condition: crossing.IsCompleted);
+            // The drain returns at once: the source's first record is in flight, and nothing waits for the store.
+            instances.DrainPendingTransfers();
+            await allocation.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
             Assert.False(condition: uploads.IsCompleted);
         } finally {
             held.Dispose();
-            await crossing.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
         }
+        await SiloCrossings.DriveAsync(
+            done: () => (CountTraveler(host: original, traveler: traveler) == 1) && (instances.CaptureRow(row: rowA).InDoubtTransfers.Count == 0),
+            host: original,
+            rows: ["rowa", "rowb"]
+        );
         await PumpAsync(host: original, operation: uploads);
         Assert.True(condition: await uploads);
         if (checkpoint is not null) { Assert.True(condition: await checkpoint); }
