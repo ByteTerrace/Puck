@@ -68,23 +68,15 @@ public sealed partial class WorldServer {
             expectedBorder: expectedBorder
         );
     /// <inheritdoc cref="WorldTick.CommitTransfer"/>
-    public WorldTransferStatus CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
-        var key = new WorldTransferKey(
-            SourceAuthority: sourceAuthority,
-            TransferId: transferId
-        );
-
-        return m_tick.CommitTransfer(
-            confirmed: ConfirmCompanionHops(
-                key: key,
-                phase: WorldHopPhase.Commit,
-                tickets: ExecuteAuthorityOperation(operation: () => m_transferEscrow.CommitHopQuestion(key: key))
-            ),
-            members: members!,
-            reason: out reason,
-            sourceAuthority: sourceAuthority,
-            transferId: transferId
-        );
+    public Task<(WorldTransferStatus Status, string Reason)> CommitTransferAsync(string sourceAuthority, ulong transferId,
+        IReadOnlyList<WorldTransferCommitMember> members, Action? authorize = null, CancellationToken ct = default) {
+        var key = new WorldTransferKey(sourceAuthority, transferId);
+        var tickets = ExecuteAuthorityOperation(() => m_transferEscrow.CommitHopQuestion(key));
+        return WithConfirmedHopsAsync(key, tickets, WorldHopPhase.Commit, confirmed => {
+            var status = m_tick.CommitTransfer(confirmed: confirmed, members: members, reason: out var reason,
+                sourceAuthority: sourceAuthority, transferId: transferId);
+            return (status, reason);
+        }, authorize, ct);
     }
     /// <inheritdoc cref="WorldTick.ConstrainTransferAuthorities"/>
     public void ConstrainTransferAuthorities(Func<string, bool> allowed) => m_tick.ConstrainTransferAuthorities(allowed: allowed);
@@ -149,20 +141,13 @@ public sealed partial class WorldServer {
             previous: previous
         );
     /// <inheritdoc cref="WorldTick.ReserveTransfer"/>
-    public WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request) {
-        ArgumentNullException.ThrowIfNull(argument: request);
-
-        return m_tick.ReserveTransfer(
-            confirmed: ConfirmCompanionHops(
-                key: new WorldTransferKey(
-                    SourceAuthority: request.SourceAuthority,
-                    TransferId: request.TransferId
-                ),
-                phase: WorldHopPhase.Reservation,
-                tickets: ExecuteAuthorityOperation(operation: () => m_transferEscrow.ReservationHopQuestion(request: request))
-            ),
-            request: request
-        );
+    public Task<WorldTransferReservationReply> ReserveTransferAsync(WorldTransferReservationRequest request,
+        Action? authorize = null, CancellationToken ct = default) {
+        ArgumentNullException.ThrowIfNull(request);
+        var key = new WorldTransferKey(request.SourceAuthority, request.TransferId);
+        var tickets = ExecuteAuthorityOperation(() => m_transferEscrow.ReservationHopQuestion(request));
+        return WithConfirmedHopsAsync(key, tickets, WorldHopPhase.Reservation,
+            confirmed => m_tick.ReserveTransfer(confirmed: confirmed, request: request), authorize, ct);
     }
     /// <inheritdoc cref="WorldTick.RetireTransferredMobility"/>
     public void RetireTransferredMobility(in WorldMobilityIdentity mobility) => m_tick.RetireTransferredMobility(mobility: in mobility);

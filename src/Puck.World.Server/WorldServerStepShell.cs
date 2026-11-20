@@ -43,9 +43,8 @@ public static class WorldServerStepShell {
 
         while (true) {
             using var work = HostFrameWork.MeasureWorld(server.InstanceIdentity);
-            peerHost?.DrainPending();
-            // Federation may commit from another thread. Its authority operation must precede this whole step or
-            // follow its tape close: a post-step arrival cannot enter the bucket replay will apply before that step.
+            server.DrainMailbox();
+            // Keep the simulation step and tape close atomic with other authority readers and writers.
             lock (server.AuthorityGate) {
                 try {
                     using var recordedDraws = tape?.InjectDriveTick();

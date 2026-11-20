@@ -3,12 +3,12 @@ namespace Puck.Networking;
 /// <summary>The wire-facing shape and behavior a lane authenticator exposes, so a challenge/proof exchange never
 /// hardcodes one scheme's byte widths against a second implementation. A caller reads
 /// <see cref="ChallengeBytes"/> to size and validate a fresh challenge; proof-shape validation is
-/// <see cref="TryVerify"/>'s own job, never a fixed length check upstream of it.</summary>
+/// <see cref="VerifyAsync"/>'s own job, never a fixed length check upstream of it.</summary>
 /// <remarks>
-/// <see cref="Prove"/> carries no source-authority parameter and <see cref="TryVerify"/> returns one instead of
+/// <see cref="Prove"/> carries no source-authority parameter and <see cref="VerifyAsync"/> returns one instead of
 /// accepting one: the identity a verified proof names is a fact the proof itself establishes, never a claim the
 /// caller supplies. An authenticator whose <see cref="Prove"/> took a namespace argument would let a caller ask to
-/// be proven as anyone; an authenticator whose <see cref="TryVerify"/> took one back would let the door's caller
+/// be proven as anyone; an authenticator whose <see cref="VerifyAsync"/> took one back would let the door's caller
 /// keep using an unverified label after verification succeeded on some other identity entirely. Both ends of the
 /// exchange are identity-derived, not identity-supplied.
 /// </remarks>
@@ -29,11 +29,13 @@ public interface IAuthenticator {
     /// the proof establishes.</summary>
     /// <param name="challenge">The challenge this authenticator issued.</param>
     /// <param name="proof">The presented proof.</param>
-    /// <param name="sourceAuthority">The verified source namespace the proof establishes, or
-    /// <see langword="null"/> on failure. Never derived from anything the caller asserted.</param>
-    /// <returns><see langword="true"/> only when the proof verifies.</returns>
-    bool TryVerify(ReadOnlySpan<byte> challenge, ReadOnlySpan<byte> proof, out string? sourceAuthority);
+    /// <param name="ct">Cancels issuer metadata retrieval.</param>
+    /// <returns>The verified namespace and its signed lifetime, or null when refused.</returns>
+    ValueTask<VerifiedPeerIdentity?> VerifyAsync(ReadOnlyMemory<byte> challenge, ReadOnlyMemory<byte> proof, CancellationToken ct);
 }
+/// <summary>The proof's verified namespace and last inclusive Unix second of validity.</summary>
+public sealed record VerifiedPeerIdentity(string Authority, long ValidThrough, Func<bool>? TrustIsCurrent = null);
+
 /// <summary>Requires an authenticated transport identity to be pinned before disclosing a credential.</summary>
 public interface IRemoteIdentityVerifier {
     /// <summary>Gets whether this instance has an explicit remote transport pin. A verifier-only server has none.</summary>

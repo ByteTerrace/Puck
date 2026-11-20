@@ -16,15 +16,13 @@ namespace Puck.World.Presentation.Tests;
 /// <see cref="VirtualClock"/> that never advances, and the destination's document is on disk so the source resolves it
 /// as a remote transfer destination.
 /// </summary>
-/// <remarks>The source's drain blocks its calling thread on the door's socket workers, which answer under the
-/// destination's authority gate, so a law never steps or drains the destination on another thread while the source
-/// drains.</remarks>
 internal sealed class FederatedHosts : IDisposable {
     /// <summary>The destination row's instance name, on the destination host.</summary>
     public const string DestinationName = "row-b";
     /// <summary>The onward row's instance name, on the destination host.</summary>
     public const string OnwardName = "row-c";
 
+    private readonly IAsyncDisposable m_mailbox;
     private readonly TemporaryDirectory m_scratch;
     private readonly LocalKeySigningOracle m_sourceOracle;
     private readonly LocalKeySigningOracle m_destinationOracle;
@@ -100,6 +98,7 @@ internal sealed class FederatedHosts : IDisposable {
         // The row owns its door: disposing the row disposes the door.
         DestinationRow.Instance.Door = Door;
         Door.Start(listen: "127.0.0.1:0");
+        m_mailbox = AdmissionWireFixture.StartMailboxPump(Door);
         Source.AdmitBoot(row: SourceRow.Instance);
         Destination.Admit(row: DestinationRow.Instance);
         Destination.Admit(row: OnwardRow.Instance);
@@ -178,14 +177,20 @@ internal sealed class FederatedHosts : IDisposable {
             throw new InvalidOperationException(message: $"'{DestinationName}' did not hand body:{credential.BodyIndex} on to '{OnwardName}'");
         }
 
-        return (traveler.TryDescribeRoute(
-            bodyIndex: credential.BodyIndex,
-            reason: out var reason,
-            route: out var route
-        )
-            ? route
-            : throw new InvalidOperationException(message: $"the destination described no onward route ({reason})"));
+        var (route, reason) = traveler.DescribeRouteAsync(credential.BodyIndex).AsTask().GetAwaiter().GetResult();
+        return route ?? throw new InvalidOperationException($"the destination described no onward route ({reason})");
     }
+    public void DrainCrossing(int slot) {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        while (Seats.RoutedEndpoint(slot)?.Identity == WorldInstanceHost.BootInstanceName) {
+            deadline.Token.ThrowIfCancellationRequested();
+            Source.DrainPendingTransfers();
+            if (Seats.RoutedEndpoint(slot)?.Identity == WorldInstanceHost.BootInstanceName) {
+                deadline.Token.WaitHandle.WaitOne(1);
+            }
+        }
+    }
+
     /// <summary>Joins local seat <paramref name="slot"/> on the source's boot row, gives its occupant
     /// <paramref name="travelTurn"/>, and steps the source once.</summary>
     /// <param name="slot">The local seat.</param>
@@ -214,6 +219,7 @@ internal sealed class FederatedHosts : IDisposable {
     }
     /// <inheritdoc/>
     public void Dispose() {
+        m_mailbox.DisposeAsync().AsTask().GetAwaiter().GetResult();
         Source.Dispose();
         Destination.Dispose();
         SourceRow.Dispose();

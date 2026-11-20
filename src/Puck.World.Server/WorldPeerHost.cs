@@ -25,7 +25,7 @@ public readonly record struct WorldPeerConnectionInfo(int ConnectionId, int Peer
 /// <see cref="WorldAdmissionDoor"/>'s challenge-response identity check) runs off the tick thread — neither touches
 /// server state beyond a read-only snapshot of the current document's admission entries — while admission
 /// (<see cref="WorldServer.TryAdmitPeerConnection"/>) and every subsequent submission run on the tick thread —
-/// marshaled there through <see cref="m_pending"/>, drained by <see cref="DrainPending"/> at the top of every fixed
+/// marshaled there through the row mailbox, drained by <see cref="DrainPending"/> at the top of every fixed
 /// step (<c>WorldServerStepShell.Step</c>), exactly where the design's §1.5 "deterministic fair merge" window sits.
 /// v1 keeps that merge to its simplest correct shape: one global FIFO (no per-connection quotas, no bounded-queue
 /// backpressure) — a trusted-LAN connection count small enough that fairness never needs more.
@@ -85,6 +85,7 @@ public sealed class WorldPeerHost : IDisposable {
 
     private Task? m_acceptLoop;
     private ITimer? m_credentialTimer;
+    private int m_sweepingCredentials;
     private CancellationTokenSource? m_cts;
     private bool m_disposed;
     private int m_nextConnectionId;
@@ -97,7 +98,6 @@ public sealed class WorldPeerHost : IDisposable {
     // tracked independently so idle observation/intent streams expire along with request/response sessions.
     private readonly ConcurrentDictionary<PeerStream, Credential> m_federationConnections = new();
     private readonly SemaphoreSlim m_federationSlots = new(initialCount: MaximumFederationConnections, maxCount: MaximumFederationConnections);
-    private readonly Channel<Action> m_pending = Channel.CreateUnbounded<Action>();
     private readonly List<Connection> m_connections = [];
     private readonly Lock m_connectionsLock = new();
 
@@ -232,14 +232,19 @@ public sealed class WorldPeerHost : IDisposable {
             foreach (var connection in m_connections) { CloseConnection(connection: connection.Client); }
         }
     }
-    private void EvictInvalidCredentials() {
-        foreach (var (client, credential) in m_federationConnections) {
-            if (!credential.IsValid()) { CloseConnection(connection: client); }
-        }
-        lock (m_connectionsLock) {
-            foreach (var connection in m_connections) {
-                if (!connection.Credential.IsValid()) { CloseConnection(connection: connection.Client); }
+    private async Task EvictInvalidCredentialsAsync() {
+        if (Interlocked.Exchange(ref m_sweepingCredentials, 1) != 0) { return; }
+        try {
+            Connection[] peers;
+            lock (m_connectionsLock) { peers = [.. m_connections]; }
+            foreach (var (client, credential) in m_federationConnections) {
+                if (!await credential.RefreshAsync().ConfigureAwait(false)) { CloseConnection(client); }
             }
+            foreach (var connection in peers) {
+                if (!await connection.Credential.RefreshAsync().ConfigureAwait(false)) { CloseConnection(connection.Client); }
+            }
+        } finally {
+            Volatile.Write(ref m_sweepingCredentials, 0);
         }
     }
     // The tier a federated peer's own authority namespace is authored at, read at reply encoding through the
@@ -272,7 +277,7 @@ public sealed class WorldPeerHost : IDisposable {
                 return;
             }
 
-            if (!connection.Credential.IsValid()) { return; }
+            if (!await connection.Credential.RefreshAsync().ConfigureAwait(false)) { return; }
 
             if (!TryDecodeSubmissionFrame(
                 failure: out var failure,
@@ -320,7 +325,7 @@ public sealed class WorldPeerHost : IDisposable {
 
             var completion = new TaskCompletionSource<WorldSubmissionResult>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-            var submitted = await RunOnTickThreadAsync(
+            var submitted = await m_server.RunOnTickThreadAsync(
                 work: () => {
                     if (!connection.Credential.IsValid()) { return false; }
                     m_server.Submit(
@@ -456,47 +461,31 @@ public sealed class WorldPeerHost : IDisposable {
                     failure: out _,
                     proof: out var federationProof
                 ) ||
-                    (clientChallenge.Length != m_authenticator.ChallengeBytes) ||
-                    !m_authenticator.TryVerify(
-                    challenge: WorldFederationCodec.BindProofChallenge(
-                        challenge: federationChallenge,
-                        counterChallenge: clientChallenge,
-                        clientKeyHash: client.Link.RemoteId.KeyHash,
-                        serverKeyHash: m_network.Peer.Id.KeyHash,
-                        serverProof: false),
-                    proof: federationProof,
-                    sourceAuthority: out var federationAuthority
-                ) ||
-                    (federationAuthority is null)
+                    (clientChallenge.Length != m_authenticator.ChallengeBytes)
                 ) {
-                    await WriteFederationRefusal(
-                        ct: handshakeCt,
-                        detail: "the presented proof did not verify",
-                        refusal: WorldFederationRefusal.AuthenticationFailed,
-                        stream: stream
-                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    await WriteFederationRefusal(ct: handshakeCt, detail: "malformed proof", refusal: WorldFederationRefusal.AuthenticationFailed, stream: stream).ConfigureAwait(false);
                     return;
                 }
-
-                var hadArrivalAdmission = (WorldAdmissionDoor.TryAdmitArrival(
-                    entries: m_server.Definition.Admission,
-                    sourceAuthority: federationAuthority,
-                    verdict: out _
-                ) is null);
-                using var credential = new Credential(host: this, ct: ct, verify: () => (m_authenticator.TryVerify(
-                    challenge: WorldFederationCodec.BindProofChallenge(
-                        challenge: federationChallenge,
-                        counterChallenge: clientChallenge,
-                        clientKeyHash: client.Link.RemoteId.KeyHash,
-                        serverKeyHash: m_network.Peer.Id.KeyHash,
-                        serverProof: false),
-                    proof: federationProof,
-                    sourceAuthority: out var currentAuthority
-                ) && (currentAuthority == federationAuthority) && (!hadArrivalAdmission || (WorldAdmissionDoor.TryAdmitArrival(
-                    entries: m_server.Definition.Admission,
-                    sourceAuthority: federationAuthority,
-                    verdict: out _
-                ) is null))));
+                var boundChallenge = WorldFederationCodec.BindProofChallenge(
+                    challenge: federationChallenge, counterChallenge: clientChallenge,
+                    clientKeyHash: client.Link.RemoteId.KeyHash, serverKeyHash: m_network.Peer.Id.KeyHash,
+                    serverProof: false);
+                var verifiedPolicy = m_server.Definition.Admission;
+                var identityProof = await m_authenticator.VerifyAsync(boundChallenge, federationProof, handshakeCt).ConfigureAwait(false);
+                if (identityProof is null || !ReferenceEquals(verifiedPolicy, m_server.Definition.Admission)) {
+                    await WriteFederationRefusal(ct: handshakeCt, detail: "the presented proof did not verify",
+                        refusal: WorldFederationRefusal.AuthenticationFailed, stream: stream).ConfigureAwait(false);
+                    return;
+                }
+                var federationAuthority = identityProof.Authority;
+                var hadArrivalAdmission = WorldAdmissionDoor.TryAdmitArrival(verifiedPolicy, federationAuthority, out _) is null;
+                async ValueTask<VerifiedPeerIdentity?> ReverifyAsync(IReadOnlyList<WorldAdmissionEntry>? policy, CancellationToken token) {
+                    if (hadArrivalAdmission && WorldAdmissionDoor.TryAdmitArrival(policy, federationAuthority, out _) is not null) { return null; }
+                    if (identityProof.TrustIsCurrent?.Invoke() != false) { return identityProof; }
+                    var next = await m_authenticator.VerifyAsync(boundChallenge, federationProof, token).ConfigureAwait(false);
+                    return next?.Authority == federationAuthority ? next : null;
+                }
+                using var credential = new Credential(this, verifiedPolicy, identityProof, ReverifyAsync, ct);
 
                 if (!m_federationSlots.Wait(millisecondsTimeout: 0)) {
                     await WriteFederationRefusal(
@@ -649,13 +638,10 @@ public sealed class WorldPeerHost : IDisposable {
                 return;
             }
 
-            using var peerCredential = new Credential(host: this, ct: ct, verify: () => WorldAdmissionDoor.TryAdmit(
-                entries: m_server.Definition.Admission,
-                challenge: challenge,
-                claim: claimAttestation,
-                chain: chainAttestations,
-                now: m_timeProvider.GetUtcNow()
-            ).Admitted);
+            using var peerCredential = new Credential(this, admissionEntriesAtVerify, new(outcome.Domain!, outcome.ValidThrough), (policy, _) => {
+                var next = WorldAdmissionDoor.TryAdmit(policy, challenge, claimAttestation, chainAttestations, m_timeProvider.GetUtcNow());
+                return new ValueTask<VerifiedPeerIdentity?>(next.Admitted ? new VerifiedPeerIdentity(next.Domain!, next.ValidThrough) : null);
+            }, ct);
 
             // Population/grant admission runs through the ordered-domain path, fed the verified identity's own
             // authored grant templates. The compare-at-commit check rides along here: TryAdmitPeerConnection
@@ -663,7 +649,7 @@ public sealed class WorldPeerHost : IDisposable {
             // handshake deadline covers this queue hop too — an authored rate-0/paused world may not drain it at
             // all — and RunOnTickThreadAsync's cancellation guard both releases the waiting socket at the deadline
             // and prevents the orphaned item from admitting later.
-            var (admitted, admissionRefusal) = await RunOnTickThreadAsync(
+            var (admitted, admissionRefusal) = await m_server.RunOnTickThreadAsync(
                 work: () => (!peerCredential.IsValid()
                 ? (default(WorldPeerEventEntry), "the verified credential expired or its admission entry was removed before admission")
                 : (m_server.TryAdmitPeerConnection(
@@ -735,7 +721,7 @@ public sealed class WorldPeerHost : IDisposable {
                     m_connections.Remove(item: connection);
                 }
 
-                await RunOnTickThreadAsync(work: () => {
+                await m_server.RunOnTickThreadAsync(work: () => {
                     m_server.DisconnectPeerConnection(peer: admitted);
 
                     return true;
@@ -797,7 +783,7 @@ public sealed class WorldPeerHost : IDisposable {
         // A forwarded submission can cross into another authority. Recheck at ingress, then leave each
         // authority's own gate to the existing forwarding path; never carry the source gate across a hop.
         credential.RequireValid();
-        if (WorldLocalForwardedAuthority.TryApplySubmission(
+        if (await ExecuteAuthenticatedAsync(credential, () => WorldLocalForwardedAuthority.TryApplySubmission(
             completion: Answer,
             mobility: in mobility,
             operationId: operationId,
@@ -805,7 +791,7 @@ public sealed class WorldPeerHost : IDisposable {
             reason: out _,
             server: m_server,
             sourceAuthority: sourceAuthority
-        )) {
+        )).ConfigureAwait(false)) {
             return (await answered.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false), string.Empty);
         }
 
@@ -823,17 +809,12 @@ public sealed class WorldPeerHost : IDisposable {
         ).ConfigureAwait(continueOnCapturedContext: false);
         credential.RequireValid();
 
-        return (forwarder.TryForwardSubmission(
-            completion: Answer,
-            mobility: in mobility,
-            operationId: operationId,
-            payload: payload,
-            reason: out var reason,
-            source: m_server
-        )
-            ? (await answered.Task.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false), reason)
-            : (null, reason)
-        );
+        var forwarded = await ExecuteAuthenticatedAsync(credential, () => {
+            var accepted = forwarder.TryForwardSubmission(completion: Answer, mobility: in mobility, operationId: operationId,
+                payload: payload, reason: out var reason, source: m_server);
+            return (accepted, reason);
+        }).ConfigureAwait(false);
+        return (forwarded.accepted ? await answered.Task.WaitAsync(ct).ConfigureAwait(false) : null, forwarded.reason);
     }
     // Detach necessarily precedes publication of the committed onward route, so a request landing inside that window
     // finds none yet. Waits, on the host clock, until the forwarder publishes one or the attempts run out; a refusal
@@ -855,38 +836,15 @@ public sealed class WorldPeerHost : IDisposable {
             ).ConfigureAwait(continueOnCapturedContext: false);
         }
     }
-    // Marshals one unit of work onto the tick thread via DrainPending and awaits its result — the one hand-off point
-    // between a connection's background read loop and the single-threaded server.
-    private Task<T> RunOnTickThreadAsync<T>(Func<T> work, CancellationToken ct = default) {
-        var tcs = new TaskCompletionSource<T>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+    private Task<T> ExecuteAuthenticatedAsync<T>(Credential credential, Func<T> operation) =>
+        m_server.RunOnTickThreadAsync(() => {
+            credential.RequireValid();
+            return operation();
+        }, credential.Token);
 
-        _ = m_pending.Writer.TryWrite(item: () => {
-            // A canceled queue item must never execute later: the caller has already released its socket/handshake
-            // slot, so committing admission here would create a population body with no connection to own it.
-            if (ct.IsCancellationRequested) {
-                tcs.TrySetCanceled(cancellationToken: ct);
+    private Task<Principal?> TransferredPrincipalAsync(Credential credential, WorldMobilityIdentity mobility, string sourceAuthority) =>
+        ExecuteAuthenticatedAsync<Principal?>(credential, () => m_server.TryTransferredPrincipal(sourceAuthority, mobility, out var principal) ? principal : null);
 
-                return;
-            }
-
-            try {
-                tcs.TrySetResult(result: work());
-            } catch (Exception ex) {
-                tcs.TrySetException(exception: ex);
-            }
-        });
-
-        // WaitAsync releases the caller promptly even when the tick queue is not draining. The guard above is the
-        // other half of the contract: it prevents that still-enqueued work from taking effect if draining resumes.
-        return (ct.CanBeCanceled
-            ? tcs.Task.WaitAsync(cancellationToken: ct)
-            : tcs.Task
-        );
-    }
-    private T ExecuteAuthenticated<T>(Credential credential, Func<T> operation) => m_server.ExecuteAuthorityOperation(operation: () => {
-        credential.RequireValid();
-        return operation();
-    });
     // A destination asks this authority, as a companion's title authority, whether a hop is currently granted to it.
     // The destination is the namespace this connection authenticated as, never one the body names.
     private async Task<bool> ServeHopQueryAsync(Stream stream, string sourceAuthority, Credential credential, ReadOnlyMemory<byte> body, CancellationToken ct) {
@@ -907,7 +865,7 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        var answers = ExecuteAuthenticated(credential: credential, operation: () => m_server.ConfirmHops(
+        var answers = await ExecuteAuthenticatedAsync(credential: credential, operation: () => m_server.ConfirmHops(
             destination: sourceAuthority,
             incarnations: incarnations,
             key: key,
@@ -943,7 +901,7 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
         if (kind == WorldFederationRequest.CustodyQuery) {
-            var answer = ExecuteAuthenticated(credential: credential, operation: () => m_server.QueryCustody(
+            var answer = await ExecuteAuthenticatedAsync(credential: credential, operation: () => m_server.QueryCustody(
                 asker: sourceAuthority,
                 incarnation: incarnation,
                 key: key
@@ -969,14 +927,7 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        // Settling asks the hop's destination, which may be another peer: it runs outside this authority's gate.
-        _ = ExecuteAuthenticated(credential: credential, operation: static () => true);
-
-        var acked = m_server.SettleHop(
-            incarnation: incarnation,
-            key: key,
-            source: sourceAuthority
-        );
+        var acked = await ExecuteAuthenticatedAsync(credential, () => m_server.SettleHop(key, incarnation, sourceAuthority)).ConfigureAwait(false);
 
         await WorldFederationCodec.WriteResponseAsync(
             body: new[] { (acked ? (byte)1 : (byte)0) },
@@ -1017,7 +968,7 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        var answers = ExecuteAuthenticated(credential: credential, operation: () => m_server.RequestHop(
+        var answers = await ExecuteAuthenticatedAsync(credential: credential, operation: () => m_server.RequestHop(
             destination: destination,
             key: key,
             members: members,
@@ -1066,13 +1017,9 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        var commitReason = string.Empty;
-        var status = ExecuteAuthenticated(credential: credential, operation: () => m_server.CommitTransfer(
-            members: members,
-            reason: out commitReason,
-            sourceAuthority: sourceAuthority,
-            transferId: transferId
-        ));
+        var commit = await ExecuteAuthenticatedAsync(credential, () => m_server.CommitTransferAsync(sourceAuthority,
+            transferId, members, credential.RequireValid, ct)).ConfigureAwait(false);
+        var (status, commitReason) = await commit.ConfigureAwait(false);
 
         await WorldFederationCodec.WriteResponseAsync(
             stream: stream,
@@ -1096,7 +1043,7 @@ public sealed class WorldPeerHost : IDisposable {
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);
 
-            if (!credential.IsValid()) { return; }
+            if (!await credential.RefreshAsync().ConfigureAwait(false)) { return; }
 
             if (!frame.Ok) {
                 if (frame.Failure.Refusal != WireRefusal.ConnectionClosed) {
@@ -1208,8 +1155,9 @@ public sealed class WorldPeerHost : IDisposable {
                     await WriteFederationRefusal(ct: ct, detail: "invalid prototype request", refusal: WorldFederationRefusal.FrameMalformed, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
                     return true;
                 }
-                var prototype = WorldProjectionPrototypeFetch.Fetch(server: m_server, pin: pin,
-                    sourceAuthority: sourceAuthority, ceiling: DisclosureFor(sourceAuthority: sourceAuthority), traveler: traveler);
+                var fetch = await ExecuteAuthenticatedAsync(credential, () => WorldProjectionPrototypeFetch.FetchAsync(m_server, pin,
+                    sourceAuthority, DisclosureFor(sourceAuthority), traveler)).ConfigureAwait(false);
+                var prototype = await fetch.ConfigureAwait(false);
                 if (prototype is null) {
                     await WriteFederationRefusal(ct: ct, detail: "the current projection does not disclose this prototype", refusal: WorldFederationRefusal.PrototypeUndisclosed, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
                 } else {
@@ -1255,7 +1203,8 @@ public sealed class WorldPeerHost : IDisposable {
                     observation,
                     (m_server.Definition.Host.Authority ?? ListenEndpoint ?? m_server.AuthorityIdentity),
                     stream,
-                    ct
+                    ct,
+                    credential.IsValid
                 ).ConfigureAwait(continueOnCapturedContext: false);
                 if (refusal is not null) {
                     await WriteFederationRefusal(
@@ -1310,8 +1259,8 @@ public sealed class WorldPeerHost : IDisposable {
         }
     }
     // The one document-reply door: current credentials, current policy and encoding share the authority gate.
-    private byte[] EncodeFederationReply(string sourceAuthority, Credential credential, Func<WorldDisclosureTier, byte[]> encode) =>
-        ExecuteAuthenticated(credential: credential, operation: () => encode(DisclosureFor(sourceAuthority: sourceAuthority)));
+    private Task<byte[]> EncodeFederationReplyAsync(string sourceAuthority, Credential credential, Func<WorldDisclosureTier, byte[]> encode) =>
+        ExecuteAuthenticatedAsync(credential: credential, operation: () => encode(DisclosureFor(sourceAuthority: sourceAuthority)));
 
     private async Task<bool> ServeReserveAsync(Stream stream, string sourceAuthority, Credential credential, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (
@@ -1347,15 +1296,13 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        // Reserve/commit/status are authority transactions, not ordinary gameplay submissions. They run on this
-        // socket worker under WorldServer's authority gate rather than through DrainPending: a destination that
-        // could only answer on its own next tick would deadlock two hosts crossing into one another at once.
-        var reply = ExecuteAuthenticated(credential: credential, operation: () => m_server.ReserveTransfer(request: request));
+        var reserve = await ExecuteAuthenticatedAsync(credential, () => m_server.ReserveTransferAsync(request, credential.RequireValid, ct)).ConfigureAwait(false);
+        var reply = await reserve.ConfigureAwait(false);
 
         await WorldFederationCodec.WriteResponseAsync(
             stream: stream,
             kind: WorldFederationResponse.Reservation,
-            body: EncodeFederationReply(sourceAuthority: sourceAuthority, credential: credential, encode: tier => WorldFederationCodec.EncodeReservationReply(
+            body: await EncodeFederationReplyAsync(sourceAuthority: sourceAuthority, credential: credential, encode: tier => WorldFederationCodec.EncodeReservationReply(
                 reply: reply,
                 tier: tier,
                 authority: m_server.AuthorityIdentity,
@@ -1399,11 +1346,7 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        if (!m_server.TryTransferredPrincipal(
-            mobility: in mobility,
-            principal: out var principal,
-            sourceAuthority: sourceAuthority
-        )) {
+        if (await TransferredPrincipalAsync(credential, mobility, sourceAuthority).ConfigureAwait(false) is not { } principal) {
             await WriteFederationRefusal(
                 ct: ct,
                 detail: "the route credential names no committed transfer body",
@@ -1417,7 +1360,7 @@ public sealed class WorldPeerHost : IDisposable {
         var declaredEndpoint = (m_server.Definition.Host.Authority ?? ListenEndpoint);
         // Read the body and its address inside the same gated operation that decided it is live.
         var local = ((declaredEndpoint is { } localEndpoint)
-            ? m_server.ExecuteAuthorityOperation(operation: () => (WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
+            ? await ExecuteAuthenticatedAsync(credential, () => (WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
                 principal: principal,
                 server: m_server
             )
@@ -1430,22 +1373,12 @@ public sealed class WorldPeerHost : IDisposable {
             : null
         );
 
-        WorldAuthorityRouteDescription route;
         var routeReason = string.Empty;
-
-        if (local is { } described) {
-            route = described;
-        } else if (
-            (m_server.TransferForwarder is { } forwarder) &&
-            forwarder.TryDescribeForwarding(
-            mobility: in mobility,
-            reason: out routeReason,
-            route: out route,
-            source: m_server
-        )
-        ) {
-            // The composition root recursively resolved the final authority.
-        } else {
+        if (local is null && m_server.TransferForwarder is { } forwarder) {
+            var pending = await ExecuteAuthenticatedAsync(credential, () => forwarder.DescribeForwardingAsync(m_server, mobility)).ConfigureAwait(false);
+            (local, routeReason) = await pending.ConfigureAwait(false);
+        }
+        if (local is not { } route) {
             await WriteFederationRefusal(
                 stream: stream,
                 refusal: WorldFederationRefusal.RouteUnknown,
@@ -1461,7 +1394,7 @@ public sealed class WorldPeerHost : IDisposable {
         await WorldFederationCodec.WriteResponseAsync(
             stream: stream,
             kind: WorldFederationResponse.Route,
-            body: EncodeFederationReply(sourceAuthority: sourceAuthority, credential: credential, encode: tier => WorldFederationCodec.EncodeRoute(
+            body: await EncodeFederationReplyAsync(sourceAuthority: sourceAuthority, credential: credential, encode: tier => WorldFederationCodec.EncodeRoute(
                 route: in route,
                 tier: tier,
                 authority: m_server.AuthorityIdentity,
@@ -1522,11 +1455,7 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        if (!m_server.TryTransferredPrincipal(
-            mobility: in mobility,
-            principal: out var principal,
-            sourceAuthority: sourceAuthority
-        )) {
+        if (await TransferredPrincipalAsync(credential, mobility, sourceAuthority).ConfigureAwait(false) is not { } principal) {
             await WriteFederationRefusal(
                 ct: ct,
                 detail: "the submission credential names no committed transfer body",
@@ -1575,7 +1504,7 @@ public sealed class WorldPeerHost : IDisposable {
             (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
             (result is WorldSubmissionResult.Session { Reply.Accepted: true })
         ) {
-            m_server.RetireTransferredMobility(mobility: in mobility);
+            await m_server.RunOnTickThreadAsync(() => { m_server.RetireTransferredMobility(in mobility); return true; }).ConfigureAwait(false);
         }
 
         using var completion = new MemoryStream();
@@ -1631,7 +1560,7 @@ public sealed class WorldPeerHost : IDisposable {
         }
 
         if (kind == WorldFederationRequest.Status) {
-            var (status, landed) = ExecuteAuthenticated(credential: credential, operation: () => {
+            var (status, landed) = await ExecuteAuthenticatedAsync(credential: credential, operation: () => {
                 var answered = m_server.TransferStatus(
                     sourceAuthority: sourceAuthority,
                     transferId: transferId
@@ -1658,7 +1587,7 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        _ = ExecuteAuthenticated(credential: credential, operation: () => {
+        _ = await ExecuteAuthenticatedAsync(credential: credential, operation: () => {
             if (kind == WorldFederationRequest.Abort) {
                 m_server.AbortTransfer(
                     sourceAuthority: sourceAuthority,
@@ -1705,7 +1634,7 @@ public sealed class WorldPeerHost : IDisposable {
                     stream: stream
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
-                if (!credential.IsValid()) { return; }
+                if (!await credential.RefreshAsync().ConfigureAwait(false)) { return; }
 
                 if (!frame.Ok) {
                     if (frame.Failure.Refusal != WireRefusal.ConnectionClosed) {
@@ -1778,11 +1707,7 @@ public sealed class WorldPeerHost : IDisposable {
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     return;
                 }
-                if (!m_server.TryTransferredPrincipal(
-                    mobility: in mobility,
-                    principal: out var principal,
-                    sourceAuthority: sourceAuthority
-                )) {
+                if (await TransferredPrincipalAsync(credential, mobility, sourceAuthority).ConfigureAwait(false) is not { } principal) {
                     await WriteFederationRefusal(
                         ct: ct,
                         detail: "the intent names no committed transfer body",
@@ -1796,8 +1721,7 @@ public sealed class WorldPeerHost : IDisposable {
                 var accepted = false;
                 var reason = string.Empty;
 
-                if (m_server.ExecuteAuthorityOperation(operation: () => {
-                    credential.RequireValid();
+                if (await ExecuteAuthenticatedAsync(credential, () => {
                     if (!WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
                         principal: principal,
                         server: m_server
@@ -1823,12 +1747,12 @@ public sealed class WorldPeerHost : IDisposable {
                         mobility: mobility
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     credential.RequireValid();
-                    accepted = forwarder.TryForwardIntent(
+                    accepted = await ExecuteAuthenticatedAsync(credential, () => forwarder.TryForwardIntent(
                         mobility: in mobility,
                         reason: out reason,
                         source: m_server,
                         submission: in stamped
-                    );
+                    )).ConfigureAwait(false);
                 }
 
                 if (!accepted) {
@@ -1852,44 +1776,47 @@ public sealed class WorldPeerHost : IDisposable {
                 ).ConfigureAwait(continueOnCapturedContext: false);
             }
         } finally {
-            m_server.ReleaseFederatedIntents(leaseId: leaseId);
+            _ = m_server.RunOnTickThreadAsync(() => {
+                m_server.ReleaseFederatedIntents(leaseId: leaseId);
 
-            // A stream may now terminate at an older authority in a forwarding chain. Forward capture loss through
-            // that same chain; disconnect cancels the episode and must not fabricate a scoring release.
-            foreach (var pair in touched) {
-                if (!forwardRelease) {
-                    break;
-                }
-                if (
-                    m_server.ExecuteAuthorityOperation(operation: () => WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
-                    server: m_server,
-                    principal: pair.Value.Principal
-                )) ||
-                    (m_server.TransferForwarder is not { } forwarder)
-                ) {
-                    continue;
-                }
+                // A stream may now terminate at an older authority in a forwarding chain. Forward capture loss through
+                // that same chain; disconnect cancels the episode and must not fabricate a scoring release.
+                foreach (var pair in touched) {
+                    if (!forwardRelease) {
+                        break;
+                    }
+                    if (
+                        m_server.ExecuteAuthorityOperation(operation: () => WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
+                        server: m_server,
+                        principal: pair.Value.Principal
+                    )) ||
+                        (m_server.TransferForwarder is not { } forwarder)
+                    ) {
+                        continue;
+                    }
 
-                var released = pair.Value.Submission with {
-                    Intent = default,
-                    Input = pair.Value.Submission.Input with { CaptureLost = true, Image = default, Contributions = default, Events = default },
-                };
-                var mobility = pair.Key;
+                    var released = pair.Value.Submission with {
+                        Intent = default,
+                        Input = pair.Value.Submission.Input with { CaptureLost = true, Image = default, Contributions = default, Events = default },
+                    };
+                    var mobility = pair.Key;
 
-                if (!forwarder.TryForwardIntent(
-                    mobility: in mobility,
-                    reason: out var reason,
-                    source: m_server,
-                    submission: in released
-                )) {
-                    if (m_server.Output.HasNarrationSink) {
-                        m_server.Output.Narrate(
-                            channel: "world.authority unavailable",
-                            text: $"[world.authority unavailable: traveler {mobility.Incarnation} release could not follow its committed route ({reason})]"
-                        );
+                    if (!forwarder.TryForwardIntent(
+                        mobility: in mobility,
+                        reason: out var reason,
+                        source: m_server,
+                        submission: in released
+                    )) {
+                        if (m_server.Output.HasNarrationSink) {
+                            m_server.Output.Narrate(
+                                channel: "world.authority unavailable",
+                                text: $"[world.authority unavailable: traveler {mobility.Incarnation} release could not follow its committed route ({reason})]"
+                            );
+                        }
                     }
                 }
-            }
+                return true;
+            });
         }
     }
     // The lane authenticated a source authority's namespace, which names no body here, so it observes as the public
@@ -1915,7 +1842,7 @@ public sealed class WorldPeerHost : IDisposable {
         );
         // The sink resolves the live policy and redacts only a sampled frame. Attaching it unfiltered here avoids
         // copying a 4,096-body radius view on every authority tick merely to discard seven out of eight copies.
-        var lease = ExecuteAuthenticated(credential: credential, operation: () => m_server.AttachSink(sink: sink));
+        var lease = await ExecuteAuthenticatedAsync(credential: credential, operation: () => m_server.AttachSink(sink: sink));
 
         try {
             await sink.StreamAsync(
@@ -1927,7 +1854,7 @@ public sealed class WorldPeerHost : IDisposable {
         } finally {
             // WorldOutputHub's subscriber list is not itself guarded, so the release must hold the same authority
             // gate the attach did — otherwise this dispose races a tick publishing through that list.
-            m_server.ExecuteAuthorityOperation(operation: () => {
+            _ = m_server.RunOnTickThreadAsync(work: () => {
                 lease.Dispose();
                 sink.Release();
 
@@ -2000,19 +1927,12 @@ public sealed class WorldPeerHost : IDisposable {
     /// <summary>Drains every tick-thread work item enqueued by a connection since the last drain — admissions,
     /// submissions, and disconnects alike. MUST run on the tick thread, before <c>WorldServer.Step</c>, so it never
     /// races the single-threaded server/population/grant state.</summary>
-    public void DrainPending() {
-        EvictInvalidCredentials();
-        while (m_pending.Reader.TryRead(item: out var action)) {
-            action();
-        }
-    }
+    public void DrainPending() => m_server.DrainMailbox();
     /// <summary>Completes once tick-thread work is queued for <see cref="DrainPending"/>, immediately when some
     /// already is. A loop that only needs to step when a connection has work waits here instead of polling.</summary>
     /// <param name="cancellationToken">Abandons the wait; queued work is unaffected.</param>
     /// <returns>A task that completes when at least one work item is queued.</returns>
-    public async ValueTask WaitForPendingWorkAsync(CancellationToken cancellationToken) {
-        _ = await m_pending.Reader.WaitToReadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-    }
+    public ValueTask WaitForPendingWorkAsync(CancellationToken cancellationToken) => m_server.WaitForPendingWorkAsync(cancellationToken);
     /// <summary>Binds the listener and starts accepting connections in the background. The composition root calls this
     /// only when <c>host.listen</c>/<c>--listen</c> names an endpoint; when it is absent the call is skipped entirely,
     /// so no listener ever binds.</summary>
@@ -2054,7 +1974,7 @@ public sealed class WorldPeerHost : IDisposable {
         }
         m_cts = cts;
         m_credentialTimer = m_timeProvider.CreateTimer(
-            callback: _ => EvictInvalidCredentials(),
+            callback: unused => _ = EvictInvalidCredentialsAsync(),
             state: null,
             dueTime: CredentialSweepInterval,
             period: CredentialSweepInterval
@@ -2070,48 +1990,51 @@ public sealed class WorldPeerHost : IDisposable {
     /// <summary>Closes live ingress while retaining authoritative connection bookkeeping for final capture.</summary>
     public void SuspendIngress() => CloseConnections();
 
-    // Verification is repeated only when its clock second or immutable policy changes. This preserves the
-    // attestation verifier's Unix-second windows without doing signature work for every simulation tick.
-    // Once a credential fails, a later re-grant cannot revive its already-evicted session.
-    private sealed class Credential(WorldPeerHost host, Func<bool> verify, CancellationToken ct) : IDisposable {
-        private readonly Lock m_lock = new();
-        private readonly CancellationTokenSource m_lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
+    // Network readers and queued work consult one immutable verdict. Readers and the idle timer refresh it after a trust change.
+    private sealed class Credential : IDisposable {
+        private sealed record Verdict(IReadOnlyList<WorldAdmissionEntry>? Policy, VerifiedPeerIdentity Proof);
+        private readonly WorldPeerHost m_host;
+        private readonly Func<IReadOnlyList<WorldAdmissionEntry>?, CancellationToken, ValueTask<VerifiedPeerIdentity?>> m_verify;
+        private readonly CancellationTokenSource m_lifetime;
+        private Verdict? m_verdict;
 
-        private IReadOnlyList<WorldAdmissionEntry>? m_policy;
-
-        private long m_checkedSecond = long.MinValue;
-        private bool m_valid = true;
-
-        private bool m_disposed;
-
-        public CancellationToken Token => m_lifetime.Token;
-
-        public void RequireValid() {
-            if (!IsValid()) { throw new OperationCanceledException(message: "the authenticated session credential is no longer valid"); }
+        public Credential(WorldPeerHost host, IReadOnlyList<WorldAdmissionEntry>? policy, VerifiedPeerIdentity proof,
+            Func<IReadOnlyList<WorldAdmissionEntry>?, CancellationToken, ValueTask<VerifiedPeerIdentity?>> verify, CancellationToken ct) {
+            m_host = host;
+            m_verify = verify;
+            m_lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            Token = m_lifetime.Token;
+            m_verdict = new(policy, proof);
         }
-        public bool IsValid() {
-            lock (m_lock) {
-                if (m_disposed) { return false; }
-                var policy = host.m_server.Definition.Admission;
-                var second = host.m_timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        public CancellationToken Token { get; }
+        public void RequireValid() {
+            if (!IsValid()) { throw new OperationCanceledException("the authenticated session credential is no longer valid"); }
+        }
+        public bool IsValid() => Volatile.Read(ref m_verdict) is { } verdict &&
+            ReferenceEquals(verdict.Policy, m_host.m_server.Definition.Admission) &&
+            m_host.m_timeProvider.GetUtcNow().ToUnixTimeSeconds() <= verdict.Proof.ValidThrough && verdict.Proof.TrustIsCurrent?.Invoke() != false && !Token.IsCancellationRequested;
 
-                if (m_valid && ((second != m_checkedSecond) || !ReferenceEquals(objA: policy, objB: m_policy))) {
-                    m_valid = verify();
-                    m_policy = policy;
-                    m_checkedSecond = second;
-                }
-                // Stream teardown may enter the authority gate. Never run cancellation callbacks synchronously
-                // under this lock: authority dispatch takes the same locks in the opposite order.
-                if (!m_valid) { _ = m_lifetime.CancelAsync(); }
-                return m_valid;
+        public async ValueTask<bool> RefreshAsync() {
+            var prior = Volatile.Read(ref m_verdict);
+            if (prior is null || Token.IsCancellationRequested) { return false; }
+            var policy = m_host.m_server.Definition.Admission;
+            if (m_host.m_timeProvider.GetUtcNow().ToUnixTimeSeconds() <= prior.Proof.ValidThrough) {
+                if (ReferenceEquals(policy, prior.Policy) && prior.Proof.TrustIsCurrent?.Invoke() != false) { return true; }
+                try {
+                    if (await m_verify(policy, Token).ConfigureAwait(false) is { } through) {
+                        Interlocked.CompareExchange(ref m_verdict, new(policy, through), prior);
+                        return IsValid();
+                    }
+                } catch (OperationCanceledException) when (Token.IsCancellationRequested) { return false; }
             }
+            if (Interlocked.Exchange(ref m_verdict, null) is not null) {
+                try { await m_lifetime.CancelAsync().ConfigureAwait(false); } catch (ObjectDisposedException) { }
+            }
+            return false;
         }
         public void Dispose() {
-            lock (m_lock) {
-                m_disposed = true;
-
-                m_lifetime.Dispose();
-            }
+            Interlocked.Exchange(ref m_verdict, null);
+            m_lifetime.Dispose();
         }
     }
     private sealed class Connection(int id, int peerIndex, int generation, PeerStream client, Stream stream, string remoteEndpoint, string identityDomain, string identitySubject, WorldDisclosureTier tier, Credential credential) {

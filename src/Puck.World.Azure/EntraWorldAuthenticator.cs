@@ -140,43 +140,39 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
         return Encoding.UTF8.GetBytes(s: (((((Prefix + Convert.ToBase64String(challenge)) + "\n") + m_session) + "\n") + ReadClientToken()));
     }
     /// <inheritdoc/>
-    public bool TryVerify(ReadOnlySpan<byte> challenge, ReadOnlySpan<byte> proof, out string? sourceAuthority) {
-        sourceAuthority = null;
-        if (proof.Length > 18000) { return false; }
-        var wire = Encoding.UTF8.GetString(bytes: proof);
+    public async ValueTask<VerifiedPeerIdentity?> VerifyAsync(ReadOnlyMemory<byte> challenge, ReadOnlyMemory<byte> proof, CancellationToken ct) {
+        if (proof.Length > 18000) { return null; }
+        var wire = Encoding.UTF8.GetString(bytes: proof.Span);
 
         if (!wire.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: Prefix
         )) {
-            return (m_federation?.TryVerify(
-            challenge: challenge,
-            proof: proof,
-            sourceAuthority: out sourceAuthority
-        ) == true);
+            return m_federation is null ? null : await m_federation.VerifyAsync(challenge, proof, ct).ConfigureAwait(false);
         }
         if (
             (m_credential is not null) ||
             (challenge.Length != ChallengeBytes)
-        ) { return false; }
+        ) { return null; }
         var parts = wire[Prefix.Length..].Split('\n');
 
         if (
             (parts.Length != 3) ||
-            (parts[0] != Convert.ToBase64String(challenge)) ||
+            (parts[0] != Convert.ToBase64String(challenge.Span)) ||
             !Guid.TryParseExact(
             parts[1],
             "N",
             out var session
         )
-        ) { return false; }
+        ) { return null; }
         try {
             using var timeout = new CancellationTokenSource(
                 delay: MetadataTimeout,
                 timeProvider: m_clock
             );
-            var metadata = m_configuration.GetConfigurationAsync(cancel: timeout.Token).GetAwaiter().GetResult();
-            var validation = m_tokens.ValidateTokenAsync(
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+            var metadata = await m_configuration.GetConfigurationAsync(linked.Token).ConfigureAwait(false);
+            var validation = await m_tokens.ValidateTokenAsync(
                 token: parts[2],
                 validationParameters: new TokenValidationParameters {
                     ClockSkew = TimeSpan.Zero,
@@ -191,11 +187,11 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
                     ValidateIssuerSigningKey = true,
                     ValidateLifetime = true,
                 }
-            ).GetAwaiter().GetResult();
+            ).ConfigureAwait(false);
 
             if (!validation.IsValid) {
                 if (validation.Exception is SecurityTokenSignatureKeyNotFoundException) { m_configuration.RequestRefresh(); }
-                return false;
+                return null;
             }
             var identity = validation.ClaimsIdentity;
 
@@ -217,11 +213,10 @@ public sealed class EntraWorldAuthenticator : IAuthenticator, IRemoteIdentityVer
                 input: identity.FindAll(type: "oid").SingleOrDefault()?.Value,
                 result: out var oid
             )
-            ) { return false; }
-            sourceAuthority = $"{oid:D}/{session:N}";
-            return true;
+            ) { return null; }
+            return new VerifiedPeerIdentity($"{oid:D}/{session:N}", new DateTimeOffset(validation.SecurityToken.ValidTo).ToUnixTimeSeconds() - 1);
         } catch (Exception error) when ((error is SecurityTokenException or ArgumentException or InvalidOperationException or HttpRequestException or OperationCanceledException)) {
-            return false;
+            return null;
         }
     }
     /// <summary>Names this client session beneath the ambient API user's object ID.</summary>

@@ -387,7 +387,7 @@ Verifiers in world code, from a search for `VerifyChain(` outside
 
 | Verifier | Purpose | Where |
 |---|---|---|
-| `WorldAttestedAuthenticator.TryVerify` | federation identity proof | `src/Puck.World.Protocol/Codecs/WorldAttestedAuthenticator.cs:79-150` |
+| `WorldAttestedAuthenticator.VerifyAsync` | federation identity proof | `src/Puck.World.Protocol/Codecs/WorldAttestedAuthenticator.cs:79-150` |
 | `WorldAdmissionDoor.TryAdmit` | interactive peer admission (`puck.world.tcp-admission`) | `src/Puck.World.Schema/WorldAdmissionDoor.cs:115-196` |
 | `WorldCounterpartAttestationProtocol.TryVerify` | a counterpart's border terms | `src/Puck.World.Schema/WorldCounterpartAttestation.cs:232-321` |
 | `PeerAuthenticator`, `PeerLink` | transport peer identity | `src/Puck.Networking/Peers/PeerAuthenticator.cs:97`, `src/Puck.Networking/Peers/PeerLink.cs:275` |
@@ -1016,7 +1016,7 @@ exist **[opened]**, with their reach **[inference]**:
 |---|---|---|
 | Claim validity window | `LocalKeySigningOracle` (five minutes), `MaximumClaimAge` | ends a live federation connection at expiry |
 | Admission edit | `WorldPeerHost.Credential.IsValid` re-verifies on a policy change | evicts a live connection within a second; per world |
-| Entra token lifetime and group | `EntraWorldAuthenticator.TryVerify` | per tenant; a removed user keeps any unexpired token |
+| Entra token lifetime and group | `EntraWorldAuthenticator.VerifyAsync` | per tenant; a removed user keeps any unexpired token |
 | Binding expiry | `IssuingKeyOptions.SubjectBindingValidity` (30 days) | unused by world code today |
 | Grant revoke | `world.revoke` (`src/Puck.World.Console/WorldGrantCommandModule.cs:61-65`) | one world's grants, not identity |
 

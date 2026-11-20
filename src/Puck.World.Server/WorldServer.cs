@@ -94,8 +94,8 @@ public readonly record struct WorldEditEcho(string Message, bool Rejected, World
 /// </summary>
 /// <remarks>Ordinary work is single-threaded on the host tick: submissions arrive during the command
 /// pump's apply window and <see cref="Step"/> runs immediately after, both on the launcher's window-pump thread.
-/// Authenticated federation operations use <see cref="ExecuteAuthorityOperation{T}"/> so cyclic cross-host traffic
-/// can settle without racing that fold or waiting for another authority's next tick. The
+/// Authenticated federation operations enter through the row mailbox. A tick can service an incoming crossing
+/// while its own outbound crossing awaits the next peer response. The
 /// journal is the undo engine: the loaded base definition plus an append-only list of applied <see cref="WorldMutation"/>s;
 /// undo restores the base and deterministically replays the journal minus its tail through the same apply path — no
 /// per-mutation inverse logic is ever written.</remarks>
