@@ -455,13 +455,15 @@ public sealed partial class ShaderPipelineRenderNode {
         return false;
     }
 
-    // The usages every instance of an image storage is created with. A depth storage is a depth attachment, sampled too
-    // when a planned access reads it (a package's cascade the surface pass reads). A color storage is sampled and a
-    // storage image, which compute writes, zero clears and a publication in General need, and a color attachment too when
-    // a planned access draws into it: a graphics pass's output or a package's color-attachment port.
+    // The usages every instance of an image storage is created with. A depth storage is a depth attachment and always
+    // sampled: a package samples depths it draws inside its own recording, where the plan sees no access (a two-phase
+    // selection's late step reads the target it drew, a far cascade's static layer among them), and a depth created
+    // without Sampled has no shader resource view to bind (creating one removes a Direct3D 12 device). A color storage is
+    // sampled and a storage image, which compute writes, zero clears and a publication in General need, and a color
+    // attachment too when a planned access draws into it: a graphics pass's output or a package's color-attachment port.
     public static GpuImageUsage UsageOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
         ((storage.Declaration.Kind == ShaderPipelineResourceKind.Depth)
-            ? GpuImageUsage.DepthAttachment | (Accessed(layout: GpuImageLayout.ShaderReadOnly, plan: plan, storage: storage) ? GpuImageUsage.Sampled : GpuImageUsage.None)
+            ? (GpuImageUsage.DepthAttachment | GpuImageUsage.Sampled)
             : GpuImageUsage.Sampled | GpuImageUsage.Storage | (Accessed(layout: GpuImageLayout.RenderTarget, plan: plan, storage: storage)
                 ? GpuImageUsage.ColorAttachment
                 : GpuImageUsage.None));

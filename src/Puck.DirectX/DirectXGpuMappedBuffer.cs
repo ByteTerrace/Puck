@@ -36,6 +36,11 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     /// not a heap, and a 4 GiB reservation's page table stays a few thousand chunks.</summary>
     public const uint ChunkTiles = 16U;
 
+    /// <summary>The private-data key every reserved buffer carries (<see cref="IsReserved"/>), so a reader that must know
+    /// whether a buffer lies on a heap asks the resource itself rather than <c>ID3D12Resource::GetHeapProperties</c>,
+    /// which a reserved resource refuses with a debug-layer error.</summary>
+    public static readonly Guid ReservedKey = new(g: "b3c1f0a7-5d2e-4f8b-9a61-7e4d2c9b0f15");
+
     private readonly DirectXDeviceContext m_context;
     // The arena and device the buffer was created on: a lost device's successor has its own, which never takes these tiles.
     private readonly DirectXHeapArena m_arena;
@@ -117,11 +122,24 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
 
         calls.CreateReservedResource(description: &description, initialState: DirectXGpuBufferFactory.DeviceLocalState, resource: &resource)
             .ThrowIfFailed(calls: calls, operation: "ID3D12Device::CreateReservedResource");
+
+        var tagged = calls.Tag(key: ReservedKey, resource: resource, value: 1L);
+
+        if (tagged.Failed) {
+            calls.ReleaseResource(resource: resource);
+            tagged.ThrowIfFailed(calls: calls, operation: "ID3D12Object::SetPrivateData");
+        }
         context.Services.Naming.Name(handle: ((nint)resource), kind: GpuObjectKind.Buffer, name: in name);
 
         return new DirectXGpuMappedBuffer(context: context, family: name.MemoryFamily(), resource: ((nint)resource), sizeBytes: sizeBytes);
     }
 
+    /// <summary>Returns whether a buffer is a reserved buffer this type created: one that lies on no heap and is
+    /// device-local.</summary>
+    /// <param name="resource">The buffer's <c>ID3D12Resource</c>; not zero.</param>
+    /// <returns><see langword="true"/> when the resource carries <see cref="ReservedKey"/>.</returns>
+    public static bool IsReserved(nint resource) =>
+        new DirectXDeviceCommandCalls(device: null).TryReadTag(key: ReservedKey, resource: ((ID3D12Resource*)resource), value: out _);
     /// <inheritdoc/>
     public void Map(ulong offset, ulong bytes) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
