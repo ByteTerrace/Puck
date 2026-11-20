@@ -874,9 +874,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// <paramref name="regions"/> and whose samples show the surface turning (a plane's field is affine and contours
     /// exactly), split no finer than its turn needs to contour smooth (<see cref="RoundCell"/>) or its regions ask; in a
     /// region whose field is a bound (<see cref="SdfLatticeRegion.Bound"/>), every such cell, split as the region asks.
-    /// <para>The essential cells split <paramref name="factor"/> times. Detected thin sheets and gaps can split more
-    /// finely. A region cell splits the fewest times the finest split divides into by a power of two that reach
-    /// what it needs, so each split divides the
+    /// <para>The essential cells split <paramref name="factor"/> times. A detected thin sheet or gap splits
+    /// <paramref name="thinFactor"/> times, and so does every measured cell sharing a face or an edge with one: a sheet
+    /// runs on past the last line that caught it, and a cell of a coarser stride beside it steps over the sheet between
+    /// the fine samples the two cells share, ending the sheet in a false cap inside the solid. A region cell splits the
+    /// fewest times the finest split divides into by a power of two that reach what it needs, so each split divides the
     /// finest. A cell of a coarser split measures the fine samples on its stride's grid and interpolates the rest inside
     /// each stride cell, and its contour merges each stride cell's fine vertices per connected piece, so its triangles
     /// follow its own split.</para>
@@ -907,6 +909,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         }
 
         m_asked = factor;
+        // The split every cell but a thin one takes at most; `factor` becomes the finest split chosen below.
+        var ordinary = factor;
 
         var cellsX = (m_samplesX - 1);
         var cellsY = (m_samplesY - 1);
@@ -1247,9 +1251,35 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         var finest = (hasThin ? (thinFactor ?? factor) : factor);
         m_asked = finest;
+        // The cells the thin split reaches: each thin cell and every cell sharing one of its faces or edges. A sheet runs on
+        // past the last line that caught it (a nearer solid caps the falls a line reads), and a measured cell of a coarser
+        // stride beside a thin cell reads the thin cell's fine samples on the face or edge they share while it interpolates
+        // its own from its stride's grid, which steps over the sheet: the sheet ends in a false cap at the shared face,
+        // inside the solid, and the stride cell's merged vertex takes the mean of the sheet's two faces.
+        using var thinSplitLease = RentedArrays.Rent<bool>(array: out var thinSplit, minimumLength: cellCount);
+
+        thinSplit.AsSpan(length: cellCount, start: 0).Clear();
+        if (finest > ordinary) {
+            for (var z = 0; (z < cellsZ); z++) {
+                for (var y = 0; (y < cellsY); y++) {
+                    for (var x = 0; (x < cellsX); x++) {
+                        if (!thin[CellIndex(x: x, y: y, z: z)]) { continue; }
+
+                        for (var dz = Math.Max(val1: 0, val2: (z - 1)); (dz <= Math.Min(val1: (cellsZ - 1), val2: (z + 1))); dz++) {
+                            for (var dy = Math.Max(val1: 0, val2: (y - 1)); (dy <= Math.Min(val1: (cellsY - 1), val2: (y + 1))); dy++) {
+                                for (var dx = Math.Max(val1: 0, val2: (x - 1)); (dx <= Math.Min(val1: (cellsX - 1), val2: (x + 1))); dx++) {
+                                    // A cell meeting this one at a corner alone shares only a coarse sample.
+                                    if ((((dx != x) ? 1 : 0) + ((dy != y) ? 1 : 0) + ((dz != z) ? 1 : 0)) < 3) { thinSplit[CellIndex(x: dx, y: dy, z: dz)] = true; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         // Try the finer thin cells on a grid which still divides into the original cells. If this costs too much,
         // all candidates below it follow the ordinary budget and split rules.
-        for (var split = finest; (split >= 2); split = ((split > factor) ? (split / 2) : (split - 1))) {
+        for (var split = finest; (split >= 2); split = ((split > ordinary) ? (split / 2) : (split - 1))) {
             essential.AsSpan(length: cellCount, start: 0).CopyTo(destination: trial);
 
             var fits = true;
@@ -1334,8 +1364,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // cell an essential test measures or no region holds, else the fewest `refinement` divides into by a power of two
         // that still reach the most its regions ask for (wanted), so every split a lattice holds divides the next finer.
         int CellSplit(int cell, int refinement) {
-            if (refinement > factor && thin[cell]) { return refinement; }
-            if (essential[cell] || (wanted[cell] == 0)) { return Math.Min(val1: factor, val2: refinement); }
+            if ((refinement > ordinary) && thinSplit[cell]) { return refinement; }
+            if (essential[cell] || (wanted[cell] == 0)) { return Math.Min(val1: ordinary, val2: refinement); }
 
             var reach = Math.Min(val1: wanted[cell], val2: refinement);
             var stride = 1;

@@ -1105,7 +1105,9 @@ Next: fill the engine gaps first
    tier's floor still refines the cells it cannot resolve at all
    (`SdfMeshPathBake.FactorOf`), so the swallow's streamer tips are no longer
    lost. A broad sheet can also take an extra split when the ordinary
-   refinement would still leave a coarse cell (`SdfMeshPathBake.ThinSplit`).
+   refinement would still leave a coarse cell (`SdfMeshPathBake.ThinSplit`), and
+   so do the measured cells beside it (`SdfSampledLattice.Refine`), which closed
+   the range windows' flips, folds and off-surface vertices.
    Still open, each read in the exhibit's own vertices: the junction
    where a groove's lips meet a box edge (`shape-groove-union`) and where a
    rounded rim fades into a sharp edge (`shape-smooth-subtraction`), where the
@@ -1216,9 +1218,8 @@ Next: fill the engine gaps first
   her flipped triangles in two groups, nearly all under a square millimetre
   and strung along the blades' edges: each blade tapers to a rim thinner than
   the 2 mm floor, two creases in one cell, which one vertex a patch cannot
-  hold. `blinkCrease-*` and `nozzleGlow-*` are next on her, and
-  `range-window` and the Humble Brick's face are the worst of a wider sample;
-  none of those four is examined. The contour needs a rule for a face it cannot
+  hold. `blinkCrease-*` and `nozzleGlow-*` are next on her, and the Humble
+  Brick's face is the worst of a wider sample; none of those three is examined. The contour needs a rule for a face it cannot
   resolve (close it to one crease, as `SdfSampledLattice.CloseSheets` closes a
   sheet, or refine it), and the non-manifold edges on the shins' soles sit on
   the same edges. The one detail rule exposes the defect and does not cause
@@ -1231,10 +1232,6 @@ Next: fill the engine gaps first
   than a cell. A measured cell whose fine samples are two affine faces takes
   its split as its contour stride
   ([the memo's step 4](bake-demand-tiers.md#steps-and-checks)).
-- [high] A rim thinner than a group's final cell is lost (`range-window`'s
-  2 cm rim): a declared feature narrower than the cell must refine or be
-  reported. This is the engine gap above (gap 7), with the tapered tip of the
-  tapered-tip item below it.
 - [medium] Glyphs have no CPU reference: `SdfFieldEvaluator` has no
   interpreter for the `Glyph` shape, so `puck mesh audit --cpu` and
   `puck mesh preview` bake a plaque's text empty and no audit covers text. Add
