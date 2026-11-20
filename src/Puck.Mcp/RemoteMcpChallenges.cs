@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using System.Text;
+using Puck.Abstractions;
 
 namespace Puck.Mcp;
 
@@ -19,7 +19,7 @@ internal sealed class RemoteMcpChallenges {
         policy.Changed += ForgetRevoked;
     }
 
-    private static byte[] Fingerprint(string token) => SHA256.HashData(source: Encoding.UTF8.GetBytes(s: token));
+    private static byte[] Fingerprint(string token) => ContentDigest.OfText(text: token);
     private void ForgetRevoked() {
         lock (m_gate) {
             foreach (var subject in m_rejections.Keys) {

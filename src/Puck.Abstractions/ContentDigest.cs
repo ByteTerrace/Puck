@@ -24,13 +24,19 @@ public static class ContentDigest {
     /// <summary>Hashes text as its UTF-8 bytes.</summary>
     /// <param name="text">The text to hash.</param>
     /// <param name="digest">The destination, at least <see cref="SizeInBytes"/> bytes long.</param>
-    public static void HashText(ReadOnlySpan<char> text, Span<byte> digest) {
-        var byteCount = Encoding.UTF8.GetByteCount(chars: text);
+    public static void HashText(ReadOnlySpan<char> text, Span<byte> digest) => HashText(prefix: ReadOnlySpan<byte>.Empty, text: text, digest: digest);
+    /// <summary>Hashes a binary prefix followed by text's UTF-8 bytes, as one message.</summary>
+    /// <param name="prefix">The bytes that precede the text.</param>
+    /// <param name="text">The text to hash after the prefix.</param>
+    /// <param name="digest">The destination, at least <see cref="SizeInBytes"/> bytes long.</param>
+    public static void HashText(ReadOnlySpan<byte> prefix, ReadOnlySpan<char> text, Span<byte> digest) {
+        var byteCount = (prefix.Length + Encoding.UTF8.GetByteCount(chars: text));
 
         if (byteCount <= StackBytes) {
             Span<byte> bytes = stackalloc byte[StackBytes];
 
-            _ = Encoding.UTF8.GetBytes(bytes: bytes, chars: text);
+            prefix.CopyTo(destination: bytes);
+            _ = Encoding.UTF8.GetBytes(bytes: bytes[prefix.Length..], chars: text);
             _ = SHA256.HashData(destination: digest, source: bytes[..byteCount]);
 
             return;
@@ -39,7 +45,8 @@ public static class ContentDigest {
         var rented = ArrayPool<byte>.Shared.Rent(minimumLength: byteCount);
 
         try {
-            _ = Encoding.UTF8.GetBytes(bytes: rented, chars: text);
+            prefix.CopyTo(destination: rented);
+            _ = Encoding.UTF8.GetBytes(bytes: rented.AsSpan(start: prefix.Length), chars: text);
             _ = SHA256.HashData(destination: digest, source: rented.AsSpan(length: byteCount, start: 0));
         } finally {
             ArrayPool<byte>.Shared.Return(array: rented);
@@ -81,6 +88,16 @@ public static class ContentDigest {
         } while (chunks.MoveNext());
         AppendChunk(buffer: buffer, chars: default, encoder: encoder, flush: true, hash: hash);
         _ = hash.GetHashAndReset(destination: digest);
+    }
+    /// <summary>Gets the SHA-256 digest of text's UTF-8 bytes as a new array.</summary>
+    /// <param name="text">The text to hash.</param>
+    /// <returns>The 32 bytes of the digest.</returns>
+    public static byte[] OfText(ReadOnlySpan<char> text) {
+        var digest = new byte[SizeInBytes];
+
+        HashText(text: text, digest: digest);
+
+        return digest;
     }
     /// <summary>Gets the SHA-256 digest of bytes as hexadecimal text.</summary>
     /// <param name="content">The bytes to hash.</param>
