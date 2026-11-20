@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 
 namespace Puck.SignedDistance;
 
@@ -28,7 +29,7 @@ public sealed partial class SdfProgram {
     private PartProgramPlan CompilePartPrograms() {
         var assets = new List<PartLeafPlan[]>();
         var instances = new PartInstancePlan?[m_instances.Length];
-        var keys = new Dictionary<uint[], int>(comparer: new PartProgramKeyComparer());
+        var keys = new Dictionary<uint[], int>(comparer: SequenceEqualityComparer<uint>.Instance);
         var polygons = m_convexPolygonProfiles.ToDictionary(
             elementSelector: item => item.Vertices,
             keySelector: item => item.InstructionIndex
@@ -310,21 +311,6 @@ public sealed partial class SdfProgram {
         }
     }
 
-    private sealed class PartProgramKeyComparer : IEqualityComparer<uint[]> {
-        public bool Equals(uint[]? x, uint[]? y) => (ReferenceEquals(
-            objA: x,
-            objB: y
-        )
-            || ((x is not null) && (y is not null) && x.AsSpan().SequenceEqual(other: y)));
-        public int GetHashCode(uint[] words) {
-            var hash = new HashCode();
-
-            foreach (var word in words) {
-                hash.Add(value: word);
-            }
-            return hash.ToHashCode();
-        }
-    }
     private readonly record struct PartLeafPlan(int ShapeInstruction, int DomainInstruction);
     private readonly record struct PartBinding(int DynamicSlot, uint Material, int ShapeInstruction);
     private sealed record PartInstancePlan(int Asset, PartBinding[] Bindings, float Scale);
