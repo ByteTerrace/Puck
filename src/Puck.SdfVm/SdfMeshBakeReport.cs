@@ -107,7 +107,10 @@ internal static class SdfMeshBakeReport {
         private int m_gen2AtStart;
 
         public long Batches;
+        // The samples of lattices handed back after the GPU sampled them (a group retired while its lattice flew, a
+        // failed decode or readback), and of those handed back before it did (a deferred or abandoned job).
         public long Discarded;
+        public long Returned;
         public long Dispatches;
         public long FlyingGroups;
         public long FrameGateWaitMax;
@@ -151,7 +154,7 @@ internal static class SdfMeshBakeReport {
             Takes = IdleTakes = Batches = StopTaps = StopSamples = StopBatch = StopDrained = 0;
             WaitingGroups = FlyingGroups = WorkingGroups = 0;
             FrameGateWaitMax = FrameGateWaitTotal = FrameGateWaitsSlow = 0;
-            Dispatches = Samples = Taps = Discarded = RefinedCells = CutEdges = Softened = Merged = Loaded = 0;
+            Dispatches = Samples = Taps = Discarded = Returned = RefinedCells = CutEdges = Softened = Merged = Loaded = 0;
             Joined = JoinedLanded = JoinedAbandoned = JoinedStalled = SamplesSaved = 0;
             Array.Clear(array: GateEntries);
             Array.Clear(array: GateWaitTicks);
@@ -285,7 +288,7 @@ internal static class SdfMeshBakeReport {
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
 
-        Console.Error.WriteLine(value: (($"[sdf.mesh-bake] done residency={residency} residency-id={residencyId} groups={groups.Count} meshes={meshes} dispatches={accounts.Dispatches} samples={accounts.Samples} discarded={accounts.Discarded} taps={accounts.Taps} refined={accounts.RefinedCells} edges={accounts.CutEdges} softened={accounts.Softened} merged={accounts.Merged} loaded={accounts.Loaded} skinned={skinned} triangles={triangles} vertices={vertices} levelled={levelled} level1={first} level2={second} seconds={seconds:0.000}" + accounts.Describe(dispatches: dispatches)) + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty)));
+        Console.Error.WriteLine(value: (($"[sdf.mesh-bake] done residency={residency} residency-id={residencyId} groups={groups.Count} meshes={meshes} dispatches={accounts.Dispatches} samples={accounts.Samples} discarded={accounts.Discarded} returned={accounts.Returned} taps={accounts.Taps} refined={accounts.RefinedCells} edges={accounts.CutEdges} softened={accounts.Softened} merged={accounts.Merged} loaded={accounts.Loaded} skinned={skinned} triangles={triangles} vertices={vertices} levelled={levelled} level1={first} level2={second} seconds={seconds:0.000}" + accounts.Describe(dispatches: dispatches)) + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty)));
     }
     /// <summary>Writes the line for a stage that held one group's worker past <see cref="SlowStageSeconds"/>, so the
     /// bake's long poles can be found; a faster stage writes nothing.</summary>

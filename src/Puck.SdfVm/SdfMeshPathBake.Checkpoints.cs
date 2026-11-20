@@ -46,14 +46,36 @@ public sealed partial class SdfMeshPathBake {
 
     /// <summary>Where a group's dispatched lattices keep their samples and what their key reads beside each lattice's own
     /// row and points: the store and sampling identity the group checkpoints to, its sample input
-    /// (<c>SampleFieldInput</c>'s hash) and the first slot and row count of the pose rows its dispatch packs. Taken once,
-    /// when the group begins (<c>Begin</c>), from state the group fixes before its first lattice; immutable, and holding
-    /// no group, so a reader that keeps a lattice's samples after the take reads nothing the bake moves on.</summary>
+    /// (<c>SampleFieldInput</c>'s hash) and the first slot and row count of the pose rows its dispatch packs. Part of the
+    /// group's <see cref="CheckpointKeys"/>; immutable, and holding no group, so a reader that keeps a lattice's samples
+    /// after the take reads nothing the bake moves on.</summary>
     internal sealed record SampleKeys(SdfMeshStore Store, UInt128 Sampling, UInt128 Geometry, int PoseFirst, int PoseRowCount);
 
-    // The one key a lattice's samples are kept and probed by: a probe (ProbeSamples) and a write (Receive's KeepSamples)
+    /// <summary>Everything a group's checkpoints are kept and found under, taken from one program: the bake identity whose
+    /// stage keys name its contour and simplified meshes, the program the keys hash (<c>GroupInput</c> reads its packed
+    /// field), the geometry key those meshes are kept under and the keys its sample sets are kept under. Immutable and
+    /// replaced whole (<c>KeyCheckpoints</c>), so a worker reading a group's keys off the gate reads one consistent set,
+    /// never a program from one and a geometry key from another.</summary>
+    internal sealed record CheckpointKeys(SdfMeshBakeIdentity Identity, SdfProgram Program, SdfMeshGeometry Geometry, SampleKeys Samples);
+
+    // Under the gate: keys a group's checkpoints under the bake's identity and the program it meshes, kept in a store. Begin
+    // keys a group as it begins; a group a new program keeps mid-bake (Place) is keyed again under that program, so its
+    // later stages and lattices are kept where a later bake of that program finds them.
+    private void KeyCheckpoints(Group group, SdfMeshStore store) {
+        var program = m_program!;
+
+        group.Checkpoints = new CheckpointKeys(
+            Geometry: CheckpointInput(group, program),
+            Identity: Identity,
+            Program: program,
+            Samples: new SampleKeys(Store: store, Sampling: Identity.Sampling, Geometry: SampleFieldInput(group, program).Hash, PoseFirst: group.PoseFirst, PoseRowCount: group.PoseRows.Length)
+        );
+    }
+
+    // The one key a lattice's samples are kept and probed by: a probe (LoadSamples) and a write (Receive's KeepSamples)
     // both call it with the keys the take recorded for the request, so a hit restores the samples the same request
-    // dispatched. It reads the request's points: its caller holds the request (Complete states who).
+    // dispatched. It reads the request's points: its caller holds the request (Complete and ProbeSamples state who), and
+    // it is never called under the bake's gate, since a request holds up to LatticeTaps points.
     private static UInt128 SampleInput(SampleKeys keys, in SdfMeshBakeRequest request) {
         var hash = new XxHash128();
         Span<byte> geometry = stackalloc byte[16];
@@ -70,34 +92,37 @@ public sealed partial class SdfMeshPathBake {
     // Under the gate, from the take: the keys the group's next lattice keeps its samples under, or null when the group
     // keeps none. The take records them beside the lattice (SdfMeshBakeBatch.Keeps), so whether and where its samples are
     // kept is decided once, with the dispatch, never by the reader from a program or identity bound since.
-    private SampleKeys? SampleKeysOf(Group group) => ((CheckpointStore(group) is not null) ? group.SampleKeys : null);
+    private SampleKeys? SampleKeysOf(Group group) => CurrentCheckpoints(group)?.Samples;
 
-    private SdfMeshStore? CheckpointStore(Group group) =>
-        ((group.Checkpoints is not null) && StageCodeCurrent(group)
-            && ReferenceEquals(group.CheckpointProgram, m_program) ? Library.Disk : null);
+    // A group's checkpoint keys while they key what the bake now meshes: taken under the bake's current code and identity,
+    // from the program it meshes; null otherwise, and for a group that keeps none. Read once by each caller, off the gate
+    // or under it: the keys are one immutable set (CheckpointKeys).
+    private CheckpointKeys? CurrentCheckpoints(Group group) =>
+        ((group.Checkpoints is { } keys) && CodeCurrent(keys.Identity) && ReferenceEquals(keys.Program, m_program) ? keys : null);
 
-    private bool StageCodeCurrent(Group group) => (group.Checkpoints is not { } keys)
-        || ((keys.CodeRevision == CodeRevision.Current) && (keys.Value == Identity.Value));
+    private bool StageCodeCurrent(Group group) => (group.Checkpoints is not { } keys) || CodeCurrent(keys.Identity);
+
+    private bool CodeCurrent(SdfMeshBakeIdentity identity) => ((identity.CodeRevision == CodeRevision.Current) && (identity.Value == Identity.Value));
 
     private bool HoldsCheckpoint(Group group) {
-        if (CheckpointStore(group) is not { } store) { return false; }
-        var keys = group.Checkpoints!;
-        return store.ContainsCheckpoint(keys.Simplification, group.CheckpointGeometry)
-            || store.ContainsCheckpoint(keys.Contouring, group.CheckpointGeometry);
+        if (CurrentCheckpoints(group) is not { } keys) { return false; }
+        var store = keys.Samples.Store;
+        return store.ContainsCheckpoint(keys.Identity.Simplification, keys.Geometry)
+            || store.ContainsCheckpoint(keys.Identity.Contouring, keys.Geometry);
     }
 
     // The latest checkpoint that survives is the earliest work the group still owes.
     private bool ResumeCheckpoint(Group group) {
-        if (CheckpointStore(group) is not { } store) { return false; }
-        var keys = group.Checkpoints!;
+        if (CurrentCheckpoints(group) is not { Samples.Store: var store } current) { return false; }
+        var keys = current.Identity;
 
-        if (store.TryReadCheckpoint(keys.Simplification, group.CheckpointGeometry, out var simplified)) {
+        if (store.TryReadCheckpoint(keys.Simplification, current.Geometry, out var simplified)) {
             using (EnterGate(site: BakeGate.Checkpoint)) { m_accounts.SimplifyHits++; }
             if (simplified is not null) { group.DiagnosticCell = simplified.BakeCell; }
             PublishMesh(group, simplified, merged: 0);
             return true;
         }
-        var found = store.TryReadCheckpoint(keys.Contouring, group.CheckpointGeometry, out var contour);
+        var found = store.TryReadCheckpoint(keys.Contouring, current.Geometry, out var contour);
         using (EnterGate(site: BakeGate.Checkpoint)) {
             group.CheckedCheckpoints = true;
             m_accounts.SimplifyMisses++;
@@ -112,9 +137,8 @@ public sealed partial class SdfMeshPathBake {
     }
 
     private void KeepCheckpoint(Group group, SdfMesh? mesh, bool simplified) {
-        if (CheckpointStore(group) is not { } store) { return; }
-        var keys = group.Checkpoints!;
-        store.WriteCheckpoint(simplified ? keys.Simplification : keys.Contouring, group.CheckpointGeometry, mesh);
+        if (CurrentCheckpoints(group) is not { } keys) { return; }
+        keys.Samples.Store.WriteCheckpoint(simplified ? keys.Identity.Simplification : keys.Identity.Contouring, keys.Geometry, mesh);
     }
 
     private void StoreEmpty(Group group) {
@@ -135,12 +159,13 @@ public sealed partial class SdfMeshPathBake {
     }
 
     // Whether a take hands a group's next lattice to the store instead of dispatching it; under the gate, from the take,
-    // which dispatches the lattice when this answers false. A group owns one request at a time. A lattice the store is
-    // known not to hold dispatches in this take, decided from the store's knowledge of its sample sets
-    // (SdfMeshStore.MayHoldSamples) with no file read: on a cold store, every lattice. One it may hold is read on the
-    // bake's pool ahead of every queued stage, an answer's place; a miss hands it back to the next take, which dispatches
-    // it unprobed. A probe is never a stage (Schedule), so a group's lead (SdfMeshBakeBacklog.ObserveLead) runs from its
-    // admission to its first real stage. An answered probe never consumes GPU dispatch budget.
+    // which dispatches the lattice when this answers false. A group owns one request at a time. Only identity-sized work
+    // runs here, since a request holds up to LatticeTaps points: a lattice whose sampling identity the store is known to
+    // hold no set of (SdfMeshStore.MayHoldSamples, no file read; on a cold store, every lattice) dispatches in this take.
+    // Any other is probed on the bake's pool ahead of every queued stage, an answer's place (LoadSamples), which hashes
+    // its points; a miss there hands it back to the next take, which dispatches it unprobed. A probe is never a stage
+    // (Schedule), so a group's lead (SdfMeshBakeBacklog.ObserveLead) runs from its admission to its first real stage. An
+    // answered probe never consumes GPU dispatch budget.
     private bool ProbeSamples(Group group, in SdfMeshBakeRequest request, SampleKeys? keys) {
         if (keys is null) { return false; }
         if (!group.CheckedCheckpoints) {
@@ -156,36 +181,34 @@ public sealed partial class SdfMeshPathBake {
             m_accounts.SampleMisses++;
             return false;
         }
-
-        var key = SampleInput(keys, in request);
-
-        if (!keys.Store.MayHoldSamples(keys.Sampling, key)) {
-            m_accounts.SampleMisses++;
-            return false;
-        }
         // A retired group takes no lattice: its bake no longer plans it.
         if (!group.QueueWork()) { return true; }
 
+        // The probe holds the group until LoadSamples hands it on, so no stage runs and nothing rewrites the request's
+        // points (the group's workspace) while the probe hashes them: the request belongs to its holder, as a
+        // dispatched one belongs to its ticket's (Complete).
         group.Contouring = true;
-        QueueSampleLoad(group, request, keys, key);
+        QueueSampleLoad(group, request, keys);
         return true;
     }
     // Its own method, so a probe that returns early above allocates no closure.
-    private void QueueSampleLoad(Group group, in SdfMeshBakeRequest request, SampleKeys keys, UInt128 key) {
+    private void QueueSampleLoad(Group group, in SdfMeshBakeRequest request, SampleKeys keys) {
         var pending = request;
 
-        Enqueue(group: group, urgent: true, work: () => LoadSamples(group, pending, keys, key));
+        Enqueue(group: group, urgent: true, work: () => LoadSamples(group, pending, keys));
     }
 
-    // Reads a probed lattice's samples under the key its probe took and answers the group with them, or hands the lattice
-    // back to the next take, which dispatches it.
-    private void LoadSamples(Group group, SdfMeshBakeRequest request, SampleKeys keys, UInt128 key) {
+    // Keys a probed lattice's samples, reads them and answers the group with them, or hands the lattice back to the next
+    // take, which dispatches it (ProbeMissed, which that take counts as the miss). On the pool, holding the group
+    // (ProbeSamples).
+    private void LoadSamples(Group group, SdfMeshBakeRequest request, SampleKeys keys) {
         if (group.Retired) { return; }
 
+        var key = SampleInput(keys, in request);
         var length = request.OutputBytes;
         using var samples = new OwnedBuffer<byte>(allocator: Library.Allocator, observer: group.Memory);
 
-        if (keys.Store.TryReadSamples(keys.Sampling, key, length, samples)) {
+        if (keys.Store.MayHoldSamples(keys.Sampling, key) && keys.Store.TryReadSamples(keys.Sampling, key, length, samples)) {
             using var answer = Decode(group, in request, samples.GetSpan());
             using (EnterGate(site: BakeGate.Checkpoint)) {
                 if (!GroupList.Holds(group: group)) { return; }

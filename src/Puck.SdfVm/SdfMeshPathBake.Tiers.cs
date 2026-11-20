@@ -21,9 +21,11 @@ public sealed partial class SdfMeshPathBake {
     private int m_retiersReused;
 
     private readonly List<(float Pixel, int Index, int Tier)> m_retierCandidates = [];
-    // The floors planned on arrival that have landed and start their demanded tier at the next decision; how many such
-    // floors still owe it, which the bake owes the frame (Owes); and the first details that landed.
-    private readonly List<(float Pixel, int Index, int Tier)> m_firstCandidates = [];
+    // The floors planned on arrival that have landed, as the latest decision found them, finest demand first, which start
+    // their demanded tier from that decision on (StartFirsts), and the next of them to start; how many such floors still
+    // owe it, which the bake owes the frame (Owes); and the first details that landed.
+    private readonly List<(float Pixel, int Index, int Tier, Group Floor)> m_firstCandidates = [];
+    private int m_firstNext;
     private int m_firstDetailsOwed;
     private int m_floorsRaised;
 
@@ -278,7 +280,10 @@ public sealed partial class SdfMeshPathBake {
     // frame's thread.
     private void Retier(SdfFrame frame) {
         MeasureDemands();
-        if (++m_decideFrames < SdfMeshTier.MeasureFrames) { return; }
+        if (++m_decideFrames < SdfMeshTier.MeasureFrames) {
+            _ = StartFirsts(frame: frame, inFlight: out _);
+            return;
+        }
 
         var elapsed = m_decideFrames;
 
@@ -360,7 +365,7 @@ public sealed partial class SdfMeshPathBake {
                     group.FirstDetailOwed = false;
                 } else {
                     firstsOwed++;
-                    if (group.Done && (group.Replaces is null) && !group.Ahead) { firsts.Add(item: (pixel, index, demanded)); }
+                    if (group.Done && (group.Replaces is null) && !group.Ahead) { firsts.Add(item: (pixel, index, demanded, group)); }
                     continue;
                 }
             }
@@ -417,15 +422,12 @@ public sealed partial class SdfMeshPathBake {
         var replaced = false;
         var heldBack = 0;
 
-        foreach (var (_, index, tier) in firsts) {
-            var floor = m_groups[index];
-
-            floor.FirstDetailOwed = false;
-            firstsOwed--;
-            if (Retier(delta: 0L, first: true, frame: frame, index: index, old: floor, tier: tier)) { firstsInFlight++; }
-            replaced = true;
-        }
+        firsts.Sort(comparison: static (left, right) => ((left.Pixel.CompareTo(value: right.Pixel) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index)));
+        m_firstNext = 0;
         m_firstDetailsOwed = firstsOwed;
+        if (StartFirsts(frame: frame, inFlight: out var firstsStarted) > 0) { replaced = true; }
+        firstsInFlight += firstsStarted;
+        firstsOwed = m_firstDetailsOwed;
 
         foreach (var (_, index, tier) in candidates) {
             var old = m_groups[index];
@@ -477,6 +479,31 @@ public sealed partial class SdfMeshPathBake {
             location: ref m_detailQuiet,
             value: ((replaced || (inFlight > 0) || (landing > 0) || (owedWaiting > 0) || (firstsInFlight > 0) || (firstsOwed > 0) || pressing) ? 0 : Math.Min(val1: (m_detailQuiet + elapsed), val2: SdfMeshTier.SettleFrames))
         );
+    }
+    // Starts the first details the latest decision found owed (m_firstCandidates), finest demand first, at most
+    // SdfMeshTier.FirstsPerFrame a frame, so an arrival's wave of landed floors is replanned over a few frames rather than
+    // in one frame holding the gate; a floor replaced, retired or no longer owing since the decision is passed over. Returns
+    // how many started, and how many of those are still to land. Under the gate, on the frame's thread.
+    private int StartFirsts(SdfFrame frame, out int inFlight) {
+        var firsts = m_firstCandidates;
+        var started = 0;
+
+        inFlight = 0;
+        while ((m_firstNext < firsts.Count) && (started < SdfMeshTier.FirstsPerFrame)) {
+            var (_, index, tier, floor) = firsts[m_firstNext++];
+
+            if ((index >= m_groups.Count) || !ReferenceEquals(objA: m_groups[index], objB: floor) || !floor.FirstDetailOwed || floor.Retired || !floor.Done || (floor.Replaces is not null) || floor.Ahead) { continue; }
+            floor.FirstDetailOwed = false;
+            m_firstDetailsOwed--;
+            started++;
+            if (Retier(delta: 0L, first: true, frame: frame, index: index, old: floor, tier: tier)) { inFlight++; }
+        }
+        // The list holds its floors only while some may still start.
+        if (m_firstNext >= firsts.Count) {
+            firsts.Clear();
+            m_firstNext = 0;
+        }
+        return started;
     }
     // Plans a group again at another tier, as Plan would plan it at this frame, and starts it in the group's place: the
     // library's mesh of that geometry lands at once, and otherwise the group bakes (or loads from the store) while the

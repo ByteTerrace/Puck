@@ -610,10 +610,16 @@ public sealed partial class SdfMeshPathBake {
         } catch { scope.Dispose(); throw; }
     }
 
+    // Invariant: the dresser reads the bake's groups (their list, drawn meshes, traces, tiers and copies) only while it
+    // holds the gate, and a mesh it draws is claimed by its rows (SdfMeshRows) before the gate opens, so no worker
+    // replaces or releases a landed mesh the dresser has not claimed. Enforced here: every group read throws once the
+    // access is released (Release, or Dispose), so the dresser's work that reads no group (poses, uploads, publishing)
+    // runs with the gate open, and a new read past the release cannot pass unseen.
     internal ref struct FrameAccess {
         private readonly SdfMeshPathBake m_owner;
 
         private GateScope m_scope;
+        private bool m_released;
 
         internal FrameAccess(SdfMeshPathBake owner, GateScope scope) {
             m_owner = owner;
@@ -626,18 +632,30 @@ public sealed partial class SdfMeshPathBake {
         internal long Revision { get; }
         internal long CopyLayoutRevision { get; }
         // The groups are read by index, so a dress allocates no enumerator.
-        internal int GroupCount => m_owner.m_groups.Count;
+        internal readonly int GroupCount => Owner.m_groups.Count;
 
-        internal SdfMeshBakeGroup GroupAt(int index) => m_owner.m_groups[index];
-        internal SdfMesh? MeshOf(SdfMeshBakeGroup group) => ((Group)group).Shown;
+        internal readonly SdfMeshBakeGroup GroupAt(int index) => Owner.m_groups[index];
+        internal readonly SdfMesh? MeshOf(SdfMeshBakeGroup group) => Held((Group)group).Shown;
         // The mesh the irradiance volume traces in place of the group's drawn one (Group.Trace), null for the drawn one.
-        internal SdfMesh? TraceOf(SdfMeshBakeGroup group) => ((Group)group).Trace;
+        internal readonly SdfMesh? TraceOf(SdfMeshBakeGroup group) => Held((Group)group).Trace;
         // The tier the mesh a group draws was baked at: the replaced group's while a replacement lands ahead.
-        internal int TierOf(SdfMeshBakeGroup group) => (((Group)group).Replaces ?? group).Tier;
-        internal IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) => m_owner.CopiesOf(group: group);
-        internal void Acknowledge() => m_owner.m_dressedRevision = Revision;
+        internal readonly int TierOf(SdfMeshBakeGroup group) => (Held((Group)group).Replaces ?? group).Tier;
+        internal readonly IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) => Owner.CopiesOf(group: group);
+        // Records that the frame's draws stand at the captured product revision, once they are published; after the
+        // release too, since it reads no group.
+        internal readonly void Acknowledge() => Volatile.Write(location: ref m_owner.m_dressedRevision, value: Revision);
 
-        public void Dispose() => m_scope.Dispose();
+        // Opens the gate once the dress has read every group it reads and its rows claim every mesh it draws; a second
+        // release, or the dispose after it, does nothing.
+        internal void Release() {
+            if (m_released) { return; }
+            m_released = true;
+            m_scope.Dispose();
+        }
+        public void Dispose() => Release();
+
+        private readonly SdfMeshPathBake Owner => (m_released ? throw new InvalidOperationException(message: "The bake's groups are read only while the frame access holds its gate.") : m_owner);
+        private readonly Group Held(Group group) => (m_released ? throw new InvalidOperationException(message: "The bake's groups are read only while the frame access holds its gate.") : group);
     }
 
     // Whether the frame's copies keep the layout the index was built from: compared at the copies the producer's journal
@@ -1014,13 +1032,14 @@ public sealed partial class SdfMeshPathBake {
         ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index));
 
     /// <summary>Returns a taken batch's lattices still unanswered to their groups, as when its dispatch never completed or
-    /// its answer stopped part way; each group dispatches its lattice again, and those lattices' samples count as discarded.
-    /// A lattice already answered or returned stays as it is.</summary>
+    /// its answer stopped part way; each group dispatches its lattice again. Their samples count as discarded when the GPU
+    /// sampled them, and as returned otherwise. A lattice already answered or returned stays as it is.</summary>
     /// <param name="batch">The batch <see cref="TryTake(SdfProgram?, out SdfMeshBakeBatch?, long)"/> took, or <see langword="null"/>.</param>
-    public void Abandon(SdfMeshBakeBatch? batch) {
+    /// <param name="sampled">Whether the batch's dispatch completed, so its samples were taken and are dropped.</param>
+    public void Abandon(SdfMeshBakeBatch? batch, bool sampled = false) {
         if (batch is null) { return; }
         using (EnterGate(site: BakeGate.Ticket)) {
-            for (var index = 0; (index < batch.Tickets.Length); index++) { _ = MoveTicket(batch: batch, index: index, to: SdfMeshBakeTicket.Returned); }
+            for (var index = 0; (index < batch.Tickets.Length); index++) { _ = MoveTicket(batch: batch, index: index, to: SdfMeshBakeTicket.Returned, sampled: sampled); }
         }
     }
     /// <summary>Answers a dispatched batch with the samples its readback copied, each lattice its own slice: each group's
@@ -1054,7 +1073,7 @@ public sealed partial class SdfMeshPathBake {
                 using (EnterGate(site: BakeGate.Ticket)) {
                     if (batch.States[index] != SdfMeshBakeTicket.Taken) { continue; }
                     if (!group.QueueWork()) {
-                        _ = MoveTicket(batch, index, SdfMeshBakeTicket.Returned);
+                        _ = MoveTicket(batch, index, SdfMeshBakeTicket.Returned, sampled: true);
                         continue;
                     }
                     _ = MoveTicket(batch, index, SdfMeshBakeTicket.Decoding);
@@ -1065,7 +1084,7 @@ public sealed partial class SdfMeshPathBake {
                 } catch {
                     // No next lattice is published until AnswerGroup. Return the claimed request for retry.
                     using (EnterGate(site: BakeGate.Ticket)) {
-                        _ = MoveTicket(batch, index, SdfMeshBakeTicket.Returned, from: SdfMeshBakeTicket.Decoding);
+                        _ = MoveTicket(batch, index, SdfMeshBakeTicket.Returned, from: SdfMeshBakeTicket.Decoding, sampled: true);
                     }
                     group.EndWork();
                     throw;
@@ -1084,8 +1103,9 @@ public sealed partial class SdfMeshPathBake {
 
     // The one transition of a batch's ticket out of Taken, which answering and abandoning both take: Answered once its
     // samples reach its group or slice (the group stays in flight until its answer job runs), Returned when they never will,
-    // which hands the lattice back to be taken again. Under the gate; false when the ticket had left Taken already.
-    private bool MoveTicket(SdfMeshBakeBatch batch, int index, SdfMeshBakeTicket to, SdfMeshBakeTicket from = SdfMeshBakeTicket.Taken) {
+    // which hands the lattice back to be taken again: its samples are discarded when the GPU took them (`sampled`), GPU
+    // work spent for nothing, and returned when it never did. Under the gate; false when the ticket had left Taken already.
+    private bool MoveTicket(SdfMeshBakeBatch batch, int index, SdfMeshBakeTicket to, SdfMeshBakeTicket from = SdfMeshBakeTicket.Taken, bool sampled = false) {
         if (batch.States[index] != from) { return false; }
         batch.States[index] = to;
         if (to != SdfMeshBakeTicket.Returned) { return true; }
@@ -1093,7 +1113,7 @@ public sealed partial class SdfMeshPathBake {
         if ((batch.Tickets[index] is SliceTicket ticket) && ReferenceEquals(objA: ticket.Slice, objB: m_slice) && (ticket.Generation == ticket.Slice.Generation)) {
             ticket.Slice.Return(ticket: ticket.Lattice);
         }
-        m_accounts.Discarded += batch.Lattices[index].Samples;
+        if (sampled) { m_accounts.Discarded += batch.Lattices[index].Samples; } else { m_accounts.Returned += batch.Lattices[index].Samples; }
         return true;
     }
     // Answers a field slice's lattice.
@@ -1206,7 +1226,7 @@ public sealed partial class SdfMeshPathBake {
                     + (((3L * mesh.TriangleCount) + mesh.TriangleMaterials.Length) * sizeof(uint)));
             }
 
-            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_accounts.Dispatches} samples={m_accounts.Samples} discarded={m_accounts.Discarded} taps={m_accounts.Taps} refined={m_accounts.RefinedCells} edges={m_accounts.CutEdges} softened={m_accounts.Softened} merged={m_accounts.Merged} loaded={m_accounts.Loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000} {m_accounts.DescribeCheckpoints()}";
+            return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_accounts.Dispatches} samples={m_accounts.Samples} discarded={m_accounts.Discarded} returned={m_accounts.Returned} taps={m_accounts.Taps} refined={m_accounts.RefinedCells} edges={m_accounts.CutEdges} softened={m_accounts.Softened} merged={m_accounts.Merged} loaded={m_accounts.Loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000} {m_accounts.DescribeCheckpoints()}";
         }
     }
 
@@ -1439,9 +1459,12 @@ public sealed partial class SdfMeshPathBake {
         }
         group.Owner = this;
         group.TakeDemandBox();
-        if ((old is not null) && (old.Done || (old.CheckpointProgram is null) || ReferenceEquals(old.CheckpointProgram, m_program))
-            && Keeps(group: group, identity: identity, old: old)) {
+        if ((old is not null) && Keeps(group: group, identity: identity, old: old)) {
             old.AdoptSampled(planned: group);
+            // A group kept mid-bake carries on under the new program: its checkpoints are keyed again under it, so the
+            // stages and lattices still to come are kept where a later bake of this program looks. Its sealed geometry,
+            // and so its mesh, is the same under either program, as the library's key says.
+            if (!old.Done && (old.Checkpoints is { Samples.Store: var store } keys) && !ReferenceEquals(keys.Program, m_program)) { KeyCheckpoints(old, store); }
             Replace(group: old, index: index);
             if (!old.Done && (old.Leader is null) && (old.Replaces is null)) { _ = leaders.TryAdd(key: old.Sealed, value: old); }
             return false;
@@ -1606,12 +1629,7 @@ public sealed partial class SdfMeshPathBake {
             group.Next = Lattice(gradients: false, group: group, longest: CoarseSamples, minimum: CoarseSamples);
         }
         group.Identity = Identity.Value;
-        if (Identity.HasParts && Library.Disk is { } disk) {
-            group.Checkpoints = Identity;
-            group.CheckpointProgram = m_program;
-            group.CheckpointGeometry = CheckpointInput(group, m_program!);
-            group.SampleKeys = new SampleKeys(Store: disk, Sampling: Identity.Sampling, Geometry: SampleFieldInput(group, m_program!).Hash, PoseFirst: group.PoseFirst, PoseRowCount: group.PoseRows.Length);
-        }
+        if (Identity.HasParts && Library.Disk is { } disk) { KeyCheckpoints(group, disk); }
         if (!Library.Holds(geometry: group.Sealed, identity: group.Identity) && !HoldsCheckpoint(group)) { return false; }
         group.Deferred = group.Next;
         group.Next = null;
@@ -2785,13 +2803,12 @@ public sealed partial class SdfMeshPathBake {
             Outcome = (Clamped ? $"no surface{how} (bound clamped to the far distance)" : $"no surface{how}");
         // The identity of the bake the group started under, and the coarse lattice it bakes from when its load fails.
         public UInt128 Identity { get; set; }
-        public SdfMeshBakeIdentity? Checkpoints { get; set; }
-        public SdfProgram? CheckpointProgram { get; set; }
-        public SdfMeshGeometry CheckpointGeometry { get; set; }
+        // The keys the group's checkpoints and sample sets are kept under (KeyCheckpoints), replaced whole and read by
+        // workers off the gate; null for a group that keeps none.
+        private CheckpointKeys? m_checkpoints;
+
+        public CheckpointKeys? Checkpoints { get => Volatile.Read(location: ref m_checkpoints); set => Volatile.Write(location: ref m_checkpoints, value: value); }
         public bool CheckedCheckpoints { get; set; }
-        // Where every sample set of the group is kept and what its key reads beside each lattice's row (SampleKeys), set
-        // once by Begin, before the group's first lattice.
-        public SampleKeys? SampleKeys { get; set; }
         // Whether the group's next lattice missed its probe, so the next take dispatches it unprobed (ProbeSamples).
         public bool ProbeMissed { get; set; }
         public SdfMeshBakeRequest? Deferred { get; set; }

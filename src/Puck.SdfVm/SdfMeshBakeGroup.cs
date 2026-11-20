@@ -199,7 +199,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         sampled ??= program.Sampled;
         return Ordered(
             create: create,
-            groups: PlanGroups(create: create, farDistance: farDistance, program: program, sampled: sampled, slots: null, tier: tier, transforms: transforms),
+            groups: PlanGroups(create: create, farDistance: farDistance, program: program, sampled: sampled, instances: null, tier: tier, transforms: transforms),
             program: program,
             reach: Reach(farDistance: farDistance),
             sampled: sampled,
@@ -236,7 +236,10 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
         var reach = Reach(farDistance: farDistance);
         var refreshed = 0;
-        HashSet<int>? slots = null;
+        // The instances of the dynamic groups planned again, each group's own: a slot's other groups, which bake
+        // separately, stay as they were planned, and the program's other instances are never visited.
+        List<int>? instances = null;
+        HashSet<int>? selectors = null;
 
         for (var index = 0; (index < groups.Count); index++) {
             var group = groups[index];
@@ -244,7 +247,8 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
 
             if (!resampled && !stale(arg: group)) { continue; }
             if (group.Dynamic) {
-                (slots ??= []).Add(item: group.Slot);
+                (instances ??= []).AddRange(collection: group.m_instances);
+                (selectors ??= []).Add(item: group.Selector);
 
                 continue;
             }
@@ -255,14 +259,17 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             refreshed++;
         }
 
-        if (slots is null) { return refreshed; }
+        if (instances is null) { return refreshed; }
 
-        var planned = PlanGroups(create: create, farDistance: farDistance, program: program, sampled: sampled, slots: slots, tier: tier, transforms: transforms);
-        var bySlot = new Dictionary<int, T>(capacity: planned.Count);
+        // A plan visits instances in program order, which decides a group's members and geometry.
+        instances.Sort();
 
-        foreach (var group in planned) { bySlot[group.Selector] = group; }
+        var planned = PlanGroups(create: create, farDistance: farDistance, program: program, sampled: sampled, instances: instances, tier: tier, transforms: transforms);
+        var bySelector = new Dictionary<int, T>(capacity: planned.Count);
+
+        foreach (var group in planned) { bySelector[group.Selector] = group; }
         for (var index = 0; (index < groups.Count); index++) {
-            if (groups[index].Dynamic && bySlot.TryGetValue(key: groups[index].Selector, value: out var group)) {
+            if (groups[index].Dynamic && selectors!.Contains(item: groups[index].Selector) && bySelector.TryGetValue(key: groups[index].Selector, value: out var group)) {
                 groups[index] = group;
                 refreshed++;
             }
@@ -303,22 +310,24 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     }
 
     private static float Reach(float farDistance) => MathF.Max(x: 1f, y: farDistance);
-    // Plans every group, or with `slots` the groups of those dynamic slots alone, each sealed and listed at its first
-    // instance.
-    private static List<T> PlanGroups<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled, float farDistance, IReadOnlySet<int>? slots, Func<int, bool, T> create, Func<SdfMeshBakeGroup, int>? tier) where T : SdfMeshBakeGroup {
+    // Plans every group, or with `instances` the dynamic groups of those instances alone (ascending, each a whole group's: a
+    // slot's instances baked together, or one baked separately), each sealed and listed at its first instance.
+    private static List<T> PlanGroups<T>(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled, float farDistance, IReadOnlyList<int>? instances, Func<int, bool, T> create, Func<SdfMeshBakeGroup, int>? tier) where T : SdfMeshBakeGroup {
         var groups = new List<T>();
         var bySlot = new Dictionary<int, T>();
-        var instances = program.Instances;
+        var all = program.Instances;
         var reach = Reach(farDistance: farDistance);
         // The static group the last instance joined, which a following instance that bakes with its previous one extends
         // while the run stays unbroken.
         T? staticRun = null;
+        var count = (instances?.Count ?? all.Count);
 
-        for (var index = 0; (index < instances.Count); index++) {
-            var instance = instances[index];
+        for (var at = 0; (at < count); at++) {
+            var index = (instances?[at] ?? at);
+            var instance = all[index];
 
             if (!instance.Active) { continue; }
-            if ((slots is not null) && (!instance.IsDynamic || !slots.Contains(item: instance.Slot))) { continue; }
+            if ((instances is not null) && !instance.IsDynamic) { continue; }
 
             var radius = (float.IsFinite(f: instance.Radius) ? MathF.Min(x: instance.Radius, y: reach) : reach);
             // A dynamic bound is a sphere about the slot's position offset along world axes; about the slot's origin in its

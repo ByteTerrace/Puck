@@ -1507,10 +1507,12 @@ slotN or unionN/bake or load, …]`), so a group that bakes again and again name
 itself.
 It counts a batch as work when the background work takes it. A batch remembers
 the bake that took it and holds its slot until its samples are copied off, so no
-view's coming or going strands it. A batch handed back unanswered (a recording
-that failed, the tables disposed mid-bake) returns its lattices to their groups,
-which dispatch them again, and the line reports those samples as `discarded`,
-so `samples` less `discarded` counts the samples that answered. The done line's
+view's coming or going strands it. A batch handed back unanswered returns its
+lattices to their groups, which dispatch them again. The line reports a lattice
+the GPU sampled for nothing (its group retired while it flew, a failed decode or
+readback) as `discarded`, GPU work spent for nothing, and one handed back before
+it was sampled (a recording deferred for room, the tables disposed mid-bake) as
+`returned`, so `samples` less both counts the samples that answered. The done line's
 `gpu-work=[…]` field counts the jobs, their measured GPU time, the wall time a
 job was in flight and the share of it the GPU spent on them, and the steps
 taken inside the host's wait with the jobs they submitted (`services`,

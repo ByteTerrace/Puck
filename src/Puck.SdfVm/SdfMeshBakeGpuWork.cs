@@ -257,7 +257,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
             m_bake.Complete(batch: batch, samples: bytes.GetSpan());
         } catch (Exception exception) {
             // The batch's unanswered lattices go back to their groups, which dispatch them again.
-            m_bake.Abandon(batch: batch);
+            m_bake.Abandon(batch: batch, sampled: true);
             SdfMeshBakeReport.WorkFailed(exception: exception);
         } finally {
             SdfMeshPathBake.Progressed();
