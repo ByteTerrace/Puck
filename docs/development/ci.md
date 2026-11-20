@@ -717,8 +717,13 @@ hosted Windows runner, and nothing waits on it:
    headless boot's device-free caches.
 2. `puck world caches fetch` takes each backend's mesh cache set whose bake
    identity equals this build's from its GitHub prerelease
-   (`caches/<backend>-<identity>`), verifies every content pin and unpacks it
-   into `cache/meshes`, or writes the miss into the release notes.
+   (`caches/<backend>-<identity>`), verifies every content pin, unpacks it
+   into `cache/meshes` and checks that the set was produced for the groups this
+   release's world plans. A backend with no matching set, or whose set was
+   produced for another world, fails the step: the job summary names the
+   backend, the identity and what the lead runs, nothing is signed or
+   uploaded, and the channel keeps its last complete release. The deploy is a
+   separate job and goes ahead.
 3. `puck publish … --exclude player-logs cache/meshes-intermediates player-caches --bootstrap launcher`
    writes the unsigned tree, with the installer copied to the stable
    `<channel>/<rid>/` path a first install downloads.
@@ -737,7 +742,10 @@ puck world caches produce <folder> --push
 
 `--push` uses `gh` with the developer's own login to create the prerelease when
 it is missing and replace its `cache-set.zip`. The next release whose build has
-the same mesh bake identity ships the set. Locally, `puck channel push --to
+the same mesh bake identity, and whose world plans the groups the set was
+produced for, ships the set. A change to the bake's code or to a world document
+therefore needs a fresh `produce --push` before the push to `main` that should
+reach players. Locally, `puck channel push --to
 <directory> --signing-key <file>` mirrors a channel instead, which `puck official
 serve --tree <directory>` serves over HTTP for the installer to test against.
 

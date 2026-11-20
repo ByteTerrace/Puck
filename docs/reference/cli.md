@@ -405,15 +405,21 @@ built without one ([the player channel](../decisions/runtime-and-delivery.md#the
 each backend's mesh bake identity from the folder's own build (as `mesh identity
 --build` does), and packs that identity's mesh set into
 `<output>/<backend>-<identity>/cache-set.zip` with a `cache-set.json` listing every
-file's content pin; `--push` runs `gh` to create the prerelease
+file's content pin and the hashes of the groups the folder's world plans
+(`plan`); `--push` runs `gh` to create the prerelease
 `caches/<backend>-<identity>` when it is missing and replace its asset. `fetch`
 computes the same identities for a folder built with `--no-bake`, downloads each
 matching asset with `gh`, refuses an archive whose record names another backend
 or identity, lists an entry outside the set or holds a file whose bytes miss its
-pin, and unpacks a verified set into `cache/meshes/<identity>/`. It records each
-backend's outcome under `caches` in `player.json`, and `--notes` writes a
-release-notes line naming each set or the miss. Exit 0 handled every backend,
-1 a download or archive failed, 2 an invalid folder.
+pin, and unpacks a verified set into `cache/meshes/<identity>/`. It then plans
+the folder's own world offline and compares it with the set's recorded plan. A
+backend with no matching set, a set whose record holds no plan, or a set
+produced for other groups holds the channel's publish: the verb writes why and
+what to run into the job summary, `--notes` and the folder's `README.md`, and
+exits 1. It records each backend's outcome under `caches` in `player.json`;
+when every backend is whole, `--notes` writes a release-notes line naming each
+set. Exit 0 every backend whole, 1 a set was held or a download or archive
+failed, 2 an invalid folder.
 
 `channel push` signs the release a `puck publish` tree holds and writes the tree
 through a channel host: a deployment provider's installed host (`--host`, which

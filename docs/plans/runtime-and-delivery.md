@@ -117,32 +117,22 @@ image of about 291 MB that every Puck change rewrites.
 
 **Delivers, in this order:**
 
-1. **A player release never ships a mesh miss.** Today a backend whose cache
-   set is missing is named in the release notes and released anyway, so the
-   2060 bakes that backend's whole world on its first boot, against the
-   ruling. A miss has two shapes: the build's bake identity moved (a change to
-   the bake's code or kernel bytecode since the lead last produced a set), or
-   the identity matches but the set was baked from an older document, so the
-   groups whose geometry changed are missing and bake on the player. The
-   [delivery packet](open-items.md#delivery-launcher-and-ci) holds the first
-   shape; nothing yet holds the second. The `player` job publishes only when
-   every backend's set matches the identity and covers the geometries the
-   release's document plans at every target it ships; otherwise it publishes
-   no player release (the deploy itself goes ahead), names the miss and the
-   missing group count in the run, and the channel keeps its last complete
-   release until the lead pushes a set. The lead produces a set before
-   pushing a change that moves the identity, so the hold is a guard rather
-   than the usual path. Coverage is counted without a GPU, as `puck mesh
-   audit` already plans a composition's geometries. The
-   [decision](../decisions/runtime-and-delivery.md#the-player-channel)'s
-   sentence that a stale set's missing groups "are derived on the consumer
-   like any other miss" changes with this step. A device whose detail never
-   settles re-bakes tiers in play however complete its set is, which the
-   `rtx2060` profile on Direct3D 12 may do
-   ([residency and streaming](open-items.md#residency-and-streaming)).
-   *Check:* a run whose set lacks one group publishes no player release and
-   names that group; the next run with a covering set publishes, and the
-   2060's first boot of it reports zero groups baked on both backends.
+1. **A set whole for the tiers a target demands.** The `player` job holds the
+   channel's publish when a backend has no set for the build's bake identity,
+   or when its set was produced for other groups than the release's world
+   plans (`puck world caches fetch`; the set's record carries the world's
+   plan, `WorldCachePlan`). It cannot tell whether the producer's store held
+   every tier a view demands at each target, so a set produced from a store
+   that was not settled still passes. `produce` could read the baking boots'
+   own check pass, which reports the groups it baked over the finished store,
+   and refuse a set whose check baked any; a device whose detail never settles
+   (the `rtx2060` profile on Direct3D 12 may be one,
+   [residency and streaming](open-items.md#residency-and-streaming)) re-bakes
+   tiers in play however complete its set is, so that refusal needs the
+   settle question answered first. *Check:* a producer folder whose check pass
+   baked a group produces no set, and one whose check pass baked none
+   produces; the 2060's first boot of the released build reports zero groups
+   baked on both backends.
 2. **The first boot after an update.** The driver's pipeline cache is per
    adapter and driver, so it is never shipped, and every release's first boot
    compiles the engine's pipelines on the player's machine; the 2060's one
