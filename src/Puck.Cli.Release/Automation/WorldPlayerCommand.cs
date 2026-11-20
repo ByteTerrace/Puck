@@ -162,6 +162,7 @@ public static class WorldPlayerCommand {
                         var (baking, loading, bakes) = Bake(backend: backend, bakeSeconds: bakeSeconds, logs: logs, output: output, pass: "bake", target: target, world: world);
 
                         verified[$"bake {WorldBackendTokens.Token(backend: backend)}-{target}"] = new JsonObject { ["baked"] = baking, ["loaded"] = loading, ["bakes"] = bakes };
+                        PruneIntermediates(meshes: Path.Combine(path1: output, path2: CacheName, path3: "meshes"));
                     }
                 }
                 // A second boot of each pair over the finished store is what a consumer's boot does: every group it demands
@@ -171,6 +172,7 @@ public static class WorldPlayerCommand {
                         var (baking, loading, bakes) = Bake(backend: backend, bakeSeconds: bakeSeconds, logs: logs, output: output, pass: "check", target: target, world: world);
 
                         verified[$"check {WorldBackendTokens.Token(backend: backend)}-{target}"] = new JsonObject { ["baked"] = baking, ["loaded"] = loading, ["bakes"] = bakes };
+                        PruneIntermediates(meshes: Path.Combine(path1: output, path2: CacheName, path3: "meshes"));
                     }
                 }
             }
@@ -256,6 +258,22 @@ public static class WorldPlayerCommand {
             Puck.Assets.DerivedBytes.DefaultDirectory = previous;
         }
         Console.WriteLine(value: $"{Verb}: prepared {prepared.Count} machine content file(s) into {CliPaths.ToDisplay(fullPath: cache)}.");
+    }
+    // A bake leaves its intermediates beside its meshes (SdfMeshStore's checkpoint and sample sets, an author's re-bake
+    // aids), and the store's one retention bound counts them with the meshes: one debug-world boot writes several
+    // gibibytes of samples, so the next backend's boot evicted the first backend's finished meshes. A consumer loads meshes
+    // only, so every set that holds no mesh entry is removed after each boot, before the next one writes.
+    private static void PruneIntermediates(string meshes) {
+        if (!Directory.Exists(path: meshes)) { return; }
+
+        var removed = 0L;
+
+        foreach (var set in Directory.EnumerateDirectories(path: meshes)) {
+            if (Directory.EnumerateFiles(path: set, searchPattern: $"*{Puck.SdfVm.SdfMeshStore.Extension}").Any()) { continue; }
+            removed += Directory.EnumerateFiles(path: set, searchOption: SearchOption.AllDirectories, searchPattern: "*").Sum(selector: static file => new FileInfo(fileName: file).Length);
+            Directory.Delete(path: set, recursive: true);
+        }
+        Console.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Verb}: removed {(removed / 1048576.0):F1} MiB of bake intermediates from {CliPaths.ToDisplay(fullPath: meshes)}."));
     }
     // An extension installs as the host discovers one (PuckExtensionDiscovery): extensions/<name>/<name>.dll beside its
     // dependency manifest.

@@ -374,7 +374,9 @@ the published engine itself, windowed and paused at its first tick, once per
 target's device profile (a name of the world's `render.devices`, or `auto`) at
 the target's window size and waits for its bakes to settle, which fills `cache/`
 with the baked meshes, compiled worlds and compiles a consumer's boot of the same
-folder reads. A second boot of each pair over the finished store reports the
+folder reads. After each boot it removes the mesh store's bake intermediates
+(its checkpoint and sample sets), which a consumer never reads and which share
+the store's retention bound with the meshes. A second boot of each pair over the finished store reports the
 groups it baked and the groups it loaded, which `player.json` keeps under
 `checked`; a store that hits bakes none. The
 mesh store keys by the bake's code and kernel bytecode, never the adapter, but the
