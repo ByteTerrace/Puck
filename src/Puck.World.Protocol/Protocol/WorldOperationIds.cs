@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
-using System.Security.Cryptography;
-using System.Text;
+using Puck.Abstractions;
 using Puck.Commands;
 
 namespace Puck.World.Protocol;
@@ -41,12 +40,14 @@ public sealed class WorldOperationIds {
             count = (m_counts.TryGetValue(key: name, value: out var previous) ? (previous + 1L) : 1L);
             m_counts[name] = count;
         }
-        var nameBytes = Encoding.UTF8.GetBytes(s: name);
-        var material = new byte[(16 + nameBytes.Length)];
+        Span<byte> header = stackalloc byte[16];
 
-        BinaryPrimitives.WriteUInt64LittleEndian(destination: material, value: seed);
-        BinaryPrimitives.WriteInt64LittleEndian(destination: material.AsSpan(start: 8), value: count);
-        nameBytes.CopyTo(array: material, index: 16);
-        return new Guid(b: SHA256.HashData(source: material).AsSpan(start: 0, length: 16));
+        BinaryPrimitives.WriteUInt64LittleEndian(destination: header, value: seed);
+        BinaryPrimitives.WriteInt64LittleEndian(destination: header[8..], value: count);
+
+        Span<byte> digest = stackalloc byte[ContentDigest.SizeInBytes];
+
+        ContentDigest.HashText(prefix: header, text: name, digest: digest);
+        return new Guid(b: digest[..16]);
     }
 }

@@ -24,13 +24,19 @@ public static class ContentDigest {
     /// <summary>Hashes text as its UTF-8 bytes.</summary>
     /// <param name="text">The text to hash.</param>
     /// <param name="digest">The destination, at least <see cref="SizeInBytes"/> bytes long.</param>
-    public static void HashText(ReadOnlySpan<char> text, Span<byte> digest) {
-        var byteCount = Encoding.UTF8.GetByteCount(chars: text);
+    public static void HashText(ReadOnlySpan<char> text, Span<byte> digest) => HashText(prefix: ReadOnlySpan<byte>.Empty, text: text, digest: digest);
+    /// <summary>Hashes a binary prefix followed by text's UTF-8 bytes, as one message.</summary>
+    /// <param name="prefix">The bytes that precede the text.</param>
+    /// <param name="text">The text to hash after the prefix.</param>
+    /// <param name="digest">The destination, at least <see cref="SizeInBytes"/> bytes long.</param>
+    public static void HashText(ReadOnlySpan<byte> prefix, ReadOnlySpan<char> text, Span<byte> digest) {
+        var byteCount = (prefix.Length + Encoding.UTF8.GetByteCount(chars: text));
 
         if (byteCount <= StackBytes) {
             Span<byte> bytes = stackalloc byte[StackBytes];
 
-            _ = Encoding.UTF8.GetBytes(bytes: bytes, chars: text);
+            prefix.CopyTo(destination: bytes);
+            _ = Encoding.UTF8.GetBytes(bytes: bytes[prefix.Length..], chars: text);
             _ = SHA256.HashData(destination: digest, source: bytes[..byteCount]);
 
             return;
@@ -39,7 +45,8 @@ public static class ContentDigest {
         var rented = ArrayPool<byte>.Shared.Rent(minimumLength: byteCount);
 
         try {
-            _ = Encoding.UTF8.GetBytes(bytes: rented, chars: text);
+            prefix.CopyTo(destination: rented);
+            _ = Encoding.UTF8.GetBytes(bytes: rented.AsSpan(start: prefix.Length), chars: text);
             _ = SHA256.HashData(destination: digest, source: rented.AsSpan(length: byteCount, start: 0));
         } finally {
             ArrayPool<byte>.Shared.Return(array: rented);
