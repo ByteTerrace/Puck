@@ -6,6 +6,16 @@ public static class CliText {
     /// <param name="text">The text.</param>
     /// <returns>The lines in order, without line endings and without blank lines.</returns>
     public static IReadOnlyList<string> Lines(string text) => [.. AllLines(text: text).Where(predicate: static line => (line.Length > 0))];
+    /// <summary>Joins the last <paramref name="count"/> lines of process output that hold more than whitespace: a failing
+    /// process's refusal sits at its end, and the whole transcript would bury it.</summary>
+    /// <param name="text">The output.</param>
+    /// <param name="count">The number of lines to keep.</param>
+    /// <param name="separator">The text that joins them; the default keeps them on one line, for a message printed on one.</param>
+    /// <returns>The kept lines, or an empty string when the output holds none.</returns>
+    public static string Tail(string text, int count, string separator = " | ") => string.Join(
+        separator: separator,
+        values: Lines(text: text).Where(predicate: static line => !string.IsNullOrWhiteSpace(value: line)).TakeLast(count: count)
+    );
     /// <summary>Reads source lines, preserving interior blank lines and omitting the phantom line after a final newline.</summary>
     /// <param name="text">The source text.</param>
     /// <param name="emptyIsLine">Whether an empty input counts as one empty line, as source searches require.</param>

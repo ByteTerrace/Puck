@@ -126,7 +126,7 @@ internal static class LocalAdapterInstall {
 
             if ((answer.ExitCode != 0) || string.IsNullOrEmpty(value: printed)) {
                 throw new IOException(message: $"build {stamp} at {build} could not activate itself (its `mcp --prepare-install` exited {answer.ExitCode}): " +
-                    string.Join(separator: " | ", values: CliText.Lines(text: answer.Stderr).TakeLast(count: 4)));
+                    CliText.Tail(count: 4, text: answer.Stderr));
             }
             activated = stamp;
             version = printed;
