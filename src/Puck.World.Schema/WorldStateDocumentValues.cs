@@ -319,8 +319,8 @@ public static class WorldStateDocumentValues {
         }
     }
 
-    private static bool Find(object graph, string? soughtRow) {
-        var finder = new Finder(collected: null, soughtRow: soughtRow);
+    private static bool Find(object graph, string? soughtRow, bool identityOnly = false) {
+        var finder = new Finder(collected: null, soughtRow: soughtRow, identityOnly: identityOnly);
 
         Walker.Walk(
             root: graph,
@@ -505,10 +505,7 @@ public static class WorldStateDocumentValues {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentException.ThrowIfNullOrEmpty(argument: rowName);
 
-        var finder = new Finder(collected: null, soughtRow: rowName, identityOnly: true);
-
-        Walker.Walk(root: definition, visitor: finder);
-        return finder.Found;
+        return Find(graph: definition, soughtRow: rowName, identityOnly: true);
     }
     /// <summary>Returns a candidate whose every document value is resolved against the candidate's own state cells:
     /// what a row write that introduces a bound value composes, so validation and every derived rebuild read a
