@@ -806,17 +806,17 @@ public sealed partial class SdfMeshPathBake {
                 // A slice samples any instance, so it reads every field at the bake's set.
                 for (var handle = 0; (handle < m_sampled.Count); handle++) { m_takenSampled[handle] = m_sampled[handle]; }
             }
-            var candidates = m_candidates;
             var pending = false;
+            var waiting = 0;
             var flying = 0;
             var working = 0;
             var admitted = 0;
             // The groups admitted whose first stage has not reached the pool's queue: stages on their way.
             var awaiting = 0;
+            var from = DoneThrough();
 
-            candidates.Clear();
             // Every group before the done cursor is done and offers nothing, so a settled bake takes without a walk.
-            for (var index = DoneThrough(); (index < m_groups.Count); index++) {
+            for (var index = from; (index < m_groups.Count); index++) {
                 var group = m_groups[index];
 
                 pending |= !group.Done;
@@ -824,26 +824,31 @@ public sealed partial class SdfMeshPathBake {
                 working += ((!group.Done && group.Contouring) ? 1 : 0);
                 admitted += ((!group.Done && group.Admitted) ? 1 : 0);
                 awaiting += ((!group.Done && group.AwaitsStage) ? 1 : 0);
-                if (group.Done || group.InFlight || group.Contouring || (group.Next is null) || (owedOnly && !OwesFrame(group: group))) { continue; }
-                candidates.Add(item: (RankOf(group: group), index));
+                waiting += (Offers(group: group, owedOnly: owedOnly) ? 1 : 0);
             }
             if (pending) {
                 m_accounts.Takes++;
-                m_accounts.WaitingGroups += candidates.Count;
+                m_accounts.WaitingGroups += waiting;
                 m_accounts.FlyingGroups += flying;
                 m_accounts.WorkingGroups += working;
+                // A tier's replacement set into the list since the latest measure is ordered here, once until the next.
+                if (m_orderVersion != m_groups.Version) {
+                    Order(order: m_order, from: from);
+                    m_orderVersion = m_groups.Version;
+                }
             }
-            CollectionsMarshal.AsSpan(list: candidates).Sort(comparison: ByPriority);
             var stop = 0;
             // The first group the account defers holds its place: no group behind it starts its final lattice
             // before it does, so a large group never starves behind a stream of smaller ones.
             var admissionWaits = false;
             var queued = -1;
 
-            foreach (var (_, index) in candidates) {
+            foreach (var (_, index) in (pending ? CollectionsMarshal.AsSpan(list: m_order) : [])) {
+                var group = m_groups[index];
+
+                if (!Offers(group: group, owedOnly: owedOnly)) { continue; }
                 if (lattices.Count >= SdfWorldPackage.MeshBakeBatch) { stop = 3; break; }
 
-                var group = m_groups[index];
                 var next = group.Next!.Value;
 
                 // A batch reads one snapshot a handle: a group whose geometry hashed another waits for a later batch.
@@ -946,8 +951,29 @@ public sealed partial class SdfMeshPathBake {
         return true;
     }
 
-    // The groups a take may take a lattice of, by priority, reused take to take.
-    private readonly List<(float Priority, int Index)> m_candidates = [];
+    // The order a take offers groups in: every group not done from the done cursor, as the list stood at m_orderVersion,
+    // by ByPriority over RankOf. Invariant: a take walks the order a sort of its candidates would give. A rank changes
+    // only in Prioritize, which takes the order again after measuring (into the spare, outside the gate, swapped in
+    // under it), and the list changes only through GroupList, whose Version the take compares, ordering again under the
+    // gate when a group was set in since. A group done since is passed over (Offers), and Done only turns on.
+    private List<(float Priority, int Index)> m_order = [];
+    private List<(float Priority, int Index)> m_spareOrder = [];
+    private int m_orderVersion = -1;
+
+    // Orders the groups not done from `from` by take priority into `order`.
+    private void Order(List<(float Priority, int Index)> order, int from) {
+        order.Clear();
+        for (var index = from; (index < m_groups.Count); index++) {
+            var group = m_groups[index];
+
+            if (!group.Done) { order.Add(item: (RankOf(group: group), index)); }
+        }
+        CollectionsMarshal.AsSpan(list: order).Sort(comparison: ByPriority);
+    }
+    // Whether a take may take a lattice of a group: one it owes, with none in flight or being worked, and, for an owed
+    // take, owed to the frame.
+    private static bool Offers(Group group, bool owedOnly) =>
+        !(group.Done || group.InFlight || group.Contouring || (group.Next is null) || (owedOnly && !OwesFrame(group: group)));
 
     // A group's rank among a take's candidates: every group in view (Group.InView) ahead of every group out of it, each
     // side by its priority. A priority is never negative, so an out-of-view group's rank is taken into [-1, 0) with its
@@ -1015,17 +1041,10 @@ public sealed partial class SdfMeshPathBake {
                     group.EndWork();
                     continue;
                 }
-                var checkpoint = CaptureSamples(group, slice);
                 Enqueue(group: group, urgent: true, work: () => {
-                    using (answer) {
-                        using var captured = checkpoint;
-                        if (captured is not null && CheckpointStore(group) is { } store) {
-                            store.WriteSamples(group.Checkpoints!.Sampling, group.SampleProbe!.Value, captured.GetSpan());
-                        }
-                        group.SampleProbe = null;
-                        AnswerGroup(answer: answer, group: group, request: in lattice);
-                    }
+                    using (answer) { AnswerGroup(answer: answer, group: group, request: in lattice); }
                 });
+                KeepSamples(group: group, request: in lattice, samples: slice);
                 continue;
             }
             Complete(batch: batch, index: index, request: in lattice, samples: slice);
@@ -1564,6 +1583,7 @@ public sealed partial class SdfMeshPathBake {
             group.Checkpoints = Identity;
             group.CheckpointProgram = m_program;
             group.CheckpointGeometry = CheckpointInput(group, m_program!);
+            group.SampleGeometry = SampleFieldInput(group, m_program!);
         }
         if (!Library.Holds(geometry: group.Sealed, identity: group.Identity) && !HoldsCheckpoint(group)) { return false; }
         group.Deferred = group.Next;
@@ -2735,7 +2755,10 @@ public sealed partial class SdfMeshPathBake {
         public SdfProgram? CheckpointProgram { get; set; }
         public SdfMeshGeometry CheckpointGeometry { get; set; }
         public bool CheckedCheckpoints { get; set; }
-        public UInt128? SampleProbe { get; set; }
+        // The key every sample set of the group is kept and probed under, beside each lattice's row (SampleFieldInput).
+        public SdfMeshGeometry SampleGeometry { get; set; }
+        // Whether the group's next lattice missed its probe, so the next take dispatches it unprobed (ProbeSamples).
+        public bool ProbeMissed { get; set; }
         public SdfMeshBakeRequest? Deferred { get; set; }
         // Whether the mesh came from the library or its store rather than a bake of this group.
         public bool Stored { get; set; }

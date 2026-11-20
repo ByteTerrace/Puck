@@ -290,6 +290,8 @@ public sealed class SdfMeshStoreLawTests {
         var store = new SdfMeshStore(capacityBytes: (2 * entry.Length) + (entry.Length / 2), directory: directory);
 
         Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: Mesh()));
+        // The bound is enforced on the store's writer once the entry stands.
+        Assert.True(condition: SdfMeshStore.WaitForWrites(timeout: TimeSpan.FromSeconds(seconds: 30)));
         Assert.True(condition: store.Contains(geometry: Geometry, identity: Identity));
         Assert.False(condition: File.Exists(path: Path.Combine(path1: directory, path2: "older.mesh")));
         Assert.True(condition: File.Exists(path: Path.Combine(path1: directory, path2: "newer.mesh")));
@@ -323,6 +325,7 @@ public sealed class SdfMeshStoreLawTests {
         Place(minutesAgo: 20, name: "d.mesh", set: idle);
 
         Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: Mesh()));
+        Assert.True(condition: SdfMeshStore.WaitForWrites(timeout: TimeSpan.FromSeconds(seconds: 30)));
         Assert.True(condition: store.Contains(geometry: Geometry, identity: Identity));
         Assert.True(condition: File.Exists(path: Path.Combine(path1: active, path2: "a.mesh")));
         Assert.True(condition: File.Exists(path: Path.Combine(path1: active, path2: "b.mesh")));
@@ -347,6 +350,7 @@ public sealed class SdfMeshStoreLawTests {
         }
 
         Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: Mesh()));
+        Assert.True(condition: SdfMeshStore.WaitForWrites(timeout: TimeSpan.FromSeconds(seconds: 30)));
         Assert.True(condition: store.Contains(geometry: Geometry, identity: Identity));
         Assert.False(condition: File.Exists(path: Path.Combine(path1: own, path2: "older.mesh")));
         Assert.True(condition: File.Exists(path: Path.Combine(path1: own, path2: "newer.mesh")));

@@ -66,6 +66,9 @@ public sealed partial record SdfMesh {
     /// <summary>Releases one mesh claim; the last claimant releases the payload, never a finalizer.</summary>
     /// <param name="cached">Whether the released claim was acquired as cache retention.</param>
     public void Release(bool cached = false) => m_payload?.Release(cached: cached);
+    // Whether the mesh's planes are native storage its claims own, which its last release frees; a managed mesh's planes
+    // are arrays nothing writes once it is built, kept alive by any reference to it.
+    internal bool OwnsNativeStorage => (m_payload is not null);
 
     /// <summary>Gets the bytes the mesh's own storage holds: for a native mesh, what its storage owners are charged,
     /// excluding storage it shares with the mesh it was renumbered from; for a managed one, its arrays' bytes, counting

@@ -6,7 +6,8 @@ namespace Puck.Confinement;
 /// <summary>
 /// Replaces files atomically: new content is written to a fresh temporary file beside the destination, flushed to
 /// disk, and renamed over the destination with <see cref="File.Move(string, string, bool)"/>, so neither a reader nor a
-/// crash mid-write ever finds a partially written file behind the real name.
+/// crash mid-write ever finds a partially written file behind the real name. A verified cache entry
+/// (<see cref="WriteVerifiedCacheBytes"/>) skips the flush to stable storage and keeps the atomic rename.
 /// <para>The temporary file lives in the destination's own directory, so the rename never crosses a volume, and is
 /// named <c>&lt;file name&gt;.&lt;claim&gt;.tmp</c>, where the claim names its writer (<see cref="IsAbandoned"/>), so concurrent writers of one destination never share a temporary. A
 /// write that fails at any step deletes its temporary file: a failed write leaves the directory as it found it,
@@ -167,7 +168,10 @@ public static class AtomicFile {
             // An image still mapped cannot be deleted; its name ends in the temporary extension.
         }
     }
-    private static PendingWrite Stage<TState>(string path, UnixFileMode? unixCreateMode, TState state, Fill<TState> fill) where TState : allows ref struct {
+    // Stages a temporary beside the destination. `durable` flushes it to stable storage before it is published; without it
+    // the bytes reach the operating system alone, and a power loss before the system writes them back can leave the
+    // published name holding anything.
+    private static PendingWrite Stage<TState>(string path, UnixFileMode? unixCreateMode, TState state, Fill<TState> fill, bool durable = true) where TState : allows ref struct {
         ArgumentException.ThrowIfNullOrEmpty(argument: path);
 
         var destination = ExistingSpelling(path: Path.GetFullPath(path: path));
@@ -218,7 +222,7 @@ public static class AtomicFile {
                     state: state,
                     stream: stream
                 );
-                stream.Flush(flushToDisk: true);
+                stream.Flush(flushToDisk: durable);
             }
 
             return pending;
@@ -227,8 +231,8 @@ public static class AtomicFile {
             throw;
         }
     }
-    private static void Replace<TState>(string path, UnixFileMode? unixCreateMode, TState state, Fill<TState> fill) where TState : allows ref struct {
-        using var pending = Stage(fill: fill, path: path, state: state, unixCreateMode: unixCreateMode);
+    private static void Replace<TState>(string path, UnixFileMode? unixCreateMode, TState state, Fill<TState> fill, bool durable = true) where TState : allows ref struct {
+        using var pending = Stage(durable: durable, fill: fill, path: path, state: state, unixCreateMode: unixCreateMode);
 
         pending.Commit();
     }
@@ -403,6 +407,28 @@ public static class AtomicFile {
             path: path,
             state: bytes,
             unixCreateMode: unixCreateMode
+        );
+    /// <summary>Atomically replaces a cache entry at <paramref name="path"/> with <paramref name="bytes"/> without flushing
+    /// it to stable storage: a reader and a killed writer see the old file or the whole new one, as
+    /// <see cref="WriteAllBytes"/> gives, but after a power loss or an operating-system crash the name may hold the old
+    /// bytes, the new ones, or a file of the new length whose bytes the system never wrote back. Only content its reader
+    /// verifies whole (a checksum it refuses and derives again on) is written this way; a release, a record or anything
+    /// else that must survive a power loss takes <see cref="WriteAllBytes"/> or <see cref="WriteAllBytesDurably"/>.</summary>
+    /// <param name="path">The destination file; an existing file there is replaced, and a missing parent directory is
+    /// created.</param>
+    /// <param name="bytes">The complete new content.</param>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
+    /// <exception cref="IOException">The temporary file could not be created, written, or moved over the
+    /// destination. The destination is unchanged and the temporary file is deleted.</exception>
+    /// <exception cref="UnauthorizedAccessException">The caller may not create the temporary file or replace the
+    /// destination. The destination is unchanged.</exception>
+    public static void WriteVerifiedCacheBytes(string path, ReadOnlySpan<byte> bytes) =>
+        Replace(
+            durable: false,
+            fill: static (stream, content) => stream.Write(buffer: content),
+            path: path,
+            state: bytes,
+            unixCreateMode: null
         );
     /// <summary>Atomically replaces <paramref name="path"/> with <paramref name="contents"/> as UTF-8 without a byte
     /// order mark, the encoding <see cref="File.WriteAllText(string, string)"/> writes.</summary>

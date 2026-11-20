@@ -208,13 +208,22 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         recording.CopyToReadback(bytes: sampleBytes, source: samplesBuffer);
     }
     /// <inheritdoc/>
-    /// <remarks>Reads the samples on the bake's pool, ahead of its queued stages, releases the slot as soon as they are
-    /// copied, and answers the batch there; a batch whose samples could not be read goes back to its groups.</remarks>
+    /// <remarks>Reads the samples on a reader of their own (<see cref="Readers"/>), never behind the bake's pool,
+    /// releases the slot as soon as they are copied, and decodes the batch there, each lattice's answer queued on the
+    /// bake's pool ahead of its stages; a batch whose samples could not be read goes back to its groups.</remarks>
     public void Complete(object job, SdfGpuWorkReadback readback) {
         var batch = ((SdfMeshBakeBatch)job);
 
         if (readback.GpuSeconds is { } seconds) { m_rate.Observe(seconds: seconds, units: batch.Taps); }
-        SdfMeshPathBake.RunFirst(work: () => {
+        Readers.Enqueue(item: () => Read(batch: batch, readback: readback));
+    }
+
+    // The readers that copy completed batches out of their slots, at most one a slot, on the host's pool: a slot frees as
+    // soon as its fence signals and a reader copies it, while every bake worker is busy contouring.
+    private static readonly BoundedWorkQueue<Action> Readers = new(concurrency: SdfGpuWork.SlotCount, run: static read => read());
+
+    private void Read(SdfMeshBakeBatch batch, SdfGpuWorkReadback readback) {
+        try {
             var length = readback.Length;
             // The copy belongs to this answer alone: native storage from the bake's allocator, charged while it lasts
             // (the shared pool allocates anything past a mebibyte afresh and drops it, which the samples are).
@@ -222,18 +231,19 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
             using var bytes = new OwnedBuffer<byte>(allocator: m_bake.Library.Allocator, observer: owner);
 
             try {
-                try {
-                    bytes.Resize(clear: false, length: length, preserve: false);
-                    readback.Read(destination: bytes.GetSpan());
-                } finally {
-                    readback.Release();
-                }
-                m_bake.Complete(batch: batch, samples: bytes.GetSpan());
-            } catch {
-                m_bake.Abandon(batch: batch);
-                throw;
+                bytes.Resize(clear: false, length: length, preserve: false);
+                readback.Read(destination: bytes.GetSpan());
+            } finally {
+                readback.Release();
             }
-        });
+            m_bake.Complete(batch: batch, samples: bytes.GetSpan());
+        } catch (Exception exception) {
+            // The batch's unanswered lattices go back to their groups, which dispatch them again.
+            m_bake.Abandon(batch: batch);
+            SdfMeshBakeReport.WorkFailed(exception: exception);
+        } finally {
+            SdfMeshPathBake.Progressed();
+        }
     }
     /// <inheritdoc/>
     public void Abandon(object job) => m_bake.Abandon(batch: ((SdfMeshBakeBatch)job));
