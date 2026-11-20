@@ -1,10 +1,8 @@
 namespace Puck.Abstractions.Memory;
 
 /// <summary>
-/// A growable run of elements whose storage is rented from <see cref="RentedArrays"/>: a build that appends an unknown
-/// number of elements and copies out what it keeps grows here, so neither its growth nor its workspace becomes garbage.
-/// Spans and references it hands out are borrows that end at the next append or at disposal, and its storage goes back
-/// to the pool when it is disposed.
+/// A growable run of elements whose storage comes from <see cref="RentedArrays"/>. Spans and references it hands out
+/// are borrows that end at the next append or at disposal, which releases its storage.
 /// </summary>
 /// <typeparam name="T">The element.</typeparam>
 /// <param name="capacity">The elements the first rented array holds at least.</param>
@@ -47,7 +45,7 @@ public sealed class RentedList<T>(int capacity = 0) : IDisposable {
     /// <summary>Copies the appended elements into a new array of exactly their count.</summary>
     /// <returns>The copy; the shared empty array when the list is empty.</returns>
     public T[] ToArray() => AsSpan().ToArray();
-    /// <summary>Returns the rented storage to the pool; the list holds nothing afterward.</summary>
+    /// <summary>Releases the rented storage and empties the list.</summary>
     public void Dispose() {
         var items = m_items;
 

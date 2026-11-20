@@ -438,11 +438,12 @@ laws exercise that boundary.
   never a search of the list.
 - **A stage's scratch is rented, its result exact.** A CPU stage grows its
   per-vertex and per-quad workspace in `RentedList<T>` and leases its tables
-  (`RentedArrays.Rent(minimumLength, out array)`), both over
-  `ArrayPool<T>.Shared`, and copies out only the arrays its result keeps; a
-  group's lattices and point tables stay in owned native storage. A rented array
-  is longer than asked for and holds an earlier stage's values: clear or fill
-  the range read before writing it, and never read `.Length` as a count. The
+  (`RentedArrays.Rent(minimumLength, out array)`). Both reuse eligible shared
+  pool buckets and release larger arrays to the collector. The stage copies
+  out only the arrays its result keeps. A group's lattices and point tables
+  stay in owned native storage. A rental can be longer than requested and its
+  contents are unspecified. Fill the range before reading it and track the
+  logical count separately. The
   done line's `managed=[allocated,gc-pause,collections]` reads the process's
   allocation and collector pauses over the bake's window. The contour, crossing
   search, weld and crease split rent theirs; the collapse
