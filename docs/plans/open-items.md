@@ -1771,6 +1771,19 @@ migrated to standard programs.
   keeps the tier bias moving (`SdfMeshTier.Biased`); read the bias and the mesh
   region's budget on the RTX 2060 itself, since a detail that never settles
   re-bakes tiers in play.
+- [medium] The far cascade has no held static layer: every refresh at the
+  authored `farShadows.hertz` redraws its static casters too. The technique
+  (HDRP's on-demand static shadows, Unreal's CSM depth reuse) holds a static
+  layer while its fit stands and draws the dynamic casters over a copy of it at
+  the rate. The pieces the distant map's back map built carry over (a depth
+  `IGpuRecorder.CopyImage`, load-op framebuffers, `SdfMeshOcclusion.Stage`'s
+  filters); what it still needs is a dynamic-only filter that leaves the
+  static draws' visibility history untouched (the selection kernel writes
+  `state` for every draw today, so a static-only and a dynamic-only staging in
+  one frame would erase each other's history), a second selection instance for
+  the second staging, and a static copy of the optical buffer or a redraw of
+  glass on every refresh. `shadow-far.held` and `world.gpu-timing`'s
+  `shadow-far` on a still camera with moving bodies decide it.
 - [low] A player without a shader compiler shades a program its documents do
   not declare through the interpreter: the prewarm (`world prepare`) compiles
   and reflects only the declared program sets, so a frame holding another

@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text;
 using Puck.Abstractions.Gpu;
 using Puck.Assets;
@@ -31,7 +30,7 @@ public static class PreparedShaderBindings {
 
         var store = new ContentAddressedStore(root: directory);
 
-        store.SetDerived(kind: Kind, inputHash: PinOf(bytecode: bytecode), outputHash: store.Put(content: Encode(bindings: bindings)));
+        store.SetDerived(kind: Kind, inputHash: ContentPin.Compute(content: bytecode), outputHash: store.Put(content: Encode(bindings: bindings)));
     }
     /// <summary>Reads the bindings a shipping cache holds for some bytecode.</summary>
     /// <param name="bytecode">The bytecode.</param>
@@ -40,27 +39,17 @@ public static class PreparedShaderBindings {
     /// <returns><see langword="true"/> when a shipping cache holds a readable entry for exactly these bytes.</returns>
     public static bool TryRead(ReadOnlySpan<byte> bytecode, out IReadOnlyList<ShaderInterfaceBinding>? bindings) {
         bindings = null;
-
-        var pin = PinOf(bytecode: bytecode);
-
-        foreach (var directory in DerivedBytes.ShippingDirectories()) {
-            if (!Directory.Exists(path: directory)) { continue; }
-            try {
-                var store = new ContentAddressedStore(root: directory);
-
-                if (store.TryResolveDerived(kind: Kind, inputHash: pin, hash: out var output) && store.TryGet(pin: output, content: out var encoded)) {
-                    bindings = Decode(encoded: encoded);
-
-                    return true;
-                }
-            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or EndOfStreamException or InvalidDataException) {
-            }
+        if (!DerivedBytes.TryReadShipped(content: out var encoded, input: ContentPin.Compute(content: bytecode), kind: Kind)) {
+            return false;
         }
+        try {
+            bindings = Decode(encoded: encoded);
 
-        return false;
+            return true;
+        } catch (Exception exception) when (exception is EndOfStreamException or InvalidDataException) {
+            return false;
+        }
     }
-
-    private static ContentPin PinOf(ReadOnlySpan<byte> bytecode) => ContentPin.FromDigest(digest: SHA256.HashData(source: bytecode));
 
     private static byte[] Encode(IReadOnlyList<ShaderInterfaceBinding> bindings) {
         using var stream = new MemoryStream();
