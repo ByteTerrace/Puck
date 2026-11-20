@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 namespace Puck.Abstractions.Counting;
 
 /// <summary>
@@ -156,7 +157,7 @@ public sealed class ShardedWorkCounterSet : IWorkCounterSource {
         if ((shards is null) || (shards.Length <= m_id)) {
             Array.Resize(
                 array: ref shards,
-                newSize: Math.Max(val1: (m_id + 1), val2: ((shards?.Length ?? 0) * 2))
+                newSize: ArrayCapacity.Grown(shards?.Length ?? 0, m_id + 1)
             );
             Shards = shards;
         }

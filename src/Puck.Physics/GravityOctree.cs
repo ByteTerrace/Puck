@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 
 namespace Puck.Physics;
@@ -236,10 +237,7 @@ internal static class GravityOctree {
     }
     public static void EnsureIndexCapacity(ref int[] indices, ref int[] partitionScratch, int required) {
         if (indices.Length < required) {
-            var capacity = GrowthCapacity(
-                current: indices.Length,
-                required: required
-            );
+            var capacity = ArrayCapacity.Grown(indices.Length, required);
 
             Array.Resize(
                 array: ref indices,
@@ -250,29 +248,6 @@ internal static class GravityOctree {
                 newSize: capacity
             );
         }
-    }
-    public static void EnsureNodeCapacity<TNode>(ref TNode[] nodes, int required) {
-        if (nodes.Length < required) {
-            Array.Resize(
-                array: ref nodes,
-                newSize: GrowthCapacity(
-                    current: nodes.Length,
-                    required: required
-                )
-            );
-        }
-    }
-    public static int GrowthCapacity(int current, int required) {
-        var capacity = Math.Max(
-            val1: 16,
-            val2: current
-        );
-
-        while (capacity < required) {
-            capacity = checked((capacity * 2));
-        }
-
-        return capacity;
     }
     public static bool IsSideWithinOpeningAngle(UInt128 sideRaw, UnitInterval32 openingAngle, FixedQ4816 distanceSquared) {
         if (distanceSquared <= FixedQ4816.Zero) {
@@ -358,10 +333,7 @@ internal static class GravityOctree {
         var firstChild = nodeSlotCount;
         var required = checked((firstChild + 8));
 
-        EnsureNodeCapacity(
-            nodes: ref nodes,
-            required: required
-        );
+        ArrayCapacity.EnsureLength(ref nodes, required);
         Array.Clear(
             array: nodes,
             index: firstChild,

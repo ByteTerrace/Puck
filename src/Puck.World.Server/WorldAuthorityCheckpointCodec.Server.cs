@@ -1,6 +1,5 @@
 using Puck.Abstractions.Machines;
 using Puck.Commands;
-using Puck.Audio.Simulation;
 using Puck.Networking;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
@@ -190,46 +189,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             Accepted: accepted,
             Reason: reasonText,
             Submission: submission
-        );
-    }
-    private static void WriteMusicTransition(WireWriter writer, MusicTransition transition) {
-        writer.WriteString(value: transition.ToSegmentId);
-        writer.WriteByte(value: ((byte)transition.When));
-        writer.WriteByte(value: ((byte)transition.At));
-    }
-    private static MusicTransition ReadMusicTransition(ref WireReader reader) {
-        var toSegmentId = reader.ReadString(
-            field: "music transition segment",
-            maxBytes: MaxStringBytes
-        );
-        var when = ((MusicSenseFamily)reader.ReadByte());
-
-        if (
-            !reader.Failed &&
-            !Enum.IsDefined(value: when)
-        ) {
-            reader.Fail(
-                detail: $"{nameof(MusicSenseFamily)} wire value {((byte)when)} is not declared",
-                refusal: WireRefusal.EnumValueUnknown
-            );
-        }
-
-        var at = ((MusicTransitionBoundary)reader.ReadByte());
-
-        if (
-            !reader.Failed &&
-            !Enum.IsDefined(value: at)
-        ) {
-            reader.Fail(
-                detail: $"{nameof(MusicTransitionBoundary)} wire value {((byte)at)} is not declared",
-                refusal: WireRefusal.EnumValueUnknown
-            );
-        }
-
-        return new MusicTransition(
-            At: at,
-            ToSegmentId: toSegmentId,
-            When: when
         );
     }
     private static void WritePendingOp(WireWriter writer, WorldPendingOpCheckpoint op) {
@@ -482,23 +441,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             value: section.MusicClockElapsedTicks,
             writeValue: static (w, v) => w.WriteUInt64(value: v)
         );
-        writer.WriteNullableString(value: section.MusicDirectorCurrentSegmentId);
-        writer.WriteOptional(
-            value: section.MusicDirectorArmed,
-            writeValue: WriteMusicTransition
-        );
-        writer.WriteUInt64(value: section.MusicDirectorTransitionCount);
-        writer.WriteOptional(
-            value: section.MusicDirectorLastTransitionTick,
-            writeValue: static (w, v) => w.WriteUInt64(value: v)
-        );
-        writer.WriteNullableString(value: section.MusicDirectorLastTransitionFromSegmentId);
-        writer.WriteNullableString(value: section.MusicDirectorLastTransitionToSegmentId);
-        writer.WriteNullableString(value: section.MusicDirectorLastEmbellishmentPatchId);
-        writer.WriteOptional(
-            value: section.MusicDirectorLastEmbellishmentTick,
-            writeValue: static (w, v) => w.WriteUInt64(value: v)
-        );
         writer.WriteArray(
             items: section.MachineBindings,
             writeItem: static (w, entry) => {
@@ -748,32 +690,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         var musicClockElapsedTicks = reader.ReadOptional(
             readValue: static (ref WireReader r) => r.ReadUInt64()
         );
-        var musicDirectorCurrentSegmentId = reader.ReadNullableString(
-            field: "music director segment",
-            maxBytes: MaxStringBytes
-        );
-        var musicDirectorArmed = reader.ReadOptional(
-            readValue: static (ref WireReader r) => ReadMusicTransition(reader: ref r)
-        );
-        var musicDirectorTransitionCount = reader.ReadUInt64();
-        var musicDirectorLastTransitionTick = reader.ReadOptional(
-            readValue: static (ref WireReader r) => r.ReadUInt64()
-        );
-        var musicDirectorLastTransitionFromSegmentId = reader.ReadNullableString(
-            field: "music director last from segment",
-            maxBytes: MaxStringBytes
-        );
-        var musicDirectorLastTransitionToSegmentId = reader.ReadNullableString(
-            field: "music director last to segment",
-            maxBytes: MaxStringBytes
-        );
-        var musicDirectorLastEmbellishmentPatchId = reader.ReadNullableString(
-            field: "music director last embellishment patch",
-            maxBytes: MaxStringBytes
-        );
-        var musicDirectorLastEmbellishmentTick = reader.ReadOptional(
-            readValue: static (ref WireReader r) => r.ReadUInt64()
-        );
         var machineBindings = reader.ReadArray(
             field: "server machine bindings",
             readItem: static (ref WireReader r) => {
@@ -856,14 +772,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             LastStepTicks: lastStepTicks,
             MachineBindings: machineBindings,
             MusicClockElapsedTicks: musicClockElapsedTicks,
-            MusicDirectorArmed: musicDirectorArmed,
-            MusicDirectorCurrentSegmentId: musicDirectorCurrentSegmentId,
-            MusicDirectorLastEmbellishmentPatchId: musicDirectorLastEmbellishmentPatchId,
-            MusicDirectorLastEmbellishmentTick: musicDirectorLastEmbellishmentTick,
-            MusicDirectorLastTransitionFromSegmentId: musicDirectorLastTransitionFromSegmentId,
-            MusicDirectorLastTransitionTick: musicDirectorLastTransitionTick,
-            MusicDirectorLastTransitionToSegmentId: musicDirectorLastTransitionToSegmentId,
-            MusicDirectorTransitionCount: musicDirectorTransitionCount,
             Pending: pending,
             RoutedInputs: routedInputs,
             RuleGateHeld: ruleGateHeld,

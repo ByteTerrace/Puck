@@ -1,6 +1,7 @@
+using Puck.Abstractions.Memory;
 using Puck.Abstractions.Waiting;
-using Puck.Hosting.Jobs;
 using Puck.Commands;
+using Puck.Hosting.Jobs;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -692,276 +693,52 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        if (ExceedsBootDerivedFaceReservation(
-            candidate: candidate,
-            reason: out var reservationReason
-        )) {
-            RejectRebuild(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                reason: reservationReason,
-                verb: verb
-            );
-
-            return false;
-        }
-
         // A reload rebuilds the products whose inputs its candidate changed, by the rule a mutation's install follows;
         // a load or a reset replaces the document whole, which changes every part.
         var products = PlanProducts(candidate: candidate, previous: priorDefinition, whole: (request.Kind != WorldRebuildKind.Reload));
-        WorldDocumentInputs? envelopeInputs = null;
-        WorldDocumentInputs? addonInputs = null;
-        WorldDocumentInputs? machineInputs = null;
-
-        if (!products.Envelope.IsEmpty) {
-            if (!TryFitEnvelope(candidate: candidate, inputs: out var fitted, reason: out var capacityReason)) {
-                RejectRebuild(
-                    connectionId: connectionId,
-                    correlationId: correlationId,
-                    reason: capacityReason,
-                    verb: verb
-                );
-
-                return false;
-            }
-            envelopeInputs = fitted;
-        }
-
-        if (!Host.Population.CanInstallFields(
-            definition: candidate,
-            reason: out var fieldReason
-        )) {
-            RejectRebuild(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                reason: fieldReason!,
-                verb: verb
-            );
-
-            return false;
-        }
-
-        if (!TryStageSolids(
-            candidate: candidate,
-            products: products,
-            reason: out var rebuildSolidReason,
-            solids: out var rebuildSolids
-        )) {
-            RejectRebuild(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                reason: rebuildSolidReason,
-                verb: verb
-            );
-
-            return false;
-        }
-
-        // Reconcile the addon runtime against the candidate when a part its last preparation read changed: a reused
-        // row costs a structural compare, never a recompile. A server with no addon host attached (a test double;
-        // production hosts attach WorldAddonRuntime) refuses a candidate holding an enabled row by name, the shape a
-        // mutation's install uses, rather than installing a candidate that claims a mounted addon no host can run.
-        IWorldAddonPreparedPlan? rebuildAddonPlan = null;
-        int[]? newRebuildTickWrittenEntity = null;
-        Principal[]? newRebuildTickWrittenPrincipal = null;
-        bool[]? newRebuildTickCollided = null;
-        var rebuildAddonPlanCommitted = false;
-
-        IWorldMachinePreparedPlan? rebuildMachinePlan = null;
-        var rebuildMachinePlanCommitted = false;
+        // A reload re-seeds the state rows its source changed and keeps every other row's live values, as a
+        // mutation's install does: the live arena itself when no row changed, otherwise a replacement born with
+        // the changed rows that loads the rest. A load or a reset, and a reload that changes the section beside
+        // its rows, installs the document's state whole. Nothing crosses from a replaced layout but its key ledger
+        // and the boot-sized session lanes.
+        var reloadEdit = ((request.Kind == WorldRebuildKind.Reload) ? NameReloadEdit(candidate: candidate) : null);
+        var installed = candidate;
         var stateKept = string.Empty;
+        string arenaReason;
+        StateArena? rebuildArena;
 
-        // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
-        // shape for why: rebuildAddonPlan starts null, so a return before TryPrepare ever succeeds leaves the
-        // finally a no-op, and a downstream throw from contention-array staging, Install, or Commit alike still
-        // disposes an uncommitted plan. Replay restores the complete guest image through the checkpoint boundary.
-
-        try {
-            if (products.Addons.IsEmpty) {
-                // The addon host's last preparation read no part this candidate changed.
-            } else if (Host.Addons is { } addonsForRebuild) {
-                if (!TryPrepareAddons(
-                    addons: addonsForRebuild,
-                    candidate: candidate,
-                    current: m_definition,
-                    inputs: out var preparedAddons,
-                    plan: out rebuildAddonPlan,
-                    reason: out var rebuildAddonReason
-                )) {
-                    RejectRebuild(
-                        connectionId: connectionId,
-                        correlationId: correlationId,
-                        reason: $"addon {rebuildAddonReason}",
-                        verb: verb
-                    );
-
-                    return false;
-                }
-                addonInputs = preparedAddons;
-
-                if (rebuildAddonPlan is not null) {
-                    StageAddonContentionArrays(
-                        mountedCount: rebuildAddonPlan.MountedCount,
-                        entity: out newRebuildTickWrittenEntity,
-                        principal: out newRebuildTickWrittenPrincipal,
-                        collided: out newRebuildTickCollided
-                    );
-                }
-            } else if (TryFindEnabledAddonRow(
-                candidate: candidate,
-                name: out var enabledRowName
-            )) {
-                RejectRebuild(
-                    connectionId: connectionId,
-                    correlationId: correlationId,
-                    reason: $"addon '{enabledRowName}' cannot mount — no addon host is attached to this server",
-                    verb: verb
-                );
-
-                return false;
-            }
-
-            if (!products.Machines.IsEmpty) {
-                if (!TryPrepareMachines(
-                    admission: admitted,
-                    candidate: candidate,
-                    current: m_definition,
-                    inputs: out var preparedMachines,
-                    plan: out rebuildMachinePlan,
-                    reason: out var rebuildMachineReason
-                )) {
-                    RejectRebuild(
-                        connectionId: connectionId,
-                        correlationId: correlationId,
-                        reason: $"screen machine {rebuildMachineReason}",
-                        verb: verb
-                    );
-
-                    return false;
-                }
-                machineInputs = preparedMachines;
-            }
-
-            // Candidate refusals precede arena preparation, which carries the boot-sized session lanes. Nothing
-            // else crosses from the old layout but its key ledger: the candidate's declared rows settle at this tick.
-            StateArena? rebuildArena = null;
-            var installed = candidate;
-            // A reload re-seeds the state rows its source changed and keeps every other row's live values, as a
-            // mutation's install does: the live arena itself when no row changed, otherwise a replacement born with
-            // the changed rows that loads the rest. A load or a reset, and a reload that changes the section beside
-            // its rows, installs the document's state whole.
-            var reloadEdit = ((request.Kind == WorldRebuildKind.Reload) ? NameReloadEdit(candidate: candidate) : null);
-
-            if (reloadEdit is { } stateEdit) {
-                candidate = stateEdit.Candidate;
-                installed = candidate;
-                if (Host.KeepsArena(candidate: candidate)) {
-                    rebuildArena = Host.Arena;
-                    stateKept = ", state kept";
-                } else if (!Host.TryPrepareArenaReplacement(
-                    definition: candidate,
-                    edit: stateEdit,
-                    prepared: out var editArena,
-                    reason: out var editReason,
-                    settled: out var settledEdit
-                )) {
-                    RejectRebuild(
-                        connectionId: connectionId,
-                        correlationId: correlationId,
-                        reason: $"the state section does not load into an arena: {editReason}",
-                        verb: verb
-                    );
-
-                    return false;
-                } else {
-                    rebuildArena = editArena;
-                    installed = settledEdit;
-                    stateKept = $", state rows re-seeded {stateEdit.Named!.Count} kept {stateEdit.Carried!.Count}";
-                }
-            } else if (!Host.ReloadsArenaInPlace(definition: candidate)) {
-                if (!Host.TryPrepareArenaReplacement(
-                    definition: candidate,
-                    prepared: out var preparedArena,
-                    reason: out var arenaReason,
-                    settled: out var settledCandidate
-                )) {
-                    RejectRebuild(
-                        connectionId: connectionId,
-                        correlationId: correlationId,
-                        reason: $"the state section does not load into an arena: {arenaReason}",
-                        verb: verb
-                    );
-
-                    return false;
-                }
-
-                rebuildArena = preparedArena;
-                installed = settledCandidate;
-            }
-
-            if (!Host.Input.TryValidateDefinition(installed, rebuildArena, out var inputModeReason, fresh: (request.Kind != WorldRebuildKind.Reload))) {
-                RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: inputModeReason, verb: verb);
-                return false;
-            }
-
-            var authorityAdmitted = (keepAuthority
-                ? Host.GrantTable.TryPrepareDocument(actor: principal, candidate: installed, current: priorDefinition, grantsWrite: false, prepared: out var authority, reason: out var authorityReason)
-                : Host.GrantTable.TryPrepareReset(actor: principal, candidate: installed, current: priorDefinition, prepared: out authority, reason: out authorityReason));
-
-            if (!authorityAdmitted) {
-                RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: authorityReason, verb: verb);
-                return false;
-            }
-            if (request.Kind != WorldRebuildKind.Reload) { Host.Input.Restart(); }
-            SwapSolids(solids: rebuildSolids);
-            // A whole-document rebuild restarts scalar state and lattice stores together. Preserving one while
-            // reseeding the other can duplicate finite stores; live mutations and checkpoints retain their own paths.
-
-            Install(
-                authority: authority!,
-                arena: rebuildArena,
-                compilation: compilation,
-                continuity: ((reloadEdit is null) ? WorldArenaContinuity.Load : WorldArenaContinuity.Edit),
-                definition: installed,
-                products: products,
-                rebuildKind: request.Kind
-            );
-            AdoptProductInputs(addons: addonInputs, envelope: envelopeInputs, machines: machineInputs);
-            NarrateProducts(plan: products, population: products.RebuildsPopulation);
-            // A lattice keeps its cells through an install whose state it kept; only a row whose draw pass the source
-            // changed repaints. An install of the document's state whole restarts every lattice with it.
-            if (reloadEdit is null) {
-                Host.ReseedLatticeFields(definition: installed);
-            } else {
-                Host.RepaintChangedLatticeDraws(current: installed, previous: priorDefinition);
-            }
-
-            if (rebuildAddonPlan is not null) {
-                Host.Addons!.Commit(plan: rebuildAddonPlan);
-                rebuildAddonPlanCommitted = true;
-
-                if (newRebuildTickWrittenEntity is not null) {
-                    Host.AdoptContentionArrays(
-                        collided: newRebuildTickCollided!,
-                        entity: newRebuildTickWrittenEntity,
-                        principal: newRebuildTickWrittenPrincipal!
-                    );
-                }
-            }
-
-            if (rebuildMachinePlan is not null) {
-                Host.Machines.Commit(plan: rebuildMachinePlan);
-                rebuildMachinePlanCommitted = true;
-            }
-        } finally {
-            if (!rebuildAddonPlanCommitted) {
-                rebuildAddonPlan?.Dispose();
-            }
-
-            if (!rebuildMachinePlanCommitted) {
-                rebuildMachinePlan?.Dispose();
-            }
+        if (reloadEdit is not { } stateEdit) {
+            _ = TryPrepareWholeArena(candidate: candidate, arena: out rebuildArena, reason: out arenaReason, settled: out installed);
+        } else if (Host.KeepsArena(candidate: stateEdit.Candidate)) {
+            installed = stateEdit.Candidate;
+            rebuildArena = Host.Arena;
+            arenaReason = string.Empty;
+            stateKept = ", state kept";
+        } else if (Host.TryPrepareArenaReplacement(definition: stateEdit.Candidate, edit: stateEdit, prepared: out rebuildArena, reason: out arenaReason, settled: out installed)) {
+            stateKept = $", state rows re-seeded {stateEdit.Named!.Count} kept {stateEdit.Carried!.Count}";
+        } else {
+            arenaReason = $"the state section does not load into an arena: {arenaReason}";
         }
+        if (arenaReason.Length != 0) {
+            RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: arenaReason, verb: verb);
+            return false;
+        }
+        if (!TryStageInstall(
+            request: new InstallRequest(Candidate: installed, Current: priorDefinition, Kind: WorldInstallKind.Full, Principal: principal, Products: products) {
+                Admission = admitted,
+                Arena = rebuildArena,
+                Compilation = compilation,
+                Continuity = ((reloadEdit is null) ? WorldArenaContinuity.Load : WorldArenaContinuity.Edit),
+                Rebuild = request.Kind,
+                ResetAuthority = !keepAuthority,
+            },
+            reason: out var stageReason,
+            stage: out var stage
+        )) {
+            RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: stageReason, verb: verb);
+            return false;
+        }
+        CommitInstall(stage: stage);
 
         // A new base starts a fresh deal lifecycle, even when its source rows equal the previous session's.
         // Keeping a completed memo would skip materialization after reset or a live replay drive. A reload merges over
@@ -992,18 +769,6 @@ public sealed partial class WorldDocument {
             Host.GrantTable.EndSessionsForRebuild();
         }
 
-        // Finish runs here, AFTER the candidate's own grants have installed, never earlier: its capability
-        // disclosure narration is computed lazily against the LIVE grant table at the moment each line actually
-        // prints (see WorldAddonRuntime.Finish), so a rebuild that also moves Grants reports what the addon is
-        // ACTUALLY granted under the candidate, never a mount report pinned to the table this rebuild just replaced.
-        if (rebuildAddonPlanCommitted) {
-            Host.Addons!.Finish(plan: rebuildAddonPlan!);
-        }
-
-        if (rebuildMachinePlanCommitted) {
-            Host.Machines.Finish(plan: rebuildMachinePlan!);
-        }
-
         // Load moves the undo base. Reload moves the independent source revision and appends to the undo history.
         string history;
 
@@ -1020,6 +785,10 @@ public sealed partial class WorldDocument {
             history = AcceptReload(request, next, contentHash, journalPatch, WorldPrivateDrawKeys.Positions(m_definition));
             Host.PipelineSources = rebuildPipelineSources;
         }
+        // After the candidate's own grants installed and the peers' were re-minted: an addon's capability disclosure
+        // reads the live grant table as each line prints, so a rebuild that moves grants reports what the addon holds
+        // under the candidate.
+        FinishInstall(stage: stage);
 
         var message = $"{verb} applied — {history}{stateKept}{changedMembers}{DescribeConflicts(conflicts: conflicts)}";
 
@@ -1144,7 +913,7 @@ public sealed partial class WorldDocument {
         var stateCells = Host.PublishedCellCount(full: !consumeContinuity);
         var cellCount = (latticeDeltas.Count + stateCells);
 
-        if (m_snapshotCells.Length < cellCount) { Array.Resize(array: ref m_snapshotCells, newSize: ((int)(((uint)cellCount)).NextPowerOfTwo())); }
+        ArrayCapacity.EnsureLength(ref m_snapshotCells, cellCount);
         var fieldCells = m_snapshotCells.AsMemory(length: cellCount, start: 0);
 
         for (var index = 0; (index < latticeDeltas.Count); index++) {
@@ -1308,8 +1077,8 @@ public sealed partial class WorldDocument {
     // assignment, motion, producer, seat kit, spawns) recompile the population's fixed tables and live bodies; the
     // scene/screens rebuild on the client through the delivered definition, and cameras/render/population defaults are
     // document-only.
-    internal void Install(WorldDefinition definition, WorldProductPlan products, WorldGrants.PreparedAuthorityTransition authority, WorldRuleCompilation? compilation = null, StateArena? arena = null,
-        WorldRebuildKind? rebuildKind = null, WorldArenaContinuity? continuity = null) {
+    private void Install(WorldDefinition definition, WorldProductPlan products, WorldGrants.PreparedAuthorityTransition authority, WorldRuleCompilation? compilation, StateArena? arena,
+        WorldRebuildKind? rebuildKind, WorldArenaContinuity continuity) {
         var rebuildPopulation = products.RebuildsPopulation;
 
         Host.Input.PrepareCameraReconfigure(definition);
@@ -1320,8 +1089,7 @@ public sealed partial class WorldDocument {
         MarkDefinitionDeliveryPending();
         AdoptDefinition(definition: definition);
         Host.InputHold.Reconfigure(settings: definition.CompiledInputHold);
-        definition = Host.RecompileRules(arena: arena, compilation: compilation, definition: definition,
-            continuity: (continuity ?? (rebuildKind.HasValue ? WorldArenaContinuity.Load : WorldArenaContinuity.Edit)));
+        definition = Host.RecompileRules(arena: arena, compilation: compilation, continuity: continuity, definition: definition);
         // Unconditional, like RecompileRules above: a group/member count is capacity-bounded, so a full resync costs
         // nothing on the ticks that never touch the groups section, and unconditional is what keeps membership
         // expansion CHECK-TIME correct without a bespoke "did this mutation touch Groups" classification to maintain.
@@ -1672,9 +1440,9 @@ public sealed partial class WorldDocument {
         }
     }
 
-    // Adopt a wholesale-rebuilt field (a swap/undo), bumping the revision when the field actually moved so the status
-    // read-back tracks it. A swap into an analytic world clears the field.
-    internal void SwapSolids(WorldSolidField? solids) {
+    // Adopts the field an install staged, bumping the revision when the field moved so the status read-back tracks it.
+    // A swap into an analytic world clears the field.
+    private void SwapSolids(WorldSolidField? solids) {
         if (!ReferenceEquals(
             objA: solids,
             objB: m_solids
@@ -2321,7 +2089,7 @@ public sealed partial class WorldDocument {
     // a limit on how many a guest may drive. Past it, ReportContention's defensive length check stops recording new
     // entities and contention reporting saturates. Every array stays null when the capacity did not move, so an
     // addon-affecting mutation that leaves MountedCount unchanged allocates nothing here either.
-    internal void StageAddonContentionArrays(int mountedCount, out int[]? entity, out Principal[]? principal, out bool[]? collided) {
+    private void StageAddonContentionArrays(int mountedCount, out int[]? entity, out Principal[]? principal, out bool[]? collided) {
         var capacity = (Host.Population.LocalSeatCount + (mountedCount * 2));
 
         if (capacity == Host.TickWrittenEntity.Length) {

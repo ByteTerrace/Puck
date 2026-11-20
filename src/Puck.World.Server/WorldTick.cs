@@ -123,11 +123,10 @@ public sealed partial class WorldTick {
     // Per-body "an intent was denied last drain" latch, so a revoked driver that keeps submitting logs its loud drop
     // ONCE per denial episode (reset when an allowed intent for that body arrives) rather than once per tick.
     private readonly bool[] m_driveDenied;
-    // The tick-denominated musical clock and its event-driven segment director, compiled once at construction from
-    // the FIRST declared definition.Music row (a world authoring none carries neither). Stepped in Step, right
-    // after m_events.Collect — see the call site's own remarks for the projection order this depends on.
+    // The tick-denominated musical clock, compiled once at construction from the FIRST declared definition.Music row
+    // (a world authoring none has none). The score's segments, layers and embellishments are each listener's own
+    // (WorldAudioDirector), stepped from what it is delivered; the authority owns only the grid they share.
     private readonly Puck.Audio.Simulation.MusicClock? m_musicClock;
-    private readonly Puck.Audio.Simulation.MusicDirector? m_musicDirector;
     private readonly string? m_musicContentHash;
     // A federated player's device image is replicated state, not a packet-rate-shaped impulse. One authenticated
     // intent stream owns each slot at a time and the destination republishes its latest image on every authority
@@ -177,9 +176,6 @@ public sealed partial class WorldTick {
     /// <summary>Gets the tick-denominated musical clock, or <see langword="null"/> for a world authoring no
     /// <c>music</c> row.</summary>
     internal Puck.Audio.Simulation.MusicClock? MusicClock => m_musicClock;
-    /// <summary>Gets the event-driven segment director, or <see langword="null"/> for a world authoring no
-    /// <c>music</c> row.</summary>
-    internal Puck.Audio.Simulation.MusicDirector? MusicDirector => m_musicDirector;
     // A load can replace the document's score without replacing this boot-compiled runtime. Such a checkpoint
     // cannot reconstruct the running graph from its embedded definition.
     internal bool MusicMatchesDefinition => string.Equals(
@@ -217,7 +213,7 @@ public sealed partial class WorldTick {
 
     /// <summary>Initializes the facade over the server it advances and the document it boots on.</summary>
     /// <param name="host">The owning server.</param>
-    /// <param name="definition">The boot document, whose first <c>music</c> row compiles the clock and director.</param>
+    /// <param name="definition">The boot document, whose first <c>music</c> row compiles the clock.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">A validated music row does not resolve.</exception>
     internal WorldTick(WorldServer host, WorldDefinition definition) {
@@ -273,7 +269,6 @@ public sealed partial class WorldTick {
                 beatsPerBar: (tempo.BeatsPerBar ?? 4),
                 ticksPerBeat: tempo.TicksPerBeat
             );
-            m_musicDirector = new Puck.Audio.Simulation.MusicDirector(graph: MusicDirectorFactory.CompileGraph(document: score));
         }
     }
 

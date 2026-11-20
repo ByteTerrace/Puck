@@ -198,6 +198,73 @@ public sealed class HostAdmissionLawTests {
         Assert.Equal(expected: (8.0, 6.8), actual: (Math.Round(split.ResidentGrowthGb, 6), Math.Round(unsplit.ResidentGrowthGb, 6)));
         Assert.Equal(expected: (4.8, 6.0, 6.0), actual: (new HostRunningStart(Id: 2, Kind: HostStartKind.WindowedWorld, PrivateGb: 10, PrivateResidentGb: 4.8, WorkingSetGb: 6).ResidentGb, new HostRunningStart(Id: 3, Kind: HostStartKind.WindowedWorld, PrivateGb: 10, WorkingSetGb: 6).ResidentGb, new HostRunningStart(Id: 2, Kind: HostStartKind.WindowedWorld, PrivateGb: 10, PrivateResidentGb: 4.8, WorkingSetGb: 6).HeldGb));
     }
+    // A heavy suite that hangs stops using CPU while its private bytes move by more than a material step (a collection, a
+    // timer): the growth it was admitted for never plateaus by memory alone. After a plateau without CPU use admission
+    // expects nothing more of it, so a start the commit headroom covers beside what it holds is admitted.
+    [Fact]
+    public void AHungStartWhosePrivateBytesWobbleStopsHoldingBackTheStartsBesideIt() {
+        var clock = new GateClock();
+        var tracker = new HostStartTracker();
+
+        // 12 GB of commit headroom: a heavy suite's 10 GB peak fits beside a start holding 3.9 GB, its 6.1 GB of unspent
+        // growth on top does not.
+        HostStartDemand Read(int step) => tracker.Judge(reading: Sample(commit: 70, limit: 40, starts: [new(Id: 7044, Kind: HostStartKind.HeavySuite, PrivateGb: ((step % 2 == 0) ? 3.9 : 3.8), StartTicks: 7, PrivateResidentGb: 3.0, CpuSeconds: (53 + (0.01 * step)))]), kind: HostStartKind.HeavySuite, thresholds: Thresholds, clock: clock, reserve: false);
+
+        Assert.False(condition: Read(0).CommitCovered);
+
+        for (var step = 1; (step < 12); step++) {
+            clock.Advance(TimeSpan.FromSeconds(seconds: 20));
+
+            var demand = Read(step);
+
+            if (clock.GetElapsedTime(0) >= HostStartTracker.Plateau) {
+                Assert.Equal(expected: (true, 0.0), actual: (demand.CommitCovered, demand.GrowthGb));
+            }
+        }
+    }
+    // A start that uses CPU is never idle however flat its memory, and the idle mark is the machine's: a run that goes quiet
+    // is marked once, a heavy slot opens, and the first CPU it uses again takes the mark away.
+    [Fact]
+    public void AnIdleMarkFollowsTheStartsCpuAndIsSharedUnderTheLeaseRoot() {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        var clock = new GateClock();
+        var tracker = new HostStartTracker(directory.RootPath);
+        var ticks = System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks;
+        var cpu = 100.0;
+
+        HostRunningStart Start(DateTimeOffset? idleSince = null) => new(Id: Environment.ProcessId, Kind: HostStartKind.HeavySuite, PrivateGb: 3.9, StartTicks: ticks, CpuSeconds: cpu, IdleSince: idleSince);
+        void Look(HostRunningStart start) => tracker.Judge(reading: Sample(starts: [start]), kind: HostStartKind.Step, thresholds: Thresholds, clock: clock, reserve: false);
+        IdleStart[] Marked() => [.. StartIdleness.Among(root: directory.RootPath, running: new Dictionary<int, long>()).Values];
+
+        // Busy for three minutes: 5 CPU-seconds in every 20, flat memory.
+        for (var step = 0; (step < 9); step++) {
+            Look(Start());
+            clock.Advance(TimeSpan.FromSeconds(seconds: 20));
+            cpu += 5;
+        }
+        Assert.Empty(Marked());
+
+        // Quiet for a plateau and a reading: marked, once, with the time it last used CPU.
+        Look(Start());
+        for (var step = 0; (step < 4); step++) {
+            clock.Advance(TimeSpan.FromSeconds(seconds: 20));
+            Look(Start());
+        }
+
+        var idle = Assert.Single(Marked());
+
+        Assert.Equal(expected: (Environment.ProcessId, HostStartKind.HeavySuite), actual: (idle.ProcessId, idle.Kind));
+
+        // Another observer reads the mark: the start is idle there at once, with no growth reserved.
+        var other = new HostStartTracker(directory.RootPath).Judge(reading: Sample(commit: 70, limit: 40, starts: [Start(idleSince: idle.Since)]), kind: HostStartKind.HeavySuite, thresholds: Thresholds, clock: clock, reserve: false);
+
+        Assert.Equal(expected: (true, 0.0), actual: (other.CommitCovered, other.GrowthGb));
+
+        // CPU use resumes: the mark goes.
+        cpu += 5;
+        Look(Start(idleSince: idle.Since));
+        Assert.Empty(Marked());
+    }
     // The operating system answers a process's private working set, for this process and for another one the same user runs,
     // and it never exceeds the process's whole working set.
     [Fact]

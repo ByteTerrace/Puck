@@ -185,6 +185,7 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SdfVm.SdfMeshHistory.ProcessWork);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SdfVm.SdfRowChecks.ProcessWork);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SdfVm.SdfCaptureWork.ProcessWork);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SdfVm.SdfCadenceWork.ProcessWork);
 
         // The owned-world catalog (files under the state root; the storage.* verbs sync it to the per-user cloud
         // container): loaded once at startup, malformed documents refused by name — the roster and the settings verbs
@@ -262,6 +263,9 @@ public static class WorldBootComposition {
             speech: sp.GetRequiredService<WorldSpeechClock>(),
             evaluator: sp.GetRequiredService<IOverlayPredicateEvaluator>()
         ));
+        // The music read-backs read the director's delivered score and the authority's clock, neither of which needs a
+        // device, so a headless script reads music.state as a windowed one does.
+        services.AddSingleton<ICommandModule, WorldMusicCommandModule>();
         services.AddSingleton(implementationFactory: static sp => {
             var gamepads = sp.GetService<GamepadManager>();
 
@@ -1633,7 +1637,7 @@ public static class WorldBootComposition {
         services.AddSingleton<ICommandModule, HostMemoryCommandModule>();
         // world.lockstep: the window pump presents in lockstep with the simulation, as the offscreen host always does.
         services.AddSingleton<ICommandModule, WorldLockstepCommandModule>();
-        // The audio READ-BACK + lever surface — world.speakers/audio.state/speaker.state/world.volume/
+        // The audio READ-BACK + lever surface — world.speakers/audio.state/audio.mix/speaker.state/world.volume/
         // audio.emitters. The rows are written through world.row.set/world.row.remove over
         // speakers/tunes/patches/audio. Presentation-only: injects the audio device render service directly.
         services.AddSingleton<ICommandModule, WorldAudioCommandModule>();

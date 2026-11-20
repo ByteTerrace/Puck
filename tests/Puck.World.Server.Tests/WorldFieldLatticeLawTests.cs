@@ -357,7 +357,7 @@ public sealed class WorldFieldLatticeLawTests {
 
         Assert.True(condition: observed.Rejected);
         Assert.Contains(
-            expectedSubstring: "restored field runtime is incompatible",
+            expectedSubstring: "the field runtime is incompatible",
             actualString: observed.Message,
             comparisonType: StringComparison.Ordinal
         );

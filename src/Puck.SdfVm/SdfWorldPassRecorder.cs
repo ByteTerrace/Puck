@@ -589,7 +589,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     Follow();
                     m_owner.Begin(residency: m_view.Residency);
                     var tables = m_view.Residency.Staged(context: in context);
-                    var cascades = SdfMeshShadowCascades.Fit(frame: m_view.Residency.Frame!, view: m_view.View);
+                    var cascades = tables.CascadesOf(frame: m_view.Residency.Frame!, view: m_view.View);
 
                     return (!cascades.Holds(index: CascadeEntry) || ((PartDrawCount(tables: tables) == 0) && TargetsHoldClear));
                 }
@@ -729,7 +729,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             ? m_owner.RecordFar(
                 counts: frame.RateCounts,
                 drawsStatic: out drawsStatic,
-                fresh: SdfMeshShadowCascades.Fit(frame: frame, texels: boundTexels, view: view)[1],
+                fresh: tables.CascadesOf(frame: frame, texels: boundTexels, view: view)[SdfMeshShadowCascades.FarEntry],
                 instance: m_context.Instance,
                 layer: new SdfFarStaticLayer(Held: HasFarStatic, Revision: tables.StaticDrawRevision, Written: StaticWritten(target: recording.Outputs[0].Owned)),
                 written: LayersWritten(target: recording.Outputs[0].Owned)
@@ -747,12 +747,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfDistantDraw? distantDraw = null;
 
         if (m_part == SdfWorldPackage.Parts.ShadowDistant) {
-            _ = m_owner.CascadesOf(distantTexels: boundDistantTexels, frame: frame, instance: m_context.Instance, texels: boundTexels, view: view);
+            _ = m_owner.CascadesOf(distantTexels: boundDistantTexels, frame: frame, instance: m_context.Instance, tables: tables, texels: boundTexels, view: view);
             distantDraw = m_owner.RecordDistant(counts: frame.RateCounts, hasBack: HasDistantBack, instance: m_context.Instance, revision: tables.StaticDrawRevision);
             tables.CastersRead();
         }
 
-        var cascades = m_owner.CascadesOf(distantTexels: boundDistantTexels, frame: frame, instance: m_context.Instance, texels: boundTexels, view: view);
+        var cascades = m_owner.CascadesOf(distantTexels: boundDistantTexels, frame: frame, instance: m_context.Instance, tables: tables, texels: boundTexels, view: view);
         var drawCamera = ((distantDraw is { } drawn) ? drawn.Camera : (IsShadowCascade ? cascades[CascadeEntry] : default));
 
         SdfFrameBlock.WriteMeshShadows(block: recording.PassBlock, cascades: in cascades);

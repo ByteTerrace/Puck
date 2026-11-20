@@ -35,7 +35,14 @@ public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, d
 /// (<see cref="Puck.Hosting.HostMemory.PrivateResidentBytes"/>): the resident pages of its private regions, a graphics driver's
 /// write-combined host views included, without the mapped files and images the system shares and reclaims; NaN when the
 /// reading does not report it.</param>
-public readonly record struct HostRunningStart(int Id, HostStartKind Kind, double PrivateGb, bool Ready = false, long StartTicks = 0, double WorkingSetGb = double.NaN, double PrivateResidentGb = double.NaN) {
+/// <param name="CpuSeconds">The CPU time the process has used in total, in seconds; NaN when the reading does not report it,
+/// which never counts the process as idle.</param>
+/// <param name="IdleSince">When the process was last seen using CPU, from the idle mark another observer recorded
+/// (<see cref="StartIdleness"/>), or <see langword="null"/> when none marks it idle.</param>
+public readonly record struct HostRunningStart(int Id, HostStartKind Kind, double PrivateGb, bool Ready = false, long StartTicks = 0, double WorkingSetGb = double.NaN, double PrivateResidentGb = double.NaN, double CpuSeconds = double.NaN, DateTimeOffset? IdleSince = null) {
+    /// <summary>Gets a phrase for a reading to append when the process is idle, such as <c> idle since 12:03:00Z</c>; empty
+    /// when none marks it idle.</summary>
+    public string IdleNote => ((IdleSince is { } since) ? string.Create(provider: CultureInfo.InvariantCulture, handler: $" idle since {since.UtcDateTime:HH:mm:ss}Z") : string.Empty);
     /// <summary>Gets the physical memory the process needs resident now, in gigabytes, the quantity admission judges against
     /// free memory: its private working set; its whole working set when the reading carries no private working set; its
     /// private bytes when it carries neither. Each stand-in is never less than the quantity it replaces, so a reading that

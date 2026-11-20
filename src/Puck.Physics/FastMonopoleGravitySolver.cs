@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 
 namespace Puck.Physics;
@@ -172,10 +173,7 @@ public sealed class FastMonopoleGravitySolver : IGravitySolver {
             indices: m_sourceIndices
         );
 
-        GravityOctree.EnsureNodeCapacity(
-            nodes: ref m_nodes,
-            required: 1
-        );
+        ArrayCapacity.EnsureLength(ref m_nodes, 1);
         m_nodeSlotCount = 1;
         var builder = new OctreeBuilder(owner: this);
 

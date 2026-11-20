@@ -202,13 +202,4 @@ public sealed class WorldSourceWatch {
         LastError = error;
         if (error is not null) { Report?.Invoke(error, true); }
     }
-    /// <summary>Returns and publishes an ordinary reload refusal without changing the running world.</summary>
-    /// <param name="diagnostic">The loader or validator's diagnostic, including any source location.</param>
-    /// <returns>The refused command result.</returns>
-    public CommandResult Refuse(string diagnostic) {
-        var result = CommandResult.Error(output: $"[world.reload: {diagnostic}]");
-
-        NoteResult(result: result);
-        return result;
-    }
 }

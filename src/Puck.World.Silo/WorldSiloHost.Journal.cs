@@ -9,7 +9,7 @@ public sealed partial class WorldSiloHost {
     private const long JournalBacklogBytes = 32L * 1024 * 1024;
 
     private (Action? Commit, string? Refusal) PrepareJournalMutation(RowBookkeeping row, WorldJournalEntry entry) {
-        if (row.PersistenceBlocked || row.Initializing || row.Released) {
+        if (row.Publications.Blocked || row.Initializing || row.Released) {
             return (null, "the authority journal is unavailable");
         }
         var limit = m_definition.Lifecycle?.JournalBacklogLimit ?? WorldSiloLifecycle.DefaultJournalBacklogLimit;
@@ -46,36 +46,24 @@ public sealed partial class WorldSiloHost {
         row.JournalBatch = [];
         row.JournalBatchBytes = 0;
 
-        lock (row.TailGate) {
-            var previous = row.JournalTail;
-            row.JournalTail = Task.Run(() => AppendJournalBatchAsync(row, row.Identity, entries, bytes, previous));
-        }
-    }
+        // These edits are already live, so the queue blocks the activation when their record does not land.
+        var append = row.Publications.Enqueue(live: true, write: fence => m_store.AppendJournalBatchAsync(row.Identity, entries, CancellationToken.None, fence));
 
-    private async Task AppendJournalBatchAsync(RowBookkeeping row, WorldAuthorityIdentity identity,
-        List<WorldAuthorityJournalEntry> entries, long bytes, Task previous) {
-        WorldAuthorityStoreOutcome outcome;
-        try {
-            await ObservePersistenceAsync(previous, CancellationToken.None).ConfigureAwait(false);
-            outcome = row.PersistenceBlocked
-                ? WorldAuthorityStoreOutcome.RecoveryRequired("This activation must recover before publishing again.")
-                : await m_store.AppendJournalBatchAsync(identity, entries, CancellationToken.None, row.Fence).ConfigureAwait(false);
-            ObservePublication(row, outcome);
-        } catch (Exception error) {
-            outcome = WorldAuthorityStoreOutcome.Failed(error.Message);
-        }
-        // These edits are already live. A later crossing or checkpoint must not be published past a hole.
-        if (!outcome.Ok) { row.PersistenceBlocked = true; }
-        Post(() => {
-            if (!m_rows.TryGetValue(identity.World.Value, out var current) || !ReferenceEquals(current, row)) { return; }
-            row.PendingJournalAppends -= entries.Count;
-            row.PendingJournalBytes -= bytes;
-            row.JournalTimestamp = m_clock.GetTimestamp();
-            row.LastJournalOutcome = outcome.Ok ? "ok" : $"failed ({outcome.Detail})";
-            if (outcome.Ok) {
-                row.JournalBytesWritten += outcome.JournalBytesWritten;
-                row.JournalMutationsWritten += entries.Count;
-            }
-        });
+        _ = append.ContinueWith(
+            continuationAction: landed => Post(() => {
+                if (!m_rows.TryGetValue(row.Identity.World.Value, out var current) || !ReferenceEquals(current, row)) { return; }
+                var outcome = landed.Result;
+
+                row.PendingJournalAppends -= entries.Count;
+                row.PendingJournalBytes -= bytes;
+                row.JournalTimestamp = m_clock.GetTimestamp();
+                row.LastJournalOutcome = outcome.Ok ? "ok" : $"failed ({outcome.Detail})";
+                if (outcome.Ok) {
+                    row.JournalBytesWritten += outcome.JournalBytesWritten;
+                    row.JournalMutationsWritten += entries.Count;
+                }
+            }),
+            scheduler: TaskScheduler.Default
+        );
     }
 }

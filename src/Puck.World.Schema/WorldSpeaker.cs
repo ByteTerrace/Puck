@@ -261,8 +261,8 @@ public sealed record WorldAudioCue(
         VoiceBabble,
     ];
     /// <summary>The sense-mappable subset of <see cref="EventTokens"/> a <c>puck.music.v1</c>
-    /// transition/layer/embellishment <c>when</c> field may name — exactly the tokens the director compiler
-    /// (<c>Puck.World.Server.MusicDirectorFactory.ParseFamily</c>) maps to a sim-side sense family. Single-sourced
+    /// transition/layer/embellishment <c>when</c> field may name — exactly the tokens the score compiler
+    /// (<c>Puck.World.Server.MusicDirectorFactory.ParseFamily</c>) maps to a sense family. Single-sourced
     /// here so the validator's refusal and the compiler's mapping cannot drift: a cue-only token
     /// (<see cref="GrantDenied"/>, <see cref="MutationApplied"/>, <see cref="PlayerJump"/>, …) refuses at world
     /// validation instead of validating cleanly and then compiling to a lane that can never fire. Extend this list

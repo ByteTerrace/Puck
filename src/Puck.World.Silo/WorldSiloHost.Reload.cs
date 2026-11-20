@@ -7,16 +7,24 @@ using Puck.World.Server;
 namespace Puck.World.Silo;
 
 public sealed partial class WorldSiloHost {
+    private const string ReloadVerb = "silo.reload";
+
     private readonly SemaphoreSlim m_reload = new(
         initialCount: 1,
         maxCount: 1
     );
+    // The release each row has taken but not yet made durable: the published definition's pin, and the completion of
+    // the rebuild that applies it. An entry stands until the row's checkpoint and release marker land.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<WorldAuthorityIdentity, (string Hash, Task Applied)> m_pendingReleases = new();
+    // The silo's own reloads register here, under each row's name, and never in the console's table: they are not
+    // console lines, so their verdicts print and count nowhere.
+    private readonly WorldDeferredVerbEchoes m_reloadEchoes = new();
 
-    /// <summary>Applies changed published content through the ordinary reload submission and checkpoints it before recording its release.</summary>
+    /// <summary>Applies changed published content through the reload door and checkpoints it before recording its release.</summary>
     /// <param name="identity">The declared, active world to reconcile.</param>
     /// <param name="cancellationToken">Bounds storage reads, pump admission, and persistence.</param>
-    /// <returns>The canonical content hash of the published definition accepted by this world.</returns>
+    /// <returns>The content pin of the published definition this world accepted: the hash of its bytes as
+    /// published, which the world's source revision carries.</returns>
     public Task<string> ReloadAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
         lock (m_drainLock) {
             if (m_drainTask is not null) { throw new InvalidOperationException(message: "The silo is retiring."); }
@@ -43,14 +51,9 @@ public sealed partial class WorldSiloHost {
                 timeProvider: m_clock,
                 documentDirectory: m_documentDirectory
             );
+            var (published, hash, reason) = await origin.ReadPublishedAsync(cancellationToken: cancellationToken);
 
-            var (definition, reason) = await origin.LoadAsync(
-                identity.World.Value,
-                cancellationToken,
-                keys: WorldPrivateDrawKeys.Preview
-            );
-            if (definition is null) { throw new InvalidDataException(message: reason); }
-            var hash = WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: definition));
+            if (published is not { } bytes) { throw new InvalidDataException(message: reason); }
             var address = WorldOwnedWorldSync.HostedAddressFor(
                 identity.Owner,
                 identity.World,
@@ -72,89 +75,61 @@ public sealed partial class WorldSiloHost {
                 );
                 return hash;
             }
-
-            if (
-                m_pendingReleases.TryGetValue(
-                key: identity,
-                value: out var pending
-            ) &&
-                (pending.Hash != hash)
-            ) {
-                throw new InvalidOperationException(message: "Complete the pending release before publishing another definition.");
+            // An earlier reload's rebuild settles first: what it applied is the revision this one is cut from.
+            if (m_pendingReleases.TryGetValue(key: identity, value: out var earlier)) {
+                await ObservePersistenceAsync(ct: cancellationToken, operation: earlier.Applied);
             }
-            if (!m_pendingReleases.ContainsKey(key: identity)) {
-                var completion = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
-
-                Post(action: () => {
-                    if (cancellationToken.IsCancellationRequested) { completion.TrySetCanceled(cancellationToken: cancellationToken); return; }
-                    try {
-                        if (
-                            IsDraining ||
-                            !Instances.TryGet(
-                            identity.World.Value,
-                            out var row
-                        ) ||
-                            (row is null) ||
-                            row.Server.IsRetiring
-                        ) { throw new InvalidOperationException(message: "World is inactive or retiring."); }
-                        // Compare the activation's binding: a recovered checkpoint may advertise the prior deployment.
-                        if (
-                            (row.Federation.Subject != FederationSubject(definition: definition, world: identity.World)) ||
-                            (row.ListenEndpoint != definition.Host.Listen) ||
-                            (row.AdvertisedEndpoint != definition.Host.Authority)
-                        ) {
-                            throw new InvalidOperationException(message: "Changing a world's network binding requires a fresh activation.");
-                        }
-                        // A crash can leave the rebuilt checkpoint durable before its release marker.
-                        // Its authored definition already matches: retain recovered simulation state.
-                        if (WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: row.Server.Definition)) == hash) {
-                            m_pendingReleases[identity] = (hash, completion.Task);
-                            completion.TrySetResult();
-                            return;
-                        }
-                        long correlation = -1;
-
-                        void Observe(WorldEditEcho echo) {
-                            if (
-                                (echo.Kind != WorldEditEchoKind.Rebuild) ||
-                                (echo.ConnectionId != SubmissionEnvelope.LocalConnectionId) ||
-                                (echo.CorrelationId != correlation)
-                            ) { return; }
-                            row.Server.EchoTap -= Observe;
-                            if (echo.Rejected) {
-                                m_pendingReleases.TryRemove(
-                                key: identity,
-                                value: out _
-                            ); completion.TrySetException(exception: new InvalidOperationException(message: echo.Message));
-                            } else { completion.TrySetResult(); }
-                        }
-                        row.Server.EchoTap += Observe;
-                        try {
-                            m_pendingReleases[identity] = (hash, completion.Task);
-                            correlation = row.Link.SubmitEnvelope(
-                                payload: new WorldSubmissionPayload.Rebuild(Value: new(
-                                    ContentHash: hash,
-                                    Definition: null,
-                                    Delta: WorldReloadDelta.Between(previous: row.Server.SourceRevision.Definition, next: definition),
-                                    Force: false,
-                                    Kind: WorldRebuildKind.Reload,
-                                    Origin: origin.Store
-                                )),
-                                principal: Principal.Console
-                            );
-                            if (correlation == 0) { throw new InvalidOperationException(message: "Reload was refused by the transport."); }
-                        } catch {
-                            m_pendingReleases.TryRemove(
-                            key: identity,
-                            value: out _
-                        ); row.Server.EchoTap -= Observe; throw;
-                        }
-                    } catch (Exception error) { completion.TrySetException(exception: error); }
-                });
-                await completion.Task.WaitAsync(cancellationToken: cancellationToken);
-            } else {
-                await pending.Applied.WaitAsync(cancellationToken: cancellationToken);
+            // The next revision, read as an edit off the pump: the row's authority validates what it installs once.
+            if (!origin.TryPrepareEdit(definition: out var definition, instanceIdentity: identity.World.Value, keys: WorldPrivateDrawKeys.Preview, published: bytes, reason: out reason)) {
+                throw new InvalidDataException(message: reason);
             }
+
+            var applied = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+            Post(action: () => {
+                if (cancellationToken.IsCancellationRequested) { applied.TrySetCanceled(cancellationToken: cancellationToken); return; }
+                try {
+                    if (
+                        IsDraining ||
+                        !Instances.TryGet(
+                        identity.World.Value,
+                        out var row
+                    ) ||
+                        (row is null) ||
+                        row.Server.IsRetiring ||
+                        !m_rows.TryGetValue(key: row.Name, value: out var bookkeeping)
+                    ) { throw new InvalidOperationException(message: "World is inactive or retiring."); }
+                    // Compare the activation's binding: a recovered checkpoint may advertise the prior deployment.
+                    if (
+                        (row.Federation.Subject != FederationSubject(definition: definition!, world: identity.World)) ||
+                        (row.ListenEndpoint != definition!.Host.Listen) ||
+                        (row.AdvertisedEndpoint != definition.Host.Authority)
+                    ) {
+                        throw new InvalidOperationException(message: "Changing a world's network binding requires a fresh activation.");
+                    }
+                    // A source that still composes to the revision the row holds sends nothing: a crash can leave the
+                    // rebuilt checkpoint durable before its release marker, and the recovered state stands.
+                    var pending = bookkeeping.Reloads.Begin(
+                        origin: origin.Store,
+                        principal: Principal.Console,
+                        read: (revision, _) => ValueTask.FromResult(result: new WorldSourceRead(ContentHash: hash, Definition: ((revision.ContentHash == hash) ? null : definition))),
+                        verb: ReloadVerb
+                    );
+
+                    m_pendingReleases[identity] = (hash, applied.Task);
+                    pending.Verdict.OnSettled(continuation: verdict => {
+                        if (verdict.IsError) {
+                            m_pendingReleases.TryRemove(key: identity, value: out _);
+                            applied.TrySetException(exception: new InvalidOperationException(message: verdict.Output));
+                        } else {
+                            applied.TrySetResult();
+                        }
+                    });
+                    // The mailbox runs only when posted to, so the finished reading posts its own submission.
+                    _ = pending.Reading.ContinueWith(continuationAction: _ => Post(action: bookkeeping.Reloads.Poll), scheduler: TaskScheduler.Default);
+                } catch (Exception error) { applied.TrySetException(exception: error); }
+            });
+            await applied.Task.WaitAsync(cancellationToken: cancellationToken);
             if (!await CheckpointNowCoreAsync(
                 ct: cancellationToken,
                 identity: identity

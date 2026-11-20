@@ -50,7 +50,11 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 /// between CLI processes under the lease root (<see cref="ObservationDirectory"/>), where the file decides: a long-lived
 /// process adds what it observed since its last write and keeps nothing else of its own. A live process above the
 /// estimate is still counted at its own usage, without clipping it. Growth tapers to zero over <see cref="Plateau"/> without
-/// a material allocation and returns when growth resumes. A World that reported ready reserves no growth. The system commit
+/// a material allocation and returns when growth resumes. A World that reported ready reserves no growth, and neither does an
+/// idle start, one that used under <see cref="BusyCpuSeconds"/> of CPU over a <see cref="Plateau"/> (a hung test run, whose
+/// private bytes may still move a little): it holds what it holds now and nothing more is expected of it, so one that never
+/// finishes cannot hold the machine's queue. Every tracker that sees the window pass marks the start idle for the machine
+/// (<see cref="StartIdleness"/>), and the probe stops naming it as another process's heavy test run. The system commit
 /// charge already includes live usage. A kind whose expected need alone exceeds the machine is named by
 /// <see cref="HostLoadThresholds.NeverFits"/>, not waited on. An estimate the machine could not hold even with every admitted
 /// start gone (its commit against the headroom plus the live starts' private bytes, its private working set against free
@@ -68,11 +72,17 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 /// </summary>
 public sealed class HostStartTracker {
     private sealed record Reservation(HostStartKind Kind, long At, double Gb, double ResidentGb, HashSet<(int Id, long StartTicks)> Known);
-    private sealed record Observation(HostStartKind Kind, HostPeaks Peaks, double AnchorGb, long GrewAt, long FirstAt);
+    // CpuAnchor is the process's CPU time when BusyAt was last set.
+    private sealed record Observation(HostStartKind Kind, HostPeaks Peaks, double AnchorGb, long GrewAt, long FirstAt, double CpuAnchor, long BusyAt);
 
-    /// <summary>Without material growth for this long, a live process reserves no further growth.</summary>
+    /// <summary>Without material growth for this long, a live process reserves no further growth; without CPU use for this
+    /// long it is idle.</summary>
     public static readonly TimeSpan Plateau = TimeSpan.FromMinutes(1);
     private const double MaterialGrowthGb = 1.0 / 16;
+    /// <summary>The CPU time, in seconds, a process uses to count as busy: under it for a <see cref="Plateau"/> a process is
+    /// idle (<see cref="StartIdleness"/>), whatever its private bytes do. A hung process still wakes for a timer or a
+    /// collection now and then, which this tolerates.</summary>
+    public const double BusyCpuSeconds = 1.0;
     /// <summary>The directory under the lease root that holds each kind's observation window, one file per
     /// <see cref="HostStartKind"/> name. A change to the files' lines takes a new name and raises <see cref="CliLease.Protocol"/>:
     /// every CLI copy on the machine rewrites these files on each reading, so two copies that disagree on the lines must not
@@ -191,14 +201,30 @@ public sealed class HostStartTracker {
             var live = (reading.Starts ?? []);
             var liveIds = new HashSet<(int Id, long StartTicks)>(collection: live.Select(selector: static start => (start.Id, start.StartTicks)));
 
+            // The idle starts: no CPU use for a plateau, which settles a start whatever its private bytes do.
+            HashSet<(int Id, long StartTicks)> idleStarts = [];
+
             foreach (var start in live) {
                 var id = (start.Id, start.StartTicks);
-                var seen = m_seen.GetValueOrDefault(id) ?? new Observation(start.Kind, Reading(start: start), start.PrivateGb, clock.GetTimestamp(), clock.GetTimestamp());
+                var now = clock.GetTimestamp();
+                var seen = m_seen.GetValueOrDefault(id) ?? new Observation(start.Kind, Reading(start: start), start.PrivateGb, now, now, start.CpuSeconds, now);
                 var grew = start.PrivateGb >= seen.AnchorGb + MaterialGrowthGb;
+                var busy = !double.IsFinite(start.CpuSeconds) || !double.IsFinite(seen.CpuAnchor) || (start.CpuSeconds >= (seen.CpuAnchor + BusyCpuSeconds));
+
                 seen = seen with { Peaks = seen.Peaks.Max(other: Reading(start: start)),
-                    AnchorGb = grew ? start.PrivateGb : Math.Min(start.PrivateGb, seen.AnchorGb), GrewAt = grew ? clock.GetTimestamp() : seen.GrewAt };
+                    AnchorGb = grew ? start.PrivateGb : Math.Min(start.PrivateGb, seen.AnchorGb), GrewAt = grew ? now : seen.GrewAt,
+                    CpuAnchor = (busy && double.IsFinite(start.CpuSeconds)) ? start.CpuSeconds : seen.CpuAnchor, BusyAt = busy ? now : seen.BusyAt };
                 m_seen[id] = seen;
-                Record(start.Kind, id, seen.Peaks, settled: (clock.GetElapsedTime(seen.GrewAt) >= Plateau));
+
+                // Another observer's mark counts until this tracker sees the process use CPU itself.
+                var quiet = (clock.GetElapsedTime(seen.BusyAt) >= Plateau) || ((start.IdleSince is not null) && (seen.BusyAt == seen.FirstAt));
+
+                if (quiet) { _ = idleStarts.Add(item: id); }
+                if (m_root is { } root) {
+                    if (busy && (start.IdleSince is not null)) { StartIdleness.Clear(root: root, processId: start.Id, startTicks: start.StartTicks); }
+                    else if (quiet && (start.IdleSince is null)) { StartIdleness.Mark(root: root, start: new IdleStart(Kind: start.Kind, ProcessId: start.Id, Since: (clock.GetUtcNow() - clock.GetElapsedTime(seen.BusyAt)), StartTicks: start.StartTicks)); }
+                }
+                Record(start.Kind, id, seen.Peaks, settled: (quiet || (clock.GetElapsedTime(seen.GrewAt) >= Plateau)));
             }
             foreach (var (id, seen) in m_seen.Where(predicate: pair => !liveIds.Contains(item: pair.Key)).ToArray()) {
                 Record(seen.Kind, id, seen.Peaks, settled: (clock.GetElapsedTime(seen.FirstAt) >= Plateau));
@@ -237,7 +263,7 @@ public sealed class HostStartTracker {
             // system charge and in free memory.
             foreach (var start in live) {
                 var seen = m_seen[(start.Id, start.StartTicks)];
-                var remaining = Math.Max(0, 1 - clock.GetElapsedTime(seen.GrewAt).TotalSeconds / Plateau.TotalSeconds);
+                var remaining = (idleStarts.Contains(item: (start.Id, start.StartTicks)) ? 0 : Math.Max(0, 1 - clock.GetElapsedTime(seen.GrewAt).TotalSeconds / Plateau.TotalSeconds));
                 var expected = Expected(installedRamGb: thresholds.InstalledRamGb, kind: start.Kind);
                 var left = start.Ready ? 0 : (Math.Max(expected.PrivateGb, seen.Peaks.PrivateGb) - start.PrivateGb) * remaining;
                 var residentLeft = start.Ready ? 0 : (Math.Max(expected.ResidentGb, seen.Peaks.ResidentGb) - start.ResidentGb) * remaining;

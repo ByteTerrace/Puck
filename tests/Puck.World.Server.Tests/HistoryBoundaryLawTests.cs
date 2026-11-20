@@ -242,35 +242,28 @@ public sealed class HistoryBoundaryLawTests {
         Assert.Contains(actualString: refusal, expectedSubstring: "content");
     }
     [Fact]
-    public void ASeekPreservesAnArmedMusicTransition() {
+    public void ASeekPreservesTheMusicClock() {
         using var directory = new TemporaryDirectory(prefix: "puck-history-music-");
         var definition = AudioAssetFixtures.ScoredDocument(
             directory: directory,
             musicName: "history-score",
-            segment: new MusicSegmentDocument(
-                Id: "calm",
-                Transitions: [new MusicTransitionDocument(
-                    At: MusicTransitionBoundary.BarEnd, To: "calm", When: WorldAudioCue.SeatJoin
-                )]
-            )
+            segment: new MusicSegmentDocument(Id: "calm", Transitions: null)
         );
         using var harness = new WorldHistoryHarness(definition: definition);
 
         harness.Step();
         var first = harness.Tick;
-        var pending = harness.Fixture.Server.DescribeMusicState();
+        var early = harness.Fixture.Server.DescribeMusicClock();
 
-        Assert.Contains(actualString: pending, expectedSubstring: "pending=calm");
         harness.Steps(count: 45);
         var head = harness.Tick;
-        var transitioned = harness.Fixture.Server.DescribeMusicState();
+        var late = harness.Fixture.Server.DescribeMusicClock();
 
-        Assert.Contains(actualString: transitioned, expectedSubstring: "transitions=1");
-
+        Assert.NotEqual(expected: early, actual: late);
         _ = harness.SeekAndProve(target: first);
-        Assert.Equal(expected: pending, actual: harness.Fixture.Server.DescribeMusicState());
+        Assert.Equal(expected: early, actual: harness.Fixture.Server.DescribeMusicClock());
         _ = harness.SeekAndProve(target: head);
-        Assert.Equal(expected: transitioned, actual: harness.Fixture.Server.DescribeMusicState());
+        Assert.Equal(expected: late, actual: harness.Fixture.Server.DescribeMusicClock());
     }
     [Fact]
     public void AKeyframeKeepsItsOwnAssetDirectoryAcrossLoads() {
@@ -343,7 +336,7 @@ public sealed class HistoryBoundaryLawTests {
             request: new WorldRebuildRequest(Kind: WorldRebuildKind.Load, Definition: null, Origin: new WorldRebuildOrigin.File(Path: other), Force: true));
         harness.StepWithoutInput();
         Assert.Empty(collection: (harness.Fixture.Server.Definition.Music ?? []));
-        Assert.Contains(expectedSubstring: "calm", actualString: harness.Fixture.Server.DescribeMusicState());
+        Assert.Contains(expectedSubstring: "music.clock: elapsedTicks=", actualString: harness.Fixture.Server.DescribeMusicClock());
         harness.History.Off();
         Assert.True(condition: harness.History.TryOn(windowSeconds: WorldHistory.DefaultWindowSeconds, budgetBytes: WorldHistory.DefaultBudgetBytes, refusal: out _));
         harness.StepWithoutInput();

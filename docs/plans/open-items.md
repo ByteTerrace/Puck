@@ -3416,7 +3416,7 @@ that stops compiling.
     `TheIdentityVerbPrintsABuildsIdentityItsPartsAndWhatDiffers`,
     `AStoredDummyADamagedEntryAndAMissingMeshAreReportedAsSuch`).
 - The keep-list the owner approves: exact results and determinism
-  (`Puck.Maths.Tests`' laws; World.Server `MusicReplayReDerivabilityLawTests`,
+  (`Puck.Maths.Tests`' laws; World.Server
   `CrossingReplayLawTests`, `ReplayForkLawTests`,
   `WorldStateHashCompositionLawTests`, `BodyContinuationHashLawTests`;
   World.Games `ContinuationHashLawTests`; State `ArenaHashLawTests`,
@@ -3775,6 +3775,27 @@ their lane order; this packet keeps the single duplicates and leads.
   (`SdfSampledLattice.m_fineGradients`, `m_crossingGradients`,
   `m_crossingRootIndex`). Each moves to `RentedList`/`RentedArrays` as the
   contour's did. The bake-garbage lane holds this now.
+- A host with no job pool prepares a load or reload on the thread that
+  submits it (`WorldDocument.SubmitRebuild` prepares inline unless
+  `WorldServer.Jobs` has workers), and a silo row has none: its reload's
+  reconstruction, merge and one validation, with the neighbour reads that
+  validation makes, run on the silo's step thread. The preparation reads only
+  its capture (`WorldRebuildPreparation`), so a silo row can prepare on the
+  thread pool as the desktop does; the choice wants a flag of its own instead
+  of following the job pool.
+- An accepted reload encodes its whole request on the tick only to report the
+  payload's size in its verdict (`WorldSubmissionCodec.TryEncodeRebuild` in
+  `WorldDocument.ApplyRebuild` and `WorldDocument.ApplyReloadEdit`). The work
+  is proportional to the patch; the sender already knows the size.
+- "Commit a host's plan, then finish it at once" is written at five boot and
+  restore sites (`WorldPersistence.RestoreCheckpointCore`,
+  `WorldPersistence.RestoreAttachedAddons`, `WorldPersistence.RestoreReplayStart`,
+  `WorldServer`'s constructor, `WorldAddonRuntime.TryCreate`). They are not
+  document installs, so they stay outside `WorldDocument.TryStageInstall`; one
+  helper per host would hold the pair.
+- Two private "await a task and swallow its failure" helpers
+  (`LocalControlServer.ObserveAbandonedAsync`, `BoundedMcpTransport.ObserveAsync`)
+  restate `ConfigureAwaitOptions.SuppressThrowing`.
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock
@@ -4319,8 +4340,7 @@ the model.
   a real RGB keyboard's keys on the device-output path.
 - The press ([design](../game/press.md), `worlds/debug/press.puck`) is the first
   typing place, and what it does not do yet is listed there: a seated camera
-  framing, words on the slugs themselves, layers that join on a bar line, and
-  a second seat. The lamp loop (`LampLegendDriver`) has not been run against
+  framing, words on the slugs themselves, and a second seat. The lamp loop (`LampLegendDriver`) has not been run against
   a lamp array.
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
   submits through `chat.whisper` and `chat.log` (`ChatCommandModule`).

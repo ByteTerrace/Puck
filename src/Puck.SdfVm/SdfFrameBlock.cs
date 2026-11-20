@@ -189,6 +189,7 @@ public static partial class SdfFrameBlock {
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     public static void Write(Span<byte> block, in SdfPassValues tables, SdfFrame frame, int view, uint width, uint height) {
         ArgumentNullException.ThrowIfNull(argument: frame);
+        SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Blocks);
 
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
         WritePreviousView(block: block, valid: false, view: default);

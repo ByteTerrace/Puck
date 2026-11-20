@@ -500,6 +500,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             m_tables?.GpuWork.Weigh(share: 0d);
         }
         m_begun = true;
+        m_tables?.ForgetViewInputs();
         m_frameSeconds = Math.Max(val1: frameSeconds, val2: 0);
         m_captured = false;
         m_packed = false;
@@ -969,6 +970,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         if (!(m_film?.Invoke(arg: context) ?? true)) {
             return;
         }
+        // The source's capture may write what the frames these tables hold borrow.
+        m_tables?.ForgetViewInputs();
 
         var converging = HoldsFrame;
         // A capture is written into the residency's own frame that the tables do not hold, so the packed frame, which a

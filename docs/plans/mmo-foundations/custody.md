@@ -803,7 +803,7 @@ revision belong to this lane's commit message.
 - [Authority store][p1]: `WorldAuthorityBlobStore.AcquireActivationAsync` and
   searched publication/fence paths. [Store interface][p9]: searched outcome and method declarations.
 - [Silo crossing log][p2]: `WorldSiloHost.RowCrossingLog`,
-  `AppendCrossingAfterAsync` and `TryRecoverJournal`.
+  `AppendCrossingAsync` and `TryRecoverJournal`.
 - [Session resolver][p3]: `WorldSessionResolver.m_nextGenerationId` and mint sites.
 - [Silo project][p4]: declared Orleans dependency.
 - [Attestation reference][p5] and [admission door][p6]: verification and trust-list parameters.

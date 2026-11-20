@@ -73,7 +73,7 @@ public sealed partial class WorldDocument {
     // ceiling is a refusal rather than a constructor throw; a plan that keeps the field answers the live one. The
     // collision tuning alone leaves the compiled program as it is: when the live field exists and the candidate still
     // needs one, the existing evaluator is re-wrapped with the new scalars.
-    internal bool TryStageSolids(WorldProductPlan products, WorldDefinition candidate, out WorldSolidField? solids, out string reason) {
+    private bool TryStageSolids(WorldProductPlan products, WorldDefinition candidate, out WorldSolidField? solids, out string reason) {
         solids = m_solids;
         reason = string.Empty;
         if (products.Solids.IsEmpty) { return true; }
@@ -99,7 +99,7 @@ public sealed partial class WorldDocument {
     }
 
     // Prepares the addon host against a candidate, recording what it read.
-    internal static bool TryPrepareAddons(IWorldAddonHost addons, WorldDefinition? current, WorldDefinition candidate, out IWorldAddonPreparedPlan? plan, out WorldDocumentInputs inputs, out string? reason) {
+    private static bool TryPrepareAddons(IWorldAddonHost addons, WorldDefinition? current, WorldDefinition candidate, out IWorldAddonPreparedPlan? plan, out WorldDocumentInputs inputs, out string? reason) {
         var recording = WorldDocumentReads.Begin();
 
         try {
@@ -110,7 +110,7 @@ public sealed partial class WorldDocument {
     }
 
     // Prepares the machine host against a candidate, recording what it read.
-    internal bool TryPrepareMachines(WorldDefinition? current, WorldDefinition candidate, out IWorldMachinePreparedPlan? plan, out WorldDocumentInputs inputs, out string? reason, WorldDefinitionAdmission? admission = null) {
+    private bool TryPrepareMachines(WorldDefinition? current, WorldDefinition candidate, out IWorldMachinePreparedPlan? plan, out WorldDocumentInputs inputs, out string? reason, WorldDefinitionAdmission? admission) {
         var recording = WorldDocumentReads.Begin();
 
         try {
@@ -186,24 +186,6 @@ public sealed partial class WorldDocument {
             }
             return true;
         }
-    }
-
-    /// <summary>Returns the plan an undo's install follows: the products whose inputs the restored document changed
-    /// against the live one, by the rule every install shares.</summary>
-    /// <param name="candidate">The restored document.</param>
-    /// <returns>The plan.</returns>
-    internal WorldProductPlan PlanUndo(WorldDefinition candidate) => PlanProducts(candidate: candidate, previous: m_definition);
-
-    /// <summary>Adopts what an undo's installed product builds read and narrates its plan.</summary>
-    /// <param name="products">The plan.</param>
-    /// <param name="addons">What the addon preparation read, or <see langword="null"/> when it was kept.</param>
-    /// <param name="machines">What the machine preparation read, or <see langword="null"/> when it was kept.</param>
-    internal void FinishUndoProducts(WorldProductPlan products, WorldDocumentInputs? addons, WorldDocumentInputs? machines) {
-        AdoptProductInputs(addons: addons, envelope: null, machines: machines);
-        // The replay fitted the envelope over the documents it composed, not over the one installed, so a restored
-        // document that changed what the last fit read is fitted again by the next install.
-        if (!products.Envelope.IsEmpty) { m_envelopeInputs = null; }
-        NarrateProducts(plan: (products with { Envelope = WorldDocumentInputs.None }), population: products.RebuildsPopulation);
     }
 
     // Narrates which products an install rebuilt and which parts of the document moved them.

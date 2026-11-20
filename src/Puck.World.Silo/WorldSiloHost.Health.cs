@@ -44,7 +44,7 @@ public sealed partial class WorldSiloHost {
                     value: out var row
                 )) { completion.TrySetResult(result: $"{world.World}: inactive"); return; }
                 if (
-                    row.PersistenceBlocked ||
+                    row.Publications.Blocked ||
                     row.Released ||
                     row.Initializing ||
                     !Instances.TryGet(

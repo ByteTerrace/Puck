@@ -9,13 +9,13 @@ namespace Puck.SdfVm;
 // publishes into these tables there is no table, the World set binds the dummy buffer, and the volume's parameters are
 // disabled (SdfMeshIrradiance.Publish).
 public sealed partial class SdfWorldTables {
-    private IGpuBuffer? m_meshIrradiance;
+    private readonly GpuFittedBuffer m_meshIrradiance;
     private bool m_meshIrradianceFresh;
     private IGpuBuffer? m_meshIrradianceSource;
     private readonly List<int> m_meshIrradianceSlots = [];
 
     /// <summary>Gets the published irradiance table's device bytes.</summary>
-    public GpuMemoryBytes MeshIrradianceBufferBytes => new(DeviceLocal: m_meshIrradiance?.SizeBytes ?? 0, HostVisible: 0);
+    public GpuMemoryBytes MeshIrradianceBufferBytes => new(DeviceLocal: m_meshIrradiance.Buffer?.SizeBytes ?? 0, HostVisible: 0);
 
     // Stage holds the volume's gate. Only records whose GPU commit completed and whose scene/window still stand enter
     // this list. The table fits the published volume exactly, growing or shrinking with its tier; a replaced table
@@ -23,12 +23,7 @@ public sealed partial class SdfWorldTables {
     // memory. Slots still pending for a replaced table belonged to its layout and are dropped with it.
     internal void PublishMeshIrradiance(IGpuBuffer source, int wordCount, List<int> slots) {
         var bytes = (ulong)wordCount * sizeof(uint);
-        if (m_meshIrradiance is null || m_meshIrradiance.SizeBytes != bytes) {
-            // Admission can refuse the replacement. Keep the old published table until creation succeeds.
-            m_retired.Reserve();
-            var replacement = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf("mesh-irradiance"), sizeBytes: bytes, usage: GpuBufferUsage.Storage);
-            if (m_meshIrradiance is not null) { Retire(m_meshIrradiance); }
-            m_meshIrradiance = replacement;
+        if (m_meshIrradiance.Fit(bytes)) {
             m_meshIrradianceFresh = true;
             m_meshIrradianceSlots.Clear();
             m_bindingRevision++;
@@ -38,7 +33,7 @@ public sealed partial class SdfWorldTables {
     }
 
     private void RecordMeshIrradiance(nint command) {
-        if (m_meshIrradiance is not { } destination || (!m_meshIrradianceFresh && m_meshIrradianceSlots.Count == 0)) { return; }
+        if (m_meshIrradiance.Buffer is not { } destination || (!m_meshIrradianceFresh && m_meshIrradianceSlots.Count == 0)) { return; }
         var recorder = m_gpu.Recorder;
         // A buffer copy writes as CopyWrite and a clear as TransferWrite: Direct3D 12 synchronizes each by its own scope.
         if (m_meshIrradianceFresh) {

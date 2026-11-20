@@ -119,7 +119,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.Equal((2L * scratch), account.ReadAdmission(pool: PhysicalMemory.Device).Promised);
         Assert.True(condition: (account.ReadAdmission(pool: PhysicalMemory.Device).Promised <= limit));
         // The readbacks are host-visible: reserved in the host's pool, a granule each.
-        Assert.Equal((2L * ((long)SdfGpuWork.Granule(bytes: 4UL))), account.ReadAdmission(pool: PhysicalMemory.Host).Promised);
+        Assert.Equal((2L * ((long)GpuFittedBuffer.AllocationSize(GpuBufferSizing.Granule, 0, 4UL))), account.ReadAdmission(pool: PhysicalMemory.Host).Promised);
         Assert.Contains("deferred:1,", work.Describe());
         // It is not offered again while nothing has completed: no job is taken and handed back every step.
         work.Pump(tables: rig.Engine);
@@ -332,7 +332,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             return true;
         }
         public void Record(object job, in SdfGpuWorkRecording recording) =>
-            recording.CopyToReadback(recording.DeviceBuffer(bytes: scratchBytes, part: "scratch", sizing: SdfGpuWorkSizing.Fit, usage: GpuBufferUsage.Storage), 4);
+            recording.CopyToReadback(recording.DeviceBuffer(bytes: scratchBytes, part: "scratch", sizing: GpuBufferSizing.Fit, usage: GpuBufferUsage.Storage), 4);
         public void Complete(object job, SdfGpuWorkReadback readback) => Answers.Add(item: readback);
         public void Abandon(object job) { Abandoned++; Remaining++; }
         public void Dispose() { }

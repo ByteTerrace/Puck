@@ -52,6 +52,15 @@ the scatter. Every diagnostic except the bloom-only view bypasses optical scatte
 and a debug view that is not scene light passes the display pass unencoded
 (`DebugViewModes.ComposesFinal`).
 
+The tables build each view's signature inputs once a frame: its cascade fit and
+its pass block with the hashes every pass group takes of it (`SdfWorldTables.CascadesOf`
+and the memo beside it). The renderer's passes read the fit through
+`SdfWorldTables.CascadesOf`, never `SdfMeshShadowCascades.Fit`. A pass-block value
+taken from the tables belongs in `SdfPassValues`, which the memo compares by value;
+a value read from anywhere else must move the memo's epoch (`ForgetViewInputs`),
+or a pass stands on a stale signature. `world.counters sdf.cadence` counts the
+signatures, blocks and fits.
+
 `Shared/bloom-filter.hlsli` uses cell-edge reflection and conservative cell
 integration. Unit-sum taps alone only preserve constants: edge clamping duplicated
 a corner impulse's energy, and point resampling odd levels changed their mean.

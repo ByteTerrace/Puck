@@ -29,15 +29,17 @@ public sealed partial class HostProbe(string checkoutRoot) {
             return m_leaseRoot;
         }
     }
-    // The Worlds that have reported steady state (WorldReadiness), read from the checkout's shared lease directory; none
-    // when the checkout names no such directory.
-    private IReadOnlySet<(int ProcessId, long StartTicks)> ReadyWorlds(Dictionary<int, (int Parent, DateTime Started)> tree) {
-        if (LeaseRoot is not { } root) { return new HashSet<(int, long)>(); }
+    // The Worlds that have reported steady state (WorldReadiness) and the starts another observer found idle
+    // (StartIdleness), read from the checkout's shared lease directory; none when the checkout names no such directory.
+    private (IReadOnlySet<(int ProcessId, long StartTicks)> Ready, IReadOnlyDictionary<(int ProcessId, long StartTicks), IdleStart> Idle) Marks(Dictionary<int, (int Parent, DateTime Started)> tree) {
+        if (LeaseRoot is not { } root) { return (new HashSet<(int, long)>(), new Dictionary<(int, long), IdleStart>()); }
 
         try {
-            return WorldReadiness.ReadyAmong(root: root, running: tree.Where(predicate: static entry => (entry.Value.Started != DateTime.MinValue)).ToDictionary(keySelector: static entry => entry.Key, elementSelector: static entry => entry.Value.Started.ToUniversalTime().Ticks));
+            var running = tree.Where(predicate: static entry => (entry.Value.Started != DateTime.MinValue)).ToDictionary(keySelector: static entry => entry.Key, elementSelector: static entry => entry.Value.Started.ToUniversalTime().Ticks);
+
+            return (WorldReadiness.ReadyAmong(root: root, running: running), StartIdleness.Among(root: root, running: running));
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            return new HashSet<(int, long)>();
+            return (new HashSet<(int, long)>(), new Dictionary<(int, long), IdleStart>());
         }
     }
 
@@ -71,6 +73,14 @@ public sealed partial class HostProbe(string checkoutRoot) {
             return ((process.PrivateMemorySize64 / 1073741824.0), (process.WorkingSet64 / 1073741824.0));
         } catch (Exception exception) when ((exception is Win32Exception or InvalidOperationException or NotSupportedException)) {
             return (0, double.NaN);
+        }
+    }
+    // The CPU time a process has used in total, in seconds; NaN when the platform will not say.
+    private static double CpuSeconds(Process process) {
+        try {
+            return process.TotalProcessorTime.TotalSeconds;
+        } catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or NotSupportedException) {
+            return double.NaN;
         }
     }
     private static double FreeRamGb() =>
@@ -126,7 +136,7 @@ public sealed partial class HostProbe(string checkoutRoot) {
         string? heavy = null;
         var reuse = 0;
         var self = Environment.ProcessId;
-        var running = new List<(int Id, string Name, string CommandLine, double PrivateGb, double WorkingSetGb)>();
+        var running = new List<(int Id, string Name, string CommandLine, double PrivateGb, double WorkingSetGb, HostStartKind? Kind, double CpuSeconds)>();
         var tree = new Dictionary<int, (int Parent, DateTime Started)>();
 
         foreach (var process in Process.GetProcesses()) {
@@ -144,8 +154,12 @@ public sealed partial class HostProbe(string checkoutRoot) {
                 // The probe never matches itself, whatever its own command line says.
                 if (process.Id != self) {
                     var (privateGb, workingSetGb) = Footprint(process: process);
+                    var name = process.ProcessName;
+                    var commandLine = ProcessInspection.CommandLine(processId: process.Id);
+                    var kind = HostProcesses.RunningStart(commandLine: commandLine, name: name);
 
-                    running.Add(item: (process.Id, process.ProcessName, ProcessInspection.CommandLine(processId: process.Id), privateGb, workingSetGb));
+                    // Only a tracked start pays the handle its CPU time is read through.
+                    running.Add(item: (process.Id, name, commandLine, privateGb, workingSetGb, kind, ((kind is null) ? double.NaN : CpuSeconds(process: process))));
                 }
             }
         }
@@ -155,23 +169,26 @@ public sealed partial class HostProbe(string checkoutRoot) {
         var own = HostProcesses.Descendants(processes: tree, root: self);
 
         List<HostRunningStart> starts = [];
-        var ready = ReadyWorlds(tree: tree);
+        var (ready, idle) = Marks(tree: tree);
 
-        foreach (var (id, name, commandLine, privateGb, workingSetGb) in running) {
+        foreach (var (id, name, commandLine, privateGb, workingSetGb, tracked, cpuSeconds) in running) {
             var label = $"{name} {id.ToString(provider: CultureInfo.InvariantCulture)}";
+            var startTicks = tree[id].Started.ToUniversalTime().Ticks;
+            DateTimeOffset? idleSince = (idle.TryGetValue(key: (id, startTicks), value: out var idleStart) ? idleStart.Since : null);
 
             // Only a tracked start pays the handle its private working set is read through.
-            if (HostProcesses.RunningStart(commandLine: commandLine, name: name) is { } kind) {
-                var startTicks = tree[id].Started.ToUniversalTime().Ticks;
+            if (tracked is { } kind) {
                 var privateResidentGb = ((Puck.Hosting.HostMemory.PrivateResidentBytes(processId: id) is { } bytes) ? (bytes / 1073741824.0) : double.NaN);
 
-                starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb, PrivateResidentGb: privateResidentGb, Ready: ready.Contains(item: (id, startTicks)), StartTicks: startTicks, WorkingSetGb: workingSetGb));
+                starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb, PrivateResidentGb: privateResidentGb, Ready: ready.Contains(item: (id, startTicks)), StartTicks: startTicks, WorkingSetGb: workingSetGb, CpuSeconds: cpuSeconds, IdleSince: idleSince));
             }
 
             if ((holder is null) && !own.Contains(item: id) && HostProcesses.IsGpuWork(commandLine: commandLine, name: name)) {
                 holder = label;
             }
-            if ((heavy is null) && !own.Contains(item: id) && HostProcesses.IsHeavyTest(commandLine: commandLine, name: name)) {
+            // A heavy test run that has gone idle holds the machine's one heavy slot no longer: it is not running its
+            // suite, and the memory it holds is already counted in the headroom a start is admitted by.
+            if ((heavy is null) && (idleSince is null) && !own.Contains(item: id) && HostProcesses.IsHeavyTest(commandLine: commandLine, name: name)) {
                 heavy = label;
             }
             if (HostProcesses.IsReuseNode(commandLine: commandLine, name: name)) {

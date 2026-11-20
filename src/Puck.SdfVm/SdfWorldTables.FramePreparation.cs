@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Gpu;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -9,27 +10,23 @@ public sealed partial class SdfWorldTables {
     // Whether the latest packed frame wrote its slots' update tiers (PackSlotRateCodes).
     private bool m_slotRateCodesPacked;
 
+    private void EnsureDynamicTransformCapacity(int count) {
+        if (count > m_dynamicTransformCapacity) { GrowDynamicTransforms(count); }
+    }
     // Prepares both grown tables before publishing their capacity or retiring any buffer. A failed allocation leaves
     // the previous tables usable, so the next frame can retry the same growth.
-    private void EnsureDynamicTransformCapacity(int count) {
-        if (count <= m_dynamicTransformCapacity) { return; }
+    private void GrowDynamicTransforms(int count) {
         if (count > (SdfProgram.MaxDynamicTransformSlot + 1)) { throw new InvalidOperationException(message: $"The frame needs {count} transform slots, beyond the packed slot representation."); }
-        var bytes = checked((((long)count) * DynamicTransformByteLength));
+        var capacity = (int)GpuCapacity.Grown(m_dynamicTransformCapacity, count, SdfProgram.MaxDynamicTransformSlot + 1, divisor: 1);
+        var bytes = (long)capacity * DynamicTransformByteLength;
 
         // Neither retirement allocates after the region has grown.
         m_retired.Reserve(count: 2);
-        var previous = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: ((ulong)bytes), usage: Puck.Abstractions.Gpu.GpuBufferUsage.Storage);
-
-        try {
+        m_previousDynamicTransforms.Fit((ulong)bytes, previous => {
             Retire(replaced: m_dynamicTransformRegion.Grow(byteCount: bytes), carryingRegion: m_dynamicTransformRegion);
-        } catch {
-            previous.Dispose();
-
-            throw;
-        }
-        Retire(replaced: m_previousDynamicTransforms);
-        m_previousDynamicTransforms = previous;
-        m_dynamicTransformCapacity = count;
+            Retire(previous);
+        });
+        m_dynamicTransformCapacity = capacity;
         m_seedDynamicHistory = true;
         m_dynamicTransformsPacked = false;
         m_bindingRevision++;
@@ -48,8 +45,8 @@ public sealed partial class SdfWorldTables {
         var transforms = frame.DynamicTransforms;
         var moved = frame.MovedTransforms;
 
-        EnsureDynamicTransformCapacity(count: transforms.Count);
         var count = transforms.Count;
+        EnsureDynamicTransformCapacity(count);
         var everything = m_dynamicCursor.Collect(moved?.Changes, frame.MovedTransformsSerial, transforms, count, 0,
             m_owedTransforms, m_reseatedTransforms, force: !m_dynamicTransformsPacked);
 
@@ -281,6 +278,7 @@ public sealed partial class SdfWorldTables {
             condition: m_disposed,
             instance: this
         );
+        ForgetViewInputs();
 
         if (frame.Views.Count == 0) {
             throw new ArgumentException(

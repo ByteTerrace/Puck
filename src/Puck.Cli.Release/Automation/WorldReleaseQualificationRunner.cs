@@ -213,6 +213,15 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
         }
         return ContentPin.Compute(content: JsonSerializer.SerializeToUtf8Bytes(files)).ToString();
     }
+    // The end of a failed packaged engine's output, which the failure carries because the container is gone once the
+    // leg returns and only the runner saw what it wrote.
+    private static string Output(ChildProcessResult exercise) {
+        var error = CliText.Tail(count: 12, text: exercise.Stderr);
+        var output = CliText.Tail(count: 4, text: exercise.Stdout);
+
+        return (((error.Length == 0) ? "; it wrote nothing to standard error" : $"; its standard error ends: {error}") +
+            ((output.Length == 0) ? string.Empty : $"; its standard output ends: {output}"));
+    }
     // One packaged leg: its verdict is a report, or the claim the packaged engine failed. Only a leg that cannot start
     // throws.
     private async Task<LegOutcome> LegAsync(string seed, string name, string image, WorldSiloDefinition definition, string run,
@@ -246,7 +255,7 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
             token: cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false));
         var container = ("puck-qualification-" + Guid.NewGuid().ToString(format: "N"));
-        int exitCode;
+        ChildProcessResult exercise;
 
         Console.WriteLine(value: $"Qualification {name}: {image}");
         using var deadline = new OperationDeadline(
@@ -256,7 +265,7 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
         );
 
         try {
-            exitCode = await m_containers.ExerciseAsync(
+            exercise = await m_containers.ExerciseAsync(
                 cancellationToken: deadline.Token,
                 container: container,
                 fixture: leg,
@@ -269,8 +278,8 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
             // Removal runs before another leg can use this leg's completed state, cancellation included.
             await m_containers.RemoveAsync(container: container).ConfigureAwait(continueOnCapturedContext: false);
         }
-        if (exitCode != 0) {
-            return LegOutcome.Failed(failure: $"qualification leg '{name}': the packaged engine exited with code {exitCode}");
+        if (exercise.ExitCode != 0) {
+            return LegOutcome.Failed(failure: $"qualification leg '{name}': the packaged engine exited with code {exercise.ExitCode}{Output(exercise: exercise)}");
         }
         var report = Path.Combine(
             path1: leg,

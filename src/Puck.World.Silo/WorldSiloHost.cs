@@ -27,18 +27,17 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         public required WorldAuthorityFence Fence { get; init; }
         public required WorldConsoleWaitGate Gate { get; init; }
         public required bool Pinned { get; init; }
+        // Every checkpoint, journal batch, crossing record and definition this activation publishes. A snapshot's
+        // coverage read is enqueued at capture time, before later mutations, so its watermark can never include a
+        // mutation absent from its bytes.
+        public required RowPublicationQueue Publications { get; init; }
+        // The door this activation's published-definition reloads run through.
+        public required WorldReloadDoor Reloads { get; init; }
 
-        public long PublishedJournalSequence = -1;
         public bool Initializing = true;
-        // All checkpoint and journal publications share this queue. A snapshot is enqueued at capture time,
-        // before later mutations, so its coverage watermark can never include a mutation absent from its bytes.
-        // Continuations update PublishedJournalSequence in queue order.
-        public Task JournalTail = Task.CompletedTask;
 
         public Task<WorldAuthorityStoreOutcome>? CheckpointUpload;
 
-        // A crossing step writes ahead from whichever thread carries it, so every tail replacement holds this.
-        public readonly Lock TailGate = new();
         public string LastCheckpointOutcome = "never captured";
         public string LastJournalOutcome = "none yet";
         public long LastCheckpointOrdinal = -1;
@@ -51,7 +50,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         public long PendingJournalBytes;
         public List<WorldAuthorityJournalEntry> JournalBatch = [];
         public long JournalBatchBytes;
-        public volatile int JournalSegments;
         public long JournalMutationsWritten;
         public long JournalBytesWritten;
         public long RetiredObjects;
@@ -80,7 +78,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         // uploads the same bytes instead of capturing and encoding the image again. A landed upload clears it.
         public RowCapture? QueuedCapture;
         public Task<WorldAuthorityStoreOutcome>? CadenceUpload;
-        public volatile bool PersistenceBlocked;
         public bool Released;
     }
 
@@ -258,7 +255,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     ) ||
                         bookkeeping.Initializing ||
                         bookkeeping.Released ||
-                        bookkeeping.PersistenceBlocked
+                        bookkeeping.Publications.Blocked
                     ) {
                         throw new InvalidOperationException(message: $"'{declared.World}' does not own a ready activation");
                     }
@@ -976,7 +973,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         value: out var bookkeeping
                     ) ||
                         bookkeeping.Initializing ||
-                        bookkeeping.PersistenceBlocked ||
+                        bookkeeping.Publications.Blocked ||
                         bookkeeping.Released ||
                         !Instances.TryGet(
                         declared.World.Value,
@@ -1159,7 +1156,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         value: out var bookkeeping
                     ) ||
                         bookkeeping.Initializing ||
-                        bookkeeping.PersistenceBlocked ||
+                        bookkeeping.Publications.Blocked ||
                         bookkeeping.Released ||
                         instance.Server.IsRetiring
                     ) { published.TrySetResult(result: false); return; }
@@ -1440,8 +1437,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         Gate = gate,
                         Fence = fence,
                         Identity = identity,
-                        PublishedJournalSequence = recovery.Root.Root.JournalSequence,
-                        JournalSegments = recovery.Root.Root.JournalSegmentCount,
+                        Publications = new RowPublicationQueue(fence: fence, journalSegments: recovery.Root.Root.JournalSegmentCount, journalSequence: recovery.Root.Root.JournalSequence),
+                        Reloads = new WorldReloadDoor(echoes: m_reloadEchoes, link: link.ForConsole(row: m_reloadEchoes.ForRow(row: row.Name)), server: server),
                         LastCheckpointOrdinal = (checkpointBlob?.Ordinal ?? -1),
                         LastCheckpointOutcome = ((checkpointBlob is null)
                         ? "never captured"
@@ -1814,7 +1811,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             Paused = row.IsPaused,
             PendingJournalAppends = (bookkeeping?.PendingJournalAppends ?? 0),
             PendingJournalBytes = (bookkeeping?.PendingJournalBytes ?? 0),
-            JournalSegmentCount = (bookkeeping?.JournalSegments ?? 0),
+            JournalSegmentCount = (bookkeeping?.Publications.JournalSegments ?? 0),
             JournalMutationsWritten = (bookkeeping?.JournalMutationsWritten ?? 0),
             JournalBytesWritten = (bookkeeping?.JournalBytesWritten ?? 0),
             RetiredAuthorityObjects = (bookkeeping?.RetiredObjects ?? 0),

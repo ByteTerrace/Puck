@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 using Puck.Networking;
 using Puck.Physics;
@@ -14,8 +15,8 @@ public sealed partial class WorldBody {
     // Scratch a view assembles into, reused from one view to the next and shared with no capture.
     private ulong[]? m_viewLaneRecency;
     private long[]? m_viewRegisters;
-    private WorldTapeSegmentImage[]? m_viewTape;
-    private WorldRigidContactSlotImage[]? m_viewContacts;
+    private WorldTapeSegmentImage[] m_viewTape = [];
+    private WorldRigidContactSlotImage[] m_viewContacts = [];
     private WorldRegisterWriteImage[]? m_viewRegisterWrites;
 
     /// <summary>Captures this body's sections, read live. A capture owns every table it holds. A view's tables are
@@ -124,7 +125,7 @@ public sealed partial class WorldBody {
         sections.DurableInput = DurableInput;
         sections.ScriptActors = ScriptActors;
 
-        var tape = Grown(alias: alias, count: m_tapeCount, scratch: ref m_viewTape);
+        var tape = alias ? ArrayCapacity.EnsureScratch(ref m_viewTape, m_tapeCount) : (m_tapeCount == 0 ? [] : new WorldTapeSegmentImage[m_tapeCount]);
 
         for (var offset = 0; (offset < m_tapeCount); offset++) {
             ref readonly var segment = ref m_tape[((m_tapeHead + offset) % m_tape.Length)];
@@ -138,7 +139,7 @@ public sealed partial class WorldBody {
         );
 
         var occupied = CountRigidContactSlots();
-        var contacts = Grown(alias: alias, count: occupied, scratch: ref m_viewContacts);
+        var contacts = alias ? ArrayCapacity.EnsureScratch(ref m_viewContacts, occupied) : (occupied == 0 ? [] : new WorldRigidContactSlotImage[occupied]);
 
         CopyRigidContactImages(destination: contacts);
         sections.Contacts = new(Slots: contacts.AsMemory(length: occupied, start: 0));
@@ -224,19 +225,6 @@ public sealed partial class WorldBody {
         }
         if ((scratch is null) || (scratch.Length != length)) {
             scratch = ((length == 0) ? [] : new T[length]);
-        }
-
-        return scratch;
-    }
-    // An array of at least count elements: the body's view scratch for a view, which grows and never shrinks so a
-    // table whose length follows the step (the tape, the contacts) costs no allocation as it changes, or a fresh
-    // array of exactly count for a capture.
-    private static T[] Grown<T>(bool alias, int count, ref T[]? scratch) {
-        if (!alias) {
-            return ((count == 0) ? [] : new T[count]);
-        }
-        if ((scratch is null) || (scratch.Length < count)) {
-            scratch = new T[Math.Max(val1: count, val2: ((scratch?.Length ?? 0) * 2))];
         }
 
         return scratch;

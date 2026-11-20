@@ -13,22 +13,18 @@ namespace Puck.World.Machines.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: the diegetic-instrument clock fold (<c>WorldServer.InstrumentClockBoundary</c>) — holding a
 /// <see cref="GrantSubjectKind.Screen"/> application onto a booted <c>tune-instrument</c> machine folds its authored
-/// tempo into <c>music.state</c>'s boundary-derived fields, deterministically, and NEVER when unengaged. The fixture
-/// world's sole music segment arms a <c>BeatEnd</c> transition off <c>seat.join</c> (fires at boot regardless of
-/// engagement) against a WORLD tempo authored at the slowest legal beat (50400 ticks, the max divisor of the
-/// engine's fixed tick base — one second) — far longer than this test's own step budget — so the transition commits
-/// ONLY when the instrument's own much faster authored tempo (840 ticks, <c>AudioDocument</c>'s minimum) is folded
-/// in, which happens if and only if the seat holds the screen application.
+/// tempo's beat into the boundary delivered with each tick, which every listener's score steps on, and NEVER when
+/// unengaged. The WORLD tempo is authored at the slowest legal beat (50400 ticks, one second), so over one instrument
+/// beat (840 ticks, <c>AudioDocument</c>'s minimum) only the instrument can contribute a beat.
 /// </summary>
 public sealed class InstrumentClockSourceLawTests {
     private const int InstrumentScreenIndex = 1;
-    private const int StepBudgetAfterJoin = 10;
+    private const ulong InstrumentTicksPerBeat = 840UL;
     private const int WorldTicksPerBeat = 50400;
 
     /// <summary>Builds the fixture: <see cref="Fixtures.BuildDocument"/> plus a real <c>puck.music.v1</c>/
-    /// <c>puck.tune.v1</c> pair written to <paramref name="assetDirectory"/> and referenced by absolute path, an
-    /// engageable <c>tune-instrument</c> screen at <see cref="InstrumentScreenIndex"/>, and one music segment whose
-    /// transition discriminates the fold.</summary>
+    /// <c>puck.tune.v1</c> pair written to <paramref name="assetDirectory"/> and referenced by absolute path, and an
+    /// engageable <c>tune-instrument</c> screen at <see cref="InstrumentScreenIndex"/>.</summary>
     private static WorldDefinition BuildDocument(string assetDirectory) {
         var music = MusicCanonicalizer.Canonicalize(document: new MusicDocument(
             Schema: MusicDocument.CurrentSchema,
@@ -37,20 +33,7 @@ public sealed class InstrumentClockSourceLawTests {
                 BeatsPerBar: 4,
                 TicksPerBeat: WorldTicksPerBeat
             ),
-            Segments: [
-                new MusicSegmentDocument(
-                    Id: "idle",
-                    Transitions: [new MusicTransitionDocument(
-                            At: MusicTransitionBoundary.BeatEnd,
-                            To: "driven",
-                            When: WorldAudioCue.SeatJoin
-                        )]
-                ),
-                new MusicSegmentDocument(
-                    Id: "driven",
-                    Transitions: null
-                ),
-            ]
+            Segments: [new MusicSegmentDocument(Id: "idle", Transitions: null)]
         ));
         // The instrument's own authored tempo — AudioDocument's minimum (1 frame/row @ 60 fps), the fastest an
         // instrument can author: 840 engine ticks/beat, far inside this law's step budget.
@@ -143,7 +126,9 @@ public sealed class InstrumentClockSourceLawTests {
             ScreensRaw = [.. document.Screens, instrumentScreen],
         };
     }
-    private static string RunAndReadMusicState(string assetDirectory, bool engage) {
+    // The beat the engaged instrument folds into the boundary every score steps on, over one instrument beat of the
+    // world clock: the boundary a listener's transition or gridded layer waits for.
+    private static Puck.Audio.Simulation.MusicClockBoundary FoldedBoundary(string assetDirectory, bool engage) {
         using var fixture = Fixtures.FreshServer(
             definition: BuildDocument(assetDirectory: assetDirectory),
             engines: [new TuneInstrumentEngine()]
@@ -156,9 +141,6 @@ public sealed class InstrumentClockSourceLawTests {
             IdentityName: null,
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
-
-        // Lands the seat.join sense edge (WorldEventFeed.Collect runs inside this Step call) — arms the transition
-        // for BOTH runs identically, so the only discriminating fact below is engagement.
         fixture.Step();
 
         if (engage) {
@@ -171,58 +153,23 @@ public sealed class InstrumentClockSourceLawTests {
             ));
         }
 
-        for (var step = 0; (step < StepBudgetAfterJoin); step++) {
-            fixture.Step();
-        }
+        fixture.Step();
 
-        return fixture.Server.AnswerSubmittedQuery(principal: Principal.Console, query: new WorldQuery.MusicState(Index: 1)).Text;
+        return fixture.Server.InstrumentClockBoundary(previousElapsedTicks: 0UL, currentElapsedTicks: InstrumentTicksPerBeat);
     }
 
     [Fact]
-    public void EngagingTheInstrumentCommitsTheTransition_UnengagedControlLeavesItArmed() {
+    public void EngagingTheInstrumentFoldsItsBeat_UnengagedControlFoldsNothing() {
         using var engagedDirectory = new TemporaryDirectory(prefix: "puck-instrument-clock-law-engaged-");
         using var controlDirectory = new TemporaryDirectory(prefix: "puck-instrument-clock-law-control-");
-        var engaged = RunAndReadMusicState(
-            assetDirectory: engagedDirectory.RootPath,
-            engage: true
-        );
-        var control = RunAndReadMusicState(
-            assetDirectory: controlDirectory.RootPath,
-            engage: false
-        );
-
-        Assert.Contains(
-            actualString: engaged,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "segment=driven"
-        );
-        Assert.Contains(
-            actualString: control,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "segment=idle"
-        );
-        Assert.Contains(
-            actualString: control,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "pending=driven"
-        );
-    }
-    [Fact]
-    public void TwoIndependentEngagedBootsReDeriveTheIdenticalMusicState() {
-        using var directoryA = new TemporaryDirectory(prefix: "puck-instrument-clock-law-a-");
-        using var directoryB = new TemporaryDirectory(prefix: "puck-instrument-clock-law-b-");
-        var a = RunAndReadMusicState(
-            assetDirectory: directoryA.RootPath,
-            engage: true
-        );
-        var b = RunAndReadMusicState(
-            assetDirectory: directoryB.RootPath,
-            engage: true
-        );
 
         Assert.Equal(
-            actual: b,
-            expected: a
+            expected: Puck.Audio.Simulation.MusicClockBoundary.Beat,
+            actual: FoldedBoundary(assetDirectory: engagedDirectory.RootPath, engage: true)
+        );
+        Assert.Equal(
+            expected: Puck.Audio.Simulation.MusicClockBoundary.None,
+            actual: FoldedBoundary(assetDirectory: controlDirectory.RootPath, engage: false)
         );
     }
 }

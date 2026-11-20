@@ -88,7 +88,7 @@ public abstract record WorldQuery {
         ScreenState screen => GrantSubject.Screen(index: screen.ScreenIndex),
         Properties { BodyIndex: int bodyIndex } => GrantSubject.Body(index: bodyIndex),
         GrantAllows allows => allows.Subject,
-        MusicState state => GrantSubject.Body(index: (state.Index - 1)),
+        MusicClock state => GrantSubject.Body(index: (state.Index - 1)),
         InstrumentState state => GrantSubject.Body(index: (state.Index - 1)),
         _ => GrantSubject.All,
     };
@@ -182,12 +182,12 @@ public abstract record WorldQuery {
     /// <see langword="null"/> when the device has no remembered preference.</summary>
     /// <param name="Device">The device to look up.</param>
     public sealed record PreferredControllerProfile(InputDeviceId Device) : WorldQuery;
-    /// <summary>The live music clock/director state (<c>music.state</c>) — the current segment, any pending
-    /// transition, and the tick/from/to of the most recent committed transition, if any. World-wide, not
-    /// per-entity; <see cref="Index"/> names only the observing seat, the same subject its own
-    /// <see cref="ObservationSubject"/> checks Observe against.</summary>
+    /// <summary>The authority's music clock (the clock half of <c>music.state</c>): its elapsed ticks, beat, bar and
+    /// phase error, the grid every listener's score steps on. World-wide, not per-entity; <see cref="Index"/> names
+    /// only the observing seat, the same subject its own <see cref="ObservationSubject"/> checks Observe
+    /// against.</summary>
     /// <param name="Index">The 1-based observing player display index.</param>
-    public sealed record MusicState(int Index) : WorldQuery;
+    public sealed record MusicClock(int Index) : WorldQuery;
     /// <summary>Which diegetic instrument screen (if any) the observing seat is engaged with, whether the booted
     /// machine there carries the instrument-clock capability, and its authored tempo (<c>instrument.state</c>).
     /// World-wide, not per-entity; <see cref="Index"/> names only the observing seat, the same subject its own

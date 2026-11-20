@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Puck.Abstractions;
 
 namespace Puck.Cli.Automation;
 
@@ -9,8 +10,9 @@ namespace Puck.Cli.Automation;
 /// <param name="RepoDigests">The <c>repository@sha256:…</c> references the image is known by.</param>
 public sealed record WorldReleaseQualificationImage(string Id, IReadOnlyList<string> RepoDigests);
 /// <summary>The container engine a qualification leg's packaged engine runs in. An implementation throws when the
-/// engine itself cannot inspect or start an image, which is a refusal; the exit code of the packaged command inside a
-/// started container is returned, because a nonzero one is a leg that failed.</summary>
+/// engine itself cannot inspect or start an image, which is a refusal; the exit code and captured output of the packaged
+/// command inside a started container are returned, because a nonzero code is a leg that failed and its output names
+/// why.</summary>
 public interface IWorldReleaseQualificationContainers {
     /// <summary>Runs <c>world release exercise</c> from <paramref name="image"/> over <paramref name="fixture"/> in an
     /// isolated container named <paramref name="container"/>.</summary>
@@ -19,8 +21,8 @@ public interface IWorldReleaseQualificationContainers {
     /// <param name="fixture">The leg's fixture directory, mounted read-write as the only host path.</param>
     /// <param name="steps">The exact continuation steps the exercise runs.</param>
     /// <param name="cancellationToken">The leg's deadline.</param>
-    /// <returns>The exit code of the packaged command.</returns>
-    Task<int> ExerciseAsync(string container, string image, string fixture, int steps, CancellationToken cancellationToken);
+    /// <returns>The packaged command's exit code and its captured standard output and error.</returns>
+    Task<ChildProcessResult> ExerciseAsync(string container, string image, string fixture, int steps, CancellationToken cancellationToken);
     /// <summary>Reads an image's identity.</summary>
     /// <param name="reference">The image reference.</param>
     /// <param name="cancellationToken">The run's cancellation.</param>
@@ -34,7 +36,12 @@ public interface IWorldReleaseQualificationContainers {
 }
 
 /// <summary>Runs qualification legs in Docker: no network, a read-only root, no capabilities, bounded processes,
-/// memory, and CPU, and one bind mount holding the leg's fixture copy.</summary>
+/// memory, and CPU, and one bind mount holding the leg's fixture copy.
+/// <para>On a Linux host the packaged engine runs as this process's own user and group, because the fixture is this
+/// process's. The directory store takes a lock file in every directory it reads, which the image's default root,
+/// holding no capabilities, may not create in a directory it does not own; and the store creates its entries 0700 and
+/// 0600, so an engine running as another user would leave entries this process could not copy into the next leg.
+/// Another host's container engine maps the bind mount's ownership itself.</para></summary>
 /// <param name="clock">The clock the container removal bound runs on.</param>
 internal sealed class WorldReleaseQualificationDocker(TimeProvider clock) : IWorldReleaseQualificationContainers {
     /// <summary>Gets the bound, on the runner's clock, on removing a leg's container.</summary>
@@ -44,10 +51,11 @@ internal sealed class WorldReleaseQualificationDocker(TimeProvider clock) : IWor
     // Every other code is the packaged command's.
     private static bool IsEngineFailure(int exitCode) => (exitCode is 125 or 126 or 127);
 
-    public async Task<int> ExerciseAsync(string container, string image, string fixture, int steps, CancellationToken cancellationToken) {
+    public async Task<ChildProcessResult> ExerciseAsync(string container, string image, string fixture, int steps, CancellationToken cancellationToken) {
+        string[] user = ((ProcessIdentity.LinuxUserAndGroup() is { } identity) ? ["--user", identity] : []);
         var run = await CliProcess.RunAsync(
             arguments: [
-                "run", "--name", container, "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
+                "run", "--name", container, "--rm", .. user, "--network", "none", "--read-only", "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges", "--pids-limit", "256", "--memory", "4g", "--cpus", "2",
                 "--tmpfs", "/tmp:rw,nosuid,nodev,size=256m", "--mount", $"type=bind,source={fixture},target=/fixture",
                 "--entrypoint", "dotnet", image, WorldSiloImageLayout.CliAssembly, "world", "release", "exercise", "/fixture",
@@ -62,7 +70,7 @@ internal sealed class WorldReleaseQualificationDocker(TimeProvider clock) : IWor
             throw new InvalidOperationException(message: $"docker could not run the qualification container (exit code {run.ExitCode}). {run.Stderr}".TrimEnd());
         }
 
-        return run.ExitCode;
+        return run;
     }
     public async Task<WorldReleaseQualificationImage> InspectAsync(string reference, CancellationToken cancellationToken) {
         var json = await CliProcess.RunCheckedAsync(

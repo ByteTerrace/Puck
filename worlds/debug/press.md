@@ -53,14 +53,12 @@ sits with `player.signal keyboard.e press`;
 | The still of a best score | `highlights` |
 | The music | the `press` and `press-run` segments of [`score.music.json`](score.music.json), the `press-*` tunes and patches, and two `audio.cues` rows in `guide.puck` |
 
-`lights.state` answers in every boot shape. The audio lines and
-`capture.status` need a window. `music.state` reads the authority's music
-director, which does not hear a rule's cues, so it stays on `verse` through a
-run: the segment a player hears is the listener's, which `speaker.state` shows
-by the layers it plays.
+`lights.state` and `music.state` answer in every boot shape. The other audio
+lines and `capture.status` need a window. `music.state` reads the score the
+player hears: `press` once she sits, `press-run` from the second page, and each
+voice as `<tune>@<tick>`, where the tick is the bar line it joined on.
 
 ## Known limits
 
-The chase camera is not reframed when she sits, the words are on the panel and
-not on the slugs, and a layer joins when its cue arrives rather than on a bar
-line. The design page lists what each needs.
+The chase camera is not reframed when she sits, and the words are on the panel
+and not on the slugs. The design page lists what each needs.
