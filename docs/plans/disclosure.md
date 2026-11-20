@@ -2208,7 +2208,9 @@ they submit). What makes it structural is where the names come from:
   (`WorldModuleNamespace.RespellMachineReferences`, the provider's
   `MachineFieldRole` reference fields), which the server hands every write
   capability it mints (`WorldRecipientView.MachineCatalog`). `puck registry
-  --check` names any name-shaped model member the registry does not hold.
+  --check` reports each unclassified text position. The schema generator reads each property’s
+  declared namespace and spelling or its literal or local meaning. Both runtime doors
+  read that classification from the generated model shape.
 - A row's declared relations are `WorldRowDeclarationNames`: every state name
   each row's declaration spells, its cells' own audience policies included
   (values and keys removed), and the reverse. It extends
@@ -2288,13 +2290,11 @@ values bind it is validated whole, with every check its partition makes of it:
 every row its values bind is acquired through the access first, which admits
 it from declarations alone and faults otherwise, then the unit is
 resolved to literals at `DeliveryTime`, the one clock every read of the
-validation takes, and judged. A placement is judged with its parent chain by
-`WorldDefinitionValidator.TryValidatePlacementUnit` (every check the whole
-validation makes of a placement row, its mirror and facets included), a
-creation by `TryValidateCreationUnit`. A value bound in any other section (a
-screen's basis, a curve's knot, a sky panel, a probe range) has no unit
-validator yet, so a write reaching one validates the whole document at the same
-clock: correct, but a hidden unit can refuse it there. A dealt child is judged
+validation takes, and judged. `WorldDefinitionValidator.TryValidateBoundUnits`
+runs the same partition validators whole-document admission uses. It judges
+placements with their parent chains, and creations, screens, curves, probes
+and looks by row. The sky stack and look assignment each have a section unit.
+A dealt child is judged
 by its template, since children exist only for members, and
 `WorldStateDocumentValues.TryCheckBound` reads only the written row's holders:
 it never enters the state section or a dealt child, and a malformed reference on
@@ -2337,11 +2337,9 @@ Where it stops: a write into a row a creation's id or a look's name is bound to
 positions; a reference to an entity, such as a look's creation or an
 assignment's rows, is not an identity) renames an entity every unit naming it
 refers to, so it is still validated whole for every writer, and H2 stays open
-there until references get a unit of their own. A write into a row bound in a
-section with no unit validator (screens, curves, render, probes, looks and the
-rest the `document` partition owns) validates whole, so H2 stays open there
-too; each unit validator carved from the `document` partition closes its
-section. A document write is judged by the units it reaches (the next
+there until references get a unit of their own. A binding outside the
+registered units, such as a spawn point or kit assignment, still reaches
+whole-document validation and can carry H2. A document write is judged by the units it reaches (the next
 checkpoint). Input selection (`Input.TryPrepareAll`, `TryPrepareBodies`) still
 reads every owner's selection inside the same validation (D0b3). A placement
 unit's checks between placements (solids, the envelope, one board per
@@ -2364,35 +2362,38 @@ through `WorldDocumentReads`, and a read past the partition's declared parts
 refuses the document by the partition's name, so a validator that starts
 reading something new fails the first validation that exercises it.
 
-The partitions today: `state.expansion` (the pool and record expansion every
-state reader needs, run first), `prototypes` by row (one creation per unit),
-the `hud`, `metadata`, `replays`, `haptics`, `storage`, `captures`,
-`schedule`, `routes` and `admission` sections, and `document`, which owns every
-other part and reads the whole document. A creation row whose change differs
+The table includes row partitions for creations, placements, screens, curves,
+probes and looks. Placement validation follows parent and surface-target
+dependencies, and a creation edit reaches placements that use it. The
+`document` partition still owns cross-row declarations and reservations.
+A creation row whose change differs
 in what shading reads alone (`WorldPrototype.DiffersInShadingAlone`) is
 private to its row: no other partition reads a palette's colours, so a palette
-edit validates one unit. Any other creation change reaches every partition
-that reads the creations, which today includes `document`.
+edit validates one unit. A full install whose mutation leaves state alone keeps
+the installed state section and live arena when their catalog still matches
+(`WorldDocument.NameStateEdit`). `StateArena.ToRow` reuses unchanged exported
+rows, and a second validation after arena settlement compares against the
+already validated proposal.
 
 Every document mutation (`WorldDocument.TryValidateMutationCandidate`, which
 `TryStageDocument` and `world.row.set` use) and the presentation and fallback
 reload paths validate through the runner, for recipients and the authority
 alike: when the live document was admitted, the units an edit does not reach
-read nothing it moved, so the verdict equals the whole-document one. A
-recipient's write into a creation or one of the sections above no longer reads
-any other unit. `ValidationPartitionLawTests` holds the table's coverage, a
-palette edit counting one unit beside an invalid neighbour that whole
-validation refuses, and a shape edit reaching exactly the partitions that read
-the creations. `world.boot.validations` counts units: a whole validation counts
+read nothing it moved, so the verdict equals the whole-document one. A full
+mutation passes its admission for the selected catalog to machine preparation
+(`WorldDefinitionValidator.TryAdmitChange`). `ValidationPartitionLawTests`
+holds the table's coverage, the required bound-write validators, and the
+isolation of palette edits and placement moves beside invalid neighbours.
+`world.boot.validations` counts units. A whole validation counts
 every unit of the document (`WorldDefinitionValidator.UnitsIn`).
 
 Where it stops:
 
-- **The `document` partition is the remaining whole.** A write that reaches it
-  (a placement, a row declaration, a kit, any creation change beyond shading)
-  still reads every unit, so H2 stays open for those writers. Each further
-  partition carved from it narrows that: placements by row first, then the
-  state declarations, whose `stateRows` map most other checks read.
+- **The `document` partition still reads across sections.** Placement moves
+  run the reached placement rows alongside the shared checks, including the
+  placement reservations, and a creation shape change still reaches those
+  checks. State declarations remain in the document partition. Narrow them
+  next, starting with the declaration map other validators resolve against.
 - **State values** stay with the touched-row walk
   (`TryValidateTouchedStateRows`, which counts its rows as units) and the
   bound-write walk above; the runner does not yet derive a value change's rows

@@ -141,46 +141,6 @@ public sealed partial class WorldOutputHub {
 
         return true;
     }
-    /// <summary>Fans a composed query answer out to every typed subscriber. A faulting sink is isolated and
-    /// detached — see the class remarks.</summary>
-    /// <param name="answer">The answer.</param>
-    public void DeliverAnswer(in QueryAnswer answer) {
-        m_deliveryDepth++;
-
-        try {
-            var writeIndex = 0;
-
-            for (var readIndex = 0; (readIndex < m_typed.Count); readIndex++) {
-                var subscription = m_typed[readIndex];
-
-                if (!subscription.Active) {
-                    continue;
-                }
-
-                try {
-                    subscription.Sink.DeliverAnswer(answer: in answer);
-                } catch (Exception exception) {
-                    Detach(
-                        subscription: subscription,
-                        callSite: nameof(DeliverAnswer),
-                        exception: exception
-                    );
-                    continue;
-                }
-
-                if (
-                    subscription.Active &&
-                    !EndedBySink(subscription: subscription)
-                ) {
-                    m_typed[writeIndex++] = subscription;
-                }
-            }
-
-            Compact(writeIndex: writeIndex);
-        } finally {
-            m_deliveryDepth--;
-        }
-    }
     /// <summary>Fans an accepted live window-composition override out to every typed subscriber. A faulting sink is
     /// isolated and detached — see the class remarks.</summary>
     /// <param name="composition">The composition override.</param>

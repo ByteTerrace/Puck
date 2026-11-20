@@ -114,10 +114,6 @@ public static partial class WorldStateHashComposition {
 
     /// <summary>Gets the components <see cref="WorldStateHashScope.Authoritative"/> folds, in fold order.</summary>
     public static IReadOnlyList<WorldStateHashComponent> Authoritative => AuthoritativeOrder;
-    /// <summary>Gets the components <see cref="WorldStateHashScope.Pose"/> folds, in fold order.</summary>
-    public static IReadOnlyList<WorldStateHashComponent> Pose => PoseOrder;
-    /// <summary>Gets the components <see cref="WorldStateHashScope.World"/> folds, in fold order.</summary>
-    public static IReadOnlyList<WorldStateHashComponent> World => WorldOrder;
 
     /// <summary>Returns the components a scope folds, in fold order.</summary>
     /// <param name="scope">The scope.</param>

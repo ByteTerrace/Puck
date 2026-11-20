@@ -26,7 +26,7 @@ public sealed record WorldCameraAnchorCandidate(WorldAnchor Anchor, [property: J
 /// speaking character while they speak and the seat's own avatar otherwise. Refused beside <paramref name="Anchor"/>;
 /// a single unconditional anchor is <paramref name="Anchor"/>.</param>
 public sealed record WorldCamera(
-    string Name,
+    [property: DocumentText("a camera name")] string Name,
     WorldCameraProgram Rig,
     uint RenderWidth,
     uint RenderHeight,
@@ -570,6 +570,7 @@ public sealed record WorldRenderIndirectApply(
 public sealed record WorldRenderLighting(
     IReadOnlyList<WorldRenderLight>? Lights = null,
     WorldRenderCurvature? Curvature = null,
+    [property: DocumentName(WorldNameKind.Clock, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Clock = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRenderLightingKey>? Keys = null
 ) {
@@ -636,6 +637,7 @@ public abstract record WorldRenderLight {
         BindableScalar? Illuminance = null,
         BindableAngle? AngularRadius = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldShadowMode? Shadow = null,
+        [property: DocumentText("a light name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Temperature = null
     ) : WorldRenderLight {
@@ -654,6 +656,7 @@ public abstract record WorldRenderLight {
         BindableColor? Color = null,
         BindableScalar? Luminance = null,
         BindableScalar? Power = null,
+        [property: DocumentText("a light name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
     ) : WorldRenderLight {
         /// <inheritdoc/>
@@ -683,6 +686,7 @@ public abstract record WorldRenderLight {
         WorldAnchor? Anchor = null,
         BindableColor? Color = null,
         BindableScalar? Intensity = null,
+        [property: DocumentText("a light name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Power = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Temperature = null
@@ -719,6 +723,7 @@ public abstract record WorldRenderLight {
         BindableScalar? Intensity = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Power = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Temperature = null,
+        [property: DocumentText("a light name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
     ) : WorldRenderLight {
         /// <summary>The cone's outer half angle a spot that authors none takes, in radians: 45 degrees.</summary>
@@ -742,6 +747,7 @@ public abstract record WorldRenderLight {
         BindableScalar? Radius = null,
         WorldAnchor? Anchor = null,
         BindableScalar? Weight = null,
+        [property: DocumentText("a light name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
     ) : WorldRenderLight {
         /// <inheritdoc/>
@@ -784,6 +790,7 @@ public sealed record WorldRenderCurvature(
 /// <param name="Frame">Which way is up for the sky. Absent is world +y.</param>
 public sealed record WorldRenderSky(
     IReadOnlyList<WorldRenderSkyLayer>? Layers = null,
+    [property: DocumentName(WorldNameKind.Clock, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Clock = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRenderSkyKey>? Keys = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderSkyFrame? Frame = null
@@ -829,6 +836,7 @@ public abstract record WorldRenderSkyLayer {
         BindableColor? Color = null,
         BindableScalar? Intensity = null,
         BindableScalar? Blur = null,
+        [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
     ) : WorldRenderSkyLayer {
         /// <inheritdoc/>
@@ -865,6 +873,7 @@ public abstract record WorldRenderSkyLayer {
     public WorldRenderSkyTransform? Transform { get; init; }
     /// <summary>Gets the clock, by name in the <c>timeline</c> section, whose phase moves the layer's own motion: an
     /// aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.</summary>
+    [DocumentName(WorldNameKind.Clock, WorldNameRole.Names)]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Clock { get; init; }
     /// <summary>Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone
@@ -881,6 +890,7 @@ public abstract record WorldRenderSkyLayer {
     /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
     public sealed record Gradient(
         IReadOnlyList<WorldRenderSkyStop>? Stops = null,
+        [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
     ) : WorldRenderSkyLayer {
         /// <inheritdoc/>
@@ -901,6 +911,7 @@ public abstract record WorldRenderSkyLayer {
         int? Light = null,
         BindableAngle? Radius = null,
         BindableScalar? Intensity = null,
+        [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Color = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderSkyTexture? Texture = null
@@ -923,6 +934,7 @@ public abstract record WorldRenderSkyLayer {
         BindableScalar? Brightness = null,
         uint? Seed = null,
         WorldRenderSkyTwinkle? Twinkle = null,
+        [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Sparsity = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Size = null
@@ -963,6 +975,7 @@ public abstract record WorldRenderSkyLayer {
         BindableScalar? Spin = null,
         BindableAngle? Curl = null,
         BindableVector2? Shear = null,
+        [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] uint? Octaves = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Warp = null,
@@ -994,6 +1007,7 @@ public abstract record WorldRenderSkyLayer {
         float? Rays = null,
         float? Waves = null,
         uint? Seed = null,
+        [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
     ) : WorldRenderSkyLayer {
         /// <inheritdoc/>
@@ -1021,6 +1035,7 @@ public abstract record WorldRenderSkyLayer {
         uint? Octaves = null,
         float? Gain = null,
         uint? Seed = null,
+        [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
     ) : WorldRenderSkyLayer {
         /// <inheritdoc/>
@@ -1039,6 +1054,7 @@ public abstract record WorldRenderSkyLayer {
         float? Cells = null,
         float? Line = null,
         float? Softness = null,
+        [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
     ) : WorldRenderSkyLayer {
         /// <inheritdoc/>
@@ -1056,6 +1072,7 @@ public abstract record WorldRenderSkyLayer {
         int? Screen = null,
         WorldSkyProjection? Projection = null,
         BindableScalar? Intensity = null,
+        [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
     ) : WorldRenderSkyLayer {
         /// <inheritdoc/>
@@ -1083,7 +1100,9 @@ public abstract record WorldRenderSkyLayer {
     /// <param name="Fallback"><see cref="BindableColor"/>'s grammar: the colour drawn where the view cannot render, before
     /// its first image and past the nesting depth or the cap. Absent is black.</param>
     public sealed record View(
+        [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
+        [property: DocumentText("a destination name")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Destination = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Anchor = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Turn = null,
@@ -1113,7 +1132,9 @@ public abstract record WorldRenderSkyLayer {
     /// <param name="AmbientOcclusion">As <see cref="View.AmbientOcclusion"/>.</param>
     /// <param name="Fallback">As <see cref="View.Fallback"/>.</param>
     public sealed record Far(
+        [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
+        [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Names)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Prototypes = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Anchor = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Turn = null,

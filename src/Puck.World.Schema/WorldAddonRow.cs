@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.World.Protocol;
 
@@ -33,10 +34,16 @@ namespace Puck.World;
 /// (configuration undo, not time travel — the pre-undo guest's memory is not part of the document and is never
 /// restored), while an author driving it forward is expected to increment with checked overflow so a wrapped value
 /// can never alias an earlier revision. Defaults to <c>0</c>.</param>
-public sealed record WorldAddonRow(string Name, string ModulePath, string Hash, ulong Fuel, bool Enabled,
+public sealed record WorldAddonRow(
+    [property: DocumentText("an addon name")] string Name,
+    [property: DocumentText("a path or document locator")] string ModulePath,
+    [property: DocumentText("a content digest")] string Hash,
+    ulong Fuel,
+    bool Enabled,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCapabilityRequest>? Requests = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAddonMemoryWatch>? MemoryWatches = null,
-    ulong Revision = 0UL);
+    ulong Revision = 0UL
+);
 /// <summary>One machine-memory watch row — an addon's declaration of one byte range on one screen's machine to poll
 /// for value-changed edges (the achievements-shaped primitive: works on any ROM with a known memory layout). The
 /// address space is the machine's whole bus view (<see cref="Puck.Abstractions.Machines.IMachineMemoryPeek"/>

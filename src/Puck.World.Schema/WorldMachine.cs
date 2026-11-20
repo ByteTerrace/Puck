@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -23,8 +24,14 @@ namespace Puck.World;
 /// (<c>machine.default</c>) and the boot and every <c>world.reload</c> read, so the default lives beside the content
 /// and no document names it. A device with no default set, or whose default is absent or unmountable, boots its
 /// authored content. Omitted from the wire when false.</param>
-public sealed record WorldMachine(string Name, string Engine, JsonElement Configuration, bool Running = true,
+public sealed record WorldMachine(
+    [property: DocumentName(WorldNameKind.Machine, WorldNameRole.Declares)] string Name,
+    [property: DocumentText("a machine provider id")] string Engine,
+    JsonElement Configuration,
+    bool Running = true,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMachineMemory>? Memory = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineCable? Cable = null,
+    [property: DocumentText("a path or document locator")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? ContentFolders = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool PreferFolderDefault = false);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool PreferFolderDefault = false
+);

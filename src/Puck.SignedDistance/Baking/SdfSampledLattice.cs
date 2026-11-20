@@ -1819,9 +1819,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // ends the search.
         private const float Straddle = (0.45f * Tolerance);
 
-        public CrossingRoot(float first, float second) {
+        public CrossingRoot(float first, float second, bool firstMeasured, bool secondMeasured) {
             LowValue = first;
             HighValue = second;
+            (LowMeasured, HighMeasured) = (firstMeasured, secondMeasured);
             Done = ((first == 0f) || (second == 0f));
             Position = (Done ? ((first == 0f) ? 0f : 1f) : 0.5f);
             if (!Done) { Straddling(estimate: (first / (first - second))); }
@@ -1829,6 +1830,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         public bool Done { get; private set; }
         public float Position { get; private set; }
+        // Whether both ends of the bracket the search ended in are measured values (a measured sample's, or a trial's),
+        // rather than an end an unmeasured sample's interpolated value bounds: only then does the field change sign in it.
+        public readonly bool Bracketed => (LowMeasured && HighMeasured);
         // The round's two trials along the edge, nearer the low end first.
         public float First { get; private set; }
         public float Second { get; private set; }
@@ -1836,8 +1840,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         private int Answered { get; set; }
         private float FirstValue { get; set; }
         private float High { get; set; } = 1f;
+        private bool HighMeasured { get; set; }
         private float HighValue { get; set; }
         private float Low { get; set; }
+        private bool LowMeasured { get; set; }
         private float LowValue { get; set; }
         private int Rounds { get; set; }
 
@@ -1861,11 +1867,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             var lowInside = (LowValue < 0f);
 
             if ((FirstValue < 0f) != lowInside) {
-                (High, HighValue) = (First, FirstValue);
+                (High, HighValue, HighMeasured) = (First, FirstValue, true);
             } else if ((secondValue < 0f) != lowInside) {
-                (Low, LowValue, High, HighValue) = (First, FirstValue, Second, secondValue);
+                (Low, LowValue, LowMeasured, High, HighValue, HighMeasured) = (First, FirstValue, true, Second, secondValue, true);
             } else {
-                (Low, LowValue) = (Second, secondValue);
+                (Low, LowValue, LowMeasured) = (Second, secondValue, true);
             }
 
             var width = (High - Low);
@@ -2007,7 +2013,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 var (x, y, z) = FineCoordinates(key: start);
                 var (ex, ey, ez) = FineCoordinates(key: end);
 
-                roots[searched] = new CrossingRoot(first: FineValue(x: x, y: y, z: z), second: FineValue(x: ex, y: ey, z: ez));
+                roots[searched] = new CrossingRoot(first: FineValue(x: x, y: y, z: z), firstMeasured: MeasuredSample(x: x, y: y, z: z), second: FineValue(x: ex, y: ey, z: ez), secondMeasured: MeasuredSample(x: ex, y: ey, z: ez));
                 keys[searched] = key;
                 searched++;
                 m_crossingData[edge].RootPlusOne = searched;
@@ -3061,6 +3067,14 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         return (float.IsNaN(f: closed) ? m_fineValues[slot] : closed);
     }
+    // Whether a fine sample's value (FineValue) was measured: a coarse sample's, or one a measured cell holds, rather than
+    // one interpolated from the samples about it.
+    private bool MeasuredSample(int x, int y, int z) {
+        var (cx, cy, cz, lx, ly, lz) = FineCell(x: x, y: y, z: z);
+        var factor = m_factor;
+
+        return ((((lx == 0) || (lx == factor)) && ((ly == 0) || (ly == factor)) && ((lz == 0) || (lz == factor))) || (FineSlot(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz) >= 0));
+    }
     // A fine sample's value: the coarse sample's at a coarse position, the measured one in a measured cell, and otherwise
     // the trilinear interpolation of its coarse cell's corners.
     private float FineValue(int x, int y, int z) {
@@ -3347,13 +3361,22 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                     var (ex, ey, ez) = (CellExtent ?? (CellSize, CellSize, CellSize));
                     var reach = (length * Math.Max(val1: ex, val2: Math.Max(val1: ey, val2: ez)));
 
+                    var behind = Math.Clamp(max: reach, min: -reach, value: (measured.W / magnitude));
+
                     gradient /= magnitude;
                     (nx, ny, nz) = (gradient.X, gradient.Y, gradient.Z);
-                    // A searched root stays on its edge, and a closed sheet retains its deliberately displaced crossing;
-                    // any other crossing's plane moves by its measured value.
-                    offset = ((crossing.Closed || crossing.RootPlusOne > 0)
-                        ? 0.0
-                        : Math.Clamp(max: reach, min: -reach, value: (measured.W / magnitude)));
+                    // A transition edge's search is bracketed by the sign its interpolated end gives, which the field
+                    // along the edge need not share (a coarse cell's corners interpolate a pinch's two wedges as one):
+                    // where the search ended against that end and the field there does not read zero, to the search's
+                    // precision, the edge holds no root, and its crossing gives no plane, since the gradient there is the
+                    // nearer face's, measured off the surface. A closed sheet retains its deliberately displaced
+                    // crossing, a root stays on its edge, and any other crossing's plane moves by its measured value.
+                    if (!crossing.Closed && (crossing.RootPlusOne > 0) && !owner.m_crossingRoots[(crossing.RootPlusOne - 1)].Bracketed && (Math.Abs(value: behind) > (reach * CrossingRoot.Tolerance))) {
+                        offset = 0.0;
+
+                        return false;
+                    }
+                    offset = ((crossing.Closed || (crossing.RootPlusOne > 0)) ? 0.0 : behind);
 
                     return true;
                 }

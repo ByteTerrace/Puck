@@ -34,10 +34,6 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the GPU work the tables' uploads recorded, for the newest upload known to have completed.</summary>
     public IGpuWorkSource Work =>
         m_work;
-    /// <summary>Gets the GPU objects the tables' ledger has seen created (images, buffers, descriptor pools and sets), over
-    /// the ledger's whole life.</summary>
-    public IWorkCounterSource WorkLifetime =>
-        m_work;
 
     private void ReconfigureWork() {
         m_workRevision++;

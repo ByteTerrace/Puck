@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Collections.ObjectModel;
 
 namespace Puck.SignedDistance;
@@ -28,8 +29,14 @@ public enum SdfShadeReads : uint {
 /// <param name="Type">The type of a literal, validated against its bits.</param>
 /// <param name="Bits">32-bit literal components; integer components are never float converted.</param>
 /// <param name="Shape">The structural descriptor of a shape operation.</param>
-public sealed record SdfShadeExpression(string Op, IReadOnlyList<SdfShadeExpression>? Arguments = null,
-    string? Name = null, SdfShadeType Type = SdfShadeType.Float, IReadOnlyList<uint>? Bits = null, SdfShadeShape? Shape = null);
+public sealed record SdfShadeExpression(
+    [property: DocumentText("a shading instruction")] string Op,
+    IReadOnlyList<SdfShadeExpression>? Arguments = null,
+    [property: DocumentText("a stamp member or a parameter or value local to its shade program")] string? Name = null,
+    SdfShadeType Type = SdfShadeType.Float,
+    IReadOnlyList<uint>? Bits = null,
+    SdfShadeShape? Shape = null
+);
 /// <summary>A structural shape descriptor. Compilation uses the existing solid/paint emission and admission.</summary>
 public sealed record SdfShadeShape(SdfSolidPrimitive Type, float X = 1f, float Y = 1f, float Z = 1f,
     float Taper = 0.5f, SdfPrismProfile? Profile = null, SdfLift Lift = SdfLift.Extrude,
@@ -49,14 +56,18 @@ public sealed record SdfShadeShape(SdfSolidPrimitive Type, float X = 1f, float Y
     }
 }
 /// <summary>A runtime slot's type and initial data. Names bind source references and do not enter program identity.</summary>
-public sealed record SdfShadeParameter(string Name, SdfShadeType Type, IReadOnlyList<uint> Bits);
+public sealed record SdfShadeParameter([property: DocumentText("a parameter local to its shade program")] string Name, SdfShadeType Type, IReadOnlyList<uint> Bits);
 /// <summary>An output expression; omitted outputs retain the stage's default.</summary>
-public sealed record SdfShadeOutput(SdfShadePhase Phase, string Name, SdfShadeExpression Value);
+public sealed record SdfShadeOutput(SdfShadePhase Phase, [property: DocumentText("a stage output in the shading vocabulary")] string Name, SdfShadeExpression Value);
 /// <summary>The source-level expression graph serialized in a material. Admission always compiles it afresh.</summary>
-public sealed record SdfShadeDefinition(string Name, IReadOnlyList<SdfShadeParameter> Parameters, IReadOnlyList<SdfShadeOutput> Outputs,
-    IReadOnlyList<SdfShadeValue>? Values = null);
+public sealed record SdfShadeDefinition(
+    [property: DocumentText("a shade program's label, local to the material that carries it")] string Name,
+    IReadOnlyList<SdfShadeParameter> Parameters,
+    IReadOnlyList<SdfShadeOutput> Outputs,
+    IReadOnlyList<SdfShadeValue>? Values = null
+);
 /// <summary>A dependency-ordered value in the canonical document. Reads may name only earlier values of this phase.</summary>
-public sealed record SdfShadeValue(SdfShadePhase Phase, string Name, SdfShadeExpression Value);
+public sealed record SdfShadeValue(SdfShadePhase Phase, [property: DocumentText("a value local to its shade program")] string Name, SdfShadeExpression Value);
 /// <summary>A typed, slice-relative address. Only the compiler creates operands.</summary>
 public readonly record struct SdfShadeOperand {
     internal SdfShadeOperand(int index, SdfShadeType type) { Index = index; Type = type; }

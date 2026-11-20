@@ -27,7 +27,10 @@ public readonly record struct MemoryRowBytes(long NativeAllocator, long NativeDi
 /// <param name="Class">What its storage is for; cached storage reads as <see cref="MemoryClass.Cached"/>.</param>
 /// <param name="Forced">Whether the owner holds the process's one forced admission
 /// (<see cref="MemoryAccount.Owner.TryReserveForced"/>).</param>
-public readonly record struct MemoryOwnerReading(string Name, MemoryCategory Category, long Owned, long Reserved, long PeakOwned, long ReservationPeak, bool Disposed, PhysicalMemory Pool, bool Observed, bool Row, MemoryRowBytes Rows, MemoryClass Class, bool Forced);
+public readonly record struct MemoryOwnerReading(string Name, MemoryCategory Category, long Owned, long Reserved, long PeakOwned, long ReservationPeak, bool Disposed, PhysicalMemory Pool, bool Observed, bool Row, MemoryRowBytes Rows, MemoryClass Class, bool Forced) {
+    /// <summary>Gets the allowance the owner's storage draws on; device families and segments are play.</summary>
+    public MemoryAllowance Allowance { get; init; }
+}
 /// <summary>A detached account reading and the charged/reserved owners that reconcile to it, captured under one
 /// account lock: the admitted owners' rows reconcile to the account's categories and reservations, the segment owners'
 /// to their pools' device blocks, and every other owner's to the parts named in the rows
@@ -60,12 +63,14 @@ public readonly record struct MemoryRowReading(string Name, PhysicalMemory Pool,
 /// gives nothing back.</summary>
 /// <param name="Pool">The physical memory.</param>
 /// <param name="Limit">What may be spent of the pool, or <see langword="null"/> where nothing bounds it (a discrete
-/// adapter's memory no reading names).</param>
-/// <param name="Held">What the pool holds: its admitted owners' bytes (host memory) and the device blocks placed in
-/// it, a retired object's included until its block is freed.</param>
+/// adapter's memory no reading names). In host memory it is play's limit: the authored bar where a profile sets one,
+/// and no more than the machine's limit leaves once authoring's bytes are taken out.</param>
+/// <param name="Held">What play holds in the pool: its admitted play owners' bytes (host memory) and the device blocks
+/// placed in it, a retired object's included until its block is freed. Authoring's bytes are read apart
+/// (<see cref="AuthoringHeld"/>).</param>
 /// <param name="Peak">The most the pool has held at once.</param>
-/// <param name="Promised">What the pool has promised and not yet been charged: its owners' reservations, its device
-/// families' and the grants whose native allocation is not counted yet.</param>
+/// <param name="Promised">What play has promised in the pool and not yet been charged: its play owners' reservations,
+/// its device families' and the grants whose native allocation is not counted yet.</param>
 /// <param name="Retired">The part of <paramref name="Held"/> that belongs to replaced objects waiting on their last
 /// readers, as their holders state it (<see cref="MemoryAccount.DeviceReservation.Retiring"/>, the
 /// <see cref="MemoryCategory.Retirement"/> category).</param>
@@ -86,8 +91,37 @@ public readonly record struct MemoryRowReading(string Name, PhysicalMemory Pool,
 public sealed record MemoryAdmissionReading(PhysicalMemory Pool, long? Limit, long Held, long Peak, long Promised, long Retired, long Forced, long ForcedJobs, long OverLimitBytes, long OverLimitGrants, long Refusals, long DeviceRefusals, long PressureTrims, long Floor, IReadOnlyList<long> ClassHeld, IReadOnlyList<long> ClassPromised) {
     /// <summary>Gets the owner of the most recent refusal in this pool.</summary>
     public string? LastRefusedOwner { get; init; }
-    /// <summary>Gets sampled private bytes beyond the held charges used to reduce host admission room.</summary>
+    /// <summary>Gets the sampled private bytes beyond what the host pool holds (its owners and its device blocks), which
+    /// reduce the machine's room; zero without a host bar and outside host memory.</summary>
     public long PrivateBeyondHeld { get; init; }
+    /// <summary>Gets play's part of <see cref="PrivateBeyondHeld"/>, which reduces the play bar's room: the whole until
+    /// authoring work first holds or promises anything in the process (always, in a player's build), and from then on
+    /// no more than the reading last taken before it.</summary>
+    public long PlayBeyondHeld { get; init; }
+    /// <summary>Gets what authoring owners (<see cref="MemoryAllowance.Authoring"/>) hold in host memory apart from play,
+    /// which <see cref="Held"/> leaves out; zero in a player's build, whose authoring is play's, and outside host
+    /// memory.</summary>
+    public long AuthoringHeld { get; init; }
+    /// <summary>Gets what authoring owners have promised in host memory apart from play, which <see cref="Promised"/>
+    /// leaves out; zero in a player's build and outside host memory.</summary>
+    public long AuthoringPromised { get; init; }
+    /// <summary>Gets whether authoring storage is held to the play bar, as in a player's build
+    /// (<see cref="MemoryAccount.SetAuthoringOnPlayBar"/>); host memory only.</summary>
+    public bool AuthoringOnPlayBar { get; init; }
+    /// <summary>Gets what play and authoring together may hold and promise in host memory: the machine's budget, or its
+    /// free memory with what the pool held when it was read when that is smaller, less the private bytes beyond the
+    /// owners and the headroom; <see langword="null"/> outside host memory.</summary>
+    public long? MachineLimit { get; init; }
+    /// <summary>Gets the room authoring apart from play has left for a new promise, at least zero: the machine's limit
+    /// less what authoring holds and has promised and less play's entitlement (the larger of what play holds and has
+    /// promised and the bar's limit), so a bake draws on the headroom past play's budget; zero in a player's build, whose
+    /// authoring shares play's room, and <see langword="null"/> outside host memory.</summary>
+    public long? AuthoringRoom { get; init; }
+    /// <summary>Returns the room an allowance has left for a new promise: authoring's apart from play
+    /// (<see cref="AuthoringRoom"/>), or play's (<see cref="Room"/>), which a player's build's authoring shares.</summary>
+    /// <param name="allowance">The allowance.</param>
+    /// <returns>The bytes, at least zero, or <see langword="null"/> where nothing bounds the pool.</returns>
+    public long? RoomFor(MemoryAllowance allowance) => (((allowance == MemoryAllowance.Authoring) && !AuthoringOnPlayBar && (AuthoringRoom is not null)) ? AuthoringRoom : Room);
     /// <summary>Gets the room left for a new promise, at least zero, or <see langword="null"/> where nothing bounds the
     /// pool.</summary>
     public long? Room => ((Limit is { } limit) ? Math.Max(val1: 0L, val2: ((limit - Held) - Promised)) : null);

@@ -19,9 +19,6 @@ public readonly record struct ViewBinding(ViewId View, NormalizedRect Region);
 /// other layout a <see cref="ViewTransition"/> eases between/toward — see its remarks for what happens when the two
 /// counts differ).</param>
 public readonly record struct ViewLayout(IReadOnlyList<ViewBinding> Bindings) {
-    /// <summary>Gets the empty layout — no views, no regions (a valid <c>to</c> or <c>from</c> for a transition that
-    /// fades a slot out/in entirely).</summary>
-    public static ViewLayout Empty { get; } = new(Bindings: []);
 }
 /// <summary>
 /// Eases a composition of views from one <see cref="ViewLayout"/> to another. Each slot can change

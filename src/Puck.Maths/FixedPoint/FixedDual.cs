@@ -8,7 +8,6 @@ namespace Puck.Maths;
 /// Provides factory methods and derivative lifts for the <see cref="FixedDual{TValue}"/> struct.
 /// </summary>
 public static class FixedDual {
-    private static readonly FixedQ4816 Two = FixedQ4816.FromRawBits(value: 131072L);
 
     /// <summary>Creates a constant (zero dual part).</summary>
     /// <typeparam name="TValue">The carrier type providing the required arithmetic operators and identities.</typeparam>

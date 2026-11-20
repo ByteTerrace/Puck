@@ -104,9 +104,6 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
         m_leaseId = WorldFederatedIntentLease.Next();
     }
 
-    /// <summary>Gets the destination authority this arm forwards to.</summary>
-    public WorldServer Server => m_server;
-
     private ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeRouteCoreAsync() {
         if (!TryResolvePrincipal(out var principal, out var reason)) { return new((null, reason)); }
         var local = m_server.ExecuteAuthorityOperation(() => IsLiveTransferredPrincipal(server: m_server, principal: principal)

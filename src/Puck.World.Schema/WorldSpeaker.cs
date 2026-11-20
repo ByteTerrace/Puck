@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
 using Puck.World.Authoring;
@@ -27,15 +28,18 @@ public abstract record WorldSpeakerSource {
     /// preparation, advancement, and the single drain shared by every speaker feed that names this output.</summary>
     /// <param name="Instance">The declared <see cref="WorldMachine.Name"/> instance.</param>
     /// <param name="Output">The provider audio output name exposed by that instance.</param>
-    public sealed record Machine(string Instance, string Output) : WorldSpeakerSource;
+    public sealed record Machine(
+        [property: DocumentName(WorldNameKind.Machine, WorldNameRole.Names)] string Instance,
+        [property: DocumentText("a selector in the machine provider vocabulary")] string Output
+    ) : WorldSpeakerSource;
     /// <summary>A tune asset (<see cref="WorldTune"/>) played through a headless machine host — acquired while any
     /// speaker references it, released when orphaned (a runtime derivation, never a data concept).</summary>
     /// <param name="TuneId">The referenced <see cref="WorldTune.Name"/> (must resolve).</param>
-    public sealed record Tune(string TuneId) : WorldSpeakerSource;
+    public sealed record Tune([property: DocumentText("a tune id")] string TuneId) : WorldSpeakerSource;
     /// <summary>The world voice synth playing a patch asset (<see cref="WorldPatch"/>). Patches are mono by
     /// construction: the feed's channel selectors degenerate to <c>mix</c> — documented, never rejected.</summary>
     /// <param name="PatchId">The referenced <see cref="WorldPatch.Name"/> (must resolve).</param>
-    public sealed record Synth(string PatchId) : WorldSpeakerSource;
+    public sealed record Synth([property: DocumentText("a synth patch id")] string PatchId) : WorldSpeakerSource;
 }
 /// <summary>A speaker's feed — what it plays: a shared source identity, a stereo channel selector,
 /// and a gain. Stereo separation is two independent speaker rows sharing one source with <c>left</c>/<c>right</c>
@@ -46,7 +50,7 @@ public abstract record WorldSpeakerSource {
 /// <see cref="ChannelRight"/>.</param>
 /// <param name="Gain">The feed gain (1 = unity), as a literal, state binding or keys on a clock, bounded by
 /// <see cref="CreationSoundDocument.MaxLevel"/>. Publication resolves the live value without restarting the emitter.</param>
-public sealed record WorldSpeakerFeed(WorldSpeakerSource Source, string Channel, BindableScalar Gain) {
+public sealed record WorldSpeakerFeed(WorldSpeakerSource Source, [property: DocumentText("an audio channel")] string Channel, BindableScalar Gain) {
     /// <summary>The left-channel selector.</summary>
     public const string ChannelLeft = "left";
     /// <summary>The mix selector — the average of both source channels.</summary>
@@ -60,7 +64,7 @@ public sealed record WorldSpeakerFeed(WorldSpeakerSource Source, string Channel,
 /// (finite support is the cull).</param>
 /// <param name="Curve">The falloff curve token (<see cref="WorldAudioDefaults.CurveSmoothstep"/> or
 /// <see cref="WorldAudioDefaults.CurveLinear"/>), or <see langword="null"/> for the audio-defaults curve.</param>
-public sealed record WorldSpeakerAttenuation(float Radius, string? Curve);
+public sealed record WorldSpeakerAttenuation(float Radius, [property: DocumentText("a curve name")] string? Curve);
 /// <summary>
 /// One placeable speaker in the world — the camera family's sibling: abstract, name-keyed,
 /// <c>$type</c>-discriminated, whole-row <c>UpsertSpeaker</c>/<c>RemoveSpeaker</c>. Routing chiasmus: screens
@@ -76,7 +80,7 @@ public sealed record WorldSpeakerAttenuation(float Radius, string? Curve);
 [JsonDerivedType(typeof(WorldSpeaker.Bed), typeDiscriminator: "bed")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldSpeaker(
-    string Name,
+    [property: DocumentText("a speaker name")] string Name,
     WorldSpeakerFeed Feed,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSpeakerAttenuation? Attenuation
 ) {
@@ -141,7 +145,11 @@ public abstract record WorldSpeaker(
 /// <see cref="WorldSpeakerSource.Tune"/> references.</param>
 /// <param name="Source">The referenced document's file path.</param>
 /// <param name="Hash">The SHA-256 hex64 of the referenced document's canonical bytes.</param>
-public sealed record WorldTune(string Name, string Source, string Hash);
+public sealed record WorldTune(
+    [property: DocumentText("a tune name")] string Name,
+    [property: DocumentText("a tune's source is a document path")] string Source,
+    [property: DocumentText("a content digest")] string Hash
+);
 /// <summary>
 /// One synth-patch asset reference row — the <c>puck.synthesizer-patch.v1</c> twin of <see cref="WorldTune"/>, same
 /// name/source/hash shape and load-then-pin discipline.
@@ -150,7 +158,11 @@ public sealed record WorldTune(string Name, string Source, string Hash);
 /// <see cref="WorldSpeakerSource.Synth"/> and by <see cref="WorldEmission.PatchId"/> facets.</param>
 /// <param name="Source">The referenced document's file path.</param>
 /// <param name="Hash">The SHA-256 hex64 of the referenced document's canonical bytes.</param>
-public sealed record WorldPatch(string Name, string Source, string Hash);
+public sealed record WorldPatch(
+    [property: DocumentText("a patch name")] string Name,
+    [property: DocumentText("a patch's source is a document path")] string Source,
+    [property: DocumentText("a content digest")] string Hash
+);
 /// <summary>An emission facet — a synth voice a world row itself makes (phenomena sound like
 /// themselves; a creek is not a speaker). Nullable on <see cref="WorldPlacement"/>
 /// — a facet edit is the row's existing whole-row upsert. Under a repeat facet the
@@ -160,7 +172,7 @@ public sealed record WorldPatch(string Name, string Source, string Hash);
 /// <param name="Level">The emitter level (1 = unity), bounded by <see cref="CreationSoundDocument.MaxLevel"/>.</param>
 /// <param name="Radius">The audible support radius in world units, or <see langword="null"/> for the audio
 /// defaults' <c>DefaultSpeakerRadius</c>.</param>
-public sealed record WorldEmission(string PatchId, float Level, float? Radius = null);
+public sealed record WorldEmission([property: DocumentText("a synth patch id")] string PatchId, float Level, float? Radius = null);
 /// <summary>
 /// One world-event → sound binding — a row of the Audio section's cue table: when the named engine
 /// event fires, the referenced patch voices through a short-lived transient emitter placed per <see cref="Placement"/>.
@@ -178,9 +190,9 @@ public sealed record WorldEmission(string PatchId, float Level, float? Radius = 
 /// unity. Bounded by <see cref="CreationSoundDocument.MaxLevel"/> × 1000 — the shared audio gain ceiling in the cue
 /// table's integer unit.</param>
 public sealed record WorldAudioCue(
-    string Event,
-    string PatchId,
-    string Placement,
+    [property: DocumentText("an audio event")] string Event,
+    [property: DocumentText("a synth patch id")] string PatchId,
+    [property: DocumentText("where a cue sounds: a site, the listener, or a named speaker")] string Placement,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? GainThousandths = null
 ) {
     /// <summary>A capability denial — a mutate attempt without its grant, or a refused grant acquisition.</summary>
@@ -333,9 +345,9 @@ public sealed record WorldAudioCue(
 public sealed record WorldAudioDefaults(
     float MasterGain,
     float DefaultSpeakerRadius,
-    string DefaultCurve,
+    [property: DocumentText("a curve name")] string DefaultCurve,
     float DefaultBedFadeSeconds,
-    string Listener,
+    [property: DocumentText("a listener policy")] string Listener,
     IReadOnlyList<WorldAudioCue> Cues
 ) {
     /// <summary>The distance-linear finite-support falloff.</summary>

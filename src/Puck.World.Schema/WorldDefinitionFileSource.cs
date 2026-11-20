@@ -1343,16 +1343,6 @@ public static partial class WorldDefinitionFileSource {
 
         return TryReadCompiledDocument(definition: out definition, reason: out reason, refusal: out _, sourceName: sourceName, utf8: utf8);
     }
-    /// <summary>Parses a compiled world's drawn definition from its UTF-8 JSON exactly as
-    /// <see cref="TryParseCompiledDocument(string, string, out WorldDefinition?, out string)"/> parses its text, without
-    /// counting a <see cref="WorldBootWork.Parses"/>.</summary>
-    /// <param name="utf8">The drawn definition's UTF-8 JSON.</param>
-    /// <param name="sourceName">The source name echoed in failures.</param>
-    /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
-    /// <param name="reason">The named parse or schema failure.</param>
-    /// <returns>Whether parsing and schema checks succeeded.</returns>
-    public static bool TryParseCompiledDocument(ReadOnlyMemory<byte> utf8, string sourceName, out WorldDefinition? definition, out string reason) =>
-        TryReadCompiledDocument(definition: out definition, reason: out reason, refusal: out _, sourceName: sourceName, utf8: utf8);
     // The one parse of a composed or drawn document: the strict read from its bytes, the schema check, and the refusal
     // of an authored name carrying the file joiner (WorldAuthoredNames), which reads a tree only when the bytes could
     // spell one.

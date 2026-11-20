@@ -51,4 +51,26 @@ public static partial class WorldDefinitionValidator {
         admission = new WorldDefinitionAdmission(compilation: compilation!, machines: machines);
         return true;
     }
+
+    /// <summary>Validates the units an edit reaches using the selected machine catalog. When the edit requires rule
+    /// compilation, the resulting admission can serve later preparations of the same candidate and catalog.</summary>
+    /// <param name="before">The admitted document the edit was composed over.</param>
+    /// <param name="after">The proposed document.</param>
+    /// <param name="machines">The selected host's machine catalog.</param>
+    /// <param name="admission">The candidate's admission when the edit required compilation, otherwise null.</param>
+    /// <param name="reason">The refusal, or empty on success.</param>
+    /// <returns>Whether every reached unit passed validation.</returns>
+    public static bool TryAdmitChange(WorldDefinition before, WorldDefinition after, IMachineValidationCatalog machines,
+        out WorldDefinitionAdmission? admission, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: machines);
+        admission = null;
+        if (!TryValidateChange(before: before, after: after, reason: out reason, compilation: out var compilation,
+            retainCompilation: true, machines: machines)) {
+            return false;
+        }
+        if (compilation is not null) {
+            admission = new WorldDefinitionAdmission(compilation: compilation, machines: machines);
+        }
+        return true;
+    }
 }

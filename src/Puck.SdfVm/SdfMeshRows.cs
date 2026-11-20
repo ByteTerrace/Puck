@@ -81,8 +81,6 @@ public sealed class SdfMeshRows {
     /// <summary>Reads a staged row, or the absent draw for a free row.</summary>
     public SdfMeshDraw this[int row] => ((((uint)row) < ((uint)Count)) ? m_cells[row].Draw : default);
 
-    /// <summary>Reads the unclipped draw supplied by its owner.</summary>
-    public SdfMeshDraw BaseAt(int row) => m_cells[row].Base;
     /// <summary>Gets a row's allocation incarnation; zero means free.</summary>
     public ulong Occupancy(int row) => ((((uint)row) < ((uint)Count)) ? m_cells[row].Occupancy : 0);
     /// <summary>Gets a live row's picking provenance.</summary>

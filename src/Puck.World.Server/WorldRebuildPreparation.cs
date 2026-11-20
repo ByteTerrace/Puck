@@ -138,8 +138,6 @@ internal sealed record WorldRebuildPreparation(WorldRebuildRequest Request, Prin
 internal sealed class WorldRebuildPreparations {
     private readonly Queue<(WorldRebuildPreparation Preparation, BackgroundBuild<WorldPendingOp.Rebuild> Build)> m_builds = new();
 
-    /// <summary>Gets the number of rebuilds still preparing or prepared and not yet taken.</summary>
-    internal int Count => m_builds.Count;
     /// <summary>Gets a task that completes once every preparation started so far has finished.</summary>
     internal Task Completion => Task.WhenAll(m_builds.Select(selector: static entry => (entry.Build.Completion ?? Task.CompletedTask)));
 

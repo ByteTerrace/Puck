@@ -33,9 +33,6 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
     private SdfDocumentProgram? m_program;
     private int m_revision;
 
-    /// <summary>The currently loaded document's content hash (FNV-1a over its received UTF-8 bytes, computed before
-    /// decode), or <see langword="null"/> when no document has loaded successfully yet.</summary>
-    public ulong? ContentHash => m_program?.ContentHash;
     /// <summary>The currently loaded document (or <see langword="null"/> when none has loaded successfully yet), whose
     /// materials the world scene's count adds (<see cref="WorldSceneEnvelope.DocumentMaterials"/>).</summary>
     public SdfDocumentProgram? CurrentProgram => m_program;

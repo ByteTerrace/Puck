@@ -11,9 +11,6 @@ public sealed partial class SdfWorldTables {
     public IGpuBuffer ScreenEmission => m_screenEmission.Buffer;
     /// <summary>Gets the actual submitted screen reduction, independent of sky projection's cadence.</summary>
     public SdfEnvironmentSubmission? SubmittedScreenEmission => m_screenEmission.Publication.Submitted;
-    /// <summary>Gets the latest screen reduction whose submission its render node proved complete while it was still the
-    /// latest submitted.</summary>
-    public GpuImagePublication CompletedScreenEmission => m_screenEmission.Publication.Completed;
 
     internal bool ScreenEmissionOwes => (m_screenEmission.Owes || m_screenEmission.Forced);
     internal bool ScreenEmissionHasImages => m_screenBound.Any(predicate: static bound => bound);

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -62,7 +63,7 @@ namespace Puck.World;
 /// <param name="Reflow">Optional bounded rearrangement policy. Requires instance-owned transforms and a footprint.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPlacementDeal(
-    string Row,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string Row,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDealVariants? Variants = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDealPreserve? Preserve = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementReflow? Reflow = null
@@ -472,7 +473,10 @@ public sealed record WorldPlacementDeal(
 /// <param name="Map">Cell text (an integer cell's value spelled as text) to the <see cref="WorldPrototype.Id"/> the
 /// child shows. Every value must resolve to a declared, non-animated creation.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldPlacementDealVariants(string Row, IReadOnlyDictionary<string, string> Map);
+public sealed record WorldPlacementDealVariants(
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string Row,
+    [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Names)] IReadOnlyDictionary<string, string> Map
+);
 /// <summary>Instance-owned properties which reconciliation seeds at creation and subsequently preserves.
 /// Membership and the allocated deal slot remain owned by the source row.</summary>
 /// <param name="Transform">Preserve an existing child's displacement from its slot, yaw, and scale.</param>

@@ -1,3 +1,5 @@
+using Puck.Abstractions.Documents;
+
 namespace Puck.State;
 
 /// <summary>
@@ -8,4 +10,8 @@ namespace Puck.State;
 /// <param name="Name">The row's stable name.</param>
 /// <param name="Source">The referenced document's file path.</param>
 /// <param name="Hash">The SHA-256 hex64 of the referenced document's canonical bytes.</param>
-public sealed record TableRow(string Name, string Source, string Hash);
+public sealed record TableRow(
+    [property: DocumentName(WorldNameKind.Table, WorldNameRole.Declares)] string Name,
+    [property: DocumentText("a table's source is a document path")] string Source,
+    [property: DocumentText("a content digest")] string Hash
+);

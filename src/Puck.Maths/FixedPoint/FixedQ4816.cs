@@ -480,9 +480,6 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <summary>Gets the value one.</summary>
     public static FixedQ4816 One => new(Value: RawOne);
 
-    /// <summary>Gets the value one half, which the format represents exactly.</summary>
-    internal static FixedQ4816 OneHalf => new(Value: RawOneHalf);
-
     /// <summary>Gets the value zero.</summary>
     public static FixedQ4816 Zero => default;
 

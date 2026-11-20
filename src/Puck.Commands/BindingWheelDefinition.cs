@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
 
@@ -42,13 +43,13 @@ namespace Puck.Commands;
 /// <param name="Style">Author-controlled presentation and pointer-selection policy, or the documented defaults.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingWheelDefinition(
-    string Id,
+    [property: DocumentText("a binding wheel id")] string Id,
     DocumentIdentifier Group,
-    IReadOnlyList<string> HoldPages,
+    [property: DocumentText("a binding page id")] IReadOnlyList<string> HoldPages,
     IReadOnlyList<BindingPageDefinition> Rings,
     BindingWheelStyleDefinition? Style = null,
-    string? LabelRow = null,
-    string? IconRow = null
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Binding, WorldExportFacet.Binding)] string? LabelRow = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Binding, WorldExportFacet.Binding)] string? IconRow = null
 ) {
     /// <summary>The label-row cell the hub reads while nothing is hovered — what releasing now does. The one reserved
     /// key in a wheel's label row; every other key is a sector id.</summary>

@@ -2890,7 +2890,7 @@ public sealed partial class SdfMeshPathBake {
         }
         public bool InFlight { get => m_inFlight; set { m_inFlight = value; TryRelease(); Settle(); } }
 
-        public MemoryAccount.Owner Memory { get; } = MemoryAccount.Shared.CreateOwner(memoryClass: MemoryClass.Workspace, name: "mesh-bake-group");
+        public MemoryAccount.Owner Memory { get; } = MemoryAccount.Shared.CreateOwner(allowance: MemoryAllowance.Authoring, memoryClass: MemoryClass.Workspace, name: "mesh-bake-group");
 
         private SdfMesh? m_mesh;
 

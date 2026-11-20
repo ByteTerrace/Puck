@@ -84,7 +84,7 @@ Two things about the measure matter before any target is set.
   generated half is 7,900 lines that `puck schema` writes. The four `*.Post`
   projects are 27,800 lines of machine batteries, which are tests that live
   under `src/`. About 16,000 lines of `Puck.Maths` are reached only by tests
-  or by nothing ([decisions for the owner](#decisions-for-the-owner)).
+  or by nothing ([decisions for the owner](#what-the-owner-settled)).
 
 The figures below are a sizing input taken once on the integration branch.
 They are estimates of what can go, each with the count or the sample it rests
@@ -149,7 +149,7 @@ of code lines.
 
 | Project | Lines | What it does | Found |
 |---|---|---|---|
-| `Puck.Maths` | 53.3 | Fixed-point numerics (15.9), exact algebra and finite fields, sampling, and two wings named `Oracle` (10.2) and `Research` (10.7). | About 16 is reached only by tests or by nothing ([the owner's decision](#decisions-for-the-owner)). Copied about 1. The fixed-point core is dense and earned. |
+| `Puck.Maths` | 53.3 | Fixed-point numerics (15.9), exact algebra and finite fields, sampling, and two wings named `Oracle` (10.2) and `Research` (10.7). | About 16 is reached only by tests or by nothing ([the owner's decision](#what-the-owner-settled)). Copied about 1. The fixed-point core is dense and earned. |
 | `Puck.Physics` | 13.5 | Contact, the rigid solver, gravity, navigation and the motion-program core. | — . Judged dense. |
 
 ### Machines, cartridges and batteries, 76,000 lines

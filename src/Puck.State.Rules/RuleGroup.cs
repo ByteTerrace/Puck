@@ -26,7 +26,10 @@ public enum RuleGroupStepPolicy : byte {
 /// <param name="Rule">The member rule's name.</param>
 /// <param name="OnRefusal">What a refusal does to the cursor.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record RuleGroupStep(CellName Rule, RuleGroupStepPolicy OnRefusal = RuleGroupStepPolicy.Stall);
+public sealed record RuleGroupStep(
+    [property: DocumentName(WorldNameKind.Rule, WorldNameRole.Names)] CellName Rule,
+    RuleGroupStepPolicy OnRefusal = RuleGroupStepPolicy.Stall
+);
 /// <summary>One authored rule group: the members it claims, its shape, its pass ceiling, and the gate that arms
 /// it.</summary>
 /// <param name="Name">The group's stable name — unique within the section, and never a rule's name.</param>
@@ -38,9 +41,19 @@ public sealed record RuleGroupStep(CellName Rule, RuleGroupStepPolicy OnRefusal 
 /// <param name="Trigger">The gate that arms the group, or <see langword="null"/> for always.</param>
 /// <param name="Undo">The retained turn rows and depth, or <see langword="null"/> when the group has no undo history.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record RuleGroupDeclaration(CellName Name, RuleGroupShape Shape, IReadOnlyList<RuleGroupStep> Steps, int? Passes = null, ActionPredicate? Trigger = null, RuleGroupUndo? Undo = null);
+public sealed record RuleGroupDeclaration(
+    [property: DocumentName(WorldNameKind.RuleGroup, WorldNameRole.Declares)] CellName Name,
+    RuleGroupShape Shape,
+    IReadOnlyList<RuleGroupStep> Steps,
+    int? Passes = null,
+    ActionPredicate? Trigger = null,
+    RuleGroupUndo? Undo = null
+);
 /// <summary>The rows and retained turn depth an undo-enabled group owns.</summary>
-public sealed record RuleGroupUndo(IReadOnlyList<CellName> Rows, int Depth);
+public sealed record RuleGroupUndo(
+    [property: DocumentName(WorldNameKind.Any, WorldNameRole.Names, WorldExportFacet.Action)] IReadOnlyList<CellName> Rows,
+    int Depth
+);
 /// <summary>Hard bounds for rule groups. A fixpoint group runs one pass a tick, so a tick's work is its members',
 /// which the work sheet prices as the rules they are; its passes count ticks.</summary>
 public static class RuleGroupCapacity {

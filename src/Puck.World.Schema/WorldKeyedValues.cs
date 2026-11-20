@@ -1,9 +1,12 @@
+using Puck.Abstractions.Documents;
+
 namespace Puck.World;
 
 /// <summary>A keyed value's clock and key times, whatever its value's type: what the validator judges of every keyed
 /// value in a document.</summary>
 public interface IWorldKeyTrack {
     /// <summary>Gets the name of the clock the track reads.</summary>
+    [DocumentName(WorldNameKind.Clock, WorldNameRole.Names)]
     string Clock { get; }
     /// <summary>Gets the number of keys.</summary>
     int Count { get; }

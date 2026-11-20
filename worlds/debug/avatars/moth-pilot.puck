@@ -19,6 +19,7 @@ import "../../standard/rig"
 exports {
   reads [$"moth-pilot", pilotHold]
   actions [pilotHold]
+  bindings [pilotHold]
 }
 
 let pilotHeadScale = 0.68

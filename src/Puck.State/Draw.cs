@@ -57,7 +57,7 @@ public enum DrawTiming : byte {
 /// zero exactly as an unskipped site's does.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record Draw(
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellName? Source = null,
+    [property: DocumentName(WorldNameKind.Generator, WorldNameRole.Names)] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellName? Source = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateGenerator? Generator = null,
     DrawTiming Timing = DrawTiming.Boot,
     long Skip = 0L,

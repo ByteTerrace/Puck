@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using Puck.Maths;
@@ -38,7 +39,7 @@ public static class DynamicsLimits {
 /// anticipates by initially moving opposite the target's motion.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record DynamicsRow(
-    string Name,
+    [property: DocumentName(WorldNameKind.Dynamics, WorldNameRole.Declares)] string Name,
     [property: JsonPropertyName("f")] float Frequency,
     [property: JsonPropertyName("zeta")] float Damping,
     [property: JsonPropertyName("r")] float Response

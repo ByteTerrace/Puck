@@ -6,8 +6,7 @@ namespace Puck.World.Server;
 /// <param name="Candidate">The candidate whose unnamed rows are the installed declarations. When the mutation named no
 /// state at all it holds the installed state section itself.</param>
 /// <param name="Carried">The live arena's export of every unnamed row, in document order, or <see langword="null"/>
-/// when the whole section is the candidate's (it declares pools, or the mutation changed a part of the section other
-/// than its rows).</param>
+/// when the edit keeps the arena as it stands or replaces it from the complete candidate section.</param>
 /// <param name="Named">The rows the mutation added or changed, or <see langword="null"/> exactly when
 /// <paramref name="Carried"/> is.</param>
 internal readonly record struct WorldStateEdit(WorldDefinition Candidate, IReadOnlyList<StateRow>? Carried, IReadOnlySet<string>? Named);
@@ -28,6 +27,13 @@ public sealed partial class WorldDocument {
         var composed = candidate.StateRaw;
         var source = current.StateRaw;
 
+        if (ReferenceEquals(objA: composed, objB: source)) {
+            var unchanged = candidate.WithStateSection(state: installed);
+            if (Host.KeepsArena(candidate: unchanged)) {
+                return new WorldStateEdit(Candidate: unchanged, Carried: null, Named: null);
+            }
+        }
+
         if ((installed is null) || (composed is null) || (source is null) ||
             (installed.Pools is { Count: > 0 }) || (installed.PairPools is { Count: > 0 }) ||
             (composed.Pools is { Count: > 0 }) || (composed.PairPools is { Count: > 0 }) ||
@@ -35,41 +41,16 @@ public sealed partial class WorldDocument {
             return new WorldStateEdit(Candidate: candidate, Carried: null, Named: null);
         }
 
+        // Composing directly over the installed section has no live values to carry.
+        if (ReferenceEquals(source, installed)) { return new WorldStateEdit(Candidate: candidate, Carried: null, Named: null); }
+
         var before = new Dictionary<string, WorldStateRow>(capacity: (source.World?.Count ?? 0), comparer: StringComparer.Ordinal);
-        var declared = new Dictionary<string, WorldStateRow>(capacity: (installed.World?.Count ?? 0), comparer: StringComparer.Ordinal);
-
         foreach (var row in (source.World ?? [])) { before[row.Name.Value] = row; }
-        foreach (var row in (installed.World ?? [])) { declared[row.Name.Value] = row; }
 
-        var after = (composed.World ?? []);
-        var rows = new WorldStateRow[after.Count];
-        var carried = new List<StateRow>(capacity: after.Count);
-        var named = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var sameRows = (after.Count == (installed.World?.Count ?? 0));
-
-        for (var index = 0; (index < after.Count); index++) {
-            var row = after[index];
-            var name = row.Name.Value;
-
-            if (before.TryGetValue(key: name, value: out var exported) && ReferenceEquals(objA: row, objB: exported) &&
-                declared.TryGetValue(key: name, value: out var declaration)) {
-                // Composed over a document that is not the arena's export (the installed one itself), an unnamed row
-                // holds seeds rather than the arena's values, so nothing can be carried.
-                if (!declaration.HostOwned && ReferenceEquals(objA: exported, objB: declaration)) {
-                    return new WorldStateEdit(Candidate: candidate, Carried: null, Named: null);
-                }
-                rows[index] = declaration;
-                if (!declaration.HostOwned) { carried.Add(item: row); }
-            } else {
-                rows[index] = row;
-                named.Add(item: name);
-            }
-            sameRows = (sameRows && ReferenceEquals(objA: rows[index], objB: installed.World![index]));
-        }
-
-        var state = (sameRows ? installed : (installed with { World = rows }));
-
-        return new WorldStateEdit(Candidate: candidate.WithStateSection(state: state), Carried: carried, Named: named);
+        var carried = new List<StateRow>();
+        return RestoreStateRows(candidate, installed, composed, carried,
+            (row, _) => ReferenceEquals(row, before.GetValueOrDefault(row.Name.Value)),
+            row => carried.Add(row));
     }
 
     /// <summary>Names what a reload's candidate changes of the state section: every row whose declaration differs from
@@ -92,47 +73,50 @@ public sealed partial class WorldDocument {
             return null;
         }
 
-        var named = new HashSet<string>(comparer: StringComparer.Ordinal);
         var carried = new List<StateRow>();
+        var kept = new HashSet<string>(StringComparer.Ordinal);
+        var edit = RestoreStateRows(candidate, installed, composed, carried,
+            static (row, declaration) => ReferenceEquals(row, declaration) || SameAuthoredRow(row, declaration),
+            row => kept.Add(row.Name.Value));
 
-        if (!ReferenceEquals(objA: composed, objB: installed)) {
-            var declared = new Dictionary<string, WorldStateRow>(capacity: (installed.World?.Count ?? 0), comparer: StringComparer.Ordinal);
-
-            foreach (var row in (installed.World ?? [])) { declared[row.Name.Value] = row; }
-
-            var after = (composed.World ?? []);
-            var rows = new WorldStateRow[after.Count];
-            var kept = new HashSet<string>(comparer: StringComparer.Ordinal);
-            var sameRows = (after.Count == (installed.World?.Count ?? 0));
-
-            for (var index = 0; (index < after.Count); index++) {
-                var row = after[index];
-                var name = row.Name.Value;
-
-                if (declared.TryGetValue(key: name, value: out var declaration) && (ReferenceEquals(objA: row, objB: declaration) || SameAuthoredRow(left: row, right: declaration))) {
-                    rows[index] = declaration;
-                    if (!declaration.HostOwned) { kept.Add(item: name); }
-                } else {
-                    rows[index] = row;
-                    named.Add(item: name);
-                }
-                sameRows = (sameRows && ReferenceEquals(objA: rows[index], objB: installed.World![index]));
-            }
-
-            // A section that differs from the installed one in nothing is the installed one, and the install keeps the
-            // live arena.
-            var state = ((sameRows && ((composed with { World = installed.World }) == installed)) ? installed : (composed with { World = rows }));
-
-            candidate = candidate.WithStateSection(state: state);
-            if (!Host.KeepsArena(candidate: candidate) && (kept.Count > 0)) {
-                foreach (var row in (Host.MaterializeArena().StateRaw?.World ?? [])) {
-                    if (kept.Contains(item: row.Name.Value)) { carried.Add(item: row); }
-                }
+        if (!Host.KeepsArena(edit.Candidate) && kept.Count > 0) {
+            foreach (var row in Host.MaterializeArena().StateRaw?.World ?? []) {
+                if (kept.Contains(row.Name.Value)) { carried.Add(row); }
             }
         }
-
-        return new WorldStateEdit(Candidate: candidate, Carried: carried, Named: named);
+        return edit;
     }
+
+    // An unchanged row gets the installed declaration. Compose already holds its live value; reload exports it only
+    // if the arena must be replaced. The path choosing how to compare rows also supplies the continuity it needs.
+    private static WorldStateEdit RestoreStateRows(WorldDefinition candidate, WorldStateSection installed,
+        WorldStateSection composed, List<StateRow> carried, Func<WorldStateRow, WorldStateRow, bool> unchanged,
+        Action<WorldStateRow> keep) {
+        var declared = new Dictionary<string, WorldStateRow>(installed.World?.Count ?? 0, StringComparer.Ordinal);
+        foreach (var row in installed.World ?? []) { declared[row.Name.Value] = row; }
+        var edited = composed.World ?? [];
+        var rows = new WorldStateRow[edited.Count];
+        var named = new HashSet<string>(StringComparer.Ordinal);
+        var sharesRows = edited.Count == (installed.World?.Count ?? 0);
+
+        for (var index = 0; index < edited.Count; index++) {
+            var row = edited[index];
+            var name = row.Name.Value;
+            if (declared.TryGetValue(name, out var declaration) && unchanged(row, declaration)) {
+                rows[index] = declaration;
+                if (!declaration.HostOwned) { keep(row); }
+            } else {
+                rows[index] = row;
+                named.Add(name);
+            }
+            sharesRows &= installed.World is { } prior && index < prior.Count && ReferenceEquals(rows[index], prior[index]);
+        }
+        var state = sharesRows && (composed with { World = installed.World }) == installed
+            ? installed
+            : composed with { World = rows };
+        return new WorldStateEdit(candidate.WithStateSection(state), carried, named);
+    }
+
     // Whether two state rows are the same row as a document writes it, declaration and seeds alike: their serialized bytes
     // agree. SameComposeDeclaration answers for the declaration alone, which a changed seed leaves standing.
     private static bool SameAuthoredRow(WorldStateRow left, WorldStateRow right) =>

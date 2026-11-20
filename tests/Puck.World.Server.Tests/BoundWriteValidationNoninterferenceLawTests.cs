@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Numerics;
 using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.World.Protocol;
@@ -47,8 +48,8 @@ public sealed class BoundWriteValidationNoninterferenceLawTests {
 
     // What the writer, and then the operator, are told for one write into the public bound row, with the hidden row
     // left holding text its binding reads or text it cannot.
-    private static (string Recipient, string Operator) Answers(string hidden, bool readable) {
-        using var fixture = Fixtures.FreshServer(Document());
+    private static (string Recipient, string Operator) Answers(WorldDefinition document, string hidden, bool readable) {
+        using var fixture = Fixtures.FreshServer(document);
         fixture.Server.Grant(new WorldGrant(Grantee: Writer, Capability: WorldCapability.Mutate, Subject: GrantSubject.Section(WorldSection.State),
             Exclusive: false, Budget: 64, KindMask: WorldMutationKindCatalog.KindsOf(WorldSection.State)), Principal.Console);
         fixture.Server.Grant(new WorldGrant(Grantee: Writer, Capability: WorldCapability.Edit, Subject: GrantSubject.State("spot"),
@@ -143,8 +144,8 @@ public sealed class BoundWriteValidationNoninterferenceLawTests {
         var hidden = HiddenUnitRows(Document());
         Assert.NotEmpty(hidden);
         foreach (var row in hidden) {
-            var valid = Answers(row, readable: true);
-            var invalid = Answers(row, readable: false);
+            var valid = Answers(Document(), row, readable: true);
+            var invalid = Answers(Document(), row, readable: false);
 
             Assert.Equal(valid.Recipient, invalid.Recipient);
             // The control: the recipient's write is a real one, not refused in both worlds.
@@ -153,5 +154,22 @@ public sealed class BoundWriteValidationNoninterferenceLawTests {
             // validation did when it validated the whole document.
             Assert.NotEqual(valid.Operator, invalid.Operator);
         }
+    }
+
+    [Fact]
+    public void ARecipientScreenWriteDoesNotReadAnotherUnitsBinding() {
+        var document = Document();
+        document = document with {
+            PlacementRowsRaw = [document.Placements[1]],
+            ScreensRaw = [new WorldScreen(Index: 0, Origin: Bound("state.spot"), Right: Vector3.UnitX, Up: Vector3.UnitY,
+                HalfWidth: 1f, HalfHeight: 1f, HalfDepth: 0.1f, Round: 0f, Source: new WorldScreenSource.None(), Route: WorldScreenRoute.Passive)],
+        };
+        Assert.True(WorldStateDocumentValues.TryResolve(document, out document, out var reason), reason);
+        var valid = Answers(document, "vault", readable: true);
+        var invalid = Answers(document, "vault", readable: false);
+
+        Assert.StartsWith(nameof(WorldMutationDecision.Applied), valid.Recipient, StringComparison.Ordinal);
+        Assert.Equal(valid.Recipient, invalid.Recipient);
+        Assert.NotEqual(valid.Operator, invalid.Operator);
     }
 }

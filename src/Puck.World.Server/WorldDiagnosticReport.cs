@@ -56,7 +56,7 @@ public sealed record WorldDiagnosticFinding(string Id, string View, string Sever
     string Expected, double? Observed, WorldDiagnosticBudget Budget, Vector3 Witness, Vector3 Normal,
     WorldDiagnosticIdentity Identity, ulong FirstSeen = 0, ulong LastSeen = 0, ulong ActiveTicks = 0,
     bool Resolved = false, string Visibility = "unknown", IReadOnlyDictionary<string, string>? Details = null) {
-    /// <summary>The units of the separation and budget.</summary>
+    /// <summary>The units of the separation and budget, written into the finding's JSON.</summary>
     public string Units => "m";
     /// <summary>The stable presentation anchor; measurements always retain their own current witness.</summary>
     public Vector3? PinAnchor { get; init; }

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Runtime.CompilerServices;
@@ -154,6 +155,7 @@ public sealed partial record WorldDefinition(
     [JsonPropertyName("kits"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public WorldKitsSection? KitsRaw { get { WorldDocumentReads.Note(inputs: WorldDocumentInputs.Kits); return m_kits; } init => m_kits = value; }
     /// <summary>The kit every seat body is built from; absent, the sole declared kit when exactly one is declared.</summary>
+    [DocumentText("a kit in the composed world")]
     [JsonPropertyName("defaultSeatKit"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DefaultSeatKitRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.DefaultSeatKit); return field; } init; } = DefaultSeatKitRaw;
     /// <summary>The addon modules the world mounts, each pinned by its content hash.</summary>
@@ -440,6 +442,7 @@ public sealed partial record WorldDefinition(
     /// here, the validator refuses anything else, and every serialization of a running document (a save fold, the
     /// replica egress, a replay embed) is self-contained. A wire-arriving document has no directory to resolve
     /// against, so a non-null basis on that path refuses rather than resolving.</remarks>
+    [DocumentText("a path or document locator")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Basis { get { WorldDocumentReads.Note(input: WorldDocumentInput.Basis); return field; } init; }
     /// <summary>Gets the directory every relative path this document authors resolves beside
@@ -498,6 +501,7 @@ public sealed partial record WorldDefinition(
         : string.Empty));
     /// <summary>Gets the stable document id used when this world submits to another document, or
     /// <see langword="null"/> when the document authors none.</summary>
+    [DocumentText("a path or document locator")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DocumentId { get { WorldDocumentReads.Note(input: WorldDocumentInput.DocumentId); return field; } init; }
     /// <summary>Gets the named second-order "personality" rows every follower consumer (looks, camera booms, kit
@@ -680,6 +684,7 @@ public sealed partial record WorldDefinition(
     [JsonIgnore]
     public WorldRenderDefaults Render => (RenderRaw ?? WorldRenderDefaults.Absent);
     /// <summary>Gets the document schema tag — <see cref="SchemaVersion"/> for a well-formed document.</summary>
+    [DocumentText("a schema or program version")]
     public string Schema { get { WorldDocumentReads.Note(input: WorldDocumentInput.Schema); return field; } init; } = SchemaVersion;
     /// <summary>Gets the diegetic screens standing in the plaza — ABSENT resolves to none.</summary>
     [JsonIgnore]
@@ -1091,16 +1096,6 @@ public sealed partial record WorldDefinition(
         HoldingMoves.TryGetValue(this, out var move) && move.Previous.TryGetTarget(out var source) && ReferenceEquals(previous, source)
             ? move.Rows
             : default;
-    /// <summary>Returns a copy with its declared state spaces replaced.</summary>
-    public WorldDefinition WithWorldSpaces(IReadOnlyList<StateSpace>? spaces) {
-        var updated = this with {
-            StateRaw = ((StateRaw ?? new WorldStateSection()) with { Spaces = spaces }),
-        };
-
-        PreserveCompatibleCompilation(target: updated);
-
-        return updated;
-    }
 
     private static readonly RuntimeCompilationCache AbsentStateCompilation = new();
     [SideTable(reason: "holds the state catalog the running arena was created against; a recompiled catalog would mint keys that arena cannot resolve")]

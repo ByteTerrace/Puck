@@ -764,22 +764,6 @@ public readonly record struct CompiledDiscreteMeasure64 {
         Quadratic,
     }
     private readonly record struct UInt256(UInt128 High, UInt128 Low) : IComparable<UInt256> {
-        private UInt256 ShiftLeftTwoBits() => new(
-            High: (High << 2) | (Low >> 126),
-            Low: (Low << 2)
-        );
-        private uint TwoBits(int pairIndex) {
-            var bitIndex = (pairIndex * 2);
-
-            return ((bitIndex < 128)
-                ? (uint)((Low >> bitIndex) & 3)
-                : (uint)((High >> (bitIndex - 128)) & 3)
-            );
-        }
-        private UInt256 WithLowBits(uint bits) => new(
-            High: High,
-            Low: Low | bits
-        );
 
         public int CompareTo(UInt256 other) {
             return LexicographicOrder.Compare(

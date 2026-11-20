@@ -494,20 +494,8 @@ public static class WorldKeyResolver {
             y: modulus
         );
     }
-    /// <summary>Returns a keyed value's integral over its clock's phase from zero to a phase, in value units times
-    /// phase: the area under the eased keys, the wrap segment's two pieces included.</summary>
-    /// <param name="track">The track.</param>
-    /// <param name="span">The clock's span.</param>
-    /// <param name="phase">The phase to integrate to, in <c>[0, 1]</c>.</param>
-    /// <returns>The integral.</returns>
-    public static double PhaseIntegral(WorldKeyTrack<float> track, double span, double phase) => PhaseIntegral(
-        phase: phase,
-        span: span,
-        track: track,
-        value: static value => value
-    );
-    /// <summary>Returns one component of a keyed value's integral over its clock's phase from zero to a phase, as
-    /// <see cref="PhaseIntegral(WorldKeyTrack{float}, double, double)"/> integrates a scalar.</summary>
+    /// <summary>Returns one component of a keyed value's integral over its clock's phase from zero to a phase, in value
+    /// units times phase: the area under the eased keys, the wrap segment's two pieces included.</summary>
     /// <typeparam name="T">The value's type.</typeparam>
     /// <param name="track">The track.</param>
     /// <param name="value">Reads the integrated component of a key's value.</param>

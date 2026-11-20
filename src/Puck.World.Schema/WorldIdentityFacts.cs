@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Globalization;
 using System.Text.Json.Serialization;
 
@@ -10,7 +11,7 @@ namespace Puck.World;
 /// <param name="State">The keyed <see cref="CellKind.Int"/> row on the identity's document holding the facts.</param>
 /// <param name="Capacity">How many distinct facts the row holds; a write past it refuses by name.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldIdentityFacts(CellName State, int Capacity) {
+public sealed record WorldIdentityFacts([property: DocumentText("an identity-lane row name")] CellName State, int Capacity) {
     /// <summary>The shape an identity section authoring no <c>facts</c> member carries.</summary>
     public static WorldIdentityFacts Default { get; } = new(
         State: CellName.Parse(candidate: "identity-facts"),
@@ -132,14 +133,6 @@ public static class WorldIdentityFactLane {
             }
         }
     }
-    /// <summary>Returns whether a lane key belongs to <paramref name="bodyIndex"/>.</summary>
-    /// <param name="key">The lane key.</param>
-    /// <param name="bodyIndex">The body index.</param>
-    public static bool BelongsTo(ReadOnlySpan<char> key, int bodyIndex) => (TryParse(
-        bodyIndex: out var owner,
-        fact: out _,
-        key: key
-    ) && (owner == bodyIndex));
     /// <summary>Spells the lane key of one (body, fact) pair.</summary>
     /// <param name="bodyIndex">The 0-based body index.</param>
     /// <param name="fact">The fact key.</param>

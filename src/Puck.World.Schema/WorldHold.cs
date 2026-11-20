@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
 using Puck.Maths;
@@ -10,7 +11,7 @@ namespace Puck.World;
 /// <param name="State">The declared <c>state.body</c> slot name.</param>
 /// <param name="RatePerSecond">The positive rate the slot drains at, per second.</param>
 public sealed record WorldHoldSpend(
-    string State,
+    [property: DocumentText("a per-body slot name")] string State,
     float RatePerSecond
 );
 /// <summary>What the medium does to a body standing in it — the authored half of a <see cref="BodyHoldBond.Medium"/>
@@ -99,7 +100,7 @@ public sealed record WorldHoldEnvelope(
 /// the tick, clearing the ballistic carry; a medium row folds it into the medium's own displacement before that
 /// law's convergence runs.</param>
 public sealed record WorldHold(
-    string Name,
+    [property: DocumentText("a hold name, local to its kit")] string Name,
     BodyHoldBond Bond,
     BodyHoldKind Hold,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector2? Cone = null,
@@ -111,7 +112,7 @@ public sealed record WorldHold(
     BodyHoldForward Forward = BodyHoldForward.Heading,
     bool OnDrive = false,
     float DriveAlignment = 0f,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Release = null,
+    [property: DocumentText("logical input channels")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Release = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldSpend? Spend = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldMedium? Medium = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldGravity? Gravity = null,

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
 
 namespace Puck.World;
 
@@ -47,16 +48,16 @@ public sealed record WorldKeyLightSection(
 /// <see langword="null"/> for every local seat that holds one.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldKeyLightRow(
-    string Id,
+    [property: DocumentText("a key light row id")] string Id,
     BindableColor Color,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Keys = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Bound = null,
+    [property: DocumentText("input source identifiers")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Keys = null,
+    [property: DocumentText("binding entry ids")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Bound = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Character = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Lit = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Available = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? FlashSignal = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? FlashColor = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Seat = null
+    [property: DocumentText("a seat selector")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Seat = null
 );
 /// <summary>The <see cref="WorldKeyLightSection"/> bounds <see cref="WorldDefinitionValidator"/> enforces.</summary>
 public static class WorldKeyLightCapacity {
@@ -81,7 +82,7 @@ public static class WorldKeyLightCapacity {
 /// trigger led to, from 0 to <see cref="WorldHighlightCapacity.MaxDelaySeconds"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldHighlightRow(
-    string Id,
+    [property: DocumentText("a highlight row id, the stem of the files it writes")] string Id,
     BindableScalar Signal,
     int Frames = 1,
     float DelaySeconds = 0f

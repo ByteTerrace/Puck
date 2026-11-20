@@ -99,7 +99,17 @@ public sealed record StateCellClock(long EpochTick = 0, long EpochEngineTick = 0
 /// settled anywhere but tick zero. See <see cref="StateCellClock"/>.</param>
 /// <param name="Visibility">An additional cell-level audience restriction; slot policies belong on the row.</param>
 /// <param name="Observation">The persisted last-seen stamp of a knowledge cell.</param>
-public sealed record StateCell(CellName Key, CellValue Value, StateAdvance? Advance = null, StateDynamics? Dynamics = null, StateCycle? Cycle = null, StateCellBehavior Behavior = StateCellBehavior.Inherit, StateCellClock? Clock = null, StateVisibility? Visibility = null, StateObservation? Observation = null);
+public sealed record StateCell(
+    [property: DocumentText("a cell key is local to its row")] CellName Key,
+    CellValue Value,
+    StateAdvance? Advance = null,
+    StateDynamics? Dynamics = null,
+    StateCycle? Cycle = null,
+    StateCellBehavior Behavior = StateCellBehavior.Inherit,
+    StateCellClock? Clock = null,
+    StateVisibility? Visibility = null,
+    StateObservation? Observation = null
+);
 /// <summary>
 /// One row of the <c>state</c> section — a named cell or a named collection of cells, addressed by its stable
 /// <see cref="StateRowShape.Name"/>. <see cref="StateRowShape.Name"/> is the <c>UpsertStateRow</c>/<c>RemoveStateRow</c> key, the

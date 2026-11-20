@@ -14,9 +14,12 @@ namespace Puck.World;
 /// <param name="Lines">The console lines the command submits, in order. A <c>{name}</c> placeholder takes a
 /// parameter's argument and <c>{{</c>/<c>}}</c> stand for literal braces; the first token, the verb, is literal.</param>
 public sealed record WorldConsoleCommand(
+    [property: DocumentText("a console verb name, in the command registry's namespace")]
     [property: JsonPropertyName("name")] string Name,
+    [property: DocumentText("literal text")]
     [property: JsonPropertyName("help"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Help = null,
     [property: JsonPropertyName("parameters"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldConsoleCommandParameter>? Parameters = null,
+    [property: DocumentText("console command text")]
     [property: JsonPropertyName("lines")] IReadOnlyList<string>? Lines = null
 );
 /// <summary>One typed parameter of a <see cref="WorldConsoleCommand"/>.</summary>
@@ -27,9 +30,12 @@ public sealed record WorldConsoleCommand(
 /// <param name="Values">The admitted values of a <see cref="WorldConsoleCommandParameterKind.Choice"/> parameter, each one
 /// plain token; no other kind carries any.</param>
 public sealed record WorldConsoleCommandParameter(
+    [property: DocumentText("a placeholder local to its command's lines")]
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("kind")] WorldConsoleCommandParameterKind Kind = WorldConsoleCommandParameterKind.Text,
+    [property: DocumentText("command argument values")]
     [property: JsonPropertyName("default"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Default = null,
+    [property: DocumentText("command argument values")]
     [property: JsonPropertyName("values"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Values = null
 );
 /// <summary>What an argument for a <see cref="WorldConsoleCommandParameter"/> must be.</summary>

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.Commands;
@@ -16,9 +17,9 @@ namespace Puck.Commands;
 /// page's fallback table, or <see langword="null"/> for no inheritance.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingPageDefinition(
-    string Id,
+    [property: DocumentText("a binding page id")] string Id,
     IReadOnlyList<BindingPageEntryDefinition> Entries,
-    string? Label = null,
-    string? Icon = null,
-    string? Inherits = null
+    [property: DocumentText("literal text")] string? Label = null,
+    [property: DocumentText("an icon name")] string? Icon = null,
+    [property: DocumentText("a binding page id")] string? Inherits = null
 );

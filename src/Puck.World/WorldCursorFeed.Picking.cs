@@ -23,8 +23,6 @@ internal sealed partial class WorldCursorFeed : IDisposable {
     public SdfWorldView? PickView => (m_hoverPicker?.View ?? (HoldsCapturedView ? m_explain.CapturedView : null));
     /// <summary>The exact render instance the pointer pixel samples, or null while no consumer demands it.</summary>
     public string? PickInstance { get; private set; }
-    /// <summary>The latest explicit explanation, retaining its fenced census even after the pointer moves.</summary>
-    public WorldExplainPick Explanation => m_explain;
 
 
     private bool HoldsCapturedView => ((m_explain.CapturedSlot == m_pointerSlot) && (m_pointerPicker?.View is { } view) && (view == m_explain.CapturedView));

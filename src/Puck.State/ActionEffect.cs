@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.State;
@@ -24,7 +25,7 @@ namespace Puck.State;
 public abstract record ActionEffect {
     /// <summary>Restores and removes the newest retained turn of a named undo group.</summary>
     /// <param name="Group">The undo-enabled rule group.</param>
-    public sealed record RewindGroup(CellName Group) : ActionEffect;
+    public sealed record RewindGroup([property: DocumentName(WorldNameKind.RuleGroup, WorldNameRole.Names, WorldExportFacet.Action)] CellName Group) : ActionEffect;
     /// <summary>Applies a bounded state transform through the ordinary mutation pipeline.</summary>
     /// <param name="Transform">The typed operation.</param>
     public sealed record TransformState(StateTransform Transform) : ActionEffect;
@@ -37,10 +38,13 @@ public abstract record ActionEffect {
     /// <param name="FromKey">The cell of <paramref name="FromState"/>, or null for its slot.</param>
     /// <param name="Expression">A bounded numeric expression evaluated in the row's kind.</param>
     public sealed record PushState(
-        StateChannelRef State,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef State,
         decimal? Value = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? FromState = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? FromKey = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
     ) : ActionEffect;
     /// <summary>Writes a named state cell — a <c>state</c>-section row's cell at rule scope, a counter slot inside a
@@ -80,15 +84,21 @@ public abstract record ActionEffect {
     /// fixed-point domain. Exactly one source spelling is authored.</param>
     /// <param name="Vector">The base64url-encoded vector literal a vector state row's cell takes.</param>
     public sealed record SetState(
-        StateChannelRef State,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef State,
         decimal? Value = null,
         ActionTarget Target = ActionTarget.Self,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? FromState = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? FromKey = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
+        [property: DocumentText("literal text")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null,
+        [property: DocumentText("encoded vector components")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Vector = null
     ) : ActionEffect;
     /// <summary>Adds to a named state cell — the same shape as <see cref="SetState"/>, here the source is the addend
@@ -105,20 +115,25 @@ public abstract record ActionEffect {
     /// the addend rather than the replacement.</param>
     /// <param name="Expression">See <see cref="SetState.Expression"/>.</param>
     public sealed record AddState(
-        StateChannelRef State,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef State,
         decimal? Value = null,
         ActionTarget Target = ActionTarget.Self,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? FromState = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? FromKey = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
     ) : ActionEffect;
     /// <summary>Removes one addressed cell from a declared state row.</summary>
     /// <param name="State">The row to remove from.</param>
     /// <param name="Key">The optional cell key.</param>
     public sealed record RemoveStateCell(
-        StateChannelRef State,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef State,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null
     ) : ActionEffect;
     /// <summary>Writes an absolute simulation due tick into an integer state cell. The delay is converted against
@@ -128,8 +143,9 @@ public abstract record ActionEffect {
     /// <param name="DelaySeconds">The non-negative delay, rounded up to simulation ticks.</param>
     /// <param name="Key">The optional cell key.</param>
     public sealed record ScheduleState(
-        StateChannelRef State,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef State,
         decimal DelaySeconds,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null
     ) : ActionEffect;
     /// <summary>Applies a bounded list of effects atomically, as a savepoint inside the firing: each effect fires once,
@@ -148,7 +164,7 @@ public abstract record ActionEffect {
     /// mutation ordinal.</summary>
     /// <param name="Row">The draw site's row name. One name, not a (source, destination) pair: a site's source is its
     /// own facet and a site is a scalar slot, so there is nothing else to address.</param>
-    public sealed record Generate(StateChannelRef Row) : ActionEffect;
+    public sealed record Generate([property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Row) : ActionEffect;
     /// <summary>Branches on a predicate: fires <paramref name="Then"/> when it holds, else <paramref name="Else"/>
     /// when present. Both branches read the frame at the effect's own position, so an earlier effect's same-firing
     /// write is visible to the condition exactly as it is to a later effect's own operand. A condition that fails to
@@ -171,21 +187,25 @@ public abstract record ActionEffect {
     /// <param name="Binding">The lexical instance name available only inside <paramref name="Effects"/>.</param>
     /// <param name="Effects">The ordered initializer and body effects run under the fresh binding.</param>
     public sealed record Claim(
-        StateChannelRef Pool,
-        CellName Binding,
+        [property: DocumentName(WorldNameKind.Pool, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Pool,
+        [property: DocumentText("a lexical instance binding")] CellName Binding,
         IReadOnlyList<ActionEffect> Effects
     ) : ActionEffect;
     /// <summary>Releases the currently bound pool instance named by <paramref name="Binding"/>. A stale or already
     /// released binding refuses the enclosing firing instead of selecting a later reclaim of the same slot.</summary>
     /// <param name="Binding">The lexical instance binding to release.</param>
-    public sealed record Release(CellName Binding) : ActionEffect;
+    public sealed record Release([property: DocumentText("a lexical instance binding")] CellName Binding) : ActionEffect;
     /// <summary>Snapshots one pool's live generation-checked instances and fires <paramref name="Effects"/> for
     /// each under <paramref name="Binding"/>. A release or reclaim inside the body cannot make a replacement slot
     /// appear in the same sweep.</summary>
     /// <param name="Pool">The declared pool to visit.</param>
     /// <param name="Binding">The lexical binding available only inside <paramref name="Effects"/>.</param>
     /// <param name="Effects">The ordered effects run for each snapshot instance.</param>
-    public sealed record ForEachPool(StateChannelRef Pool, CellName Binding, IReadOnlyList<ActionEffect> Effects) : ActionEffect;
+    public sealed record ForEachPool(
+        [property: DocumentName(WorldNameKind.Pool, WorldNameRole.Names)] StateChannelRef Pool,
+        [property: DocumentText("a lexical instance binding")] CellName Binding,
+        IReadOnlyList<ActionEffect> Effects
+    ) : ActionEffect;
     /// <summary>Claims one pair-pool instance for two currently bound endpoint instances, then runs its body under
     /// the fresh pair binding. Endpoint handles remain generation-checked, so a released/reclaimed endpoint cannot
     /// be paired through a stale alias.</summary>
@@ -194,7 +214,13 @@ public abstract record ActionEffect {
     /// <param name="Right">The lexical binding for the right endpoint.</param>
     /// <param name="Binding">The lexical binding for the fresh pair instance.</param>
     /// <param name="Effects">The ordered body under <paramref name="Binding"/>.</param>
-    public sealed record ClaimPair(StateChannelRef Pool, CellName Left, CellName Right, CellName Binding, IReadOnlyList<ActionEffect> Effects) : ActionEffect;
+    public sealed record ClaimPair(
+        [property: DocumentName(WorldNameKind.Pool, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Pool,
+        [property: DocumentText("a lexical endpoint binding")] CellName Left,
+        [property: DocumentText("a lexical endpoint binding")] CellName Right,
+        [property: DocumentText("a lexical pair binding")] CellName Binding,
+        IReadOnlyList<ActionEffect> Effects
+    ) : ActionEffect;
 
     /// <summary>Enumerates effects with every effect they hold, each before what it holds: a branch's arms, a
     /// transaction's body and its failure arm, and the bodies a claim, a pair claim and a pool sweep run. A reader that

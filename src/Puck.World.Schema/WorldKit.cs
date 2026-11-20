@@ -26,8 +26,8 @@ namespace Puck.World;
 /// anchored through <see cref="Puck.Physics.IContactField.TryNearestSurfaceAlongDirection"/> and
 /// <see cref="Puck.Physics.FixedTetherConstraint"/>.</remarks>
 public sealed record WorldKit(
-    string Name,
-    string BodyMotionProgram,
+    [property: DocumentText("a kit name")] string Name,
+    [property: DocumentText("a body motion program name")] string BodyMotionProgram,
     WorldMotion Motion,
     [property: JsonPropertyName("producers"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, BodyProgramParameters>? ProducersRaw = null,
     [property: JsonPropertyName("actions"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, ActionSpec>? ActionsRaw = null,

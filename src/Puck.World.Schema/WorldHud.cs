@@ -146,12 +146,15 @@ public sealed record WorldHudFrameCandidate(WorldFrameSource Source, [property: 
 /// <param name="Markup">Whether a text element's resolved text is read as markup: <c>[wave]</c>, <c>[shake]</c>, <c>[caret at=3]</c> and the other effect tags of <c>Puck.Text</c> style each glyph, and a placeholder may supply a tag's name or a parameter's value. Absent, brackets are ordinary text.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldHudElement(
-    string Id,
+    [property: DocumentText("a HUD element id")] string Id,
     WorldHudElementKind Kind,
     WorldHudRect Rect,
     WorldHudStyleToken Style,
+    [property: DocumentText("literal text")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Binding, WorldExportFacet.Binding)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Binding = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Template, WorldExportFacet.Binding)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Template = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFrameSource? Source = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Puck.Commands.SourceFit Fit = Puck.Commands.SourceFit.Cover,
@@ -165,6 +168,7 @@ public sealed record WorldHudElement(
     float PlotMin = 0f,
     float PlotMax = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? PlotReference = null,
+    [property: DocumentText("a presentation reading's source name, in the readings vocabulary")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PlotReferenceBinding = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Markup = false
 ) {
@@ -190,7 +194,14 @@ public sealed record WorldHudElement(
 /// <see cref="WorldHudCapacity.MaxElementsPerPanel"/>.</param>
 /// <param name="Visible">The panel's visibility condition over presentation facts, or <see langword="null"/> for always.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldHudPanel(string Id, WorldHudRect Rect, WorldHudLayer Layer, WorldHudPanelStyle Style, IReadOnlyList<WorldHudElement> Elements, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null) {
+public sealed record WorldHudPanel(
+    [property: DocumentText("a HUD panel id")] string Id,
+    WorldHudRect Rect,
+    WorldHudLayer Layer,
+    WorldHudPanelStyle Style,
+    IReadOnlyList<WorldHudElement> Elements,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null
+) {
     private readonly IReadOnlyList<WorldHudElement> m_elements = (Elements ?? []);
 
     /// <summary>Gets the panel's child elements. Absent and empty read identically to every consumer, and the
@@ -359,13 +370,6 @@ public static class HudBindingVocabulary {
     private const string WorldFpsToken = "world.fps";
     private const string WorldTickToken = "world.tick";
 
-    /// <summary>Determines whether <paramref name="token"/> is a recognized binding — the validator's refuse-unknown-by-name check.</summary>
-    /// <param name="token">The token.</param>
-    /// <returns><see langword="true"/> when recognized.</returns>
-    public static bool IsKnown(string? token) => TryParse(
-        binding: out _,
-        token: token
-    );
     /// <summary>Parses a binding token against the closed vocabulary.</summary>
     /// <param name="token">The token (e.g. <c>world.tick</c>, <c>seat.1.position.x</c>, <c>state.row</c>,
     /// <c>state.row.key</c>).</param>

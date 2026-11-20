@@ -189,26 +189,6 @@ public readonly record struct FixedPosition
 
         return true;
     }
-    private static bool TryNormalizeComponent(long cell, long localRaw, out long normalizedCell, out long normalizedLocalRaw) {
-        var quotient = (localRaw >> CellRawLog2);
-        var remainder = localRaw & (CellRaw - 1L);
-        var carry = (quotient + ((remainder + HalfCellRaw) >> CellRawLog2));
-
-        if (
-            ((carry > 0L) && (cell > (long.MaxValue - carry))) ||
-            ((carry < 0L) && (cell < (long.MinValue - carry)))
-        ) {
-            normalizedCell = default;
-            normalizedLocalRaw = default;
-
-            return false;
-        }
-
-        normalizedCell = (cell + carry);
-        normalizedLocalRaw = unchecked((localRaw - (carry << CellRawLog2)));
-
-        return true;
-    }
     private static bool TryNormalizeComponent(long cell, Int128 localRaw, out long normalizedCell, out long normalizedLocalRaw) {
         // Arithmetic right shift is floor division by the power-of-two cell size. The non-negative remainder then
         // selects the centred representative without an overflowing half-cell bias.

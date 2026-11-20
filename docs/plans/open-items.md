@@ -1244,17 +1244,36 @@ Next: fill the engine gaps first
   lie in measured cells of stride one (2.1 mm), as triangles 0.3 to 0.4 mm
   high beside crease vertices on the shell's cut edge, where the flared field
   reads a fifth of the distance (slope 0.2), so the rule acts in the measured
-  contour, not in the ring or the refinement.
-- [high] `shape-blend-xor`'s 112 flipped triangles lie along the pinch curves
+  contour, not in the ring or the refinement. The CPU audit cannot judge that
+  rule here: at slope 0.2 the CPU twin's values step by 2⁻¹⁶ of field, 76 µm
+  of distance, and its gradients by 1/32 a component, about eight degrees of
+  normal, so the planes one crease vertex of the left blade solves put the
+  bottom face at offsets 0.3 mm apart, and the triangles between that vertex
+  and its neighbours (0.3 mm high) turn over. The audit also counts each
+  material-cut piece of a turned triangle: with the cut off, the group reads
+  417 flipped, not 902. Read the shins in a device store audit (the CPU-taps
+  item above) before changing their contour.
+- [high] `shape-blend-xor`'s flipped triangles lie along the pinch curves
   where the sphere crosses the box's faces, where the XOR's two solids touch
-  along a line. 102 of its 108 narrow faces lie in ring cells, and the usual
-  flip joins two lattice vertices to a ring cell's merged vertex (24 to 33
-  fine vertices of one 15 mm cell) that the field check then moved 2 to 4 mm
-  onto one sheet. Declaring the XOR's seam as detail, to refine the pinch at
-  2 mm, moved the defects into measured cells and left 101 flips and 314
-  folds, so the cause is the contour at a pinch at any spacing: it needs a
-  rule that keeps the two wedges' vertices on the pinch line and never joins
-  them through one vertex, not more refinement.
+  along a line, nearly all with a ring cell's merged vertex (a 15 mm cell's 24
+  to 35 fine vertices) as a corner. Two causes are fixed: a transition edge
+  whose interpolated end gives a sign the field does not share fed its merged
+  piece a plane up to a fine cell off the face (`CrossingRoot.Bracketed`), and
+  a piece holding both faces of a wedge whose edge lies past its block merged
+  into one vertex the settle returned inside the solid
+  (`SdfDualContouring.SplitAtCreases`); 94 flipped and 85 folds remain, from
+  112 and 81. What remains, read in the exhibit's contour: merged pieces whose
+  crease crosses their block but whose planes do not meet within
+  `MergedResidual` (the curved pinch across a 15 mm cell reads 1.1 to 1.7 times
+  it), whose vertex takes the pieces' mean inside the wedge and moves onto one
+  face in the field check; and coarse cells whose interpolated topology joins
+  the two wedges, where opposite-facing quads share merged vertices. Splitting
+  those pieces as well, by face or by sheet, turned more triangles than it
+  fixed (123 and 132 flipped). Declaring the seam as detail, to refine the
+  pinch at 2 mm, moved the defects into measured cells and left 101 flips and
+  314 folds, so the next rule is the contour's at a pinch: a crease vertex for
+  a piece whose crease crosses its block though its planes miss the residual,
+  and a merged piece kept to one wedge.
 - [high] [Moving blends](moving-blends.md) steps 4 and 5 still need the lead's
   presented striped-neck check and the quiet-window cost of a skinned
   close-up and a crowd on both backends.
@@ -3762,6 +3781,27 @@ their lane order; this packet keeps the single duplicates and leads.
   and `Commit(overwrite: false)` preserves a concurrent winner only where
   `File.Move` without overwrite is create-only. A law that races two stamps
   on each platform settles the second.
+- [low] `PrimeKernels.TrialDivision` writes each vector width's rung by hand:
+  `HasTrialFactor512Core`, `HasTrialFactor256Core` and `HasTrialFactor128Core`
+  are one fold-and-compare loop at three widths, and so are the three
+  `HasNarrowTrialFactor*Core` loops. One generic rung over a lanes interface
+  (`VectorLanes.cs` already carries `IByteVectorLanes` and
+  `ISignedByteWideningLanes`; this needs 32- and 64-bit multiply, compare-any
+  and the 16-bit multiply-add) would hold each loop once, as
+  `BinaryFieldKernels`' region rungs now do. The law
+  `prime-field.trial-division-rungs-vs-remainder` checks every rung, and the
+  disassembly (`puck bench kernels`) must match the hand-written form.
+- The weight audit's next targets, from a whole-solution semantic reference
+  walk (a scratch Roslyn pass that marks every symbol any syntax node in any
+  project resolves to), read for duplicates and leftovers rather than line
+  count (the owner's ruling; `Puck.Maths`' `Research` and `Oracle` folders stay
+  as product source even where only tests reach them): 690 lines of
+  `Puck.HumbleGamingBrick.Forge` and 491 of `Puck.Text` that nothing reaches;
+  and the interface members whose every caller uses the concrete
+  type (`IWorldMachineHost`, `IWorldAuthorityStore`, `IWorldGrantsView`,
+  `IWorldAuthorityHost`), which can drop off their interfaces. The walk does
+  not credit an abstract or interface member called through a derived type,
+  so treat its interface results as leads.
 - The `.puck` sources still under-use the language:
   `worlds/debug/avatars/moth.puck` holds thousands of decimal literals and
   raw quaternions, with the pod's band groups pasted (a uniform row table

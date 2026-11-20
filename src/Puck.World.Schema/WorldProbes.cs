@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
@@ -34,10 +35,11 @@ namespace Puck.World;
 /// boot, matching <see cref="WorldViewPostPass.Config"/>'s shallow-then-deep precedent.</param>
 /// <param name="Bindings">What this probe's channels drive, or <see langword="null"/> for a probe that is only read back.</param>
 public sealed record WorldProbe(
-    string Id,
-    string Kind,
+    [property: DocumentText("a probe id")] string Id,
+    [property: DocumentText("a probe kind")] string Kind,
     uint RateHz,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldFrameSource>? Inputs = null,
+    [property: DocumentText("a path or document locator")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Track = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? Config = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProbeBinding>? Bindings = null
@@ -56,12 +58,12 @@ public abstract record WorldProbeParameterTarget {
     /// <param name="Pass">The <c>views.post[].name</c> this targets — must name a row of this document.</param>
     /// <param name="Field">The pass's package config field name — checked against the package's schema at boot, never
     /// here (the same shallow-then-deep precedent every kind-vocabulary field follows).</param>
-    public sealed record Post(string Pass, string Field) : WorldProbeParameterTarget;
+    public sealed record Post([property: DocumentText("a post pass name")] string Pass, [property: DocumentText("a post pass config field")] string Field) : WorldProbeParameterTarget;
     /// <summary>Writes a config field of another declared probe's kind, live, into its running kernel — one probe's
     /// reading steering another's computation (a tracked centroid placing a relighting kind's light).</summary>
     /// <param name="Id">The <c>probes[].id</c> this targets — a row of this document other than the binding's own.</param>
     /// <param name="Field">That probe's kind config field name — checked against its manifest at boot, never here.</param>
-    public sealed record Probe(string Id, string Field) : WorldProbeParameterTarget;
+    public sealed record Probe([property: DocumentText("a probe id")] string Id, [property: DocumentText("a probe parameter field")] string Field) : WorldProbeParameterTarget;
 }
 /// <summary>One <c>probes[].bindings</c> row: routes one of the enclosing probe's channels to a command axis, a presentation
 /// parameter, or a camera control. The <c>$type</c> string is the JSON discriminator.</summary>
@@ -94,8 +96,8 @@ public abstract record WorldProbeBinding {
     /// (defaulting to seat 1) on a single-instance probe, exactly as before. <see langword="null"/> is the wire
     /// default. Omitted from the wire when null.</param>
     public sealed record Axis(
-        string Channel,
-        string Source,
+        [property: DocumentText("logical input channels")] string Channel,
+        [property: DocumentText("an input source id")] string Source,
         float Deadband = 0f,
         float Hysteresis = 0f,
         float Smoothing = 0f,
@@ -112,7 +114,7 @@ public abstract record WorldProbeBinding {
     /// <param name="MaxAgeSeconds">How long a reading stays live before this binding stops writing. Must be
     /// finite and positive.</param>
     public sealed record Parameter(
-        string Channel,
+        [property: DocumentText("logical input channels")] string Channel,
         WorldProbeParameterTarget Target,
         DocumentVector2 Range,
         float MaxAgeSeconds = 0.5f
@@ -130,7 +132,8 @@ public abstract record WorldProbeBinding {
     /// <param name="MaxAgeSeconds">How long a reading stays live before this binding stops writing. Must be
     /// finite and positive.</param>
     public sealed record Control(
-        string Channel,
+        [property: DocumentText("logical input channels")] string Channel,
+        [property: DocumentText("a device control")]
         [property: JsonPropertyName("control")] string ControlName,
         int Minimum,
         int Maximum,

@@ -40,18 +40,6 @@ public sealed partial class SdfWorldTables {
     internal bool SkyEnvironmentCanRecord => m_skyEnvironment.CanRecord;
     internal ReadOnlySpan<bool> SkyEnvironmentScreens => m_skyEnvironment.Screens;
 
-    internal bool SkyEnvironmentUsesScreen(int screen) {
-        var count = Math.Min(val1: ((int)m_skyRecord[0].LayerCount), val2: m_skyLayerRecords.Length);
-
-        for (var index = 0; (index < count); index++) {
-            ref var layer = ref m_skyLayerRecords[index];
-
-            if ((layer.Kind == SdfSkyLayerKind.Panorama) && (layer.Opacity > 0f) && SdfSkyEnvironment.IsLit(layer: layer) &&
-                (SdfSky.PayloadOf<SdfSkyPanorama>(layer: ref layer).Screen == screen)) { return true; }
-        }
-        return false;
-    }
-
     private void PrepareSkyEnvironment(bool physical) => m_skyEnvironment.Prepare(physical: physical);
 
     internal ulong? SkyEnvironmentSignature(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {

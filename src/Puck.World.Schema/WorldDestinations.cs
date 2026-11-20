@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -55,12 +56,12 @@ public abstract record WorldGroupSelector {
     /// <paramref name="Group"/> specifically.</summary>
     /// <param name="Group">The <see cref="WorldGroup.Id"/> this destination is bound to. Must resolve to a declared
     /// group row — an undeclared id refuses by name.</param>
-    public sealed record Named(string Group) : WorldGroupSelector;
+    public sealed record Named([property: DocumentText("a group id")] string Group) : WorldGroupSelector;
     /// <summary>Selects the traveler's unique verified membership claim carrying <paramref name="Tag"/> — zero
     /// matching memberships and multiple matching memberships are distinct named refusals; the engine never picks
     /// one silently (see <see cref="WorldGroup.Tags"/>).</summary>
     /// <param name="Tag">The tag every candidate membership is matched against. Must be non-empty.</param>
-    public sealed record Tagged(string Tag) : WorldGroupSelector;
+    public sealed record Tagged([property: DocumentText("a tag")] string Tag) : WorldGroupSelector;
 }
 /// <summary>
 /// One row of the <c>destinations</c> section — scoped selection layered over exactly one <see cref="WorldReference"/>
@@ -91,7 +92,7 @@ public abstract record WorldGroupSelector {
 /// name (see <see cref="WorldDefinitionValidator"/>).</param>
 public sealed record WorldDestination(
     SafeName Name,
-    string Reference,
+    [property: DocumentText("a world reference name")] string Reference,
     WorldDestinationDurability Durability,
     WorldDestinationScope Scope = WorldDestinationScope.Global,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGroupSelector? Selector = null

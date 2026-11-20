@@ -22,35 +22,6 @@ namespace Puck.World.Client;
 /// mapped frame keeps the glass's handedness.
 /// </remarks>
 public static class WorldWindowFrustumFit {
-    /// <summary>Resolves the two apertures of a window screen: the local face that claims <paramref name="screenIndex"/>,
-    /// and the counterpart its portal facet names, derived from the destination's document.</summary>
-    /// <param name="local">The local document, whose face catalog seats the screen.</param>
-    /// <param name="destination">The destination's document, as its session mirror last delivered it.</param>
-    /// <param name="screenIndex">The derived-face screen index the window shows on.</param>
-    /// <param name="source">The local face's aperture, on success.</param>
-    /// <param name="counterpart">The counterpart face's aperture in the destination, on success.</param>
-    /// <returns><see langword="true"/> when the screen index belongs to a face whose portal facet authors a mapped
-    /// counterpart that the destination's document declares; <see langword="false"/> otherwise, including while the
-    /// destination has not delivered a definition naming the counterpart.</returns>
-    public static bool TryResolveApertures(WorldDefinition local, WorldDefinition destination, int screenIndex, out WorldFaceGeometry source, out WorldFaceGeometry counterpart) {
-        var resolved = TryResolveFrames(
-            counterpart: out var counterpartFrame,
-            counterpartGlass: out _,
-            destination: destination,
-            local: local,
-            screenIndex: screenIndex,
-            source: out var sourceFrame
-        );
-
-        source = (resolved
-            ? WorldFaceGeometry.FromFrame(frame: sourceFrame)
-            : default);
-        counterpart = (resolved
-            ? WorldFaceGeometry.FromFrame(frame: counterpartFrame)
-            : default);
-
-        return resolved;
-    }
 
     // The two face frames a window screen's apertures are: the local face that claims the screen index, and the
     // counterpart its portal facet names in the destination.
@@ -149,30 +120,9 @@ public static class WorldWindowFrustumFit {
     /// <returns>The height in display pixels; zero when the viewer's resolution is unknown.</returns>
     public static float ShownHeight(in CameraSnapshot fitted, float viewerPixelsPerMetre) =>
         MathF.Max(x: 0f, y: ((2f * fitted.TanHalfFieldOfView) * viewerPixelsPerMetre));
-    /// <summary>Returns the fit a window session renders through (<see cref="WorldSessionSceneEmitter.SetWindowFit"/>):
-    /// asked as each frame is dressed, it reads the documents and the screen row at that moment and fits against the
-    /// viewer's eye in that frame (<see cref="TryFitFromView"/>), so a placement mutation or a camera move reaches the
-    /// very next frame. A transient gap (no dressed frame yet, no local document or row, a destination that has not delivered
-    /// the counterpart, an eye behind the glass) yields <see langword="null"/>, the ordinary session projection for the
-    /// frame.</summary>
-    /// <param name="viewports">The seats' views and the viewer, which the world's own capture publishes each frame.</param>
-    /// <param name="local">Reads the local document, whose face catalog seats the screen, or <see langword="null"/>.</param>
-    /// <param name="destination">Reads the destination's document, as its session mirror last delivered it.</param>
-    /// <param name="screen">Reads the screen row the window shows on, or <see langword="null"/>.</param>
-    /// <returns>The fit.</returns>
-    public static Func<CameraSnapshot?> FitFrom(WorldSeatViewports viewports, Func<WorldDefinition?> local, Func<WorldDefinition> destination, Func<WorldScreen?> screen) {
-        ArgumentNullException.ThrowIfNull(argument: viewports);
-
-        return FitFrom(
-            destination: destination,
-            eye: () => ViewerEye(viewports: viewports),
-            local: local,
-            screen: screen
-        );
-    }
     /// <summary>Returns the fit a window session renders through, against any eye: a window inside a world another view
     /// renders fits to the camera that view renders with (a seat's presented there, or a window's one level up), as the
-    /// boot world's windows fit to its viewer (<see cref="FitFrom(WorldSeatViewports, Func{WorldDefinition?}, Func{WorldDefinition}, Func{WorldScreen?})"/>).
+    /// boot world's windows fit to its viewer.
     /// A transient gap yields <see langword="null"/>, the ordinary session projection for the frame.</summary>
     /// <param name="eye">Reads the eye, in the local world's space, or <see langword="null"/> while there is none.</param>
     /// <param name="local">Reads the local document, whose face catalog seats the screen, or <see langword="null"/>.</param>
@@ -213,32 +163,8 @@ public static class WorldWindowFrustumFit {
                 : null);
         };
     }
-    /// <summary>Fits a window screen's camera for the frame being dressed: the local face the screen shows on and its
-    /// counterpart in the destination (<see cref="TryResolveApertures"/>), the glass its row draws (<see cref="Glass"/>),
-    /// and the viewer's eye (<see cref="ViewerEye"/>).</summary>
-    /// <param name="viewports">The seats' views and the viewer for the frame just dressed.</param>
-    /// <param name="local">The local document, whose face catalog seats the screen.</param>
-    /// <param name="destination">The destination's document, as its session mirror last delivered it.</param>
-    /// <param name="screen">The screen row the window shows on.</param>
-    /// <param name="camera">The fitted camera, on success.</param>
-    /// <returns><see langword="true"/> when every part resolves and the eye stands in front of the glass;
-    /// <see langword="false"/> otherwise, when the session renders its ordinary projection for the frame.</returns>
-    public static bool TryFitFromView(WorldSeatViewports viewports, WorldDefinition local, WorldDefinition destination, WorldScreen screen, out CameraSnapshot camera) {
-        camera = default;
-
-        return (
-            (ViewerEye(viewports: viewports) is { } eye) &&
-            TryFitFromEye(
-                camera: out camera,
-                destination: destination,
-                eye: eye,
-                local: local,
-                screen: screen
-            )
-        );
-    }
     /// <summary>Fits a window screen's camera against an eye: the local face the screen shows on and its counterpart in
-    /// the destination (<see cref="TryResolveApertures"/>), the glass its row draws (<see cref="Glass"/>), and the
+    /// the destination, the glass its row draws (<see cref="Glass"/>), and the
     /// eye. When the counterpart seats a screen, the camera's rays start past its glass (<see cref="WorldPrototypeFacets.GlassSpan"/>),
     /// so the window never shows the destination's own glass it looks through, which shows a window of its own when the
     /// counterpart is a return portal.</summary>

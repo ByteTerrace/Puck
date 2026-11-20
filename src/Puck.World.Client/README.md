@@ -205,8 +205,6 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
 - `WorldBindingBarVisibility.cs`—the live per-seat binding-bar visibility
   override the `binding-bar` lever writes and the root's bar-policy resolver
   reads.
-- `WorldSessionWindowLeases.cs`—the process-wide window-lease counter
-  `world.faces` reads back. Session programs and transforms grow from the live scene.
 - `WorldWindowFrustumFit.cs`—the border-pair isometry and asymmetric-frustum
   fit a cross-authority window projects through.
 - `WorldAuthorityRoute.cs`, `WorldContinuum.cs`, `WorldSeatAuthorityRouter.cs`
@@ -379,8 +377,6 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
   and `WorldWheelCommandNames`) the root player and wheel command modules in
   `Puck.World` forward their own declarations to, single-sourced here since
   the binding-authoring files above cannot reference those root types.
-  `AddonSourceVocabulary.cs` narrows the input-source vocabulary to the value
-  kinds an addon input act can carry.
 - `PlayerAssignmentCommand.cs`—the shared `player.assign` definition and
   outcome narration over `PlayerRoster`; the root module registers this exact
   definition and command-level laws drive it through `CommandRegistry`.

@@ -410,9 +410,9 @@ to it. `Puck.World`'s `WorldScreenBinder` resolves camera anchors through that
 interface. The live sources are
 `Puck.World.Client`'s `WorldClient` and `FixedAnchorSource`
 (`WorldCameraRigCompiler.cs`) and the entity-part and ranked-candidate sources
-in `WorldScreenBinder.CameraViews.cs`. `SdfAnchorTable`, a name-keyed
-`ISdfAnchorSource`, has no users. `Puck.SdfVm.Views` holds the camera-rig shapes
-(`OrbitRig`/`FollowRig`/`OrientedFollowRig`/`FixedRig`/`FirstPersonRig`). A
+in `WorldScreenBinder.CameraViews.cs`. `Puck.SdfVm.Views` holds the camera-rig
+seam (`ISdfCameraRig`, worn by `SdfCameraProgramRig`) and the shared orbit math
+(`OrbitRig`). A
 camera view is one more view of the world's frame (`SdfViewSnapshot`), with its
 own camera and quality, which the world's residency renders as an `sdf.world`
 instance of the render graph. A view whose own screen samples its output reads its

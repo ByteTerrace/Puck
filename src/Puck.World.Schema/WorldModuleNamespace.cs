@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
@@ -23,36 +24,6 @@ namespace Puck.World;
 /// <c>basis</c>/<c>imports</c>.
 /// </summary>
 public static class WorldModuleNamespace {
-    // The model's shape never changes. Resolve each type's property registrations once, without retaining document
-    // nodes: every walk still observes the current values and lets its visitor rewrite them.
-    private static readonly Puck.Abstractions.CodeDerivedTable<WorldModelType, VisitMemberPlan[]> VisitMembers = new();
-
-    private readonly record struct VisitMemberPlan(string Name, Type Type, WorldNameField? Field);
-
-    // A state row is converter-backed, so the serializer lists no members for it; its converter reads the record's
-    // own writable, unignored properties by camel-cased name.
-    private static VisitMemberPlan[] BuildVisitMembers(WorldModelType shape) {
-        var members = new List<VisitMemberPlan>();
-
-        if (typeof(StateRow).IsAssignableFrom(c: shape.Type)) {
-            foreach (var property in shape.Properties) {
-                if (((property.Access & WorldModelAccess.Write) == 0) || ((property.Access & WorldModelAccess.Ignored) != 0)) {
-                    continue;
-                }
-                _ = WorldNameRegistry.TryResolve(declaringType: property.DeclaringType, field: out var field, member: property.Member, propertyType: property.Type);
-                members.Add(item: new(Field: field, Name: property.Name, Type: property.Type));
-            }
-        } else {
-            foreach (var property in shape.Members) {
-                if ((property.Access & (WorldModelAccess.ExtensionData | WorldModelAccess.Read | WorldModelAccess.Write)) != (WorldModelAccess.Read | WorldModelAccess.Write)) {
-                    continue;
-                }
-                _ = WorldNameRegistry.TryResolve(declaringType: property.DeclaringType, member: property.Member, propertyType: property.Type, field: out var field);
-                members.Add(item: new(Name: property.Name, Type: property.Type, Field: field));
-            }
-        }
-        return [.. members];
-    }
     private static DeclaredNames CollectDeclaredNames(JsonObject module, string alias) {
         var declared = new DeclaredNames();
 
@@ -551,6 +522,18 @@ public static class WorldModuleNamespace {
         );
     }
 
+    private static void VisitField(JsonObject holder, string name, JsonNode value, WorldNameField field, Type type, WorldNameVisitor visitor) {
+        if (value is JsonObject map && WorldModelShape.Of(type) is { Kind: JsonTypeInfoKind.Dictionary, ElementType: { } element }) {
+            // A visitor may replace the current value. Keep the dictionary's keys and document order.
+            for (var i = 0; i < map.Count; i++) {
+                var entry = map.GetAt(i);
+                if (entry.Value is { } item) { VisitField(map, entry.Key, item, field, element, visitor); }
+            }
+        } else {
+            visitor(holder, name, value, field, type);
+        }
+    }
+
     // The IR's wire shape flattens an instruction's payload onto the instruction object, so the walk reaches a
     // payload's registered names by the operation's payload shape rather than through a JSON type info.
     private static void VisitExpressionProgram(JsonNode node, WorldNameVisitor visitor) {
@@ -585,89 +568,23 @@ public static class WorldModuleNamespace {
             ) {
                 continue;
             }
-            switch (ExpressionOperators.PayloadOf(operation: operation)) {
-                case PayloadShape.State:
-                    VisitMember(
-                        declaringType: typeof(InstructionPayload.State),
-                        jsonName: "name",
-                        member: nameof(InstructionPayload.State.Name),
-                        memberType: typeof(StateChannelRef),
-                        obj: obj,
-                        visitor: visitor
-                    );
-                    VisitMember(
-                        declaringType: typeof(InstructionPayload.State),
-                        jsonName: "key",
-                        member: nameof(InstructionPayload.State.Key),
-                        memberType: typeof(StateChannelRef),
-                        obj: obj,
-                        visitor: visitor
-                    );
-                    break;
-                case PayloadShape.Board:
-                    VisitMember(
-                        declaringType: typeof(InstructionPayload.Board),
-                        jsonName: "topology",
-                        member: nameof(InstructionPayload.Board.Topology),
-                        memberType: typeof(string),
-                        obj: obj,
-                        visitor: visitor
-                    );
-                    break;
-                case PayloadShape.Fold:
-                    VisitMember(
-                        declaringType: typeof(InstructionPayload.Fold),
-                        jsonName: "family",
-                        member: nameof(InstructionPayload.Fold.Family),
-                        memberType: typeof(string),
-                        obj: obj,
-                        visitor: visitor
-                    );
-                    break;
-                case PayloadShape.Vector:
-                    VisitVectorOperand(
-                        node: obj["left"],
-                        visitor: visitor
-                    );
-                    VisitVectorOperand(
-                        node: obj["right"],
-                        visitor: visitor
-                    );
-                    break;
-                default:
-                    break;
+            var shape = ExpressionOperators.PayloadOf(operation: operation);
+            if (shape != PayloadShape.None) {
+                VisitPayload(obj, WorldNameRegistry.PayloadTypes[shape], visitor);
             }
         }
     }
-    private static void VisitVectorOperand(JsonNode? node, WorldNameVisitor visitor) {
-        if (
-            (node is not JsonObject obj) ||
-            (obj["$type"] is not JsonValue kindValue) ||
-            !kindValue.TryGetValue<string>(value: out var kind) ||
-            !string.Equals(
-            a: kind,
-            b: "cell",
-            comparisonType: StringComparison.Ordinal
-        )
-        ) {
-            return;
+    private static void VisitPayload(JsonObject obj, Type type, WorldNameVisitor visitor) {
+        foreach (var property in WorldModelShape.Of(type)!.Properties) {
+            if (obj[property.Name] is not { } value) { continue; }
+            if (property.NameField is { } field) {
+                visitor(obj, property.Name, value, field, property.Type);
+            } else if (property.Type == typeof(VectorOperand) && value is JsonObject operand &&
+                operand["$type"] is JsonValue tag && tag.TryGetValue<string>(out var kind) &&
+                WorldNameRegistry.VectorTypes.TryGetValue(kind, out var arm)) {
+                VisitPayload(operand, arm, visitor);
+            }
         }
-        VisitMember(
-            declaringType: typeof(VectorOperand.Cell),
-            jsonName: "name",
-            member: nameof(VectorOperand.Cell.Name),
-            memberType: typeof(StateChannelRef),
-            obj: obj,
-            visitor: visitor
-        );
-        VisitMember(
-            declaringType: typeof(VectorOperand.Cell),
-            jsonName: "key",
-            member: nameof(VectorOperand.Cell.Key),
-            memberType: typeof(StateChannelRef),
-            obj: obj,
-            visitor: visitor
-        );
     }
 
     // A creation document rides its own serializer, so the walk reads it by hand: every value in it a state cell may
@@ -710,27 +627,6 @@ public static class WorldModuleNamespace {
                 break;
         }
     }
-    private static void VisitMember(JsonObject obj, string jsonName, Type declaringType, string member, Type memberType, WorldNameVisitor visitor) {
-        if (
-            (obj[jsonName] is not { } value) ||
-            !WorldNameRegistry.TryResolve(
-            declaringType: declaringType,
-            field: out var field,
-            member: member,
-            propertyType: memberType
-        )
-        ) {
-            return;
-        }
-        visitor(
-            obj,
-            jsonName,
-            value,
-            field,
-            memberType
-        );
-    }
-
     /// <summary>Walks a raw tree type-directed, calling <paramref name="visitor"/> at every registered name-bearing
     /// site with the holding object, the member's JSON name, the value, and the registration: each present member
     /// is resolved against the registry by its C# member, a <c>$type</c> discriminator selects the arm, and the two
@@ -756,7 +652,7 @@ public static class WorldModuleNamespace {
                     keyed,
                     "clock",
                     clock,
-                    new WorldNameField(Owner: type, Member: nameof(IWorldKeyTrack.Clock), Kind: WorldNameKind.Clock, Role: WorldNameRole.Names),
+                    WorldNameRegistry.KeyClock.NameField!,
                     typeof(string)
                 );
             }
@@ -792,11 +688,7 @@ public static class WorldModuleNamespace {
                 propertyName: "row"
             ) &&
                 (row is not null) &&
-                WorldNameRegistry.TryFind(
-                declaringType: typeof(WorldLatticeScalar),
-                member: nameof(WorldLatticeScalar.Row),
-                field: out var scalarField
-            )
+                WorldModelShape.Of(type)!.Properties.First(property => property.Member == nameof(WorldLatticeScalar.Row)).NameField is { } scalarField
             ) {
                 visitor(
                     scalar,
@@ -824,43 +716,10 @@ public static class WorldModuleNamespace {
             return;
         }
 
-        if (
-            typeof(StateRow).IsAssignableFrom(c: type) &&
-            (node is JsonObject rowObject)
-        ) {
-            foreach (var member in VisitMembers.GetValue(derive: BuildVisitMembers, key: shape)) {
-                if (
-                    !rowObject.TryGetPropertyValue(
-                    jsonNode: out var value,
-                    propertyName: member.Name
-                ) ||
-                    (value is null)
-                ) {
-                    continue;
-                }
-
-                if (member.Field is { } field) {
-                    visitor(
-                        rowObject,
-                        member.Name,
-                        value,
-                        field,
-                        member.Type
-                    );
-                }
-
-                Visit(
-                    node: value,
-                    type: member.Type,
-                    visitor: visitor
-                );
-            }
-
-            return;
-        }
-
         switch (shape.Kind) {
-            case JsonTypeInfoKind.Object when (node is JsonObject obj):
+            case JsonTypeInfoKind.None when typeof(StateRow).IsAssignableFrom(type) && node is JsonObject:
+            case JsonTypeInfoKind.Object when node is JsonObject:
+                var obj = (JsonObject)node;
                 if (
                     (shape.Arms.Count > 0) &&
                     obj.TryGetPropertyValue(
@@ -891,7 +750,7 @@ public static class WorldModuleNamespace {
                     }
                 }
 
-                foreach (var member in VisitMembers.GetValue(derive: BuildVisitMembers, key: shape)) {
+                foreach (var member in WorldNameRegistry.MembersOf(shape)) {
                     if (
                         !obj.TryGetPropertyValue(
                         propertyName: member.Name,
@@ -902,14 +761,12 @@ public static class WorldModuleNamespace {
                         continue;
                     }
 
-                    if (member.Field is { } field) {
-                        visitor(
-                            obj,
-                            member.Name,
-                            value,
-                            field,
-                            member.Type
-                        );
+                    if (member.NameField is { } field) {
+                        if (member.IdentifierBinding is { } binding && value is JsonValue literal &&
+                            literal.TryGetValue<string>(out var token) && Puck.Assets.Documents.DocumentIdentifier.IsReference(token)) {
+                            field = binding;
+                        }
+                        VisitField(obj, member.Name, value, field, member.Type, visitor);
                     }
 
                     Visit(
@@ -1481,19 +1338,6 @@ public static class WorldModuleNamespace {
                     }
 
                     break;
-                case JsonObject map when ((field.Role == WorldNameRole.Names) && (memberType == typeof(IReadOnlyDictionary<string, string>))):
-                    // A map whose values are names: a deal's variant prototypes.
-                    foreach (var (key, entry) in map.ToArray()) {
-                        if ((entry is JsonValue mapped) && mapped.TryGetValue<string>(value: out var item)) {
-                            map[propertyName: key] = Rewrite(
-                                kind: field.Kind,
-                                role: field.Role,
-                                text: item
-                            );
-                        }
-                    }
-
-                    break;
                 case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
                     var rewritten = Rewrite(
                         kind: field.Kind,
@@ -1736,6 +1580,7 @@ public static class WorldModuleNamespace {
             ? RewriteReserved(name: text)
             : MapNameOrSplit(kind: kind, name: text)),
             WorldNameRole.Key => RewriteKey(key: text),
+            WorldNameRole.BodyReference => text.Contains(':') ? RewriteReserved(name: text) : text,
             WorldNameRole.Expression => RewriteExpression(text: text),
             WorldNameRole.Binding => RewriteBinding(token: text),
             WorldNameRole.Template => RewriteTemplate(template: text),

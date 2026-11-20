@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.State;
@@ -8,7 +9,7 @@ namespace Puck.State;
 /// <param name="Min">The least value the symbol accepts.</param>
 /// <param name="Max">The greatest value the symbol accepts.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record PatternSymbol(CellName Name, decimal Min, decimal Max);
+public sealed record PatternSymbol([property: DocumentText("a symbol name is local to its pattern")] CellName Name, decimal Min, decimal Max);
 /// <summary>One row of the <c>patterns</c> section: a regular language over cell values, compiled once to a
 /// deterministic table the <c>$match:</c> operand runs allocation-free, one indexed step per token.</summary>
 /// <param name="Name">The pattern name a rule references.</param>
@@ -24,11 +25,13 @@ public sealed record PatternSymbol(CellName Name, decimal Min, decimal Max);
 /// 1..<see cref="PatternCapacity.MaxStates"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PatternRow(
-    CellName Name,
+    [property: DocumentName(WorldNameKind.Pattern, WorldNameRole.Declares)] CellName Name,
     CellKind Kind,
     IReadOnlyList<PatternSymbol> Symbols,
     PatternNode Pattern,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Attribute = null,
     int MaxStates = PatternCapacity.DefaultStates,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Value = null
 );

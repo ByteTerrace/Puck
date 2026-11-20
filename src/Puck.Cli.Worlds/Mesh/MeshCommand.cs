@@ -46,7 +46,7 @@ public static class MeshCommand {
     private static Command AuditCommand() {
         var worldOption = new Option<string>(name: "--world") { Description = "The world document whose meshes to audit.", Required = true };
         var prototypeOption = new Option<string[]>(name: "--prototype") { AllowMultipleArgumentsPerToken = true, Description = "Audit these prototypes' groups, from bodies and static or animated placements; repeat it, or name several, to audit several in one run." };
-        var groupOption = new Option<string?>(name: "--group") { Description = "Audit only the groups whose label holds this text, such as a shape's name (podBand1-left) or a slot (slot 6745)." };
+        var groupOption = new Option<string?>(name: "--group") { Description = "Audit only the groups whose label holds this text, as a group's heading prints it: a shape's name (podBand1-left), a slot (slot 6745) or a geometry hash (geometry=78f7d9d8), which singles out one tier's group where tiers share a label." };
         var cacheOption = new Option<string?>(name: "--cache-dir") { Description = "The device-cache root the World booted with (its --cache-dir); the meshes are its meshes subdirectory. Absent reads the per-user store (%LOCALAPPDATA%/Puck/meshes on Windows)." };
         var buildOption = new Option<string?>(name: "--build") { Description = "The directory of the World build whose bake stored the meshes (its Puck.World.dll's directory); the store keys each mesh by that build's bake identity. Absent uses this tool's own build." };
         var identityOption = new Option<string?>(name: "--identity") { Description = "The bake identity the meshes are stored under, as a report prints it (32 hex digits), in place of --build: a build since rebuilt keeps its stored meshes under the identity it had." };
@@ -267,12 +267,15 @@ public static class MeshCommand {
         }
     }
 
-    // Selection uses emission identity, not the presence of a body or a parsed display label.
+    // Selection uses emission identity, not the presence of a body or a parsed display label. A group's text is the label
+    // its heading prints, geometry included, so one tier's group of a shape whose tiers share a label (the Moth's shins)
+    // is selected alone by its geometry hash.
     private static bool Selected(SdfMeshBakeGroup group, RestScene scene, AuditRequest request) {
         var owner = scene.Owner(group: group);
+        var prototype = scene.Prototype(group: group);
 
-        return (((request.Prototypes.Count == 0) || ((scene.Prototype(group: group) is { } prototype) && request.Prototypes.Contains(value: prototype, comparer: StringComparer.Ordinal)))
-            && ((request.Group is null) || scene.Label(group: group, owner: owner).Contains(value: request.Group, comparisonType: StringComparison.Ordinal)));
+        return (((request.Prototypes.Count == 0) || ((prototype is not null) && request.Prototypes.Contains(value: prototype, comparer: StringComparer.Ordinal)))
+            && ((request.Group is null) || MeshAuditLines.Label(geometry: group.Sealed.Hash, posed: false, prototype: prototype, scene: scene.Label(group: group, owner: owner)).Contains(value: request.Group, comparisonType: StringComparison.Ordinal)));
     }
     // One group's audit: its stored mesh, or with baked its offline bake, measured against its field, or why it was not.
     private static Outcome Audit(SdfMeshBakeGroup group, RestScene scene, RestBody? owner, SdfMeshStore store, UInt128 identity, SdfMeshAuditOptions options, Dictionary<int, SdfMesh>? baked, IReadOnlyDictionary<int, Puck.SignedDistance.DynamicTransform> poses, SdfRefinementMap? refinement) {

@@ -3622,11 +3622,9 @@ puck registry --check       regenerate in memory and compare against the file on
 puck registry -h / --help   this text
 ```
 
-Both modes first refuse, exit 1, on a name-shaped document member the registry
-neither registers nor excludes with a reason—a `CellName`, `ExpressionProgram`,
-`BindableScalar`, `BindableColor`, or `WorldLatticeScalar` member, or a string
-member whose C# name reads like a name position—so a field added to the model
-without a registration cannot pass. Exit codes: **0** wrote or matched, **1**
+Both modes report each unclassified text position. A property declares its module name
+kind and spelling, takes its binding from its type, or identifies its literal or local
+meaning. Run `puck schema` and rebuild after changing a declaration. Exit codes: **0** wrote or matched, **1**
 drift or an uncovered member, **2** usage error or missing repository root.
 
 ## `puck verbs`—console verb catalog
@@ -3826,8 +3824,9 @@ never writes the store, so it reads a store a running World owns.
   store.
 - `--prototype <id>...` keeps the groups of bodies wearing those creations
   (repeat it, or name several);
-  `--group <text>` keeps the groups whose label holds the text, such as a
-  shape's name.
+  `--group <text>` keeps the groups whose label holds the text, as a group's
+  heading prints it: a shape's name, or its `geometry=` hash, which singles
+  out one tier's group where several tiers share a label.
 - `--level <n>` audits the surface that forced render level draws (zero by
   default), clamped to each chunk's last available level. Only referenced
   vertices count. The error threshold and coverage lattice retain level zero's

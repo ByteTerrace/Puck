@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -55,9 +56,9 @@ public enum WorldInteractionCoOccurrence : byte {
 /// row does: level-firing a spawn is a journal entry every tick the co-occurrence holds).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldInteraction(
-    CellName Name,
-    string Left,
-    string Right,
+    [property: DocumentText("an interaction name is the interactions section's own namespace")] CellName Name,
+    [property: DocumentName(WorldNameKind.Any, WorldNameRole.Names)] string Left,
+    [property: DocumentName(WorldNameKind.Any, WorldNameRole.Names)] string Right,
     WorldInteractionCoOccurrence CoOccurrence,
     decimal Range,
     IReadOnlyList<ActionEffect> Effects,

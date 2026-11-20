@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text;
 using System.Text.Json;
 
@@ -7,7 +8,7 @@ namespace Puck.World;
 /// <param name="Name">The author's display name.</param>
 /// <param name="Oid">The author's object id, when the author chooses to attach one — see
 /// <see cref="WorldObjectId"/>. Authored, not authenticated: nothing here proves the name behind the id.</param>
-public sealed record WorldMetadataAuthor(string Name, string? Oid = null);
+public sealed record WorldMetadataAuthor([property: DocumentText("an author's name")] string Name, [property: DocumentText("a principal identifier")] string? Oid = null);
 /// <summary>
 /// The <c>metadata</c> document section — an optional, boot-authored-only bag of author-facing facts. Nothing in
 /// the engine reads or dispatches on any member here, the same "content, never a case the engine branches on"
@@ -32,10 +33,10 @@ public sealed record WorldMetadataAuthor(string Name, string? Oid = null);
 /// posture <see cref="WorldPropertyRegistrySection.Names"/> already carries for a property name.</param>
 /// <param name="Custom">A free-form author bag — see the type remarks for its two compose-time carve-outs.</param>
 public sealed record WorldMetadataSection(
-    string? Title = null,
-    string? Description = null,
+    [property: DocumentText("literal text")] string? Title = null,
+    [property: DocumentText("literal text")] string? Description = null,
     IReadOnlyList<WorldMetadataAuthor>? Authors = null,
-    IReadOnlyList<string>? Tags = null,
+    [property: DocumentText("a tag")] IReadOnlyList<string>? Tags = null,
     IDictionary<string, JsonElement>? Custom = null
 ) {
     /// <summary>Gets the total UTF-8 byte size of <paramref name="custom"/> — every key plus each value's raw JSON

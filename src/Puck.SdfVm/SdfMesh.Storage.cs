@@ -66,6 +66,13 @@ public sealed partial record SdfMesh {
     /// <summary>Releases one mesh claim; the last claimant releases the payload, never a finalizer.</summary>
     /// <param name="cached">Whether the released claim was acquired as cache retention.</param>
     public void Release(bool cached = false) => m_payload?.Release(cached: cached);
+    /// <summary>Acquires a claim unless the mesh's storage was already released: a holder that names a mesh without a
+    /// claim of its own (a list of meshes named ahead) takes one this way, since the mesh's owner may have let it go.</summary>
+    /// <param name="cached">Whether the claim is reclaimable cache retention rather than an active consumer.</param>
+    /// <returns><see langword="true"/> when the claim was taken; <see langword="false"/> when the storage is gone.</returns>
+    internal bool TryAcquire(bool cached) => (m_payload?.TryAcquire(cached: cached) ?? true);
+    // Whether the mesh's storage was released by its last claimant, so nothing may claim or read it again.
+    internal bool IsReleased => (m_payload?.Released ?? false);
     // Whether the mesh's planes are native storage its claims own, which its last release frees; a managed mesh's planes
     // are arrays nothing writes once it is built, kept alive by any reference to it.
     internal bool OwnsNativeStorage => (m_payload is not null);
@@ -432,7 +439,6 @@ public sealed partial record SdfMesh {
     // one claim on each source for each claim held on it: the parts it was built with (a chunked mesh's shared
     // attributes and chunks) and the storage it borrows (a renumbered variant's original).
     private sealed class Payload(MemoryAccount.Owner owner) {
-        public MemoryAccount.Owner Owner => owner;
 
         private readonly Lock m_gate = new();
         private readonly List<IDisposable> m_blocks = [];
@@ -454,7 +460,6 @@ public sealed partial record SdfMesh {
             block.Resize(length, clear: false, preserve: false);
             return block;
         }
-        public ReadOnlyMemory<T> Copy<T>(ReadOnlyMemory<T> source, IAllocator allocator) where T : unmanaged => Copy(allocator: allocator, block: out _, source: source);
         public ReadOnlyMemory<T> Copy<T>(ReadOnlyMemory<T> source, IAllocator allocator, out OwnedBuffer<T>? block) where T : unmanaged {
             block = null;
             if (source.IsEmpty) { return default; }
@@ -492,9 +497,14 @@ public sealed partial record SdfMesh {
 
         private bool m_sealed;
 
-        public void Acquire(bool cached) {
+        public bool Released {
+            get { lock (m_gate) { return (m_claims == 0); } }
+        }
+
+        public void Acquire(bool cached) => ObjectDisposedException.ThrowIf(condition: !TryAcquire(cached: cached), instance: this);
+        public bool TryAcquire(bool cached) {
             lock (m_gate) {
-                ObjectDisposedException.ThrowIf(condition: (m_claims == 0), instance: this);
+                if (m_claims == 0) { return false; }
                 var acquired = 0;
 
                 try {
@@ -506,6 +516,7 @@ public sealed partial record SdfMesh {
                 m_claims++;
                 if (cached) { m_cached++; }
                 Classify();
+                return true;
             }
         }
         public void Release(bool cached) {

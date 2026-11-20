@@ -80,6 +80,9 @@ public sealed partial class WorldDocument {
         var (edit, kind) = ClassifyComposed(composed: candidate, current: current, mutation: mutation);
 
         candidate = edit.Candidate;
+        var validationBase = (edit.Named is not null || ReferenceEquals(objA: candidate.StateRaw, objB: m_definition.StateRaw))
+            ? current.WithStateSection(state: m_definition.StateRaw)
+            : current;
         var installsArena = (kind == WorldInstallKind.Full);
         var keepsArena = (installsArena && Host.KeepsArena(candidate: candidate));
         // Pool snapshots include generated storage rows that cannot be admitted through the ordinary row-import
@@ -98,13 +101,13 @@ public sealed partial class WorldDocument {
         // nothing returns the very candidate validated here, whose compilation then serves below, and any other
         // settled candidate is validated again and owns the retained compilation.
         WorldDefinition? validated = null;
-        WorldRuleCompilation? validatedCompilation = null;
+        WorldDefinitionAdmission? validatedAdmission = null;
 
         if (installsArena) {
             if (!TryValidateMutationCandidate(
                 candidate: candidate,
-                compilation: out validatedCompilation,
-                current: current,
+                admission: out validatedAdmission,
+                current: validationBase,
                 mutation: mutation,
                 reason: out reason
             )) {
@@ -149,15 +152,16 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        WorldRuleCompilation? compilation;
+        WorldDefinitionAdmission? admission;
 
         // Only a full install installs compiled rules, so only its validation keeps what it compiled.
         if (ReferenceEquals(objA: candidate, objB: validated)) {
-            compilation = validatedCompilation;
-        } else if (!TryValidateMutationCandidate(candidate: candidate, compilation: out compilation, current: current, mutation: mutation, reason: out reason,
+            admission = validatedAdmission;
+        } else if (!TryValidateMutationCandidate(candidate: candidate, admission: out admission, current: (validated ?? validationBase), mutation: mutation, reason: out reason,
             retainCompilation: installsArena)) {
             return false;
         }
+        var compilation = (admission ?? validatedAdmission)?.Compilation;
         if (!Host.Input.TryValidateDefinition(candidate, arena, out reason)) { return false; }
         if (!TryAdmitPipelineOverrides(
             candidate: candidate,
@@ -269,6 +273,7 @@ public sealed partial class WorldDocument {
 
             if (!products.Machines.IsEmpty) {
                 if (!TryPrepareMachines(
+                    admission: admission,
                     candidate: candidate,
                     current: current,
                     inputs: out var preparedMachines,

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -12,8 +13,22 @@ namespace Puck.Abstractions;
 public static class ContentDigest {
     /// <summary>The length, in bytes, of a SHA-256 digest.</summary>
     public const int SizeInBytes = SHA256.HashSizeInBytes;
+    /// <summary>The length, in characters, of a SHA-256 digest written as hexadecimal digits.</summary>
+    public const int HexLength = 2 * SizeInBytes;
 
     private const int StackBytes = 512;
+    private static readonly SearchValues<char> HexDigits = SearchValues.Create(values: "0123456789abcdefABCDEF");
+
+    /// <summary>Returns whether text is a SHA-256 digest written as <see cref="HexLength"/> hexadecimal digits of either case.</summary>
+    /// <param name="text">The text to test; <see langword="null"/> is not a digest.</param>
+    /// <returns><see langword="true"/> when <paramref name="text"/> is exactly <see cref="HexLength"/> hexadecimal digits.</returns>
+    public static bool IsHex([NotNullWhen(returnValue: true)] string? text) => IsHexDigits(length: HexLength, text: text);
+    /// <summary>Returns whether text is exactly a given number of hexadecimal digits of either case.</summary>
+    /// <param name="text">The text to test; <see langword="null"/> never matches.</param>
+    /// <param name="length">The required number of digits.</param>
+    /// <returns><see langword="true"/> when <paramref name="text"/> is <paramref name="length"/> hexadecimal digits and nothing else.</returns>
+    public static bool IsHexDigits([NotNullWhen(returnValue: true)] string? text, int length) =>
+        ((text is not null) && (text.Length == length) && !text.AsSpan().ContainsAnyExcept(values: HexDigits));
 
     /// <summary>Hashes bytes.</summary>
     /// <param name="content">The bytes to hash.</param>

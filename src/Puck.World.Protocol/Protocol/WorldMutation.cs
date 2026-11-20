@@ -686,7 +686,7 @@ public abstract record WorldMutation(Principal Principal) {
             }
             if (
                 (ExpectedDefinition is { } hash) &&
-                ((hash.Length != 64) || hash.Any(predicate: c => !char.IsAsciiHexDigit(c: c)))
+                !Puck.Abstractions.ContentDigest.IsHex(text: hash)
             ) { return false; }
             if (
                 (ExpectedInputs is { } inputs) &&

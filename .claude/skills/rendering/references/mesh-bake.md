@@ -189,7 +189,15 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   topology: inside a union the interpolated value is no distance (a 2 cm layer
   under a 6 cm coarse cell measures to the face it shares with its neighbour),
   and its linear estimate put a slab's underside a centimetre up inside the
-  slab. Only samples displaced by `CloseSheets` keep their lattice
+  slab. The field along such an edge need not change sign where the
+  interpolated end says it does (a coarse cell's corners interpolate the two
+  wedges of an XOR's pinch as one solid), and the search then ends against
+  that end, off the surface: a crossing whose bracket still ends at an
+  interpolated value (`CrossingRoot.Bracketed`) and whose field there does not
+  read zero gives no plane (`Lattice.TryCrossingNormal`). Its measured
+  gradient is the nearer face's, and a plane through the lattice point along it
+  stands up to a fine cell off that face and keeps a merged piece's planes from
+  meeting at its crease. Only samples displaced by `CloseSheets` keep their lattice
   interpolation: their intentional surface differs from the original field.
   The search (`CrossingRoot`) measures two trials a round, a tolerance apart
   about an estimate (the linear one, then the secant through the last round's
@@ -266,7 +274,16 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
     finds every quad neither of whose splits faces out and returns the vertex
     whose return fixes it, or all of them, to its crossings' mean, which lies in
     its own cell. A merged piece's vertex stands for several cells and has no
-    region of its own, so the settle is all that holds a transition fan.
+    region of its own, so the settle is all that holds a transition fan. A
+    piece whose vertex the settle returns and whose planes meet along a crease
+    past its block (the faces of a wedge whose edge the neighbouring measured
+    cells hold) has no point on both faces, and its returned vertex lies inside
+    the solid, where the field check moves it onto one face and turns the other
+    face's triangles against the field; the merge runs again with each such
+    piece split into one piece per face (`SdfDualContouring.SplitAtCreases`).
+    A piece the settle leaves alone keeps its one vertex: splitting every
+    creased piece, or every piece holding two opposite sheets, turns more
+    triangles on the XOR and the range windows than it fixes.
   - *The split* (`SdfSampledLattice.SelectDiagonals`) takes the diagonal whose
     triangles face out where only one's do, before any normal is read. Two
     quads that hold one pair of vertices as opposite corners (a merged vertex
@@ -424,6 +441,12 @@ laws exercise that boundary.
   (`SdfMeshPathBake.AnsweredSamples`, shared until its last answer ends), then
   advances `Progress` (`SdfMeshPathBake.Progressed`), since a field slice's
   answer queues no work item.
+- **A bake draws on the machine's headroom, not the play bar.** Its group
+  workspaces, readback, store writes and sample reads are authoring owners
+  (`MemoryAllowance.Authoring`), held to the machine's room alone; the meshes it
+  publishes into the library are play. A player's build holds authoring to the
+  play bar (`MemoryAccount.SetAuthoringOnPlayBar`), so a bake there degrades
+  and never fails ([the owners and their allowances](../../../../docs/plans/streaming-and-memory.md#the-large-host-owners)).
 - **A dispatch's answer never waits for host memory.** The copy, and a sample
   set read in place of a dispatch, are charged to the bake's readback owner
   inside a standing reservation of `SdfMeshPathBake.ReadbackBytes`: the take
@@ -436,8 +459,9 @@ laws exercise that boundary.
   fails (`SdfMeshPathBake.Refusals`): a sample set the store keeps or reads past
   the account's room is dropped or missed (`store-writes-dropped`), a copy into
   the library the account refuses (a landing's published mesh, a follower's
-  renumbered take of its leader's) waits parked until the group can reserve its
-  bytes (`Park`, `copy-waits`), and any other refused stage starts its group's
+  renumbered take of its leader's) waits parked until its bytes can be reserved
+  as play's, since the library's copy is play storage (`Park`, `copy-waits`),
+  and any other refused stage starts its group's
   final lattice again under an admission of at least the most the group's
   storage held and the bytes refused (`Group.PeakFloor`, `readmitted`). A request's points are its group's
   workspace (a final lattice's one point buffer, reused round to round; the
@@ -856,8 +880,8 @@ laws exercise that boundary.
   takes, each member refined over its own box at its own factor. A folded
   member's part is the cube about its slot's origin its copies reach.
   A dynamic instance's text declares detail too: a pooled creation's embossed text is
-  its own instance on a slot after its shapes' that holds the root's pose
-  (`WorldCreationInstances.TextSlot`), bounded by its glyphs' reach and declaring their
+  its own instance on a slot after its shapes' that holds the root's pose,
+  bounded by its glyphs' reach and declaring their
   detail. Sharing the root slot with a blend group put the glyphs in that
   group's coarser lattice, which dropped an "I". A slot's group refines toward
   the finest detail its

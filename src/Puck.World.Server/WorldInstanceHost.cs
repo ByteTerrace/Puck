@@ -1005,33 +1005,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         return true;
     }
-    /// <summary>Looks up a running authority's submission transport. Every local instance and remote traveler route
-    /// carries the same transport capability; consumers do not branch on where that authority is hosted.</summary>
-    /// <param name="name">The console-facing instance name.</param>
-    /// <param name="link">The instance's transport, when found.</param>
-    /// <returns>Whether an instance is running under <paramref name="name"/>.</returns>
-    public bool TryGetLink(string name, out IServerLink? link) {
-        if (m_remoteAuthorities.TryGetValue(
-            key: name,
-            value: out var authority
-        )) {
-            link = authority.Link;
-
-            return true;
-        }
-
-        if (m_instances.TryGetValue(
-            key: name,
-            value: out var instance
-        )) {
-            link = instance.Link;
-            return true;
-        }
-
-        link = null;
-
-        return false;
-    }
     /// <summary>Resolves the continuous projection channel for a local or remote authority already named by the
     /// session router. Definition and per-tick records cross the same observer contract.</summary>
     public bool TryGetProjection(string name, out WorldDefinition? definition, out Func<IClientSink, IDisposable>? attach, out WorldRenderEnvelope? envelope, out IWorldAdjacencySource? adjacencies) {

@@ -776,7 +776,7 @@ internal sealed class FirmwareLegacySoundStage : IPostStage<PostContext> {
         FirmwareSwiProbe.Require(
             condition: (bus.Read8(
                 access: BusAccessType.NonSequential,
-                address: 0x04000081
+                address: (AgbAddresses.SoundControlLow + 1)
             ) == 73),
             detail: $"{label} port command PSG routing"
         );

@@ -14,9 +14,6 @@ public readonly record struct WorldContextFamilyEcho(
     string? Group,
     bool Wins
 ) {
-    /// <summary>Whether this family matched a row that an earlier row's match shadowed — "applied and lost", which the
-    /// read-back must keep visibly distinct from "didn't apply" (<see cref="Group"/> <see langword="null"/>).</summary>
-    public bool Shadowed => ((Group is not null) && !Wins);
 }
 /// <summary>A seat's whole context derivation, surfaced by <see cref="WorldSeatBindings.DescribeContextDerivation"/> —
 /// the read-back rule's payload: every admitted family's state and match, and the resolved

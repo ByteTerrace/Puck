@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Presentation;
 
@@ -27,8 +28,8 @@ namespace Puck.World;
 /// preset.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldDeviceProfile(
-    string Name,
-    string Match,
+    [property: DocumentText("a device profile's name, which a host selects the profile by (WorldDeviceProfiles.Find)")] string Name,
+    [property: DocumentText("a device match pattern")] string Match,
     QualityTier Quality,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? DeviceMemoryMiB = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? HostMemoryMiB = null,

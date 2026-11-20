@@ -1,20 +1,8 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
 
-/// <summary>Which of a module's export lists admits a host reference to one of the module's names — the list a
-/// registered name-bearing field binds through (<see cref="WorldNameField.Facet"/>).</summary>
-public enum WorldExportFacet : byte {
-    /// <summary>The field reads the name: a gate, a comparand, an expression operand, a key indirection, a domain,
-    /// a zone table, a placement's board topology. Admitted by <see cref="WorldExports.Reads"/>.</summary>
-    Read,
-    /// <summary>The field drives the name: a state effect's destination, a transform's target row or zone, a
-    /// generate row, a field write, a placement's occupancy row. Admitted by <see cref="WorldExports.Actions"/>.</summary>
-    Action,
-    /// <summary>The field binds presentation to the name: a HUD element, an overlay predicate, a camera program
-    /// scalar, a binding wheel or bar row. Admitted by <see cref="WorldExports.Bindings"/>.</summary>
-    Binding,
-}
 /// <summary>The surface an imported module offers its host: the names the host may read, drive, and bind to. A
 /// module's names are private by default — every row, lattice, rule, table, pattern, generator, field, and dynamics
 /// row it declares is its own — and a host reference to a name outside these lists refuses at compose by name
@@ -29,8 +17,11 @@ public enum WorldExportFacet : byte {
 /// predicates, camera program scalars, binding wheels and bars.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldExports(
+    [property: DocumentName(WorldNameKind.Any, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Reads = null,
+    [property: DocumentName(WorldNameKind.Any, WorldNameRole.Names, WorldExportFacet.Action)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Actions = null,
+    [property: DocumentName(WorldNameKind.Any, WorldNameRole.Names, WorldExportFacet.Binding)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Bindings = null
 ) {
     /// <summary>The document member carrying the record.</summary>
