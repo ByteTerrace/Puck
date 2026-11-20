@@ -310,6 +310,12 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Names
         ),
         new(
+            typeof(StateKnowledge),
+            nameof(StateKnowledge.Positions),
+            WorldNameKind.State,
+            WorldNameRole.Names
+        ),
+        new(
             typeof(StateVisibility),
             nameof(StateVisibility.ReadersFrom),
             WorldNameKind.State,

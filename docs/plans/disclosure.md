@@ -125,7 +125,7 @@ scheduling a step:
   state. A row admits only with its declared write footprint: its token domain, every row keyed
   over it (`StateCatalog.DependentRows`, the relation the arena's commit check and the touched-row
   validator read), and for an incoming declaration every row the declaration names
-  (`WorldRecipientView.AdmitsDeclaration`); a transform only while every row it resolves to
+  (`WorldMutationNames`, read through the name registry); a transform only while every row it resolves to
   does (`RuleCompiler.TryCollectTransformRows`); a placement only with its parent chain's inputs
   and the template every id on that chain spells as a dealt child, present or absent, for the
   incoming placement and the installed one it replaces or removes; a machine or kit with the rows
@@ -135,8 +135,9 @@ scheduling a step:
   fingerprints share the placement state-dependency collector. Whole-document validation and
   rule compilation judge declarations alone (`RuleCompiler.RequireEnclosedAudience` reads row
   policies, never seeded cells); the arena judges current cell policies at the firing.
-  This is the implemented collector's intended coverage, not a completeness
-  guarantee: decision 3a's W1–W7 reopen it and replace the mechanism.
+  The names and relations the footprint covers are now read through the name registry
+  ([the write-door footprint checkpoint](#write-door-footprint-checkpoint)); checks that
+  read past the declared relation are decision 3a's restricted transaction.
 - A write's outcome reaches its submitter typed, not only as an echo:
   `WorldTick.CompletePendingOp` builds a `WorldMutationOutcome` from the real
   verdict with its decision, detail and the live document version
@@ -203,7 +204,7 @@ that erase key faults) are not disclosure and stay in the
 | [high] Per-cell upsert and remove receipts distinguish hidden from absent for peers, addons and sessions | Closed by the same policy refusal on every key; typed and addon completions carry that actual verdict | 3, landed |
 | [medium] A seat writes under its grants alone and learns which hidden keys exist | Seats use the same recipient admission as peers, sessions and addons | 3, landed |
 | [high] Removing a public domain key is refused only when a hidden row keyed over the domain holds it (`StateArena.TryValidateRelations` at commit) | Closed: the domain's dependents are in its write footprint (`StateCatalog.DependentRows`) | 3, landed |
-| [high] A new row keyed over a hidden domain is accepted or refused by the domain's membership (`WorldDefinitionValidator.Discrete.cs`) | Closed: `WorldRecipientView.AdmitsDeclaration` admits every row an incoming declaration names | 3, landed |
+| [high] A new row keyed over a hidden domain is accepted or refused by the domain's membership (`WorldDefinitionValidator.Discrete.cs`) | Closed: every row an incoming declaration names is admitted (`WorldMutationNames`) | 3, landed |
 | [high] A placement under a dealt child id answers "not disclosed" when the child exists and "not a declared placement" when it does not | Closed: the parent-chain walk admits the template every id spells, present or absent | 3, landed |
 | [high] An unrelated edit recompiles every rule and `RequireEnclosedAudience` refuses by a hidden cell's current policy | Closed: compile-time audience enclosure reads declared row policies; cells are the arena's at the firing | 3, landed |
 | [high] A seat's rule or interaction with a literal read of a hidden key compiles or refuses `StateCellUndeclared` by the hidden row's membership | Closed: a recipient's mutation of a program section is refused by kind (`WorldSectionFacts.IsProgram`) | 3, landed |
@@ -468,7 +469,7 @@ or kit by its own name, a transform by its first subject, a spatial guard as
 refused by its shape, as `state`, since whether any declaration withholds from its
 proposer would otherwise decide it. Enforcement: `WorldRecipientMutations.Admits`
 alone assigns the refusal name, and the view's derived-footprint checks
-(`AdmitsPlacement`, `AdmitsSpatial`, `AdmitsMachine`, `AdmitsKit`, `AdmitsTransform`)
+(`AdmitsPlacement`, `AdmitsSpatial`, `AdmitsInstalled`, `AdmitsTransform`)
 return no name to assign. Where it stops: the footprint relation is declared
 structure, so a write into a public row is still refused while some row keyed over
 it is withheld, which tells a recipient below `Replica` that such a declaration
@@ -505,7 +506,7 @@ keeps that invariant in one of two ways, and every check is one or the other:
   row is declared, never current: the row, its token domain, every row keyed
   over it (`StateCatalog.DependentRows`), the ordered zones over its domain
   and its live audience row (already inside `ReadsWhole`); for an incoming
-  declaration, every row it names (`WorldRecipientView.AdmitsDeclaration`); for a
+  declaration, every row it names (`WorldMutationNames`); for a
   transform, every row it resolves to; for a placement, its own inputs, its
   parent chain's and the template every id on the chain spells as a dealt
   child whether or not that placement exists. The arena's relation check at
@@ -563,8 +564,8 @@ admits the installed placement's inputs (its deal and variants rows), its
 parent chain and the template every id on that chain spells
 (`WorldRecipientView.AdmitsPlacement`); a machine write admits the rows every
 memory binding of the incoming and the installed machine reads or writes
-(`AdmitsMachine`), since a binding copies a cell into hardware a screen may
-show; a kit write admits the rows its actions redraw (`AdmitsKit`).
+(`WorldRecipientView.AdmitsInstalled`), since a binding copies a cell into hardware a screen may
+show; a kit write admits the rows its actions name, the same way.
 
 **Authoring the program is the authority's.** Rules and interactions are the
 world's program: they compile against the whole document, read any row through
@@ -661,7 +662,7 @@ adversarial review is answered below (H1–H6, M1–M8 and L1–L7). The revised
 security closure is static; executed reads never remove a security check. It answers the
 question decision 3 closed without settling. The write door refuses every
 recipient's declaration of a new state row (`WorldRecipientView.Admits` refuses
-a name no row holds, and `WorldRecipientView.AdmitsDeclaration` says "a
+a name no row holds, and the write door says "a
 recipient replaces a row it reads whole and adds none"), because a door that
 admits a free name and refuses a name a withheld row holds tells the submitter
 whether a hidden row exists. The refusal costs a capability: a principal who is
@@ -1309,7 +1310,7 @@ numbers here are W1–W8 to distinguish them from rd2's F1–F4 above.
 |---|---|---|---|
 | W1, high: references outside document-value holders | `WorldStateDocumentValues.Finder.Enter` handles `IDocumentStateValue`; `WorldDefinitionFingerprint.CollectPlacementStateInputs` adds only deal/variant rows. `WorldDefinitionValidator.ValidateProperties` looks up the property's implicit same-name row. Board, response, HUD and overlay validators also resolve names outside that collector | Every semantic lookup in the real validator or compiler goes through transaction access, regardless of the field's spelling. New delayed bindings acquire sources there too | Typed `SetProperty` and nested placement/kit/creation/HUD/camera/overlay/host edits naming public, absent and withheld rows; malformed and valid values. Compare decisions and subsequent public bindings, not only text |
 | W2, high: transform indirections and failed resolution | `WorldRecipientView.AdmitsTransform` returns true on failed `RuleCompiler.TryCollectTransformRows`; `RuleCompiler.ResolveCellRef` checks kind and `DeclaresCell` before that collection succeeds. `StateTransform.Transfer.Subjects` omits its key | Resolution itself is restricted; unavailable is sticky before kind or key lookup. The compiler and kernel share that context; no preliminary collector grants permission | `$cell:`, `$zone:`, `$expr:` and computed-key forms with present/absent keys, wrong kinds and nested expressions; vary only withheld membership with declarations fixed. Generate both direct and batched forms |
-| W3, high: declaration omissions | `AdmitsDeclaration` checks domain, row readers, inverse and phase only; `ValidateDisclosureRow` reads knowledge source/mask/positions and cell readers; `ValidateWitnessRow` resolves the witness | Incoming declaration compilation, including its deferred source bindings, reads through access. Scope allowlist rejects these features from payload alone | Replace an admitted row with each knowledge, witness or per-cell-reader form. Include a public-source success control and inspect later delivery for copied values |
+| W3, high: declaration omissions | The former declaration check read domain, row readers, inverse and phase only; `ValidateDisclosureRow` reads knowledge source/mask/positions and cell readers; `ValidateWitnessRow` resolves the witness | Incoming declaration compilation, including its deferred source bindings, reads through access. Scope allowlist rejects these features from payload alone | Replace an admitted row with each knowledge, witness or per-cell-reader form. Include a public-source success control and inspect later delivery for copied values |
 | W4, high: reverse dependencies | `StateCatalog` builds `DependentRows` only from `KeysOf`; `ValidateDerivedBoard` compares token/code membership and order. Its shown error names the board and codes, **not the hidden keys themselves**. The packet overstates that text claim | Reverse invalidation comes from check reads, including the owner and negative lookups. All checks that could veto the change run restricted. Lower-tier general writes refuse by shape; scope checks cannot have outside dependents | Change tokens while a fixed hidden inverse's code membership varies; remove/reshape public sources of knowledge, phase, readers and witness checks. Add absent-dependent pairs below replica, and assert public state unchanged on refusal |
 | W5, high as a lower-tier oracle: empty selection | `WorldDefinitionFingerprint.Compute` filters `StateRaw.World` only; other sections remain. `DisclosedPlacements` deliberately emits one back per hidden cell under `Placeholder`. **One versus two backs is permitted disclosure to the seat in the packet, not a valid hidden-equivalent seat pair** | Every expected-definition form uses the actual read universe, never the write view. Null, empty and nonempty selection have identical ceiling admission | Recast the example as a Frames/Presentation writer not delivered those bytes; all forms refuse identically. Replica controls use their actual delivered fingerprints: equal for `Omit` hidden-only changes, different for a permitted back-count change |
 | W6, medium: console pre-reads | The former `world.state.cell.set` handler branched on the row kind before submitting a write. The command now submits its raw operand for ordered compose; `WorldRowCommandModule.TryReadMutationRow` distinguishes `Withheld` from missing before admission; `WorldServer.ReadView` throws for unavailable sessions | Console submits raw edit intent; schema-dependent parsing/read-modify-write occurs inside preparation. Handler needs no write-side `ReadView` call | Multiword text, invalid vector and row set/remove/step/add through the real console for seats and session tiers, with Observe revoked too; compare synchronous reply, queued echo, outcome and stream survival |
@@ -2181,6 +2182,64 @@ The auction's highest bid, over-purse bid and tie/replacement scenarios play thr
 and reproduce their authoritative hashes. The full solution builds in Release and the
 debug world boots headlessly. Allocation readings and their revisions are in the completion
 commit, as machine readings are not a repository baseline.
+
+### Write-door footprint checkpoint
+
+The write door's footprint is derived, no longer listed per field. Its invariant:
+for a recipient, every name a submission spells, at any position, is admitted
+through `WorldRecipientView.Admits(string)`, which refuses a name no row or set
+holds exactly as it refuses a withheld one; and a name it spells is admitted
+only while every state name in the declared relations around it reads whole.
+The one enforcing place is `WorldRecipientMutations.Admits`, which every
+recipient door already calls (complete admission, live state commands,
+detached composition and its batch members, the console's row verbs before
+they submit). What makes it structural is where the names come from:
+
+- `WorldMutationNames` walks a mutation's members by reflection. A document
+  model member (a placement, a row declaration, a transform, a HUD element) is
+  read through the name registry's grammar (`WorldSpelledNames.Collect`, over
+  `WorldModuleNamespace.Respell`, the same reader the import rewrite uses), and
+  the vocabulary's own string members are entries of its `Fields` or
+  `Exclusions`. `WorldMutationNames.Uncovered` names any string member that is
+  neither, and `puck registry --check` names any name-shaped model member the
+  registry does not hold.
+- A row's declared relations are `WorldRowDeclarationNames`: every state name
+  each row's declaration spells (cells removed), and the reverse. It extends
+  `StateCatalog.DependentRows` from token domains to every registered position:
+  a live audience, a derived board's token and code rows, a knowledge row's
+  source, mask and positions, a phase protocol, a witness.
+- A replacement or removal admits every state name the installed value spells
+  (`WorldRecipientView.AdmitsInstalled`), found through one resolver table in
+  `WorldRecipientMutations`; a placement adds its parent chain and dealt
+  template. A transform that does not resolve is refused, since resolution may
+  already have read the row it stopped at.
+- A guard over the document (an expected definition, an empty state-row
+  selection included, named inputs, a spatial read) is answered only for a
+  recipient whose read door hands it a replica document; a session below
+  `Replica` is refused by the guard's shape (W5).
+
+This closes W1 (including `SetProperty`'s same-name row and the knowledge
+row's `positions`, which the registry did not hold), W2's named indirections,
+W3, W4's declared reverse relations, W5 and W6's row-verb pre-read at the
+declared level. `WriteDoorNoninterferenceLawTests` holds it from the code: it
+respells every state name position the registry reads in each value a writer
+submits, one at a time, plus every vocabulary entry, and requires the same
+answer from a world where the probe row is withheld, one where it holds other
+cells and one where it is absent, with a public control that is not refused;
+it also refuses an uncovered mutation member and a replacing kind the resolver
+table lacks.
+
+Where it stops: the footprint is the declared relation. A check that reads past
+it stays a review obligation until the restricted transaction (D0b1 to D0c)
+makes every read go through admission: whole-document validation of a unit
+the write does not name (a joint check inside one placement or HUD element over
+a written row and a withheld one), shared ceilings and the key table, and a
+rule firing that leaves a hidden row invalid for the next recipient write (H2).
+Below `Replica`, the footprint still refuses by declarations the writer is not
+delivered ([security review](open-items.md#security-review)). The coupling also costs a capability: a
+recipient's write into a row that a withheld declaration names (a live
+audience row, a knowledge source) is refused, where the token-domain relation
+alone admitted it.
 
 ## Presentation and derived-product disclosure
 
