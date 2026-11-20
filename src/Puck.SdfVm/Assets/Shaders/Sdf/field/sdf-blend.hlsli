@@ -59,7 +59,7 @@ float blendShape(float current, float candidate, uint blendOp, float smoothRadiu
 // The scalar interpreter and the host-compiled rigid-leaf path meet here. Keeping the material winner and distance
 // compose in one helper prevents the fast path from becoming a subtly different VM. DXC sees trackMaterial as a
 // literal at every call and erases this whole material half for the bake's gradient taps.
-void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int material, float4 lanes, int instanceIndex, int frameSlot, float smooth, bool trackMaterial) {
+void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int material, int instanceIndex, int frameSlot, float smooth, bool trackMaterial) {
     if (trackMaterial) {
         bool candidateWins;
         // A cut or an intersection shapes the surface it wins on, which still belongs to the shape it shapes: the mesh
@@ -81,7 +81,6 @@ void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int m
 
         if (candidateWins) {
             result.material = material;
-            result.lanes = lanes;
             result.instanceIndex = instanceIndex;
             result.frameSlot = (handsSlot ? frameSlot : result.frameSlot);
         }

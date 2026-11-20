@@ -29,7 +29,7 @@ public sealed partial class SdfWorldTables : IDisposable {
     // cell run starts at DecalDescriptorCount + screenIndex * MaxScreenDecalCells (KEEP IN SYNC with sdfSampleGlyphDecal).
     private const int DecalDescriptorCount = MaxScreenSurfaces;
     private const int DecalWordsPerCell = 4; // one uint4 per cell/descriptor (KEEP IN SYNC with shade/sdf-environment.hlsli's sdfDecalCells)
-    private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = the slot's SdfUpdateRateCode while a tier view shows, zero otherwise) + float4 orientation quaternion + float4 anonymous Lanes (DynamicTransform.Lanes) (KEEP IN SYNC with isa/sdf-world.interface.hlsli sdfDynamicTransforms: position.w is read by sdfRateCode in debug/sdf-debug-views.hlsli, the third row by SDF_OP_LANE_ERODE's currentLanes and shade-volumes.hlsli's selected intensity lane)
+    private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = the slot's SdfUpdateRateCode while a tier view shows, zero otherwise) + float4 orientation quaternion + float4 anonymous Lanes (DynamicTransform.Lanes) (KEEP IN SYNC with isa/sdf-world.interface.hlsli sdfDynamicTransforms: position.w is read by sdfRateCode in debug/sdf-debug-views.hlsli, the third row by sdfFieldLane for erosion and morphs and by shading for slot-driven appearance)
     // The fillers' format: the views' color format, which the storage image they stand in for declares.
     private const GpuPixelFormat Format = RenderGraphPackageCatalog.WorkingFormat;
     // The glyph atlas's format: RGBA8 coverage and color, as the host rasterizes it.

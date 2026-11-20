@@ -20,125 +20,92 @@
 #include "sdf-bake-world.hlsli"
 #include "../isa/sdf-bake-taps.hlsli"
 
+// The samples are packed in dispatch order (SdfMeshBakeBlock.Write). A partial final workgroup may run past the end.
+void sdfBakeSample(uint sample, uint count) {
+    uint lattice = 0u;
+    uint high = count;
+    [loop]
+    while (lattice + 1u < high) {
+        uint middle = (lattice + high) >> 1u;
+        if (asuint(passGroup.meshBakeLattices[middle * SDF_MESH_BAKE_LATTICE_ROWS].w) <= sample) {
+            lattice = middle;
+        } else {
+            high = middle;
+        }
+    }
+
+    uint rowBase = lattice * SDF_MESH_BAKE_LATTICE_ROWS;
+    float4 origin = passGroup.meshBakeLattices[rowBase];
+    uint4 dims = asuint(passGroup.meshBakeLattices[rowBase + 2u]);
+    uint local = sample - asuint(origin.w);
+    if (local >= dims.x * dims.y * dims.z) { return; }
+
+    float4 cell = passGroup.meshBakeLattices[rowBase + 1u];
+    uint mode = dims.w & 3u;
+    float3 position;
+    if (mode >= 2u) {
+        position = sdfMeshBakePoints[sample].xyz;
+    } else {
+        // A slab shares the final lattice's origin. Its packed first plane places it on that grid.
+        uint plane = (dims.w & 0xFFFFu) >> 2u;
+        uint3 grid = uint3(local % dims.x, (local / dims.x) % dims.y, local / (dims.x * dims.y) + plane);
+        position = origin.xyz + float3(grid) * cell.xyz;
+    }
+
+    uint4 poses = asuint(passGroup.meshBakeLattices[rowBase + 3u]);
+    float4 glyphs = passGroup.meshBakeLattices[rowBase + 4u];
+    sdfGlyphCell = glyphs.x;
+    sdfGlyphStroke = glyphs.y;
+    sdfBakePoseBase = poses.x;
+    sdfBakePoseFirst = poses.y;
+    sdfBakePoseCount = poses.z;
+    sdfBakeLivePoses = (glyphs.z != 0.0);
+    // Only the world selector samples segments outside every instance.
+    sdfMapOmitWorldSegments = (asuint(cell.w) != 0x80000000u);
+
+    float4 orientation = float4(0.0, 0.0, 0.0, 1.0);
+    int frame = asint(poses.w);
+    if (frame >= 0) {
+        uint pose = 3u * (uint)frame;
+        orientation = sdfDynamicTransformRow(pose + 1u);
+        position = rotatePointByQuaternion(position, orientation) + sdfDynamicTransformRow(pose).xyz;
+    }
+
+    uint maskBase = worldInstanceMaskBase(lattice);
+    uint lastTap = (mode == 3u) ? SDF_BAKE_GRADIENT_TAPS : 0u;
+    float spacing = cell.x;
+    float3 gradient = 0.0;
+    uint word = sample * 5u;
+    sdfProgramLayout = sdfLoadProgramLayout();
+    float unscale = 1.0 / sdfProgramLayout.stepScale;
+    [loop]
+    for (uint tap = 0u; tap <= lastTap; tap++) {
+        // Sample in the field's frame, but difference along the lattice's axes for the contour.
+        float3 direction = sdfBakeTap(tap);
+        float3 at = position;
+        if (tap != 0u) { at += rotatePointByQuaternion(direction * spacing, orientation); }
+        SdfHit hit = mapCore(at, maskBase, tap == 0u);
+        if (tap == 0u) {
+            meshBakeSamplesRW[word] = asuint(hit.distance * unscale);
+            meshBakeSamplesRW[word + 1u] = asuint(hit.material);
+            if (mode == 2u) { meshBakeSamplesRW[word + 2u] = asuint(hit.frameSlot); }
+        } else {
+            gradient += direction * hit.distance;
+        }
+        sdfWorkSteps++;
+    }
+
+    // The four taps sum to four times their spacing times the gradient. Undo the program's step scale as for the centre.
+    if (mode == 3u) { gradient *= (0.25 / spacing) * unscale; }
+    if (mode != 2u) { meshBakeSamplesRW[word + 2u] = asuint(gradient.x); }
+    meshBakeSamplesRW[word + 3u] = asuint(gradient.y);
+    meshBakeSamplesRW[word + 4u] = asuint(gradient.z);
+    sdfWorkTexels = 1u;
+}
+
 [numthreads(64, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
-    uint sample = id.x;
-    uint lattice = 0xFFFFFFFFu;
-    uint count = passGroup.meshBakeCount;
-
-    sdfProgramLayout = sdfLoadProgramLayout();
-
-    // The lattices' samples lie back to back from zero in dispatch order (SdfMeshBakeBlock.Write, which refuses
-    // more lattices than the pass block holds), so the last lattice starting at or before the sample is the one that can
-    // hold it.
-    if (count > 0u) {
-        uint low = 0u;
-        uint high = count;
-
-        [loop]
-        while ((low + 1u) < high) {
-            uint middle = ((low + high) >> 1u);
-
-            if (asuint(passGroup.meshBakeLattices[middle * SDF_MESH_BAKE_LATTICE_ROWS].w) <= sample) {
-                low = middle;
-            } else {
-                high = middle;
-            }
-        }
-
-        uint4 dims = asuint(passGroup.meshBakeLattices[(low * SDF_MESH_BAKE_LATTICE_ROWS) + 2u]);
-        uint first = asuint(passGroup.meshBakeLattices[low * SDF_MESH_BAKE_LATTICE_ROWS].w);
-
-        if ((sample >= first) && (sample < (first + (dims.x * dims.y * dims.z)))) {
-            lattice = low;
-        }
-    }
-
-    if (lattice != 0xFFFFFFFFu) {
-        uint rowBase = (lattice * SDF_MESH_BAKE_LATTICE_ROWS);
-        float4 row0 = passGroup.meshBakeLattices[rowBase];
-        float4 row1 = passGroup.meshBakeLattices[rowBase + 1u];
-        uint4 dims = asuint(passGroup.meshBakeLattices[rowBase + 2u]);
-        uint4 poses = asuint(passGroup.meshBakeLattices[rowBase + 3u]);
-        float4 glyphs = passGroup.meshBakeLattices[rowBase + 4u];
-        uint local = (sample - asuint(row0.w));
-        // The mode word: the mode in its low two bits, a slab's first plane of its final lattice above them, and the
-        // instance run the mask pass reads in its high half. A slab's origin is its final lattice's, so its samples lie
-        // exactly where the whole lattice's would, however the bake cuts it into slabs.
-        uint mode = (dims.w & 0x3u);
-        uint plane = ((dims.w & 0xFFFFu) >> 2u);
-        uint x = (local % dims.x);
-        uint y = ((local / dims.x) % dims.y);
-        uint z = ((local / (dims.x * dims.y)) + plane);
-        // A points lattice (mode two, or three with gradients) samples the point table's entry at the sample's place in
-        // the dispatch: a surface point of a contoured mesh whose material the bake reads, or a corner of a crossed cell
-        // of a final lattice whose gradient the contour reads. A grid lattice samples its grid at the spacing its second
-        // row holds; a points lattice's second row holds instead how far its gradient taps lie from each sample
-        // (SdfMeshBakeRequest.TapSpacing, the one place that decides it, which every CPU answer of a lattice reads too).
-        bool points = (mode >= 2u);
-        float3 position = (points ? sdfMeshBakePoints[sample].xyz : (row0.xyz + (float3(x, y, z) * row1.xyz)));
-        float spacing = row1.x;
-        uint maskBase = worldInstanceMaskBase(lattice);
-        int selector = asint(row1.w);
-
-        // The lettering stroke rule's cell and stroke, one for every lattice of the group (sdfGlyph).
-        sdfGlyphCell = glyphs.x;
-        sdfGlyphStroke = glyphs.y;
-        sdfBakePoseBase = poses.x;
-        sdfBakePoseFirst = poses.y;
-        sdfBakePoseCount = poses.z;
-        sdfBakeLivePoses = (glyphs.z != 0.0);
-
-        float3 slotPosition = float3(0.0, 0.0, 0.0);
-        float4 slotOrientation = float4(0.0, 0.0, 0.0, 1.0);
-
-        int latticeFrame = asint(poses.w);
-        if (latticeFrame >= 0) {
-            slotPosition = sdfDynamicTransformRow(3u * (uint)latticeFrame).xyz;
-            slotOrientation = sdfDynamicTransformRow((3u * (uint)latticeFrame) + 1u);
-        }
-        // The segments no instance owns form a group of their own (the selector SdfMeshBakeGroup.WorldSelector, whose
-        // mask selects no instance); every other group samples its instances without them.
-        sdfMapOmitWorldSegments = (asuint(row1.w) != 0x80000000u);
-        uint taps = ((mode == 3u) ? 5u : 1u);
-        float value = 0.0;
-        int material = 0;
-        int frameSlot = SDF_TRANSFORM_SLOT_NONE;
-        float3 gradient = float3(0.0, 0.0, 0.0);
-
-        [loop]
-        for (uint tap = 0u; (tap < taps); tap++) {
-            float3 at = ((tap == 0u) ? position : (position + (SdfBakeTaps[tap - 1u] * spacing)));
-            SdfHit hit = mapCore((rotatePointByQuaternion(at, slotOrientation) + slotPosition), maskBase, (tap == 0u));
-
-            if (tap == 0u) {
-                value = hit.distance;
-                material = hit.material;
-                frameSlot = hit.frameSlot;
-            } else {
-                gradient += (SdfBakeTaps[tap - 1u] * hit.distance);
-            }
-            sdfWorkSteps += 1u;
-        }
-
-        // The four taps sum to four times the spacing times the gradient. mapCore scales what it returns by the program's
-        // step scale, a bound every instance's warps lower for the whole program; the group's own field is that answer
-        // over the step scale (SdfFieldDeviceLawTests.Instances).
-        float unscale = (1.0 / sdfProgramLayout.stepScale);
-
-        value *= unscale;
-        gradient *= ((0.25 / spacing) * unscale);
-
-        uint word = (sample * 5u);
-
-        meshBakeSamplesRW[word] = asuint(value);
-        meshBakeSamplesRW[word + 1u] = asuint(material);
-        meshBakeSamplesRW[word + 2u] = ((mode == 2u) ? asuint(frameSlot) : asuint(gradient.x));
-        meshBakeSamplesRW[word + 3u] = asuint(gradient.y);
-        meshBakeSamplesRW[word + 4u] = asuint(gradient.z);
-        sdfWorkTexels = 1u;
-    }
-
+    if (passGroup.meshBakeCount != 0u) { sdfBakeSample(id.x, passGroup.meshBakeCount); }
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
     puckCountShapes(sdfWorkShapes, sdfWorkGradients);
 }

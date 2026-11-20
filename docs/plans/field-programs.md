@@ -394,8 +394,7 @@ the walk:
   slot shrinks from 32 bytes to 12 bytes and all eight `[4 x ...]` DXIL allocas
   disappear.
 - **Replace runtime `localPosition[axis]` indexing with component selects.**
-  Extend `frame/sdf-component.hlsli` (or a shared `field/` helper) with 3-way
-  component read and write helpers and use them in `RotatePlane`,
+  Use the shared `field/sdf-component.hlsli` helpers to read and write the selected axis in `RotatePlane`,
   `WallpaperFold`, `sdfAxialProfile`, and `sdfShear`, eliminating the last two
   `[3 x float]` DXIL allocas.
 - **Replace indexed `SdfBakeTaps[tap - 1u]` and shorten wrapper live ranges.**
@@ -424,16 +423,10 @@ Each step lands on its own branch with a mechanical check before moving on.
 Steps 1 and 2 establish the clean, single-sourced pipeline; steps 3 and 4 build
 directly on the generated catalogue without adding hand-synced opcode arms.
 
-1. **Remove bake-kernel spills and dead `SdfHit.lanes`.**
-   Delete `SdfHit.lanes`, load slot lanes lazily in `LaneErode` and `Morph`,
-   scalarize `fieldParents` to four switched slots, replace `localPosition[axis]`
-   indexing with 3-way selects, generate a switched tap helper in
-   `SdfMeshBakeTapsHlsl`, and tighten live ranges in `sdf-mesh-bake.comp.hlsl`.
-   Landing this first gives step 2's HLSL emitter a clean, zero-alloca `mapCore`
-   target instead of generating code for dead state only to rewrite it later.
-   *Check:* `dxc -dumpbin` on `sdf-mesh-bake.comp.dxil` reports zero `alloca`
-   instructions and no `@SdfBakeTaps.v.1dim` array; `puck shaders generate
-   --check` passes; `SdfFieldDeviceLawTests` passes on Direct3D 12 and Vulkan.
+1. **Verify bake register pressure and field results on device.**
+   The bake selects parent fields and tetrahedral taps with switches and reads
+   slot lanes only for erosion and morphs. Run `SdfFieldDeviceLawTests` on
+   Direct3D 12 and Vulkan.
    *Windowed verification request (lead's batched GPU leg):* Vulkan
    `[pipeline-statistics]` for `sdf-mesh-bake` drops from 128 registers / 224 B
    local / 6,912 B shared to at most 96 registers (aiming for 80 or under) with
