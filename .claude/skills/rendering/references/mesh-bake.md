@@ -428,11 +428,12 @@ laws exercise that boundary.
   goes once a take finds nothing to take, or the residency is released, and no
   answer holds any of it. Elsewhere a host-memory refusal defers rather than
   fails (`SdfMeshPathBake.Refusals`): a sample set the store keeps or reads past
-  the account's room is dropped or missed (`store-writes-dropped`), a published
-  copy the account refuses waits at the group's landing until the group can
-  reserve its bytes (`publish-waits`), and any other refused stage starts its
-  group's final lattice again under an admission of at least what it held and
-  the bytes refused (`Group.PeakFloor`, `readmitted`). A request's points are its group's
+  the account's room is dropped or missed (`store-writes-dropped`), a copy into
+  the library the account refuses (a landing's published mesh, a follower's
+  renumbered take of its leader's) waits parked until the group can reserve its
+  bytes (`Park`, `copy-waits`), and any other refused stage starts its group's
+  final lattice again under an admission of at least the most the group's
+  storage held and the bytes refused (`Group.PeakFloor`, `readmitted`). A request's points are its group's
   workspace (a final lattice's one point buffer, reused round to round; the
   group's crease and material points, cut to nothing by the answer that
   finishes them), so the reader reads a lattice's request and group only while

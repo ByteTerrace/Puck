@@ -256,7 +256,14 @@ public sealed partial class SdfMeshPathBake {
     // whose leader left nothing in the library (it retired or failed, or the library let its mesh go) starts its geometry
     // again (Start), waiting on another group that started it meanwhile or leading it itself. On the pool.
     private void TakeLanded(Group group, SdfMeshBakeShare? share) {
-        var taken = Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh);
+        var taken = Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refused: out var refused);
+
+        // A take that renumbers the leader's mesh copies its materials into the library under the account; one it has no
+        // room for waits parked rather than baking the geometry again (Park).
+        if (refused is not null) {
+            Park(bytes: refused.Bytes, group: group, refused: refused, work: () => TakeLanded(group: group, share: share));
+            return;
+        }
 
         using (EnterGate(site: BakeGate.Taken)) {
             // A waiter that already took, deserted or retired is no longer this share's to finish.

@@ -906,6 +906,12 @@ public sealed class MemoryAccount {
                 lock (m_account.m_gate) { return m_bytes; }
             }
         }
+        /// <summary>Gets the most bytes the owner's storage has held at once over its lifetime.</summary>
+        public long HeldPeak {
+            get {
+                lock (m_account.m_gate) { return m_ownedPeak; }
+            }
+        }
 
         internal Owner(MemoryAccount account, string name, MemoryCategory category, PhysicalMemory pool, OwnerKind kind, MemoryClass memoryClass, FamilyEntry? family) { m_account = account; Name = name; m_category = category; m_pool = pool; m_kind = kind; m_class = memoryClass; m_family = family; }
 

@@ -2473,7 +2473,7 @@ public sealed partial class SdfMeshPathBake {
                     ? Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: baked)
                     : Library.CopyUnstored(baked);
             } catch (HostMemoryRefusedException refused) {
-                ParkPublish(group: group, mesh: baked, merged: merged, refused: refused);
+                Park(bytes: Math.Max(val1: refused.Bytes, val2: baked.StorageBytes), group: group, refused: refused, work: () => PublishMesh(group: group, mesh: baked, merged: merged));
                 return;
             }
             Account(since: started, stage: BakeStage.Store);
