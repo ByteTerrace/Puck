@@ -501,7 +501,11 @@ public sealed partial class WorldReleaseCutoverLawTests {
             destination: WorldInstanceHost.TransferDestination.Existing(name: "beta"),
             actingPrincipal: Principal.Console
         );
-        source.Instances.DrainPendingTransfers();
+        await SiloCrossings.DriveAsync(
+            done: () => beta!.Server.Population.IsActive(index: PeerSlot) && (source.Instances.CaptureRow(row: alpha!).InDoubtTransfers.Count == 0),
+            host: source,
+            rows: ["alpha", "beta"]
+        );
         Assert.False(condition: alpha.Server.Population.IsActive(index: PeerSlot));
         Assert.True(condition: beta!.Server.Population.IsActive(index: PeerSlot));
 

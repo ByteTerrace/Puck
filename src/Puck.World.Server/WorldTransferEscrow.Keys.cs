@@ -89,9 +89,10 @@ public sealed partial class WorldTransferEscrow {
             );
         }
     }
-    // Kills a live lease: its capacity is released and its key is dead.
+    // Kills a live lease: its capacity is released and its key is dead. A lease whose record or arrival is in flight is
+    // decided by that record when it settles, never killed under it.
     private void KillLease(WorldTransferKey key) {
-        if (m_leases.ContainsKey(key: key)) {
+        if (m_leases.ContainsKey(key: key) && !IsOpen(key: key)) {
             ReleaseLease(key: key);
             Spend(
                 committed: false,
@@ -102,7 +103,8 @@ public sealed partial class WorldTransferEscrow {
     // Answers Missing for a key that holds nothing live, first making its death durable: a key below its source's floor
     // or already durably dead answers at once, and any other is tombstoned in the crossing log and takes its row only
     // once the tombstone is durable. A key the ledger cannot admit, or whose tombstone is not known to be durable,
-    // changes nothing and answers Uncertain, since only a later answer can be final.
+    // changes nothing and answers Uncertain, since only a later answer can be final. A tombstone still in flight takes
+    // its row when the authority settles it, and the next answer about the key is Missing.
     private WorldTransferStatus AnswerMissing(WorldTransferKey key, ref string reason, IReadOnlyList<int>? burned = null) {
         if (IsBelowFloor(key: key) || (m_spent.TryGetValue(key: key, value: out var spent) && spent.Durable)) {
             return WorldTransferStatus.Missing;
@@ -113,6 +115,11 @@ public sealed partial class WorldTransferEscrow {
         }
 
         var durability = m_server.RecordCrossingHeld(
+            continuation: step => {
+                if (step.Outcome == WorldCrossingDurability.Durable) {
+                    ApplyDurableDeath(key: key);
+                }
+            },
             reason: out var detail,
             record: new WorldCrossingRecord.Tombstone(Burned: burned, Key: key)
         );
@@ -121,11 +128,7 @@ public sealed partial class WorldTransferEscrow {
             reason = $"transfer {key.TransferId} cannot be tombstoned yet ({detail}); only a later answer is final";
             return WorldTransferStatus.Uncertain;
         }
-        EnterRow(key: key);
-        m_spent[key] = new SpentKey(
-            Committed: false,
-            Durable: true
-        );
+        ApplyDurableDeath(key: key);
         return WorldTransferStatus.Missing;
     }
     // The floor a source holds once `floor` is applied: a floor never falls.
@@ -173,7 +176,7 @@ public sealed partial class WorldTransferEscrow {
             floor: floor,
             sourceAuthority: key.SourceAuthority
         );
-        RedoDeath(key: key);
+        ApplyDurableDeath(key: key);
     }
     /// <summary>Redoes a crossing-log tombstone: the key is dead, a live lease the recovered checkpoint holds for it is
     /// released, and every slot the refused commit landed at takes the generation that landing burned. A committed key
@@ -183,13 +186,13 @@ public sealed partial class WorldTransferEscrow {
     /// <param name="burned">The body indices the refused commit landed at before rolling them back.</param>
     internal void RedoTombstone(WorldTransferKey key, IReadOnlyList<int> burned) {
         ReleaseLease(key: key);
-        RedoDeath(key: key);
+        ApplyDurableDeath(key: key);
         foreach (var slot in burned) {
             m_server.Population.BurnGeneration(index: slot);
         }
     }
-    // A redone durable death: admitted when it was recorded, so it enters without the bounds.
-    private void RedoDeath(WorldTransferKey key) {
+    // A durable death, live or redone: admitted when its record was sent, so it enters without the bounds.
+    private void ApplyDurableDeath(WorldTransferKey key) {
         EnterRow(key: key);
         m_spent[key] = new SpentKey(
             Committed: false,

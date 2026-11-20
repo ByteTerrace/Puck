@@ -51,6 +51,11 @@ public interface IFixedStepSimulation {
     [Replaces(root: typeof(object))]
     void Step(in FixedStepContext context, in CommandSnapshot commands);
 
+    /// <summary>Gets whether the step <see cref="TryStep"/> began and has not finished can no longer finish: its
+    /// authority froze at a stall. The host treats that as a tick boundary again, so its console runs (to inspect,
+    /// recover or quit) instead of waiting for a step that never settles.</summary>
+    bool StepInterrupted => false;
+
     /// <summary>Begins or resumes the same step. A false result retains the command snapshot and clock position.</summary>
     [Replaces(root: typeof(object))]
     bool TryStep(in FixedStepContext context, in CommandSnapshot commands) {

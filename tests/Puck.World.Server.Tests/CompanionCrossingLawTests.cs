@@ -338,12 +338,12 @@ public sealed partial class CompanionCrossingLawTests {
     // Model trace HomeHoldsTheSlotOfItsOwnDepartureInDoubt (its settlement half): home's own hop settles from home's
     // own records alone; a notice from another authority does not settle it.
     [Fact]
-    public void HomesOwnHopSettlesOnlyFromItsOwnRecords() {
+    public async Task HomesOwnHopSettlesOnlyFromItsOwnRecords() {
         using var rows = new Rows();
         var companion = rows.Companions[0];
         var key = new WorldTransferKey(SourceAuthority: rows.Home.Server.AuthorityIdentity, TransferId: 98UL);
 
-        Assert.Equal(actual: Assert.Single(collection: rows.Home.Server.AuthorizeOwnHop(destination: rows.B.Server.AuthorityIdentity, incarnations: [companion], key: key)).Verdict, expected: WorldHopVerdict.Granted);
+        Assert.Equal(actual: Assert.Single(collection: await rows.Home.Server.AuthorizeOwnHopAsync(destination: rows.B.Server.AuthorityIdentity, incarnations: [companion], key: key)).Verdict, expected: WorldHopVerdict.Granted);
         Assert.False(condition: rows.Home.Server.SettleHop(incarnation: companion, key: key, source: rows.B.Server.AuthorityIdentity));
         Assert.Equal(actual: rows.Title(companion: companion).Kind, expected: WorldCustodyKind.Pending);
     }

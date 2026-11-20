@@ -455,7 +455,11 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
             public bool SettleHop(WorldTransferKey key, WorldEntityAddress incarnation, string source) => Owner.Call(from: From, to: To, kind: Model.MsgKind.HopSettled, key: Owner.KeyName(key: key), call: () => Inner.SettleHop(incarnation: incarnation, key: key, source: source), unreachable: static () => false, replied: static acked => (acked ? Model.MsgKind.HopSettledAck : null), replyKinds: [Model.MsgKind.HopSettledAck]);
         }
         private sealed record ObservedLog(Refinement Owner, Model.Node Node, IWorldCrossingLog Inner) : IWorldCrossingLog {
-            public WorldCrossingDurability Append(in WorldCrossingEntry entry, out string reason) => Owner.Append(entry: in entry, inner: Inner, node: Node, reason: out reason);
+            public ValueTask<WorldCrossingAppend> Append(in WorldCrossingEntry entry) {
+                var durability = Owner.Append(entry: in entry, inner: Inner, node: Node, reason: out var reason);
+
+                return new(result: new WorldCrossingAppend(Durability: durability, Reason: reason));
+            }
         }
 
         // One engine call between two authorities: the model delivers the request (or drops it), the engine performs it
@@ -543,6 +547,14 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
             }
             return reply;
         }
+        // The inner logs answer at once: the refinement model has no record in flight.
+        private static WorldCrossingDurability AppendNow(in WorldCrossingEntry entry, IWorldCrossingLog inner, out string reason) {
+            var answer = inner.Append(entry: in entry);
+
+            Assert.True(condition: answer.IsCompletedSuccessfully, userMessage: "the refinement's inner log answers at once");
+            reason = answer.Result.Reason;
+            return answer.Result.Durability;
+        }
         private WorldCrossingDurability Append(in WorldCrossingEntry entry, IWorldCrossingLog inner, Model.Node node, out string reason) {
             var index = m_points.Count;
             var fault = FaultAt(index: index);
@@ -570,7 +582,7 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
                         Trace(text: $"append {text} uncertain (lost)");
                         return WorldCrossingDurability.Uncertain;
                     default:
-                        _ = inner.Append(entry: in entry, reason: out _);
+                        _ = AppendNow(entry: in entry, inner: inner, reason: out _);
                         Match(node: node, record: entry.Record);
                         reason = "the store's answer was lost";
                         Trace(text: $"append {text} uncertain (landed)");
@@ -582,7 +594,7 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
                 CrashModel(node: node);
                 Crash(node: node, text: $"{entry.Record.GetType().Name} before it was durable");
             }
-            var durability = inner.Append(entry: in entry, reason: out reason);
+            var durability = AppendNow(entry: in entry, inner: inner, reason: out reason);
 
             if (durability == WorldCrossingDurability.Durable) {
                 Match(node: node, record: entry.Record);

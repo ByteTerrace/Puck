@@ -115,15 +115,17 @@ public sealed partial class FederationTransferLawTests {
 
     // Answers every arrival record with one verdict; every other record lands.
     private sealed class AnsweringCrossingLog(WorldCrossingDurability answer) : IWorldCrossingLog {
-        public WorldCrossingDurability Append(in WorldCrossingEntry entry, out string reason) {
+        public ValueTask<WorldCrossingAppend> Append(in WorldCrossingEntry entry) {
             var verdict = ((entry.Record is WorldCrossingRecord.Arrival)
                 ? answer
                 : WorldCrossingDurability.Durable);
 
-            reason = ((verdict == WorldCrossingDurability.Durable)
-                ? string.Empty
-                : $"the log answered {verdict}");
-            return verdict;
+            return new(result: new WorldCrossingAppend(
+                Durability: verdict,
+                Reason: ((verdict == WorldCrossingDurability.Durable)
+                    ? string.Empty
+                    : $"the log answered {verdict}")
+            ));
         }
     }
 

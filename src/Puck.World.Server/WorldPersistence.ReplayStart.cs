@@ -32,7 +32,7 @@ public sealed partial class WorldPersistence {
     /// <param name="documentDirectory">The tape's asset directory, or null to use this authority's directory.</param>
     [Replaces(root: typeof(StateArena))]
     public void RestoreReplayStart(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true, string? documentDirectory = null) {
-        lock (Host.AuthorityGate) {
+        using (Host.EnterAtTickBoundary()) {
             Host.ThrowIfTickPending();
             var keys = Host.DrawKeys;
             keys.AdvanceGeneration();

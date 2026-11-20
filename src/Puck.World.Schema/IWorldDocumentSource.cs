@@ -37,13 +37,21 @@ public sealed class WorldComposedLink {
 }
 /// <summary>A composed image and the filesystem facts that justify it. The original chain preserves content hashes.</summary>
 public sealed record WorldComposedDocument(IReadOnlyList<WorldComposedLink> Chain, byte[] ComposedJson, int Reach, IReadOnlyList<CompileInput>? Inputs) {
+    private string? m_composedDigest;
+    internal string ComposedDigest => (m_composedDigest ??= ContentPin.Compute(content: ComposedJson).Hex);
+
     // Effective scalar provenance is process-local. Older/persisted images without it still serve ordinary reads;
     // a provenance read recomposes once and holds a new image. No mutable JSON node is shared with a caller.
     internal IReadOnlyDictionary<string, WorldDocumentOrigins.Origin>? Origins { get; init; }
-    // The layers a composite image composed from, process-local like Origins: a later composition of the same document
-    // after one layer changed recomposes only what that layer writes (WorldDefinitionFileSource.Layers). A persisted
-    // image carries none and its next recomposition merges whole.
     internal WorldDefinitionFileSource.ComposedLayers? Layers { get; init; }
+    internal WorldDefinitionFileSource.LayerIndex? CachedLayers { get; private init; }
+
+    /// <summary>Reads the index of a verified composition image's layers. The layer entries are opened on recomposition.</summary>
+    public WorldComposedDocument ReadLayerIndex(BinaryReader reader) =>
+        this with { CachedLayers = WorldDefinitionFileSource.ReadLayerIndex(reader: reader, json: ComposedJson) };
+
+    /// <summary>Writes the references to this composition's persisted layers and its root member ranges.</summary>
+    public void WriteLayerIndex(BinaryWriter writer) => WorldDefinitionFileSource.WriteLayerIndex(writer: writer, layers: Layers);
 }
 /// <summary>The persistent composition entries of the compile cache.</summary>
 public interface IWorldCompositionStore {
@@ -51,6 +59,12 @@ public interface IWorldCompositionStore {
     WorldComposedDocument? ReadComposition(string key);
     /// <summary>Stores an image under this source, path and catalog identity.</summary>
     void WriteComposition(string key, WorldComposedDocument image);
+    /// <summary>Gets the verified result of the layer code walk for this build, deriving it on a miss.</summary>
+    string GetLayerCodeHash(Func<string> derive);
+    /// <summary>Reads the verified layer under its content and code key, or returns null on a miss.</summary>
+    T? ReadLayer<T>(string key, Func<BinaryReader, T> read) where T : class;
+    /// <summary>Stores a newly shaped layer under its content and code key.</summary>
+    void WriteLayer(string key, Action<BinaryWriter> write);
 }
 /// <summary>Resolves and reads one document's raw bytes by name — the byte-level seam basis-chain composition walks
 /// over, implemented once for a directory (the local load path) and once for a flat cloud namespace

@@ -870,6 +870,11 @@ public sealed partial class WorldTransferEscrow {
         )) {
             return WorldTransferStatus.Uncertain;
         }
+        // A key whose lease or arrival record is in flight answers once the record settles.
+        if (IsOpen(key: key)) {
+            _ = m_server.ParkOnCrossingInFlight(reason: out reason);
+            return WorldTransferStatus.Uncertain;
+        }
         if (
             m_spent.TryGetValue(
                 key: key,
@@ -928,14 +933,19 @@ public sealed partial class WorldTransferEscrow {
             reason: out reason
         );
         } finally {
-            ReleaseLease(key: key);
+            if (m_keepLease) {
+                m_keepLease = false;
+            } else {
+                ReleaseLease(key: key);
+            }
         }
     }
 
     private WorldTransferStatus CommitLease(WorldTransferKey key, Lease lease, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
         var transferId = key.TransferId;
 
-        if ((m_server.NextInputTick - 1UL) >= lease.DeadlineTick) {
+        // A durable arrival lands whatever its lease's deadline: the record already decided the key.
+        if (!m_relanding && ((m_server.NextInputTick - 1UL) >= lease.DeadlineTick)) {
             reason = $"transfer {transferId} reservation expired at destination tick {lease.DeadlineTick}";
 
             return WorldTransferStatus.Missing;
@@ -1004,6 +1014,14 @@ public sealed partial class WorldTransferEscrow {
                 reason = $"transfer {transferId} traveler {(index + 1)} names unavailable destination motion program '{member.BodyMotionProgramName}'";
                 return WorldTransferStatus.Missing;
             }
+        }
+
+        // Nothing lands while another crossing record is in flight: the commit is decided again once that one settles,
+        // under the lease it keeps meanwhile.
+        if (!m_relanding && m_server.ParkOnCrossingInFlight(reason: out var inFlight)) {
+            m_keepLease = true;
+            reason = inFlight;
+            return WorldTransferStatus.Uncertain;
         }
 
         var offered = new WorldCrossingArrival(
@@ -1131,15 +1149,36 @@ public sealed partial class WorldTransferEscrow {
 
         // Written ahead of the answer: a destination that cannot make its arrival durable lands nothing, so a
         // restart can never lose a body the source was told had arrived. An uncertain record lands nothing either,
-        // but the record may still be in the log, so the answer is neither a refusal nor a commit.
+        // but the record may still be in the log, so the answer is neither a refusal nor a commit. A record in flight
+        // lands nothing until it is durable: the landings that built it are undone, the lease holds their slots, and
+        // the authority lands the record as it was sent when it settles (SettleArrival).
         var durability = WorldCrossingDurability.Durable;
         var durabilityReason = string.Empty;
 
         if (!m_relanding) {
             durability = m_server.RecordCrossingHeld(
+                continuation: SettleArrival,
+                opened: out var opened,
                 reason: out durabilityReason,
                 record: new WorldCrossingRecord.Arrival(Value: arrival)
             );
+            if (durability == WorldCrossingDurability.Pending) {
+                UndoSpeculativeLanding(
+                    generations: generations,
+                    landedOrdinals: landedOrdinals,
+                    offered: offered
+                );
+                m_keepLease = true;
+                if (opened is not null) {
+                    m_open = new OpenCrossing(
+                        Arrival: arrival,
+                        Key: key,
+                        Members: offered.Members
+                    );
+                }
+                reason = durabilityReason;
+                return WorldTransferStatus.Uncertain;
+            }
         }
         if (durability != WorldCrossingDurability.Durable) {
             RollBack();
@@ -1546,11 +1585,24 @@ public sealed partial class WorldTransferEscrow {
 
         var signedTick = unchecked((long)tick);
 
+        var held = (OpenCrossing?)null;
+
         while (m_deadlines.TryDequeueDue(
             tick: signedTick,
             out var key
         )) {
+            if (IsOpen(key: key)) {
+                held = m_open;
+                continue;
+            }
             KillLease(key: key);
+        }
+        // An expiry that meets a record in flight is due again next tick: the record decides the key first.
+        if (held is { } open) {
+            m_deadlines.Add(
+                dueTick: checked((signedTick + 1L)),
+                token: open.Key
+            );
         }
     }
     public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null) {
@@ -1585,6 +1637,10 @@ public sealed partial class WorldTransferEscrow {
             request: request
         )) {
             return WorldTransferReservationReply.Refused(reason: reservationReason);
+        }
+        if (IsOpen(key: key)) {
+            _ = m_server.ParkOnCrossingInFlight(reason: out var inFlight);
+            return WorldTransferReservationReply.Refused(reason: inFlight) with { Transient = true };
         }
         if (m_leases.TryGetValue(
             key: key,
@@ -1809,15 +1865,31 @@ public sealed partial class WorldTransferEscrow {
         // Written ahead of the acceptance: a recovered destination finds the key leased, so it never leases it again.
         // A lease that is not known durable changes nothing here. An uncertain one may still be in the log, but this
         // activation records nothing more, so it can neither lease the key again nor answer it Missing; its recovery
-        // finds the record and declares the key dead.
+        // finds the record and declares the key dead. A lease whose record is in flight holds its slots under the key
+        // and accepts nothing yet: the reservation is decided again once the record settles, and a durable lease then
+        // answers it as any lease already held does.
+        var floor = request.SourceFloor;
         var durability = m_server.RecordCrossingHeld(
+            continuation: step => SettleLease(floor: floor, key: key, step: step),
+            opened: out var opened,
             reason: out var leaseDetail,
             record: new WorldCrossingRecord.Lease(
-                Floor: request.SourceFloor,
+                Floor: floor,
                 Key: key
             )
         );
 
+        if (opened is not null) {
+            OpenLease(key: key);
+            _ = InstallLease(
+                arrival: arrival,
+                deadline: deadline,
+                key: key,
+                request: request,
+                slots: slots
+            );
+            return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} lease record is in flight") with { Transient = true };
+        }
         if (durability != WorldCrossingDurability.Durable) {
             return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} lease could not be made durable — {leaseDetail}") with { Transient = true };
         }
@@ -2350,6 +2422,17 @@ public sealed partial class WorldTransferEscrow {
             return false;
         }
 
+        return RelandUnder(
+            arrival: arrival,
+            reason: out reason,
+            recorded: recorded
+        );
+    }
+    // Lands a durable arrival through the commit door under the lease it holds now, writing no record: recovery and a
+    // re-drive after their reservation step, and a live arrival whose record settled durable.
+    private bool RelandUnder(WorldCrossingArrival arrival, WorldArrivalOutcome? recorded, out string reason) {
+        var request = arrival.Request;
+
         m_relanding = true;
         m_relandOutcome = recorded;
         m_relandReadopted = arrival.Readopted;
@@ -2420,7 +2503,8 @@ public sealed partial class WorldTransferEscrow {
         );
         var reason = string.Empty;
 
-        return (m_uncertain.ContainsKey(key: key)
+        // A key whose lease or arrival record is in flight is neither reserved nor committed until the record settles.
+        return ((m_uncertain.ContainsKey(key: key) || IsOpen(key: key))
             ? WorldTransferStatus.Uncertain
             : ((m_committed.Contains(item: key) || (m_spent.TryGetValue(key: key, value: out var spent) && spent.Committed))
                 ? WorldTransferStatus.Committed

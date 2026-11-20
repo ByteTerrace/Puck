@@ -73,12 +73,18 @@ public sealed partial class WorldServer {
         IReadOnlyList<WorldTransferCommitMember> members, Action? authorize = null, CancellationToken ct = default) {
         var key = new WorldTransferKey(sourceAuthority, transferId);
         var tickets = ExecuteAuthorityOperation(() => m_transferEscrow.CommitHopQuestion(key));
-        return WithConfirmedHopsAsync(key, tickets, WorldHopPhase.Commit, confirmed => {
+        // The arrival answers only once its record is durable and the cohort has landed.
+        return Flatten(answer: WithConfirmedHopsAsync(key, tickets, WorldHopPhase.Commit, confirmed => DecideCrossingAsync(decide: () => {
             var status = m_tick.CommitTransfer(confirmed: confirmed, members: members, reason: out var reason,
                 sourceAuthority: sourceAuthority, transferId: transferId);
             return (status, reason);
-        }, authorize, ct);
+        }, ct: ct), authorize, ct));
     }
+    // A decision reached without waiting on home answers through its own task, which completes the moment the decision
+    // does; only one that waited on home goes through an unwrapping proxy.
+    private static Task<T> Flatten<T>(Task<Task<T>> answer) => (answer.IsCompletedSuccessfully
+        ? answer.Result
+        : answer.Unwrap());
     /// <inheritdoc cref="WorldTick.ConstrainTransferAuthorities"/>
     public void ConstrainTransferAuthorities(Func<string, bool> allowed) => m_tick.ConstrainTransferAuthorities(allowed: allowed);
     /// <inheritdoc cref="WorldTick.DescribeFields"/>
@@ -150,8 +156,10 @@ public sealed partial class WorldServer {
         ArgumentNullException.ThrowIfNull(request);
         var key = new WorldTransferKey(request.SourceAuthority, request.TransferId);
         var tickets = ExecuteAuthorityOperation(() => m_transferEscrow.ReservationHopQuestion(request));
-        return WithConfirmedHopsAsync(key, tickets, WorldHopPhase.Reservation,
-            confirmed => m_tick.ReserveTransfer(confirmed: confirmed, request: request), authorize, ct);
+        // The acceptance answers only once the lease record is durable.
+        return Flatten(answer: WithConfirmedHopsAsync(key, tickets, WorldHopPhase.Reservation,
+            confirmed => DecideCrossingAsync(decide: () => m_tick.ReserveTransfer(confirmed: confirmed, request: request), ct: ct),
+            authorize, ct));
     }
     /// <inheritdoc cref="WorldTick.RetireTransferredMobility"/>
     public void RetireTransferredMobility(in WorldMobilityIdentity mobility) => m_tick.RetireTransferredMobility(mobility: in mobility);

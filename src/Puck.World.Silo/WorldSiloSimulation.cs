@@ -26,8 +26,10 @@ public sealed class WorldSiloSimulation(WorldSiloHost host) : IFixedStepSimulati
 
     /// <inheritdoc/>
     public bool TryStep(in FixedStepContext context, in CommandSnapshot commands) {
-        host.DrainActivationMailbox();
+        // Activation work (checkpoints, releases, deactivations) runs only at a tick boundary, never against a row
+        // whose tick is held across wait slices.
         if (!m_resumingRows) {
+            host.DrainActivationMailbox();
             if (host.IsDraining) { return true; }
             if (!host.ReleaseAdmissionOpen) {
                 // A candidate receives pump heartbeats for private health while the durable group barrier is closed.

@@ -66,7 +66,7 @@ public sealed partial class WorldDocument {
                     DrawCursor = (siteRow.DrawCursor + advances),
                     DrawnMasks = advancedMasks,
                 }),
-                keyOf: static (WorldStateRow row) => row.Name
+                keys: WorldRowKeys.StateRows
             ));
             reason = string.Empty;
 
@@ -104,7 +104,7 @@ public sealed partial class WorldDocument {
             candidate = current.WithWorldState(rows: Upsert(
                 list: current.AuthoredState,
                 item: filled,
-                keyOf: static (WorldStateRow row) => row.Name
+                keys: WorldRowKeys.StateRows
             ));
             reason = string.Empty;
 
@@ -189,7 +189,7 @@ public sealed partial class WorldDocument {
                 previous: siteRow.DrawnMasks
             ),
             }),
-            keyOf: static (WorldStateRow row) => row.Name
+            keys: WorldRowKeys.StateRows
         );
 
         candidate = current.WithWorldState(rows: state);

@@ -9,6 +9,8 @@ public sealed partial class WorldRecipientView {
     private sealed class WriteScratch {
         public HashSet<string> Placements { get; } = new(StringComparer.Ordinal);
         public List<int> Sets { get; } = [];
+        public HashSet<string> Reached { get; } = new(StringComparer.Ordinal);
+        public Queue<string> Pending { get; } = new();
     }
     // Read-only capabilities are minted during delivery. Writing scratch belongs only to capabilities that write;
     // weak keys keep both its allocation and its lifetime off the ordinary read path.
@@ -20,19 +22,24 @@ public sealed partial class WorldRecipientView {
 
     /// <summary>Creates a capability at a trusted, detached composition boundary. Live ingress uses the server's
     /// minted capability so session ceilings and live Observe admission cannot be raised.</summary>
-    public static WorldRecipientView ForComposition(WorldDefinition document, Principal actor, StateArena? store = null, ArenaTime? time = null, Func<bool>? operates = null) =>
+    public static WorldRecipientView ForComposition(WorldDefinition document, Principal actor, StateArena? store = null, ArenaTime? time = null, Func<bool>? operates = null,
+        Puck.Abstractions.Machines.IMachineValidationCatalog? machines = null) =>
         new(() => document, () => store ?? WorldStateReader.Arena(document), actor, WorldDisclosureTier.Replica,
-            static () => true, new WorldDisclosureImages(), string.Empty, () => time ?? ArenaTime.Origin, operates);
+            static () => true, new WorldDisclosureImages(), string.Empty, () => time ?? ArenaTime.Origin, operates, machines: () => machines);
 
     /// <summary>Admits a row's declared write footprint from policy alone: the row, its token domain, every row keyed
     /// over it (<see cref="StateCatalog.DependentRows"/>), and every state name spelled by the row's own declaration and
-    /// by every declaration that spells the row (<see cref="WorldRowDeclarationNames"/>: a live audience, a derived
-    /// board's token and code rows, a knowledge row's source, mask and positions, a phase protocol, whatever position
-    /// the name registry lists). A write's checks read the current members of each (a key outside a domain, a domain
-    /// key a dependent still holds, a board settled from its tokens, a knowledge row copied from its source), so every
-    /// one must read whole or the verdict would be an oracle over hidden members. A declared set admits only if every
-    /// row its expression reads admits. A name that resolves to no row and no set is refused exactly as a withheld row
-    /// is, so the write door never tells a declared row the recipient cannot read from one that does not exist.</summary>
+    /// by every declaration that spells the row (<see cref="WorldRowDeclarationNames"/>: a live audience, a cell's own
+    /// audience, a derived board's token and code rows, a knowledge row's source, mask and positions, a phase protocol,
+    /// whatever position the name registry lists), closed transitively over the rows that depend on the row: a row
+    /// that spells or is keyed over a dependent is reached as the dependent is, since a write that moves the dependent
+    /// (a board recomputed from its tokens, a domain that loses a key) runs the dependent's own checks. A write's checks
+    /// read the current members of each (a key outside a domain, a domain key a dependent still holds, a board settled
+    /// from its tokens, a knowledge row copied from its source), so every one must read whole or the verdict would be
+    /// an oracle over hidden members. A declared set admits only if every row its expression reads admits, and the
+    /// declarations that spell it are reached as a row's are. A name that resolves to no row and no set is refused
+    /// exactly as a withheld row is, so the write door never tells a declared row the recipient cannot read from one
+    /// that does not exist.</summary>
     /// <remarks>Every write question this view answers is the recipient's declared policy alone
     /// (<see cref="WritesWhole"/>): neither the delivery ceiling nor whether the recipient observes now enters it, so a
     /// session admitted at <see cref="WorldDisclosureTier.Frames"/> writes a public row its grants name, and no refusal
@@ -42,17 +49,33 @@ public sealed partial class WorldRecipientView {
     /// <returns><see langword="true"/> when the whole footprint reads whole.</returns>
     public bool Admits(string row) {
         if (Unrestricted) { return true; }
-        if (!Arena.Catalog.TryResolve(StateLane.Document, row, out var handle)) { return AdmitsSet(row); }
-        var ordinal = handle.Ordinal;
-        var domain = Arena.Layout[ordinal].DomainOrdinal;
-        if (!WritesWhole(ordinal) || ((domain >= 0) && !WritesWhole(domain))) { return false; }
-        foreach (var dependent in Arena.Catalog.DependentRows(ordinal)) {
-            if (!WritesWhole(dependent)) { return false; }
-        }
+        var scratch = Writes.GetValue(this, static _ => new());
+        var reached = scratch.Reached;
+        var pending = scratch.Pending;
         var declared = WorldRowDeclarationNames.Of(Source);
-        foreach (var spelling in declared.SpelledBy(row)) {
-            foreach (var name in declared.Spells(spelling)) {
-                if (!WritesWholeName(name)) { return false; }
+        var catalog = Arena.Catalog;
+        reached.Clear();
+        pending.Clear();
+        reached.Add(row);
+        pending.Enqueue(row);
+        while (pending.TryDequeue(out var name)) {
+            if (catalog.TryResolve(StateLane.Document, name, out var handle)) {
+                var ordinal = handle.Ordinal;
+                var domain = Arena.Layout[ordinal].DomainOrdinal;
+                if (!WritesWhole(ordinal) || ((domain >= 0) && !WritesWhole(domain))) { return false; }
+                foreach (var dependent in catalog.DependentRows(ordinal)) {
+                    if (!WritesWhole(dependent)) { return false; }
+                    var dependentName = catalog.Descriptors[dependent].Name;
+                    if (reached.Add(dependentName)) { pending.Enqueue(dependentName); }
+                }
+            } else if (!AdmitsSet(name)) {
+                return false;
+            }
+            foreach (var spelled in declared.Spells(name)) {
+                if (!WritesWholeName(spelled)) { return false; }
+            }
+            foreach (var spelling in declared.SpelledBy(name)) {
+                if (reached.Add(spelling)) { pending.Enqueue(spelling); }
             }
         }
         return true;
@@ -170,17 +193,65 @@ public sealed partial class WorldRecipientView {
     /// for a refusal to carry.</remarks>
     public bool AdmitsInstalled(object? installed, Type type) {
         if (Unrestricted || (installed is null)) { return true; }
-        foreach (var name in WorldSpelledNames.StateNames(installed, type)) {
+        foreach (var name in WorldSpelledNames.StateNames(installed, type, MachineCatalog)) {
             if (!Admits(name)) { return false; }
         }
         return true;
+    }
+    /// <summary>Checks every state name each row of an installed list a write replaces whole spells (see
+    /// <see cref="AdmitsInstalled(object?, Type)"/>).</summary>
+    /// <typeparam name="T">The model type of a row.</typeparam>
+    /// <param name="find">Finds the installed rows in the document, or returns <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when nothing is installed or every name of every row admits.</returns>
+    public bool AdmitsInstalledRows<T>(Func<WorldDefinition, IReadOnlyList<T>?> find) {
+        ArgumentNullException.ThrowIfNull(find);
+        if (Unrestricted) { return true; }
+        foreach (var row in find(Source) ?? []) {
+            if (!AdmitsInstalled(row, typeof(T))) { return false; }
+        }
+        return true;
+    }
+    /// <summary>Checks every installed row of a keyed section that a write keyed <paramref name="key"/> may replace or
+    /// remove: each row composition would match under the section's key (<see cref="WorldRowKey{T, TKey}"/>), and each
+    /// row whose key is bound to a state cell, whose live value the door does not read, so the verdict never depends on
+    /// a cell.</summary>
+    /// <typeparam name="T">The row type.</typeparam>
+    /// <typeparam name="TKey">The key type.</typeparam>
+    /// <param name="keys">The section's key, the one composition matches by.</param>
+    /// <param name="rows">Finds the section's installed rows in the document, or returns <see langword="null"/>.</param>
+    /// <param name="key">The key the write targets.</param>
+    /// <returns><see langword="true"/> when every row the write may replace admits.</returns>
+    public bool AdmitsReplaced<T, TKey>(WorldRowKey<T, TKey> keys, Func<WorldDefinition, IReadOnlyList<T>?> rows, TKey key) where T : class {
+        ArgumentNullException.ThrowIfNull(keys);
+        ArgumentNullException.ThrowIfNull(rows);
+        if (Unrestricted) { return true; }
+        foreach (var row in rows(Source) ?? []) {
+            if ((row is not null) && ((keys.ReferenceOf(row) is not null) || WorldRowKey<T, TKey>.Same(keys.Of(row), key)) &&
+                !AdmitsInstalled(row, typeof(T))) { return false; }
+        }
+        return true;
+    }
+    /// <summary>Checks every installed row a submitted row may replace (see
+    /// <see cref="AdmitsReplaced{T, TKey}(WorldRowKey{T, TKey}, Func{WorldDefinition, IReadOnlyList{T}}, TKey)"/>). A
+    /// submitted key bound to a state cell is the value composition resolves it to, which the door does not read, so
+    /// every installed row of the section is one it may replace.</summary>
+    /// <typeparam name="T">The row type.</typeparam>
+    /// <typeparam name="TKey">The key type.</typeparam>
+    /// <param name="keys">The section's key, the one composition matches by.</param>
+    /// <param name="rows">Finds the section's installed rows in the document, or returns <see langword="null"/>.</param>
+    /// <param name="incoming">The submitted row.</param>
+    /// <returns><see langword="true"/> when every row the write may replace admits.</returns>
+    public bool AdmitsReplacing<T, TKey>(WorldRowKey<T, TKey> keys, Func<WorldDefinition, IReadOnlyList<T>?> rows, T incoming) where T : class {
+        ArgumentNullException.ThrowIfNull(keys);
+        ArgumentNullException.ThrowIfNull(incoming);
+        return (keys.ReferenceOf(incoming) is null) ? AdmitsReplaced(keys, rows, keys.Of(incoming)) : AdmitsInstalledRows(rows);
     }
     /// <summary>Checks every state name the value a write replaces or removes spells, found in the authority's
     /// installed document (see <see cref="AdmitsInstalled(object?, Type)"/>).</summary>
     /// <typeparam name="T">The model type of the installed value.</typeparam>
     /// <param name="find">Finds the installed value in the document, or returns <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when nothing is installed or every name admits.</returns>
-    public bool AdmitsInstalled<T>(Func<WorldDefinition, T?> find) where T : class {
+    public bool AdmitsInstalled<T>(Func<WorldDefinition, T?> find) {
         ArgumentNullException.ThrowIfNull(find);
         return Unrestricted || AdmitsInstalled(find(Source), typeof(T));
     }

@@ -628,7 +628,7 @@ public sealed partial class WorldPersistence {
     private bool TryCaptureCheckpointCore(WorldAuthorityHostRowCheckpoint hostRow, out WorldAuthorityCheckpoint? checkpoint, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: hostRow);
 
-        lock (Host.AuthorityGate) {
+        using (Host.EnterAtTickBoundary()) {
             if (Host.Tick.BlockedDetail is { } pending) {
                 checkpoint = null;
                 reason = $"authority tick is incomplete while waiting for {pending}";
@@ -638,6 +638,19 @@ public sealed partial class WorldPersistence {
                 checkpoint = null;
                 reason = "a checkpoint cannot capture while an arena transaction is open — retry at the next master boundary";
 
+                return false;
+            }
+            // An image taken while a crossing record is in flight would hold its step's early effects (a detached cohort,
+            // a held lease) under a sequence that does not cover the record. One the log has answered settles first.
+            Host.SettleCrossingIfAnswered();
+            if (Host.CrossingInFlight) {
+                checkpoint = null;
+                reason = $"a crossing record is in flight at sequence {Host.TransferEscrow.CrossingSequence} — retry at the next master boundary";
+                return false;
+            }
+            if (Host.UnappliedCrossing is { } unapplied) {
+                checkpoint = null;
+                reason = $"crossing record {unapplied} is durable but this activation could not carry it out; recover from the crossing log";
                 return false;
             }
             if (Host.Tick.ExecutionInterrupted) {
@@ -819,7 +832,7 @@ public sealed partial class WorldPersistence {
     /// boot image keeps its pinned identities detached and leaves the live catalog alone.</param>
     [Replaces(root: typeof(StateArena))]
     public void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true) {
-        lock (Host.AuthorityGate) {
+        using (Host.EnterAtTickBoundary()) {
             Host.ThrowIfTickPending();
             ArgumentNullException.ThrowIfNull(argument: checkpoint);
             var keys = Host.DrawKeys;

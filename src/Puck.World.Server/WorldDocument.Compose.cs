@@ -97,19 +97,14 @@ public sealed partial class WorldDocument {
         mutation: mutation
     ) || (mutation is
         WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults or WorldMutation.SetPopulationDistribution or WorldMutation.SetPopulationCensus or WorldMutation.SetHostDefaults));
-    // Drop the first row whose key matches — reports whether a row was actually removed.
-    private static bool Remove<T, TKey>(IReadOnlyList<T> list, TKey key, Func<T, TKey> keyOf, out IReadOnlyList<T> result) {
+    // Drop the first row whose key matches — reports whether a row was actually removed. The key is the section's
+    // WorldRowKeys entry, which the write door reads to find the same row.
+    private static bool Remove<T, TKey>(IReadOnlyList<T> list, TKey key, WorldRowKey<T, TKey> keys, out IReadOnlyList<T> result) {
         var kept = new List<T>(capacity: list.Count);
         var removed = false;
 
         foreach (var existing in list) {
-            if (
-                !removed &&
-                EqualityComparer<TKey>.Default.Equals(
-                x: keyOf(arg: existing),
-                y: key
-            )
-            ) {
+            if (!removed && WorldRowKey<T, TKey>.Same(keys.Of(row: existing), key)) {
                 removed = true;
 
                 continue;
@@ -145,7 +140,7 @@ public sealed partial class WorldDocument {
         ) {
             _ = Remove(
                 key: group.Id,
-                keyOf: static (WorldGroup row) => row.Id,
+                keys: WorldRowKeys.Groups,
                 list: groups,
                 result: out var dissolved
             );
@@ -156,7 +151,7 @@ public sealed partial class WorldDocument {
         return Upsert(
             list: groups,
             item: (group with { Members = remaining, Revision = checked((group.Revision + 1)) }),
-            keyOf: static (WorldGroup row) => row.Id
+            keys: WorldRowKeys.Groups
         );
     }
     // Replaces the row naming the SAME subject as `row` — the coarse whole-row upsert every other section rides,
@@ -164,7 +159,7 @@ public sealed partial class WorldDocument {
     private static IReadOnlyList<WorldOwnership> ReplaceOwnership(IReadOnlyList<WorldOwnership> ownership, WorldOwnership row) =>
         Upsert(
             item: row,
-            keyOf: static (WorldOwnership o) => o.Subject,
+            keys: WorldRowKeys.Ownership,
             list: ownership
         );
     // The row-scoped Edit subject a state-row or state-cell mutation names, for the second authority check — null
@@ -284,7 +279,8 @@ public sealed partial class WorldDocument {
     internal static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode, WorldGrants authority, bool prepareAuthority = true, WorldPrivateDrawKeys? sampler = null) {
         refusalCode = null;
         if (!authority.IsOperator(principal: mutation.Principal)) {
-            var view = WorldRecipientView.ForComposition(current, mutation.Principal, time: ComposeTime(definition: current, engineTick: engineTick, tick: tick));
+            var view = WorldRecipientView.ForComposition(current, mutation.Principal, time: ComposeTime(definition: current, engineTick: engineTick, tick: tick),
+                machines: authority.MachineCatalog);
 
             if (!view.Admits(mutation: mutation, row: out var withheld)) {
                 candidate = current; evictedKey = null; reason = view.Refusal("mutation", withheld); refusalCode = WorldRecipientMutations.NotDisclosedCode; return false;
@@ -409,7 +405,7 @@ public sealed partial class WorldDocument {
                     KitRowsRaw = Upsert(
                     list: current.Kits,
                     item: m.Kit,
-                    keyOf: static kit => kit.Name
+                    keys: WorldRowKeys.Kits
                 ),
                 });
 
@@ -418,7 +414,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     list: current.Kits,
                     key: m.Name,
-                    keyOf: static kit => kit.Name,
+                    keys: WorldRowKeys.Kits,
                     result: out var kits
                 )) {
                     candidate = current;
@@ -445,7 +441,7 @@ public sealed partial class WorldDocument {
                     ScreensRaw = Upsert(
                     list: current.Screens,
                     item: m.Screen,
-                    keyOf: static screen => screen.Index
+                    keys: WorldRowKeys.Screens
                 ),
                 });
 
@@ -455,7 +451,7 @@ public sealed partial class WorldDocument {
                     MachinesRaw = Upsert(
                     current.Machines,
                     m.Machine,
-                    static row => row.Name
+                    WorldRowKeys.Machines
                 ),
                 };
                 return true;
@@ -463,7 +459,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     current.Machines,
                     m.Name,
-                    static row => row.Name,
+                    WorldRowKeys.Machines,
                     out var machines
                 )) {
                     candidate = current;
@@ -476,7 +472,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     list: current.Screens,
                     key: m.Index,
-                    keyOf: static screen => screen.Index,
+                    keys: WorldRowKeys.Screens,
                     result: out var screens
                 )) {
                     candidate = current;
@@ -493,7 +489,7 @@ public sealed partial class WorldDocument {
                     CamerasRaw = Upsert(
                     list: current.Cameras,
                     item: m.Camera,
-                    keyOf: static camera => camera.Name
+                    keys: WorldRowKeys.Cameras
                 ),
                 });
 
@@ -502,7 +498,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     list: current.Cameras,
                     key: m.Name,
-                    keyOf: static camera => camera.Name,
+                    keys: WorldRowKeys.Cameras,
                     result: out var cameras
                 )) {
                     candidate = current;
@@ -559,7 +555,7 @@ public sealed partial class WorldDocument {
                     AddonsRaw = Upsert(
                     list: current.Addons,
                     item: m.Addon,
-                    keyOf: static addon => addon.Name
+                    keys: WorldRowKeys.Addons
                 ),
                 });
 
@@ -568,7 +564,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     list: current.Addons,
                     key: m.Name,
-                    keyOf: static addon => addon.Name,
+                    keys: WorldRowKeys.Addons,
                     result: out var addons
                 )) {
                     candidate = current;
@@ -618,7 +614,7 @@ public sealed partial class WorldDocument {
                         CreationsRaw = Upsert(
                         list: current.Creations,
                         item: (creation with { Document = canonicalDocument }),
-                        keyOf: static creation => creation.Id.Value
+                        keys: WorldRowKeys.Creations
                     ),
                     });
 
@@ -640,7 +636,7 @@ public sealed partial class WorldDocument {
                     if (!Remove(
                         list: current.Creations,
                         key: m.Id,
-                        keyOf: static creation => creation.Id.Value,
+                        keys: WorldRowKeys.Creations,
                         result: out var creations
                     )) {
                         candidate = current;
@@ -677,7 +673,7 @@ public sealed partial class WorldDocument {
                     if (!Remove(
                         list: current.Placements,
                         key: m.Id,
-                        keyOf: static placement => placement.Id,
+                        keys: WorldRowKeys.Placements,
                         result: out var placements
                     )) {
                         candidate = current;
@@ -695,7 +691,7 @@ public sealed partial class WorldDocument {
                     SpeakersRaw = Upsert(
                     list: current.Speakers,
                     item: m.Speaker,
-                    keyOf: static speaker => speaker.Name
+                    keys: WorldRowKeys.Speakers
                 ),
                 });
 
@@ -704,7 +700,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     list: current.Speakers,
                     key: m.Name,
-                    keyOf: static speaker => speaker.Name,
+                    keys: WorldRowKeys.Speakers,
                     result: out var speakers
                 )) {
                     candidate = current;
@@ -739,7 +735,7 @@ public sealed partial class WorldDocument {
                         TunesRaw = Upsert(
                         list: current.Tunes,
                         item: m.Tune,
-                        keyOf: static tune => tune.Name
+                        keys: WorldRowKeys.Tunes
                     ),
                     });
 
@@ -763,7 +759,7 @@ public sealed partial class WorldDocument {
                     if (!Remove(
                         list: current.Tunes,
                         key: m.Name,
-                        keyOf: static tune => tune.Name,
+                        keys: WorldRowKeys.Tunes,
                         result: out var tunes
                     )) {
                         candidate = current;
@@ -799,7 +795,7 @@ public sealed partial class WorldDocument {
                         PatchesRaw = Upsert(
                         list: current.Patches,
                         item: m.Patch,
-                        keyOf: static patch => patch.Name
+                        keys: WorldRowKeys.Patches
                     ),
                     });
 
@@ -819,7 +815,7 @@ public sealed partial class WorldDocument {
                     if (!Remove(
                         list: current.Patches,
                         key: m.Name,
-                        keyOf: static patch => patch.Name,
+                        keys: WorldRowKeys.Patches,
                         result: out var patches
                     )) {
                         candidate = current;
@@ -841,7 +837,7 @@ public sealed partial class WorldDocument {
                     BindingOverlaysRaw = Upsert(
                     list: current.BindingOverlays,
                     item: m.Overlay,
-                    keyOf: static overlay => overlay.Id
+                    keys: WorldRowKeys.BindingOverlays
                 ),
                 });
 
@@ -893,7 +889,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     list: current.BindingOverlays,
                     key: m.Id,
-                    keyOf: static overlay => overlay.Id,
+                    keys: WorldRowKeys.BindingOverlays,
                     result: out var overlays
                 )) {
                     candidate = current;
@@ -910,7 +906,7 @@ public sealed partial class WorldDocument {
                     LookRowsRaw = Upsert(
                     list: current.Looks,
                     item: m.Look,
-                    keyOf: static look => look.Name.Value
+                    keys: WorldRowKeys.Looks
                 ),
                 });
 
@@ -919,7 +915,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     list: current.Looks,
                     key: m.Name,
-                    keyOf: static look => look.Name.Value,
+                    keys: WorldRowKeys.Looks,
                     result: out var looks
                 )) {
                     candidate = current;
@@ -940,7 +936,7 @@ public sealed partial class WorldDocument {
                     DynamicsRaw = Upsert(
                     list: current.Dynamics,
                     item: m.Row,
-                    keyOf: static row => row.Name
+                    keys: WorldRowKeys.Dynamics
                 ),
                 });
 
@@ -949,7 +945,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     list: current.Dynamics,
                     key: m.Name,
-                    keyOf: static row => row.Name,
+                    keys: WorldRowKeys.Dynamics,
                     result: out var dynamics
                 )) {
                     candidate = current;
@@ -966,7 +962,7 @@ public sealed partial class WorldDocument {
                     CurvesRaw = Upsert(
                     list: current.Curves,
                     item: m.Row,
-                    keyOf: static row => row.Name
+                    keys: WorldRowKeys.Curves
                 ),
                 });
 
@@ -975,7 +971,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     list: current.Curves,
                     key: m.Name,
-                    keyOf: static row => row.Name,
+                    keys: WorldRowKeys.Curves,
                     result: out var curves
                 )) {
                     candidate = current;
@@ -992,7 +988,7 @@ public sealed partial class WorldDocument {
                     GrantsRaw = Upsert(
                     list: current.Grants,
                     item: m.Row,
-                    keyOf: static grant => (grant.Grantee, grant.Capability, grant.Subject)
+                    keys: WorldRowKeys.Grants
                 ),
                 });
 
@@ -1001,7 +997,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     list: current.Grants,
                     key: (m.Target.Grantee, m.Target.Capability, m.Target.Subject),
-                    keyOf: static grant => (grant.Grantee, grant.Capability, grant.Subject),
+                    keys: WorldRowKeys.Grants,
                     result: out var grants
                 )) {
                     candidate = current;
@@ -1019,7 +1015,7 @@ public sealed partial class WorldDocument {
                         Panels = Upsert(
                     list: current.Hud.Panels,
                     item: m.Panel,
-                    keyOf: static panel => panel.Id
+                    keys: WorldRowKeys.HudPanels
                 ),
                     }),
                 });
@@ -1029,7 +1025,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     list: current.Hud.Panels,
                     key: m.Id,
-                    keyOf: static panel => panel.Id,
+                    keys: WorldRowKeys.HudPanels,
                     result: out var hudPanels
                 )) {
                     candidate = current;
@@ -1056,7 +1052,7 @@ public sealed partial class WorldDocument {
                         Elements = Upsert(
                         list: panel.Elements,
                         item: m.Element,
-                        keyOf: static element => element.Id
+                        keys: WorldRowKeys.HudElements
                     ),
                     });
 
@@ -1065,7 +1061,7 @@ public sealed partial class WorldDocument {
                             Panels = Upsert(
                         list: current.Hud.Panels,
                         item: updatedPanel,
-                        keyOf: static p => p.Id
+                        keys: WorldRowKeys.HudPanels
                     ),
                         }),
                     });
@@ -1086,7 +1082,7 @@ public sealed partial class WorldDocument {
                     if (!Remove(
                         list: panel.Elements,
                         key: m.ElementId,
-                        keyOf: static element => element.Id,
+                        keys: WorldRowKeys.HudElements,
                         result: out var elements
                     )) {
                         candidate = current;
@@ -1102,7 +1098,7 @@ public sealed partial class WorldDocument {
                             Panels = Upsert(
                         list: current.Hud.Panels,
                         item: updatedPanel,
-                        keyOf: static p => p.Id
+                        keys: WorldRowKeys.HudPanels
                     ),
                         }),
                     });
@@ -1152,7 +1148,7 @@ public sealed partial class WorldDocument {
                     var declared = current.WithWorldState(rows: Upsert(
                         list: current.AuthoredState,
                         item: installed,
-                        keyOf: static row => row.Name
+                        keys: WorldRowKeys.StateRows
                     ));
                     declared = WorldPrivateDrawKeys.WithLast(declared, last);
                     var time = ComposeTime(
@@ -1208,7 +1204,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     list: current.AuthoredState,
                     key: m.Name,
-                    keyOf: static row => row.Name,
+                    keys: WorldRowKeys.StateRows,
                     result: out var stateRows
                 )) {
                     candidate = current;
@@ -1351,7 +1347,7 @@ public sealed partial class WorldDocument {
                     Rules = Upsert(
                     list: (current.Rules ?? []),
                     item: m.Rule,
-                    keyOf: static (WorldRule rule) => rule.Name
+                    keys: WorldRowKeys.Rules
                 ),
                 });
 
@@ -1360,7 +1356,7 @@ public sealed partial class WorldDocument {
                 if (!Remove(
                     list: (current.Rules ?? []),
                     key: m.Name,
-                    keyOf: static (WorldRule rule) => rule.Name,
+                    keys: WorldRowKeys.Rules,
                     result: out var rules
                 )) {
                     candidate = current;
@@ -1380,7 +1376,7 @@ public sealed partial class WorldDocument {
                             Kinds = Upsert(
                         list: groupsSection.Kinds,
                         item: m.Kind,
-                        keyOf: static (WorldGroupKind kind) => kind.Name
+                        keys: WorldRowKeys.GroupKinds
                     ),
                         }),
                     });
@@ -1411,7 +1407,7 @@ public sealed partial class WorldDocument {
                     if (!Remove(
                         list: groupsSection.Kinds,
                         key: m.Name,
-                        keyOf: static (WorldGroupKind kind) => kind.Name,
+                        keys: WorldRowKeys.GroupKinds,
                         result: out var kinds
                     )) {
                         candidate = current;
@@ -1473,7 +1469,7 @@ public sealed partial class WorldDocument {
                             KindName: m.KindName,
                             Members: []
                         ),
-                        keyOf: static (WorldGroup row) => row.Id
+                        keys: WorldRowKeys.Groups
                     ),
                         }),
                     });
@@ -1530,7 +1526,7 @@ public sealed partial class WorldDocument {
                             Revision = checked((group.Revision + 1)),
                             NextJoinOrdinal = checked((group.NextJoinOrdinal + 1)),
                         }),
-                        keyOf: static (WorldGroup row) => row.Id
+                        keys: WorldRowKeys.Groups
                     ),
                         }),
                     });
@@ -1610,7 +1606,7 @@ public sealed partial class WorldDocument {
                         _ = Remove(
                             list: groupsSection.Groups,
                             key: m.GroupId,
-                            keyOf: static (WorldGroup row) => row.Id,
+                            keys: WorldRowKeys.Groups,
                             result: out var disbanded
                         );
 
@@ -1793,7 +1789,7 @@ public sealed partial class WorldDocument {
                                 Names = Upsert(
                             list: propertiesSection.Names,
                             item: m.Name,
-                            keyOf: static (string name) => name
+                            keys: WorldRowKeys.PropertyNames
                         ),
                             }),
                         });
@@ -1837,7 +1833,7 @@ public sealed partial class WorldDocument {
                     _ = Remove(
                         list: propertiesSection.Names,
                         key: m.Name,
-                        keyOf: static (string name) => name,
+                        keys: WorldRowKeys.PropertyNames,
                         result: out var names
                     );
 
@@ -1853,7 +1849,7 @@ public sealed partial class WorldDocument {
                             Interactions = Upsert(
                         list: interactionsSection.Interactions,
                         item: m.Interaction,
-                        keyOf: static (WorldInteraction row) => row.Name
+                        keys: WorldRowKeys.Interactions
                     ),
                         }),
                     });
@@ -1866,7 +1862,7 @@ public sealed partial class WorldDocument {
                     if (!Remove(
                         list: interactionsSection.Interactions,
                         key: m.Name,
-                        keyOf: static (WorldInteraction row) => row.Name,
+                        keys: WorldRowKeys.Interactions,
                         result: out var interactions
                     )) {
                         candidate = current;
@@ -1886,13 +1882,14 @@ public sealed partial class WorldDocument {
                 return false;
         }
     }
-    // Replace the row whose key matches the item's, or append it — the coarse whole-row upsert.
-    private static IReadOnlyList<T> Upsert<T, TKey>(IReadOnlyList<T> list, T item, Func<T, TKey> keyOf) {
-        var key = keyOf(arg: item);
+    // Replace the row whose key matches the item's, or append it — the coarse whole-row upsert, keyed by the section's
+    // WorldRowKeys entry.
+    private static IReadOnlyList<T> Upsert<T, TKey>(IReadOnlyList<T> list, T item, WorldRowKey<T, TKey> keys) {
+        var key = keys.Of(row: item);
         var result = list.ToImmutableList();
 
         for (var index = 0; (index < list.Count); index++) {
-            if (EqualityComparer<TKey>.Default.Equals(x: keyOf(list[index]), y: key)) {
+            if (WorldRowKey<T, TKey>.Same(keys.Of(row: list[index]), key)) {
                 return result.SetItem(index: index, value: item);
             }
         }
@@ -1972,7 +1969,7 @@ public sealed partial class WorldDocument {
             PlacementRowsRaw = Upsert(
             list: current.Placements,
             item: incoming,
-            keyOf: static placement => placement.Id
+            keys: WorldRowKeys.Placements
         ),
         });
 

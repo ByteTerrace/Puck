@@ -88,7 +88,7 @@ public sealed partial class WorldServer {
     });
     /// <summary>Attaches a sink with the supplied body disclosure policy.</summary>
     public IDisposable AttachSink(IClientSink sink, in WorldSinkDisclosure disclosure) {
-        lock (AuthorityGate) {
+        using (EnterAtTickBoundary()) {
             ThrowIfTickPending();
             return m_document.AttachSink(sink, in disclosure);
         }

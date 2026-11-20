@@ -1610,7 +1610,13 @@ source's departure before its commit, the destination's arrival before its
 answer (`WorldTransferEscrow`), the destination's tombstone before its first
 `Missing` for a key, and the source's settlement before its acknowledgement or
 its return (`WorldInstanceHost.CrossingLog.cs`).
-A record that does not land refuses its step. `RecoverCrossings` redoes the
+A record that does not land refuses its step. A log that answers later leaves
+the record in flight (`WorldCrossingStep`): the authority sends no other record
+and captures no checkpoint until it settles at a tick boundary, and the step
+that wrote it waits until then. A host step parks (a transfer on its
+`ParkedAllocation`, an in-doubt transfer on its `Departure` or `Settlement`); a
+reservation, commit or hop grant is decided again when the record settles
+(`WorldServer.DecideCrossingAsync`). `RecoverCrossings` redoes the
 records a restored checkpoint does not reflect — the escrow's crossing sequence
 is the watermark — and the drain reconciles the rest. A silo row's log is its
 authority journal (`Puck.World.Silo`'s `WorldSiloHost.Crossings.cs`).

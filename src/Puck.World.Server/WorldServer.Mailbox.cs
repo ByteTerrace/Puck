@@ -34,6 +34,11 @@ public sealed partial class WorldServer {
         );
     }
     internal void DrainMailbox() {
+        // A crossing record the log has answered settles here, at the tick boundary, before any reply that may wait on it;
+        // a retiring activation drains here too, so the settle takes the gate itself.
+        using (EnterAtTickBoundary()) {
+            SettleCrossingIfAnswered();
+        }
         // Replies arriving during this drain belong to the next input batch.
         var count = m_pending.Reader.Count;
         for (var i = 0; i < count && m_pending.Reader.TryRead(out var action); i++) { action(); }

@@ -53,8 +53,24 @@ public sealed partial class WorldServer {
     /// <returns><see langword="true"/> when the transaction may commit.</returns>
     /// <exception cref="StateUnavailableException"><paramref name="reads"/> is given and an input the recipient's
     /// validation reads is unavailable to it; <paramref name="reads"/> keeps the fault.</exception>
-    public bool ValidateStateTransaction(Principal principal, out string reason, StateReadAccess? reads = null) {
+    public bool ValidateStateTransaction(Principal principal, out string reason, StateReadAccess? reads = null) =>
+        ValidateStateTransaction(principal: principal, reason: out reason, undisclosed: out _, reads: reads);
+    /// <summary>Checks live grants and bound presentation values against the complete open transaction, reporting
+    /// whether a refusal is the neutral disclosure refusal (see
+    /// <see cref="ValidateStateTransaction(Principal, out string, StateReadAccess?)"/>).</summary>
+    /// <param name="principal">The principal whose transaction is open.</param>
+    /// <param name="reason">The refusal, or empty when the transaction may commit.</param>
+    /// <param name="undisclosed">Whether the transaction was refused because an input its validation reads is
+    /// unavailable to the recipient, which every door answers as <c>world.mutation.undisclosed</c>, never as an
+    /// ordinary refusal.</param>
+    /// <param name="reads">The open preparation's read access, or <see langword="null"/> to acquire through a fresh
+    /// access.</param>
+    /// <returns><see langword="true"/> when the transaction may commit.</returns>
+    /// <exception cref="StateUnavailableException"><paramref name="reads"/> is given and an input the recipient's
+    /// validation reads is unavailable to it; <paramref name="reads"/> keeps the fault.</exception>
+    public bool ValidateStateTransaction(Principal principal, out string reason, out bool undisclosed, StateReadAccess? reads = null) {
         reason = string.Empty;
+        undisclosed = false;
         if (m_arena.Journal.OverCeiling) { reason = "state transaction exceeds its journal allowance"; return false; }
         FlagTransactionRows();
         try {
@@ -78,9 +94,10 @@ public sealed partial class WorldServer {
                 if (!view.IsAuthority && !RenamesIdentity()) {
                     var access = reads ?? ReadForWrite(view);
                     try {
-                        return TryValidateWrittenBindings(view, access, out reason);
+                        return TryValidateWrittenBindings(access, out reason);
                     } catch (StateUnavailableException) when ((reads is null) && access.Failed) {
                         reason = view.Refusal("mutation", nameof(WorldSection.State).ToLowerInvariant());
+                        undisclosed = true;
                         return false;
                     }
                 }
@@ -117,7 +134,7 @@ public sealed partial class WorldServer {
     // is acquired through the transaction, so a row the recipient cannot read whole faults the access; every value
     // bound to it must read the cell the write left (TryCheckBound reads that row alone); and every unit whose values
     // bind it is validated whole, with every check its partition makes of it: every row the unit's values bind is
-    // admitted first, from the declarations alone, then the unit is resolved to literals at the write's clock
+    // acquired through the access first, which admits it from the declarations alone, then the unit is resolved to literals at the write's clock
     // (DeliveryTime, the one clock every read here takes) and judged. A placement is judged with its parent chain
     // (WorldDefinitionValidator.TryValidatePlacementUnit), a creation as its own row (TryValidateCreationUnit). A
     // dealt child is judged by its template, whose values the child copies: the children exist only for members, so
@@ -125,7 +142,7 @@ public sealed partial class WorldServer {
     // answers nothing to the write. A value bound in any other section has no unit validator of its own yet, so a write
     // reaching one validates the whole document at the same clock, which a hidden unit can refuse; the refusal names
     // only the written row, never a path into the document, whose indices can count hidden placements.
-    private bool TryValidateWrittenBindings(WorldRecipientView view, StateReadAccess access, out string reason) {
+    private bool TryValidateWrittenBindings(StateReadAccess access, out string reason) {
         reason = string.Empty;
         var definition = m_document.Definition;
         var bound = DocumentValueRows();
@@ -154,7 +171,7 @@ public sealed partial class WorldServer {
                     unit.Insert(index: 0, item: row);
                 }
                 for (var index = 0; (index < unit.Count); index++) {
-                    if (Literal(view, access, definition, unit[index], time) is not { } literal) {
+                    if (Literal(access, definition, unit[index], time) is not { } literal) {
                         reason = $"state '{name}' leaves a placement it binds unreadable";
                         return false;
                     }
@@ -167,7 +184,7 @@ public sealed partial class WorldServer {
             }
             foreach (var creation in definition.Creations) {
                 if ((creation is null) || !WorldStateDocumentValues.ReferencesRow(definition, creation, name)) { continue; }
-                if (Literal(view, access, definition, creation, time) is not { } literal) {
+                if (Literal(access, definition, creation, time) is not { } literal) {
                     reason = $"state '{name}' leaves a creation it binds unreadable";
                     return false;
                 }
@@ -185,20 +202,27 @@ public sealed partial class WorldServer {
         }
         return true;
 
-        // A unit's values as literals at the write's clock, every row they bind admitted first; null when one does not
-        // read as its holder's value.
-        T? Literal<T>(WorldRecipientView reader, StateReadAccess reads, WorldDefinition source, T value, ArenaTime at) where T : class {
+        // A unit's values as literals at the write's clock, every row they bind acquired through the access first,
+        // which admits it from the declarations alone; null when one does not read as its holder's value.
+        T? Literal<T>(StateReadAccess reads, WorldDefinition source, T value, ArenaTime at) where T : class {
             universe.Clear();
             WorldStateDocumentValues.CollectReferencedRows(value, universe);
-            foreach (var read in universe) {
-                if (!reader.Admits(read)) { reads.Refuse(); }
-            }
+            foreach (var read in universe) { _ = reads.ResolveRow(read); }
             return WorldStateDocumentValues.TryFlatten(arena: m_arena, flattened: out var literal, graph: value, reason: out _, source: source, time: at) ? literal : null;
         }
     }
     /// <summary>Validates and closes a batch, restoring every member when any requirement refuses it.</summary>
-    public bool TryCommitStateTransaction(int mark, Principal principal, out string reason) {
-        if (!ValidateStateTransaction(principal: principal, reason: out reason)) { RewindStateTransaction(mark: mark); return false; }
+    public bool TryCommitStateTransaction(int mark, Principal principal, out string reason) =>
+        TryCommitStateTransaction(mark: mark, principal: principal, reason: out reason, undisclosed: out _);
+    /// <summary>Validates and closes a batch, restoring every member when any requirement refuses it, and reporting
+    /// whether a refusal is the neutral disclosure refusal, which the caller answers as its own not-disclosed verdict.</summary>
+    /// <param name="mark">The transaction's journal mark.</param>
+    /// <param name="principal">The principal whose transaction is open.</param>
+    /// <param name="reason">The refusal, or empty when the transaction committed.</param>
+    /// <param name="undisclosed">Whether the refusal is the disclosure refusal.</param>
+    /// <returns><see langword="true"/> when the transaction committed.</returns>
+    public bool TryCommitStateTransaction(int mark, Principal principal, out string reason, out bool undisclosed) {
+        if (!ValidateStateTransaction(principal: principal, reason: out reason, undisclosed: out undisclosed)) { RewindStateTransaction(mark: mark); return false; }
         CommitStateTransaction(mark: mark); return true;
     }
 
