@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 
@@ -5,7 +6,10 @@ namespace Puck.State;
 
 /// <summary>Declares the typed fields shared by every instance of a state pool.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record StateRecord(CellName Name, IReadOnlyList<StatePoolField>? Fields = null) {
+public sealed record StateRecord(
+    [property: DocumentName(WorldNameKind.Record, WorldNameRole.Declares)] CellName Name,
+    IReadOnlyList<StatePoolField>? Fields = null
+) {
     /// <summary>Gets the immutable field declarations in authored order.</summary>
     public IReadOnlyList<StatePoolField>? Fields { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Fields);
 
@@ -13,14 +17,14 @@ public sealed record StateRecord(CellName Name, IReadOnlyList<StatePoolField>? F
 /// <summary>One typed field of a <see cref="StateRecord"/>.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StatePoolField(
-    CellName Name,
+    [property: DocumentText("a field local to its record")] CellName Name,
     CellKind Kind = CellKind.Int,
     CellValue Default = default,
     long? Min = null,
     long? Max = null,
     StateOverflow Overflow = StateOverflow.Refuse,
-    CellName? Enum = null,
-    CellName? Space = null,
+    [property: DocumentText("an enum name is local to the document")] CellName? Enum = null,
+    [property: DocumentText("a vector-space identifier, not a module declaration")] CellName? Space = null,
     int? Dimensions = null,
     StateAdvance? Advance = null
 ) {
@@ -29,7 +33,7 @@ public sealed record StatePoolField(
 }
 /// <summary>One field override in a statically seeded pool instance.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record StatePoolValue(CellName Field, CellValue Value, StateCellClock? Clock = null) {
+public sealed record StatePoolValue([property: DocumentText("a field local to its record")] CellName Field, CellValue Value, StateCellClock? Clock = null) {
     /// <summary>Gets an immutable snapshot of the field value.</summary>
     public CellValue Value { get => field; init => field = value.DetachedCopy(); } = Value.DetachedCopy();
 }
@@ -42,7 +46,13 @@ public sealed record StatePoolSeed(int Slot, IReadOnlyList<StatePoolValue>? Valu
 }
 /// <summary>A bounded deterministic allocator over instances of one declared record.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record StatePool(CellName Name, CellName Record, int Capacity, IReadOnlyList<StatePoolSeed>? Initial = null, StatePoolSnapshot? Snapshot = null) {
+public sealed record StatePool(
+    [property: DocumentName(WorldNameKind.Pool, WorldNameRole.Declares)] CellName Name,
+    [property: DocumentName(WorldNameKind.Record, WorldNameRole.Names)] CellName Record,
+    int Capacity,
+    IReadOnlyList<StatePoolSeed>? Initial = null,
+    StatePoolSnapshot? Snapshot = null
+) {
     /// <summary>Gets the immutable statically live instances.</summary>
     public IReadOnlyList<StatePoolSeed>? Initial { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Initial);
 
@@ -50,10 +60,10 @@ public sealed record StatePool(CellName Name, CellName Record, int Capacity, IRe
 /// <summary>A bounded pool whose stable slots identify pairs of live instances from two endpoint pools.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StatePairPool(
-    CellName Name,
-    CellName Record,
-    CellName LeftPool,
-    CellName RightPool,
+    [property: DocumentName(WorldNameKind.Pool, WorldNameRole.Declares)] CellName Name,
+    [property: DocumentName(WorldNameKind.Record, WorldNameRole.Names)] CellName Record,
+    [property: DocumentName(WorldNameKind.Pool, WorldNameRole.Names)] CellName LeftPool,
+    [property: DocumentName(WorldNameKind.Pool, WorldNameRole.Names)] CellName RightPool,
     int MaxLive,
     bool Directed = true,
     bool AllowSelf = false,

@@ -1196,7 +1196,7 @@ judging free memory against private bytes would refuse every windowed start on a
 32 GB machine. The whole working set overstates the need too: it counts the clean pages of
 mapped files and images (NVIDIA's shader disk cache alone is a few hundred megabytes to a
 gigabyte of a Direct3D 12 process), which other processes share and the system takes back
-under pressure. The private working set (`ProcessInspection.PrivateResidentBytes`: on
+under pressure. The private working set (`Puck.Hosting.HostMemory.PrivateResidentBytes`: on
 Windows the process's private working set, a driver's write-combined host views included;
 on Linux `RssAnon` plus `RssShmem`) is what a start holds that only paging gives back. A
 reading that cannot split residency judges the whole working set instead, and one with no
@@ -3622,11 +3622,9 @@ puck registry --check       regenerate in memory and compare against the file on
 puck registry -h / --help   this text
 ```
 
-Both modes first refuse, exit 1, on a name-shaped document member the registry
-neither registers nor excludes with a reason—a `CellName`, `ExpressionProgram`,
-`BindableScalar`, `BindableColor`, or `WorldLatticeScalar` member, or a string
-member whose C# name reads like a name position—so a field added to the model
-without a registration cannot pass. Exit codes: **0** wrote or matched, **1**
+Both modes report each unclassified text position. A property declares its module name
+kind and spelling, takes its binding from its type, or identifies its literal or local
+meaning. Run `puck schema` and rebuild after changing a declaration. Exit codes: **0** wrote or matched, **1**
 drift or an uncovered member, **2** usage error or missing repository root.
 
 ## `puck verbs`—console verb catalog

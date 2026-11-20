@@ -322,19 +322,6 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         if (DetachReason is null) { DeliverSnapshot(snapshot: server.Document.BuildPrimerSnapshot(), stream: WorldStreamStamp.Unspanned); }
     }
 
-    /// <summary>Discloses a definition as this session's tier shows it, for a read door — see
-    /// <see cref="Disclose(WorldDefinition, WorldDisclosureTier, StateArena, Principal?, bool)"/>. Whether the session observes right now is the
-    /// delivery's question, not this one's.</summary>
-    /// <param name="definition">The definition.</param>
-    /// <returns>The disclosed definition, or <see langword="null"/> at the frames tier.</returns>
-    /// <exception cref="InvalidOperationException">The composed projection does not hydrate.</exception>
-    public WorldDefinition? Disclose(WorldDefinition definition) => Disclose(
-        arena: server.Arena,
-        definition: definition,
-        recipient: observation.Session,
-        tier: Tier,
-        unrestricted: false
-    );
     /// <summary>Discloses a definition as a tier shows it: verbatim at <see cref="WorldDisclosureTier.Replica"/>, a
     /// projection composed for <paramref name="recipient"/> from <paramref name="arena"/> at
     /// <see cref="WorldDisclosureTier.Presentation"/>, and nothing at <see cref="WorldDisclosureTier.Frames"/>. A

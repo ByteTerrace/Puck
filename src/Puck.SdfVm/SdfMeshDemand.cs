@@ -76,7 +76,7 @@ public sealed class SdfMeshDemand {
         }
         Count = count;
     }
-    /// <summary>Adds a demand point after those the latest frame named (or after a <see cref="Clear"/>): an eye with its
+    /// <summary>Adds a demand point after those the latest frame named: an eye with its
     /// pixels a metre one metre in front of it, for a plan made with no frame (an offline audit at a chosen eye).</summary>
     /// <param name="eye">The eye's position, in world space.</param>
     /// <param name="height">The view's height in display pixels; at least one.</param>
@@ -98,8 +98,6 @@ public sealed class SdfMeshDemand {
         m_focal[Count] = ((Math.Max(val1: height, val2: 1u) * 0.5f) / tanHalfFieldOfView);
         Count++;
     }
-    /// <summary>Forgets every demand point.</summary>
-    public void Clear() => Count = 0;
     /// <summary>Returns the metres one display pixel covers at a box from the demand point that sees it finest: the
     /// distance from the eye to the box, no nearer than <see cref="NearDistance"/>, over the point's pixels a metre; what
     /// a tier's cell is measured against (<see cref="SdfMeshTier.Of"/>). A point that demands only inside its view

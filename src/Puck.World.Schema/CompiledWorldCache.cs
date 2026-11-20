@@ -64,8 +64,6 @@ public sealed class CompiledWorldCache {
 /// derived or the write failed.</param>
 /// <param name="WriteFailure">Why the write failed, or <see langword="null"/>.</param>
 public sealed record CompiledWorldResolution(string? LoadedFrom, IReadOnlyList<ChunkCode> Kept, IReadOnlyList<ChunkCode> Derived, string? WrittenTo, string? WriteFailure) {
-    /// <summary>Gets whether the boot's definition came from a compiled world rather than a fresh draw.</summary>
-    public bool DefinitionFromCompiledWorld => Kept.Contains(value: DefinitionChunk.Instance.Code);
 
     /// <summary>Returns the boot line that reports this resolution.</summary>
     /// <returns>A <c>[world] compiled world:</c> line.</returns>

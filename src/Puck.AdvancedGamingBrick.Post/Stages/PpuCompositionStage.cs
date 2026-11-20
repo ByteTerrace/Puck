@@ -39,7 +39,7 @@ internal sealed class PpuCompositionStage : IPostStage<PostContext> {
             value: 16
         );
         ppu.WriteVideo(
-            address: 0x05000000u,
+            address: AgbAddresses.PaletteRam,
             value: Colors[5],
             width: 2
         );
@@ -76,7 +76,7 @@ internal sealed class PpuCompositionStage : IPostStage<PostContext> {
                         }
 
                         ppu.WriteVideo(
-                            address: ((0x06000000u + (((uint)background) * 0x4000u))
+                            address: ((AgbAddresses.VideoRam + (((uint)background) * 0x4000u))
                             + ((uint)(((tile * 32) + (y * 4)) + (x / 2)))),
                             value: pixels,
                             width: 2
@@ -88,7 +88,7 @@ internal sealed class PpuCompositionStage : IPostStage<PostContext> {
 
         for (var index = 1; (index < 128); ++index) {
             ppu.WriteVideo(
-                address: (0x07000000u + (((uint)index) * 8u)),
+                address: (AgbAddresses.ObjectAttributeRam + (((uint)index) * 8u)),
                 value: 0x0200,
                 width: 2
             );
@@ -103,7 +103,7 @@ internal sealed class PpuCompositionStage : IPostStage<PostContext> {
 
         for (var offset = 0u; (offset < 64u); offset += 2u) {
             ppu.WriteVideo(
-                address: (0x06010000u + offset),
+                address: (AgbAddresses.ObjectTileRam + offset),
                 value: 0x1111,
                 width: 2
             );
@@ -175,7 +175,7 @@ internal sealed class PpuCompositionStage : IPostStage<PostContext> {
                         value: ((ushort)(0x2A15 | (effect << 6)))
                     );
                     ppu.WriteVideo(
-                        address: 0x07000000u,
+                        address: AgbAddresses.ObjectAttributeRam,
                         value: ((uint)(0x4000 | variant | (semiTransparent
                         ? 0x400
                         : 0))),

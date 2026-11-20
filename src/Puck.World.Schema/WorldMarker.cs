@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
 
@@ -27,7 +28,7 @@ public abstract record WorldMarkerSource {
 /// admits is <c>radius</c> (<see cref="WorldSpeaker.Bed.Radius"/>); a row that is not a bed draws no ring under this
 /// policy without refusing (v1's one closed field name — a future source kind names its own).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldMarkerRing(string Field) {
+public sealed record WorldMarkerRing([property: DocumentName(WorldNameKind.Field, WorldNameRole.Names)] string Field) {
     /// <summary>The only <see cref="Field"/> value <see cref="WorldMarkerSource.Speakers"/> admits.</summary>
     public const string SpeakerRadiusField = "radius";
 }
@@ -62,9 +63,9 @@ public sealed record WorldMarkerStyle(
 /// <param name="Style">The row's look.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldMarkerRow(
-    string Id,
+    [property: DocumentText("a marker id")] string Id,
     WorldMarkerSource Source,
-    string Icon,
+    [property: DocumentText("an icon name")] string Icon,
     WorldMarkerStyle Style,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMarkerRing? Ring = null
 );

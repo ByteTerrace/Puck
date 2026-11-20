@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.State;
@@ -66,12 +67,15 @@ namespace Puck.State;
 /// what it runs and is priced by it.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record Rule(
+    [property: DocumentName(WorldNameKind.Rule, WorldNameRole.Declares)]
     [property: JsonPropertyOrder(0)] CellName Name,
     [property: JsonPropertyOrder(1)] IReadOnlyList<ActionEffect> Effects,
     [property: JsonPropertyOrder(2)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Gate = null,
     [property: JsonPropertyOrder(3)] ActionTriggerMode Mode = ActionTriggerMode.Level,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)]
     [property: JsonPropertyOrder(4)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? ForEach = null,
     [property: JsonPropertyOrder(6)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RuleLocal>? Locals = null,
+    [property: DocumentName(WorldNameKind.Zone, WorldNameRole.Names)]
     [property: JsonPropertyOrder(7)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Zones = null,
     [property: JsonPropertyOrder(8)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RulePoolIteration? PoolForEach = null,
     [property: JsonPropertyOrder(9)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? MaxFirings = null
@@ -80,7 +84,10 @@ public record Rule(
 /// so releasing a snapshot member cannot make a later reclaim of its slot appear in that same pass.</summary>
 /// <param name="Pool">The declared pool to visit.</param>
 /// <param name="Binding">The instance name available to the rule's locals, gate, and effects.</param>
-public sealed record RulePoolIteration(StateChannelRef Pool, CellName Binding);
+public sealed record RulePoolIteration(
+    [property: DocumentName(WorldNameKind.Pool, WorldNameRole.Names)] StateChannelRef Pool,
+    [property: DocumentText("a lexical instance binding")] CellName Binding
+);
 /// <summary>A value computed once per evaluation of the rule that declares it, after the forEach key and before the
 /// gate, in declared order — a later local, the gate, and every effect read it as
 /// <c>$local:&lt;name&gt;</c>; an earlier local cannot. The value is never stored: it lives on the evaluation and is
@@ -93,8 +100,8 @@ public sealed record RulePoolIteration(StateChannelRef Pool, CellName Binding);
 /// operands yet leave an <see cref="CellKind.Int"/> result, which is the inferred binding kind.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record RuleLocal(
-    CellName Name,
-    ExpressionProgram Expression,
+    [property: DocumentText("a local's name is local to its rule, read as $local:<name>")] CellName Name,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] ExpressionProgram Expression,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellKind? Kind = null
 );
 /// <summary>A name bound during one evaluation of a rule — the participant index a key token

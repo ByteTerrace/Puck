@@ -8,7 +8,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 internal sealed class FirmwareResetStage : IPostStage<PostContext> {
     private static readonly (uint Address, uint Size, uint Flag)[] Regions = [
         (0x02000000, 0x40000, 1), (0x03000000, 0x7E00, 2),
-        (0x05000000, 0x400, 4), (0x06000000, 0x18000, 8), (0x07000000, 0x400, 16),
+        (AgbAddresses.PaletteRam, 0x400, 4), (AgbAddresses.VideoRam, 0x18000, 8), (AgbAddresses.ObjectAttributeRam, 0x400, 16),
     ];
 
     /// <inheritdoc/>
@@ -29,25 +29,25 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
 
                 bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000084,
+                    address: AgbAddresses.SoundControlEnable,
                     value: 0x80
                 );
                 bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000082,
+                    address: AgbAddresses.SoundControlHigh,
                     value: 0x880E
                 );
                 for (var timer = 0u; (timer < 4); ++timer) {
                     bus.Write16(
                         access: BusAccessType.NonSequential,
-                        address: (0x04000102 + (timer * 4)),
+                        address: (AgbAddresses.Timer0Control + (timer * 4)),
                         value: 0
                     );
                 }
                 for (var fifo = 0u; (fifo < 2); ++fifo) {
                     for (var word = 0u; (word < 3); ++word) {
                         Write(
-                            address: (0x040000A0 + (fifo * 4)),
+                            address: (AgbAddresses.SoundFifoA + (fifo * 4)),
                             bus: bus,
                             value: ((0x31231507 + (fifo * 0x08080808)) + word)
                         );
@@ -65,7 +65,7 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
                     );
                     bus.Write16(
                         access: BusAccessType.NonSequential,
-                        address: (0x040000A0 + (((uint)fifo) * 4)),
+                        address: (AgbAddresses.SoundFifoA + (((uint)fifo) * 4)),
                         value: 0x7967
                     );
                 }
@@ -92,12 +92,12 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
             // data. Without sound reset they do complete the preserved word.
             core.Instance.Machine.Bus.Write16(
                 access: BusAccessType.NonSequential,
-                address: 0x04000084,
+                address: AgbAddresses.SoundControlEnable,
                 value: 0x80
             );
             core.Instance.Machine.Bus.Write16(
                 access: BusAccessType.NonSequential,
-                address: (0x040000A0 + (((uint)fifo) * 4)),
+                address: (AgbAddresses.SoundFifoA + (((uint)fifo) * 4)),
                 value: 0x5B49
             );
             Require(
@@ -168,47 +168,47 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
                 );
                 bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000000,
+                    address: AgbAddresses.DisplayControl,
                     value: 0x0403
                 );
                 bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000008,
+                    address: AgbAddresses.Background0Control,
                     value: 0x1234
                 );
                 bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000132,
+                    address: AgbAddresses.KeyControl,
                     value: 0x4001
                 );
                 bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000134,
+                    address: AgbAddresses.SerialMode,
                     value: 0x8001
                 );
                 bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000200,
+                    address: AgbAddresses.InterruptEnable,
                     value: 0x1000
                 );
                 bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000204,
+                    address: AgbAddresses.WaitControl,
                     value: 0x4000
                 );
                 bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000084,
+                    address: AgbAddresses.SoundControlEnable,
                     value: 0x80
                 );
                 bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000080,
+                    address: AgbAddresses.SoundControlLow,
                     value: 0x1177
                 );
                 bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000082,
+                    address: AgbAddresses.SoundControlHigh,
                     value: 0x030E
                 );
             }
@@ -233,7 +233,7 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
             expected: 0xC35A96F0
         );
         ExpectHalf(
-            address: 0x04000000,
+            address: AgbAddresses.DisplayControl,
             bus: bus,
             detail: "unconditional forced blank",
             expected: 0x80
@@ -241,7 +241,7 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
         var other = ((flags & 128) != 0);
 
         ExpectHalf(
-            address: 0x04000008,
+            address: AgbAddresses.Background0Control,
             bus: bus,
             detail: "BG0CNT selective reset",
             expected: (other
@@ -249,7 +249,7 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
             : (ushort)0x1234)
         );
         ExpectHalf(
-            address: 0x04000200,
+            address: AgbAddresses.InterruptEnable,
             bus: bus,
             detail: "IE selective reset",
             expected: (other
@@ -257,7 +257,7 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
             : (ushort)0x1000)
         );
         ExpectHalf(
-            address: 0x04000204,
+            address: AgbAddresses.WaitControl,
             bus: bus,
             detail: "WAITCNT selective reset",
             expected: (other
@@ -265,7 +265,7 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
             : (ushort)0x4000)
         );
         ExpectHalf(
-            address: 0x04000132,
+            address: AgbAddresses.KeyControl,
             bus: bus,
             detail: "KEYCNT selective reset",
             expected: (other
@@ -273,7 +273,7 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
             : (ushort)0x4001)
         );
         ExpectHalf(
-            address: 0x04000134,
+            address: AgbAddresses.SerialMode,
             bus: bus,
             detail: "RCNT selective serial reset",
             expected: (((flags & 32) != 0)
@@ -281,7 +281,7 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
             : (ushort)0x8001)
         );
         ExpectHalf(
-            address: 0x04000080,
+            address: AgbAddresses.SoundControlLow,
             bus: bus,
             detail: "SOUNDCNT_L selective reset",
             expected: (((flags & 64) != 0)
@@ -289,7 +289,7 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
             : (ushort)0x1177)
         );
         ExpectHalf(
-            address: 0x04000082,
+            address: AgbAddresses.SoundControlHigh,
             bus: bus,
             detail: "SOUNDCNT_H selective reset",
             expected: (((flags & 64) != 0)
@@ -345,7 +345,7 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
         );
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x04000208,
+            address: AgbAddresses.InterruptMasterEnable,
             value: 0
         );
         var target = ((hard || (flag == 0))
@@ -485,17 +485,17 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
         );
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x04000208,
+            address: AgbAddresses.InterruptMasterEnable,
             value: 0
         );
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x04000200,
+            address: AgbAddresses.InterruptEnable,
             value: 0x1008
         );
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x04000132,
+            address: AgbAddresses.KeyControl,
             value: 0x4001
         );
         for (var instruction = 0; ((instruction < 4096) && !bus.Halted); ++instruction) {
@@ -550,13 +550,13 @@ internal sealed class FirmwareResetStage : IPostStage<PostContext> {
                 detail: "sleep return lost caller ARM/Thumb state"
             );
             ExpectHalf(
-                address: 0x04000208,
+                address: AgbAddresses.InterruptMasterEnable,
                 bus: bus,
                 detail: "sleep changed IME",
                 expected: 0
             );
             ExpectHalf(
-                address: 0x04000202,
+                address: AgbAddresses.InterruptFlags,
                 bus: bus,
                 detail: "sleep unexpectedly acknowledged keypad IF",
                 expected: 0x1000

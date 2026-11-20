@@ -15,8 +15,6 @@ public sealed partial class WorldServer {
     public bool AuthorityRetiring => m_authorityRetiring;
     /// <summary>Gets the search jobs over the arena, rebuilt with the rules on every install.</summary>
     public ArenaSearch Search => m_search;
-    /// <summary>Gets the routine a landed search job's writes install through.</summary>
-    public Func<IReadOnlyList<ArenaSearchWrite>, bool> SearchApply => m_searchApply;
     /// <summary>Gets the transfer escrow — bounded transfer transactions, mobility credentials and in-flight
     /// leases.</summary>
     public WorldTransferEscrow TransferEscrow => m_transferEscrow;

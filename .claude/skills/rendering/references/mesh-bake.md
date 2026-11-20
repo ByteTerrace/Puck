@@ -406,9 +406,9 @@ laws exercise that boundary.
   whatever its size; one under a pixel ranks after. Ranking by projected size
   instead let far terrain and shells outrank the lobby's small parts, and the
   occupied area landed no sooner than in plan order. `TryTake` takes
-  lattices in the order `Prioritize` sorts once per measure, outside the bake's
-  gate (`SdfMeshPathBake.Order`; a take orders again only when the group list
-  changed since, `GroupList.Version`), the work queue runs store loads and
+  lattices in `ByRank` order of the groups the tally holds as offering a lattice
+  (`GroupTally.Offered`, into two heaps), at the ranks `Prioritize` last
+  measured, the work queue runs store loads and
   lattice answers ahead of its stages (`Enqueue`, urgent) and every CPU stage of
   the bake (`Schedule`), and `SdfWorldTables.OrderLanding`
   orders owed meshes for landing in that order, the plan's or the list's order among
@@ -435,10 +435,28 @@ laws exercise that boundary.
   never behind the pool (`SdfMeshBakeGpuWork.Complete`'s `Readers`, a
   `BoundedWorkQueue` of a reader a slot on the host's thread pool), and its slot
   is released as soon as the copy is taken, so neither the frame thread nor a
-  worker busy contouring holds the GPU's next batch back; the reader decodes
-  each group's answer buffers and queues each answer on the pool ahead of every
-  queued stage, then advances `Progress` (`SdfMeshPathBake.Progressed`), since a
-  field slice's answer queues no work item. A request's points are its group's
+  worker busy contouring holds the GPU's next batch back; the reader copies a
+  final lattice's slab into the lattice and queues each answer on the pool ahead
+  of every queued stage, each answer reading its slice of the copy in place
+  (`SdfMeshPathBake.AnsweredSamples`, shared until its last answer ends), then
+  advances `Progress` (`SdfMeshPathBake.Progressed`), since a field slice's
+  answer queues no work item.
+- **A dispatch's answer never waits for host memory.** The copy, and a sample
+  set read in place of a dispatch, are charged to the bake's readback owner
+  inside a standing reservation of `SdfMeshPathBake.ReadbackBytes`: the take
+  grants a lattice its output bytes only while they fit what is left of it, and
+  takes nothing, admitting no group, until the reservation is held, so the
+  groups the account admitted can always be answered (the done line's
+  `stop=[readback:…]` and `host-refusals=[readback-waits:…]`). The reservation
+  goes once a take finds nothing to take, or the residency is released, and no
+  answer holds any of it. Elsewhere a host-memory refusal defers rather than
+  fails (`SdfMeshPathBake.Refusals`): a sample set the store keeps or reads past
+  the account's room is dropped or missed (`store-writes-dropped`), a copy into
+  the library the account refuses (a landing's published mesh, a follower's
+  renumbered take of its leader's) waits parked until the group can reserve its
+  bytes (`Park`, `copy-waits`), and any other refused stage starts its group's
+  final lattice again under an admission of at least the most the group's
+  storage held and the bytes refused (`Group.PeakFloor`, `readmitted`). A request's points are its group's
   workspace (a final lattice's one point buffer, reused round to round; the
   group's crease and material points, cut to nothing by the answer that
   finishes them), so the reader reads a lattice's request and group only while
@@ -460,7 +478,8 @@ laws exercise that boundary.
   handed back unanswered (`Abandon`: a job whose recording failed or whose
   service was disposed) keeps its admission;
   counting its retry as a new one let returned first slabs fill every admission
-  and stall the bake. A stage that throws finishes its group with no new mesh
+  and stall the bake. A stage the host memory account refused starts its
+  group's final lattice again (`Readmit`); any other stage that throws finishes its group with no new mesh
   (`[sdf.mesh-bake] ... failed`, `Fail`), releasing its reservation and
   workspace, and a later program bakes it again. A group a later program does
   not keep, or whose residency is released, is retired (`Group.Retired`): the
@@ -474,15 +493,21 @@ laws exercise that boundary.
   frame thread's waits on the gate, and `gate=[site:entries/wait/hold/max]`
   every entry's wait and hold by site (`SdfMeshBakeReport.Gate`, taken through
   `EnterGate`, the one door to `m_gate`): on a cold debug-world bake the
-  frame thread's entries (`frame`, `retier`, `dress`, `take`, `observe`) hold the
+  frame thread's entries (`frame`, `prioritize`, `retier`, `judge`, `dress`,
+  `take`, `observe`, `evict`, `begin`) hold the
   gate far longer than the workers' own sections do, so the
-  workers' waits are the frame thread's holds. Whether a group still stands in
+  workers' waits are the frame thread's holds; `begin` (`Start`'s call of
+  `Begin`) and `evict` (the eviction sweep, and the evictions a frame makes) run
+  inside another entry's hold and are counted out of it. Whether a group still stands in
   the bake is its `Listed` flag, which only `GroupList.Set` and `Clear` move,
   never a search of the list. No entry walks the list for counts either:
   the take reads how many groups fly, run a stage, hold an admission, wait for
   their first stage or hold a lattice from `GroupTally`, which every setter of
   those states settles (`Group.Settle`, the one place a group's contribution
-  moves a count), and `ObserveResidency` walks only the groups that landed or
+  moves a count or a set), and the take walks only the groups the tally holds as
+  offering a lattice, the ready and the wanting an admission apart, which it
+  does not read at all while the pool backlog closes admissions and does not
+  start when none holds one. `ObserveResidency` walks only the groups that landed or
   were drawn again and have not stood in the mesh region
   (`Group.AwaitResidency`, the one door a group joins that set by, queued from
   any thread and taken in under the gate). A start decides whether the store
@@ -492,8 +517,20 @@ laws exercise that boundary.
   thread holds a gate waits for the gate's release
   (`SdfMeshBakeReport.GateLeft`): a write to a piped standard error can block
   on its reader, and a frame thread blocked there holds every worker.
-  `Prioritize` still walks and measures every group still baking on each
-  prepared frame, outside the gate but on the frame thread.
+  `Prioritize` measures a share of the groups' priority and view each prepared
+  frame, outside the gate but on the frame thread, from a cursor
+  (`GroupSweep`, the one cursor `MeasureDemands` shares): a rank is up to a
+  measure old, a restart ranks every group it plans, and a group planned in a
+  listed group's place takes that group's rank (`Replace`). The counts of the
+  groups that owe the frame and of those with nothing to draw
+  (`CountHoles`) move with each visit and each `Replace`. The dresser reads the
+  groups the bake names changed since its last read (`Touch`, taken by
+  `FrameAccess`) and every group only when the list was replaced, the program or
+  the copy layout moved, or a verdict declined (`TouchAll`). The groups that keep
+  a floor (`m_keepers`) are the only ones the eviction sweep, the mesh region's
+  naming of kept floors and the trace judge read, the judge through the groups
+  whose floor, done state or product changed (`Judgeable`). The retier decision
+  still reads every group once a measure.
 - **A stage's scratch is rented, its result exact.** A CPU stage grows its
   per-vertex and per-quad workspace in `RentedList<T>` and leases its tables
   (`RentedArrays.Rent(minimumLength, out array)`). Arrays up to 1 MiB reuse the
@@ -518,7 +555,7 @@ laws exercise that boundary.
 - **One geometry bakes once a bake.** A group whose sealed geometry another
   group of the same restart already bakes or loads waits on it
   (`Group.Leader`, `Follow`) and takes the library's mesh, renumbered, when the
-  leader lands; the debug world plans 1,115 of its 2,090 groups that way. The
+  leader lands; the start line's `shared=` counts the groups a restart plans that way. The
   renumbering shares immutable geometry and allocates remapped triangle materials, so it runs on the pool
   (`TakeLanded`), outside the gate the frame takes; a leader that found no
   surface lands the follower empty too (`Draw(group, null)`), or it would keep
@@ -836,8 +873,8 @@ laws exercise that boundary.
   takes, each member refined over its own box at its own factor. A folded
   member's part is the cube about its slot's origin its copies reach.
   A dynamic instance's text declares detail too: a pooled creation's embossed text is
-  its own instance on a slot after its shapes' that holds the root's pose
-  (`WorldCreationInstances.TextSlot`), bounded by its glyphs' reach and declaring their
+  its own instance on a slot after its shapes' that holds the root's pose,
+  bounded by its glyphs' reach and declaring their
   detail. Sharing the root slot with a blend group put the glyphs in that
   group's coarser lattice, which dropped an "I". A slot's group refines toward
   the finest detail its

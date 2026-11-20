@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -15,8 +16,8 @@ namespace Puck.World;
 /// (<see cref="TryValidateAlias"/>).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldImport(
-    string Document,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? As = null
+    [property: DocumentText("a path or document locator")] string Document,
+    [property: DocumentText("a module alias")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? As = null
 ) {
     /// <summary>The JSON member naming the fragment document.</summary>
     public const string DocumentMemberName = "document";

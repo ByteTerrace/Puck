@@ -113,8 +113,6 @@ public sealed partial class WorldIdentity {
     public string Id { get; }
     /// <summary>Gets the display name.</summary>
     public string Name { get; private set; }
-    /// <summary>Gets the accent color.</summary>
-    public Vector3 NoseColor => (Color * m_noseFactor);
     /// <summary>Gets this identity's control feel — the orbit response its seat wakes with, carried on the identity so
     /// it follows the player rather than the world.</summary>
     /// <remarks>Null for an identity with no <see cref="Document"/> to carry one: a traveler rebuilt from its

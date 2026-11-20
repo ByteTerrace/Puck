@@ -43,7 +43,7 @@ public abstract record WorldCollider {
     /// <summary>The finite primitives emitted by a creation, composed into one compound body collider. Spheres
     /// and ellipsoids retain their exact surfaces; other primitives currently use their local boxes.</summary>
     /// <param name="PrototypeId">The referenced <see cref="WorldPrototype.Id"/>.</param>
-    public sealed record FromCreation(string PrototypeId) : WorldCollider;
+    public sealed record FromCreation([property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Names)] string PrototypeId) : WorldCollider;
 }
 /// <summary>The contact solver's world-scale tuning.</summary>
 /// <param name="Requirements">The contact qualities the world requires. An empty list permits analytic primitive

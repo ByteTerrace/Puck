@@ -1004,6 +1004,23 @@ says how one is reproduced and profiled.
 
 Remaining detailed findings and smaller cuts in this area:
 
+- [medium] The mesh store's codec is a generation behind shipped practice
+  ([the audit](state-of-the-art/audit.md#11-the-mesh-store-codec)).
+  `SdfMeshStoreCodec` quantises positions to an error budget, which is right,
+  but stores normals as 16-bit octahedral words, indices as raw byte-plane
+  deltas (about 6 bytes a triangle, per level) and compresses with zlib at its
+  fastest level. meshoptimizer reaches about 1 to 1.2 bytes a triangle for
+  indices and 2 to 4 times on vertices, and zstd level -1 decodes at about 1550
+  MB/s against zlib's 390 (a summary, not run here). The fixes, in order of
+  cost: fewer normal bits, or normals derived from the field where the bake
+  can; topology-aware index coding, written independently and not ported from
+  any library; and zstd, a native dependency the
+  [vendor register](../decisions/runtime-and-delivery.md#vendor-binaries)
+  governs. Fold it with the refactoring packet's zlib one-shot item, which
+  already replaces the stream adapters on this path. Check: stored bytes per
+  triangle and decode time on the debug world's stored meshes, with the
+  decoded meshes inside the codec's error budget (identical wherever a change
+  is lossless, such as index coding and the compressor).
 - [high] The frame thread's `SdfWorldResidency.Capture` and the per-view
   recording while hundreds of views stand during a bake.
 - [high] `Refine`'s `Thickens` and slot numbering (`SdfSampledLattice`); the
@@ -1997,6 +2014,16 @@ collider, then the lifecycle lows as one pass.
   `SdfFieldEvaluator.CountArrayPayload` and `CreateReachScratch` take a
   `WorkCounterSet` and need a counting parameter both types satisfy, and
   `puck bench world` (`WorldBenchmarks`) lists the sets as sources.
+- [medium] The rigid solver has no joint constraint. A case-insensitive search
+  of `src/Puck.Physics` for "joint" finds none, and vehicles and ragdolls need
+  one ([the audit](state-of-the-art/audit.md#13-physics-is-exact-but-single-threaded-and-has-no-joints);
+  its claim is unverified beyond that search). Build the joint as another
+  constraint row in the same fixed-point soft-step solve (its softness
+  coefficients are `FixedSoftConstraint`'s), so it joins the colouring of
+  [the lessons plan's lesson 7](physics-and-kernels-lessons.md#7-graph-colouring-for-a-parallel-rigid-solve)
+  and never becomes a second solver. Check: a two-body hinge and a chain of
+  eight hold their anchor error under a bound across ticks, the replay hash
+  holds across two runs, and a chain at rest parks as one island.
 - [low] A stack's base under more than about two bodies' load can settle below
   the rest band. Build three-high and four-high stack scenes, read the base's
   penetration and fix the solver's load sharing.
@@ -2312,7 +2339,15 @@ Federation and transfers:
   mixer's contract.
 - [medium] Prediction and rollback for remote play has no design.
   [Readable interaction](readable-interaction.md)'s step 5 depends on it, and
-  its step 0 research round covers it.
+  its step 0 research round covers it. The [state-of-the-art audit](state-of-the-art/audit.md#5-there-is-no-client-prediction)
+  names the gap that design has to close: the wire carries float render state
+  (`WorldFederationCodec.WriteEntity`), not the seat's own fixed-point
+  continuation (pose, integration residue, contacts, input cursor). Start from
+  a per-seat own-body continuation record carried in the input
+  acknowledgement, so a predicted local body reproduces the authority exactly
+  and a correction means a real divergence, not rounding. Check: a predicted
+  body replays the authority's ticks bit for bit at a fixed latency, and a
+  corrected one differs only where an input arrived late.
 - Signed remote write-back is
   [remote home adoption](records-and-pools.md#remote-home-adoption); it needs
   the hub plan's write door and award commit and
@@ -2341,6 +2376,35 @@ grow:
   the client fetches. The replica's single-message transport
   ([the benchmark](#the-benchmark)'s `WireLimits.MaxDocumentBytes` item) is the
   same cause.
+- [medium] Interest has no priority under a byte budget.
+  `WorldInterestFrame.Project` is a grid query and a plain distance test, and
+  [disclosure's I1](disclosure.md#open-items) still owes hysteresis and
+  distance-tiered cadence. The shipped answer is a starvation-weighted priority
+  accumulator under a per-packet byte budget (Tribes, Halo Reach, Unity
+  Netcode's relevancy; [the audit](state-of-the-art/audit.md#6-interest-has-no-priority)).
+  Make the priority an authored `.puck` program, and keep in the engine only
+  the accumulation, the sort and the spend of the budget, which is one more
+  piece of the recipient view that every transport shares. Check: at a fixed
+  byte budget a body oscillating at the radius does not flap in and out, and a
+  far body's update age is bounded.
+- [medium] Entities are written whole and uncompressed. The federation codec
+  skips an entity only when it is wholly equal and otherwise rewrites it, with
+  raw floats and strings (`WorldFederationCodec.WriteEntity`). The shipped
+  answers are per-field changed masks (Quake 3), bounded quantisation,
+  smallest-three quaternions and quantised deltas against the acknowledged
+  baseline ([the audit](state-of-the-art/audit.md#7-the-wire-is-wasteful); its
+  estimate of 5 to 10 times too large is unverified). Quantise Q48.16 exactly
+  so a delta hashes and verifies against the baseline `WorldBodyHistory`
+  holds. Check: bytes per entity per tick before and after on a crowd scene,
+  and the reconstructed state hashes equal.
+- [medium] A world's tick rate could follow its load. One deterministic world
+  per authority makes EVE-style tick dilation per world possible: a world over
+  its work allowance (`RuleCapacity.MaxWorkUnitsPerTick`) steps slower in wall
+  time, not skipping ticks, so its state stays one fixed history and its
+  neighbours are unaffected. Weigh it in [the MMO foundations register](mmo-foundations/synthesis.md#4-puck-native-combinations)
+  against shedding load by splitting the place at runtime, for which the
+  register's seams decision (option S3) found no supporting evidence. Check: an overloaded world's replay hash equals its
+  unloaded run's, and a second world in the same silo keeps its own cadence.
 - [medium] One thread steps a whole silo. `WorldSiloSimulation.Step` runs
   `WorldInstanceHost.StepInstances`, which steps every row in turn, each under
   its authority gate (`WorldServerStepShell.Step`), though rows never observe
@@ -2357,8 +2421,16 @@ grow:
   thread (`TryQueueCheckpoint`, `TryCaptureRow`,
   `WorldAuthorityCheckpointCodec.Encode`); only the upload is asynchronous. The
   stall grows with the silo's total state. Stagger the rows, encode off the
-  step thread from a copy-on-write image, and make checkpoints incremental;
-  the document a checkpoint carries twice is
+  step thread from a copy-on-write image, and make checkpoints incremental.
+  The [state-of-the-art audit](state-of-the-art/audit.md#12-checkpoints-are-full-and-uncompressed)
+  gives the incremental form: the population section already folds per-slot
+  digests into segment digests, so store each segment as a content-addressed
+  blob and a checkpoint becomes the list of its segments' hashes, with zstd on
+  the blobs (a native dependency, so the
+  [vendor register](../decisions/runtime-and-delivery.md#vendor-binaries) is
+  read first). Check: a cadence checkpoint of a mostly unchanged silo writes a
+  small fraction of the full image and restores to the same state hash. The
+  document a checkpoint carries twice is
   [delivery's item](#delivery-launcher-and-ci).
 - [medium] A colocated source learns its commit's answer a pool hop late when
   the destination's log answers asynchronously: `WorldPeerCall.CommitAsync`
@@ -3669,6 +3741,8 @@ presentation view. The owner lifted test requirements for this campaign
 (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
+[Code size](code-size.md) holds the measured map, the generator families and
+their lane order; this packet keeps the single duplicates and leads.
 
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`
@@ -3707,6 +3781,27 @@ proves itself with `puck compile` lowering to the same document.
   and `Commit(overwrite: false)` preserves a concurrent winner only where
   `File.Move` without overwrite is create-only. A law that races two stamps
   on each platform settles the second.
+- [low] `PrimeKernels.TrialDivision` writes each vector width's rung by hand:
+  `HasTrialFactor512Core`, `HasTrialFactor256Core` and `HasTrialFactor128Core`
+  are one fold-and-compare loop at three widths, and so are the three
+  `HasNarrowTrialFactor*Core` loops. One generic rung over a lanes interface
+  (`VectorLanes.cs` already carries `IByteVectorLanes` and
+  `ISignedByteWideningLanes`; this needs 32- and 64-bit multiply, compare-any
+  and the 16-bit multiply-add) would hold each loop once, as
+  `BinaryFieldKernels`' region rungs now do. The law
+  `prime-field.trial-division-rungs-vs-remainder` checks every rung, and the
+  disassembly (`puck bench kernels`) must match the hand-written form.
+- The weight audit's next targets, from a whole-solution semantic reference
+  walk (a scratch Roslyn pass that marks every symbol any syntax node in any
+  project resolves to), read for duplicates and leftovers rather than line
+  count (the owner's ruling; `Puck.Maths`' `Research` and `Oracle` folders stay
+  as product source even where only tests reach them): 690 lines of
+  `Puck.HumbleGamingBrick.Forge` and 491 of `Puck.Text` that nothing reaches;
+  and the interface members whose every caller uses the concrete
+  type (`IWorldMachineHost`, `IWorldAuthorityStore`, `IWorldGrantsView`,
+  `IWorldAuthorityHost`), which can drop off their interfaces. The walk does
+  not credit an abstract or interface member called through a derived type,
+  so treat its interface results as leads.
 - The `.puck` sources still under-use the language:
   `worlds/debug/avatars/moth.puck` holds thousands of decimal literals and
   raw quaternions, with the pod's band groups pasted (a uniform row table
@@ -3786,17 +3881,16 @@ proves itself with `puck compile` lowering to the same document.
     read the World build's disassembly (the proof is static, so the World
     gets it). Its comment requires the vector and scalar paths to agree bit
     for bit, in the repacked bytes and the average colour.
-  - **SdfVm: one priority order, as a struct comparer.** [medium]
-    `SdfMeshPathBake.ByPriority` and `SdfWorldTables.ByPriority` are the same
-    `Comparison<(float Priority, int Index)>` written twice. Replace both with
-    one public `readonly struct` comparer in a shared home and sort the spans
-    both callers already take through `CollectionsMarshal.AsSpan`. That fixes
-    the duplicate, and on .NET 11 a struct comparer on a span sort is not boxed
-    and its comparison inlines, where the delegate costs a call per
-    comparison. Claim speed only with a counted or traced reading of
-    `SdfWorldTables.OrderLanding` or the path bake's plan. The other
-    `Comparison` lambdas beside them (`SdfMeshIrradiance`'s candidate order,
-    the path bake's tiers) move the same way if a profile shows them hot.
+  - **SdfVm: the frame thread's remaining array-sized walks in the bake.** [medium]
+    The bake's frame-thread entries read the groups changed or holding something
+    (`SdfMeshPathBake.Touch`, `GroupTally`, `m_keepers`), except `Retier`'s
+    decision, which reads every group once a measure, `ServeAhead`, which names
+    every kept floor's pieces to the mesh region whenever a floor or the list
+    moved, and a locked (lockstep) dress, which rebuilds every row from empty
+    (`SdfMeshDresser.StartOver`, `CountsChange`) whenever a group's piece count
+    changes. Read the done line's `retier`, `observe` and `dress` holds on a clean
+    cold bake, then keep the aggregates the decision sums and the kept floors'
+    names incrementally.
   - **SdfVm and Assets: zlib through stream adapters.** [medium]
     `SdfMeshStoreDecoder.TryDecode` expands every store entry through a `fixed`
     block, an `UnmanagedMemoryStream`, a `ZLibStream` and an end-of-stream

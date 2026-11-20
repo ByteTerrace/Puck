@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -9,5 +10,9 @@ namespace Puck.World;
 /// <param name="CostRow">An Int state row paying the price. Required for a nonzero price.</param>
 /// <param name="CostKey">The payer cell; absent selects an unkeyed row's slot.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldPlacementReflow(int CandidateBudget = 4096, long CostPerMove = 0,
-    string? CostRow = null, string? CostKey = null);
+public sealed record WorldPlacementReflow(
+    int CandidateBudget = 4096,
+    long CostPerMove = 0,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] string? CostRow = null,
+    [property: DocumentText("a literal payer cell key")] string? CostKey = null
+);

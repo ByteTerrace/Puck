@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Numerics;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Collections;
@@ -7,7 +8,7 @@ using Puck.SignedDistance;
 namespace Puck.World.Authoring;
 
 /// <summary>An authored surface tint and reflectance.</summary>
-public sealed record PaletteSurfaceDocument(string Color, float Roughness, float Metal) {
+public sealed record PaletteSurfaceDocument([property: DocumentText("a color literal")] string Color, float Roughness, float Metal) {
     /// <summary>Resolves literal colors or containing-world color bindings.</summary>
     public SdfSurface ToSurface(Func<string, Vector3> resolve) => new(
         resolve(Color),
@@ -18,10 +19,15 @@ public sealed record PaletteSurfaceDocument(string Color, float Roughness, float
 /// <summary>One ascending coverage threshold and the surface it reveals.</summary>
 public sealed record PaletteRevealDocument(float Threshold, PaletteSurfaceDocument Surface);
 /// <summary>One ascending radial ramp stop.</summary>
-public sealed record PaletteRadialStopDocument(float Radius, string Color);
+public sealed record PaletteRadialStopDocument(float Radius, [property: DocumentText("a color literal")] string Color);
 /// <summary>One to four radial paint stops with optional angular modulation.</summary>
-public sealed record PaletteRadialPaintDocument(IReadOnlyList<PaletteRadialStopDocument> Stops, float Softness = 0f,
-    float ModulationAmplitude = 0f, float ModulationFrequency = 0f, uint Seed = 0) {
+public sealed record PaletteRadialPaintDocument(
+    IReadOnlyList<PaletteRadialStopDocument> Stops,
+    float Softness = 0f,
+    float ModulationAmplitude = 0f,
+    float ModulationFrequency = 0f,
+    uint Seed = 0
+) {
     /// <summary>Gets the one to four radial stops, each an ascending radius and the colour it ramps to. The list is
     /// owned.</summary>
     public IReadOnlyList<PaletteRadialStopDocument> Stops { get => field; init => field = OwnedLists.Freeze(items: value)!; } = OwnedLists.Freeze(items: Stops)!;
@@ -45,6 +51,7 @@ public sealed record PaletteRadialPaintDocument(IReadOnlyList<PaletteRadialStopD
 public sealed record PaletteGlassDocument(
     float Depth,
     float? Ior = null,
+    [property: DocumentText("a color literal")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Scatter = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Scattering = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteGlassContactDocument? Contact = null,
@@ -199,11 +206,12 @@ public sealed record PaletteInsetDocument(DocumentVector3 Origin, DocumentQuater
 /// <param name="Curve">Sweep only: the curve, in the frame's units.</param>
 public sealed record PalettePaintDocument(
     SdfSolidPrimitive Type,
-    string Color,
+    [property: DocumentText("a color literal")] string Color,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Position = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentQuaternion? Rotation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Scale = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Stroke = null,
+    [property: DocumentText("a shape of the creation the paint's palette slot belongs to, local to that creation")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Taper = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfPrismProfile? Profile = null,
@@ -243,10 +251,25 @@ public sealed record PalettePaintDocument(
 /// second octave's frequency multiple, <c>octaveGain</c> its weight relative to the first (the sum is normalised, so
 /// the mask keeps one octave's spread), and <c>turn</c> a rotation of the lattice off the pattern axes. A weathering
 /// that says none of them reads one unturned octave.</summary>
-public sealed record PaletteWeatheringDocument(float Edge = 0f, float Lines = 0f, float Settle = 0f, float Reach = 1f,
-    uint Seed = 0, float Scale = 1f, float Floor = 0f, int Lane = 0,
-    IReadOnlyList<PaletteRevealDocument>? Under = null, PaletteSurfaceDocument? Deposit = null, float Noise = 0f, DocumentVector3? PatternScale = null, float Softness = 0f,
-    int Octaves = 1, float OctaveRatio = 2f, float OctaveGain = 0.5f, DocumentQuaternion? Turn = null) {
+public sealed record PaletteWeatheringDocument(
+    float Edge = 0f,
+    float Lines = 0f,
+    float Settle = 0f,
+    float Reach = 1f,
+    uint Seed = 0,
+    float Scale = 1f,
+    float Floor = 0f,
+    int Lane = 0,
+    IReadOnlyList<PaletteRevealDocument>? Under = null,
+    PaletteSurfaceDocument? Deposit = null,
+    float Noise = 0f,
+    DocumentVector3? PatternScale = null,
+    float Softness = 0f,
+    int Octaves = 1,
+    float OctaveRatio = 2f,
+    float OctaveGain = 0.5f,
+    DocumentQuaternion? Turn = null
+) {
     /// <summary>Gets the surfaces the coverage reveals, each at an ascending threshold. The list is owned.</summary>
     public IReadOnlyList<PaletteRevealDocument>? Under { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Under);
     /// <summary>Resolves the generic engine response at a placement scale.</summary>

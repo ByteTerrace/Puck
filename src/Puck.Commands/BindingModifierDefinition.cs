@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.Commands;
@@ -21,10 +22,10 @@ namespace Puck.Commands;
 /// <param name="Icon">An optional display icon id for the UI layer; opaque to the engine.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingModifierDefinition(
-    string Id,
-    IReadOnlyList<string> Sources,
+    [property: DocumentText("a binding modifier id")] string Id,
+    [property: DocumentText("input source identifiers")] IReadOnlyList<string> Sources,
     float PressThreshold = HeldOrderTracker.DefaultPressThreshold,
     float ReleaseThreshold = HeldOrderTracker.DefaultReleaseThreshold,
-    string? Label = null,
-    string? Icon = null
+    [property: DocumentText("literal text")] string? Label = null,
+    [property: DocumentText("an icon name")] string? Icon = null
 );

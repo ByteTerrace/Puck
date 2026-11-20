@@ -37,7 +37,7 @@ public sealed class WorldLiveValues(Func<ArenaTime> clock) {
 /// new holder where a reference stood and copies only the path from the root to it, so every row and section no
 /// reference reaches is the input's own object, and reference-keyed products derived from it (a prototype's canonical
 /// hash, a compiled stamp, a palette's emissions) still hold. The reads (<see cref="HasReference"/>,
-/// <see cref="ReferencesRow"/>, <see cref="CollectReferencedRows(WorldDefinition, ISet{string})"/>) are visitors of the
+/// <see cref="ReferencesRow"/>) are visitors of the
 /// same walk. Both enter only branches that can hold a bound value and never enter a holder's own members.</para>
 /// </remarks>
 public static class WorldStateDocumentValues {
@@ -380,22 +380,6 @@ public static class WorldStateDocumentValues {
         return !resolver.Stopped;
     }
 
-    /// <summary>Adds the name of every state row a retained document-value reference in <paramref name="definition"/>
-    /// names to <paramref name="rows"/>, in one walk.</summary>
-    /// <remarks>A cell write carries a value, never a reference, and references live in the sections around the
-    /// state table, so a batch of cell writes collects this set once and asks each member's row against it, where
-    /// <see cref="ReferencesRow(WorldDefinition, object, string)"/> over the whole definition would walk the graph per member. A member that
-    /// re-declares a row or edits any other section is where the set can change; the caller collects again after
-    /// one.</remarks>
-    /// <param name="definition">The document to walk.</param>
-    /// <param name="rows">The set every referenced row name is added to; existing members are kept.</param>
-    public static void CollectReferencedRows(WorldDefinition definition, ISet<string> rows) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-        CollectReferencedRows(
-            graph: definition,
-            rows: rows
-        );
-    }
     /// <summary>Gets the name of every state row a retained document-value reference in
     /// <paramref name="definition"/> names, collected by one walk the first time a definition asks and kept for its
     /// lifetime.</summary>

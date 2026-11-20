@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Abstractions.Machines;
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
@@ -171,7 +172,7 @@ public static class WorldModuleExports {
                     memberType: memberType,
                     value: value
                 )) {
-                    case JsonArray list when (field.Role == WorldNameRole.Names):
+                    case JsonArray list when (field.Role is WorldNameRole.Names or WorldNameRole.Binding or WorldNameRole.Template or WorldNameRole.Key):
                         foreach (var element in list) {
                             if (
                                 (element is JsonValue item) &&

@@ -94,17 +94,17 @@ internal static class ExecutionComparisonProbe {
                     );
                     machine.Bus.Write32(
                         access: BusAccessType.NonSequential,
-                        address: 0x040000D4u,
+                        address: AgbAddresses.Dma3Source,
                         value: 0x02000100u
                     );
                     machine.Bus.Write32(
                         access: BusAccessType.NonSequential,
-                        address: 0x040000D8u,
+                        address: AgbAddresses.Dma3Destination,
                         value: 0x03000018u
                     );
                     machine.Bus.Write32(
                         access: BusAccessType.NonSequential,
-                        address: 0x040000DCu,
+                        address: AgbAddresses.Dma3Count,
                         value: 0x84000001u
                     );
                 }

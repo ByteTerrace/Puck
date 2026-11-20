@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 
@@ -19,13 +20,19 @@ namespace Puck.State;
 /// <param name="Members">The member rows' own names, in member order, or <see langword="null"/> when the members
 /// are named by the <c>&lt;name&gt;&lt;index&gt;</c> convention.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record StateFamily(CellName Name, int Size, IReadOnlyList<int>? Indices = null, IReadOnlyList<CellName>? Members = null) {
+public sealed record StateFamily(
+    [property: DocumentText("a family name declares a row range local to the document")] CellName Name,
+    int Size,
+    IReadOnlyList<int>? Indices = null,
+    IReadOnlyList<CellName>? Members = null
+) {
     /// <summary>The family index each member carries, in member order, or <see langword="null"/> when the members are
     /// indexed <c>0</c>..<c>Size-1</c> with no gaps. A family index is what <c>&lt;family&gt;[i]</c> selects on, so an
     /// index the list omits is a gap that selects no row.</summary>
     public IReadOnlyList<int>? Indices { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Indices);
     /// <summary>The member rows' own names, in member order, or <see langword="null"/> when the members are named by
     /// the <c>&lt;name&gt;&lt;index&gt;</c> convention.</summary>
+    [DocumentName(WorldNameKind.State, WorldNameRole.Names)]
     public IReadOnlyList<CellName>? Members { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Members);
 
     /// <summary>Returns the row name of the family's member at <paramref name="index"/>.</summary>

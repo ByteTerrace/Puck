@@ -48,10 +48,10 @@ public sealed record WorldSpatialShape(
 /// <param name="Pinned">Whether layout policy must preserve this volume's placement transform.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPlacementSpatialVolume(
-    string Name,
+    [property: DocumentText("a placement-local spatial volume name")] string Name,
     WorldPlacementSpatialRole Role,
     WorldSpatialShape Shape,
-    string? Channel = null,
+    [property: DocumentText("an author-defined spatial influence channel")] string? Channel = null,
     bool Pinned = false
 );
 /// <summary>The fixed-point shape kind used by compiled spatial queries.</summary>

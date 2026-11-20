@@ -1538,8 +1538,8 @@ public sealed partial class WorldDocument {
         return true;
     }
 
-    internal bool TryValidateMutationCandidate(WorldDefinition candidate, WorldDefinition current, WorldMutation mutation, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation = true) {
-        compilation = null;
+    private bool TryValidateMutationCandidate(WorldDefinition candidate, WorldDefinition current, WorldMutation mutation, out string reason, out WorldDefinitionAdmission? admission, bool retainCompilation = true) {
+        admission = null;
 
         if (IsValueMutation(candidate: candidate, mutation: mutation, previous: current)) {
             return TryValidateStateMutation(candidate: candidate, mutation: mutation, reason: out reason);
@@ -1547,7 +1547,9 @@ public sealed partial class WorldDocument {
 
         // Only the units the change reaches are judged (WorldDefinitionValidator.Partitions), so a unit the mutation
         // does not name, hidden or not, cannot refuse it.
-        return WorldDefinitionValidator.TryValidateChange(after: candidate, before: current, compilation: out compilation, reason: out reason, retainCompilation: retainCompilation);
+        return retainCompilation
+            ? WorldDefinitionValidator.TryAdmitChange(before: current, after: candidate, machines: Host.Machines.ValidationCatalog, admission: out admission, reason: out reason)
+            : WorldDefinitionValidator.TryValidateChange(before: current, after: candidate, compilation: out _, reason: out reason);
     }
 
     // A state mutation can only have changed the rows it names, so validation covers those rows and the rows keyed

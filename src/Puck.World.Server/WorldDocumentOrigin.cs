@@ -48,13 +48,6 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
         catalog: m_catalog
     );
 
-    /// <summary>Whether two resolved paths name the same file, comparing case-insensitively on a platform whose file
-    /// names are case-insensitive.</summary>
-    public static bool IdentityEquals(string left, string right) => string.Equals(
-        a: left,
-        b: right,
-        comparisonType: PuckPaths.Comparison
-    );
     /// <inheritdoc/>
     public override bool TryLoad(string instanceIdentity, out WorldDefinition? definition, out string reason, WorldPrivateDrawKeys? keys = null) =>
         WorldDefinitionLoader.TryLoadFile(

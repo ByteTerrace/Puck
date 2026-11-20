@@ -44,7 +44,6 @@ public sealed partial class WorldCreationInstances {
         return parts;
     }
     // The text slot's offset from a registration's root slot: the first after its shapes'.
-    private static int TextSlot(int shapeCount) => (1 + shapeCount);
     // Whether a blend group keeps any member the isolation does not hide; a wholly hidden group emits no instance.
     private static bool AnyKept(IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, bool[]? hidden) {
         if (hidden is null) {

@@ -29,14 +29,10 @@ public sealed partial class SdfMeshPathBake {
     private int m_firstDetailsOwed;
     private int m_floorsRaised;
 
-    // The measure of every group's demand, spread over SdfMeshTier.MeasureFrames frames (MeasureDemands): the group
-    // the next frame's share starts at, the boxes the sweep under way has measured, and those the last whole sweep
-    // measured, which a frame's share is taken of.
-    private int m_measureAt;
+    // The measure of every group's demand in pixels, spread over SdfMeshTier.MeasureFrames frames (MeasureDemands).
+    private GroupSweep m_demandSweep;
     // The frames since Retier last decided the tiers, which it does once a measure (SdfMeshTier.MeasureFrames).
     private int m_decideFrames;
-    private long m_measureSweep;
-    private long m_measureBoxes;
     // The frames in a row Retier has left the detail alone, counted up to SdfMeshTier.SettleFrames; read off the
     // frame's thread (DetailSettled).
     private int m_detailQuiet;
@@ -180,25 +176,19 @@ public sealed partial class SdfMeshPathBake {
 
         if (count == 0) { return; }
 
-        var share = Math.Max(val1: SdfMeshTier.MeasureBoxes, val2: ((m_measureBoxes + (SdfMeshTier.MeasureFrames - 1)) / SdfMeshTier.MeasureFrames));
-        var at = ((m_measureAt < count) ? m_measureAt : 0);
+        var share = m_demandSweep.Share;
+        var at = m_demandSweep.Start(count: count);
         var spent = 0L;
 
         for (var visited = 0; ((visited < count) && (spent < share)); visited++) {
             var group = m_groups[at];
+            var boxes = 1;
 
-            if (!group.Retired && group.HasDemandBox) {
-                group.DemandPixel = MeasurePixel(boxes: out var boxes, group: group, point: out _);
-                spent += boxes;
-                m_measureSweep += boxes;
-            }
-            if (++at == count) {
-                at = 0;
-                m_measureBoxes = m_measureSweep;
-                m_measureSweep = 0L;
-            }
+            if (!group.Retired && group.HasDemandBox) { group.DemandPixel = MeasurePixel(boxes: out boxes, group: group, point: out _); }
+            spent += boxes;
+            at = m_demandSweep.Visited(at: at, boxes: boxes, count: count);
         }
-        m_measureAt = at;
+        m_demandSweep.Stop(at: at);
     }
     // The metres one display pixel covers at a shared geometry's box, given in the geometry's own frame, from the demand
     // point that sees one of its copies finest, in the geometry's units; infinity, and no point, with no copy.
@@ -245,7 +235,7 @@ public sealed partial class SdfMeshPathBake {
             m_retiredGroups.Add(item: replaced);
             replaced.Retired = true;
             group.Replaces = null;
-            m_productRevision++;
+            Touch(group: group);
             if (group.FirstDetail) { m_floorsRaised++; } else if (group.Tier > replaced.Tier) { m_coarsened++; } else { m_retiers++; }
             group.FirstDetail = false;
             if (group.Stored) { m_retiersReused++; }

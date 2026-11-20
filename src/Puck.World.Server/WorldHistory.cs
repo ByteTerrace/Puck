@@ -170,9 +170,6 @@ public sealed partial class WorldHistory {
         m_stateRoot = stateRoot;
     }
 
-    /// <summary>Gets whether the history is recording.</summary>
-    public bool On => m_on;
-
     // One keyframe span: the checkpoint at KeyframeTick, then the recorded input and hash of each following tick.
     private sealed class Segment {
         public List<(int Offset, WorldReplayEntry Entry)> Authority { get; } = [];

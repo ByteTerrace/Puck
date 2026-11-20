@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Commands;
 
 namespace Puck.World;
@@ -11,9 +12,20 @@ namespace Puck.World;
 /// <param name="Control">An Int row with request, status, cursor and completed cells, outside the scope.</param>
 /// <param name="DurationTicks">The recorded span, including time for the final input to settle.</param>
 /// <param name="Inputs">Inputs, in tick order, applied through the ordinary grant-checked mutation door.</param>
-public sealed record WorldScopedReplay(string Name, IReadOnlyList<string> Rows, IReadOnlyList<int> Bodies,
-    IReadOnlyList<Principal> Seats, string Control, int DurationTicks, IReadOnlyList<WorldScopedReplayInput> Inputs);
+public sealed record WorldScopedReplay(
+    [property: DocumentText("a replay scope identity, local to the replays section")] string Name,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] IReadOnlyList<string> Rows,
+    IReadOnlyList<int> Bodies,
+    IReadOnlyList<Principal> Seats,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] string Control,
+    int DurationTicks,
+    IReadOnlyList<WorldScopedReplayInput> Inputs
+);
 /// <summary>One tick-relative, atomic input batch. Values are raw state-cell values, just as at the live door.</summary>
 public sealed record WorldScopedReplayInput(int Tick, Principal Principal, IReadOnlyList<WorldScopedReplayCell> Cells);
 /// <summary>One addressed numeric input cell.</summary>
-public sealed record WorldScopedReplayCell(string Row, string Key, long Value);
+public sealed record WorldScopedReplayCell(
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] string Row,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] string Key,
+    long Value
+);

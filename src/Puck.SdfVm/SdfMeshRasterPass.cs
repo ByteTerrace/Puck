@@ -37,8 +37,6 @@ public sealed class SdfMeshRasterPass {
     /// <summary>The file stem of the mesh pass's occlusion kernel, <c>sdf-mesh-occlusion.comp</c>, which tests each
     /// draw's box against the depth of the pass's first phase and writes both phases' counted indirect draws.</summary>
     public const string OcclusionShaderStem = "sdf-mesh-occlusion";
-    /// <summary>The bytes a pixel of the target and the depth attachment hold together.</summary>
-    public const uint BytesPerPixel = (16u + 4u);
 
     /// <summary>Initializes a new instance of the <see cref="SdfMeshRasterPass"/> class from the deployed stages.</summary>
     /// <param name="pipelines">The composition's pass pipelines.</param>

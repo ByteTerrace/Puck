@@ -713,7 +713,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     private sealed record OnDemandSource(GpuPassPipelineCache Cache, IGpuDeviceContext Device);
     // What a pass's build hands its recorder: the view, whose residency the build holds until the recorder takes it.
     private sealed class Built(SdfWorldView view) : IDisposable {
-        public SdfWorldView View => view;
         private bool m_taken;
 
         public void Dispose() {

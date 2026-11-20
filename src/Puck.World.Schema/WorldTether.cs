@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Maths;
 
 namespace Puck.World;
@@ -37,10 +38,10 @@ public sealed record WorldTether(
     float LengthRate,
     float MinLength,
     float ReleaseVelocityScale = 1f,
-    string? AttachChannel = null,
-    string? DetachChannel = null,
-    string? ReelChannel = null,
-    string? ModeState = null
+    [property: DocumentText("logical input channels")] string? AttachChannel = null,
+    [property: DocumentText("logical input channels")] string? DetachChannel = null,
+    [property: DocumentText("logical input channels")] string? ReelChannel = null,
+    [property: DocumentText("a per-body slot name")] string? ModeState = null
 );
 /// <summary>The one-time fixed-point compilation of a kit's <see cref="WorldTether"/> facet — every world-unit and
 /// degree field quantized to <see cref="FixedQ4816"/>, and every declared channel/state name resolved to the ordinal

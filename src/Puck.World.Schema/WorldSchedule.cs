@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Commands;
 using System.Text.Json.Serialization;
 using Puck.World.Protocol;
@@ -32,7 +33,16 @@ namespace Puck.World;
 /// <param name="World">The armed instance this row is submitted into, named by its
 /// <see cref="WorldScheduleInstance.Name"/>, or <see langword="null"/> for the world this process booted with. A
 /// name no <see cref="WorldScheduleSection.Instances"/> entry declares is refused at validation.</param>
-public sealed record WorldScheduleRow(ulong Tick, string Principal, string Command, WorldScheduleExpectation Expect = WorldScheduleExpectation.Submitted, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Refusal = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? World = null);
+public sealed record WorldScheduleRow(
+    ulong Tick,
+    [property: DocumentText("a principal identifier")] string Principal,
+    [property: DocumentText("console command text")] string Command,
+    WorldScheduleExpectation Expect = WorldScheduleExpectation.Submitted,
+    [property: DocumentText("literal text")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Refusal = null,
+    [property: DocumentText("a world instance")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? World = null
+);
 /// <summary>One sibling world an armed run starts beside the world it booted with, the way
 /// <c>world.instance.start</c> starts one: its own document, its own authority, stepped in the same fixed step, and
 /// exported at the same tick.</summary>
@@ -41,7 +51,10 @@ public sealed record WorldScheduleRow(ulong Tick, string Principal, string Comma
 /// the world this process booted with.</param>
 /// <param name="Document">The sibling world document's name, resolved beside the document that declares it
 /// (<see cref="WorldDocumentPaths"/>).</param>
-public sealed record WorldScheduleInstance(string Name, string Document);
+public sealed record WorldScheduleInstance(
+    [property: DocumentText("an armed instance's name is the running host's own namespace, not a document's")] string Name,
+    [property: DocumentText("a path or document locator")] string Document
+);
 /// <summary>What a <see cref="WorldScheduleRow"/> declares its ingress will answer.</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldScheduleExpectation>))]
 public enum WorldScheduleExpectation {
@@ -146,10 +159,6 @@ public static class WorldScheduleCommands {
 
     /// <summary>Gets every admitted verb in ordinal order.</summary>
     public static IReadOnlyList<string> Admitted => [.. StepVerbs.Concat(second: ImmediateVerbs).Order(comparer: StringComparer.Ordinal)];
-    /// <summary>Gets every admitted immediate command in ordinal order.</summary>
-    public static IReadOnlyList<string> Immediate => [.. ImmediateVerbs.Order(comparer: StringComparer.Ordinal)];
-    /// <summary>Gets every admitted step that reaches the simulation, in ordinal order.</summary>
-    public static IReadOnlyList<string> Steps => [.. StepVerbs.Order(comparer: StringComparer.Ordinal)];
     /// <summary>Gets every verb a row may address a sibling world with, in ordinal order.</summary>
     public static IReadOnlyList<string> Addressable => [.. AddressableVerbs.Order(comparer: StringComparer.Ordinal)];
 

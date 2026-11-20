@@ -7,10 +7,6 @@ namespace Puck.SdfVm;
 /// <param name="FirstInstance">The first program instance ordinal.</param>
 /// <param name="InstanceCount">The number of program instances in the template.</param>
 public readonly record struct SdfMeshTemplateRange(int FirstInstance, int InstanceCount) {
-    /// <summary>Returns whether an instance belongs to this template.</summary>
-    /// <param name="instance">The program instance ordinal.</param>
-    /// <returns>Whether the ordinal is inside this half-open range.</returns>
-    public bool Contains(int instance) => ((instance >= FirstInstance) && (((long)instance - FirstInstance) < InstanceCount));
 }
 
 /// <summary>A copy of one local baked geometry asset: a row its producer keeps for as long as the copy lives and rewrites
@@ -64,11 +60,6 @@ public sealed class SdfMeshInstance(int AssetSlot, object Identity, DynamicTrans
     public SdfMesh? Mesh { get => m_mesh; init => m_mesh = value; }
     /// <summary>Gets the authored mesh's shared program material.</summary>
     public int Material { get => m_material; init => m_material = value; }
-
-    /// <summary>Returns whether a bake group is one of this asset's local surfaces.</summary>
-    /// <param name="slot">The bake group's dynamic slot.</param>
-    /// <returns>Whether <paramref name="slot"/> is <see cref="AssetSlot"/> or one of <see cref="OtherAssetSlots"/>.</returns>
-    public bool UsesSlot(int slot) => ((AssetSlot == slot) || OtherAssetSlots.Contains(value: slot));
 
     /// <summary>Gets the portal plane the copy straddles, before its frame slot is assigned.</summary>
     public SdfSlotClip? Clip { get => m_clip; init => m_clip = value; }

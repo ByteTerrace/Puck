@@ -198,8 +198,8 @@ compiled for every creation it can show when the contact field builds
 colliders (a lit and an unlit floor) leaves the contact field, navigation and
 the population revision as they were (`WorldColliderSet.TryCarryAcrossHolding`);
 otherwise only the solid consumers compile again
-(`WorldPopulation.InstallResponseSolids`). A client bumps
-`WorldClient.ResponseRevision` for a face-free change, which recomposes the
+(`WorldPopulation.InstallResponseSolids`). A client bumps its response
+revision for a face-free change, which recomposes the
 program once and rebuilds the presentation field, and its definition revision
 only when a creation shown before or after carries a face, camera or sound
 (`WorldPlacementResponse.ComparePlacements`). The same comparison covers every

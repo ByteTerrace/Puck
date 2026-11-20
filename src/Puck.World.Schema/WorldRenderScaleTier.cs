@@ -54,12 +54,6 @@ public static class WorldRenderScaleTiers {
     /// <summary>The canonical tier names, in descending quality order — the valid set the validator and the verb echo.</summary>
     public static readonly IReadOnlyList<string> Names = ["native", "three-quarter", "half", "quarter", "eighth"];
 
-    /// <summary>The valid names joined for an error / echo message.</summary>
-    public static string ValidNames => string.Join(
-        separator: ", ",
-        values: Names
-    );
-
     /// <summary>Returns the tier whose <see cref="Scale"/> lies nearest a continuous render scale, the reverse of
     /// <see cref="Scale"/>: a tier's own scale maps back to that tier exactly, and a continuous scale between tiers
     /// quantizes to the closer one (the tier declared first on a tie).</summary>

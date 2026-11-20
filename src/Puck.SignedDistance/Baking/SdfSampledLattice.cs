@@ -1280,6 +1280,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // Try the finer thin cells on a grid which still divides into the original cells. If this costs too much,
         // all candidates below it follow the ordinary budget and split rules.
         for (var split = finest; (split >= 2); split = ((split > ordinary) ? (split / 2) : (split - 1))) {
+            // A fine sample's key numbers the whole fine grid in an int (FineInside, FineCoordinates), so a split whose
+            // grid has more points than an int holds is not tried, and a lattice that long refines at a smaller one.
+            if ((((((long)cellsX) * split) + 1) * ((((long)cellsY) * split) + 1) * ((((long)cellsZ) * split) + 1)) > int.MaxValue) { continue; }
             essential.AsSpan(length: cellCount, start: 0).CopyTo(destination: trial);
 
             var fits = true;

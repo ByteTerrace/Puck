@@ -789,7 +789,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // The per-instance face overrides: each names a declared creation face, no duplicate face names.
-    private static void ValidateFaceSources(WorldDefinition definition, IReadOnlyList<WorldPlacementFace>? faceSources, WorldPlacement placement, IReadOnlyDictionary<string, WorldPrototype> creationsById, WorldFaceCatalog faces, ValidationScope scope, string path, List<string> errors) {
+    private static void ValidateFaceSources(WorldDefinition definition, IReadOnlyList<WorldPlacementFace>? faceSources, WorldPlacement placement, IReadOnlyDictionary<string, WorldPrototype> creationsById, ValidationScope scope, string path, List<string> errors) {
         if (faceSources is not { Count: > 0 } sources) {
             return;
         }
@@ -890,14 +890,13 @@ public static partial class WorldDefinitionValidator {
                 // The derived face itself: its shape kind must open an aperture (WorldFaceApertures). A face may be
                 // drawn on any primitive; a door is narrower. Its orientation is checked against its counterpart's at
                 // transfer time (WorldFrameIsometry.PreservesWorldUp), where the counterpart's document resolves.
-                if (faces.TryFind(
-                    placementId: placement.Id,
-                    faceName: source.Face,
-                    out var portalRow
-                )) {
-                    if (portalRow.ShapeType is not { } shapeType) {
-                        errors.Add(item: $"{facePath}.portal names face '{source.Face}', which declares no concrete shape (shapeId {(portalRow.ShapeId?.ToString(provider: CultureInfo.InvariantCulture) ?? "null")}) — a door needs a surface to open, so it has no aperture mapping.");
-                    } else if (portalRow.Aperture is null) {
+                if (TryFindRow(key: placement.ShownPrototypeId, map: creationsById, row: out var shown) &&
+                    (shown.Document.Behavior?.Faces?.FirstOrDefault(face => face.Name == source.Face) is { } portalFace)) {
+                    var shape = WorldFaceCatalog.FindShape(document: shown.EngineDocument, id: portalFace.ShapeId);
+                    if (shape is null) {
+                        errors.Add(item: $"{facePath}.portal names face '{source.Face}', which declares no concrete shape (shapeId {(portalFace.ShapeId?.ToString(provider: CultureInfo.InvariantCulture) ?? "null")}) — a door needs a surface to open, so it has no aperture mapping.");
+                    } else if (WorldFaceApertures.For(primitive: shape.Type) is null) {
+                        var shapeType = shape.Type;
                         errors.Add(item: $"{facePath}.portal names face '{source.Face}', whose shape is a {shapeType} — only Box maps onto a walkable aperture today; a curved or unbounded face has no aperture mapping.");
                     }
                 }
@@ -1198,15 +1197,14 @@ public static partial class WorldDefinitionValidator {
             section: "looks.assignment"
         );
     }
-    // The LOOK rows (PRESENTATION-ONLY): name presence/uniqueness (mirroring the kit-name rule), a source over the
-    // closed catalog|creation set with a loud unknown default, a resolvable creation reference, a positive scale under
-    // the GPU-safety MaxLookScale ceiling, and non-negative motion values — rejecting a zero-hold replay (an infinite
-    // loop) and a timeline replay on a catalog source (no timeline to replay) LOUDLY, never silently. Returns the
-    // resolved look-name set (a future Inhabit facet resolves its Look against it).
-    private static HashSet<string> ValidateLooks(WorldDefinition definition, IReadOnlyList<WorldLook> looks, HashSet<string> prototypeIds, IReadOnlyList<WorldPrototype> creations, ISet<string> dynamicsNames, List<string> errors) {
-        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+    // A look names a catalog rig or a creation and admits the motion and poses that source supports.
+    private static void ValidateLookRows(WorldDefinition definition, IReadOnlyList<int>? rows, List<string> errors) {
+        var looks = definition.Looks;
+        var creations = definition.Creations;
+        var prototypeIds = DeclaredNames(creations, static row => row.Id?.Value);
+        var dynamicsNames = DeclaredNames(definition.Dynamics, static row => row.Name);
 
-        for (var index = 0; (index < looks.Count); index++) {
+        foreach (var index in RowOrdinals(looks.Count, rows)) {
             var look = looks[index];
             var path = $"looks[{index}]";
 
@@ -1215,14 +1213,6 @@ public static partial class WorldDefinitionValidator {
 
                 continue;
             }
-
-            RequireUniqueName(
-                value: look.Name,
-                seen: names,
-                path: path,
-                field: "",
-                errors: errors
-            );
 
             var isCatalog = false;
             WorldPrototype? resolvedCreation = null;
@@ -1459,7 +1449,7 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        return names;
+
     }
     // A placement's scale: finite and positive, then inside the policy envelope. The one rule both the whole-document
     // placement walk and a dealt child's install check (TryValidateDealtChild) refuse by.
@@ -1485,70 +1475,17 @@ public static partial class WorldDefinitionValidator {
     // scale envelope, the lattice distribution's positive counts and finite steps, the mirror plane, and the animated-row
     // constraints (static-only facets; the reserved replay-pool ceiling, word-exact). Returns the resolved id set for
     // the anchor-union gate (a WorldAnchor.Placement resolves against it).
-    private static HashSet<string> ValidatePlacements(IReadOnlyList<WorldPlacement> placements, WorldDefinition definition, WorldPlacementPolicyDefaults authoring, bool requiresField, ValidationScope scope, List<string> errors) {
-        var prototypeIds = scope.PrototypeIds;
-        var lookNames = scope.LookNames;
-        var kitNames = scope.KitNames;
-        var patchIds = scope.PatchIds;
-        var destinationNames = scope.DestinationNames;
-        var fontNames = scope.FontNames;
-        var hasTextCatalog = scope.HasTextCatalog;
-        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var creations = definition.Creations;
-
-        if (placements is null) {
-            errors.Add(item: "placements is required.");
-
-            return ids;
-        }
-
-        // The creation/kit row lookups the per-placement loop below resolves against, built ONCE per whole-document
-        // validate rather than rescanned per placement. TryAdd in authored order mirrors WorldDefinitionRows.Find's
-        // linear scan exactly: both return the FIRST row matching by id/name, and creation ids/kit names are already
-        // validated unique elsewhere (ValidateCreations/ValidateKits), so a duplicate resolves identically either way.
-        var creationsById = new Dictionary<string, WorldPrototype>(comparer: StringComparer.Ordinal);
-
-        for (var creationIndex = 0; (creationIndex < creations.Count); creationIndex++) {
-            if (creations[creationIndex] is { Id: not null } creationRow) {
-                _ = creationsById.TryAdd(
-                    key: creationRow.Id,
-                    value: creationRow
-                );
-            }
-        }
-
-        var kitsByName = new Dictionary<string, WorldKit>(comparer: StringComparer.Ordinal);
-
-        for (var kitIndex = 0; (kitIndex < definition.Kits.Count); kitIndex++) {
-            if (definition.Kits[kitIndex] is { Name: not null } kitRow) {
-                _ = kitsByName.TryAdd(
-                    key: kitRow.Name,
-                    value: kitRow
-                );
-            }
-        }
-
-        var staticPlacementInstanceCount = 0L;
-        var solidPlacementColliderCount = 0L;
-        // The BOARD facet carries a tabletop's frame; a topology admits at most one carrying placement (see
-        // WorldPlacementBoard's own doc) — tracked across the whole loop, never re-scanned per row.
-        var boardTopologies = new HashSet<string>(comparer: StringComparer.Ordinal);
-        // The one face derivation, read for both the per-face portal refusals below and the screen budget after the
-        // loop — never a second walk of (placements x declared faces) to answer the same questions.
-        var faces = WorldFaceCatalog.For(definition: definition);
-        // The id lookup a dealt child's parent resolves through.
+    private static void ValidatePlacements(WorldDefinition definition, IReadOnlyList<int>? rows, List<string> errors) {
+        var placements = definition.Placements;
+        var scope = DeclaredPlacementScope(definition);
+        var authoring = definition.Authoring;
+        var requiresField = WorldContactSelection.RequiresField(collision: definition.Collision);
+        var creationsById = FirstRowsByName(rows: definition.Creations, name: static row => row.Id?.Value);
+        var kitsByName = FirstRowsByName(rows: definition.Kits, name: static row => row.Name);
         var placementsById = WorldPlacementIndex.ById(placements: placements);
-        var childCounts = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         var slotCounts = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-        var occupiedSlots = new HashSet<(string Parent, int Slot)>();
 
-        foreach (var child in placements) {
-            if ((child is { Id: not null, Parent: { } parent }) && placementsById.TryGetValue(key: parent, value: out var template) && WorldPlacementDeal.IsChild(parent: template, placement: child)) {
-                childCounts[parent] = (childCounts.GetValueOrDefault(key: parent) + 1);
-            }
-        }
-
-        for (var index = 0; (index < placements.Count); index++) {
+        foreach (var index in RowOrdinals(placements.Count, rows)) {
             var placement = placements[index];
             var path = $"placements[{index}]";
 
@@ -1558,13 +1495,6 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            RequireUniqueName(
-                value: placement.Id,
-                seen: ids,
-                path: path,
-                field: "id",
-                errors: errors
-            );
             ValidatePlacementSpatial(
                 errors: errors,
                 path: path,
@@ -1597,8 +1527,6 @@ public static partial class WorldDefinitionValidator {
                 }
                 if ((placement.DealSlot is not { } slot) || (slot < 0) || (slot >= slots)) {
                     errors.Add(item: $"{path}.dealSlot must name a slot in parent '{parentRow!.Id}' (0..{(slots - 1)}).");
-                } else if (!occupiedSlots.Add(item: (parentRow!.Id, slot))) {
-                    errors.Add(item: $"{path}.dealSlot {slot} is already occupied under parent '{parentRow.Id}'.");
                 }
             } else if (placement.DealSlot is not null) {
                 errors.Add(item: $"{path}.dealSlot is reserved for a child of a deal template.");
@@ -1626,7 +1554,7 @@ public static partial class WorldDefinitionValidator {
 
             RequireDeclared(
                 value: placement.PrototypeId,
-                declaredSet: prototypeIds,
+                declaredSet: scope.PrototypeIds,
                 path: path,
                 field: "prototypeId",
                 rowNoun: "creation",
@@ -1689,7 +1617,7 @@ public static partial class WorldDefinitionValidator {
             // per-copy constraint to gate; only patch resolution and the shared gain/radius bounds.
             ValidateEmission(
                 emission: placement.Emission,
-                patchIds: patchIds,
+                patchIds: scope.PatchIds,
                 path: $"{path}.emission",
                 errors: errors
             );
@@ -1701,74 +1629,12 @@ public static partial class WorldDefinitionValidator {
                     errors: errors
                 );
 
-                if (TryFindRow(
-                    key: placement.PrototypeId,
-                    map: creationsById,
-                    row: out var solidCreation
-                )) {
-                    // A shape carrying domain ops compiles one collider PER EXPANDED COPY, so the ceiling counts the
-                    // expansion, not the authored shape count. A fold with no rigid-copy expansion has no contact
-                    // geometry at all under EITHER provider — the analytic one would collide against one copy of
-                    // geometry the renderer draws several times, and the field one throws out of
-                    // CreationStampEmitter.EmitFixed at boot — so the expansion refusal is ungated while the
-                    // analytic collider ceiling below is not.
-                    //
-                    // A row carrying a response facet (WorldPlacementResponse) can show any of several creations at
-                    // runtime — the ceiling counts the WORST CASE across every variant (the row's own base plus each
-                    // response entry's target), never just the authored one, so a swap can never push live collision
-                    // past what validation admitted.
-                    var shapeColliders = 0L;
-
-                    foreach (var variantId in SolidVariantIds(placement: placement)) {
-                        if (!TryFindRow(
-                            key: variantId,
-                            map: creationsById,
-                            row: out var variantCreation
-                        )) {
-                            continue;
-                        }
-
-                        if ((StateBinding.Parse(token: variantCreation.Document.SizeBy) is { Key: StateBinding.BodyKey }) && (placement.Attach is null)) {
-                            errors.Add(item: $"{path}.solid creation '{variantId}' sizeBy needs an attached body for '$body'.");
-                        }
-                        var variantColliders = RefuseSolidVariantShapes(
-                            creation: variantCreation,
-                            errors: errors,
-                            path: path,
-                            variantId: variantId
-                        );
-
-                        shapeColliders = Math.Max(val1: shapeColliders, val2: variantColliders);
+                foreach (var variantId in SolidVariantIds(placement: placement)) {
+                    if (!TryFindRow(key: variantId, map: creationsById, row: out var variantCreation)) { continue; }
+                    if ((StateBinding.Parse(token: variantCreation.Document.SizeBy) is { Key: StateBinding.BodyKey }) && (placement.Attach is null)) {
+                        errors.Add(item: $"{path}.solid creation '{variantId}' sizeBy needs an attached body for '$body'.");
                     }
-
-                    // The field provider compiles every solid row into ONE program instead of one collider per copy,
-                    // so the analytic ceiling does not describe what it costs. Synchronized children use their
-                    // template reservation; editable children pay their actual cost beside the remaining reserve.
-                    if (!requiresField && (!isDealtChild || (parentRow!.Deal!.Preserve is { Prototype: true } or { Facets: true }))) {
-                        var copies = ReservedPlacementCopies(
-                            ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L),
-                            childCounts: childCounts,
-                            placement: placement
-                        );
-                        var contribution = CreationStampLattice.MultiplySaturated(
-                            ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L),
-                            left: copies,
-                            right: shapeColliders
-                        );
-                        var previousColliderCount = solidPlacementColliderCount;
-
-                        solidPlacementColliderCount = Math.Min(
-                            val1: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L),
-                            val2: (solidPlacementColliderCount + contribution)
-                        );
-
-                        if (
-                            (previousColliderCount <= WorldPlacementPolicy.MaxSolidPlacementColliders) &&
-                            (solidPlacementColliderCount > WorldPlacementPolicy.MaxSolidPlacementColliders)
-                        ) {
-                            errors.Add(item: $"{path}.solid expands the document past the {WorldPlacementPolicy.MaxSolidPlacementColliders}-collider analytic-placement ceiling; reduce lattice counts, mirror copies, or creation shapes.");
-                        }
-                    }
+                    _ = RefuseSolidVariantShapes(creation: variantCreation, errors: errors, path: path, variantId: variantId);
                 }
             }
 
@@ -1802,9 +1668,9 @@ public static partial class WorldDefinitionValidator {
                     definition: definition,
                     errors: errors,
                     inhabit: inhabit,
-                    kitNames: kitNames,
+                    kitNames: scope.KitNames,
                     kitsByName: kitsByName,
-                    lookNames: lookNames,
+                    lookNames: scope.LookNames,
                     path: $"{path}.inhabit",
                     placement: placement
                 );
@@ -1817,38 +1683,6 @@ public static partial class WorldDefinitionValidator {
                 }
 
 
-                var inhabitMax = inhabit.DeclaredMax(peerCapacity: Math.Max(val1: 0, val2: (definition.Population.Capacity - definition.Population.LocalSeats)));
-
-                if (inhabitMax > 0) {
-
-                }
-            }
-
-            if (
-                !isAnimated &&
-                (placement.Inhabit is null) &&
-                (!isDealtChild || (parentRow!.Deal!.Preserve is { Prototype: true } or { Facets: true }))
-            ) {
-                // A scope-free static stamp materializes one engine instance PER SHAPE (the tight-bound emission
-                // split — Puck.World.Authoring.CreationStampEmitter.PerCopyInstanceCount), so the ceiling charges
-                // copies × that factor.
-                var perCopyInstances = ((animatedCreation is { } staticCreation)
-                    ? Puck.World.Authoring.CreationStampEmitter.PerCopyInstanceCount(document: staticCreation.Document)
-                    : 1
-                );
-                var contribution = checked((ReservedPlacementCopies(
-                    ceiling: (SdfProgramBuilder.MaxInstances + 1L),
-                    childCounts: childCounts,
-                    placement: placement
-                ) * perCopyInstances));
-                var previousInstanceCount = staticPlacementInstanceCount;
-
-                staticPlacementInstanceCount = Math.Min(
-                    val1: (SdfProgramBuilder.MaxInstances + 1L),
-                    val2: (staticPlacementInstanceCount + contribution)
-                );
-
-
             }
 
             // The per-instance FACE overrides: each names a declared creation face, no duplicates. The View source's
@@ -1859,7 +1693,6 @@ public static partial class WorldDefinitionValidator {
                 faceSources: placement.FaceSources,
                 placement: placement,
                 creationsById: creationsById,
-                faces: faces,
                 scope: scope,
                 path: $"{path}.faceSources",
                 errors: errors
@@ -1909,7 +1742,6 @@ public static partial class WorldDefinitionValidator {
                 board: placement.Board,
                 definition: definition,
                 path: path,
-                boardTopologies: boardTopologies,
                 errors: errors
             );
 
@@ -1970,7 +1802,7 @@ public static partial class WorldDefinitionValidator {
                     errors: errors,
                     path: $"{path}.contribution",
                     placement: placement,
-                    prototypeIds: prototypeIds
+                    prototypeIds: scope.PrototypeIds
                 );
             }
 
@@ -1981,7 +1813,7 @@ public static partial class WorldDefinitionValidator {
                     errors: errors,
                     placement: placement,
                     placementPath: path,
-                    prototypeIds: prototypeIds
+                    prototypeIds: scope.PrototypeIds
                 );
             } else if (placement.Holding != 0) {
                 errors.Add(item: $"{path}.holding is {placement.Holding} on a row without respond — it records which response entries hold.");
@@ -1996,24 +1828,72 @@ public static partial class WorldDefinitionValidator {
                     errors: errors,
                     path: path,
                     placement: placement,
-                    prototypeIds: prototypeIds
+                    prototypeIds: scope.PrototypeIds
                 );
             }
         }
+    }
 
-        // Every row's PARENT chain, checked once across the whole set rather than per row (a cycle or a distributed/
-        // scaled parent is a cross-row fact, not a single row's own shape).
+    // Reservations depend on the placement set. They use declarations and counts without validating sibling rows.
+    private static HashSet<string> ValidatePlacementReservations(WorldDefinition definition, List<string> errors) {
+        var placements = definition.Placements;
+        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var topologies = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var occupiedSlots = new HashSet<(string Parent, int Slot)>();
+        var byId = WorldPlacementIndex.ById(placements);
+        var childCounts = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        var analytic = !WorldContactSelection.RequiresField(definition.Collision);
+        var colliders = 0L;
+        const long Limit = WorldPlacementPolicy.MaxSolidPlacementColliders + 1L;
+        var creationCounts = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
+        var creations = FirstRowsByName(rows: definition.Creations, name: static row => row.Id?.Value);
+
+        if (analytic) {
+            foreach (var child in placements) {
+                if ((child is { Id: not null, Parent: { } parent }) && byId.TryGetValue(parent, out var template) &&
+                    WorldPlacementDeal.IsChild(parent: template, placement: child)) {
+                    childCounts[parent] = childCounts.GetValueOrDefault(parent) + 1;
+                }
+            }
+        }
+        for (var index = 0; index < placements.Count; index++) {
+            if (placements[index] is not { } placement) { continue; }
+            var path = $"placements[{index}]";
+            RequireUniqueName(value: placement.Id, seen: ids, path: path, field: "id", errors: errors);
+            if (placement.Board is { Topology: { Length: > 0 } topology } && !topologies.Add(topology)) {
+                errors.Add(item: $"{path}.board.topology '{topology}' is already carried by another placement.");
+            }
+            var parent = placement.Parent is { } parentId ? byId.GetValueOrDefault(parentId) : null;
+            var dealt = WorldPlacementDeal.IsChild(parent: parent, placement: placement);
+            if (dealt && placement.DealSlot is { } slot && !occupiedSlots.Add((parent!.Id, slot))) {
+                errors.Add(item: $"{path}.dealSlot {slot} is already occupied under parent '{parent.Id}'.");
+            }
+            if (!analytic || placement.Solid is null || colliders == Limit ||
+                (dealt && parent!.Deal!.Preserve is not ({ Prototype: true } or { Facets: true }))) { continue; }
+
+            var shapeColliders = 0L;
+
+            foreach (var variant in SolidVariantIds(placement)) {
+                if (!creationCounts.TryGetValue(variant, out var count)) {
+                    count = creations.TryGetValue(variant, out var creation)
+                        ? RefuseSolidVariantShapes(creation: creation, errors: null, path: path, variantId: variant)
+                        : 0;
+                    creationCounts.Add(variant, count);
+                }
+                shapeColliders = Math.Max(shapeColliders, count);
+            }
+            var copies = ReservedPlacementCopies(ceiling: Limit, childCounts: childCounts, placement: placement);
+            colliders = Math.Min(Limit, colliders + CreationStampLattice.MultiplySaturated(ceiling: Limit, left: copies, right: shapeColliders));
+            if (colliders == Limit) {
+                errors.Add(item: $"{path}.solid expands the document past the {WorldPlacementPolicy.MaxSolidPlacementColliders}-collider analytic-placement ceiling; reduce lattice counts, mirror copies, or creation shapes.");
+            }
+        }
         if (!WorldPlacementFrameCompilation.TryValidate(placements: placements, reason: out var parentReason)) {
             errors.Add(item: $"placements: {parentReason}");
         }
-
-
-        // No census-fit rule: networkPlayers is a remote admission CAP, not a static reservation an
-        // inhabitant competes with. An inhabitant is a peer that JOINS a free slot; total occupancy is bounded by the
-        // entity table itself, and a genuinely full table is rejected loudly at JOIN time (a runtime fact the static
-        // document validator cannot know), never pre-rejected here.
         return ids;
     }
+
     // The deal facet (see WorldPlacementDeal): the dealt row and the variant row must be declared keyed rows, the
     // region must materialize a fixed instance count at least the dealt row's capacity, every prototype a child could
     // show must be a declared static creation, and the template carries none of the facets a child cannot copy.

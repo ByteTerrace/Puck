@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Numerics;
 using System.Text.Json.Serialization;
 using Puck.Maths;
@@ -45,7 +46,7 @@ namespace Puck.World;
 /// <param name="PrototypeId">The creation the placement shows/collides as while <paramref name="When"/> holds and no
 /// earlier entry does. Must resolve to a declared, non-animated creation row.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When, string PrototypeId) {
+public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When, [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Names)] string PrototypeId) {
     /// <summary>Returns the index of the entry a row shows: the lowest bit of <see cref="WorldPlacement.Holding"/>
     /// that names one of its <see cref="WorldPlacement.Respond"/> entries.</summary>
     /// <param name="placement">The placement.</param>
@@ -196,31 +197,6 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
             ? WorldPlacementChange.Facets
             : WorldPlacementChange.Appearance);
     }
-    /// <summary>Determines whether any entry of a row's response facet reads one of the named rows — a state
-    /// condition's row or comparand row, or a field condition's scalar row.</summary>
-    /// <param name="placement">The placement.</param>
-    /// <param name="rows">Determines whether a row name is one of the named rows.</param>
-    /// <returns><see langword="true"/> when an entry reads a named row.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="placement"/> or <paramref name="rows"/> is
-    /// <see langword="null"/>.</exception>
-    public static bool Reads(WorldPlacement placement, Func<string, bool> rows) {
-        ArgumentNullException.ThrowIfNull(argument: placement);
-        ArgumentNullException.ThrowIfNull(argument: rows);
-
-        foreach (var response in (placement.Respond ?? [])) {
-            var read = (response?.When switch {
-                WorldPlacementResponseCondition.StateCondition state => (rows(arg: state.State) || ((state.ComparandState is { } comparand) && rows(arg: comparand))),
-                WorldPlacementResponseCondition.FieldCondition { Value.Row: { } row } => rows(arg: row),
-                _ => false,
-            });
-
-            if (read) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }
 /// <summary>What a value delivery moved in a definition's placement rows
 /// (<see cref="WorldPlacementResponse.ComparePlacements"/>).</summary>
@@ -261,7 +237,11 @@ public abstract record WorldPlacementResponseCondition {
     /// <param name="Value">The scalar compared against (literal or state-row reference) — the same
     /// <see cref="WorldLatticeScalar"/> grammar a <c>fields.reactions</c> Transform/Expose condition already uses.</param>
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    public sealed record FieldCondition(string Field, [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison, WorldLatticeScalar Value) : WorldPlacementResponseCondition;
+    public sealed record FieldCondition(
+        [property: DocumentName(WorldNameKind.Field, WorldNameRole.Names)] string Field,
+        [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison,
+        WorldLatticeScalar Value
+    ) : WorldPlacementResponseCondition;
     /// <summary>A state-cell condition: compares <paramref name="State"/>'s cell (its slot cell when
     /// <paramref name="Key"/> is absent, else the cell at <paramref name="Key"/>) against
     /// <paramref name="Value"/>, or — when <paramref name="ComparandState"/> is authored instead — against another
@@ -283,11 +263,14 @@ public abstract record WorldPlacementResponseCondition {
     /// <paramref name="Key"/>. Refused when <paramref name="ComparandState"/> is absent.</param>
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed record StateCondition(
-        string State,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string State,
         [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison,
         float? Value = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ComparandState = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ComparandKey = null
     ) : WorldPlacementResponseCondition {
         /// <summary>Evaluates this condition against the live document — the one reading every consumer (the

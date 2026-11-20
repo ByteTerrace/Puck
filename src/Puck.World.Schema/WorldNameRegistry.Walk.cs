@@ -1,3 +1,5 @@
+using Puck.Abstractions.Documents;
+using System.Collections.Frozen;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -5,7 +7,7 @@ using System.Text.Json.Serialization.Metadata;
 
 namespace Puck.World;
 
-/// <summary>One name-shaped member of the document model that carries no module-scoped name, with the reason.</summary>
+/// <summary>One member of the document model that carries no module-scoped name, with the reason.</summary>
 /// <param name="Owner">The type declaring the member.</param>
 /// <param name="Member">The member's C# name.</param>
 /// <param name="Reason">Why the member is outside every <see cref="WorldNameKind"/>.</param>
@@ -16,32 +18,25 @@ public sealed record WorldNameExclusion(Type Owner, string Member, string Reason
 /// <param name="Field">The registration the path carries.</param>
 public sealed record WorldNameSite(string Path, WorldNameField Field);
 public static partial class WorldNameRegistry {
-    // Member names that read as a name position when their type is a plain string or string list; a member matching
-    // one of these must be registered or excluded.
-    private static readonly HashSet<string> NameShapedMembers = new(comparer: StringComparer.Ordinal) {
-        "Name", "State", "Row", "Topology", "Pattern", "Table", "Zones", "Zone", "Rule", "From", "To", "Draw",
-        "Source", "Attribute", "Occupancy", "Board", "Tokens", "Turn", "Verdict", "Legal", "Reach", "Held", "Counts",
-        "Best", "Move", "Plan", "Medium", "Family", "Field", "Binding", "Template", "ForEach", "Key", "FromKey", "SetKey",
-        "TargetKey", "ComparandKey", "ComparandState", "FromState", "FilterRow", "SpillRow", "ValuesFrom",
-        "PhaseOf", "CapacityRow", "RangeState", "HalfAngleState", "Set", "Left", "Right", "Codes",
-        "With", "Over", "Register", "Score", "Mask", "ReadersFrom", "Id", "Names", "Positions",
-        "Parent", "Placement", "Prototype",
-    };
-    private static readonly string[] NameShapedSuffixes = ["State", "Row", "Key", "Rule", "Table", "Pattern", "Zone", "Zones", "Topology", "Field", "Binding", "Expression", "PlacementId", "PrototypeId"];
-    private static readonly Lazy<Walk> Walked = new(valueFactory: static () => Walk.Run(fields: Fields));
+    // The expression converter names each flattened payload by its operation's PayloadShape,
+    // and each vector operand by its camel-cased discriminator.
+    internal static readonly FrozenDictionary<PayloadShape, Type> PayloadTypes = typeof(InstructionPayload).GetNestedTypes()
+        .ToFrozenDictionary(type => Enum.Parse<PayloadShape>(type.Name));
+    internal static readonly FrozenDictionary<string, Type> VectorTypes = typeof(VectorOperand).GetNestedTypes()
+        .ToFrozenDictionary(type => JsonNamingPolicy.CamelCase.ConvertName(type.Name), StringComparer.Ordinal);
+
+    internal static WorldModelMember KeyClock => KeyClockMember.Value;
+    private static readonly Lazy<WorldModelMember> KeyClockMember = new(() =>
+        WorldModelShape.Of(typeof(IWorldKeyTrack))!.Properties.Single(property => property.Member == nameof(IWorldKeyTrack.Clock)));
+
+    private static readonly Lazy<Walk> Walked = new(valueFactory: static () => Walk.Run(typeof(WorldDefinition)));
 
     /// <summary>Gets every JSON path a registered member reaches, in document order.</summary>
     public static IReadOnlyList<WorldNameSite> Sites => Walked.Value.Sites;
-    /// <summary>Gets every name-shaped member that is neither registered nor excluded, each as
+    /// <summary>Gets every unclassified text or name member, each as
     /// <c>path (Owner.Member)</c>; empty when the registry covers the model.</summary>
     public static IReadOnlyList<string> Uncovered => Walked.Value.Uncovered;
 
-    /// <summary>Returns the uncovered members under an alternative registration list — the control a law uses to
-    /// prove the check bites when a field is dropped.</summary>
-    /// <param name="fields">The registrations to check the model against.</param>
-    /// <returns>Every name-shaped member the list leaves neither registered nor excluded.</returns>
-    public static IReadOnlyList<string> UncoveredUnder(IReadOnlyList<WorldNameField> fields) =>
-        Walk.Run(fields: fields).Uncovered;
     /// <summary>Gets every path a registered member reaches in a value of one model type, rooted at that type: the
     /// positions a value a writer submits on its own (a placement, a section's defaults) carries, which the write
     /// door's laws enumerate.</summary>
@@ -50,7 +45,7 @@ public static partial class WorldNameRegistry {
     public static IReadOnlyList<WorldNameSite> SitesUnder(Type root) {
         ArgumentNullException.ThrowIfNull(argument: root);
 
-        return Walk.Run(fields: Fields, root: root).Sites;
+        return Walk.Run(root).Sites;
     }
     /// <summary>Renders the registry as the Markdown document <c>docs/world-name-registry.md</c> holds.</summary>
     /// <returns>The document text, LF-terminated.</returns>
@@ -60,7 +55,7 @@ public static partial class WorldNameRegistry {
 
         _ = output.Append(value: "# World name registry\n\n");
         _ = output.Append(value: "Generated by `puck registry` from `WorldNameRegistry` over `WorldJsonContext`; do not hand-edit.\n");
-        _ = output.Append(value: "`puck registry --check` fails when this file disagrees with the model.\n\n");
+        _ = output.Append(value: "`puck registry --check` checks every text position for a declared meaning and compares this file with the model.\n\n");
         _ = output.Append(value: "Every document field that carries a declared name, and the kind of name it carries. `[]` is a list\n");
         _ = output.Append(value: "element; `[name]` is a `$type` arm; `{tokens}` is an expression's postfix\n");
         _ = output.Append(value: "spelling; `{row}` is a reaction scalar's row form. A path ending in `…` re-enters a shape listed above it.\n");
@@ -78,7 +73,7 @@ public static partial class WorldNameRegistry {
                     : site.Field.Facet.ToString())} | `{TypeName(type: site.Field.Owner)}.{site.Field.Member}` |\n"));
         }
 
-        _ = output.Append(value: "\n## Name-shaped fields carrying no module name\n\n| Path | Member | Reason |\n|---|---|---|\n");
+        _ = output.Append(value: "\n## Literal text and names outside module qualification\n\n| Path | Member | Reason |\n|---|---|---|\n");
 
         foreach (var (path, owner, member, reason) in walk.Excluded) {
             _ = output.Append(value: $"| `{path}` | `{TypeName(type: owner)}.{member}` | {reason} |\n");
@@ -117,81 +112,11 @@ public static partial class WorldNameRegistry {
         return (property.DeclaringType, property.Name);
     }
 
-    // A state row is converter-backed, so its metadata lists no properties; the converter reads the record's own
-    // init-able members by camel-cased name, which is what the walk reflects here.
-    internal static IReadOnlyList<(string JsonName, Type DeclaringType, string Member, Type PropertyType)> ReflectedRowMembers(Type type) =>
-        RowMembers.GetOrAdd(
-            key: type,
-            valueFactory: static type => {
-                var members = new List<(string JsonName, Type DeclaringType, string Member, Type PropertyType)>();
-
-                foreach (var property in type.GetProperties(bindingAttr: BindingFlags.Public | BindingFlags.Instance)) {
-                    if (
-                        (property.SetMethod is null) ||
-                        property.IsDefined(
-                        attributeType: typeof(System.Text.Json.Serialization.JsonIgnoreAttribute),
-                        inherit: true
-                    )
-                    ) {
-                        continue;
-                    }
-
-                    members.Add(item: (JsonNamingPolicy.CamelCase.ConvertName(name: property.Name), (property.DeclaringType ?? type), property.Name, property.PropertyType));
-                }
-
-                return members;
-            }
-        );
-
-    // A light's and a sky layer's name, which a render section key addresses it by: each kind's own member, since
-    // every kind declares it.
-    private static WorldNameExclusion[] SectionKeyNames => [
-        .. new[] { typeof(WorldRenderLight.Directional), typeof(WorldRenderLight.Rim), typeof(WorldRenderLight.Point), typeof(WorldRenderLight.Spot), typeof(WorldRenderLight.Occluder) }
-            .Select(selector: static owner => new WorldNameExclusion(Member: "Name", Owner: owner, Reason: "a light name a section key addresses")),
-        .. new[] { typeof(WorldRenderSkyLayer.Gradient), typeof(WorldRenderSkyLayer.SunDisc), typeof(WorldRenderSkyLayer.Stars), typeof(WorldRenderSkyLayer.Clouds), typeof(WorldRenderSkyLayer.Aurora), typeof(WorldRenderSkyLayer.Noise), typeof(WorldRenderSkyLayer.Pattern), typeof(WorldRenderSkyLayer.Panorama), typeof(WorldRenderSkyLayer.Panel), typeof(WorldRenderSkyLayer.View), typeof(WorldRenderSkyLayer.Far) }
-            .Select(selector: static owner => new WorldNameExclusion(Member: "Name", Owner: owner, Reason: "a sky layer name a section key addresses")),
-    ];
-
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, IReadOnlyList<(string JsonName, Type DeclaringType, string Member, Type PropertyType)>> RowMembers = new();
-
-    /// <summary>Finds the registration for a member, or the implicit one its type carries: a
-    /// <see cref="BindableScalar"/>, <see cref="BindableColor"/>, <see cref="BindableAngle"/> or <c>IDocumentStateValue</c> member — a creation's
-    /// spatial value or identifier a state cell may stand in for — is a state binding wherever it sits.</summary>
-    /// <param name="declaringType">The type the member was found on.</param>
-    /// <param name="member">The member's C# name.</param>
-    /// <param name="propertyType">The member's declared type.</param>
-    /// <param name="field">The registration, when one applies.</param>
-    /// <returns><see langword="true"/> when the member carries a name.</returns>
-    public static bool TryResolve(Type declaringType, string member, Type propertyType, out WorldNameField field) => TryFind(
-        declaringType: declaringType,
-        field: out field,
-        member: member
-    ) || TryImplicit(declaringType: declaringType, member: member, propertyType: propertyType, field: out field);
-    // The registration a member's type carries when no explicit one names it; the walk that renders and checks the
-    // registry and the respelling that reads a document both resolve through it.
-    private static bool TryImplicit(Type declaringType, string member, Type propertyType, out WorldNameField field) {
-        field = null!;
-        var leaf = Unwrap(type: propertyType);
-
-        // A value a state cell may stand in for binds a row by its token, whatever member holds it.
-        if (
-            (leaf == typeof(BindableScalar)) ||
-            (leaf == typeof(BindableColor)) ||
-            (leaf == typeof(BindableAngle)) ||
-            typeof(Puck.Assets.Documents.IDocumentStateValue).IsAssignableFrom(c: leaf)
-        ) {
-            field = new WorldNameField(
-                Facet: WorldExportFacet.Binding,
-                Kind: WorldNameKind.State,
-                Member: member,
-                Owner: declaringType,
-                Role: WorldNameRole.Binding
-            );
-
-            return true;
-        }
-
-        return false;
+    private static WorldNameField? Implicit(Type declaringType, string member, Type propertyType) {
+        var leaf = ValueType(propertyType);
+        return leaf == typeof(BindableScalar) || leaf == typeof(BindableColor) || leaf == typeof(BindableAngle) || typeof(Puck.Assets.Documents.IDocumentStateValue).IsAssignableFrom(leaf)
+            ? new(declaringType, member, WorldNameKind.State, WorldNameRole.Binding, WorldExportFacet.Binding)
+            : null;
     }
 
     internal static Type Unwrap(Type type) {
@@ -207,110 +132,43 @@ public static partial class WorldNameRegistry {
         return type;
     }
 
-    private static bool IsNameShaped(Type propertyType, string member) {
-        var leaf = Unwrap(type: propertyType);
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldModelType, WorldModelMember[]> DocumentMembers = new();
 
-        if (
-            (leaf == typeof(CellName)) ||
-            (leaf == typeof(ExpressionProgram)) ||
-            (leaf == typeof(StateChannelRef)) ||
-            (leaf == typeof(BindableScalar)) ||
-            (leaf == typeof(BindableColor)) ||
-            (leaf == typeof(BindableAngle)) ||
-            (leaf == typeof(WorldLatticeScalar))
-        ) {
-            return true;
-        }
-
-        if (leaf != typeof(string)) {
-            return false;
-        }
-
-        if (NameShapedMembers.Contains(item: member)) {
-            return true;
-        }
-
-        foreach (var suffix in NameShapedSuffixes) {
-            if (
-                (member.Length > suffix.Length) &&
-                member.EndsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: suffix
-            )
-            ) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    internal static WorldModelMember[] MembersOf(WorldModelType shape) => DocumentMembers.GetValue(shape, static model => {
+        // The row converter reads its public writable properties. Ordinary objects follow the serializer.
+        var members = typeof(StateRow).IsAssignableFrom(model.Type) ? model.Properties : model.Members;
+        const WorldModelAccess Mask = WorldModelAccess.Read | WorldModelAccess.Write | WorldModelAccess.Ignored | WorldModelAccess.ExtensionData;
+        return [.. members.Where(property => (property.Access & Mask) == (WorldModelAccess.Read | WorldModelAccess.Write))];
+    });
 
     private sealed class Walk {
-        private readonly IReadOnlyList<WorldNameField> m_fields;
         private readonly List<Type> m_stack = [];
 
         public List<(string Path, Type Owner, string Member, string Reason)> Excluded { get; } = [];
         public List<WorldNameSite> Sites { get; } = [];
         public List<string> Uncovered { get; } = [];
 
-        private Walk(IReadOnlyList<WorldNameField> fields) => m_fields = fields;
-
-        private void Record(string path, Type declaringType, string member, Type propertyType) {
-            if (TryFind(declaringType: declaringType, field: out var field, fields: m_fields, member: member) ||
-                TryImplicit(declaringType: declaringType, member: member, propertyType: propertyType, field: out field)) {
-                Sites.Add(item: new WorldNameSite(
-                    Field: field,
-                    Path: path
-                ));
-
-                return;
-            }
-
-            var leaf = Unwrap(type: propertyType);
-
-            if (leaf == typeof(WorldLatticeScalar)) {
-                return;
-            }
-
-            if (ExclusionReason(
-                declaringType: declaringType,
-                member: member
-            ) is { } reason) {
-                Excluded.Add(item: (path, declaringType, member, reason));
-
-                return;
-            }
-
-            if (IsNameShaped(
-                member: member,
-                propertyType: propertyType
-            )) {
-                Uncovered.Add(item: $"{path} ({TypeName(type: declaringType)}.{member}: {Unwrap(type: propertyType).Name})");
+        private void Record(string path, WorldModelMember model) {
+            if (model.NameField is { } field) {
+                Sites.Add(new WorldNameSite(path, field));
+                if (model.IdentifierBinding is { } binding) { Sites.Add(new WorldNameSite(path, binding)); }
+            } else if (model.TextPurpose is { } purpose) {
+                Excluded.Add((path, model.DeclaringType, model.Member, purpose));
+            } else if (IsUncovered(model)) {
+                Uncovered.Add($"{path} ({TypeName(model.DeclaringType)}.{model.Member}: {model.Type.Name})");
             }
         }
         // A vector-operand member is itself a union whose arms carry names, so it expands one level further.
         private void RecordPayload(Type payload, string arm) {
-            foreach (var (jsonName, declaringType, member, propertyType) in ReflectedRowMembers(type: payload)) {
-                if (Unwrap(type: propertyType) != typeof(VectorOperand)) {
-                    Record(
-                        declaringType: declaringType,
-                        member: member,
-                        path: $"{arm}.{jsonName}",
-                        propertyType: propertyType
-                    );
-
+            foreach (var model in WorldModelShape.Of(payload)!.Properties) {
+                if (Unwrap(type: model.Type) != typeof(VectorOperand)) {
+                    Record($"{arm}.{model.Name}", model);
                     continue;
                 }
-                foreach (var operand in typeof(VectorOperand).GetNestedTypes(bindingAttr: BindingFlags.Public)) {
-                    var side = $"{arm}.{jsonName}[{JsonNamingPolicy.CamelCase.ConvertName(name: operand.Name)}]";
-
-                    foreach (var (operandJsonName, operandDeclaringType, operandMember, operandPropertyType) in ReflectedRowMembers(type: operand)) {
-                        Record(
-                            declaringType: operandDeclaringType,
-                            member: operandMember,
-                            path: $"{side}.{operandJsonName}",
-                            propertyType: operandPropertyType
-                        );
+                foreach (var (discriminator, operand) in VectorTypes.OrderBy(pair => pair.Key, StringComparer.Ordinal)) {
+                    var side = $"{arm}.{model.Name}[{discriminator}]";
+                    foreach (var property in WorldModelShape.Of(operand)!.Properties) {
+                        Record($"{side}.{property.Name}", property);
                     }
                 }
             }
@@ -323,9 +181,13 @@ public static partial class WorldNameRegistry {
             // its own. Enumerating them, rather than naming the name-bearing ones by hand, is what lets the
             // coverage check reach a payload member nothing registered. A subprogram's instructions are the same
             // shape, so both lists are recorded.
+            if (WorldKeyedValues.IsKeyable(type)) {
+                Record($"{path}.clock", KeyClock);
+                return;
+            }
             if (type == typeof(ExpressionProgram)) {
                 foreach (var list in new[] { $"{path}{{instructions}}", $"{path}{{subprograms}}{{instructions}}" }) {
-                    foreach (var payload in typeof(InstructionPayload).GetNestedTypes(bindingAttr: BindingFlags.Public)) {
+                    foreach (var payload in PayloadTypes.OrderBy(pair => pair.Key).Select(pair => pair.Value)) {
                         RecordPayload(
                             arm: $"{list}[{JsonNamingPolicy.CamelCase.ConvertName(name: payload.Name)}]",
                             payload: payload
@@ -345,12 +207,7 @@ public static partial class WorldNameRegistry {
             }
 
             if (type == typeof(WorldLatticeScalar)) {
-                Record(
-                    path: $"{path}{{row}}",
-                    declaringType: typeof(WorldLatticeScalar),
-                    member: nameof(WorldLatticeScalar.Row),
-                    propertyType: typeof(string)
-                );
+                Record($"{path}{{row}}", WorldModelShape.Of(type)!.Properties.Single(property => property.Member == nameof(WorldLatticeScalar.Row)));
 
                 return;
             }
@@ -384,48 +241,16 @@ public static partial class WorldNameRegistry {
 
             m_stack.Add(item: type);
 
-            if (typeof(StateRow).IsAssignableFrom(c: type)) {
-                foreach (var (jsonName, declaringType, member, propertyType) in ReflectedRowMembers(type: type)) {
-                    var childPath = $"{path}.{jsonName}";
-
-                    Record(
-                        declaringType: declaringType,
-                        member: member,
-                        path: childPath,
-                        propertyType: propertyType
-                    );
-                    VisitType(
-                        path: childPath,
-                        type: propertyType
-                    );
-                }
-
-                m_stack.RemoveAt(index: (m_stack.Count - 1));
-
-                return;
-            }
-
             switch (typeInfo.Kind) {
+                case JsonTypeInfoKind.None when typeof(StateRow).IsAssignableFrom(type):
                 case JsonTypeInfoKind.Object:
-                    foreach (var property in typeInfo.Members) {
-                        if (
-                            (property.Access & (WorldModelAccess.Read | WorldModelAccess.Write | WorldModelAccess.ExtensionData)) != (WorldModelAccess.Read | WorldModelAccess.Write)
-                        ) {
-                            continue;
-                        }
-
-                        var (declaringType, member) = (property.DeclaringType, property.Member);
+                    foreach (var property in MembersOf(typeInfo)) {
                         var childPath = ((path.Length == 0)
                             ? property.Name
                             : $"{path}.{property.Name}"
                         );
 
-                        Record(
-                            path: childPath,
-                            declaringType: declaringType,
-                            member: member,
-                            propertyType: property.Type
-                        );
+                        Record(childPath, property);
                         VisitType(
                             type: property.Type,
                             path: childPath
@@ -459,12 +284,12 @@ public static partial class WorldNameRegistry {
             m_stack.RemoveAt(index: (m_stack.Count - 1));
         }
 
-        public static Walk Run(IReadOnlyList<WorldNameField> fields, Type? root = null) {
-            var walk = new Walk(fields: fields);
+        public static Walk Run(Type root) {
+            var walk = new Walk();
 
             walk.VisitType(
                 path: string.Empty,
-                type: (root ?? typeof(WorldDefinition))
+                type: root
             );
 
             return walk;

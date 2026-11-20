@@ -133,165 +133,78 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // Expand only admitted section keys. In particular, a null key is a diagnostic, never a dereference in Expand.
-    private static (WorldRenderLighting? Lighting, WorldRenderSky? Sky) ValidateAndExpandRenderKeys(WorldDefinition definition, List<string> errors) {
-        var before = errors.Count;
-
-        ValidateRenderSectionKeys(definition: definition, errors: errors);
-
-        return ((errors.Count == before)
-            ? (WorldRenderKeys.Expand(lighting: definition.Render.Lighting), WorldRenderKeys.Expand(sky: definition.Render.Sky))
-            : (definition.Render.Lighting, definition.Render.Sky));
-    }
-    // A keyed section: its clock and keys together, every key's time as a value's, each key addressing a light or a
-    // layer the section names, of the same kind, stating only values a key may move, each a literal, and no field keyed
-    // both on its own and by the section.
-    private static void ValidateRenderSectionKeys(WorldDefinition definition, List<string> errors) {
+    private static WorldRenderLighting? ExpandValidatedLighting(WorldDefinition definition, List<string> errors) {
         var lighting = definition.Render.Lighting;
+        var start = errors.Count;
+
+        ValidateRenderKeys(definition, errors, "render.lighting", "light", "lights", lighting?.Clock,
+            lighting?.Lights, lighting?.Keys, static light => light.LightName, static key => key.At,
+            static key => key.Lights, ValidateLightKeyPart,
+            (key, path) => ValidateLightingKeyCurvature(lighting!, key, path, errors));
+        return errors.Count == start ? WorldRenderKeys.Expand(lighting) : lighting;
+    }
+
+    private static WorldRenderSky? ExpandValidatedSky(WorldDefinition definition, List<string> errors) {
         var sky = definition.Render.Sky;
+        var start = errors.Count;
 
-        ValidateSectionNames(
-            errors: errors,
-            names: (lighting?.Lights ?? []).Select(selector: static light => light?.LightName),
-            path: "render.lighting.lights"
-        );
-        ValidateSectionNames(
-            errors: errors,
-            names: (sky?.Layers ?? []).Select(selector: static layer => layer?.LayerName),
-            path: "render.sky.layers"
-        );
+        ValidateRenderKeys(definition, errors, "render.sky", "layer", "layers", sky?.Clock, sky?.Layers, sky?.Keys,
+            static layer => layer.LayerName, static key => key.At, static key => key.Layers, ValidateLayerKeyPart);
+        return errors.Count == start ? WorldRenderKeys.Expand(sky) : sky;
+    }
 
-        if ((lighting is not null) && ValidateSectionClock(
-            clock: lighting.Clock,
-            count: (lighting.Keys?.Count ?? 0),
-            definition: definition,
-            errors: errors,
-            path: "render.lighting",
-            timeOf: index => (lighting.Keys![index]?.At ?? 0d)
-        )) {
-            for (var index = 0; (index < lighting.Keys!.Count); index++) {
-                var key = lighting.Keys[index];
-                var keyPath = $"render.lighting.keys[{index}]";
-
-                if (key is null) {
-                    errors.Add(item: $"{keyPath} must be a key.");
-
-                    continue;
-                }
-
-                foreach (var (name, part) in (key.Lights ?? new Dictionary<string, WorldRenderLight>())) {
-                    var partPath = $"{keyPath}.lights.{name}";
-                    var target = lighting.Lights?.FirstOrDefault(predicate: light => string.Equals(
-                        a: light?.LightName,
-                        b: name,
-                        comparisonType: StringComparison.Ordinal
-                    ));
-
-                    if (target is null) {
-                        errors.Add(item: $"{partPath} names no light; a key addresses a light by the name render.lighting.lights gives it.");
-
-                        continue;
-                    }
-
-                    if (part is null) {
-                        errors.Add(item: $"{partPath} must be a light.");
-
-                        continue;
-                    }
-
-                    if (part.GetType() != target.GetType()) {
-                        errors.Add(item: $"{partPath} must keep the kind of the light it names; a key moves values, never a light's kind.");
-
-                        continue;
-                    }
-
-                    ValidateLightKeyPart(
-                        errors: errors,
-                        part: part,
-                        path: partPath,
-                        target: target
-                    );
-                }
-
-                if (key.Curvature is { } curvature) {
-                    foreach (var (field, value, own) in new (string, BindableScalar?, BindableScalar?)[] {
-                        ("cavity", curvature.Cavity, lighting.Curvature?.Cavity),
-                        ("rim", curvature.Rim, lighting.Curvature?.Rim),
-                        ("ink", curvature.Ink, lighting.Curvature?.Ink),
-                        ("inkLow", curvature.InkLow, lighting.Curvature?.InkLow),
-                        ("inkHigh", curvature.InkHigh, lighting.Curvature?.InkHigh),
-                    }) {
-                        RequireKeyScalar(
-                            errors: errors,
-                            own: own,
-                            path: $"{keyPath}.curvature.{field}",
-                            value: value
-                        );
-                    }
-
-                    RequireKeyColor(
-                        errors: errors,
-                        own: lighting.Curvature?.InkColor,
-                        path: $"{keyPath}.curvature.inkColor",
-                        value: curvature.InkColor
-                    );
-                }
-            }
+    // Section keys address a named member, keep its type, and move only the fields that member has not keyed itself.
+    private static void ValidateRenderKeys<TKey, TPart>(WorldDefinition definition, List<string> errors, string path,
+        string noun, string member, string? clock, IReadOnlyList<TPart>? parts, IReadOnlyList<TKey>? keys,
+        Func<TPart, string?> nameOf, Func<TKey, double> timeOf, Func<TKey, IReadOnlyDictionary<string, TPart>?> changesOf,
+        Action<TPart, TPart, string, List<string>> validatePart, Action<TKey, string>? validateKey = null)
+        where TKey : class where TPart : class {
+        ValidateSectionNames((parts ?? []).Select(part => part is null ? null : nameOf(part)), $"{path}.{member}", errors);
+        if (!ValidateSectionClock(definition, clock, keys?.Count ?? 0, index => keys![index] is { } key ? timeOf(key) : 0d, path, errors)) {
+            return;
         }
 
-        if ((sky is not null) && ValidateSectionClock(
-            clock: sky.Clock,
-            count: (sky.Keys?.Count ?? 0),
-            definition: definition,
-            errors: errors,
-            path: "render.sky",
-            timeOf: index => (sky.Keys![index]?.At ?? 0d)
-        )) {
-            for (var index = 0; (index < sky.Keys!.Count); index++) {
-                var key = sky.Keys[index];
-                var keyPath = $"render.sky.keys[{index}]";
+        var byName = FirstRowsByName(parts ?? [], nameOf);
 
-                if (key is null) {
-                    errors.Add(item: $"{keyPath} must be a key.");
-
-                    continue;
-                }
-
-                foreach (var (name, part) in (key.Layers ?? new Dictionary<string, WorldRenderSkyLayer>())) {
-                    var partPath = $"{keyPath}.layers.{name}";
-                    var target = sky.Layers?.FirstOrDefault(predicate: layer => string.Equals(
-                        a: layer?.LayerName,
-                        b: name,
-                        comparisonType: StringComparison.Ordinal
-                    ));
-
-                    if (target is null) {
-                        errors.Add(item: $"{partPath} names no layer; a key addresses a layer by the name render.sky.layers gives it.");
-
-                        continue;
+        for (var index = 0; index < keys!.Count; index++) {
+            var keyPath = $"{path}.keys[{index}]";
+            if (keys[index] is not { } key) {
+                errors.Add(item: $"{keyPath} must be a key.");
+                continue;
+            }
+            if (changesOf(key) is { } changes) {
+                foreach (var (name, part) in changes) {
+                    var partPath = $"{keyPath}.{member}.{name}";
+                    if (!byName.TryGetValue(name, out var target)) {
+                        errors.Add(item: $"{partPath} names no {noun}; a key addresses a {noun} by the name {path}.{member} gives it.");
+                    } else if (part is null) {
+                        errors.Add(item: $"{partPath} must be a {noun}.");
+                    } else if (part.GetType() != target.GetType()) {
+                        errors.Add(item: $"{partPath} must keep the kind of the {noun} it names; a key moves values, never a {noun}'s kind.");
+                    } else {
+                        validatePart(part, target, partPath, errors);
                     }
-
-                    if (part is null) {
-                        errors.Add(item: $"{partPath} must be a layer.");
-
-                        continue;
-                    }
-
-                    if (part.GetType() != target.GetType()) {
-                        errors.Add(item: $"{partPath} must keep the kind of the layer it names; a key moves values, never a layer's kind.");
-
-                        continue;
-                    }
-
-                    ValidateLayerKeyPart(
-                        errors: errors,
-                        part: part,
-                        path: partPath,
-                        target: target
-                    );
                 }
             }
+            validateKey?.Invoke(key, keyPath);
         }
     }
+
+    private static void ValidateLightingKeyCurvature(WorldRenderLighting lighting, WorldRenderLightingKey key, string path, List<string> errors) {
+        if (key.Curvature is not { } curvature) { return; }
+        foreach (var (field, value, own) in new (string, BindableScalar?, BindableScalar?)[] {
+            ("cavity", curvature.Cavity, lighting.Curvature?.Cavity),
+            ("rim", curvature.Rim, lighting.Curvature?.Rim),
+            ("ink", curvature.Ink, lighting.Curvature?.Ink),
+            ("inkLow", curvature.InkLow, lighting.Curvature?.InkLow),
+            ("inkHigh", curvature.InkHigh, lighting.Curvature?.InkHigh),
+        }) {
+            RequireKeyScalar(errors: errors, own: own, path: $"{path}.curvature.{field}", value: value);
+        }
+
+        RequireKeyColor(errors: errors, own: lighting.Curvature?.InkColor, path: $"{path}.curvature.inkColor", value: curvature.InkColor);
+    }
+
     private static void ValidateSectionNames(IEnumerable<string?> names, string path, List<string> errors) {
         var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
         var index = 0;

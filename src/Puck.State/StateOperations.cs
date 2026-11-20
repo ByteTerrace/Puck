@@ -167,7 +167,7 @@ public abstract record StateTransform {
     }
 
     /// <summary>Refreshes a knowledge board from its declared source and visibility mask; authority only.</summary>
-    public sealed record Observe(StateChannelRef Row) : StateTransform {
+    public sealed record Observe([property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Row) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(writes: [Row.Spelling]);
     }
@@ -184,8 +184,15 @@ public abstract record StateTransform {
     /// <param name="Count">How many tokens move in this one transfer, 1..<c>MaxTransferCount</c>,
     /// each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one,
     /// and a slice selection moves the keyed token's whole tail (its count is 1).</param>
-    public sealed record Transfer(StateChannelRef From, StateChannelRef To, ZoneSelector Selector = ZoneSelector.Key,
-        StateChannelRef? Key = null, bool InsertFirst = false, StateChannelRef? Draw = null, int Count = 1) : StateTransform {
+    public sealed record Transfer(
+        [property: DocumentName(WorldNameKind.Zone, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef From,
+        [property: DocumentName(WorldNameKind.Zone, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef To,
+        ZoneSelector Selector = ZoneSelector.Key,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef? Key = null,
+        bool InsertFirst = false,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] StateChannelRef? Draw = null,
+        int Count = 1
+    ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(writes: ((Draw is null)
             ? [From.Spelling, To.Spelling]
@@ -202,7 +209,13 @@ public abstract record StateTransform {
     /// <param name="Direction">A direction in the board's topology.</param>
     /// <param name="Pattern">A <c>patterns</c> row over the board's own raw values (kind Int).</param>
     /// <param name="Value">The replacement value written to every cell of the accepted prefix.</param>
-    public sealed record SetRay(StateChannelRef Row, StateChannelRef From, CellName Direction, StateChannelRef Pattern, long Value) : StateTransform {
+    public sealed record SetRay(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Row,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef From,
+        [property: DocumentText("a direction local to the row's topology")] CellName Direction,
+        [property: DocumentName(WorldNameKind.Pattern, WorldNameRole.Names)] StateChannelRef Pattern,
+        long Value
+    ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(writes: [Row.Spelling]);
     }
@@ -223,7 +236,18 @@ public abstract record StateTransform {
     /// <param name="PushPattern">The integer pattern selecting occupants that join the moving run.</param>
     /// <param name="StopPattern">The integer pattern selecting occupants that block the move.</param>
     /// <param name="Empty">The explicit symbol contributed by the first unoccupied cell.</param>
-    public sealed record PushRay(CellName Pool, CellName Cell, CellName Value, StateChannelRef From, CellName Topology, CellName Direction, StateChannelRef Pattern, StateChannelRef PushPattern, StateChannelRef StopPattern, long Empty) : StateTransform {
+    public sealed record PushRay(
+        [property: DocumentName(WorldNameKind.Pool, WorldNameRole.Names, WorldExportFacet.Action)] CellName Pool,
+        [property: DocumentText("a field local to its pool record")] CellName Cell,
+        [property: DocumentText("a field local to its pool record")] CellName Value,
+        [property: DocumentText("a lexical instance field selected by the enclosing pool iteration")] StateChannelRef From,
+        [property: DocumentName(WorldNameKind.Topology, WorldNameRole.Names)] CellName Topology,
+        [property: DocumentText("a direction local to its topology")] CellName Direction,
+        [property: DocumentName(WorldNameKind.Pattern, WorldNameRole.Names)] StateChannelRef Pattern,
+        [property: DocumentName(WorldNameKind.Pattern, WorldNameRole.Names)] StateChannelRef PushPattern,
+        [property: DocumentName(WorldNameKind.Pattern, WorldNameRole.Names)] StateChannelRef StopPattern,
+        long Empty
+    ) : StateTransform {
         /// <summary>Lists the pool whose instances the push moves: a pool shares the state namespace with the rows,
         /// which no pool may share a name with, and its cell field is the store the push writes.</summary>
         /// <returns>The pool's name, written.</returns>
@@ -234,7 +258,10 @@ public abstract record StateTransform {
     /// including rejections, so reopening it reproduces the permutation.</summary>
     /// <param name="Row">Any ordered zone or keyed row.</param>
     /// <param name="Draw">The integer streamDraw site supplying the samples.</param>
-    public sealed record Shuffle(StateChannelRef Row, StateChannelRef Draw) : StateTransform {
+    public sealed record Shuffle(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Row,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] StateChannelRef Draw
+    ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(writes: [Row.Spelling, Draw.Spelling]);
     }
@@ -243,7 +270,10 @@ public abstract record StateTransform {
     /// <param name="Row">A keyed or ordered numeric row for own-value sorting, or an ordered zone for attributes.</param>
     /// <param name="By">One or more distinct numeric key rows, each carrying its own direction. Attribute rows
     /// must share the zone's token domain. A sole key naming the target reads its own stored values.</param>
-    public sealed record Sort(StateChannelRef Row, IReadOnlyList<SortKey> By) : StateTransform {
+    public sealed record Sort(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Row,
+        IReadOnlyList<SortKey> By
+    ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
             reads: (By ?? []).Where(predicate: static key => (key is not null)).Select(selector: static key => key.Row.Spelling),
@@ -260,7 +290,12 @@ public abstract record StateTransform {
     /// key spelling a write accepts (a binding token, a registered key family, an expression key, or a
     /// <c>$cell:&lt;row&gt;:&lt;key&gt;</c> indirection).</param>
     /// <param name="Value">The value written to every masked cell.</param>
-    public sealed record WriteSet(StateChannelRef Row, StateChannelRef Set, StateChannelRef? SetKey = null, long Value = 0) : StateTransform {
+    public sealed record WriteSet(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Row,
+        [property: DocumentName(WorldNameKind.Positions, WorldNameRole.Names)] StateChannelRef Set,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef? SetKey = null,
+        long Value = 0
+    ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
             reads: [Set.Spelling],
@@ -279,8 +314,15 @@ public abstract record StateTransform {
     /// <param name="Direction">The direction a <see cref="BoardCombineOp.Shift"/> steps along.</param>
     /// <param name="Element">The point-group element an <see cref="BoardCombineOp.Image"/> carries through.</param>
     /// <param name="Value">The value written to every member; never the board's own <c>empty</c>.</param>
-    public sealed record BoardCombine(StateChannelRef Row, BoardCombineOp Operation, StateChannelRef? Left = null, StateChannelRef? Right = null,
-        string? Direction = null, string? Element = null, long Value = 1) : StateTransform {
+    public sealed record BoardCombine(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Row,
+        BoardCombineOp Operation,
+        [property: DocumentName(WorldNameKind.Positions, WorldNameRole.Names)] StateChannelRef? Left = null,
+        [property: DocumentName(WorldNameKind.Positions, WorldNameRole.Names)] StateChannelRef? Right = null,
+        [property: DocumentText("a direction or symmetry element local to its topology")] string? Direction = null,
+        [property: DocumentText("a direction or symmetry element local to its topology")] string? Element = null,
+        long Value = 1
+    ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
             reads: [.. Named(name: Left?.Spelling), .. Named(name: Right?.Spelling)],
@@ -293,7 +335,11 @@ public abstract record StateTransform {
     /// <param name="Row">The ordered zone.</param>
     /// <param name="From">The integer row the rank is read from.</param>
     /// <param name="FromKey">The cell of that row, or null for its slot cell.</param>
-    public sealed record Arrange(StateChannelRef Row, StateChannelRef From, StateChannelRef? FromKey = null) : StateTransform {
+    public sealed record Arrange(
+        [property: DocumentName(WorldNameKind.Zone, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Row,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] StateChannelRef From,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef? FromKey = null
+    ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
             reads: [From.Spelling],
@@ -307,14 +353,19 @@ public abstract record StateTransform {
     /// <param name="From">The placed value's cell: a literal cell key, or any dynamic key spelling a write accepts.</param>
     /// <param name="Lower">The enclosed range's inclusive low end; the board's empty value lies outside it.</param>
     /// <param name="Upper">The enclosed range's inclusive high end.</param>
-    public sealed record ClearEnclosed(StateChannelRef Row, StateChannelRef From, long Lower, long Upper) : StateTransform {
+    public sealed record ClearEnclosed(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Row,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef From,
+        long Lower,
+        long Upper
+    ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(writes: [Row.Spelling]);
     }
     /// <summary>Writes the normalized sum of 1 to <see cref="StateCapacity.MaxMixTerms"/> weighted vector terms.</summary>
     /// <param name="Into">The target vector cell or slot.</param>
     /// <param name="Terms">The weighted vector terms.</param>
-    public sealed record Mix(string Into, IReadOnlyList<VectorTerm> Terms) : StateTransform {
+    public sealed record Mix([property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] string Into, IReadOnlyList<VectorTerm> Terms) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
             reads: (Terms ?? []).Where(predicate: static term => (term is not null)).SelectMany(selector: static term => VectorSubject(spelling: term.From)),
@@ -325,7 +376,11 @@ public abstract record StateTransform {
     /// <param name="From">The source vector table.</param>
     /// <param name="Into">The target vector cell or slot.</param>
     /// <param name="Where">Optional boolean filter row.</param>
-    public sealed record Mean(string From, string Into, StateChannelRef? Where = null) : StateTransform {
+    public sealed record Mean(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] string From,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] string Into,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] StateChannelRef? Where = null
+    ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
             reads: [.. Named(name: From), .. Named(name: Where?.Spelling)],
@@ -341,7 +396,16 @@ public abstract record StateTransform {
     /// <param name="Where">Optional boolean row filter.</param>
     /// <param name="Exclude">Optional key to exclude from candidates.</param>
     /// <param name="Farthest">Whether to rank lower scores first.</param>
-    public sealed record Nearest(string From, string Query, StateChannelRef Into, int K, string? Threshold = null, StateChannelRef? Where = null, StateChannelRef? Exclude = null, bool Farthest = false) : StateTransform {
+    public sealed record Nearest(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] string From,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] string Query,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] StateChannelRef Into,
+        int K,
+        [property: DocumentText("a numeric threshold")] string? Threshold = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] StateChannelRef? Where = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef? Exclude = null,
+        bool Farthest = false
+    ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
             reads: [.. Named(name: From), .. VectorSubject(spelling: Query), .. Named(name: Where?.Spelling)],
@@ -353,7 +417,12 @@ public abstract record StateTransform {
     /// <param name="Key">The key to write.</param>
     /// <param name="From">The source vector.</param>
     /// <param name="UnlessWithin">Cosine similarity threshold in [0, 1].</param>
-    public sealed record Remember(StateChannelRef Into, StateChannelRef Key, string From, string UnlessWithin) : StateTransform {
+    public sealed record Remember(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] StateChannelRef Into,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef Key,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] string From,
+        [property: DocumentText("a numeric threshold")] string UnlessWithin
+    ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
             reads: VectorSubject(spelling: From),
@@ -376,9 +445,9 @@ public readonly record struct StateSubject(string Name, StateAccess Access);
 /// <param name="Row">The target itself for own-value sorting, or an attribute row over the zone's token domain.</param>
 /// <param name="Descending">Whether the greatest value comes first under this key.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record SortKey(StateChannelRef Row, bool Descending = false);
+public sealed record SortKey([property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] StateChannelRef Row, bool Descending = false);
 /// <summary>One term of a <see cref="StateTransform.Mix"/>: a vector operand with an integer weight.</summary>
 /// <param name="From">The vector operand.</param>
 /// <param name="Weight">The integer weight in [-1000, 1000] and non-zero.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record VectorTerm(string From, int Weight);
+public sealed record VectorTerm([property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] string From, int Weight);

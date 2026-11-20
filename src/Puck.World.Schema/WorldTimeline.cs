@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Hosting;
 using Puck.Maths;
@@ -32,11 +33,11 @@ public sealed record WorldTimelineSection(IReadOnlyList<WorldClock>? Clocks = nu
 /// stands for reads none while its row holds no number.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldClock(
-    string Name,
+    [property: DocumentName(WorldNameKind.Clock, WorldNameRole.Declares)] string Name,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? PeriodSeconds = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? SpanSeconds = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? StartSeconds = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldClockAnchor? Anchor = null
 ) {
     /// <summary>Gets whether the clock reads a state row rather than the tick.</summary>

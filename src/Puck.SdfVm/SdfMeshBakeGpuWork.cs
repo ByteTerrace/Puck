@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Memory;
 using Puck.Hosting.Jobs;
 using Puck.Maths;
 using Puck.Shaders;
@@ -241,25 +240,23 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     private static readonly BoundedWorkQueue<Action> Readers = new(concurrency: SdfGpuWork.SlotCount, run: static read => read());
 
     private void Read(SdfMeshBakeBatch batch, SdfGpuWorkReadback readback) {
-        try {
-            var length = readback.Length;
-            // The copy belongs to this answer alone: native storage from the bake's allocator, charged while it lasts
-            // (the shared pool allocates anything past a mebibyte afresh and drops it, which the samples are).
-            using var owner = MemoryAccount.Shared.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Workspace, name: "mesh-bake-readback");
-            using var bytes = new OwnedBuffer<byte>(allocator: m_bake.Library.Allocator, observer: owner);
+        SdfMeshPathBake.AnsweredSamples? samples = null;
 
+        try {
+            // The copy is native storage from the bake's allocator inside the readback reservation the batch's take
+            // granted it (SdfMeshPathBake.ReadbackBytes), so it never waits for room; its answers read it in place.
             try {
-                bytes.Resize(clear: false, length: length, preserve: false);
-                readback.Read(destination: bytes.GetSpan());
+                samples = m_bake.CopySamples(batch: batch, fill: static (destination, source) => source.Read(destination: destination), length: readback.Length, state: readback);
             } finally {
                 readback.Release();
             }
-            m_bake.Complete(batch: batch, samples: bytes.GetSpan());
+            m_bake.Complete(batch: batch, samples: samples);
         } catch (Exception exception) {
             // The batch's unanswered lattices go back to their groups, which dispatch them again.
             m_bake.Abandon(batch: batch, sampled: true);
             SdfMeshBakeReport.WorkFailed(exception: exception);
         } finally {
+            samples?.Release();
             SdfMeshPathBake.Progressed();
         }
     }

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.State;
@@ -56,7 +57,7 @@ public abstract record StateDomain {
     /// <param name="Row">The row whose keys this row's own keys are drawn from.</param>
     /// <param name="Ordered">Whether cell order carries gameplay meaning (a pile) rather than being incidental.</param>
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    public sealed record KeysOf(CellName Row, bool Ordered = false) : StateDomain;
+    public sealed record KeysOf([property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] CellName Row, bool Ordered = false) : StateDomain;
     /// <summary>One value per cell of a named <c>state.lattices</c> topology — the old <c>board</c> and <c>lattice</c>
     /// facets' shared shape. Which of the two storage strategies a row actually gets (sparse cells overlaying
     /// <see cref="Empty"/>, or the dense physical-field composite) is an implementation choice keyed on the row's own
@@ -67,7 +68,10 @@ public abstract record StateDomain {
     /// <param name="Empty">The value a sparse (board) cell reads before it is ever written; meaningless for the dense
     /// physical-field case, whose unwritten value is the field trait's own initial instead.</param>
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    public sealed record CellsOf(string Topology, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] long Empty = 0) : StateDomain;
+    public sealed record CellsOf(
+        [property: DocumentName(WorldNameKind.Topology, WorldNameRole.Names)] string Topology,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] long Empty = 0
+    ) : StateDomain;
     /// <summary>The history ring: the row keeps the last <see cref="Capacity"/> pushed values in slots keyed
     /// <c>0..Capacity-1</c>, oldest overwritten first — the old <c>history</c> facet.</summary>
     /// <param name="Capacity">How many pushes the ring keeps, from 1 to <see cref="StateCapacity.MaxCellsPerRow"/>.</param>

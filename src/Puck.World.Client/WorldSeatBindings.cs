@@ -1008,36 +1008,6 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         }
         return document;
     }
-    /// <summary>Gets the group the seat's composed <c>contexts</c> rows map a family state to — the first row
-    /// (document order) for that family and state — or <see langword="null"/> when the document authors none: the
-    /// state may still be published, but it moves the seat to no page.</summary>
-    /// <param name="slot">The 0-based seat slot.</param>
-    /// <param name="family">The admitted family name.</param>
-    /// <param name="state">The family state.</param>
-    public string? ContextGroup(int slot, string family, string state) {
-        if (((uint)slot) >= SeatCount) {
-            return null;
-        }
-
-        foreach (var row in m_seatContexts[slot]) {
-            if (
-                string.Equals(
-                a: row.Family,
-                b: family,
-                comparisonType: StringComparison.Ordinal
-            ) &&
-                string.Equals(
-                a: row.State,
-                b: state,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return row.Group;
-            }
-        }
-
-        return null;
-    }
     /// <summary>Describes a seat's full context derivation for the <c>player.bindings</c> read-back: each admitted
     /// family's current state with its matched row (winner or shadowed), the requested group, and the finally-resolved
     /// active group with its derivation step.</summary>
@@ -1215,14 +1185,6 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         m_seats[((((uint)slot) < SeatCount)
             ? slot
             : 0)].ViewFor(slot: slot);
-    /// <summary>The seat's currently delivered profile binding layer (see <see cref="SetProfileLayers"/>), or
-    /// <see langword="null"/> when it has none — the source of a player's own binding-bar LOOK preferences
-    /// (<see cref="BindingProfileDocument.BindingBar"/>).</summary>
-    /// <param name="slot">The 0-based seat slot.</param>
-    public BindingProfileDocument? ProfileBindings(int slot) => ((((uint)slot) < SeatCount)
-        ? m_profileBindings[slot]
-        : null
-    );
     /// <inheritdoc/>
     public void Reset(int slot) {
         if (((uint)slot) < SeatCount) {

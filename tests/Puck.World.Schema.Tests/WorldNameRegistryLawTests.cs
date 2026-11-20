@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Nodes;
 
 using Xunit;
@@ -237,23 +238,29 @@ public sealed class WorldNameRegistryLawTests {
             actual: File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n")
         );
     }
-    [Fact]
-    public void DroppingARegistrationLeavesItsMemberUncovered() {
-        var without = WorldNameRegistry.RegisteredFields
-            .Where(predicate: static field => !((field.Owner == typeof(ActionEffect.SetState)) && (field.Member == nameof(ActionEffect.SetState.State))))
-            .ToArray();
+    private sealed record Probe(
+        string Arbitrary,
+        IReadOnlyList<string> Items,
+        IReadOnlyDictionary<string, string> Map,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> Nested,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string Destination,
+        [property: DocumentText("display text")] string Caption
+    );
 
-        Assert.Equal(
-            expected: (WorldNameRegistry.RegisteredFields.Count - 1),
-            actual: without.Length
-        );
-        Assert.Contains(
-            collection: WorldNameRegistry.UncoveredUnder(fields: without),
-            filter: static line => line.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "rules[].effects[][setState].state ("
-            )
-        );
+    private sealed record Conflicting([property: DocumentName(WorldNameKind.State, WorldNameRole.Names), DocumentText("literal text")] string Value);
+
+    [Fact]
+    public void LiteralTextCannotMaskANamePosition() {
+        Assert.Throws<InvalidOperationException>(() => WorldNameRegistry.Describe(new WorldModelMember(
+            "value", typeof(string), typeof(Conflicting), nameof(Conflicting.Value), WorldModelAccess.Read | WorldModelAccess.Write)));
+    }
+
+    [Fact]
+    public void EveryStringPositionRequiresAnExplicitMeaning() {
+        var properties = typeof(Probe).GetProperties().Select(property => WorldNameRegistry.Describe(new WorldModelMember(
+            property.Name, property.PropertyType, typeof(Probe), property.Name, WorldModelAccess.Read | WorldModelAccess.Write))).ToArray();
+        Assert.Equal(["Arbitrary", "Items", "Map", "Nested"], properties.Where(WorldNameRegistry.IsUncovered).Select(property => property.Member));
+        Assert.Equal(WorldNameKind.State, properties.Single(property => property.Member == nameof(Probe.Destination)).NameField!.Kind);
     }
     [Fact]
     public void AFoldsFamilyAndItsBodysReadsAreBothVisited() {

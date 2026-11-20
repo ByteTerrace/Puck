@@ -146,25 +146,6 @@ public sealed class WorldTransformOwners {
             start: start
         );
     }
-    /// <summary>Parks one catalog body's reserved range and owes it.</summary>
-    /// <param name="table">The whole shared dynamic-transform table.</param>
-    /// <param name="catalogBase">The table slot the catalog's first body range starts at.</param>
-    /// <param name="avatar">The 0-based body index.</param>
-    /// <param name="moved">The frame's moved set.</param>
-    /// <param name="parkPosition">Where a hidden slot parks.</param>
-    public static void ParkBody(Span<DynamicTransform> table, int catalogBase, int avatar, SdfMovedTransforms moved, Vector3 parkPosition) {
-        ArgumentNullException.ThrowIfNull(argument: moved);
-
-        var (first, count) = WorldRigCatalog.BodySlots(avatar: avatar);
-
-        Park(
-            count: count,
-            moved: moved,
-            parkPosition: parkPosition,
-            start: (catalogBase + first),
-            table: table
-        );
-    }
     /// <summary>Parks a range of the table and owes it.</summary>
     /// <param name="table">The whole shared dynamic-transform table.</param>
     /// <param name="start">The range's first slot.</param>

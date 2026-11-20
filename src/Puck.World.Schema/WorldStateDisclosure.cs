@@ -138,44 +138,6 @@ public static class WorldStateDisclosure {
             rowOrdinal: ordinal
         ));
     }
-    /// <summary>Determines, from declarations alone, whether a document row can never withhold a cell from the
-    /// recipient: the row's own policy admits the recipient, the row declares no cell restriction
-    /// (<see cref="StateArena.DeclaresCellVisibility"/>), and no ordered zone containing it declares one or excludes
-    /// the recipient. Every door that answers a restricted row differently (a whole-row read or write, a
-    /// presentation binding, an observation's row list, a delta's row replacement) asks this one question, so its
-    /// answer never depends on which members are present or hidden now.</summary>
-    /// <param name="arena">The live store and its declarations.</param>
-    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="recipient">The recipient, or <see langword="null"/> for the public observer.</param>
-    /// <returns><see langword="true"/> when no cell of the row can be withheld from the recipient;
-    /// <see langword="false"/> when one can, or the ordinal names no row.</returns>
-    public static bool ReadsWholeRow(StateArena arena, int rowOrdinal, Principal? recipient) {
-        ArgumentNullException.ThrowIfNull(argument: arena);
-
-        return new Observer(arena: arena, recipient: recipient).ReadsWhole(rowOrdinal: rowOrdinal);
-    }
-    /// <summary>Returns what one row withholds from the recipient, read from the live store.</summary>
-    /// <param name="arena">The live store and its declarations.</param>
-    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
-    /// <param name="recipient">The recipient, or <see langword="null"/> for the public observer.</param>
-    /// <returns><see langword="null"/> when the row reads whole for the recipient (<see cref="ReadsWholeRow"/>);
-    /// otherwise the record, present whether zero or many cells are withheld now.</returns>
-    public static WorldWithheldRow? WithheldFrom(StateArena arena, int rowOrdinal, Principal? recipient) {
-        ArgumentNullException.ThrowIfNull(argument: arena);
-
-        var observer = new Observer(arena: arena, recipient: recipient);
-
-        if (observer.ReadsWhole(rowOrdinal: rowOrdinal)) { return null; }
-        var row = arena.Rows[rowOrdinal];
-        var rowReadable = observer.Allows(policy: row.Visibility);
-        var count = 0;
-        var cursor = 0;
-
-        while (arena.TryNextCell(rowOrdinal: rowOrdinal, cursor: ref cursor, key: out var key)) {
-            if (!rowReadable || !observer.CanRead(row: row, rowOrdinal: rowOrdinal, key: key)) { count++; }
-        }
-        return new WorldWithheldRow(Count: count, Policy: (row.Visibility?.Hidden ?? HiddenCells.Omit), WholeRow: !rowReadable);
-    }
 
     // A live audience admits only while every recipient reads it whole: a decision read from cells some recipient
     // cannot see would tell that recipient what they hold (whether its own write is admitted, whether a row

@@ -258,7 +258,7 @@ lever's setter moves it, with one exception listed among the gaps. It is
 the sum of two counters that only rise.
 
 **The definition's revisions.** `WorldClient.DefinitionRevision` moves at
-a definition delivery, and `WorldClient.ResponseRevision` when a state
+a definition delivery, and the client's response revision when a state
 delivery changes which creations placements show. A routed world has
 `WorldSessionMirror.DefinitionRevision` and
 `WorldSessionMirror.SnapshotRevision`. The second is assigned from the

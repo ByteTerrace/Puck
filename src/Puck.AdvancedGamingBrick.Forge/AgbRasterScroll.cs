@@ -22,11 +22,6 @@ namespace Puck.AdvancedGamingBrick.Forge;
 /// </para>
 /// </remarks>
 public sealed class AgbRasterScroll {
-    private const uint ControlAddress = 0x040000BAu;
-    private const uint DestinationAddress = 0x040000B4u;
-    private const uint ScrollAddress = 0x04000010u;
-    private const uint SourceAddress = 0x040000B0u;
-    private const uint UnitCountAddress = 0x040000B8u;
 
     /// <summary>Scanlines the table covers; the picture is this tall.</summary>
     public const int ScanlineCount = 160;
@@ -116,24 +111,24 @@ public sealed class AgbRasterScroll {
     /// source; writing the source alone while the channel is enabled changes nothing.</remarks>
     public void EmitRearm() {
         StoreHalf(
-            address: ControlAddress,
+            address: AgbAddresses.Dma0Control,
             value: 0x0000u
         );
         StoreWord(
-            address: SourceAddress,
+            address: AgbAddresses.Dma0Source,
             value: m_tableAddress
         );
         StoreWord(
-            address: DestinationAddress,
-            value: ScrollAddress
+            address: AgbAddresses.Dma0Destination,
+            value: AgbAddresses.Background0HorizontalOffset
         );
         StoreHalf(
-            address: UnitCountAddress,
+            address: AgbAddresses.Dma0Count,
             value: 2u
         );
         // Enable, horizontal-blank start, repeating, destination reloading each burst, source advancing through it.
         StoreHalf(
-            address: ControlAddress,
+            address: AgbAddresses.Dma0Control,
             value: 0xA260u
         );
     }
