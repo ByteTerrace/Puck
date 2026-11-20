@@ -146,10 +146,6 @@ public static class WorldScheduleCommands {
 
     /// <summary>Gets every admitted verb in ordinal order.</summary>
     public static IReadOnlyList<string> Admitted => [.. StepVerbs.Concat(second: ImmediateVerbs).Order(comparer: StringComparer.Ordinal)];
-    /// <summary>Gets every admitted immediate command in ordinal order.</summary>
-    public static IReadOnlyList<string> Immediate => [.. ImmediateVerbs.Order(comparer: StringComparer.Ordinal)];
-    /// <summary>Gets every admitted step that reaches the simulation, in ordinal order.</summary>
-    public static IReadOnlyList<string> Steps => [.. StepVerbs.Order(comparer: StringComparer.Ordinal)];
     /// <summary>Gets every verb a row may address a sibling world with, in ordinal order.</summary>
     public static IReadOnlyList<string> Addressable => [.. AddressableVerbs.Order(comparer: StringComparer.Ordinal)];
 

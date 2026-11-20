@@ -164,8 +164,6 @@ public static class WorldCallArguments {
     /// <summary>Gets every <c>discriminator.member</c> whose arms disagree on its form, in ordinal order. Such a
     /// member reads as <see cref="WorldArgumentForm.Unclassified"/>.</summary>
     public static IReadOnlyList<string> Conflicts => Table.Value.Conflicts;
-    /// <summary>Gets every classified member, keyed by its arm's discriminator and its JSON name.</summary>
-    public static IReadOnlyDictionary<(string Discriminator, string Member), WorldArgumentForm> Forms => Table.Value.Forms;
 
     // Cache the finite schema, never authored lookup keys. An editor can ask about arbitrarily many unknown
     // members over its lifetime; a negative entry for each would retain their source text indefinitely.

@@ -163,10 +163,6 @@ public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
 
     /// <inheritdoc/>
     public override ReadOnlySpan<OperandAddress> Addresses => m_addresses;
-    /// <summary>Gets the channel name.</summary>
-    public string Channel => m_operand.Channel;
-    /// <summary>Gets the dealt child's literal key, or <see langword="null"/>.</summary>
-    public string? ChildKey => m_operand.Key;
     /// <summary>Gets the live child-key indirection, or <see langword="null"/>.</summary>
     public CompiledCellRef? KeyFrom { get; }
     /// <summary>Gets the placement's id.</summary>
@@ -263,8 +259,6 @@ public sealed class WorldMachineMemoryOperand : WorldFactOperand {
         screen: screen
     );
 
-    /// <summary>Gets the memory address.</summary>
-    public int Address => m_operand.Address;
     /// <summary>Gets the screen index.</summary>
     public int Screen => m_operand.Screen;
 

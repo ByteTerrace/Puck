@@ -47,8 +47,6 @@ public readonly record struct WorldFieldNodeHandle {
         m_encodedOrdinal = checked((ordinal + 1));
     }
 
-    /// <summary>Gets whether this handle addresses a compiled node.</summary>
-    public bool IsValid => (m_encodedOrdinal > 0);
     /// <summary>Gets the node's stable execution ordinal, or <c>-1</c> for the default handle.</summary>
     public int Ordinal => (m_encodedOrdinal - 1);
 }
