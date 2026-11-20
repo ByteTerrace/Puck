@@ -136,7 +136,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     // Reads the live body policy and records it on the cursor, which decides a cut when the policy turns redacting.
     private WorldSinkDisclosure ObserveBodies() {
         var bodies = disclosure();
-        m_cursor.ObserveBodies(mode: bodies.Policy.Mode, radius: bodies.Policy.Radius);
+        m_cursor.ObserveBodies(bodies.Policy);
         return bodies;
     }
     // Queues the record a cut the cursor decided owes, once: the new generation, with no content. True when one was

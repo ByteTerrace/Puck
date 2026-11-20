@@ -103,9 +103,9 @@ public sealed class WorldDeliveryCursor {
     /// <summary>Records the body policy a delivery is redacted under, and cuts when it changes to one that redacts: a
     /// body the stream was shown may be one it is no longer shown. A body leaving the projection under an unchanged
     /// policy is no cut.</summary>
-    /// <param name="mode">The policy's mode.</param>
-    /// <param name="radius">The policy's radius, in metres, for <see cref="WorldObserverDisclosureMode.Radius"/>.</param>
-    public void ObserveBodies(WorldObserverDisclosureMode mode, float? radius) {
+    /// <param name="policy">The live body policy; its cadence never cuts.</param>
+    public void ObserveBodies(WorldObserverDisclosure policy) {
+        var (mode, radius) = (policy.Mode, policy.Radius);
         if (m_bodyMode is { } held && ((held != mode) || (m_bodyRadius != radius)) && (mode != WorldObserverDisclosureMode.All)) { Cut(); }
         m_bodyMode = mode;
         m_bodyRadius = radius;

@@ -199,10 +199,11 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
     // Observes the live body policy outside a snapshot: an install can turn it redacting while no snapshot follows (a
     // paused world), and the cut is owed with the document that carries it.
-    private void ObserveBodies() {
+    private WorldSinkDisclosure ObserveBodies() {
         var bodies = m_view.Bodies;
 
-        m_cursor.ObserveBodies(mode: bodies.Policy.Mode, radius: bodies.Policy.Radius);
+        m_cursor.ObserveBodies(bodies.Policy);
+        return bodies;
     }
     // Sends the record a cut the cursor decided owes, once: the new generation, with no content. True when one was sent,
     // after which the stream owes its whole disclosed document and a primer before anything newer.
@@ -393,7 +394,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         try {
             m_withheld = false;
             server.AttachCursor(observation.Session, m_cursor);
-            ObserveBodies();
+            _ = ObserveBodies();
 
             if (Tier == WorldDisclosureTier.Replica) {
                 DeliverReplicaDocument(delivered: DiscloseToReplica(definition: definition));
@@ -425,7 +426,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             // The rows travel through the same cursor and body policy as a whole document: a policy that moved with
             // the edit owes a cut, which the row path refuses so the document door primes it.
             server.AttachCursor(observation.Session, m_cursor);
-            ObserveBodies();
+            _ = ObserveBodies();
             if (Tier != WorldDisclosureTier.Replica) {
                 var time = server.DeliveryTime;
                 Present(ComposeProjection(out var cut, rows), Version, time.Tick, time.EngineTick);
@@ -456,10 +457,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             return;
         }
 
-        var bodies = m_view.Bodies;
-
-        m_cursor.ObserveBodies(mode: bodies.Policy.Mode, radius: bodies.Policy.Radius);
-
+        var bodies = ObserveBodies();
         var redacted = snapshot with { Entries = frame.Project(bodies) };
         var tick = snapshot.Tick;
         var engineTick = snapshot.EngineTick;
@@ -528,7 +526,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         try {
             server.AttachCursor(observation.Session, m_cursor);
-            ObserveBodies();
+            _ = ObserveBodies();
             if (Tier != WorldDisclosureTier.Replica) {
                 m_withheld = false;
                 Present(
