@@ -150,6 +150,34 @@ public static partial class WorldDefinitionLoader {
             return false;
         }
     }
+    /// <summary>Reads already-composed bytes as an edit of a running world, the bytes-level twin of
+    /// <see cref="TryLoadFileForEdit"/> for a document that arrived from somewhere other than a local file: parses
+    /// them, fills the document's first-fill draw sites for <paramref name="instanceIdentity"/> and settles its boot
+    /// values, and admits nothing. A refusal never throws.</summary>
+    /// <param name="utf8">The document's already-composed UTF-8 JSON bytes.</param>
+    /// <param name="sourceName">The bytes' own source name, echoed in every refusal.</param>
+    /// <param name="definition">The drawn, settled definition; <see langword="null"/> on refusal.</param>
+    /// <param name="reason">The named refusal, or empty on success.</param>
+    /// <param name="instanceIdentity">The instance identity used for first-fill draws.</param>
+    /// <param name="documentDirectory">The directory the document's relative paths resolve beside, which bytes carry no
+    /// trace of; <see langword="null"/> for a document that has none.</param>
+    /// <param name="keys">The installed world sampler, required for private draws.</param>
+    /// <returns>Whether the bytes parsed, drew and settled.</returns>
+    public static bool TryLoadForEdit(ReadOnlyMemory<byte> utf8, string sourceName, out WorldDefinition? definition, out string reason,
+        string instanceIdentity = BootInstanceName, string? documentDirectory = null, WorldDrawSampler? keys = null) {
+        definition = null;
+        try {
+            return (
+                TryDecode(json: out var json, reason: out reason, sourceName: sourceName, utf8: utf8) &&
+                WorldDefinitionFileSource.TryParseDocument(definition: out var parsed, reason: out reason, sourceName: sourceName, utf8: json) &&
+                TryPrepareBootValues(keys: keys, definition: (parsed! with { DocumentDirectory = documentDirectory }), instanceIdentity: instanceIdentity, reason: out reason, resolved: out definition, sourceName: sourceName)
+            );
+        } catch (Exception exception) {
+            definition = null;
+            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {WorldJsonPayload.Reason(exception: exception)}";
+            return false;
+        }
+    }
     /// <summary>Loads a file and retains the final, draw-resolved document's validation and programs — the one door
     /// every document file is admitted through: the boot, an instance start, a transfer's destination,
     /// <c>world.load</c>/<c>world.reload</c> with the replay drive's re-read of what they pinned, the owned-world

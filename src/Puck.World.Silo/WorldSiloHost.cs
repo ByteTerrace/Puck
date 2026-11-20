@@ -31,6 +31,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         // coverage read is enqueued at capture time, before later mutations, so its watermark can never include a
         // mutation absent from its bytes.
         public required RowPublicationQueue Publications { get; init; }
+        // The door this activation's published-definition reloads run through.
+        public required WorldReloadDoor Reloads { get; init; }
 
         public bool Initializing = true;
 
@@ -1436,6 +1438,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         Fence = fence,
                         Identity = identity,
                         Publications = new RowPublicationQueue(fence: fence, journalSegments: recovery.Root.Root.JournalSegmentCount, journalSequence: recovery.Root.Root.JournalSequence),
+                        Reloads = new WorldReloadDoor(echoes: m_reloadEchoes, link: link.ForConsole(row: m_reloadEchoes.ForRow(row: row.Name)), server: server),
                         LastCheckpointOrdinal = (checkpointBlob?.Ordinal ?? -1),
                         LastCheckpointOutcome = ((checkpointBlob is null)
                         ? "never captured"
