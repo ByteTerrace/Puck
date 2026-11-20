@@ -20,8 +20,9 @@ namespace Puck.World.Client;
 /// The same bindings resolve <c>render.indirect</c>'s source gains and receiver application controls.
 /// <para>
 /// The environment re-resolves only when its definition moves, a slot one of its bindings or state clocks reads
-/// moves, or the presented tick moves while it reads a tick clock or a moving anchor, or integrates a rate; every other frame copies
-/// the last resolution, and <see cref="Resolutions"/> counts the ones it made. A point light's anchor is resolved fresh
+/// moves; every other frame copies the last resolution, and <see cref="Resolutions"/> counts the ones it made. When only the
+/// presented tick moves, the literal rates the sky integrates (a cloud layer's drift, shear and spin, the star twinkle's
+/// phase) are integrated again in place, which is not a resolution. A point light's anchor is resolved fresh
 /// every frame.
 /// </para>
 /// </summary>
@@ -32,6 +33,10 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     private static readonly SdfSky Unauthored = new();
     private readonly List<(int Slot, double Value)> m_bound = [];
     private readonly WorldClockReads m_clocks = new();
+    // The literal rates the last resolution wrote into the stack, which a moved presented tick advances in place.
+    private readonly List<LiveIntegral> m_integrals = [];
+    // The literal rates the layer being written has integrated so far, which WriteLayer files under the layer's index.
+    private readonly List<LiveIntegral> m_layerIntegrals = [];
 
     private readonly WorldValueDomainGuard m_domains;
 
@@ -45,7 +50,6 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     private WorldRenderLighting? m_lighting;
     private WorldStateMirror? m_mirror;
     private int m_outputIndex;
-    private bool m_readsTick;
     private int m_resolutions;
     private int m_resolvedAt;
 
@@ -66,6 +70,12 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     /// <summary>Initializes a new instance of the <see cref="WorldEnvironmentResolve"/> class.</summary>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
     public WorldEnvironmentResolve(WorldValueDomainGuard domains) => m_domains = (domains ?? throw new ArgumentNullException(paramName: nameof(domains)));
+
+    private enum LiveField { Drift, Shear, Spin, Twinkle }
+
+    // A literal rate a sky layer's record carries as an integral, with the rate itself, so the integral is taken again at
+    // another presented tick without the document read. Layer is the stack index once WriteLayer has filed it.
+    private readonly record struct LiveIntegral(LiveField Field, int Layer, double Modulus, BindableScalar Scalar, BindableVector2 Vector);
 
     /// <summary>Gets how many times this resolver has resolved the environment rather than copying its last
     /// resolution.</summary>
@@ -116,7 +126,6 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         ) ||
             (mirror.Generation != m_generation) ||
             m_clocks.Moved(mirror: mirror) ||
-            (m_readsTick && (mirror.Presented != m_tick)) ||
             BoundSlotMoved(mirror: mirror)
         ) {
             m_mirror = mirror;
@@ -124,7 +133,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             m_layersRevision = (layers?.Revision ?? 0);
             m_bound.Clear();
             m_clocks.Clear();
-            m_readsTick = false;
+            m_integrals.Clear();
             Write(
                 atmosphere: definition.Render.Atmosphere,
                 environment: definition.Render.Environment,
@@ -156,6 +165,9 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             m_resolvedAt = mirror.Revision;
             m_tick = mirror.Presented;
             m_resolutions++;
+        } else if ((m_integrals.Count > 0) && (mirror.Presented != m_tick)) {
+            AdvanceIntegrals(mirror: mirror);
+            m_tick = mirror.Presented;
         }
 
         PrepareShadows(mirror, (shadows ?? WorldShadowSettings.From(render: definition.Render)), shadowSelection);
@@ -454,13 +466,14 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         return ((resolved.W < 0f) ? fallback : new DisplayColor(Rgba: resolved).ToScene().Linear);
     }
     // A rate integrated to the presented tick: a literal rate's offset moves with the tick as surely as a keyed one's.
-    private double Integrate(WorldStateMirror mirror, BindableScalar? rate, double modulus) {
+    // A keyed rate resolves again when its clock moves; a literal one is filed for AdvanceIntegrals under the field it feeds.
+    private double Integrate(WorldStateMirror mirror, BindableScalar? rate, double modulus, LiveField field) {
         if (rate is not { } value) {
             return 0d;
         }
 
         if (value.Keys is { } keys) { m_clocks.Note(mirror, keys.Clock, integrated: true); } else if ((value.Literal is { } literal) && (literal != 0f)) {
-            m_readsTick = true;
+            m_layerIntegrals.Add(item: new LiveIntegral(Field: field, Layer: -1, Modulus: modulus, Scalar: value, Vector: default));
         }
 
         return mirror.Integrate(
@@ -468,13 +481,13 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             rate: in value
         );
     }
-    private Vector2 Integrate(WorldStateMirror mirror, BindableVector2? rate, double modulus) {
+    private Vector2 Integrate(WorldStateMirror mirror, BindableVector2? rate, double modulus, LiveField field) {
         if (rate is not { } value) {
             return Vector2.Zero;
         }
 
         if (value.Keys is { } keys) { m_clocks.Note(mirror, keys.Clock, integrated: true); } else if ((value.Literal is { } literal) && (literal != Vector2.Zero)) {
-            m_readsTick = true;
+            m_layerIntegrals.Add(item: new LiveIntegral(Field: field, Layer: -1, Modulus: modulus, Scalar: default, Vector: value));
         }
 
         return mirror.Integrate(
@@ -482,6 +495,29 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             rate: in value
         );
     }
+    // The literal rates move with the presented tick alone, so the resolved sky's offsets and phase are integrated again
+    // in place, through the same mirror integration the full resolution used, rather than resolving every binding again.
+    private void AdvanceIntegrals(WorldStateMirror mirror) {
+        foreach (var live in m_integrals) {
+            switch (live.Field) {
+                case LiveField.Drift:
+                    m_resolvedSky.Parameters<SdfSkyClouds>(index: live.Layer).DriftOffset = mirror.Integrate(modulus: live.Modulus, rate: live.Vector);
+                    break;
+                case LiveField.Shear:
+                    m_resolvedSky.Parameters<SdfSkyClouds>(index: live.Layer).ShearOffset = mirror.Integrate(modulus: live.Modulus, rate: live.Vector);
+                    break;
+                case LiveField.Spin:
+                    m_resolvedSky.Parameters<SdfSkyClouds>(index: live.Layer).SpinAngle = ((float)mirror.Integrate(modulus: live.Modulus, rate: live.Scalar));
+                    break;
+                case LiveField.Twinkle:
+                    m_resolvedSky.Parameters<SdfSkyStars>(index: live.Layer).TwinklePhase = TwinklePhase(cycles: mirror.Integrate(modulus: live.Modulus, rate: live.Scalar));
+                    break;
+            }
+        }
+    }
+    private static float TwinklePhase(double cycles) => ((float)((cycles < 0d)
+        ? (cycles + 1d)
+        : cycles));
     // The one document-to-records writer. The lights seed from the pinned ones when the world authors no light list (the
     // pinned sun) and from nothing when it does, the sky from the unauthored one, and an absent field
     // takes its kind's default.
@@ -765,6 +801,8 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             return -1;
         }
 
+        m_layerIntegrals.Clear();
+
         var blend = WorldSkyLayers.BlendOf(layer: layer);
         var visibility = WorldSkyLayers.VisibilityOf(layer: layer);
         var tier = WorldSkyLayers.TierOf(layer: layer);
@@ -788,6 +826,10 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         if (at < 0) {
             return -1;
+        }
+
+        foreach (var live in m_layerIntegrals) {
+            m_integrals.Add(item: (live with { Layer = at }));
         }
 
         ref var record = ref into.LayerAt(index: at);
@@ -948,15 +990,12 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         // A sky with no visible twinkle bakes phase zero, so a still frame's record repeats.
         if (visible) {
-            var cycles = Integrate(
+            parameters.TwinklePhase = TwinklePhase(cycles: Integrate(
+                field: LiveField.Twinkle,
                 mirror: mirror,
                 modulus: 1d,
                 rate: rate
-            );
-
-            parameters.TwinklePhase = ((float)((cycles < 0d)
-                ? (cycles + 1d)
-                : cycles));
+            ));
         }
 
         return parameters;
@@ -999,16 +1038,19 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             site: site
         );
         parameters.DriftOffset = Integrate(
+            field: LiveField.Drift,
             mirror: mirror,
             modulus: SdfVolume.NoisePeriodCells,
             rate: clouds.Drift
         );
         parameters.ShearOffset = Integrate(
+            field: LiveField.Shear,
             mirror: mirror,
             modulus: SdfVolume.NoisePeriodCells,
             rate: clouds.Shear
         );
         parameters.SpinAngle = ((float)Integrate(
+            field: LiveField.Spin,
             mirror: mirror,
             modulus: Math.Tau,
             rate: clouds.Spin
