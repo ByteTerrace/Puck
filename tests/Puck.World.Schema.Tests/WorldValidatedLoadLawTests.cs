@@ -3,7 +3,8 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 /// <summary>
-/// One load produces one whole-document validation and one rule compilation, whatever the document's rows settle
+/// One load produces one whole-document validation (every unit of the document counted once) and one rule
+/// compilation, whatever the document's rows settle
 /// into and whatever the host overrides on the way in. Each law counts through its own attributed
 /// <see cref="WorldBootWork"/> ledger.
 /// </summary>
@@ -36,7 +37,7 @@ public sealed class WorldValidatedLoadLawTests {
         var after = Counts();
 
         Assert.NotNull(@object: admission);
-        Assert.Equal(actual: (after.Validations - before.Validations), expected: 1L);
+        Assert.Equal(actual: (after.Validations - before.Validations), expected: (long)WorldDefinitionValidator.UnitsIn(definition: SettlingDocument()));
         Assert.Equal(actual: (after.Compilations - before.Compilations), expected: 1L);
         // The receipt names the settled document, and settling it again is a fixpoint, so the server installs the
         // exact object validation read.
@@ -56,7 +57,7 @@ public sealed class WorldValidatedLoadLawTests {
         var after = Counts();
 
         Assert.NotNull(@object: admission);
-        Assert.Equal(actual: (after.Validations - before.Validations), expected: 1L);
+        Assert.Equal(actual: (after.Validations - before.Validations), expected: (long)WorldDefinitionValidator.UnitsIn(definition: SettlingDocument()));
         Assert.Equal(actual: (after.Compilations - before.Compilations), expected: 1L);
         Assert.Null(@object: admission.Definition.Host.Authority);
         Assert.Null(@object: admission.Definition.Host.Listen);

@@ -291,15 +291,19 @@ rows, [the checks](#checks) below are owed.
   composes to that revision's content pin as unchanged without parsing or
   sending it, and otherwise cuts the delta between the two revisions
   (`WorldReloadDelta.Between`). The authority reconstructs the next revision
-  (`TryReconstruct`) and merges it over the live document (`TryMergeOver`): a
-  member the session has not changed takes the source's, and any other merges
-  three ways, the source winning each row both changed. The verdict names those
-  rows and the members the reload changed.
+  (`TryReconstruct`) and merges it over the live document (`TryMergeOver`). An
+  ordinary keyed overlay visits the rows it changes, preserving the instances of
+  unchanged live rows. The source wins whenever both sides changed the same row
+  differently. The verdict names those rows and the members the reload changed.
 - **Undo follows the accepted edit.** A local file reload appends the overlay
   that actually installed to the same journal as console mutations
   (`WorldJournalEntry.TryCompose`). An unchanged reload advances the source
-  revision without adding an entry. Undo and reset leave the file on disk
-  alone. The checkpoint keeps the source revision independently of the undo
+  revision without adding an entry. An undo whose dropped entries changed only
+  creations in what shading reads and shade programs sets those rows back on
+  the live document and takes the presentation install a reload takes
+  (`WorldPersistence.DroppedPresentation`), keeping the session's state; any
+  other undo installs the replayed document whole. Undo and reset leave the
+  file on disk alone. The checkpoint keeps the source revision independently of the undo
   base so the next save merges against the source the authority last accepted.
 - **Prepared clients receive changed rows.** `WorldOutputHub.DeliverPresentation`
   sends changed creations and shades. `WorldDeliveryCursor` advances the
@@ -344,7 +348,8 @@ rows, [the checks](#checks) below are owed.
   load, its text check and the delta (`[world.reload] source`), then the
   authority's reconstruction, validation and install (`[world.rebuild]`).
   The loop's own `world.iteration` line counts the source work beside its
-  stages (compiles, compositions, the root members merged, documents read and
+  stages (compiles, compositions, root members composed, keyed rows merged on
+  reload, documents read and
   validations), so a reading of seconds and a reading of work come from one
   loop.
 

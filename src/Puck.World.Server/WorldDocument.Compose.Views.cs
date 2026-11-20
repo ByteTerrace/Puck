@@ -18,7 +18,7 @@ public sealed partial class WorldDocument {
             ViewsRaw = (views with {
                 Layouts = Upsert(
                     item: mutation.Layout,
-                    keyOf: static layout => layout.Name,
+                    keys: WorldRowKeys.ViewLayouts,
                     list: views.Layouts
                 ),
             }),
@@ -32,7 +32,7 @@ public sealed partial class WorldDocument {
 
         if (!Remove(
             key: mutation.Name,
-            keyOf: static layout => layout.Name,
+            keys: WorldRowKeys.ViewLayouts,
             list: views.Layouts,
             result: out var layouts
         )) {
@@ -54,7 +54,7 @@ public sealed partial class WorldDocument {
             ViewsRaw = (views with {
                 Graphs = Upsert(
                     item: mutation.Graph,
-                    keyOf: static graph => graph.Name,
+                    keys: WorldRowKeys.ViewGraphs,
                     list: (views.Graphs ?? [])
                 ),
             }),
@@ -68,7 +68,7 @@ public sealed partial class WorldDocument {
 
         if (!Remove(
             key: mutation.Name,
-            keyOf: static graph => graph.Name,
+            keys: WorldRowKeys.ViewGraphs,
             list: (views.Graphs ?? []),
             result: out var graphs
         )) {

@@ -6,9 +6,16 @@ public sealed partial class WorldRuleHost {
     private int[] m_poolCarrierLeftBody = [];
     private int[] m_poolCarrierRightBody = [];
 
-    private void InteractionCarriers(string name, StatePoolDescriptor? pool, CompiledPoolBodyCarrier? carrier, List<int> into, ref StateInstanceHandle[] snapshots, ref int[] bodies) {
+    private void InteractionCarriers(string name, bool trackPositions, StatePoolDescriptor? pool, CompiledPoolBodyCarrier? carrier, List<int> into, ref StateInstanceHandle[] snapshots, ref int[] bodies) {
         if (pool is null) {
-            Carriers(rowOrdinal: CarrierRowOrdinal(name: name), into: into);
+            var row = CarrierRowOrdinal(name: name);
+            Carriers(rowOrdinal: row, into: into);
+            if (trackPositions && row >= 0) {
+                // The same enumeration supplies the pairs and their position subscriptions. Multiple keys may spell one body.
+                if (!m_positionTags.TryGetValue(row, out var members)) { m_positionTags.Add(row, members = []); }
+                members.Clear();
+                foreach (var body in into) { members.Add(body); }
+            }
             return;
         }
         if (carrier is null) {

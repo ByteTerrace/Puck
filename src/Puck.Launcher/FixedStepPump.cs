@@ -40,7 +40,7 @@ public sealed class FixedStepPump {
         Withheld,
     }
 
-    private readonly Action? m_beforeStep;
+    private readonly Action<bool>? m_beforeStep;
     private readonly bool m_holdsClock;
     private readonly InputRouter m_inputRouter;
     private readonly Func<bool>? m_mayStep;
@@ -57,6 +57,10 @@ public sealed class FixedStepPump {
 
     /// <summary>Whether this pump has applied the input for a tick still in progress.</summary>
     public bool StepPending => m_pendingContext.StepTicks != 0;
+    /// <summary>Gets whether the simulation stands at a tick boundary: no step is in progress, or the one in progress can
+    /// no longer finish (<see cref="IFixedStepSimulation.StepInterrupted"/>). Console work runs only here, so no line
+    /// reads or writes a tick that is half stepped.</summary>
+    public bool AtTickBoundary => !StepPending || m_simulation.StepInterrupted;
     private ulong m_elapsedTicks;
 
     /// <summary>Initializes the pump over one simulation/router/registry triple and wires the Simulation-phase console
@@ -66,9 +70,11 @@ public sealed class FixedStepPump {
     /// <param name="registry">The command registry Simulation-phase entries apply through.</param>
     /// <param name="captureOriginTicks">The input clock's tick origin at pump construction — the pin newly captured
     /// input is measured against (see <see cref="CaptureOriginTicks"/>).</param>
-    /// <param name="beforeStep">Runs immediately before every step, ahead of its input snapshot — the host's console
-    /// drain, so a line released by the step just completed (a <c>world.wait</c> deadline) runs before the next step
-    /// rather than after the rest of a catch-up burst. <see langword="null"/> drains nothing between steps.</param>
+    /// <param name="beforeStep">Runs immediately before every step, ahead of its input snapshot — the host's control
+    /// phase, so a line released by the step just completed (a <c>world.wait</c> deadline) runs before the next step
+    /// rather than after the rest of a catch-up burst. Its argument is <see cref="AtTickBoundary"/>: before a step that
+    /// resumes one still in progress it is <see langword="false"/>, and the host drains no console line then.
+    /// <see langword="null"/> drains nothing between steps.</param>
     /// <param name="mayStep">Asked after <paramref name="beforeStep"/> and before every step; <see langword="false"/>
     /// ends this call's stepping and discards the whole steps still due (see <see cref="Advance"/>).
     /// <see langword="null"/> always steps.</param>
@@ -81,7 +87,7 @@ public sealed class FixedStepPump {
     /// <param name="timeline">The host's tick-cost and shed-step recorder, or null for an unobserved pump.</param>
     /// <exception cref="ArgumentNullException"><paramref name="simulation"/>, <paramref name="inputRouter"/> or
     /// <paramref name="registry"/> is <see langword="null"/>.</exception>
-    public FixedStepPump(IFixedStepSimulation simulation, InputRouter inputRouter, CommandRegistry registry, ulong captureOriginTicks, Action? beforeStep = null, Func<bool>? mayStep = null, bool holdsClock = true, IInputClock? wallClock = null, HostFrameTimeline? timeline = null) {
+    public FixedStepPump(IFixedStepSimulation simulation, InputRouter inputRouter, CommandRegistry registry, ulong captureOriginTicks, Action<bool>? beforeStep = null, Func<bool>? mayStep = null, bool holdsClock = true, IInputClock? wallClock = null, HostFrameTimeline? timeline = null) {
         ArgumentNullException.ThrowIfNull(argument: simulation);
         ArgumentNullException.ThrowIfNull(argument: inputRouter);
         ArgumentNullException.ThrowIfNull(argument: registry);
@@ -112,10 +118,10 @@ public sealed class FixedStepPump {
     /// <summary>The exact engine time this pump has advanced the simulation by.</summary>
     public ulong ElapsedTicks => m_elapsedTicks;
 
-    /// <summary>Drains the iteration's console even when no step is due. The first step reuses this drain; later
-    /// steps in a catch-up burst still drain before each input snapshot.</summary>
+    /// <summary>Runs the iteration's control phase even when no step is due. The first step reuses it; later steps in a
+    /// catch-up burst still run it before each input snapshot.</summary>
     public void BeginIteration() {
-        m_beforeStep?.Invoke();
+        m_beforeStep?.Invoke(AtTickBoundary);
         m_iterationDrained = true;
     }
     /// <summary>Creates the pump every launcher host loop drives: it drains the console before every step, holds the
@@ -127,8 +133,9 @@ public sealed class FixedStepPump {
     /// <param name="inputClock">The input clock whose current reading pins the capture origin, and the wall clock a
     /// burst is bounded by.</param>
     /// <param name="textSource">The console text source, whose administrative session can release the first step.</param>
-    /// <param name="controlPhase">The host loop's control phase, run before every step: it drains
-    /// <paramref name="textSource"/> and flushes the console output.</param>
+    /// <param name="controlPhase">The host loop's control phase, run before every step with
+    /// <see cref="AtTickBoundary"/>: at a boundary it drains <paramref name="textSource"/> and flushes the console
+    /// output.</param>
     /// <param name="terminal">The terminal whose exit request stops stepping.</param>
     /// <param name="inputBacklog">The standard-input backlog the first step is held on.</param>
     /// <param name="holdsClock">Whether the pump holds its clock for owed frames, as windowed and offscreen hosts
@@ -144,7 +151,7 @@ public sealed class FixedStepPump {
     /// of that point has run, however the writer chunked the pipe. The release is sampled before the drain: the reader
     /// releases only after queuing every line it read, so a release seen before the drain is a release whose lines the
     /// drain takes. Once one step has run, the gate never holds again.</remarks>
-    public static FixedStepPump? CreateHosted(IFixedStepSimulation? simulation, InputRouter? inputRouter, CommandRegistry registry, IInputClock inputClock, TextCommandSource textSource, Action controlPhase, TerminalControl terminal, StandardInputBacklog inputBacklog, bool holdsClock, HostFrameTimeline? timeline = null) {
+    public static FixedStepPump? CreateHosted(IFixedStepSimulation? simulation, InputRouter? inputRouter, CommandRegistry registry, IInputClock inputClock, TextCommandSource textSource, Action<bool> controlPhase, TerminalControl terminal, StandardInputBacklog inputBacklog, bool holdsClock, HostFrameTimeline? timeline = null) {
         ArgumentNullException.ThrowIfNull(argument: registry);
         ArgumentNullException.ThrowIfNull(argument: inputClock);
         ArgumentNullException.ThrowIfNull(argument: textSource);
@@ -163,9 +170,9 @@ public sealed class FixedStepPump {
         var started = false;
 
         return new FixedStepPump(
-            beforeStep: () => {
+            beforeStep: atBoundary => {
                 inputReleased = !inputBacklog.IsHolding;
-                controlPhase();
+                controlPhase(atBoundary);
             },
             captureOriginTicks: inputClock.NowTicks,
             holdsClock: holdsClock,
@@ -337,7 +344,7 @@ public sealed class FixedStepPump {
     // simulation's rate (read before the drain as ratePerSecond), when the host may not step, or when a holding pump's
     // simulation withholds it, spending withheldTicks of host time.
     private StepGate Gate(uint ratePerSecond, ulong withheldTicks) {
-        if (m_iterationDrained) { m_iterationDrained = false; } else { m_beforeStep?.Invoke(); }
+        if (m_iterationDrained) { m_iterationDrained = false; } else { m_beforeStep?.Invoke(AtTickBoundary); }
 
         if (StepPending) { return StepGate.Steps; }
 

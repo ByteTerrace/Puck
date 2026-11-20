@@ -85,6 +85,7 @@ public sealed partial class WorldBody {
             VerticalVelocityRemainder: m_verticalVelocityAccumulator.Remainder
         );
         sections.Clocks = new(
+            IdleSleepGravity: IdleSleepGravity,
             AsleepSinceTick: m_asleepSinceTick,
             ContactUpTurnRemainder: m_contactUpTurnAccumulator.Remainder,
             ContinuumConsumedThroughEngineTick: m_continuumConsumedThroughEngineTick,
@@ -341,6 +342,7 @@ public sealed partial class WorldBody {
         m_upTurnAccumulator = FixedRateAccumulator.FromRemainder(remainder: clocks.FieldUpTurnRemainder, ticksPerSecond: EngineTicksPerSecond);
         m_contactUpTurnAccumulator = FixedRateAccumulator.FromRemainder(remainder: clocks.ContactUpTurnRemainder, ticksPerSecond: EngineTicksPerSecond);
         m_asleepSinceTick = clocks.AsleepSinceTick;
+        IdleSleepGravity = clocks.IdleSleepGravity;
         m_sleepIdleTicks = clocks.SleepIdleTicks;
         // The island root is not written here: the population parks the restored body under it
         // (WorldPopulation.RestoreSleepingIslands, AdoptRestoredIsland), the one writer of island membership.

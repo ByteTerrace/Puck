@@ -5,13 +5,16 @@ using Xunit;
 namespace Puck.World.Server.Tests;
 
 /// <summary>
-/// One load of a world is one whole-document validation and one rule compilation, and installing it moves no state
+/// One load of a world is one whole-document validation (every unit of the document counted once) and one rule
+/// compilation, and installing it moves no state
 /// hash: a desktop boot, an instance start, a hosted activation read, and a checkpoint restore each pay once, even
 /// when the document's rows settle on the way in. Each law counts through its own attributed
 /// <see cref="WorldBootWork"/> ledger, so a class loading a document beside it moves nothing it reads.
 /// </summary>
 public sealed class WorldValidatedLoadLawTests : IDisposable {
     private readonly WorldBootWork m_work = new();
+    // What one whole-document validation of the settling document counts: every unit it holds.
+    private static long Units => WorldDefinitionValidator.UnitsIn(definition: SettlingDocument());
     // Every FreshProfiles call's own scratch directory, released together when the test instance is (a fresh
     // instance per [Fact], xUnit's default).
     private readonly List<IDisposable> m_scratch = [];
@@ -96,7 +99,7 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
             new WorldRenderEnvelope(), machines);
         var after = Counts();
 
-        Assert.Equal(actual: (after.Validations - before.Validations), expected: 1L);
+        Assert.Equal(actual: (after.Validations - before.Validations), expected: Units);
         Assert.Equal(actual: (after.Compilations - before.Compilations), expected: 1L);
         Assert.NotNull(@object: server.Definition.AuthoredState[^1].Cells![0].Clock);
     }
@@ -139,7 +142,7 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
         var after = Counts();
 
         Assert.NotNull(@object: instance);
-        Assert.Equal(actual: (after.Validations - before.Validations), expected: 1L);
+        Assert.Equal(actual: (after.Validations - before.Validations), expected: Units);
         Assert.Equal(actual: (after.Compilations - before.Compilations), expected: 1L);
         Assert.NotNull(@object: instance.Server.Definition.AuthoredState[^1].Cells![0].Clock);
     }
@@ -167,7 +170,7 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
 
         Assert.NotNull(value: recovery);
         Assert.NotNull(@object: recovery.Value.Admission);
-        Assert.Equal(actual: (loaded.Validations - before.Validations), expected: 1L);
+        Assert.Equal(actual: (loaded.Validations - before.Validations), expected: Units);
         Assert.Equal(actual: (loaded.Compilations - before.Compilations), expected: 1L);
 
         var definition = recovery.Value.Admission.Definition;
@@ -177,7 +180,7 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
             new WorldRenderEnvelope(), machines, identity.World.Value, admission: recovery.Value.Admission);
         var after = Counts();
 
-        Assert.Equal(actual: (after.Validations - before.Validations), expected: 1L);
+        Assert.Equal(actual: (after.Validations - before.Validations), expected: Units);
         Assert.Equal(actual: (after.Compilations - before.Compilations), expected: 1L);
         Assert.Same(definition.StateRaw, server.Definition.StateRaw);
     }
@@ -208,7 +211,8 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
 
         // The world is admitted once. Each owned-world identity the restore rehydrates is its own document and
         // carries its own validation, which retains no programs.
-        Assert.Equal((1L + checkpoint.OwnedWorlds.Documents.Count), (after.Validations - before.Validations));
+        Assert.Equal((Units + checkpoint.OwnedWorlds.Documents.Sum(selector: static document =>
+            (long)WorldDefinitionValidator.UnitsIn(definition: WorldDefinitionSerialization.Deserialize(utf8Json: document.DefinitionJson)))), (after.Validations - before.Validations));
         Assert.Equal(actual: (after.Compilations - before.Compilations), expected: 1L);
         Assert.Equal(
             expected: captured,

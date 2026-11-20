@@ -298,7 +298,7 @@ public sealed partial class WorldDocument {
                         Overrides = overrides,
                         TimeScale = commit.TimeScale,
                     }),
-                    keyOf: static graph => graph.Name,
+                    keys: WorldRowKeys.ViewGraphs,
                     list: (views.Graphs ?? [])
                 ),
             }),

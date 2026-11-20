@@ -39,6 +39,7 @@ namespace Puck.World.Server;
 /// after a teleport instead of steering continuously toward it.</param>
 /// <param name="FieldUpTurnRemainder">The solved-field up-turn rate accumulator's signed remainder.</param>
 /// <param name="ContactUpTurnRemainder">The measured-contact-normal turn accumulator's signed remainder.</param>
+/// <param name="IdleSleepGravity">The acceleration a sleeping kit last observed, or null for ordinary kit gravity.</param>
 /// <param name="AsleepSinceTick">The simulation tick at which the body fell asleep, or 0 while awake.</param>
 /// <param name="SleepIdleTicks">The consecutive idle engine ticks accumulated toward the authored sleep floor.</param>
 /// <param name="LastContactFieldVersion">The contact-field version observed by the body's latest advance: a
@@ -90,6 +91,7 @@ public readonly record struct WorldBodyIntegrationResidue(
     bool UpNeedsReseat,
     long FieldUpTurnRemainder,
     long ContactUpTurnRemainder,
+    FixedVector3? IdleSleepGravity,
     ulong AsleepSinceTick,
     ulong SleepIdleTicks,
     ulong LastContactFieldVersion,

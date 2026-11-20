@@ -439,12 +439,7 @@ public sealed class SdfMeshStore {
     public static bool WaitForWrites(TimeSpan timeout) => Writes.WaitIdle(timeout: timeout);
     // The writes no bake waits for (checkpoints, sample sets and the bounds' enforcement), run off the bake's workers on
     // at most two pool items, in the order they came, for every store of the process.
-    private static readonly BoundedWorkQueue<Action> Writes = CreateWrites();
-
-    private static BoundedWorkQueue<Action> CreateWrites() {
-        AppDomain.CurrentDomain.ProcessExit += static (_, _) => _ = Writes.WaitIdle(timeout: ExitDrain);
-        return new BoundedWorkQueue<Action>(concurrency: 2, run: static write => write());
-    }
+    private static readonly BoundedWorkQueue<Action> Writes = BoundedWorkQueue<Action>.DrainedAtExit(concurrency: 2, exitDrain: ExitDrain, run: static write => write());
 
     private enum Behind { Inline, Drop }
 

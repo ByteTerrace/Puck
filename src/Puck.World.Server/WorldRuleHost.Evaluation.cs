@@ -21,6 +21,7 @@ public sealed partial class WorldRuleHost {
         }
 
         InteractionCarriers(
+            trackPositions: interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance,
             into: lefts,
             name: interaction.Left,
             pool: interaction.LeftPool,
@@ -47,6 +48,7 @@ public sealed partial class WorldRuleHost {
             var rights = m_carrierScratchRight;
 
             InteractionCarriers(
+                trackPositions: true,
                 into: rights,
                 name: interaction.Right,
                 pool: interaction.RightPool,
@@ -227,11 +229,13 @@ public sealed partial class WorldRuleHost {
             );
         }
 
-        applied |= m_evaluator.Evaluate(
-            latch: m_interactionGateHeld,
-            rules: m_interactions,
-            stepTicks: stepTicks
-        );
+        if (m_interactions.Length != 0) {
+            applied |= m_evaluator.EvaluateDue(
+                latch: m_interactionGateHeld,
+                rules: m_interactions,
+                stepTicks: stepTicks
+            );
+        }
         FlushIdentityFacts();
         applied |= Host.PublishArena();
         if (applied) {

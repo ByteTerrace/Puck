@@ -415,7 +415,6 @@ public static partial class TestCommand {
                 if (matched.Length > 0) {
                     var inheritedState = ((((found["basis"] is not null) || (found["imports"] is not null)) &&
                         WorldCompileSession.Shared.TryCompose(
-                            chainBytes: out _,
                             composed: out var composedFound,
                             reason: out _,
                             rootBytes: Encoding.UTF8.GetBytes(s: found.ToJsonString()),

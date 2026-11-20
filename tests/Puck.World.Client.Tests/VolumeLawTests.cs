@@ -13,6 +13,10 @@ namespace Puck.World.Client.Tests;
 /// no slot. A volume never reaches the program: the emitted tape carries no instruction for it.
 /// </summary>
 public sealed class VolumeLawTests {
+    // The pool's volumes as the frame takes them (WorldFramePresenter): the articulated registrations' and then the
+    // rigid assets', which carry a creation without part motion.
+    private static List<SdfVolume> Packed(WorldCreationInstances pool) => [.. pool.Volumes, .. pool.RigidVolumes];
+
     private static readonly Vector3 NozzleOffset = new(
         x: 0.1f,
         y: 0.2f,
@@ -171,11 +175,11 @@ public sealed class VolumeLawTests {
 
         Assert.Equal(
             expected: 2,
-            actual: pool.Volumes.Count
+            actual: Packed(pool).Count
         );
 
-        var onNozzle = pool.Volumes[0];
-        var onRoot = pool.Volumes[1];
+        var onNozzle = Packed(pool)[0];
+        var onRoot = Packed(pool)[1];
 
         // The rigid nozzle and the volume share the root; its authored offset is baked into the volume.
         Assert.Equal(
@@ -366,14 +370,14 @@ public sealed class VolumeLawTests {
         );
         Assert.Equal(
             16,
-            pool.Volumes.Count
+            Packed(pool).Count
         );
         Assert.Equal(
             Enumerable.Range(
                 count: 16,
                 start: 0
             ).Select(selector: index => ((uint)index)),
-            pool.Volumes.Select(selector: volume => volume.Seed)
+            Packed(pool).Select(selector: volume => volume.Seed)
         );
     }
     [Fact]

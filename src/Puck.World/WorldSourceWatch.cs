@@ -107,7 +107,7 @@ public sealed class WorldSourceWatch {
                     : CompileInputs.ReadAllBytes(path: m_path));
 
                 if (document is not null) {
-                    _ = WorldCompileSession.Shared.TryCompose(catalog: m_catalog, catalogFingerprint: m_catalogFingerprint, chainBytes: out _, composed: out _, reason: out _, rootBytes: document, rootResolvedPath: m_path);
+                    _ = WorldCompileSession.Shared.TryCompose(catalog: m_catalog, catalogFingerprint: m_catalogFingerprint, composed: out _, reason: out _, rootBytes: document, rootResolvedPath: m_path);
                 }
             } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
                 // Keep the failed read's absent fact. A later file recovery takes the ordinary reload path.

@@ -9,7 +9,7 @@ public sealed partial class WorldServer {
     /// <returns>The operator capability for this addressed world.</returns>
     public WorldOperatorAuthority AcquireOperatorAuthority(OperatorContext context) {
         ArgumentNullException.ThrowIfNull(context);
-        lock (AuthorityGate) {
+        using (EnterAtTickBoundary()) {
             ThrowIfTickPending();
             if (!Grants.IsOperator(context.Invocation.Principal)) {
                 throw new InvalidOperationException("The invocation does not operate this world.");

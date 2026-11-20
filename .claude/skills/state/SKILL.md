@@ -47,6 +47,7 @@ corrected in the same change.
 | Reproducible dice, decks, generated text, Penrose patches, lookup tables | `GeneratorEngine`, `ArenaDraws`, `PenrosePatch`, `CompiledTable` (Generators); unbiased bounded draws come from `Puck.Maths` `BoundedRandomSampling` | [generators](../../../docs/reference/state/generators.md) |
 | Vector rows: nearest, mix, mean, remember | `ArenaVectorTransforms` (Vectors) | [vectors](../../../docs/reference/state/vectors.md) |
 | Legal moves, a computer opponent's best move, chance nodes | `ArenaSearch` over journal scopes, judged by `IArenaSearchJudge.Judge` (`RuleArenaSearchJudge`); world jobs are `search` rows (`WorldSearchSection`) | [search](../../../docs/reference/state/search.md) |
+| Schedule a distance or region interaction | `WorldRuleHost` supplies carrier rows, positions and sampled occupancy to `RuleDueList`. `RuleEvaluator.DrainFactMoves` delivers moves to both rule families. | [analysis](../../../docs/reference/state/analysis.md) |
 | Read and write sets, order-sensitive pairs, price a tick's worst case, skip rules whose inputs did not move | `RuleDataflow`, `RuleHazards`, `RuleWorkBudget`, `RuleSchedule` against `RuleCapacity.MaxWorkUnitsPerTick` | [analysis](../../../docs/reference/state/analysis.md) |
 | A host fact, effect or row family only your host understands | facets and families registered on the compile context; `ArenaEffectHost` as the base host | [hosting](../../../docs/reference/state/hosting.md) |
 | Decide what a recipient may read or write | `WorldRecipientView` over `WorldStateDisclosure`; mutation/guard admission in `WorldRecipientMutations`; audience enclosure in `StateArena.ReadAudienceEncloses` | [disclosure plan](../../../docs/plans/disclosure.md) |
@@ -189,8 +190,9 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   it spell (`WorldRowDeclarationNames`), every row a transform resolves to
   (`RuleCompiler.TryCollectTransformRows`; an unresolvable transform refuses), a
   placement's parent chain and the template every id on it spells as a dealt
-  child, every state name the installed value an upsert replaces or a removal
-  drops spells (`WorldRecipientView.AdmitsInstalled`), and, for a spatial guard,
+  child, every state name the installed value an upsert replaces, a removal
+  drops or a `Set*` replaces whole spells (`WorldRecipientView.AdmitsInstalled`,
+  the keyed row found by the key composition matches, `WorldRowKeys`), and, for a spatial guard,
   every placement that can enter a census. A guard over the document answers only
   a recipient whose read door hands it a replica document. A name-bearing member
   the registry or `WorldMutationNames.Fields` does not hold escapes the footprint,
@@ -227,7 +229,7 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 | Worst-case work fits a tick | `RuleWorkBudget` against `RuleCapacity.MaxWorkUnitsPerTick`, at load; the evaluator's deferred locals and the sheet read one `CompiledRule.Deferred`, and the world host's rule pass and the sheet's line places (`RuleWorkContributor.Order`) read one `RuleEvaluationOrder`. A host with another pass order builds its own |
 | A price is a function of declarations | `RuleCompileContext.RowCapacity`, the one room `IRuleCostContext` serves every fact, search price and rewind estimate; `RecipientOracleLawTests` compares two hidden-member variants. Nothing refuses a new price that reads storage instead |
 | A read audience encloses the destination's | `StateArena.ReadAudienceEncloses`, called by search and the disclosure transforms |
-| A recipient's write answers alike whether a row it spells is withheld or absent | `WorldRecipientMutations.Admits`, the one door, over a footprint read from the name registry; `WriteDoorNoninterferenceLawTests` respells every registered state position of a submitted value and every vocabulary entry, and refuses an uncovered mutation member or an unresolved replacing kind |
+| A recipient's write answers alike whether a row it spells is withheld or absent | `WorldRecipientMutations.Admits`, the one door, over a footprint read from the name registry; `WriteDoorFootprintLawTests` probes every registered state position of every submitted model type, every kind's classification (`WorldRecipientMutations.JudgedElsewhere`) and every replaced section; `WriteDoorNoninterferenceLawTests` runs every vocabulary entry end to end and refuses an uncovered mutation member |
 | A recipient's state write is validated only as far as its written rows reach | `WorldServer.ValidateStateTransaction`: the authority revalidates the whole document; a recipient's bound write runs `TryValidateWrittenBindings` through the transaction's `StateReadAccess` (values bound to the written row, then each placement binding it, admitted whole first); an identity-bound row is still validated whole. `BoundWriteValidationNoninterferenceLawTests` |
 | A host fact declares what a derived transient discloses | the compiler, through the abstract `CollectDisclosure` on `WorldFactOperand` and `WorldFactEffect`; `WorldRuleDisclosure.Classify` withholds an undeclared facet fact from every recipient but the authority; `CueDisclosureLawTests` |
 | Same input, same state | row digests in `StateArena.ComputeHash`; `puck test --reproduce` compares two runs and recomputes every tick |

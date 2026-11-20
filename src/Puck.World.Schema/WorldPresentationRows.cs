@@ -67,18 +67,21 @@ public sealed record WorldPresentationRows(WorldPresentationCreation[] Creations
             }
             creations = next;
         }
+        changed = held with { CreationsRaw = HasCreations ? creations ?? [] : null };
+        // ShadesRaw reads the table the uses derive, so it is set only when the delivery moves it: setting it back
+        // would replace the recipient's stored table with another instance, which reads as a shade change.
         var shades = held.ShadesRaw;
-        if (HasShades && Shades.Length != 0) {
+        if (!HasShades) {
+            if (shades is not null) { changed = changed with { ShadesRaw = null }; }
+        } else if (Shades.Length != 0) {
             var next = shades is null ? new Dictionary<string, SdfShadeDefinition>(StringComparer.Ordinal) : new(shades, StringComparer.Ordinal);
             foreach (var (name, row) in Shades) {
                 if (row is null) { next.Remove(name); } else { next[name] = row; }
             }
-            shades = next;
+            changed = changed with { ShadesRaw = next };
+        } else if (shades is null) {
+            changed = changed with { ShadesRaw = new Dictionary<string, SdfShadeDefinition>(StringComparer.Ordinal) };
         }
-        changed = held with {
-            CreationsRaw = HasCreations ? creations ?? [] : null,
-            ShadesRaw = HasShades ? shades ?? new Dictionary<string, SdfShadeDefinition>(StringComparer.Ordinal) : null
-        };
         return true;
     }
 

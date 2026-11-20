@@ -99,12 +99,6 @@ public sealed class StateReadAccess {
             ? declaration with { Draw = draw with { Source = null, Generator = null } }
             : declaration;
     }
-    /// <summary>Fails this access for an input its caller found unavailable through an admission the access cannot ask
-    /// itself: a declared set's read rows, or another name a unit the preparation validates spells. A restricted
-    /// access keeps the fault as any failed acquisition does; nothing clears it.</summary>
-    /// <exception cref="StateUnavailableException">Always.</exception>
-    [System.Diagnostics.CodeAnalysis.DoesNotReturn]
-    public void Refuse() => Unavailable();
     internal StateDomain Domain(StateReadRow row) => m_arena.Rows[Require(row)].EffectiveDomain;
     private void RequireNamed(string? name) {
         if (name is not null) { _ = ResolveRow(name); }

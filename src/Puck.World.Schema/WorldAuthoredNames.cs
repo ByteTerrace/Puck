@@ -8,8 +8,8 @@ namespace Puck.World;
 /// and is not read.
 /// <para>Both doors that hold an author's names to <see cref="GeneratedName"/> read this one walk: the compiler,
 /// which refuses either reserved spelling where the author wrote it, and the loader
-/// (<see cref="WorldDefinitionFileSource.TryParseDocument"/>), which refuses <see cref="GeneratedName.FileJoiner"/> in
-/// every document it parses (<see cref="TryRefuseFileJoiner"/>).</para></summary>
+/// (<see cref="WorldDefinitionFileSource.TryParseDocument(ReadOnlyMemory{byte}, string, out WorldDefinition?, out string)"/>), which refuses <see cref="GeneratedName.FileJoiner"/> in
+/// every document it parses (<see cref="TryRefuseFileJoiner(ReadOnlySpan{byte}, out string)"/>).</para></summary>
 public static class WorldAuthoredNames {
     private static readonly string[] NamedSections = ["destinations", "references"];
 
@@ -102,6 +102,30 @@ public static class WorldAuthoredNames {
     public static bool TryRefuseFileJoiner(JsonObject document, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
+        return TryRefuseFileJoinerCore(document: document, reason: out reason);
+    }
+    /// <summary>Refuses a document, read from its UTF-8 JSON, exactly as <see cref="TryRefuseFileJoiner(JsonObject, out string)"/>
+    /// refuses its tree. A document whose bytes hold neither <see cref="GeneratedName.FileJoiner"/> nor a JSON escape
+    /// that could spell it holds no name carrying it, so its tree is read only when they do.</summary>
+    /// <param name="utf8">The document's UTF-8 JSON, without a byte-order mark.</param>
+    /// <param name="reason">The refusal, naming the first such name and where it stands, or empty on success.</param>
+    /// <returns><see langword="true"/> when no authored name carries the character.</returns>
+    public static bool TryRefuseFileJoiner(ReadOnlySpan<byte> utf8, out string reason) {
+        if ((utf8.IndexOf(value: (byte)GeneratedName.FileJoiner) < 0) && (utf8.IndexOf(value: "\\u007"u8) < 0)) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        if (JsonNode.Parse(utf8Json: utf8) is not JsonObject document) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        return TryRefuseFileJoinerCore(document: document, reason: out reason);
+    }
+    private static bool TryRefuseFileJoinerCore(JsonObject document, out string reason) {
         var refusal = string.Empty;
 
         Visit(

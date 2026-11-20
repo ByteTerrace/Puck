@@ -131,8 +131,6 @@ public sealed partial class WorldPopulation {
         if (position < 0) { members.Insert(index: ~position, item: index); }
         m_sleepIndexDirty = true;
     }
-    private FixedVector3? SolvedSleepGravity(int index) =>
-        (((m_gravityField is { } gravity) && gravity.TryAcceleration(acceleration: out var acceleration, entityIndex: index)) ? acceleration : null);
 
     /// <summary>Parks a body a scoped replay restored under the island root its captured clocks name, as the
     /// checkpoint restore does for a whole population (<see cref="RestoreSleepingIslands"/>): a section restore never
@@ -142,7 +140,7 @@ public sealed partial class WorldPopulation {
     internal void AdoptRestoredIsland(int index, int rootPlusOne) {
         if ((rootPlusOne == 0) || m_sleepingBodies.Contains(item: index) || (m_entries[index] is not { Active: true, Body: not null })) { return; }
         ParkIslandMember(contactFieldVersion: m_sleepFieldVersion, index: index, rootPlusOne: rootPlusOne);
-        m_sleepGravity[index] = SolvedSleepGravity(index: index);
+        m_sleepGravity[index] = m_entries[index].Body!.SolvedGravity;
     }
 
     // Collects into m_island, in slot order, the rigid bodies the root's occupied rigid contacts join it to: the island
@@ -309,7 +307,7 @@ public sealed partial class WorldPopulation {
 
             foreach (var member in m_island) {
                 ParkIslandMember(contactFieldVersion: m_sleepFieldVersion, index: member, rootPlusOne: rootPlusOne);
-                m_sleepGravity[member] = SolvedSleepGravity(index: member);
+                m_sleepGravity[member] = m_entries[member].Body!.SolvedGravity;
             }
         }
     }

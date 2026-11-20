@@ -36,8 +36,7 @@ public static partial class WorldDefinitionFileSource {
             serveHeldImage: true,
             source: source,
             stack: out _,
-            touched: out _,
-            touchedPaths: out _
+            touched: out _
         )) {
             return false;
         }
@@ -54,7 +53,7 @@ public static partial class WorldDefinitionFileSource {
     // import layer) — what a derivation-preserving save diffs a target against; `composed` is the final tree.
     // `ancestors` is the resolution path from the top down to (not including) `resolvedPath`: a stack, not a global
     // visited set, so two imports independently reaching the same shared ancestor (a diamond) is never a cycle.
-    private static bool TryComposeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) => TryComposeLayersHeld(
+    private static bool TryComposeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out ComposedChain touched, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) => TryComposeLayersHeld(
         ancestors: ancestors,
         bytes: bytes,
         catalog: catalog,
@@ -70,12 +69,11 @@ public static partial class WorldDefinitionFileSource {
         serveHeldImage: serveHeldImage,
         source: source,
         stack: out stack,
-        touched: out touched,
-        touchedPaths: out touchedPaths
+        touched: out touched
     );
     // The composer as above, also handing back the image the composition was served from or held as (null when none
     // was held). With `parseHeld` false a served image is not parsed: `composed` is null and the image's bytes answer.
-    private static bool TryComposeLayersHeld(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) {
+    private static bool TryComposeLayersHeld(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out ComposedChain touched, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) {
         // Typed channel nodes are interpreted by alias/export walks before strict deserialization. Their malformed
         // shapes are document refusals here too, including for in-memory composition callers with no file wrapper.
         try {
@@ -95,22 +93,20 @@ public static partial class WorldDefinitionFileSource {
                 serveHeldImage: serveHeldImage,
                 source: source,
                 stack: out stack,
-                touched: out touched,
-                touchedPaths: out touchedPaths
+                touched: out touched
             );
         } catch (JsonException exception) {
             stack = null;
             composed = null;
             image = null;
-            touched = [];
-            touchedPaths = [];
+            touched = new ComposedChain();
             reach = 0;
             reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} contains an invalid document value: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
     }
-    private static bool TryComposeLayersCore(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) {
+    private static bool TryComposeLayersCore(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out ComposedChain touched, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) {
         image = null;
 
         var reads = new CompileInputLog();
@@ -118,8 +114,7 @@ public static partial class WorldDefinitionFileSource {
 
         stack = null;
         composed = null;
-        touched = [bytes];
-        touchedPaths = [resolvedPath];
+        touched = new ComposedChain();
         reach = 0;
 
         if (catalog is not null) {
@@ -178,18 +173,18 @@ public static partial class WorldDefinitionFileSource {
             reach: out var heldReach,
             resolvedPath: resolvedPath,
             source: source,
-            touched: out var heldTouched,
-            touchedPaths: out var heldTouchedPaths
+            touched: out var heldTouched
         )
         ) {
             composed = held;
             reach = heldReach;
             touched = heldTouched;
-            touchedPaths = heldTouchedPaths;
             reason = string.Empty;
 
             return true;
         }
+
+        touched.Add(link: new WorldComposedLink(bytes: bytes, path: resolvedPath));
 
         return TryComposeBody(
             ancestors: ancestors,
@@ -208,8 +203,7 @@ public static partial class WorldDefinitionFileSource {
             serveHeldImage: serveHeldImage,
             source: source,
             stack: out stack,
-            touched: touched,
-            touchedPaths: touchedPaths
+            touched: touched
         );
     }
     // Shares TryComposeLayers' cycle/depth walk and basis-then-imports-then-own-body recursion order, but collects
@@ -419,6 +413,10 @@ public static partial class WorldDefinitionFileSource {
         contentHash = string.Empty;
         WorldBootWork.Count(kind: WorldBootWork.Loads);
 
+        // The root's compile, every import's and every held image's proof ask about the same files: one pass reads
+        // each once.
+        using var pass = CompileInputs.Pass();
+
         if (!TryReadDocumentFile(
             content: out var read,
             countsFileRead: true,
@@ -434,11 +432,12 @@ public static partial class WorldDefinitionFileSource {
 
         var bytes = read!;
 
-        string json;
+        ReadOnlyMemory<byte> json;
 
         try {
-            // The hash below is over the raw bytes; the text is decoded as File.ReadAllText decodes the file.
-            json = DecodeJson(bytes: bytes);
+            // The hash below is over the raw bytes; the document is read from the text they decode to, as
+            // File.ReadAllText decodes the file, kept as UTF-8.
+            json = Puck.Confinement.FileContent.Utf8(content: bytes);
         } catch (Exception exception) {
             reason = $"cannot decode {shown}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
@@ -450,24 +449,19 @@ public static partial class WorldDefinitionFileSource {
         // model only ever sees the finished composition — with the consumed `basis`/`imports` members stripped,
         // which is why a live document's Basis/Imports are always null. The substring gate keeps flat documents on
         // the untouched single-parse path.
-        var chain = ((IReadOnlyList<byte[]>)[bytes]);
+        // The pin of a flat document is over its own bytes; a composition hands back its own.
+        var hash = string.Empty;
 
         if (
-            json.Contains(
-            comparisonType: StringComparison.Ordinal,
-            value: $"\"{WorldDocumentBasis.BasisMemberName}\""
-        ) ||
-            json.Contains(
-            comparisonType: StringComparison.Ordinal,
-            value: $"\"{WorldDocumentBasis.ImportsMemberName}\""
-        )
+            (json.Span.IndexOf(value: "\"basis\""u8) >= 0) ||
+            (json.Span.IndexOf(value: "\"imports\""u8) >= 0)
         ) {
-            if (!TryComposeChainJson(
+            if (!TryComposeChainBytes(
                 source: (documents ?? LocalDocuments),
                 rootResolvedName: PuckPaths.Normalize(path: path),
                 rootBytes: bytes,
                 composedJson: out var composed,
-                chainBytes: out var chainBytes,
+                contentPin: out var composedPin,
                 reason: out var composeReason,
                 catalogFingerprint: catalogFingerprint,
                 catalog: catalog
@@ -478,18 +472,16 @@ public static partial class WorldDefinitionFileSource {
             }
 
             // composed is null when the root names neither basis nor imports, or its bytes are not a JSON object at
-            // all — the already-decoded `json`/`chain` above are left untouched and the strict parse below owns the
-            // wording.
+            // all — the root's own `json` and pin stand, and the strict parse below owns the wording.
             if (composed is not null) {
                 json = composed;
-                chain = chainBytes;
+                hash = composedPin;
             }
         }
 
-        var hash = ((chain.Count == 1)
-            ? ComputeContentHash(content: bytes)
-            : ComputeChainContentHash(chain: chain)
-        );
+        if (hash.Length == 0) {
+            hash = ComputeContentHash(content: bytes);
+        }
 
         // The source revision the caller already holds: the composition it would parse is the one it has.
         if (string.Equals(a: hash, b: unchangedFrom, comparisonType: StringComparison.Ordinal)) {
@@ -502,9 +494,9 @@ public static partial class WorldDefinitionFileSource {
         try {
             if (!TryParseDocument(
                 definition: out var parsed,
-                json: json,
                 reason: out reason,
-                sourceName: shown
+                sourceName: shown,
+                utf8: json
             )) {
                 return false;
             }
@@ -634,11 +626,10 @@ public static partial class WorldDefinitionFileSource {
     // records: every other source names its documents in a space of its own (an in-memory pair calls them "host"
     // and "fragment"), and nothing else may resolve one of those names onto a file image. With `parse` false the tree is
     // not parsed (`composed` is null): the caller reads the image's bytes, which are checked to hold one JSON object.
-    private static bool TryServeComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, byte[] bytes, IReadOnlyList<string> ancestors, bool parse, out JsonObject? composed, out WorldComposedDocument? image, out List<byte[]> touched, out List<string> touchedPaths, out int reach, WorldDocumentOrigins? origins) {
+    private static bool TryServeComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, byte[] bytes, IReadOnlyList<string> ancestors, bool parse, out JsonObject? composed, out WorldComposedDocument? image, out ComposedChain touched, out int reach, WorldDocumentOrigins? origins) {
         composed = null;
         image = null;
-        touched = [];
-        touchedPaths = [];
+        touched = new ComposedChain();
         reach = 0;
 
         if (
@@ -672,17 +663,16 @@ public static partial class WorldDefinitionFileSource {
         }
 
         JsonObject? tree = null;
-        var whole = !parse;
+        // A held image holds one JSON object (TryFindComposedImage), so only a parse can find otherwise.
+        var whole = true;
 
         if (parse) {
             try {
-                tree = (JsonNode.Parse(utf8Json: new MemoryStream(buffer: image.ComposedJson)) as JsonObject);
+                tree = (JsonNode.Parse(utf8Json: image.ComposedJson) as JsonObject);
                 whole = (tree is not null);
             } catch (JsonException) {
                 whole = false;
             }
-        } else {
-            whole = (MembersOf(json: image.ComposedJson) is not null);
         }
 
         if (!whole) {
@@ -699,10 +689,7 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
 
-        foreach (var link in image.Chain) {
-            touched.Add(item: link.Bytes);
-            touchedPaths.Add(item: link.Path);
-        }
+        touched.AddRange(links: image.Chain);
 
         if ((tree is not null) && (origins is not null) && (image.Origins is { } snapshot)) {
             origins.Restore(node: tree, snapshot: snapshot);
@@ -1181,8 +1168,7 @@ public static partial class WorldDefinitionFileSource {
             catalogFingerprint: catalogFingerprint,
             catalog: catalog,
             stack: out _,
-            touched: out _,
-            touchedPaths: out _
+            touched: out _
         );
     }
     /// <summary>Composes <paramref name="path"/>'s basis-and-imports graph, stopping BEFORE its own body — the
@@ -1213,8 +1199,7 @@ public static partial class WorldDefinitionFileSource {
                 catalogFingerprint: catalogFingerprint,
                 catalog: catalog,
                 stack: out var result,
-                touched: out _,
-                touchedPaths: out _
+                touched: out _
             )) {
                 return false;
             }
@@ -1287,7 +1272,7 @@ public static partial class WorldDefinitionFileSource {
     }
     /// <summary>Parses an already composed document, binds authored state expressions. A
     /// document holding an authored name that carries <see cref="GeneratedName.FileJoiner"/> is refused by name
-    /// (<see cref="WorldAuthoredNames.TryRefuseFileJoiner"/>).</summary>
+    /// (<see cref="WorldAuthoredNames.TryRefuseFileJoiner(ReadOnlySpan{byte}, out string)"/>).</summary>
     /// <param name="json">The composed JSON text.</param>
     /// <param name="sourceName">The source name echoed in failures.</param>
     /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
@@ -1321,7 +1306,7 @@ public static partial class WorldDefinitionFileSource {
             sourceName: sourceName
         );
     }
-    /// <summary>Parses a compiled world's drawn definition exactly as <see cref="TryParseDocument"/> parses a composed
+    /// <summary>Parses a compiled world's drawn definition exactly as <see cref="TryParseDocument(string, string, out WorldDefinition?, out string)"/> parses a composed
     /// document, without counting a <see cref="WorldBootWork.Parses"/>. The parse is the work of a compiled-world hit,
     /// which <see cref="WorldBootWork.CompiledHits"/> counts; whether a boot finds a compiled world depends on the
     /// per-user cache, so counting it as a parse would make a deterministic count depend on that cache.</summary>
@@ -1348,13 +1333,49 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="refusal">The schema's refusal of the payload, or <see langword="null"/> on success and on a
     /// failure that is not the payload's shape (the wrong schema name, a refused authored name).</param>
     /// <returns>Whether parsing and schema checks succeeded.</returns>
-    public static bool TryReadCompiledDocument(string json, string sourceName, out WorldDefinition? definition, out string reason, out WorldPayloadRefusal? refusal) {
+    public static bool TryReadCompiledDocument(string json, string sourceName, out WorldDefinition? definition, out string reason, out WorldPayloadRefusal? refusal) =>
+        TryReadCompiledDocument(
+            definition: out definition,
+            reason: out reason,
+            refusal: out refusal,
+            sourceName: sourceName,
+            utf8: Encoding.UTF8.GetBytes(s: json)
+        );
+    /// <summary>Parses a composed document from its UTF-8 JSON exactly as <see cref="TryParseDocument(string, string, out WorldDefinition?, out string)"/>
+    /// parses its text, reading the bytes directly: a world's composed document is held, stored and sent as bytes, and
+    /// is never decoded into text to be read.</summary>
+    /// <param name="utf8">The composed document, as a file holds it.</param>
+    /// <param name="sourceName">The source name echoed in failures.</param>
+    /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
+    /// <param name="reason">The named parse or schema failure.</param>
+    /// <returns>Whether parsing and schema checks succeeded. No adjacency or local-world validation runs here.</returns>
+    public static bool TryParseDocument(ReadOnlyMemory<byte> utf8, string sourceName, out WorldDefinition? definition, out string reason) {
+        WorldBootWork.Count(kind: WorldBootWork.Parses);
+
+        return TryReadCompiledDocument(definition: out definition, reason: out reason, refusal: out _, sourceName: sourceName, utf8: utf8);
+    }
+    /// <summary>Parses a compiled world's drawn definition from its UTF-8 JSON exactly as
+    /// <see cref="TryParseCompiledDocument(string, string, out WorldDefinition?, out string)"/> parses its text, without
+    /// counting a <see cref="WorldBootWork.Parses"/>.</summary>
+    /// <param name="utf8">The drawn definition's UTF-8 JSON.</param>
+    /// <param name="sourceName">The source name echoed in failures.</param>
+    /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
+    /// <param name="reason">The named parse or schema failure.</param>
+    /// <returns>Whether parsing and schema checks succeeded.</returns>
+    public static bool TryParseCompiledDocument(ReadOnlyMemory<byte> utf8, string sourceName, out WorldDefinition? definition, out string reason) =>
+        TryReadCompiledDocument(definition: out definition, reason: out reason, refusal: out _, sourceName: sourceName, utf8: utf8);
+    // The one parse of a composed or drawn document: the strict read from its bytes, the schema check, and the refusal
+    // of an authored name carrying the file joiner (WorldAuthoredNames), which reads a tree only when the bytes could
+    // spell one.
+    private static bool TryReadCompiledDocument(ReadOnlyMemory<byte> utf8, string sourceName, out WorldDefinition? definition, out string reason, out WorldPayloadRefusal? refusal) {
         definition = null;
+
+        var text = Puck.Confinement.FileContent.Utf8(content: utf8);
 
         // This is the loader's first parse: a reference into a draw site that has not filled yet stays attached and
         // resolves on the post-draw pass (WorldDefinitionLoader), the one door that runs the draw resolver.
         if (!WorldJsonPayload.TryRead(
-            json: json,
+            utf8: text,
             info: WorldJsonContext.Authored.WorldDefinition,
             value: out var parsed,
             refusal: out refusal,
@@ -1375,13 +1396,10 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
 
-        if (
-            (JsonNode.Parse(json: json) is JsonObject tree) &&
-            !WorldAuthoredNames.TryRefuseFileJoiner(
-            document: tree,
-            reason: out var nameReason
-        )
-        ) {
+        if (!WorldAuthoredNames.TryRefuseFileJoiner(
+            reason: out var nameReason,
+            utf8: text.Span
+        )) {
             reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {nameReason}";
 
             return false;
@@ -1617,7 +1635,7 @@ public static partial class WorldDefinitionFileSource {
                 total += image.ComposedJson.LongLength;
 
                 for (var index = 0; (index < image.Chain.Count); index++) {
-                    total += image.Chain[index].Bytes.LongLength;
+                    total += (image.Chain[index].Bytes?.LongLength ?? 0L);
                 }
             }
 

@@ -227,6 +227,7 @@ public sealed partial class WorldOutputHub {
         );
     }
     internal static void CountPresentationRows(WorldPresentationRows rows) {
+        WorldBootWork.Count(WorldBootWork.PresentationDeliveries);
         WorldBootWork.Count(WorldBootWork.PresentationRowsDelivered, rows.Creations.Length + rows.Shades.Length);
         WorldBootWork.Count(WorldBootWork.PresentationBytesDelivered, rows.Payload.Length);
     }

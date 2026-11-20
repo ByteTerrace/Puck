@@ -864,8 +864,8 @@ ever produces is the boot's `first` stage, not a held frame), and the source
 work from the edit to the
 settled frame, as the `world.boot` ledger counts it: `compiles`,
 `compositions`, `composition-members` (the root members compositions merged
-from their layers), `documents-read` and `validations`. Work a loop running
-beside it does is counted too.
+from their layers), `reload-rows-merged`, `documents-read` and `validations`.
+Work a loop running beside it does is counted too.
 
 The boot is a loop timed from process start, so a restart and a cold boot
 read the same way. `world.reload` (by hand, or from `world.watch` once its

@@ -64,21 +64,33 @@ public static class WorldRecipientMutations {
             return false;
         }
         if (mutation is WorldMutation.Batch batch) { return AdmitsBatch(view, batch, out row); }
-        string? spelled = null;
         string? refused = null;
         WorldMutationNames.Collect(mutation, (_, kind, name) => {
-            spelled ??= name;
             if ((refused is null) && WorldSpelledNames.NamesStateRow(kind, name) && !view.Admits(name)) { refused = name; }
-        });
+        }, view.MachineCatalog);
         if (refused is not null) {
             row = refused;
             return false;
         }
         if (!(Replaced(mutation)?.Invoke(view) ?? true) || !AdmitsDerived(view, mutation)) {
-            row = Subject(mutation) ?? spelled ?? SectionName(section);
+            row = RefusalSubject(mutation);
             return false;
         }
         return true;
+    }
+    /// <summary>Returns the name a refusal over a write's derived footprint carries, for every door that refuses a
+    /// mutation by what its footprint reads rather than by a name it spells (this door's installed values and
+    /// derived rows, and a state transaction's binding validation): the subject the submission spelled for the value
+    /// it writes, else the first name it spells, else its section's document name. It is always a name the submitter
+    /// already holds, so every such refusal carries the same text whatever the withheld row is.</summary>
+    /// <param name="mutation">The submitted mutation.</param>
+    /// <returns>The name.</returns>
+    public static string RefusalSubject(WorldMutation mutation) {
+        ArgumentNullException.ThrowIfNull(mutation);
+        if (Subject(mutation) is { } subject) { return subject; }
+        string? spelled = null;
+        WorldMutationNames.Collect(mutation, (_, _, name) => spelled ??= name);
+        return spelled ?? SectionName(WorldMutationKindCatalog.SectionOf(mutation));
     }
     private static bool AdmitsBatch(WorldRecipientView view, WorldMutation.Batch batch, out string row) {
         row = string.Empty;
@@ -116,70 +128,97 @@ public static class WorldRecipientMutations {
         // A resolver captures its mutation without reading it, so an uninitialized instance selects its arm.
         return Replaced((WorldMutation)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(kind)) is not null;
     }
-    // The one table of installed values a write replaces or removes. A state row's own declaration is admitted with
-    // its name, a placement's with its chain, and a grant or group change is the grants' own transition.
+    /// <summary>The mutation kinds whose footprint is not an installed value the door resolves through
+    /// <see cref="ResolvesReplaced"/>, each with where its footprint is judged instead. Every concrete kind outside a
+    /// program section either resolves its installed value or is listed here, so a new kind is classified when it is
+    /// written.</summary>
+    public static IReadOnlyDictionary<Type, string> JudgedElsewhere { get; } = new Dictionary<Type, string> {
+        [typeof(WorldMutation.UpsertStateRow)] = "a state row's own declaration is admitted with its name, its relations with it",
+        [typeof(WorldMutation.RemoveStateRow)] = "a state row's own declaration is admitted with its name, its relations with it",
+        [typeof(WorldMutation.UpsertStateCell)] = "a cell write is admitted by its row's name and declared relations",
+        [typeof(WorldMutation.RemoveStateCell)] = "a cell removal is admitted by its row's name and declared relations",
+        [typeof(WorldMutation.Generate)] = "a draw is admitted by its row's name and declared relations",
+        [typeof(WorldMutation.SetProperty)] = "a property's tags live in the keyed row of its name, admitted with the name",
+        [typeof(WorldMutation.UpsertPlacement)] = "a placement is admitted with its installed chain and the template its id spells",
+        [typeof(WorldMutation.RemovePlacement)] = "a placement is admitted with its installed chain and the template its id spells",
+        [typeof(WorldMutation.TransformState)] = "a transform is admitted with every row it resolves to",
+        [typeof(WorldMutation.Batch)] = "each member and each guard is admitted on its own",
+        [typeof(WorldMutation.SetDefaultSeatKit)] = "it replaces a kit's name, which spells no state row",
+        [typeof(WorldMutation.UpsertGrant)] = "a grant change is the grants' own transition",
+        [typeof(WorldMutation.RemoveGrant)] = "a grant change is the grants' own transition",
+        [typeof(WorldMutation.UpsertGroupKind)] = "a group change is the grants' own transition",
+        [typeof(WorldMutation.RemoveGroupKind)] = "a group change is the grants' own transition",
+        [typeof(WorldMutation.FormGroup)] = "a group change is the grants' own transition",
+        [typeof(WorldMutation.JoinGroup)] = "a group change is the grants' own transition",
+        [typeof(WorldMutation.LeaveGroup)] = "a group change is the grants' own transition",
+        [typeof(WorldMutation.KickMember)] = "a group change is the grants' own transition",
+        [typeof(WorldMutation.OfferOwnership)] = "an ownership change is the grants' own transition",
+        [typeof(WorldMutation.SettleOwnership)] = "an ownership change is the grants' own transition",
+    };
+    // The one table of installed values a write replaces or removes: a keyed section's rows by the key composition
+    // matches them by (WorldRowKeys), and a section a write replaces whole, as composition replaces it.
     private static Func<WorldRecipientView, bool>? Replaced(WorldMutation mutation) => mutation switch {
-        WorldMutation.UpsertMachine upsert => view => view.AdmitsInstalled(document => Installed(document.Machines, upsert.Machine)),
-        WorldMutation.RemoveMachine remove => view => view.AdmitsInstalled(document => Installed(document.Machines, remove.Name)),
-        WorldMutation.UpsertKit upsert => view => view.AdmitsInstalled(document => Installed(document.Kits, upsert.Kit)),
-        WorldMutation.RemoveKit remove => view => view.AdmitsInstalled(document => Installed(document.Kits, remove.Name)),
-        WorldMutation.UpsertCreation upsert => view => view.AdmitsInstalled(document => Installed(document.Creations, upsert.Creation)),
-        WorldMutation.RemoveCreation remove => view => view.AdmitsInstalled(document => Installed(document.Creations, remove.Id)),
-        WorldMutation.UpsertAddon upsert => view => view.AdmitsInstalled(document => Installed(document.Addons, upsert.Addon)),
-        WorldMutation.RemoveAddon remove => view => view.AdmitsInstalled(document => Installed(document.Addons, remove.Name)),
-        WorldMutation.UpsertCamera upsert => view => view.AdmitsInstalled(document => Installed(document.Cameras, upsert.Camera)),
-        WorldMutation.RemoveCamera remove => view => view.AdmitsInstalled(document => Installed(document.Cameras, remove.Name)),
-        WorldMutation.UpsertScreen upsert => view => view.AdmitsInstalled(document => Installed(document.Screens, upsert.Screen)),
-        WorldMutation.RemoveScreen remove => view => view.AdmitsInstalled(document =>
-            ((remove.Index >= 0) && (remove.Index < document.Screens.Count)) ? document.Screens[remove.Index] : null),
-        WorldMutation.UpsertSpeaker upsert => view => view.AdmitsInstalled(document => Installed(document.Speakers, upsert.Speaker)),
-        WorldMutation.RemoveSpeaker remove => view => view.AdmitsInstalled(document => Installed(document.Speakers, remove.Name)),
-        WorldMutation.UpsertTune upsert => view => view.AdmitsInstalled(document => Installed(document.Tunes, upsert.Tune)),
-        WorldMutation.RemoveTune remove => view => view.AdmitsInstalled(document => Installed(document.Tunes, remove.Name)),
-        WorldMutation.UpsertPatch upsert => view => view.AdmitsInstalled(document => Installed(document.Patches, upsert.Patch)),
-        WorldMutation.RemovePatch remove => view => view.AdmitsInstalled(document => Installed(document.Patches, remove.Name)),
-        WorldMutation.UpsertLook upsert => view => view.AdmitsInstalled(document => Installed(document.Looks, upsert.Look)),
-        WorldMutation.RemoveLook remove => view => view.AdmitsInstalled(document => Installed(document.Looks, remove.Name)),
-        WorldMutation.UpsertBindingOverlay upsert => view => view.AdmitsInstalled(document => Installed(document.BindingOverlays, upsert.Overlay)),
-        WorldMutation.RemoveBindingOverlay remove => view => view.AdmitsInstalled(document => Installed(document.BindingOverlays, remove.Id)),
-        WorldMutation.UpsertViewLayout upsert => view => view.AdmitsInstalled(document => Installed(document.Views.Layouts, upsert.Layout)),
-        WorldMutation.RemoveViewLayout remove => view => view.AdmitsInstalled(document => Installed(document.Views.Layouts, remove.Name)),
-        WorldMutation.UpsertViewGraph upsert => view => view.AdmitsInstalled(document => Installed(document.Views.Graphs, upsert.Graph)),
-        WorldMutation.RemoveViewGraph remove => view => view.AdmitsInstalled(document => Installed(document.Views.Graphs, remove.Name)),
-        WorldMutation.CommitViewGraph commit => view => view.AdmitsInstalled(document => Installed(document.Views.Graphs, commit.Name)),
-        WorldMutation.UpsertHudPanel upsert => view => view.AdmitsInstalled(document => Installed(document.Hud.Panels, upsert.Panel)),
-        WorldMutation.RemoveHudPanel remove => view => view.AdmitsInstalled(document => Installed(document.Hud.Panels, remove.Id)),
-        WorldMutation.UpsertHudElement upsert => view => view.AdmitsInstalled(document =>
-            Installed(Installed(document.Hud.Panels, upsert.PanelId)?.Elements, upsert.Element)),
-        WorldMutation.RemoveHudElement remove => view => view.AdmitsInstalled(document =>
-            Installed(Installed(document.Hud.Panels, remove.PanelId)?.Elements, remove.ElementId)),
-        WorldMutation.UpsertDynamics upsert => view => view.AdmitsInstalled(document => Installed(document.Dynamics, upsert.Row)),
-        WorldMutation.RemoveDynamics remove => view => view.AdmitsInstalled(document => Installed(document.Dynamics, remove.Name)),
-        WorldMutation.UpsertCurve upsert => view => view.AdmitsInstalled(document => Installed(document.Curves, upsert.Row)),
-        WorldMutation.RemoveCurve remove => view => view.AdmitsInstalled(document => Installed(document.Curves, remove.Name)),
+        WorldMutation.UpsertMachine upsert => view => view.AdmitsReplacing(WorldRowKeys.Machines, static document => document.Machines, upsert.Machine),
+        WorldMutation.RemoveMachine remove => view => view.AdmitsReplaced(WorldRowKeys.Machines, static document => document.Machines, remove.Name),
+        WorldMutation.UpsertKit upsert => view => view.AdmitsReplacing(WorldRowKeys.Kits, static document => document.Kits, upsert.Kit),
+        WorldMutation.RemoveKit remove => view => view.AdmitsReplaced(WorldRowKeys.Kits, static document => document.Kits, remove.Name),
+        WorldMutation.UpsertCreation upsert => view => view.AdmitsReplacing(WorldRowKeys.Creations, static document => document.Creations, upsert.Creation),
+        WorldMutation.RemoveCreation remove => view => view.AdmitsReplaced(WorldRowKeys.Creations, static document => document.Creations, remove.Id),
+        WorldMutation.UpsertAddon upsert => view => view.AdmitsReplacing(WorldRowKeys.Addons, static document => document.Addons, upsert.Addon),
+        WorldMutation.RemoveAddon remove => view => view.AdmitsReplaced(WorldRowKeys.Addons, static document => document.Addons, remove.Name),
+        WorldMutation.UpsertCamera upsert => view => view.AdmitsReplacing(WorldRowKeys.Cameras, static document => document.Cameras, upsert.Camera),
+        WorldMutation.RemoveCamera remove => view => view.AdmitsReplaced(WorldRowKeys.Cameras, static document => document.Cameras, remove.Name),
+        WorldMutation.UpsertScreen upsert => view => view.AdmitsReplacing(WorldRowKeys.Screens, static document => document.Screens, upsert.Screen),
+        WorldMutation.RemoveScreen remove => view => view.AdmitsReplaced(WorldRowKeys.Screens, static document => document.Screens, remove.Index),
+        WorldMutation.UpsertSpeaker upsert => view => view.AdmitsReplacing(WorldRowKeys.Speakers, static document => document.Speakers, upsert.Speaker),
+        WorldMutation.RemoveSpeaker remove => view => view.AdmitsReplaced(WorldRowKeys.Speakers, static document => document.Speakers, remove.Name),
+        WorldMutation.UpsertTune upsert => view => view.AdmitsReplacing(WorldRowKeys.Tunes, static document => document.Tunes, upsert.Tune),
+        WorldMutation.RemoveTune remove => view => view.AdmitsReplaced(WorldRowKeys.Tunes, static document => document.Tunes, remove.Name),
+        WorldMutation.UpsertPatch upsert => view => view.AdmitsReplacing(WorldRowKeys.Patches, static document => document.Patches, upsert.Patch),
+        WorldMutation.RemovePatch remove => view => view.AdmitsReplaced(WorldRowKeys.Patches, static document => document.Patches, remove.Name),
+        WorldMutation.UpsertLook upsert => view => view.AdmitsReplacing(WorldRowKeys.Looks, static document => document.Looks, upsert.Look),
+        WorldMutation.RemoveLook remove => view => view.AdmitsReplaced(WorldRowKeys.Looks, static document => document.Looks, remove.Name),
+        WorldMutation.UpsertBindingOverlay upsert => view => view.AdmitsReplacing(WorldRowKeys.BindingOverlays, static document => document.BindingOverlays, upsert.Overlay),
+        WorldMutation.RemoveBindingOverlay remove => view => view.AdmitsReplaced(WorldRowKeys.BindingOverlays, static document => document.BindingOverlays, remove.Id),
+        WorldMutation.UpsertViewLayout upsert => view => view.AdmitsReplacing(WorldRowKeys.ViewLayouts, static document => document.Views.Layouts, upsert.Layout),
+        WorldMutation.RemoveViewLayout remove => view => view.AdmitsReplaced(WorldRowKeys.ViewLayouts, static document => document.Views.Layouts, remove.Name),
+        WorldMutation.UpsertViewGraph upsert => view => view.AdmitsReplacing(WorldRowKeys.ViewGraphs, static document => document.Views.Graphs, upsert.Graph),
+        WorldMutation.RemoveViewGraph remove => view => view.AdmitsReplaced(WorldRowKeys.ViewGraphs, static document => document.Views.Graphs, remove.Name),
+        WorldMutation.CommitViewGraph commit => view => view.AdmitsReplaced(WorldRowKeys.ViewGraphs, static document => document.Views.Graphs, commit.Name),
+        WorldMutation.UpsertHudPanel upsert => view => view.AdmitsReplacing(WorldRowKeys.HudPanels, static document => document.Hud.Panels, upsert.Panel),
+        WorldMutation.RemoveHudPanel remove => view => view.AdmitsReplaced(WorldRowKeys.HudPanels, static document => document.Hud.Panels, remove.Id),
+        WorldMutation.UpsertHudElement upsert => view => view.AdmitsReplacing(WorldRowKeys.HudElements,
+            document => WorldRowKeys.HudPanels.Find(document.Hud.Panels, upsert.PanelId)?.Elements, upsert.Element),
+        WorldMutation.RemoveHudElement remove => view => view.AdmitsReplaced(WorldRowKeys.HudElements,
+            document => WorldRowKeys.HudPanels.Find(document.Hud.Panels, remove.PanelId)?.Elements, remove.ElementId),
+        WorldMutation.UpsertDynamics upsert => view => view.AdmitsReplacing(WorldRowKeys.Dynamics, static document => document.Dynamics, upsert.Row),
+        WorldMutation.RemoveDynamics remove => view => view.AdmitsReplaced(WorldRowKeys.Dynamics, static document => document.Dynamics, remove.Name),
+        WorldMutation.UpsertCurve upsert => view => view.AdmitsReplacing(WorldRowKeys.Curves, static document => document.Curves, upsert.Row),
+        WorldMutation.RemoveCurve remove => view => view.AdmitsReplaced(WorldRowKeys.Curves, static document => document.Curves, remove.Name),
+        // A section a write replaces whole; an assignment's selector, which composition carries forward, is part of it.
+        WorldMutation.SetInputModes => static view => view.AdmitsInstalled(static document => document.InputModes),
+        WorldMutation.SetInputHold => static view => view.AdmitsInstalled(static document => document.InputHoldRaw),
+        WorldMutation.SetKitAssignment => static view => view.AdmitsInstalled(static document => document.Assignment),
+        WorldMutation.SetLookAssignment => static view => view.AdmitsInstalled(static document => document.LookAssignment),
+        WorldMutation.SetSpawns => static view => view.AdmitsInstalledRows(static document => document.SpawnPointsRaw),
+        WorldMutation.SetMotion => static view => view.AdmitsInstalled(static document => document.Motion),
+        WorldMutation.SetPopulationDefaults => static view => view.AdmitsInstalled(static document => document.Population),
+        WorldMutation.SetPopulationDistribution => static view => view.AdmitsInstalled(static document => document.Population.DistributionRaw),
+        WorldMutation.SetPopulationCensus => static view => view.AdmitsInstalledRows(static document => document.Population.SeatActivationRaw),
+        WorldMutation.SetRenderDefaults => static view => view.AdmitsInstalled(static document => document.Render),
+        WorldMutation.SetAudioDefaults => static view => view.AdmitsInstalled(static document => document.Audio),
+        WorldMutation.SetAuthoringDefaults => static view => view.AdmitsInstalled(static document => document.AuthoringRaw),
+        WorldMutation.SetCollision => static view => view.AdmitsInstalled(static document => document.Collision),
+        WorldMutation.SetHostDefaults => static view => view.AdmitsInstalled(static document => document.Host),
+        WorldMutation.SetViewDefaults => static view => view.AdmitsInstalled(static document => document.Views),
+        WorldMutation.SetViewSeatRig => static view => view.AdmitsInstalled(static document => document.Views.SeatRigRaw),
+        WorldMutation.SetViewSeatControl => static view => view.AdmitsInstalled(static document => document.Views.SeatControlRaw),
+        WorldMutation.SetViewPost => static view => view.AdmitsInstalledRows(static document => document.Views.Post),
+        WorldMutation.SetPlayerDefaults => static view => view.AdmitsInstalled(static document => document.PlayerDefaults),
+        WorldMutation.SetPlayerSeatLook => static view => view.AdmitsInstalled(static document => document.PlayerDefaults.SeatLookRaw),
+        WorldMutation.SetHudDefaults => static view => view.AdmitsInstalled(static document => document.Hud.Defaults),
         _ => null,
     };
-    private static T? Installed<T>(IReadOnlyList<T>? installed, T incoming) where T : class => Installed(installed, Identity(incoming));
-    private static T? Installed<T>(IReadOnlyList<T>? installed, string? id) where T : class {
-        if ((installed is null) || (id is null)) { return null; }
-        foreach (var value in installed) {
-            if ((value is not null) && (Identity(value) == id)) { return value; }
-        }
-        return null;
-    }
-    // A section row's identity is its Id or Name member, read as its serializer writes it: a bound identifier by its
-    // reference, never by the live value it reads.
-    private static string? Identity(object value) => IdentityReaders.GetValue(value.GetType(), static type => {
-        var member = type.GetProperty("Id") ?? type.GetProperty("Name");
-        return (member is null) ? static _ => null : instance => member.GetValue(instance) switch {
-            string text => text,
-            CellName name => name.Value,
-            Puck.Assets.Documents.DocumentIdentifier identifier => identifier.Reference ?? identifier.Value,
-            null => null,
-            var other => other.ToString(),
-        };
-    })(value);
-    private static readonly Puck.Abstractions.CodeDerivedTable<Type, Func<object, string?>> IdentityReaders = new();
     // The name a refusal over a derived footprint carries: what the submission spelled for the value it writes.
     private static string? Subject(WorldMutation mutation) => mutation switch {
         WorldMutation.UpsertPlacement upsert => upsert.Placement.Id,

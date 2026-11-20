@@ -967,6 +967,39 @@ public sealed class GravityAuthoringLawTests {
         );
     }
     [Fact]
+    public void SleepingKitWakesWhenItsAttachedZeroGravityAreaLeaves() {
+        var source = AttachedAreaDefinition(zeroAcceleration: true);
+        var definition = source with {
+            PopulationRaw = source.Population with {
+                CapacityRaw = WorldBodiesLimits.LocalSeatCount + 1, NetworkPlayers = 1, SleepAfterSeconds = 0.0125m,
+            },
+        };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var actor = Principal.Seat(slot: 0);
+        Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        var population = fixture.Server.Population;
+        Assert.Equal(1, population.SetSimulatedCount(count: 1));
+        var target = WorldBodiesLimits.LocalSeatCount;
+        population.EntryBody(0)!.Pose(x: 100f, y: 100f, z: 100f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        population.EntryBody(target)!.Pose(x: 100f, y: 102f, z: 100f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        fixture.Step();
+        var sleeper = population.EntryBody(target)!;
+        Assert.True(sleeper.Asleep);
+        var sleptAt = sleeper.AsleepSinceTick;
+        Assert.True(fixture.Server.TryCaptureCheckpoint(checkpoint: out var checkpoint, hostRow: WorldAuthorityHostRowCheckpoint.Empty, reason: out var reason), reason);
+        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(WorldAuthorityCheckpointCodec.Encode(checkpoint!), out var decoded, out reason), reason);
+        fixture.Server.RestoreCheckpoint(decoded!);
+        fixture.Step();
+        sleeper = population.EntryBody(target)!;
+        Assert.Equal(sleptAt, sleeper.AsleepSinceTick);
+        var height = sleeper.FixedPosition.Y;
+        population.EntryBody(0)!.Pose(x: 200f, y: 100f, z: 100f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        fixture.Step();
+        Assert.False(sleeper.Asleep);
+        Assert.True(sleeper.FixedPosition.Y < height);
+    }
+
+    [Fact]
     public void ZeroReplaceSuppressesKitGravity_WhileAnOutsideAreaBodyKeepsFallbackGravity() {
         static WorldDefinition Definition(float radius) => WithGravity(gravity: PointGravity(
             gravitationalConstant: 0f,

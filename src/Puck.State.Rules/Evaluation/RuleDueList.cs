@@ -41,7 +41,6 @@ internal sealed class RuleDueList {
     private readonly Dictionary<int, int[]> m_eachFactReaders;
     private readonly Dictionary<int, int[]> m_wholeFactReaders;
     private readonly List<int> m_rows = [];
-    private readonly List<FactRead> m_facts = [];
     private readonly List<int> m_liveNow = [];
 
     private StateArena? m_arena;
@@ -87,7 +86,7 @@ internal sealed class RuleDueList {
         for (var index = 0; (index < rules.Length); index++) {
             var rule = rules[index];
             var schedule = evaluator.ScheduleOf(rule: rule, state: States[index]);
-            var kind = Classify(evaluator: evaluator, rule: rule, schedule: schedule);
+            var kind = Classify(rule: rule, schedule: schedule);
 
             m_kinds[index] = kind;
             if (kind == Kind.Always) {
@@ -99,7 +98,7 @@ internal sealed class RuleDueList {
             foreach (var row in schedule.IterationRows) {
                 Add(index: rowReaders, key: row, rule: index);
             }
-            foreach (var fact in schedule.Facts) {
+            foreach (var fact in schedule.Facts.Concat(schedule.IterationFacts)) {
                 switch (fact.Body) {
                     case FactRead.EachBody:
                         Add(index: each, key: fact.Source, rule: index);
@@ -112,9 +111,6 @@ internal sealed class RuleDueList {
                         Add(index: literalBySource, key: fact.Source, rule: index);
                         break;
                 }
-            }
-            foreach (var fact in schedule.IterationFacts) {
-                Add(index: whole, key: fact.Source, rule: index);
             }
         }
 
@@ -258,13 +254,16 @@ internal sealed class RuleDueList {
             }
         }
 
-        m_facts.Clear();
-        if (m_host.DrainFactMoves(into: m_facts)) {
+        m_evaluator.DrainFactMoves();
+    }
+
+    internal void ApplyFactMoves(bool all, List<FactRead> moves) {
+        if (all) {
             MarkAll();
 
             return;
         }
-        foreach (var moved in m_facts) {
+        foreach (var moved in moves) {
             if ((moved.Body >= 0) && m_literalFactReaders.TryGetValue(key: (moved.Source, moved.Body), value: out var literal)) {
                 foreach (var reader in literal) {
                     MarkFull(index: reader);
@@ -366,9 +365,8 @@ internal sealed class RuleDueList {
         }
     }
 
-    private static Kind Classify(RuleEvaluator evaluator, CompiledRule rule, RuleSchedule schedule) {
+    private static Kind Classify(CompiledRule rule, RuleSchedule schedule) {
         if (
-            evaluator.Owns(rule: rule) ||
             schedule.Volatile ||
             !schedule.IterationVersioned ||
             (rule.MaxFirings > 0) ||

@@ -1142,16 +1142,19 @@ and its operation, never of the file the wait sits in.
   completes, the tick is counted, published and hashed, and its post-step hooks
   run. A tick therefore completes later in wall time and identically in state:
   no completed tick depends on the timing (AGENTS.md rule 4).
-- **Nothing touches the half-done tick.** While the record stands, a console
-  read-back is refused with the stall's reason, and a mutation, checkpoint or
-  export, attach, reload or reset waits behind the tick as a simulation
-  submission already does, or is refused when its caller cannot wait. Disposal
-  follows teardown's rule. The check has one home, the authority's own entry:
-  the authority operation door (`WorldServer.ExecuteAuthorityOperation`, which
-  federation and sessions already enter) and the console's read view
-  (`IWorldConsoleAuthority.ReadView`, which the server mints).
-  Direct checkpoint and replay restore, document export and attach primers
-  also check the authority's pending tick before they touch live state.
+- **Nothing touches the half-done tick.** Everything waits for the tick
+  boundary rather than failing. The pump runs no console line while a step is
+  pending (`FixedStepPump.AtTickBoundary` is false, so the host's control phase
+  keeps its wait allowance and drains nothing), so every console and MCP verb
+  reads and writes whole ticks; the row mailbox and the silo's activation
+  mailbox drain only at a boundary too. Another thread entering the authority
+  (`WorldServer.EnterAtTickBoundary`, behind `ExecuteAuthorityOperation`, the
+  read view, checkpoint and restore, attach primers and the ordered submission
+  door) waits on the tick's boundary signal without holding the gate. The
+  thread that resumes the tick and a thread already holding an authority gate
+  cannot wait: a submission from one is queued for the boundary, and a read or
+  checkpoint from one is refused with the stall's reason. Disposal follows
+  teardown's rule.
 - **The stall deadline faults the authority.** An incomplete tick past its
   stall deadline (finite on an unpaced host too) freezes the authority with the
   reason, as an addon host's epoch timeout already does

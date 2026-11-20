@@ -115,28 +115,14 @@ public static class WorldModuleNamespace {
         }
 
         foreach (var node in machines) {
-            if (
-                (node is not JsonObject machine) ||
-                (machine["engine"] is not JsonValue engineValue) ||
-                !engineValue.TryGetValue<string>(value: out var engineId) ||
-                (machine["configuration"] is not JsonObject configuration) ||
-                !catalog.TryDescriptor(
-                descriptor: out var descriptor,
-                engineId: engineId
-            )
-            ) {
+            if (!TryReadMachine(node: node, catalog: catalog, machine: out var visited)) {
                 continue;
             }
 
-            var visited = new ModuleMachine(
-                Machine: machine,
-                Configuration: configuration,
-                Descriptor: descriptor.Configuration
-            );
             var descriptorErrors = new List<string>();
 
             if (!MachineConfigurationFields.TryValidateDescriptor(
-                descriptor: descriptor.Configuration,
+                descriptor: visited.Descriptor,
                 errors: descriptorErrors
             )) {
                 if (refuseInvalidDescriptor) {
@@ -160,6 +146,66 @@ public static class WorldModuleNamespace {
         }
 
         return true;
+    }
+    // Reads one machine row the catalog describes: its configuration object and its engine's provider descriptor. A
+    // row without an engine, a configuration object or a catalog entry has neither.
+    private static bool TryReadMachine(JsonNode? node, IMachineValidationCatalog catalog, out ModuleMachine machine) {
+        if (
+            (node is not JsonObject row) ||
+            (row["engine"] is not JsonValue engineValue) ||
+            !engineValue.TryGetValue<string>(value: out var engineId) ||
+            (row["configuration"] is not JsonObject configuration) ||
+            !catalog.TryDescriptor(descriptor: out var descriptor, engineId: engineId)
+        ) {
+            machine = default;
+
+            return false;
+        }
+
+        machine = new ModuleMachine(Machine: row, Configuration: configuration, Descriptor: descriptor.Configuration);
+
+        return true;
+    }
+    /// <summary>Reads, and respells, every name a machine row's configuration holds at a provider field whose role
+    /// references a world declaration (<see cref="MachineFieldRole.StateReference"/>,
+    /// <see cref="MachineFieldRole.MachineReference"/>, <see cref="MachineFieldRole.ScreenReference"/>), through the
+    /// descriptor the host's catalog holds for the row's engine: the positions <see cref="Respell(JsonNode?, Type, WorldNameRespelling)"/>
+    /// cannot reach, since a configuration's shape is its provider's. A row whose engine the catalog does not describe,
+    /// or whose descriptor is unusable, has no such position.</summary>
+    /// <param name="machine">The machine row; respelled in place.</param>
+    /// <param name="catalog">The host's machine vocabulary.</param>
+    /// <param name="respell">Called once per name position, with a site whose member is the configuration.</param>
+    public static void RespellMachineReferences(JsonObject machine, IMachineValidationCatalog catalog, WorldNameRespelling respell) {
+        ArgumentNullException.ThrowIfNull(argument: machine);
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+        ArgumentNullException.ThrowIfNull(argument: respell);
+
+        if (!TryReadMachine(node: machine, catalog: catalog, machine: out var read) ||
+            !MachineConfigurationFields.TryValidateDescriptor(descriptor: read.Descriptor, errors: [])) {
+            return;
+        }
+
+        MachineConfigurationFields.Visit(
+            configuration: read.Configuration,
+            descriptor: read.Descriptor,
+            visitor: site => {
+                if (
+                    (site.Field.Role is not (MachineFieldRole.StateReference or MachineFieldRole.MachineReference or MachineFieldRole.ScreenReference)) ||
+                    (site.Value is not JsonValue value) ||
+                    !value.TryGetValue<string>(value: out var name) ||
+                    (name.Length == 0)
+                ) {
+                    return;
+                }
+
+                var kind = ProviderReferenceKind(role: site.Field.Role);
+
+                if ((respell(new WorldNameField(Owner: typeof(WorldMachine), Member: nameof(WorldMachine.Configuration), Kind: kind, Role: WorldNameRole.Names), kind, name, read.Configuration) is { } respelled) &&
+                    (respelled != name)) {
+                    site.Value = JsonValue.Create(respelled);
+                }
+            }
+        );
     }
     private static void RelocateMachinePaths(ModuleMachine machine, string sourceDocumentPath, string targetDocumentPath) =>
         MachineConfigurationFields.Visit(
@@ -448,24 +494,7 @@ public static class WorldModuleNamespace {
                 }
 
                 rewriter.Scope = parent;
-                switch (WorldChannelNodes.Spelled(
-                    memberType: memberType,
-                    value: value
-                )) {
-                    case JsonArray list when (field.Role == WorldNameRole.Names):
-                        for (var index = 0; (index < list.Count); index++) {
-                            if ((list[index] is JsonValue element) && element.TryGetValue<string>(value: out var item)) {
-                                list[index] = rewriter.Rewrite(item, field.Role, field.Kind);
-                            }
-                        }
-                        break;
-                    case JsonValue leaf when leaf.TryGetValue<string>(value: out var text):
-                        var rewritten = rewriter.Rewrite(text, field.Role, field.Kind);
-                        parent[name] = ((value is JsonObject)
-                            ? WorldChannelNodes.Node(spelling: rewritten)
-                            : rewritten);
-                        break;
-                }
+                rewriter.RewriteSite(field: field, memberType: memberType, name: name, parent: parent, value: value);
             }
         );
 
@@ -642,15 +671,7 @@ public static class WorldModuleNamespace {
     }
 
     // A creation document rides its own serializer, so the walk reads it by hand: every value in it a state cell may
-    // stand in for — a shape's spatial value, a palette color, an identifier — binds a row by its `state.<row>` token.
-    private static readonly WorldNameField CreationBinding = new(
-        Facet: WorldExportFacet.Binding,
-        Kind: WorldNameKind.State,
-        Member: "state binding",
-        Owner: typeof(Puck.World.Authoring.CreationDocument),
-        Role: WorldNameRole.Binding
-    );
-
+    // stand in for binds a row by its `state.<row>` token (WorldNameRegistry.CreationBinding).
     private static void VisitCreationBindings(JsonNode node, WorldNameVisitor visitor) {
         switch (node) {
             case JsonObject obj:
@@ -664,7 +685,7 @@ public static class WorldModuleNamespace {
                             obj,
                             name,
                             value,
-                            CreationBinding,
+                            WorldNameRegistry.CreationBinding,
                             typeof(string)
                         );
                     } else if (value is not null) {
@@ -1437,14 +1458,15 @@ public static class WorldModuleNamespace {
             return inner;
         }
 
-        // Rewrites one registered site in place: a list of names, or one name-bearing value. A member that holds a
-        // call node holds one again, its row arguments renamed.
+        // Rewrites one registered site in place: a list holding one value of the site's role per element (names,
+        // binding tokens such as a list of bindable scalars or colors, templates, keys), or one name-bearing value. A
+        // member that holds a call node holds one again, its row arguments renamed.
         public void RewriteSite(JsonObject parent, string name, JsonNode value, WorldNameField field, Type memberType) {
             switch (WorldChannelNodes.Spelled(
                 memberType: memberType,
                 value: value
             )) {
-                case JsonArray list when (field.Role == WorldNameRole.Names):
+                case JsonArray list when (field.Role is WorldNameRole.Names or WorldNameRole.Binding or WorldNameRole.Template or WorldNameRole.Key):
                     for (var index = 0; (index < list.Count); index++) {
                         if (
                             (list[index: index] is JsonValue element) &&

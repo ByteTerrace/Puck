@@ -281,7 +281,7 @@ public sealed class CreationStampEmitterUnitsLawTests {
         );
     }
     /// <summary>Both per-shape and shared scopes retain erosion without eroding a sibling or opening a
-    /// separate nested scope. The containing scope owns the noise clamp.</summary>
+    /// separate nested scope. A hard-composed scope clamps only the eroding shape's own candidate.</summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -357,8 +357,58 @@ public sealed class CreationStampEmitterUnitsLawTests {
             1f,
             program.StepScale
         );
+        // The scope composes hard, so nothing reads its magnitude and the noise bound is a clamp on the eroding shape's
+        // own candidate, not on the scope: the sibling and the scope keep unit scales.
+        Assert.Empty(collection: program.FieldScopeClamps);
+        Assert.Equal(
+            1,
+            program.ShapeStepClampCount
+        );
+        Assert.True(condition: (program.ShapeStepScaleAt(instructionIndex: targetIndex) < 1f));
+        Assert.Equal(
+            1f,
+            program.ShapeStepScaleAt(instructionIndex: Enumerable.Range(
+                0,
+                program.Instructions.Count
+            )
+                .Single(predicate: index => ((program.Instructions[index].Op == SdfOp.ShapeBlend) && (program.Instructions[index].Shape == ((uint)SdfShapeType.Box)))))
+        );
+    }
+    /// <summary>When a soft blend reads the eroding shape's magnitude, the containing scope owns the noise clamp
+    /// and applies it at its pop, to every shape in the scope.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ScopeOwnsTheErosionClampWhenASoftBlendReadsItsMagnitude(bool callerScope) {
+        var eroding = Shape(
+            SdfSolidPrimitive.Sphere,
+            Vector3.One
+        ) with {
+            Erode = new ShapeErodeDocument(
+            From: 1f,
+            Lane: 2,
+            Noise: 2f,
+            To: 0f
+        ),
+        };
+        var sibling = Shape(
+            SdfSolidPrimitive.Box,
+            Vector3.One,
+            blend: SdfBlendOp.SmoothUnion,
+            id: 1,
+            smooth: 0.1f
+        );
+        var program = EmitScoped(
+            callerScope: callerScope,
+            shapes: [eroding, sibling],
+            stampScale: 2f
+        );
         var clamp = Assert.Single(collection: program.FieldScopeClamps);
 
+        Assert.Equal(
+            0,
+            program.ShapeStepClampCount
+        );
         Assert.Equal(
             (callerScope
             ? 2

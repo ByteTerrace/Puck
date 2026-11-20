@@ -78,6 +78,7 @@ public static class WorldMutationNames {
         new(typeof(WorldMutation.CommitViewGraph), nameof(WorldMutation.CommitViewGraph.SourceIdentity), "a source content identity"),
         new(typeof(WorldMutation.CommitViewGraph), nameof(WorldMutation.CommitViewGraph.ConfigIdentity), "a parameter schema identity"),
         new(typeof(WorldMutation.CommitViewGraph), nameof(WorldMutation.CommitViewGraph.Output), "a graph's image version"),
+        new(typeof(WorldMutation.CommitViewGraph), nameof(WorldMutation.CommitViewGraph.Overrides), "each pass's literal config values; a graph's state bindings are its row's parameters"),
     ];
 
     private enum MemberRole : byte { Site, Model, Mutations, Record, Ignored, Uncovered }
@@ -87,13 +88,15 @@ public static class WorldMutationNames {
     /// <summary>Reports every name a mutation spells, in member order, nested batch members included.</summary>
     /// <param name="mutation">The mutation.</param>
     /// <param name="found">Receives each name position's registration, namespace and name.</param>
+    /// <param name="machines">The host's machine vocabulary, which reads a machine row's configuration, or
+    /// <see langword="null"/> (see <see cref="WorldSpelledNames.Collect"/>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="mutation"/> or <paramref name="found"/> is
     /// <see langword="null"/>.</exception>
-    public static void Collect(WorldMutation mutation, Action<WorldNameField, WorldNameKind?, string> found) {
+    public static void Collect(WorldMutation mutation, Action<WorldNameField, WorldNameKind?, string> found, Puck.Abstractions.Machines.IMachineValidationCatalog? machines = null) {
         ArgumentNullException.ThrowIfNull(argument: mutation);
         ArgumentNullException.ThrowIfNull(argument: found);
 
-        Walk(value: mutation, type: mutation.GetType(), found: found);
+        Walk(value: mutation, type: mutation.GetType(), found: found, machines: machines);
     }
 
     /// <summary>Gets every string or <see cref="CellName"/> member of a mutation kind, or of a record one carries, that
@@ -117,7 +120,7 @@ public static class WorldMutationNames {
         }
     }
 
-    private static void Walk(object value, Type type, Action<WorldNameField, WorldNameKind?, string> found) {
+    private static void Walk(object value, Type type, Action<WorldNameField, WorldNameKind?, string> found, Puck.Abstractions.Machines.IMachineValidationCatalog? machines) {
         foreach (var plan in PlanOf(type: type)) {
             if ((plan.Role is MemberRole.Ignored or MemberRole.Uncovered) || (plan.Property.GetValue(obj: value) is not { } member)) { continue; }
             switch (plan.Role) {
@@ -136,21 +139,21 @@ public static class WorldMutationNames {
                     }
                     break;
                 case MemberRole.Model:
-                    WorldSpelledNames.Collect(value: member, type: plan.Property.PropertyType, found: found);
+                    WorldSpelledNames.Collect(value: member, type: plan.Property.PropertyType, found: found, machines: machines);
                     break;
                 case MemberRole.Mutations:
-                    if (member is WorldMutation single) { Walk(value: single, type: single.GetType(), found: found); break; }
+                    if (member is WorldMutation single) { Walk(value: single, type: single.GetType(), found: found, machines: machines); break; }
                     foreach (var nested in (IEnumerable<WorldMutation>)member) {
-                        if (nested is not null) { Walk(value: nested, type: nested.GetType(), found: found); }
+                        if (nested is not null) { Walk(value: nested, type: nested.GetType(), found: found, machines: machines); }
                     }
                     break;
                 case MemberRole.Record:
                     if (plan.Element is { } element) {
                         foreach (var item in (System.Collections.IEnumerable)member) {
-                            if (item is not null) { Walk(value: item, type: element, found: found); }
+                            if (item is not null) { Walk(value: item, type: element, found: found, machines: machines); }
                         }
                     } else {
-                        Walk(value: member, type: plan.Property.PropertyType, found: found);
+                        Walk(value: member, type: plan.Property.PropertyType, found: found, machines: machines);
                     }
                     break;
             }
@@ -190,14 +193,32 @@ public static class WorldMutationNames {
         if (CarriesNoName(type: type)) {
             return new(Element: null, Field: null, Property: property, Role: MemberRole.Ignored);
         }
+        // A value whose shape this walk cannot read member by member (a struct holding text, a dictionary, raw JSON)
+        // could hold a name the door would not see, so it must be registered, excluded or typed in the model.
+        if (Opaque(type: type) || ((element is not null) && Opaque(type: element))) {
+            return new(Element: null, Field: null, Property: property, Role: MemberRole.Uncovered);
+        }
         return new(Element: element, Field: null, Property: property, Role: MemberRole.Record);
     }
     private static bool CarriesText(Type type) => (type == typeof(string)) || (type == typeof(CellName));
-    // A value type, a principal and a collection of such carry no document name; a mutation's own principal is the
-    // ingress-stamped actor.
-    private static bool CarriesNoName(Type type) =>
-        type.IsValueType || (type == typeof(Principal)) || (type == typeof(StateVector)) || (type == typeof(Type)) ||
-        ((ElementOf(type: type) is { } element) && (element.IsValueType || (element == typeof(Principal))));
+    // A type carries no document name when it provably holds no text: a primitive, an enum, a principal (a mutation's
+    // own principal is the ingress-stamped actor), a vector or type token, a struct whose every member carries no
+    // name, or a collection of such. A dictionary's entries and raw JSON are never nameless.
+    private static bool CarriesNoName(Type type) => NamelessTypes.GetValue(key: type, derive: static type => new(value: Nameless(type: type, visiting: []))).Value;
+    private static readonly Puck.Abstractions.CodeDerivedTable<Type, System.Runtime.CompilerServices.StrongBox<bool>> NamelessTypes = new();
+    private static bool Nameless(Type type, HashSet<Type> visiting) {
+        type = Nullable.GetUnderlyingType(nullableType: type) ?? type;
+        if (type.IsPrimitive || type.IsEnum || (type == typeof(decimal)) || (type == typeof(Principal)) || (type == typeof(StateVector)) ||
+            (type == typeof(Type)) || (type == typeof(Guid)) || (type == typeof(TimeSpan)) || (type == typeof(DateTime))) { return true; }
+        if (CarriesText(type: type) || Opaque(type: type) || !visiting.Add(item: type)) { return false; }
+        if (ElementOf(type: type) is { } element) { return Nameless(type: element, visiting: visiting); }
+        return type.IsValueType && type.GetProperties(bindingAttr: BindingFlags.Public | BindingFlags.Instance)
+            .Where(predicate: static property => property.GetIndexParameters().Length == 0)
+            .All(predicate: property => Nameless(type: property.PropertyType, visiting: visiting));
+    }
+    // Raw JSON, and a key-value entry of a dictionary, whose shape the walk does not read.
+    private static bool Opaque(Type type) => (type == typeof(System.Text.Json.JsonElement)) || (type == typeof(System.Text.Json.Nodes.JsonNode)) ||
+        (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(KeyValuePair<,>)));
     private static Type? ElementOf(Type type) => (type == typeof(string)) ? null : type.GetInterfaces().Prepend(element: type)
         .FirstOrDefault(predicate: static candidate => candidate.IsGenericType && (candidate.GetGenericTypeDefinition() == typeof(IEnumerable<>)))
         ?.GetGenericArguments()[0];

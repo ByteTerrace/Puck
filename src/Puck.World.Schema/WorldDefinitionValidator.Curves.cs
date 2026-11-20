@@ -80,35 +80,35 @@ public static partial class WorldDefinitionValidator {
                     value: position.X,
                     min: -CurveMaxCoordinate,
                     max: CurveMaxCoordinate,
-                    name: $"{knotPath}.position.x",
+                    name: new Subject(Member: ".position.x", Path: knotPath),
                     errors: errors
                 );
                 RequireRange(
                     value: position.Y,
                     min: -CurveMaxCoordinate,
                     max: CurveMaxCoordinate,
-                    name: $"{knotPath}.position.y",
+                    name: new Subject(Member: ".position.y", Path: knotPath),
                     errors: errors
                 );
                 RequireRange(
                     value: position.Z,
                     min: -CurveMaxCoordinate,
                     max: CurveMaxCoordinate,
-                    name: $"{knotPath}.position.z",
+                    name: new Subject(Member: ".position.z", Path: knotPath),
                     errors: errors
                 );
                 RequireRange(
                     value: knot.TangentYaw,
                     min: -CurveMaxTangentYaw,
                     max: CurveMaxTangentYaw,
-                    name: $"{knotPath}.tangentYaw",
+                    name: new Subject(Member: ".tangentYaw", Path: knotPath),
                     errors: errors
                 );
                 RequireRange(
                     value: knot.Curvature,
                     min: -CurveMaxCurvature,
                     max: CurveMaxCurvature,
-                    name: $"{knotPath}.curvature",
+                    name: new Subject(Member: ".curvature", Path: knotPath),
                     errors: errors
                 );
 

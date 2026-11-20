@@ -45,6 +45,20 @@ public static class FileContent {
 
         return reader.ReadToEnd();
     }
+    /// <summary>Returns a file's whole content as the UTF-8 bytes of the text <see cref="Text"/> decodes from it, with
+    /// no byte-order mark: well-formed UTF-8 is the content itself, past a UTF-8 mark, and anything else (another
+    /// encoding's mark, or bytes that are not well-formed UTF-8) is decoded by <see cref="Text"/> and encoded again. A
+    /// reader of UTF-8 (a JSON reader) reads the result as it would read the decoded text, without the text.</summary>
+    /// <param name="content">The file's bytes, whole.</param>
+    /// <returns>The UTF-8 text bytes: a slice of <paramref name="content"/> when it is well-formed UTF-8, otherwise a
+    /// new array.</returns>
+    public static ReadOnlyMemory<byte> Utf8(ReadOnlyMemory<byte> content) {
+        var text = (content.Span.StartsWith(value: System.Text.Encoding.UTF8.Preamble) ? content[System.Text.Encoding.UTF8.Preamble.Length..] : content);
+
+        return (System.Text.Unicode.Utf8.IsValid(value: text.Span)
+            ? text
+            : System.Text.Encoding.UTF8.GetBytes(s: Text(content: content.ToArray())));
+    }
 
     /// <summary>Reads a stream from its position to its end, refusing to hold more than <paramref name="maximumBytes"/>.
     /// The stream is opened once by the caller and read until end of stream; its length is never trusted as the

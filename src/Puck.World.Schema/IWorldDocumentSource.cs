@@ -2,8 +2,39 @@ using Puck.Assets;
 
 namespace Puck.World;
 
-/// <summary>One document's bytes in the order a composition read them.</summary>
-public sealed record WorldComposedLink(string Path, byte[] Bytes);
+/// <summary>One document a composition read: its resolved path, the SHA-256 digest of the bytes read there, and those
+/// bytes while something must still prove the image by them (its own document's, and every document's when the image
+/// carries no input facts).</summary>
+public sealed class WorldComposedLink {
+    private byte[]? m_digest;
+
+    /// <summary>Initializes a new instance of the <see cref="WorldComposedLink"/> class for bytes just read.</summary>
+    /// <param name="path">The document's resolved path.</param>
+    /// <param name="bytes">The bytes read there, whole; their digest is computed when first asked for.</param>
+    public WorldComposedLink(string path, byte[] bytes) {
+        Path = path;
+        Bytes = bytes;
+    }
+    /// <summary>Initializes a new instance of the <see cref="WorldComposedLink"/> class from a digest already known.</summary>
+    /// <param name="path">The document's resolved path.</param>
+    /// <param name="digest">The SHA-256 digest of the bytes read there, 32 bytes.</param>
+    /// <param name="bytes">The bytes, or <see langword="null"/> when the image no longer holds them.</param>
+    public WorldComposedLink(string path, byte[] digest, byte[]? bytes) {
+        Path = path;
+        m_digest = digest;
+        Bytes = bytes;
+    }
+
+    /// <summary>Gets the document's resolved path.</summary>
+    public string Path { get; }
+    /// <summary>Gets the bytes read, or <see langword="null"/> when the image keeps only their digest.</summary>
+    public byte[]? Bytes { get; }
+    /// <summary>Gets the SHA-256 digest of the bytes read, 32 bytes.</summary>
+    public byte[] Digest => (m_digest ??= System.Security.Cryptography.SHA256.HashData(source: Bytes!));
+
+    // The same read without its bytes, for an image whose input facts prove it.
+    internal WorldComposedLink WithoutBytes() => ((Bytes is null) ? this : new WorldComposedLink(bytes: null, digest: Digest, path: Path));
+}
 /// <summary>A composed image and the filesystem facts that justify it. The original chain preserves content hashes.</summary>
 public sealed record WorldComposedDocument(IReadOnlyList<WorldComposedLink> Chain, byte[] ComposedJson, int Reach, IReadOnlyList<CompileInput>? Inputs) {
     // Effective scalar provenance is process-local. Older/persisted images without it still serve ordinary reads;

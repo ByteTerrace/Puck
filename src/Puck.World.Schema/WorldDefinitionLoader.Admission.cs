@@ -30,7 +30,7 @@ public static partial class WorldDefinitionLoader {
         admission = null;
         if (!TryDecode(json: out var json, reason: out reason, sourceName: sourceName, utf8: utf8)) { return false; }
         if (compiled is null) {
-            if (!WorldDefinitionFileSource.TryParseDocument(definition: out var parsed, json: json,
+            if (!WorldDefinitionFileSource.TryParseDocument(definition: out var parsed, utf8: json,
                 reason: out reason, sourceName: sourceName)) { return false; }
             return TryPrepareAndAdmit(keys: keys, catalog: catalog, definition: (parsed! with { DocumentDirectory = documentDirectory }), instanceIdentity: instanceIdentity, neighbours: neighbours,
                 overrides: overrides, reason: out reason, resolved: out admission, sourceName: sourceName);
@@ -43,7 +43,7 @@ public static partial class WorldDefinitionLoader {
             documentDirectory: documentDirectory,
             drawn: out var drawn,
             instanceIdentity: instanceIdentity,
-            parse: () => (WorldDefinitionFileSource.TryParseDocument(definition: out var authored, json: json, reason: out var parseReason, sourceName: sourceName)
+            parse: () => (WorldDefinitionFileSource.TryParseDocument(definition: out var authored, utf8: json, reason: out var parseReason, sourceName: sourceName)
                 ? ((authored! with { DocumentDirectory = documentDirectory }), string.Empty)
                 : (null, parseReason)),
             reason: out reason,
