@@ -312,6 +312,8 @@ public sealed class SdfMeshRegionArena : IDisposable {
         foreach (var mesh in m_ahead) {
             if (m_placements.ContainsKey(key: mesh)) { continue; }
             if (!TryPlace(mesh: mesh)) {
+                // The set names meshes without claiming them, so a mesh its owner has since released is not placed.
+                if (mesh.IsReleased) { continue; }
                 words -= ForgetUnnamed();
                 if (!TryPlace(mesh: mesh)) {
                     _ = m_aheadRefused.Add(item: mesh);
@@ -323,7 +325,8 @@ public sealed class SdfMeshRegionArena : IDisposable {
 
         return words;
     }
-    // Places a mesh at the lowest free run that holds it; false when no free run under the limit holds it.
+    // Places a mesh at the lowest free run that holds it under a placement claim of its own; false when no free run
+    // under the limit holds it, or when the mesh's storage was already released.
     private bool TryPlace(SdfMesh mesh) {
         // A range is at least one word, so a mesh without words still has a place of its own.
         var words = ((ulong)Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh)));
@@ -335,6 +338,12 @@ public sealed class SdfMeshRegionArena : IDisposable {
             _ = m_ranges.Free(start: start);
             return false;
         }
+        // The claim comes before the placement is recorded, so every recorded placement holds exactly one claim that
+        // Forget and Dispose release.
+        if (!mesh.TryAcquire(cached: true)) {
+            _ = m_ranges.Free(start: start);
+            return false;
+        }
 
         var vertexWord = ((int)start);
         var materialWord = (vertexWord + (mesh.Positions.Length * SdfMeshRecord.VertexWords));
@@ -342,7 +351,6 @@ public sealed class SdfMeshRegionArena : IDisposable {
         var skinWord = (mesh.VertexMembers.IsEmpty ? 0 : (indexWord + SdfMeshRegion.IndexWordsOf(mesh: mesh)));
 
         m_placements.Add(key: mesh, value: new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord, SkinWord: skinWord));
-        mesh.Acquire(cached: true);
         m_placed.Add(item: mesh);
         m_placedWords += SdfMeshRegion.WordsOf(mesh: mesh);
         RefreshUnused(mesh: mesh);
