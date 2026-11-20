@@ -25,7 +25,8 @@ public sealed class BoardJumpDistanceQuery : BoardQuery {
     /// <param name="empty">The board's unoccupied value.</param>
     /// <param name="source">The moving token's initial cell.</param>
     /// <param name="target">The resolved destination cell.</param>
-    public long Evaluate(ReadOnlySpan<long> values, long empty, int source, int target) {
+    /// <param name="scratch">The working storage the search borrows its distances and queue from.</param>
+    public long Evaluate(ReadOnlySpan<long> values, long empty, int source, int target, ArenaScratch scratch) {
         var count = Topology.CellCount;
 
         if ((((uint)source) >= count) || (((uint)target) >= count)) {
@@ -37,41 +38,37 @@ public sealed class BoardJumpDistanceQuery : BoardQuery {
         if (values[target] != empty) {
             return -1;
         }
-        var storage = System.Buffers.ArrayPool<int>.Shared.Rent(minimumLength: (count * 2));
+        using var storageLease = scratch.Rent<int>(length: (count * 2));
 
-        try {
-            var distance = storage.AsSpan(length: count, start: 0);
-            var queue = storage.AsSpan(length: count, start: count);
+        var distance = storageLease.Span[..count];
+        var queue = storageLease.Span[count..];
 
-            distance.Fill(value: -1);
-            distance[source] = 0;
-            queue[0] = source;
-            var tail = 1;
+        distance.Fill(value: -1);
+        distance[source] = 0;
+        queue[0] = source;
+        var tail = 1;
 
-            for (var head = 0; (head < tail); head++) {
-                var cell = queue[head];
+        for (var head = 0; (head < tail); head++) {
+            var cell = queue[head];
 
-                for (var direction = 0; (direction < Topology.DirectionCount); direction++) {
-                    var middle = Topology.Neighbour(cell: cell, direction: direction);
+            for (var direction = 0; (direction < Topology.DirectionCount); direction++) {
+                var middle = Topology.Neighbour(cell: cell, direction: direction);
 
-                    if ((middle < 0) || (middle == source) || (values[middle] == empty)) {
-                        continue;
-                    }
-                    var landing = Topology.Neighbour(cell: middle, direction: direction);
-
-                    if ((landing < 0) || (distance[landing] >= 0) || (values[landing] != empty)) {
-                        continue;
-                    }
-                    distance[landing] = (distance[cell] + 1);
-                    if (landing == target) {
-                        return distance[landing];
-                    }
-                    queue[tail++] = landing;
+                if ((middle < 0) || (middle == source) || (values[middle] == empty)) {
+                    continue;
                 }
+                var landing = Topology.Neighbour(cell: middle, direction: direction);
+
+                if ((landing < 0) || (distance[landing] >= 0) || (values[landing] != empty)) {
+                    continue;
+                }
+                distance[landing] = (distance[cell] + 1);
+                if (landing == target) {
+                    return distance[landing];
+                }
+                queue[tail++] = landing;
             }
-            return -1;
-        } finally {
-            System.Buffers.ArrayPool<int>.Shared.Return(storage);
         }
+        return -1;
     }
 }

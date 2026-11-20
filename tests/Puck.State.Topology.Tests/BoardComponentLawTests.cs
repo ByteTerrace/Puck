@@ -583,11 +583,14 @@ public sealed class BoardComponentLawTests {
             boundary: true
         );
 
+        var scratch = new ArenaScratch();
+
         _ = BoardQueries.Evaluate(
             boundary,
             Position,
             0,
-            source: 6
+            source: 6,
+            scratch: scratch
         );
         Assert.Equal(
             0L,
@@ -597,7 +600,8 @@ public sealed class BoardComponentLawTests {
                         boundary,
                         Position,
                         0,
-                        source: 6
+                        source: 6,
+                        scratch: scratch
                     );
                 }
             })

@@ -83,6 +83,7 @@ public static partial class ArenaTransforms {
         if (BoardQueries.ClearEnclosed(
             empty: layout.Empty,
             lower: enclosed.Lower,
+            scratch: context.Arena.Scratch,
             source: origin,
             topology: topology,
             upper: enclosed.Upper,
