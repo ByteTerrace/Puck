@@ -42,6 +42,9 @@ internal interface ISdfContourLattice {
     int CellsX { get; }
     int CellsY { get; }
     int CellsZ { get; }
+    // The owner the contour's rented scratch is charged to for as long as the contour holds it, or null for unmetered
+    // offline work. Every rental of the extraction goes through it, so a bake's account sees the contour's workspace.
+    IAllocationObserver? Workspace { get; }
     double CellSize { get; }
     int Corner(int x, int y, int z);
     bool Inside(int corner);
@@ -166,19 +169,19 @@ internal static class SdfDualContouring {
         var cellsZ = grid.CellsZ;
         var cellCount = ((cellsX * cellsY) * cellsZ);
         // The workspace is rented and returned once the surface, which the result owns, is copied out.
-        using var vertexLease = RentedArrays.Rent<int>(array: out var vertexOfPatch, minimumLength: (cellCount * MaximumPatches));
-        using var maskLease = RentedArrays.Rent<byte>(array: out var maskOfCell, minimumLength: cellCount);
-        using var positions = new RentedList<double>();
-        using var normals = new RentedList<double>();
-        using var features = new RentedList<bool>();
-        using var solveds = new RentedList<bool>();
-        using var besides = new RentedList<bool>();
+        using var vertexLease = RentedArrays.Rent<int>(array: out var vertexOfPatch, minimumLength: (cellCount * MaximumPatches), owner: grid.Workspace);
+        using var maskLease = RentedArrays.Rent<byte>(array: out var maskOfCell, minimumLength: cellCount, owner: grid.Workspace);
+        using var positions = new RentedList<double>(owner: grid.Workspace);
+        using var normals = new RentedList<double>(owner: grid.Workspace);
+        using var features = new RentedList<bool>(owner: grid.Workspace);
+        using var solveds = new RentedList<bool>(owner: grid.Workspace);
+        using var besides = new RentedList<bool>(owner: grid.Workspace);
         // Per vertex, its crossings' mean in world space, where Settle returns a vertex whose quads cannot face out.
-        using var anchors = new RentedList<double>();
+        using var anchors = new RentedList<double>(owner: grid.Workspace);
         // Per vertex, the way the lattice says its patch faces (SdfContourFacing.Patch).
-        using var patches = new RentedList<double>();
+        using var patches = new RentedList<double>(owner: grid.Workspace);
         // Per vertex whose crease lies past its cell, the crease's point in lattice coordinates (HandOff).
-        using var handoffs = new RentedList<(int Vertex, double X, double Y, double Z)>();
+        using var handoffs = new RentedList<(int Vertex, double X, double Y, double Z)>(owner: grid.Workspace);
 
         vertexOfPatch.AsSpan(start: 0, length: (cellCount * MaximumPatches)).Fill(value: -1);
         maskOfCell.AsSpan(start: 0, length: cellCount).Clear();
@@ -291,35 +294,35 @@ internal static class SdfDualContouring {
         int[] coarse = [(cells[0] / factor), (cells[1] / factor), (cells[2] / factor)];
         var coarseCount = ((coarse[0] * coarse[1]) * coarse[2]);
         // The workspace is rented and returned once the merged surface, which the result owns, is built.
-        using var refinedLease = RentedArrays.Rent<bool>(array: out var refined, minimumLength: coarseCount);
-        using var coarseMaskLease = RentedArrays.Rent<byte>(array: out var coarseMasks, minimumLength: coarseCount);
-        using var coarseVertexLease = RentedArrays.Rent<int>(array: out var coarseVertices, minimumLength: coarseCount);
+        using var refinedLease = RentedArrays.Rent<bool>(array: out var refined, minimumLength: coarseCount, owner: grid.Workspace);
+        using var coarseMaskLease = RentedArrays.Rent<byte>(array: out var coarseMasks, minimumLength: coarseCount, owner: grid.Workspace);
+        using var coarseVertexLease = RentedArrays.Rent<int>(array: out var coarseVertices, minimumLength: coarseCount, owner: grid.Workspace);
         var crossed = grid.CrossedFineCells;
         // Per crossed fine cell, by its fine key, its corner-sign mask and its first vertex.
         var fineCells = new Dictionary<long, (byte Mask, int Vertex)>(capacity: crossed.Length);
-        using var positions = new RentedList<double>();
-        using var normals = new RentedList<double>();
+        using var positions = new RentedList<double>(owner: grid.Workspace);
+        using var normals = new RentedList<double>(owner: grid.Workspace);
         // Per vertex, the block whose fine vertices it merges with (OwnerOf, Block), or -1.
-        using var owners = new RentedList<int>();
+        using var owners = new RentedList<int>(owner: grid.Workspace);
         // Per merging block, its low corner in fine lattice coordinates and its fine cells along each axis: an unmeasured
         // refined coarse cell, numbered by its coarse index, then the stride cells of measured cells of a stride past one,
         // numbered after the coarse cells as they are first met.
         var strideBlocks = new Dictionary<long, int>();
         var blocks = new List<(int X, int Y, int Z, int Size)>();
-        using var features = new RentedList<bool>();
-        using var solveds = new RentedList<bool>();
-        using var besides = new RentedList<bool>();
+        using var features = new RentedList<bool>(owner: grid.Workspace);
+        using var solveds = new RentedList<bool>(owner: grid.Workspace);
+        using var besides = new RentedList<bool>(owner: grid.Workspace);
         // Per vertex, its crossings' mean in world space (Settle).
-        using var anchors = new RentedList<double>();
+        using var anchors = new RentedList<double>(owner: grid.Workspace);
         // Per vertex, the way the lattice says its patch faces (SdfContourFacing.Patch).
-        using var patches = new RentedList<double>();
+        using var patches = new RentedList<double>(owner: grid.Workspace);
         // Every merged fine vertex's crossings' tangent planes in world space (Place's worldPlanes), back to back in vertex
         // order, and per vertex where its planes start and end there: -1 for a vertex that records none.
-        using var planeData = new RentedList<double>();
-        using var planeStarts = new RentedList<int>();
-        using var planeEnds = new RentedList<int>();
+        using var planeData = new RentedList<double>(owner: grid.Workspace);
+        using var planeStarts = new RentedList<int>(owner: grid.Workspace);
+        using var planeEnds = new RentedList<int>(owner: grid.Workspace);
         // Per vertex whose crease lies past its cell, the crease's point in fine lattice coordinates (HandOff).
-        using var handoffs = new RentedList<(int Vertex, double X, double Y, double Z)>();
+        using var handoffs = new RentedList<(int Vertex, double X, double Y, double Z)>(owner: grid.Workspace);
 
         coarseMasks.AsSpan(start: 0, length: coarseCount).Clear();
         coarseVertices.AsSpan(start: 0, length: coarseCount).Fill(value: -1);
@@ -472,9 +475,9 @@ internal static class SdfDualContouring {
             return ((fineCells.TryGetValue(key: key, value: out var fine) && (PatchCount[fine.Mask] == 1)) ? fine.Vertex : -1);
         }
 
-        using var quads = new RentedList<int>();
-        using var quadCorners = new RentedList<int>();
-        using var quadAxes = new RentedList<sbyte>();
+        using var quads = new RentedList<int>(owner: grid.Workspace);
+        using var quadCorners = new RentedList<int>(owner: grid.Workspace);
+        using var quadAxes = new RentedList<sbyte>(owner: grid.Workspace);
         Span<int> ring = stackalloc int[4];
         Span<int> at = stackalloc int[3];
         Span<int> cell = stackalloc int[3];
@@ -777,7 +780,7 @@ internal static class SdfDualContouring {
             block = owner => whole(faces.BlockOf(owner: owner));
         }
 
-        using var pieceSets = Pieces(owners: owners, quads: quads);
+        using var pieceSets = Pieces(owners: owners, quads: quads, workspace: grid.Workspace);
 
         int Root(int vertex) => pieceSets.Find(element: vertex);
 
@@ -789,20 +792,20 @@ internal static class SdfDualContouring {
             if ((owners[vertex] < 0) || (Root(vertex: vertex) == vertex)) { mergedCount++; }
         }
 
-        using var remapLease = RentedArrays.Rent<int>(array: out var remap, minimumLength: vertexCount);
+        using var remapLease = RentedArrays.Rent<int>(array: out var remap, minimumLength: vertexCount, owner: grid.Workspace);
         // Per merged vertex, by its index: a piece's sums over its fine vertices, its root and whether any of them lies
         // on a crease, and where its fine vertices' tangent planes lie in `piecePlanes`. A merged index is numbered as its
         // piece is first met in vertex order, so walking the indices visits the pieces in that order.
-        using var pieceLease = RentedArrays.Rent<Piece>(array: out var pieces, minimumLength: mergedCount);
-        using var mergedPositionLease = RentedArrays.Rent<double>(array: out var mergedPositions, minimumLength: (3 * mergedCount));
-        using var mergedNormalLease = RentedArrays.Rent<double>(array: out var mergedNormals, minimumLength: (3 * mergedCount));
+        using var pieceLease = RentedArrays.Rent<Piece>(array: out var pieces, minimumLength: mergedCount, owner: grid.Workspace);
+        using var mergedPositionLease = RentedArrays.Rent<double>(array: out var mergedPositions, minimumLength: (3 * mergedCount), owner: grid.Workspace);
+        using var mergedNormalLease = RentedArrays.Rent<double>(array: out var mergedNormals, minimumLength: (3 * mergedCount), owner: grid.Workspace);
         var mergedFeatures = new bool[mergedCount];
         var mergedSolved = new bool[mergedCount];
         var mergedBesides = new bool[mergedCount];
         // Per merged vertex, where Settle returns it: an unowned vertex's own crossings' mean, a piece's fine vertices'
         // mean of theirs.
-        using var mergedAnchorLease = RentedArrays.Rent<double>(array: out var mergedAnchors, minimumLength: (3 * mergedCount));
-        using var mergedPatchLease = RentedArrays.Rent<double>(array: out var mergedPatches, minimumLength: (3 * mergedCount));
+        using var mergedAnchorLease = RentedArrays.Rent<double>(array: out var mergedAnchors, minimumLength: (3 * mergedCount), owner: grid.Workspace);
+        using var mergedPatchLease = RentedArrays.Rent<double>(array: out var mergedPatches, minimumLength: (3 * mergedCount), owner: grid.Workspace);
         var merged = 0;
 
         remap.AsSpan(start: 0, length: vertexCount).Fill(value: -1);
@@ -855,7 +858,7 @@ internal static class SdfDualContouring {
             planeTotal += count;
         }
 
-        using var piecePlaneLease = RentedArrays.Rent<double>(array: out var piecePlanes, minimumLength: planeTotal);
+        using var piecePlaneLease = RentedArrays.Rent<double>(array: out var piecePlanes, minimumLength: planeTotal, owner: grid.Workspace);
 
         for (var vertex = 0; (vertex < vertexCount); vertex++) {
             if ((owners[vertex] < 0) || (planeStarts[vertex] < 0)) { continue; }
@@ -869,8 +872,8 @@ internal static class SdfDualContouring {
         var longestRun = 0;
 
         for (var index = 0; (index < merged); index++) { longestRun = Math.Max(val1: longestRun, val2: (pieces[index].PlaneEnd - pieces[index].PlaneStart)); }
-        using var localPlaneLease = RentedArrays.Rent<double>(array: out var localPlanes, minimumLength: longestRun);
-        using var mergedHandoffs = new RentedList<(int Vertex, double X, double Y, double Z)>(capacity: handoffs.Count);
+        using var localPlaneLease = RentedArrays.Rent<double>(array: out var localPlanes, minimumLength: longestRun, owner: grid.Workspace);
+        using var mergedHandoffs = new RentedList<(int Vertex, double X, double Y, double Z)>(capacity: handoffs.Count, owner: grid.Workspace);
         var origin = grid.World(x: 0.0, y: 0.0, z: 0.0);
         var (unitX, unitY, unitZ) = grid.World(x: 1.0, y: 1.0, z: 1.0);
         var unit = (X: (unitX - origin.X), Y: (unitY - origin.Y), Z: (unitZ - origin.Z));
@@ -975,7 +978,7 @@ internal static class SdfDualContouring {
             keptQuads++;
         }
 
-        using var settled = new RentedList<int>();
+        using var settled = new RentedList<int>(owner: grid.Workspace);
 
         Settle(anchors: mergedAnchors.AsSpan(start: 0, length: (3 * mergedCount)), axes: mergedAxes, besides: mergedBesides, features: mergedFeatures, patches: mergedPatches.AsSpan(start: 0, length: (3 * mergedCount)), positions: mergedPositions.AsSpan(start: 0, length: (3 * mergedCount)), quads: mergedQuads, returned: settled, solveds: mergedSolved);
         returned = null;
@@ -996,8 +999,8 @@ internal static class SdfDualContouring {
         };
     }
     // The pieces of the blocks' surfaces: two fine vertices of one owner are one piece where a quad edge joins them.
-    private static SdfDisjointSet Pieces(RentedList<int> owners, RentedList<int> quads) {
-        var sets = new SdfDisjointSet(count: owners.Count);
+    private static SdfDisjointSet Pieces(RentedList<int> owners, RentedList<int> quads, IAllocationObserver? workspace) {
+        var sets = new SdfDisjointSet(count: owners.Count, owner: workspace);
 
         for (var quad = 0; (quad < quads.Count); quad += 4) {
             for (var corner = 0; (corner < 4); corner++) {
@@ -1035,25 +1038,25 @@ internal static class SdfDualContouring {
 
         if ((unheld is null) || !grid.CrossingNormals) { return faces; }
 
-        using var sets = Pieces(owners: owners, quads: quads);
+        using var sets = Pieces(owners: owners, quads: quads, workspace: grid.Workspace);
         // Each piece's fine vertices back to back, pieces by their roots' order, each in vertex order.
-        using var startLease = RentedArrays.Rent<int>(array: out var starts, minimumLength: (vertexCount + 1));
-        using var memberLease = RentedArrays.Rent<int>(array: out var members, minimumLength: vertexCount);
+        using var startLease = RentedArrays.Rent<int>(array: out var starts, minimumLength: (vertexCount + 1), owner: grid.Workspace);
+        using var memberLease = RentedArrays.Rent<int>(array: out var members, minimumLength: vertexCount, owner: grid.Workspace);
 
         starts.AsSpan(start: 0, length: (vertexCount + 1)).Clear();
         for (var vertex = 0; (vertex < vertexCount); vertex++) {
             if (owners[vertex] >= 0) { starts[(sets.Find(element: vertex) + 1)]++; }
         }
         for (var root = 0; (root < vertexCount); root++) { starts[(root + 1)] += starts[root]; }
-        using var fillLease = RentedArrays.Rent<int>(array: out var fill, minimumLength: vertexCount);
+        using var fillLease = RentedArrays.Rent<int>(array: out var fill, minimumLength: vertexCount, owner: grid.Workspace);
 
         starts.AsSpan(start: 0, length: vertexCount).CopyTo(destination: fill);
         for (var vertex = 0; (vertex < vertexCount); vertex++) {
             if (owners[vertex] >= 0) { members[fill[sets.Find(element: vertex)]++] = vertex; }
         }
 
-        using var planes = new RentedList<double>();
-        using var local = new RentedList<double>();
+        using var planes = new RentedList<double>(owner: grid.Workspace);
+        using var local = new RentedList<double>(owner: grid.Workspace);
 
         for (var root = 0; (root < vertexCount); root++) {
             var piece = members.AsSpan(start: starts[root], length: (starts[(root + 1)] - starts[root]));
@@ -1874,9 +1877,9 @@ internal static class SdfDualContouring {
     // belongs to.
     private static (int[] Quads, int[] QuadCorners, sbyte[] QuadAxes) Connect<TLattice>(TLattice grid, byte[] maskOfCell, int[] vertexOfPatch) where TLattice : ISdfContourLattice {
         Span<int> cells = [grid.CellsX, grid.CellsY, grid.CellsZ];
-        using var quads = new RentedList<int>();
-        using var quadCorners = new RentedList<int>();
-        using var quadAxes = new RentedList<sbyte>();
+        using var quads = new RentedList<int>(owner: grid.Workspace);
+        using var quadCorners = new RentedList<int>(owner: grid.Workspace);
+        using var quadAxes = new RentedList<sbyte>(owner: grid.Workspace);
         Span<int> ring = stackalloc int[4];
         Span<int> at = stackalloc int[3];
         Span<int> cell = stackalloc int[3];

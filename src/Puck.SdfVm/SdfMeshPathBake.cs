@@ -2281,7 +2281,7 @@ public sealed partial class SdfMeshPathBake {
         if (empty) {
             if (contour is not null) { StoreEmpty(group); }
         } else if (contour is not null) {
-            creases = CreaseVertices(contour: contour);
+            creases = CreaseVertices(contour: contour, workspace: group.Memory);
             if (creases.Length > 0) {
                 group.Projection = new ContourProjection(allocator: group.Allocator, contour: contour, observer: group.Memory);
                 group.CreaseSpacing = lattice.ContourCell;
@@ -2317,8 +2317,8 @@ public sealed partial class SdfMeshPathBake {
         }
     }
     // The vertices a contour's field check measures (AnswerCreases): every vertex no crossing pins to the surface.
-    private static int[] CreaseVertices(SdfContour contour) {
-        using var found = new RentedList<int>();
+    private static int[] CreaseVertices(SdfContour contour, IAllocationObserver? workspace) {
+        using var found = new RentedList<int>(owner: workspace);
 
         for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
             if (((vertex < contour.Features.Length) && contour.Features[vertex]) || ((vertex < contour.Solved.Length) && contour.Solved[vertex])) { found.Add(item: vertex); }
@@ -2429,7 +2429,7 @@ public sealed partial class SdfMeshPathBake {
     private void Split(Group group) {
         var started = Stopwatch.GetTimestamp();
 
-        var contour = group.Contour!.Finished(cell: group.DiagnosticCell);
+        var contour = group.Contour!.Finished(cell: group.DiagnosticCell, workspace: group.Memory);
         var cut = new SdfMeshMaterialCut(contour: contour);
         var points = cut.Points(into: group.Points);
 
@@ -2704,7 +2704,7 @@ public sealed partial class SdfMeshPathBake {
             }
             for (var vertex = 0; (vertex < contour.VertexCount); vertex++) { m_starts[(vertex + 1)] += m_starts[vertex]; }
             m_incident.Resize(m_starts[contour.VertexCount], clear: false, preserve: false);
-            using var filledLease = RentedArrays.Rent<int>(array: out var filled, minimumLength: contour.VertexCount);
+            using var filledLease = RentedArrays.Rent<int>(array: out var filled, minimumLength: contour.VertexCount, owner: observer);
 
             filled.AsSpan(start: 0, length: contour.VertexCount).Clear();
             for (var index = 0; (index < m_triangleCount); index++) {

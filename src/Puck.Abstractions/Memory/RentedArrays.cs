@@ -19,11 +19,14 @@ public static class RentedArrays {
     // The largest single array the pool keeps; a bigger one is a one-off the collector reclaims once it is returned.
     private const long MaxRetainedArrayBytes = (128L << 20);
     // The arrays of one element type the pool keeps.
-    private const int MaxRetainedArrays = 16;
+    private const int MaxRetainedArrays = 64;
 
     private static readonly Lock TrimGate = new();
     private static readonly List<Action> Trimmers = [];
     private static long RetainedBytes;
+    // The bytes of large rentals a fresh allocation answered and the pool answered, since the process began.
+    private static long FreshLargeBytes;
+    private static long ReusedLargeBytes;
     private static IAllocationObserver? LargeCache;
 
     /// <summary>Connects the process account to the large cache. Every element type shares its admission lock.</summary>
@@ -83,6 +86,9 @@ public static class RentedArrays {
         try {
             var array = shared ? ArrayPool<T>.Shared.Rent(minimumLength)
                 : cached ?? GC.AllocateUninitializedArray<T>(capacity);
+            if (!shared) {
+                if (cached is null) { _ = Interlocked.Add(location1: ref FreshLargeBytes, value: bytes); } else { _ = Interlocked.Add(location1: ref ReusedLargeBytes, value: bytes); }
+            }
             if (owner is not null && array.Length != capacity) {
                 // The shared pool promises a minimum length. Account the actual bucket if its policy changes.
                 var extra = ((long)array.Length - capacity) * Unsafe.SizeOf<T>();
@@ -98,24 +104,28 @@ public static class RentedArrays {
             throw;
         }
     }
-    /// <summary>Rents an array for the scope of a <see langword="using"/> declaration: disposing the lease returns it.</summary>
+    /// <summary>Rents an array for the scope of a <see langword="using"/> declaration: disposing the lease returns it
+    /// and releases the workspace charge the rent took. The lease holds the owner, so a charge cannot outlive its array
+    /// by a caller returning without it.</summary>
     /// <typeparam name="T">The element.</typeparam>
     /// <param name="minimumLength">The fewest elements the array holds.</param>
     /// <param name="array">The array, with at least the requested length and unspecified elements. The caller releases
     /// its reference to it when the lease is disposed.</param>
+    /// <param name="owner">Owner of the workspace, or null for an unmetered rental.</param>
     /// <returns>The lease, which returns the array when disposed.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="minimumLength"/> is negative.</exception>
-    public static Lease<T> Rent<T>(int minimumLength, out T[] array) {
-        array = Rent<T>(minimumLength: minimumLength);
-        return new Lease<T>(array: array);
+    public static Lease<T> Rent<T>(int minimumLength, out T[] array, IAllocationObserver? owner = null) {
+        array = Rent<T>(minimumLength: minimumLength, owner: owner);
+        return new Lease<T>(array: array, owner: owner);
     }
 
     /// <summary>One rented array, released when the lease is disposed.</summary>
     /// <typeparam name="T">The element.</typeparam>
     /// <param name="array">The rented array.</param>
-    public readonly struct Lease<T>(T[] array) : IDisposable {
+    /// <param name="owner">The owner the array was rented under, or null.</param>
+    public readonly struct Lease<T>(T[] array, IAllocationObserver? owner) : IDisposable {
         /// <summary>Releases the rented array.</summary>
-        public void Dispose() => Return(array: array);
+        public void Dispose() => Return(array: array, owner: owner);
     }
     /// <summary>Returns an array to the shared pool, clearing it first when its elements hold references, or a large
     /// array of reference-free elements to the large pool while it has room. Any other large array is eligible for
@@ -174,6 +184,11 @@ public static class RentedArrays {
     }
     /// <summary>Gets the bytes of arrays the large pool holds for reuse, over every element type.</summary>
     public static long LargeRetainedBytes => Interlocked.Read(location: ref RetainedBytes);
+    /// <summary>Gets the bytes of large rentals (past the shared pool's limit) answered by a new allocation, which the
+    /// collector reclaims once it is returned past the pool's room, since the process began.</summary>
+    public static long LargeFreshBytes => Interlocked.Read(location: ref FreshLargeBytes);
+    /// <summary>Gets the bytes of large rentals answered by an array a finished build returned, since the process began.</summary>
+    public static long LargeReusedBytes => Interlocked.Read(location: ref ReusedLargeBytes);
 
     // The arrays of one reference-free element type past the shared pool's limit that finished builds returned. Every
     // array it holds has exactly a size class's length (ClassLengthOf), which is what finds one a later rental can use.
