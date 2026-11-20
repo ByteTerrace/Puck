@@ -10,7 +10,7 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfWorldTablesWorkLawTests {
     [Fact]
     public void ADriveInsideTheFramesOpenBatchHandsItsJobsToTheQueueAndRunsThemAtTheGpusPace() {
-        var gpu = new FakeGpuDevice { DefersBatches = true };
+        var gpu = new FakeGpuDevice(clock: VirtualClock.ForDevice()) { DefersBatches = true };
         using var rig = new Rig(device: gpu);
         rig.Render();
         var client = new SerialClient(gpu.Services) { Remaining = 8 };
@@ -32,16 +32,16 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         using var rig = new Rig();
         rig.Render();
         // Every job's fence reads complete as it is submitted, so a wake is always ready; each recording takes time.
-        var client = new SerialClient(rig.Gpu.Services) { Remaining = 1000, RecordDelay = TimeSpan.FromMilliseconds(value: 2) };
+        var clock = Assert.IsType<VirtualClock>(rig.Gpu.Clock);
+        var client = new SerialClient(rig.Gpu.Services) { Remaining = 1000, OnRecord = () => clock.Advance(by: SdfGpuWork.DriveSlice) };
         var work = rig.Engine.GpuWork;
         work.Add(client);
 
         work.Drive(rig.Engine);
 
-        // The slice holds a handful of two-millisecond recordings, never the whole backlog.
-        var slice = ((int)(SdfGpuWork.DriveSlice.TotalMilliseconds / client.RecordDelay.TotalMilliseconds));
-
-        Assert.InRange(actual: client.Answered, low: 1, high: (slice + SdfGpuWork.SlotCount));
+        // The first recording consumes the whole slice. Even its ready fence waits for the next step.
+        Assert.Equal(expected: 999, actual: client.Remaining);
+        Assert.Equal(expected: 0, actual: client.Answered);
     }
     [Fact]
     public void AJobIsHandedBackOnlyWhileItHasConsumedNothing() {
@@ -81,7 +81,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         private bool m_flying;
         public int Remaining { get; set; }
         public int Answered { get; private set; }
-        public TimeSpan RecordDelay { get; init; }
+        public Action? OnRecord { get; init; }
         public GpuMemoryBytes OwnedBytes => default;
         public GpuQueueCategory Category => GpuQueueCategory.Probe;
         public bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [NotNullWhen(true)] out object? job, out double estimatedSeconds) {
@@ -94,7 +94,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             return true;
         }
         public void Record(object job, in SdfGpuWorkRecording recording) {
-            if (RecordDelay > TimeSpan.Zero) { Thread.Sleep(timeout: RecordDelay); }
+            OnRecord?.Invoke();
             recording.CopyToReadback(m_source, 4);
         }
         public void Complete(object job, SdfGpuWorkReadback readback) {

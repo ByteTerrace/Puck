@@ -200,7 +200,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
         var owned = (written
             ? mesh.NativeCopy(Allocator, Account, restore: (this, identity, geometry), asStored: true)
-            : mesh.NativeCopy(Allocator, Account));
+            : CopyUnstored(mesh));
 
         try {
             if (Hold(form: form, geometry: geometry, identity: identity, materials: materials, mesh: owned) && !written) {
@@ -209,6 +209,9 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             return owned;
         } catch { owned.Release(); throw; }
     }
+
+    // A caller-owned copy without a disk entry or a library claim.
+    internal SdfMesh CopyUnstored(SdfMesh mesh) => mesh.NativeCopy(Allocator, Account);
 
     private bool HoldsAny(SdfMeshGeometry geometry, UInt128 identity) {
         lock (m_gate) { return m_held.Contains(hash: (identity, geometry)); }
@@ -329,7 +332,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         }
     }
     // Decodes a geometry's entry into the storage its mesh keeps, with the taking group's ids written in it when the mesh can
-    // be renumbered back from them (SdfMeshStoreCodec.TryDecode), and holds the result for the run. The decode's own claim
+    // be renumbered back from them (SdfMeshStoreDecoder.TryDecode), and holds the result for the run. The decode's own claim
     // outlives the hold, for the groups that share the decode to take the mesh from.
     private StoredMesh Decode(SdfMeshStore disk, UInt128 identity, SdfMeshGeometry geometry, int[] taking, UInt128? form) {
         // A native mesh lets its parts go and restores them from this set, so the set stays while this process runs.

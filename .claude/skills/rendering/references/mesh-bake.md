@@ -1269,8 +1269,7 @@ laws exercise that boundary.
   compiled-world chunks and generated machine images use the same walker with their own roots.
   The closure starts from production entry methods. The contour walk stops at
   `SdfMeshPathBake.SimplificationStage.Run` and the simplification walk starts
-  there. The sampling walk starts from the production dispatch rather than
-  the contour's request scheduler. The final closure reaches group/geometry planning, lattice refinement,
+  there. The sampling walk starts from the batch methods that pack the dispatch inputs. The final closure reaches group/geometry planning, lattice refinement,
   contours, material cuts, skin and levels. It follows every call, delegate, override of a type the bake constructs
   and implementation of an abstract member it calls across the `Puck` assemblies `Puck.SdfVm`
   references, and hashes each method's IL with its tokens written as the
@@ -1288,14 +1287,13 @@ laws exercise that boundary.
   `SdfMesh/Restorable`: `CodeClosure` stops a nested type named by its full name), and at `GpuRegion` and
   `GpuUploadRuns`, at memory accounting and storage (`MemoryAccount`, `HostMemory`, the allocators and
   `OwnedBuffer<T>`: admission paces when a group holds its final lattice, never what it meshes, and a buffer holds
-  the words the bake's own code writes), and at the runtime. It also
+  the words the bake's own code writes), at bake admission pacing (`SdfMeshBakeBacklog`), and at the runtime. It also
   stops at `SdfMeshBakeReport`, which words, counts and writes every `[sdf.mesh-bake]` line and owns the counters
   they report (`Accounts`): the bake hands it values (a group's selector, counts, outcomes) and never builds or
   writes text itself, so an edit to a line's words, or a new counter, leaves the identity as it was. A new line or
   counter goes in that type. What the bake stores for a line's later use (a group's `Outcome` text) is still
-  its own code. The
-  background GPU dispatch enters the sampling closure along with the tables
-  it binds. An edit to `Puck.Maths` code the contour calls moves the contour
+  its own code. The checkpoint keys also cover their storage format. The final mesh key reads the encoder and its
+  quantization. The store decoder and background GPU scheduler can change independently. An edit to `Puck.Maths` code the contour calls moves the contour
   key and its downstream stages. Comments and checkout paths do not
   change the key, and worktrees of one bake share one set. Appearance is outside the key by construction: the
   closure's program root is `SdfProgram`'s only constructor, the field derivation, which takes no material or screen

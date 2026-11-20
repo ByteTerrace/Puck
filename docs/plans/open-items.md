@@ -3682,7 +3682,7 @@ proves itself with `puck compile` lowering to the same document.
     `Comparison` lambdas beside them (`SdfMeshIrradiance`'s candidate order,
     the path bake's tiers) move the same way if a profile shows them hot.
   - **SdfVm and Assets: zlib through stream adapters.** [medium]
-    `SdfMeshStoreCodec.TryDecode` expands every store entry through a `fixed`
+    `SdfMeshStoreDecoder.TryDecode` expands every store entry through a `fixed`
     block, an `UnmanagedMemoryStream`, a `ZLibStream` and an end-of-stream
     probe, though the expanded length is in the header. One
     `ZLibDecoder.TryDecompress` into the buffer it already owns replaces all
