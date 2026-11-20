@@ -70,8 +70,6 @@ public readonly record struct WorldMutationAdmission(
     ushort Budget,
     string? DisclosureRefusal = null
 ) {
-    /// <summary>Gets a value indicating whether every gate cleared.</summary>
-    public bool IsAdmitted => (Rule is WorldMutationAdmissionRule.Admitted or WorldMutationAdmissionRule.Structural);
 
     /// <summary>Describes the human-legible predicate fragment naming WHY this admission refused — written to read directly
     /// after a principal's own <c>Describe()</c> ("<c>addon:x cannot mutate section:hud (…)</c>"), so both doors

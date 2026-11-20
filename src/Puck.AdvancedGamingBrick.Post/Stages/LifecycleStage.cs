@@ -91,12 +91,12 @@ internal sealed class LifecycleStage : IPostStage<PostContext> {
 
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x04000200,
+            address: AgbAddresses.InterruptEnable,
             value: 0x1000
         );
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x04000132,
+            address: AgbAddresses.KeyControl,
             value: 0x4001
         );
         bus.Halt(stop: stop);

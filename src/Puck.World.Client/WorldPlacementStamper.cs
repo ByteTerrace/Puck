@@ -88,7 +88,6 @@ public static partial class WorldPlacementStamper {
     private const float PlacementBoundMargin = 0.4f;
     // Probe instances are spaced far apart so the program's segment-merge pass can never collapse consecutive probe
     // segments — a merged probe would under-reserve the segment directory a real scattered world needs (contract).
-    private const float ProbeSpread = 100f;
 
     // Each inline prototype mesh's engine-frame SdfMesh, keyed by the immutable mesh record (MeshOf).
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldPrototypeMesh, SdfMesh> Meshes = new();

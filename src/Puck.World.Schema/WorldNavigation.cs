@@ -118,8 +118,6 @@ public sealed class WorldNavigationDomainTable {
         m_kinds = kinds;
     }
 
-    /// <summary>Gets the number of domains.</summary>
-    public int Count => m_table.Count;
     /// <summary>Gets an empty domain table.</summary>
     public static WorldNavigationDomainTable Empty { get; } = new(
         table: OrdinalTable.Empty,

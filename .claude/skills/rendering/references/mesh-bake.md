@@ -856,8 +856,8 @@ laws exercise that boundary.
   takes, each member refined over its own box at its own factor. A folded
   member's part is the cube about its slot's origin its copies reach.
   A dynamic instance's text declares detail too: a pooled creation's embossed text is
-  its own instance on a slot after its shapes' that holds the root's pose
-  (`WorldCreationInstances.TextSlot`), bounded by its glyphs' reach and declaring their
+  its own instance on a slot after its shapes' that holds the root's pose,
+  bounded by its glyphs' reach and declaring their
   detail. Sharing the root slot with a blend group put the glyphs in that
   group's coarser lattice, which dropped an "I". A slot's group refines toward
   the finest detail its

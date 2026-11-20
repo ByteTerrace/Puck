@@ -195,8 +195,6 @@ public readonly record struct WorldInputEvent(ushort Channel, WorldInputEventKin
 public readonly record struct WorldInputRecord(ulong Id, ulong Epoch, WorldInputEvent Event,
     WorldInputInterval Capture, WorldInputInterval Admission, ulong HoldPress = 0, int Crossing = -1,
     FixedQ4816 Calibration = default) {
-    /// <summary>Whether processing happened after the capture interval.</summary>
-    public bool Late => (Capture.Tick < Admission.Tick);
 
     /// <summary>The selected deterministic judgement time.</summary>
     public FixedQ4816 Time(WorldInputJudgement policy) => ((policy == WorldInputJudgement.Capture)

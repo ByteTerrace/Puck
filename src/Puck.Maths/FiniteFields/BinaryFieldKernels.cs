@@ -1122,98 +1122,40 @@ public static class BinaryFieldKernels {
             length: count
         );
 
+        return
+            TryMultiplyAccumulateRegionByteRung<VectorLanes512, Vector512<byte>>(accumulate: accumulate, degree: degree, destination: narrowDestination, scalar: narrowScalar, source: narrowSource, tail: narrowTail) ||
+            TryMultiplyAccumulateRegionByteRung<VectorLanes256, Vector256<byte>>(accumulate: accumulate, degree: degree, destination: narrowDestination, scalar: narrowScalar, source: narrowSource, tail: narrowTail) ||
+            TryMultiplyAccumulateRegionByteRung<VectorLanes128, Vector128<byte>>(accumulate: accumulate, degree: degree, destination: narrowDestination, scalar: narrowScalar, source: narrowSource, tail: narrowTail);
+    }
+    /// <summary>Runs one vector width's byte-wide rungs, the affine transform before the nibble split, when the region earns their setup.</summary>
+    /// <typeparam name="TLanes">The vector width's lane operations.</typeparam>
+    /// <typeparam name="TBytes">The byte vector at this width.</typeparam>
+    /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
+    /// <param name="source">The reduced region to scale.</param>
+    /// <param name="scalar">The reduced element to scale by.</param>
+    /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
+    /// <param name="degree">The field's degree.</param>
+    /// <param name="tail">The modulus tail.</param>
+    /// <returns><see langword="true"/> when a rung of this width ran and the region is complete; otherwise <see langword="false"/>.</returns>
+    private static bool TryMultiplyAccumulateRegionByteRung<TLanes, TBytes>(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail)
+        where TLanes : IByteVectorLanes<TBytes>
+        where TBytes : struct {
+        var count = destination.Length;
+
         if (
-            IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine512) &&
-            ((AffineMatrixAmortizationVectors * 64) <= count)
+            IsRegionTierSupported(tier: RegionTier(affine: true, byteCount: TLanes.ByteCount)) &&
+            ((AffineMatrixAmortizationVectors * TLanes.ByteCount) <= count)
         ) {
-            MultiplyAccumulateRegionAffine<VectorLanes512, Vector512<byte>>(
-                accumulate: accumulate,
-                degree: degree,
-                destination: narrowDestination,
-                scalar: narrowScalar,
-                source: narrowSource,
-                tail: narrowTail
-            );
+            MultiplyAccumulateRegionAffine<TLanes, TBytes>(accumulate: accumulate, degree: degree, destination: destination, scalar: scalar, source: source, tail: tail);
 
             return true;
         }
 
         if (
-            IsRegionTierSupported(tier: BinaryFieldRegionTier.Split512) &&
-            ((SplitTableAmortizationVectors * 64) <= count)
+            IsRegionTierSupported(tier: RegionTier(affine: false, byteCount: TLanes.ByteCount)) &&
+            ((SplitTableAmortizationVectors * TLanes.ByteCount) <= count)
         ) {
-            MultiplyAccumulateRegionSplit<VectorLanes512, Vector512<byte>>(
-                accumulate: accumulate,
-                degree: degree,
-                destination: narrowDestination,
-                scalar: narrowScalar,
-                source: narrowSource,
-                tail: narrowTail
-            );
-
-            return true;
-        }
-
-        if (
-            IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine256) &&
-            ((AffineMatrixAmortizationVectors * 32) <= count)
-        ) {
-            MultiplyAccumulateRegionAffine<VectorLanes256, Vector256<byte>>(
-                accumulate: accumulate,
-                degree: degree,
-                destination: narrowDestination,
-                scalar: narrowScalar,
-                source: narrowSource,
-                tail: narrowTail
-            );
-
-            return true;
-        }
-
-        if (
-            IsRegionTierSupported(tier: BinaryFieldRegionTier.Split256) &&
-            ((SplitTableAmortizationVectors * 32) <= count)
-        ) {
-            MultiplyAccumulateRegionSplit<VectorLanes256, Vector256<byte>>(
-                accumulate: accumulate,
-                degree: degree,
-                destination: narrowDestination,
-                scalar: narrowScalar,
-                source: narrowSource,
-                tail: narrowTail
-            );
-
-            return true;
-        }
-
-        if (
-            IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine128) &&
-            ((AffineMatrixAmortizationVectors * 16) <= count)
-        ) {
-            MultiplyAccumulateRegionAffine<VectorLanes128, Vector128<byte>>(
-                accumulate: accumulate,
-                degree: degree,
-                destination: narrowDestination,
-                scalar: narrowScalar,
-                source: narrowSource,
-                tail: narrowTail
-            );
-
-            return true;
-        }
-
-        if (
-            IsRegionTierSupported(tier: BinaryFieldRegionTier.Split128) &&
-            ((SplitTableAmortizationVectors * 16) <= count)
-        ) {
-            MultiplyAccumulateRegionSplit<VectorLanes128, Vector128<byte>>(
-                accumulate: accumulate,
-                degree: degree,
-                destination: narrowDestination,
-                scalar: narrowScalar,
-                source: narrowSource,
-                tail: narrowTail
-            );
+            MultiplyAccumulateRegionSplit<TLanes, TBytes>(accumulate: accumulate, degree: degree, destination: destination, scalar: scalar, source: source, tail: tail);
 
             return true;
         }
@@ -1243,59 +1185,47 @@ public static class BinaryFieldKernels {
             length: count
         );
 
-        // The thresholds count ELEMENTS rather than bytes, because a sixteen-bit element is half a byte-rung lane: a
-        // 512-bit vector carries thirty-two of them. The four matrices this width needs cost four times the byte rung's
-        // one, so a rung that cannot complete a vector iteration is an even worse trade here than there.
-        if (
-            IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine512) &&
-            ((WideAffineMatrixAmortizationVectors * 32) <= count)
-        ) {
-            MultiplyAccumulateRegionWideAffine<VectorLanes512, Vector512<byte>>(
-                accumulate: accumulate,
-                degree: degree,
-                destination: wideDestination,
-                scalar: wideScalar,
-                source: wideSource,
-                tail: wideTail
-            );
-
-            return true;
-        }
-
-        if (
-            IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine256) &&
-            ((WideAffineMatrixAmortizationVectors * 16) <= count)
-        ) {
-            MultiplyAccumulateRegionWideAffine<VectorLanes256, Vector256<byte>>(
-                accumulate: accumulate,
-                degree: degree,
-                destination: wideDestination,
-                scalar: wideScalar,
-                source: wideSource,
-                tail: wideTail
-            );
-
-            return true;
-        }
-
-        if (
-            IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine128) &&
-            ((WideAffineMatrixAmortizationVectors * 8) <= count)
-        ) {
-            MultiplyAccumulateRegionWideAffine<VectorLanes128, Vector128<byte>>(
-                accumulate: accumulate,
-                degree: degree,
-                destination: wideDestination,
-                scalar: wideScalar,
-                source: wideSource,
-                tail: wideTail
-            );
-
-            return true;
-        }
-
-        return false;
+        return
+            TryMultiplyAccumulateRegionWideRung<VectorLanes512, Vector512<byte>>(accumulate: accumulate, degree: degree, destination: wideDestination, scalar: wideScalar, source: wideSource, tail: wideTail) ||
+            TryMultiplyAccumulateRegionWideRung<VectorLanes256, Vector256<byte>>(accumulate: accumulate, degree: degree, destination: wideDestination, scalar: wideScalar, source: wideSource, tail: wideTail) ||
+            TryMultiplyAccumulateRegionWideRung<VectorLanes128, Vector128<byte>>(accumulate: accumulate, degree: degree, destination: wideDestination, scalar: wideScalar, source: wideSource, tail: wideTail);
     }
+    /// <summary>Runs one vector width's sixteen-bit affine rung when the region earns its four matrices.</summary>
+    /// <typeparam name="TLanes">The vector width's lane operations.</typeparam>
+    /// <typeparam name="TBytes">The byte vector at this width.</typeparam>
+    /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
+    /// <param name="source">The reduced region to scale.</param>
+    /// <param name="scalar">The reduced element to scale by.</param>
+    /// <param name="accumulate"><see langword="true"/> to add the scaled region into the destination; <see langword="false"/> to overwrite it.</param>
+    /// <param name="degree">The field's degree.</param>
+    /// <param name="tail">The modulus tail.</param>
+    /// <returns><see langword="true"/> when the rung ran and the region is complete; otherwise <see langword="false"/>.</returns>
+    /// <remarks>
+    /// The threshold counts elements rather than bytes, because a sixteen-bit element is half a byte-rung lane: a 512-bit
+    /// vector carries thirty-two of them. The four matrices this width needs cost four times the byte rung's one, so a
+    /// rung that cannot complete a vector iteration is an even worse trade here than there.
+    /// </remarks>
+    private static bool TryMultiplyAccumulateRegionWideRung<TLanes, TBytes>(Span<ushort> destination, ReadOnlySpan<ushort> source, ushort scalar, bool accumulate, int degree, ushort tail)
+        where TLanes : IByteVectorLanes<TBytes>
+        where TBytes : struct {
+        if (
+            !IsRegionTierSupported(tier: RegionTier(affine: true, byteCount: TLanes.ByteCount)) ||
+            ((WideAffineMatrixAmortizationVectors * (TLanes.ByteCount / sizeof(ushort))) > destination.Length)
+        ) {
+            return false;
+        }
+
+        MultiplyAccumulateRegionWideAffine<TLanes, TBytes>(accumulate: accumulate, degree: degree, destination: destination, scalar: scalar, source: source, tail: tail);
+
+        return true;
+    }
+    /// <summary>Names the region rung of one vector width and kernel family.</summary>
+    /// <param name="affine"><see langword="true"/> for the Galois-field affine transform; <see langword="false"/> for the nibble-split shuffle.</param>
+    /// <param name="byteCount">The vector width in bytes: 16, 32 or 64.</param>
+    /// <returns>The rung; <see cref="BinaryFieldRegionTier"/> numbers each width's split rung before its affine rung, narrowest width first.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static BinaryFieldRegionTier RegionTier(bool affine, int byteCount) =>
+        (BinaryFieldRegionTier)((2 * BitOperations.Log2(value: ((uint)byteCount) / 16u)) + (affine ? 2 : 1));
     /// <summary>Builds the four bit matrices that the Galois-field affine transform applies to scale a sixteen-bit field element.</summary>
     /// <param name="scalar">The reduced element to scale by.</param>
     /// <param name="degree">The field's degree, which is at most sixteen.</param>

@@ -89,11 +89,6 @@ public sealed record SdfMeshLevelError(
 /// whole field.</param>
 /// <param name="Skipped">Why the level was not contoured or not kept, or <see langword="null"/>.</param>
 public sealed record SdfMeshFieldContour(int Level, float Cell, float Offset, SdfMesh? Mesh, SdfMesh? Whole, bool[]? Vanished, int VanishedComponents, byte[]? Members, string? Skipped) {
-    /// <summary>Gets the level's kept triangles.</summary>
-    public int Triangles => (Mesh?.TriangleCount ?? 0);
-    /// <summary>Gets a value indicating whether the level ends the chain: its contour found no surface, or every
-    /// component vanished.</summary>
-    public bool Empty => ((Mesh is null) && (Skipped is null));
 }
 
 /// <summary>

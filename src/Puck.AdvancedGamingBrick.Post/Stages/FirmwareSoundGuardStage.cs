@@ -332,14 +332,14 @@ internal sealed class FirmwareSoundGuardStage : IPostStage<PostContext> {
         );
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000C6,
+            address: AgbAddresses.Dma1Control,
             value: (off
             ? (ushort)0xB600
             : (ushort)0)
         );
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000D2,
+            address: AgbAddresses.Dma2Control,
             value: (off
             ? (ushort)0xB600
             : (ushort)0)
@@ -369,11 +369,11 @@ internal sealed class FirmwareSoundGuardStage : IPostStage<PostContext> {
         );
         var dma1 = ((bus.Read16(
             access: BusAccessType.NonSequential,
-            address: 0x040000C6
+            address: AgbAddresses.Dma1Control
         ) & 0x8000) != 0);
         var dma2 = ((bus.Read16(
             access: BusAccessType.NonSequential,
-            address: 0x040000D2
+            address: AgbAddresses.Dma2Control
         ) & 0x8000) != 0);
         var pcm = ReadPcm(bus: bus);
         var expectedPcm = (accepted
@@ -438,11 +438,11 @@ internal sealed class FirmwareSoundGuardStage : IPostStage<PostContext> {
         var restarted = ((offset == 0) && (count == 1));
         var dma1 = ((bus.Read16(
             access: BusAccessType.NonSequential,
-            address: 0x040000C6
+            address: AgbAddresses.Dma1Control
         ) & 0x8000) != 0);
         var dma2 = ((bus.Read16(
             access: BusAccessType.NonSequential,
-            address: 0x040000D2
+            address: AgbAddresses.Dma2Control
         ) & 0x8000) != 0);
 
         Require(
@@ -469,17 +469,17 @@ internal sealed class FirmwareSoundGuardStage : IPostStage<PostContext> {
         // guard decisions, not incidental sample-DMA or timer progression.
         core.Instance.Machine.Bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x04000102,
+            address: AgbAddresses.Timer0Control,
             value: 0
         );
         core.Instance.Machine.Bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000C6,
+            address: AgbAddresses.Dma1Control,
             value: 0
         );
         core.Instance.Machine.Bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000D2,
+            address: AgbAddresses.Dma2Control,
             value: 0
         );
         return core;

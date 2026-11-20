@@ -30,8 +30,7 @@ public sealed class WorldInstance : IDisposable {
     /// <param name="ownedMachines">The machine host this instance owns and must dispose, or <see langword="null"/>
     /// when the container owns it (a desktop's boot instance) — disposal follows ownership, never presence.</param>
     /// <param name="link">This instance's own transport — the same two-line <c>LoopbackTransport</c> pattern a
-    /// desktop's composition root wires for its boot instance, now held uniformly on every row:
-    /// <see cref="WorldInstanceHost.TryGetLink"/> is the one local-authority submission door.</param>
+    /// desktop's composition root wires for its boot instance, held uniformly on every row.</param>
     /// <param name="federation">This row's own federation signing identity.</param>
     /// <param name="documentOrigin">This row's document origin — where its <c>references[].document</c> locators
     /// resolve against.</param>

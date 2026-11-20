@@ -488,15 +488,6 @@ public static class SdfMeshRegion {
         record.Clear();
         record[(SdfMeshRecord.SelectionWord + 3)] = SdfMeshRecord.AbsentFlag;
     }
-    /// <summary>Reads the mesh placement already encoded in a complete draw record.</summary>
-    /// <param name="record">The retained draw's words.</param>
-    /// <returns>The placement used to pack the draw.</returns>
-    public static SdfMeshRegionMesh ReadPlacement(ReadOnlySpan<uint> record) => new(
-        IndexWord: ((int)record[SdfMeshRecord.IndexWord]),
-        IndexCount: ((int)record[SdfMeshRecord.IndexCountWord]),
-        VertexWord: ((int)record[SdfMeshRecord.VertexWord]),
-        MaterialWord: ((int)record[SdfMeshRecord.TriangleMaterialWord]),
-        SkinWord: ((int)record[SdfMeshRecord.SkinWord]));
 
     /// <summary>The bytes of one draw's record (<see cref="SdfMeshRecord.DrawWords"/> words).</summary>
     public const int DrawBytes = (SdfMeshRecord.DrawWords * sizeof(uint));

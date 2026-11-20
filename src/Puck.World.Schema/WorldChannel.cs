@@ -358,21 +358,6 @@ public sealed class WorldChannelTable {
     /// <summary>Quantizes a binary contribution after its source fold; numeric values keep their precision.</summary>
     public FixedQ4816 Quantize(int ordinal, FixedQ4816 value) => ((Shape(ordinal: ordinal) == ChannelShape.Binary)
         ? ((value >= Threshold(ordinal: ordinal)) ? FixedQ4816.One : FixedQ4816.Zero) : value);
-    /// <summary>Resolves a binding channel reference to its authored ordinal. <see cref="ChannelRef"/> carries only
-    /// the declared-name arm; see <c>ChannelRef.cs</c>'s remarks.</summary>
-    public bool TryGetOrdinal(ChannelRef reference, out int ordinal) {
-        switch (reference) {
-            case ChannelRef.Name name:
-                return TryGetOrdinal(
-                    name: name.Value,
-                    ordinal: out ordinal
-                );
-            default:
-                ordinal = -1;
-
-                return false;
-        }
-    }
 }
 /// <summary>One row of the world's channel table — the intent vector's declared vocabulary (see
 /// <see cref="Puck.World.Protocol.PlayerIntent"/>). The consumer is exactly one of <see cref="Role"/> (an engine

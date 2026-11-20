@@ -295,8 +295,6 @@ public sealed partial class WorldServer : IWorldServerHost {
     public Action<WorldDocumentSubmissionReceipt>? DocumentSubmissionTap { get; set; }
     /// <summary>Gets the optional host sink for the player-keyed durable writes emitted by each completed tick.</summary>
     public Action<IReadOnlyList<DurableStateOutput>>? DurableStateOutputTap { get; set; }
-    /// <summary>Gets the durable writes emitted by the most recently completed tick.</summary>
-    public IReadOnlyList<DurableStateOutput> DurableStateOutputs => m_population.DurableStateOutputs;
     /// <summary>Gets an optional edit-echo tap invoked beside the loud stderr accept/reject lines — mutation outcomes,
     /// grant/revoke outcomes, and their document-only class — so a UI surface (the overlay toast, the editor HUD)
     /// narrates them without scraping stderr. Fires synchronously inline with the apply, never from a background

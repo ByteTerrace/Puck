@@ -27,18 +27,6 @@ public sealed record WorldFieldsSection(
     IReadOnlyList<WorldLatticeFill>? Paint = null,
     WorldLatticeScalar? TravelResistance = null
 ) {
-    /// <summary>Determines whether two compiled composites carry the same runtime field inputs, including paint.</summary>
-    internal bool HasSameCompilation(WorldFieldsSection other) => (
-        (Name == other.Name) &&
-        (TravelResistance == other.TravelResistance) &&
-        (Lattice == other.Lattice) &&
-        Fields.SequenceEqual(second: other.Fields) &&
-        ReactionsEqual(
-        left: Reactions,
-        right: other.Reactions
-    ) &&
-        (Paint ?? []).SequenceEqual(second: (other.Paint ?? []))
-    );
     /// <summary>Determines whether two compiled composites lower to the same reaction program. Paint and display
     /// metadata remain inputs to the companion composite, not to reaction scheduling.</summary>
     internal bool HasSameProgram(WorldFieldsSection other) => (

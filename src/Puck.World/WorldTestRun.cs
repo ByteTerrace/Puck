@@ -200,8 +200,6 @@ internal sealed class WorldTestRun {
         }
     }
 
-    /// <summary>Gets the tick the state export is written at, or <c>0</c> when no schedule is authored.</summary>
-    public ulong ExportTick => m_exportTick;
     /// <summary>Gets a value indicating whether this run submits the document's schedule: the document authors one
     /// and the boot armed it with <c>--schedule-dir</c>.</summary>
     public bool IsArmed => (m_armed && (m_server.Configuration.Schedule is not null));

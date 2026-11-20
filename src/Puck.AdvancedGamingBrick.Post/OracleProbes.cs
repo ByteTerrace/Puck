@@ -17,7 +17,6 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// </para>
 /// </summary>
 internal sealed class OracleProbes {
-    private const uint IoBase = 0x04000000u;
     private const uint ResultBase = 0x02000000u;
 
     private readonly ReadOnlyMemory<byte> m_bios;
@@ -26,19 +25,21 @@ internal sealed class OracleProbes {
         m_bios = bios;
     }
 
-    // Timer0 (÷1) enabled, an immediate 1-word DMA runs, then a plain memory access follows: hardware forces the
-    // instruction fetch after a DMA non-sequential. The timer read afterward captures the combined cost. Target: 88.
-    private byte[] BuildDmaForceNseqProbe() {
+    // Timer0 (÷1) enabled, then an immediate EWRAM-to-EWRAM DMA3 of a given number of 32-bit words is triggered and the
+    // timer is read after a given number of NOPs. Four words and no NOPs measure the DMA start delay plus its burst
+    // (documented corpus target: 20); one word and three NOPs measure the forced non-sequential fetch after a DMA
+    // (target: 88).
+    private byte[] BuildTimedDmaProbe(uint words, int nops) {
         var a = new ArmProbeAssembler();
 
         a.LdrConst(
             rd: 0,
-            value: IoBase
+            value: AgbAddresses.IoBase
         );
         a.LdrConst(
             rd: 1,
             value: 0x00800000u
-        );
+        );          // TM0: reload 0, control 0x80 (enable, ÷1)
         a.Str(
             imm12: 0x100,
             rd: 1,
@@ -64,21 +65,21 @@ internal sealed class OracleProbes {
         );
         a.LdrConst(
             rd: 1,
-            value: (0x8400u << 16) | 1u
+            value: (0x8400u << 16) | words
         );
         a.Str(
             imm12: 0xDC,
             rd: 1,
             rn: 0
         );
-        a.Nop();
-        a.Nop();
-        a.Nop();
+        for (var nop = 0; (nop < nops); nop++) {
+            a.Nop();
+        }
         a.Ldr(
             imm12: 0x100,
             rd: 1,
             rn: 0
-        );
+        );              // read TM0COUNT
         a.LdrConst(
             rd: 2,
             value: ResultBase
@@ -105,7 +106,7 @@ internal sealed class OracleProbes {
 
         a.LdrConst(
             rd: 0,
-            value: IoBase
+            value: AgbAddresses.IoBase
         );
         // Seed the channel-1 source word in EWRAM.
         a.LdrConst(
@@ -183,70 +184,6 @@ internal sealed class OracleProbes {
 
         return a.Finish();
     }
-    // Timer0 (÷1) enabled, then an immediate 4-word DMA is triggered; the timer is read right after. The measured
-    // value reflects the DMA start delay + burst cycles. Documented corpus target: 20.
-    private byte[] BuildDmaStartDelayProbe() {
-        var a = new ArmProbeAssembler();
-
-        a.LdrConst(
-            rd: 0,
-            value: IoBase
-        );
-        a.LdrConst(
-            rd: 1,
-            value: 0x00800000u
-        );          // TM0: reload 0, control 0x80 (enable, ÷1)
-        a.Str(
-            imm12: 0x100,
-            rd: 1,
-            rn: 0
-        );
-        // Immediate DMA3 (regs 0xD4/0xD8/0xDC/0xDE): EWRAM→EWRAM, 4 words, 32-bit.
-        a.LdrConst(
-            rd: 1,
-            value: 0x02000100u
-        );
-        a.Str(
-            imm12: 0xD4,
-            rd: 1,
-            rn: 0
-        );
-        a.LdrConst(
-            rd: 1,
-            value: 0x02000200u
-        );
-        a.Str(
-            imm12: 0xD8,
-            rd: 1,
-            rn: 0
-        );
-        a.LdrConst(
-            rd: 1,
-            value: (0x8400u << 16) | 4u
-        );
-        a.Str(
-            imm12: 0xDC,
-            rd: 1,
-            rn: 0
-        );
-        a.Ldr(
-            imm12: 0x100,
-            rd: 1,
-            rn: 0
-        );              // read TM0COUNT
-        a.LdrConst(
-            rd: 2,
-            value: ResultBase
-        );
-        a.Str(
-            imm12: 0,
-            rd: 1,
-            rn: 2
-        );
-        a.Spin();
-
-        return a.Finish();
-    }
     // Enable timer0 (÷1), HALT (write HALTCNT=0), and immediately raise a pending timer IRQ so the CPU wakes; the
     // timer is read after wake, capturing the halt-exit latency. Documented direct halt-exit: 12. Needs the retail BIOS.
     private byte[] BuildHaltExitProbe() {
@@ -254,7 +191,7 @@ internal sealed class OracleProbes {
 
         a.LdrConst(
             rd: 0,
-            value: IoBase
+            value: AgbAddresses.IoBase
         );
         a.LdrLabel(
             label: "handler",
@@ -262,7 +199,7 @@ internal sealed class OracleProbes {
         );
         a.LdrConst(
             rd: 2,
-            value: 0x03007FFCu
+            value: AgbAddresses.BiosInterruptVector
         );
         a.Str(
             imm12: 0,
@@ -324,7 +261,7 @@ internal sealed class OracleProbes {
         a.Label(name: "handler");
         a.LdrConst(
             rd: 3,
-            value: 0x04000000u
+            value: AgbAddresses.IoBase
         );
         a.LdrConst(
             rd: 1,
@@ -349,7 +286,7 @@ internal sealed class OracleProbes {
 
         a.LdrConst(
             rd: 0,
-            value: IoBase
+            value: AgbAddresses.IoBase
         );
         a.LdrLabel(
             label: "handler",
@@ -357,7 +294,7 @@ internal sealed class OracleProbes {
         );
         a.LdrConst(
             rd: 2,
-            value: 0x03007FFCu
+            value: AgbAddresses.BiosInterruptVector
         );
         a.Str(
             imm12: 0,
@@ -446,7 +383,7 @@ internal sealed class OracleProbes {
 
         a.LdrConst(
             rd: 0,
-            value: IoBase
+            value: AgbAddresses.IoBase
         );
         a.LdrConst(
             rd: 1,
@@ -503,7 +440,7 @@ internal sealed class OracleProbes {
 
         a.LdrConst(
             rd: 0,
-            value: IoBase
+            value: AgbAddresses.IoBase
         );
         a.LdrConst(
             rd: 1,
@@ -841,7 +778,7 @@ internal sealed class OracleProbes {
         Measure(
             name: "dma/start-delay",
             documented: "20",
-            rom: BuildDmaStartDelayProbe(),
+            rom: BuildTimedDmaProbe(nops: 0, words: 4u),
             resultIndex: 0,
             hasRetailBios: hasRetailBios,
             needsBios: false
@@ -849,7 +786,7 @@ internal sealed class OracleProbes {
         Measure(
             name: "dma/force-nseq",
             documented: "88",
-            rom: BuildDmaForceNseqProbe(),
+            rom: BuildTimedDmaProbe(nops: 3, words: 1u),
             resultIndex: 0,
             hasRetailBios: hasRetailBios,
             needsBios: false

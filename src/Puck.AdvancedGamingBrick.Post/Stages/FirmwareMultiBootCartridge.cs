@@ -101,7 +101,7 @@ internal static class FirmwareMultiBootCartridge {
             0xE1D400B8, 0xE3100080, 0,  // 33..35: wait for hardware completion.
             0, 0xE2500001, 0,          // 36..38: native inter-transfer settling delay.
             0xE1D400B2, 0xE12FFF1E,     // 39..40: return child SIOMULTI1.
-            0x04000120, (RomBase + TableOffset), ((RomBase + TableOffset) + ((uint)(negotiation.Length * 2))), 0x02004000,
+            AgbAddresses.SerialData, (RomBase + TableOffset), ((RomBase + TableOffset) + ((uint)(negotiation.Length * 2))), 0x02004000,
             0x2003, (RomBase + ParametersOffset), FirmwareSwiProbe.Info, Completion, 0x2083, 1024,
         ];
 

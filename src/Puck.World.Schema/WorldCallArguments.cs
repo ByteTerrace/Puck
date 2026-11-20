@@ -164,19 +164,6 @@ public static class WorldCallArguments {
     /// <summary>Gets every <c>discriminator.member</c> whose arms disagree on its form, in ordinal order. Such a
     /// member reads as <see cref="WorldArgumentForm.Unclassified"/>.</summary>
     public static IReadOnlyList<string> Conflicts => Table.Value.Conflicts;
-    /// <summary>Gets every classified member, keyed by its arm's discriminator and its JSON name.</summary>
-    public static IReadOnlyDictionary<(string Discriminator, string Member), WorldArgumentForm> Forms => Table.Value.Forms;
-
-    /// <summary>Returns a value indicating whether <paramref name="word"/> is one value of the enumeration a
-    /// <see cref="WorldArgumentForm.Choice"/> member holds.</summary>
-    /// <param name="discriminator">The arm's <c>$type</c> value.</param>
-    /// <param name="member">The member's JSON name.</param>
-    /// <param name="word">The word to test, in the enumeration's own case.</param>
-    /// <returns><see langword="true"/> when the member is a choice and admits the word.</returns>
-    public static bool IsChoiceWord(string discriminator, string member, string word) => (
-        Table.Value.Words.TryGetValue(key: (discriminator, member), value: out var admitted) &&
-        admitted.Contains(item: word)
-    );
 
     // Cache the finite schema, never authored lookup keys. An editor can ask about arbitrarily many unknown
     // members over its lifetime; a negative entry for each would retain their source text indefinitely.
@@ -272,18 +259,5 @@ public static class WorldCallArguments {
         ArgumentNullException.ThrowIfNull(argument: member);
 
         return FindMember(member: member, owner: owner)?.Type;
-    }
-    /// <summary>Returns the form of one member of a <c>$type</c> arm.</summary>
-    /// <param name="discriminator">The arm's <c>$type</c> value.</param>
-    /// <param name="member">The member's JSON name.</param>
-    /// <returns>The member's form, or <see cref="WorldArgumentForm.Unclassified"/> when the model declares no such
-    /// member.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="discriminator"/> or <paramref name="member"/> is
-    /// <see langword="null"/>.</exception>
-    public static WorldArgumentForm Classify(string discriminator, string member) {
-        ArgumentNullException.ThrowIfNull(argument: discriminator);
-        ArgumentNullException.ThrowIfNull(argument: member);
-
-        return Table.Value.Forms.GetValueOrDefault(key: (discriminator, member));
     }
 }

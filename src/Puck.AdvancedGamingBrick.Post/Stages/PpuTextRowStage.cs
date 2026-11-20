@@ -103,7 +103,7 @@ internal sealed class PpuTextRowStage : IPostStage<PostContext> {
                         }
                         for (var offset = 0; (offset < image.Length); offset += 4) {
                             ppu.WriteVideo(
-                                address: (0x06000000u + ((uint)offset)),
+                                address: (AgbAddresses.VideoRam + ((uint)offset)),
                                 width: 4,
                                 value: BinaryPrimitives.ReadUInt32LittleEndian(source: image.AsSpan(start: offset))
                             );
@@ -111,7 +111,7 @@ internal sealed class PpuTextRowStage : IPostStage<PostContext> {
                         for (var index = 0; (index < palette.Length); ++index) {
                             palette[index] = ((ushort)(((index * 109) ^ (index << 7)) & 0x7FFF));
                             ppu.WriteVideo(
-                                address: (0x05000000u + (((uint)index) * 2u)),
+                                address: (AgbAddresses.PaletteRam + (((uint)index) * 2u)),
                                 width: 2,
                                 value: palette[index]
                             );

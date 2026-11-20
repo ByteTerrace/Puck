@@ -15,7 +15,6 @@ namespace Puck.SdfVm;
 public sealed partial class SdfMeshIrradiance {
     // The most leaves one change's hierarchy keeps: a subtree below CutDepth stands as one leaf of its bounds.
     private const int CutDepth = 12;
-    private const int MaxChangeLeaves = (1 << CutDepth);
 
     // A change's hierarchy in depth-first order: a node's subtree is the nodes from it to its Escape, an inner node's
     // first child follows it, and a leaf stands for the boxes under it by its bounds. The walk needs no stack.

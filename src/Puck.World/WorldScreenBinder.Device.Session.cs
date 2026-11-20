@@ -221,20 +221,4 @@ public sealed partial class WorldScreenBinder {
         : null);
     // The glass a window of the boot world stands in: its screen's row, read as its view dresses.
     private Func<WorldScreen?> BootRowOf(int screen) => () => RowOf(screen: screen);
-    // Registers a window session's view: the cost lease of a view that renders every produced frame (the true-cost echo
-    // world.faces reads), and the fit every view of it frames with.
-    private Func<CameraSnapshot?> RegisterWindow(SessionFeed feed) {
-        feed.SetWindowLease(lease: WorldSessionWindowLeases.Acquire(
-            height: (feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight),
-            width: (feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth)
-        ));
-
-        return FitWindow(feed: feed);
-    }
-    private sealed partial class SessionFeed {
-        // Acquires (replacing any prior) this feed's window-cost lease.
-        public void SetWindowLease(IDisposable lease) {
-            WindowLease?.Dispose();
-            WindowLease = lease;
-        }
-    }}
+}

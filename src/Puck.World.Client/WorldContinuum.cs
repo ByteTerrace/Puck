@@ -473,16 +473,6 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
     public WorldAuthorityRoute Route(int slot) => (m_inFrame
         ? (m_frameRoutes[slot] ?? throw new InvalidOperationException(message: $"Seat {slot} has no authority route in this frame."))
         : m_routes.Route(slot: slot));
-    /// <summary>Resolves any complete authority claim into the presentation frame.</summary>
-    public bool TryResolve(WorldAuthorityRoute route, float interpolationAlpha, out Vector3 position, out Quaternion orientation) {
-        return TryResolve(
-            interpolationAlpha: interpolationAlpha,
-            orientation: out orientation,
-            position: out position,
-            route: route,
-            seatSlot: null
-        );
-    }
     /// <summary>Resolves the claimed entity's interpolated pose into the boot presentation frame; a seat presented
     /// elsewhere (<see cref="PresentedElsewhere"/>) has none there.</summary>
     public bool TryResolveSeatPose(int slot, float interpolationAlpha, out Vector3 position, out Quaternion orientation) =>

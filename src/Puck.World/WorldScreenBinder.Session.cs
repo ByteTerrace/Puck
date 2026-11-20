@@ -119,7 +119,7 @@ public sealed partial class WorldScreenBinder {
     private void RegisterSessionView(SessionFeed feed) {
         feed.Registered = true;
         feed.WindowFit = ((feed.Projection == WorldScreenProjection.Window)
-            ? RegisterWindow(feed: feed)
+            ? FitWindow(feed: feed)
             : null);
     }
     // Releases one slot's view of a session: its envelope and window registrations. The session itself is the
@@ -374,7 +374,7 @@ public sealed partial class WorldScreenBinder {
     /// <param name="Projection">How the destination render projects onto this face — see
     /// <see cref="WorldScreenProjection"/>.</param>
     /// <param name="RenderWidth">The resolved offscreen render width, pixels — the true cost this session pays every
-    /// time it produces a frame (see <see cref="WorldSessionWindowLeases"/> for a window's own accounting).</param>
+    /// time it produces a frame.</param>
     /// <param name="RenderHeight">The resolved offscreen render height, pixels.</param>
     /// <param name="RendersEveryFrame">Whether this session renders on every produced frame that shows its glass — a
     /// window does, paying its full render cost each such frame, where an ordinary camera projection refreshes at the
@@ -426,11 +426,6 @@ public sealed partial class WorldScreenBinder {
         // another; null once the destination refused another.
         public WorldSessionObservation? Observation => Hosted.Observation;
 
-        // Acquired only for a WINDOW projection (WorldSessionWindowLeases) — the runtime accounting world.faces'
-        // true-cost echo reads; the DOCUMENT-level refusal is WorldDefinitionValidator's, at boot/mutation time, not
-        // this lease.
-        private IDisposable? WindowLease { get; set; }
-
         // The feed's access and route into its destination's endpoint scene and whether it renders as a view of the
         // World's own residency instead (its destination is the boot world), all settled every frame
         // (SettleSessionRoutes), the access first as the feed is made, and a window's fit (WorldScreenBinder.FitWindow),
@@ -458,8 +453,6 @@ public sealed partial class WorldScreenBinder {
             Route.Dispose();
             EnvelopeRegistration?.Dispose();
             EnvelopeRegistration = null;
-            WindowLease?.Dispose();
-            WindowLease = null;
         }
 
     }

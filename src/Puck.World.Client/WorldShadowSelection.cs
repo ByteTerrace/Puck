@@ -24,9 +24,6 @@ public sealed class WorldShadowSelection {
     private ulong m_previousTick;
     private bool m_initialized;
 
-    /// <summary>Gets the resolved policy, read atomically with respect to delivery.</summary>
-    public WorldShadowSettings Settings { get { lock (m_gate) { return m_settings; } } }
-
     /// <summary>Applies a live quality change using the last delivered candidates, without a fractional crossing.</summary>
     /// <param name="settings">The validated slot policy.</param>
     public void SetSettings(in WorldShadowSettings settings) {

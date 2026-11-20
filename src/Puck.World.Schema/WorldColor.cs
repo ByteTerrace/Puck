@@ -105,32 +105,6 @@ public static class WorldColor {
     /// <param name="rgb">The RGB color.</param>
     /// <returns>The <c>#RRGGBB</c> hex string.</returns>
     public static string RgbToHex(Vector3 rgb) => HexColor.Format(rgb: rgb);
-    /// <summary>Returns an authored generated color for a 0-based index.</summary>
-    /// <param name="index">The 0-based sequence index.</param>
-    /// <param name="defaults">The authored color sequence.</param>
-    /// <returns>The RGB color as a <see cref="Vector3"/>.</returns>
-    public static Vector3 SequenceColor(int index, WorldPlayerDefaults defaults) =>
-        HsvToRgb(
-            h: SequenceHue(
-                index: index,
-                sequence: defaults.ColorSequence
-            ),
-            s: defaults.Saturation,
-            v: defaults.Value
-        );
-    /// <summary>Returns an authored generated color as an uppercase <c>#RRGGBB</c> string.</summary>
-    /// <param name="index">The 0-based sequence index.</param>
-    /// <param name="defaults">The authored color sequence.</param>
-    /// <returns>The <c>#RRGGBB</c> hex string.</returns>
-    public static string SequenceColorHex(int index, WorldPlayerDefaults defaults) =>
-        HsvToHex(
-            h: SequenceHue(
-                index: index,
-                sequence: defaults.ColorSequence
-            ),
-            s: defaults.Saturation,
-            v: defaults.Value
-        );
     /// <summary>Returns an authored sequence hue for a 0-based index, wrapped to <c>[0, 1)</c>.</summary>
     /// <param name="index">The 0-based sequence index.</param>
     /// <param name="sequence">The authored scalar sequence.</param>

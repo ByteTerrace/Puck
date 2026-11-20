@@ -47,8 +47,6 @@ public readonly record struct WorldFieldNodeHandle {
         m_encodedOrdinal = checked((ordinal + 1));
     }
 
-    /// <summary>Gets whether this handle addresses a compiled node.</summary>
-    public bool IsValid => (m_encodedOrdinal > 0);
     /// <summary>Gets the node's stable execution ordinal, or <c>-1</c> for the default handle.</summary>
     public int Ordinal => (m_encodedOrdinal - 1);
 }
@@ -730,16 +728,5 @@ public sealed class WorldFieldProgram {
             nodes: nodes,
             cellCount: checked(((document.Lattice.Width * document.Lattice.Depth) * document.Lattice.Layers))
         );
-    }
-    /// <summary>Determines whether a complete companion composite still carries exactly the field declarations and
-    /// ordered reactions represented by this program. Topology placement, cadence, colour, and paint remain owned by
-    /// the companion and therefore do not participate.</summary>
-    /// <param name="document">The complete companion composite to inspect.</param>
-    /// <returns><see langword="true"/> when the companion's program-owned inputs match.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="document"/> is null.</exception>
-    public bool MatchesProgram(WorldFieldsSection document) {
-        ArgumentNullException.ThrowIfNull(argument: document);
-
-        return m_programSource.HasSameProgram(other: document);
     }
 }

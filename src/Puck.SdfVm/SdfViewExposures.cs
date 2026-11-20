@@ -68,8 +68,6 @@ public sealed class SdfViewExposures {
         internal bool Fresh;
     }
 
-    /// <summary>Gets each view's exposure multiplier, per nit, for the frame <see cref="Stage"/> last staged.</summary>
-    public ReadOnlySpan<float> Multipliers => m_multipliers.AsSpan(length: m_count, start: 0);
     /// <summary>Gets the brightest luminance, in nits, of the sky the irradiance volume's lighting sees, for the frame
     /// last staged; zero while the volume holds no sky.</summary>
     public float SkyPeakLuminance { get; private set; }

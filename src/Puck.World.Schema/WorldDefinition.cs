@@ -1080,16 +1080,6 @@ public sealed partial record WorldDefinition(
         HoldingMoves.TryGetValue(this, out var move) && move.Previous.TryGetTarget(out var source) && ReferenceEquals(previous, source)
             ? move.Rows
             : default;
-    /// <summary>Returns a copy with its declared state spaces replaced.</summary>
-    public WorldDefinition WithWorldSpaces(IReadOnlyList<StateSpace>? spaces) {
-        var updated = this with {
-            StateRaw = ((StateRaw ?? new WorldStateSection()) with { Spaces = spaces }),
-        };
-
-        PreserveCompatibleCompilation(target: updated);
-
-        return updated;
-    }
 
     private static readonly RuntimeCompilationCache AbsentStateCompilation = new();
     [SideTable(reason: "holds the state catalog the running arena was created against; a recompiled catalog would mint keys that arena cannot resolve")]

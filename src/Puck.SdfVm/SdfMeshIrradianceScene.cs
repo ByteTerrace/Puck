@@ -202,7 +202,6 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
         public readonly int First => (m_firstAndCount >> SdfMeshProbeTrace.NodeCountBits);
         public readonly int Count => m_firstAndCount & Node.MaxCount;
-        public readonly uint Link => unchecked((uint)m_firstAndCount);
 
         public static PackedNode Of(in Node node, in BraidFrame frame) => new() {
             m_lowX = BraidFrame.Below(value: node.Low.X, low: frame.Low.X, step: frame.Step.X),

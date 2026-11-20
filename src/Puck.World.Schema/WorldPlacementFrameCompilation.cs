@@ -29,9 +29,6 @@ public readonly record struct CompiledPlacementFrame(FixedVector3 FixedPosition,
     /// <summary>Replaces the world origin without narrowing through presentation.</summary>
     /// <param name="position">The new exact origin.</param><returns>The updated frame.</returns>
     public CompiledPlacementFrame WithFixedPosition(FixedVector3 position) => this with { FixedPosition = position };
-    /// <summary>Replaces the world scale without narrowing through presentation.</summary>
-    /// <param name="scale">The new exact scale.</param><returns>The updated frame.</returns>
-    public CompiledPlacementFrame WithFixedScale(FixedQ4816 scale) => this with { FixedScale = scale };
 }
 /// <summary>Compiles placement parent chains through one deterministic transform composition: the frame table, the
 /// spatial query index and the canonical surface frames all resolve a parent chain through <see cref="Compose"/>

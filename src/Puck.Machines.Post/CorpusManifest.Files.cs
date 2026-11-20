@@ -35,7 +35,7 @@ public sealed partial class CorpusManifest {
         return corpus;
     }
     private static void ValidateHash(string? hash) {
-        if ((hash is null) || (hash.Length != 64) || hash.Any(predicate: static character => !char.IsAsciiHexDigit(c: character))) {
+        if (!ContentDigest.IsHex(text: hash)) {
             throw new InvalidDataException(message: "Every corpus payload requires a computed 64-digit SHA-256 pin.");
         }
     }

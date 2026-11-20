@@ -37,19 +37,12 @@ bool TryResolveAnchor(int anchorId, out SdfAnchor anchor);
 entity slot, and it resolves to that entity's interpolated render pose.
 `FixedAnchorSource` (in `WorldCameraRigCompiler.cs`) always returns one pose,
 and `WorldScreenBinder.Device.CameraViews.cs` adds sources for an entity part and a
-ranked camera candidate. `SdfAnchorTable`, a name-keyed source, has no users.
+ranked camera candidate.
 
 The rule this produces is simple and central: **an id whose subject is gone
 simply stops resolving.** `TryResolveAnchor` returns `false`, and the
 consumer's own fallback—park the camera, skip the frame—is its call. The
 camera never needs to understand entities, only poses.
-
-`SdfAnchorKind` classifies *what kind of thing* an anchor id is drawn from —
-`World` (nothing; the pose is authored directly and only moves via an
-authoring verb), `Body` (a live-animated shape with its own pose stream—an
-avatar, a creation), or `Instance` (a placed/stamped occurrence—a dragged
-prop). This is pure bookkeeping for a host's own id spaces; an anchor source
-itself doesn't care.
 
 **The presentation-only rule.** An anchor is resolved *from* an
 already-computed simulation pose, and its only consumers are presentation:
@@ -60,60 +53,36 @@ state: by the time a pose becomes an anchor, the simulation has already
 finished deciding where things are. The anchor is downstream evidence of a
 decision, not part of making one.
 
-## Camera programs and the rig classes
+## Camera programs
 
 A camera rig answers one question every frame: given a subject's anchor,
 where is the eye, where is it looking, and at what field of view? The rig also
 receives the presentation clocks (`SdfCameraClock`) for camera-only motion.
+
+```text
+(Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock);
+```
 
 A world authors its cameras as camera programs: authored ops, subjects and
 state bindings that `WorldCameraRigCompiler` compiles into one presentation rig
 and `SdfCameraProgramEvaluator` walks each frame. The standard package ships
 the concrete designs, such as `chaseCamera` in `worlds/standard/camera.puck`,
 and a world selects one by a state key, imports it, overrides it by id or
-replaces it. The engine also keeps the five C# rig classes below as a small
-vocabulary of named shapes; none of them reads the clocks.
+replaces it. `SdfCameraProgramRig` is the one `ISdfCameraRig`: the engine keeps
+no C# camera shapes beside the programs.
 
-```text
-(Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock);
-```
+The choice of chase offset is a statement about what "up" means for a
+subject. An offset kept in world axes reads the same whichever way a biped on
+a flat floor faces; an offset rotated by the subject's orientation follows a
+walker on a planetoid, where on the far side the walker's "up" is the world's
+"down" and a world-axis offset would frame the shot from beneath its feet. Get
+it backwards and the symptom is a chase camera that quietly flips upside-down
+the moment a subject's frame diverges from the world's.
 
-Each rig class is a small, named shape covering one way a camera relates to a
-subject. They are implementation helpers; a camera's concrete design belongs
-in an authored program.
-
-| Rig | Shape | When to reach for it |
-|---|---|---|
-| `OrbitRig` | Yaw/pitch/distance around the subject | A controller-driven or scripted orbit—a debug camera, a creation preview |
-| `FollowRig` | Fixed offset in **world** axes | A chase camera for a subject whose own "up" is always world-up (a biped walking on a flat floor) |
-| `OrientedFollowRig` | Fixed offset in the **subject's own** axes | A chase camera for a subject whose "up" can point anywhere (a walker on a curved planetoid, where "over the shoulder" must rotate with the walker, not the world) |
-| `FirstPersonRig` | Eye at the anchor, looking along its facing | A first-person view |
-| `FixedRig` | A pose that ignores the anchor entirely | A static security-camera eye, a backdrop establishing shot |
-
-Two of these are worth dwelling on because the difference between them is a
-recurring lesson, not a coincidence. `FollowRig` keeps its offset in world
-axes deliberately—"up and back" should read the same regardless of which
-way a biped standing on a flat floor is facing. `OrientedFollowRig` rotates
-*both* of its offsets by the subject's orientation before adding them—its
-motivating case is a walker on a planetoid, where on the far side the
-walker's own "up" is the world's "down," and a world-axis chase offset would
-frame the shot from beneath the walker's feet. The choice of rig is a
-statement about what "up" means for that subject. Get it backwards and the
-symptom is a chase camera that quietly flips upside-down the moment a
-subject's frame diverges from the world's.
-
-`OrientedFollowRig` also subsumes `FirstPersonRig` at zero pullback: a
-depth-free eye offset with a small forward step in the target offset
-reproduces the first-person shape exactly. `FirstPersonRig` stays a
-separate type anyway because its own framing—an eye height and a forward
-focus distance—reads more directly for that one case; reach for
-`OrientedFollowRig` the moment you need any pullback at all.
-
-`OrbitRig`'s pure trig—`Offset(yaw, pitch, distance)`—is exposed as a
-static method precisely so a caller that only wants the vector, not a full
-anchor-driven resolve, doesn't have to duplicate the formula. Every
-object-intent camera that has ever existed in this codebase reduces to this
-one function.
+`OrbitRig.Offset(yaw, pitch, distance)` is the pure orbit trig every
+object-intent camera reduces to, exposed so a caller that only wants the
+vector does not duplicate the formula; `OrbitRig.DefaultFieldOfViewRadians` is
+the field of view every lens defaults to.
 
 ## Camera matrices share the rays' convention
 

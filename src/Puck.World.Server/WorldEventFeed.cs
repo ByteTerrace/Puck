@@ -791,20 +791,6 @@ public sealed class WorldEventFeed {
         frame.HasCenter &&
         frame.Shape.Contains(point: point)
     ));
-    /// <summary>Gets a place's volume in the frame the latest collection sensed it in: the shape region edges and
-    /// <see cref="PlacesAt"/> test against.</summary>
-    /// <param name="placementId">The placement carrying the region facet.</param>
-    /// <param name="shape">The region's volume, when sensed.</param>
-    /// <returns><see langword="true"/> when the placement carries a region the feed has sensed with a center.</returns>
-    public bool TryPlaceShape(string placementId, out FixedSpatialShape shape) {
-        if (m_regionFrames.TryGetValue(key: placementId, value: out var frame) && frame.HasCenter) {
-            shape = frame.Shape;
-            return true;
-        }
-
-        shape = default;
-        return false;
-    }
     /// <summary>Reports whether one body is inside a placement's region as of this tick's collection.</summary>
     /// <param name="placementId">The placement carrying the region facet.</param>
     /// <param name="body">The body's 0-based entity index.</param>

@@ -72,15 +72,6 @@ public static class WorldImageProducerVocabulary {
     private static readonly Lock Gate = new();
     private static readonly ImageSourceProducerRegistry<WorldImageProducerShape> Registry = Shipped();
 
-    /// <summary>Gets the registered shapes in registration order: the shipped five first.</summary>
-    public static IReadOnlyList<WorldImageProducerShape> Shapes {
-        get {
-            lock (Gate) {
-                return [.. Registry.Producers];
-            }
-        }
-    }
-
     private static ImageSourceProducerRegistry<WorldImageProducerShape> Shipped() {
         var registry = new ImageSourceProducerRegistry<WorldImageProducerShape>();
 

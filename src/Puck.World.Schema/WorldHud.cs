@@ -354,13 +354,6 @@ public static class HudBindingVocabulary {
     private const string WorldFpsToken = "world.fps";
     private const string WorldTickToken = "world.tick";
 
-    /// <summary>Determines whether <paramref name="token"/> is a recognized binding — the validator's refuse-unknown-by-name check.</summary>
-    /// <param name="token">The token.</param>
-    /// <returns><see langword="true"/> when recognized.</returns>
-    public static bool IsKnown(string? token) => TryParse(
-        binding: out _,
-        token: token
-    );
     /// <summary>Parses a binding token against the closed vocabulary.</summary>
     /// <param name="token">The token (e.g. <c>world.tick</c>, <c>seat.1.position.x</c>, <c>state.row</c>,
     /// <c>state.row.key</c>).</param>

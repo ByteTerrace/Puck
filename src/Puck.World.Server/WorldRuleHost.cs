@@ -171,8 +171,6 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     /// <summary>Gets the compiled <c>rules</c> section, including every member a group claims.</summary>
     internal CompiledRule[] Rules => m_rules;
 
-    /// <summary>Gets the compiled <c>tables</c> section.</summary>
-    private CompiledTable[] Tables => m_tables;
     /// <summary>Gets the server whose document, arena, entity table and narration every rule read and effect arm
     /// addresses.</summary>
     private WorldServer Host => m_host;

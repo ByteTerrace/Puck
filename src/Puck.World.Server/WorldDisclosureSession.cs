@@ -59,8 +59,6 @@ public sealed class WorldDisclosureSession : IClientSink, IDisposable {
 
     /// <summary>Gets the session's principal, or <see langword="null"/> when the world refused it.</summary>
     public Principal? Principal => m_observation?.Session;
-    /// <summary>Gets the session's label in the transcript (<c>session:&lt;authority&gt;</c>).</summary>
-    public string Label => m_label;
 
     /// <summary>Admits a session observing <paramref name="server"/> from <paramref name="sourceAuthority"/> and
     /// records its stream's start (its tier) on the <see cref="LifetimeDoor"/>. A fixture observing a session claims

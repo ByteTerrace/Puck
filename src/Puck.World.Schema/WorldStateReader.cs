@@ -122,35 +122,12 @@ public static class WorldStateReader {
         return true;
     }
 
-    /// <summary>Reduces a live row.</summary>
-    public static FixedQ4816 Reduce(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, ulong engineTick, StateArena? arena = null) {
-        arena ??= ReadArena(definition);
-        if (!arena.Catalog.TryResolve(lane: StateLane.Document, name: rowName, handle: out var handle)) { return FixedQ4816.Zero; }
-        var raw = StateReader.ReduceRaw(arena: arena, rowOrdinal: handle.Ordinal, op: op, tick: tick, engineTick: engineTick);
-        return (op == StateReduceOp.Count || op == StateReduceOp.ArrangementRank || arena.Layout[handle.Ordinal].Kind != CellKind.Fixed) ?
-            StateReader.LiftSaturating(raw) : FixedQ4816.FromRawBits(raw);
-    }
-
-    /// <summary>Finds the winning participant key.</summary>
-    public static string? ArgExtremum(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, ulong engineTick,
-        Func<int, bool>? isCandidateIndex = null, StateArena? arena = null) => ArgExtremum(definition: definition, arena: arena,
-            rowName: rowName, op: op, tick: tick, engineTick: engineTick, state: isCandidateIndex,
-            isCandidateIndex: static (index, predicate) => predicate?.Invoke(index) ?? true);
-
     /// <summary>Finds the winning participant key using caller-owned filter state.</summary>
     public static string? ArgExtremum<TState>(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, ulong engineTick,
         TState state, Func<int, TState, bool> isCandidateIndex, StateArena? arena = null) {
         arena ??= ReadArena(definition);
         return arena.Catalog.TryResolve(lane: StateLane.Document, name: rowName, handle: out var handle) ?
             StateReader.ArgExtremum(arena: arena, handle: handle, op: op, tick: tick, engineTick: engineTick, state: state, isCandidateIndex: isCandidateIndex) : null;
-    }
-
-    /// <summary>Finds the winning participant key through a bound handle.</summary>
-    public static string? ArgExtremum<TState>(WorldDefinition definition, StateCatalog catalog, StateHandle handle, StateReduceOp op, ulong tick,
-        ulong engineTick, TState state, Func<int, TState, bool> isCandidateIndex, StateArena? arena = null) {
-        arena ??= ReadArena(definition);
-        if (!ReferenceEquals(arena.Catalog, catalog)) { throw new ArgumentException(message: "The catalog is stale.", paramName: nameof(catalog)); }
-        return StateReader.ArgExtremum(arena: arena, handle: handle, op: op, tick: tick, engineTick: engineTick, state: state, isCandidateIndex: isCandidateIndex);
     }
 
     /// <summary>Converts a numeric cell to its presentation number.</summary>
