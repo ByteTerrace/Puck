@@ -96,14 +96,15 @@ public sealed class WorldPresentationProbeLawTests {
         var frame = Frame();
         var target = new WorldPickTarget(null, 3) { Prototype = "body", Occurrence = 2 };
         var address = new WorldEntityAddress("authority", 3, 1);
-        var copy = new SdfMeshInstance(0, target, new DynamicTransform(Vector3.Zero, Quaternion.Identity), 1f, true) { MotionIdentity = (target, address, 1) };
+        SdfMeshInstance Copy(object motionIdentity) => new(0, target, new DynamicTransform(Vector3.Zero, Quaternion.Identity), 1f, true) { MotionIdentity = motionIdentity };
+        var copy = Copy(motionIdentity: (target, address, 1));
         var before = Sample(frame with { MeshInstances = new[] { copy } });
-        var after = Sample(frame with { MeshInstances = new[] { copy with { MotionIdentity = (target, address, 2) } } });
+        var after = Sample(frame with { MeshInstances = new[] { Copy(motionIdentity: (target, address, 2)) } });
         Assert.NotEqual(before.Transforms, after.Transforms);
         Assert.Equal(0, before.UnsupportedIdentityCount);
         var probe = new WorldPresentationProbe();
         probe.Begin(1, 1);
-        Record(probe, 1, frame with { MeshInstances = new[] { copy with { MotionIdentity = new object() } } });
+        Record(probe, 1, frame with { MeshInstances = new[] { Copy(motionIdentity: new object()) } });
         var trace = probe.Read()!;
         Assert.True(trace.Complete);
         Assert.Equal(1, trace.Samples[0].UnsupportedIdentityCount);

@@ -171,7 +171,14 @@ public readonly record struct SdfViewQuality {
         Temporal = (Temporal && other.Temporal),
     };
 }
-/// <summary>Contains the scene program and presentation state consumed by one SDF render frame.</summary>
+/// <summary>Contains the scene program and presentation state consumed by one SDF render frame: its per-frame
+/// <see cref="Content"/> and its slow-changing <see cref="Settings"/>, both held by value, the geometry its composition
+/// publishes beside the program, and the rows the mesh dresser dressed it into.</summary>
+/// <remarks>A producer that captures every frame owns one frame through its <see cref="Writer"/> and writes it again for
+/// each capture, so capturing allocates nothing; only the writer's holder can change it, and no consumer can. A frame a
+/// source returns is borrowed until the source's next capture: a consumer that keeps it longer copies it into a frame of
+/// its own (<see cref="Writer.CopyFrom(SdfFrame)"/>), as <see cref="SdfWorldResidency"/> does for the frame it renders.
+/// The constructor and the init accessors make a frame of its own, for a one-off frame or a test.</remarks>
 /// <param name="Program">The SDF program to render.</param>
 /// <param name="ProgramChanged">Whether the renderer must upload <paramref name="Program"/> for this frame.</param>
 /// <param name="Views">The camera views to render, each into its own output.</param>
@@ -182,24 +189,70 @@ public sealed record SdfFrame(
     IReadOnlyList<SdfViewSnapshot> Views,
     float Time
 ) {
+    // Everything a frame carries is in these fields, so the writer resets and a copy carries all of it by assigning them:
+    // a new value goes in the content, the settings or the composition, never in a field of its own beside them.
+    private SdfFrameContent m_content = new(Program: Program, ProgramChanged: ProgramChanged, Views: Views, Time: Time);
+    private SdfFrameSettings m_settings = new();
+    private Composition m_composition;
+    // The dressing a residency's dresser adopted onto its own frame; never copied, since the rows are that dresser's.
+    private SdfMeshRows? m_meshRows;
+    private ISdfPickMap? m_dressedPickMap;
+    // Each default is built on its first read, so a producer that supplies its own allocates none.
+    private SdfLights? m_defaultLights;
+    private SdfSky? m_defaultSky;
+
+    // The geometry and identities the composition publishes beside the program's (Compose, PickMap, ProgramDelta).
+    private struct Composition {
+        public ISdfPickMap? PickMap;
+        public IReadOnlyList<int>? MeshAssetSlots;
+        public IReadOnlyList<SdfMeshInstance>? MeshInstances;
+        public SdfSampledSet? Sampled;
+        public GpuRowChanges? MeshCopyChanges;
+        public long MeshCopyChangesSerial;
+        public SdfProgramDelta? ProgramDelta;
+    }
+
+    /// <summary>Gets the frame's per-frame content, which a producer writes whole each frame.</summary>
+    public SdfFrameContent Content => m_content;
+    /// <summary>Gets the frame's slow-changing settings, which a producer carries from frame to frame.</summary>
+    public SdfFrameSettings Settings {
+        get => m_settings;
+        init => m_settings = value;
+    }
+
+    /// <inheritdoc cref="SdfFrameContent.Program"/>
+    public SdfProgram Program {
+        get => m_content.Program;
+        init => m_content = (m_content with { Program = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.ProgramChanged"/>
+    public bool ProgramChanged {
+        get => m_content.ProgramChanged;
+        init => m_content = (m_content with { ProgramChanged = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.Views"/>
+    public IReadOnlyList<SdfViewSnapshot> Views {
+        get => m_content.Views;
+        init => m_content = (m_content with { Views = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.Time"/>
+    public float Time {
+        get => m_content.Time;
+        init => m_content = (m_content with { Time = value });
+    }
+
     /// <summary>Gets the identity table that resolves this frame's visibility identities. Composition fills the host's
     /// table before publishing the frame; a frame the mesh dresser dressed answers its dressed table, which resolves
     /// retained row addresses to the host's identities. It is CPU-only presentation data and is never uploaded to the
     /// frame block.</summary>
     public ISdfPickMap? PickMap {
-        get => (m_dressedPickMap ?? m_pickMap);
-        internal set => m_pickMap = value;
+        get => (m_dressedPickMap ?? m_composition.PickMap);
+        internal set => m_composition.PickMap = value;
     }
 
     /// <summary>Gets the identity table the host composed, which the dresser extends; a dressed frame keeps it
     /// unchanged.</summary>
-    internal ISdfPickMap? HostPickMap => m_pickMap;
-
-    private ISdfPickMap? m_pickMap;
-    private ISdfPickMap? m_dressedPickMap;
-    private SdfMeshRows? m_meshRows;
-    private IReadOnlyList<int> m_meshAssetSlots = [];
-    private IReadOnlyList<SdfMeshInstance> m_meshInstances = [];
+    internal ISdfPickMap? HostPickMap => m_composition.PickMap;
 
     /// <summary>Adopts the draw rows the mesh dresser retains and the pick map that resolves them, which the dresser owns
     /// and keeps current: the frame references them and the host's inputs stay as they were, so dressing the same frame
@@ -212,89 +265,75 @@ public sealed record SdfFrame(
     }
 
     /// <summary>Sets the geometry the composition publishes beside the program's: the baked template slots, the rigid
-    /// copies and the sampled-field snapshots. Composition calls it once for the frame it was dressed into.</summary>
+    /// copies, the sampled-field snapshots and the slot ranges drawn on both sides of a portal. Composition calls it once
+    /// for the frame it was dressed into.</summary>
     /// <param name="meshAssetSlots">The baked template slots.</param>
     /// <param name="meshInstances">The copies of local geometry assets.</param>
     /// <param name="sampled">The snapshots the program's sampled fields hold this frame.</param>
+    /// <param name="slotClips">The slot ranges every emitter's stamp pool draws on both sides of a portal.</param>
     /// <param name="copyChanges">The journal of the copies that changed in <paramref name="meshInstances"/>, or
     /// <see langword="null"/> when a consumer must compare the whole list.</param>
     /// <param name="copyChangesSerial">The journal's endpoint captured with <paramref name="meshInstances"/>.</param>
     internal void Compose(IReadOnlyList<int> meshAssetSlots, IReadOnlyList<SdfMeshInstance> meshInstances, SdfSampledSet sampled,
-        GpuRowChanges? copyChanges = null, long copyChangesSerial = 0) {
-        m_meshAssetSlots = meshAssetSlots;
-        m_meshInstances = meshInstances;
-        m_sampled = sampled;
-        MeshCopyChanges = copyChanges;
-        MeshCopyChangesSerial = copyChangesSerial;
+        IReadOnlyList<SdfSlotClip> slotClips, GpuRowChanges? copyChanges = null, long copyChangesSerial = 0) {
+        m_composition.MeshAssetSlots = meshAssetSlots;
+        m_composition.MeshInstances = meshInstances;
+        m_composition.Sampled = sampled;
+        m_composition.MeshCopyChanges = copyChanges;
+        m_composition.MeshCopyChangesSerial = copyChangesSerial;
+        m_content = (m_content with { SlotClips = slotClips });
     }
     /// <summary>Gets the producer's journal of the rigid copies that changed in <see cref="MeshInstances"/> (another copy
-    /// at an index, or the copy at an index moved to another frame slot), or <see langword="null"/> when a consumer must
-    /// compare the whole list. A frame whose template slots or copy count changed owes the whole list. The list and journal
-    /// are borrowed together until their producer next rewrites them, so a consumer reads them while it dresses the frame
-    /// (<see cref="SdfMeshDresser.Dress"/>), each through its own <see cref="GpuRowCursor"/>.</summary>
-    public GpuRowChanges? MeshCopyChanges { get; private set; }
+    /// at an index, the copy at an index moved to another frame slot, or a copy whose <see cref="SdfMeshInstance.Revision"/>
+    /// moved), or <see langword="null"/> when a consumer must compare the whole list. A frame whose template slots or copy
+    /// count changed owes the whole list. The list and journal are borrowed together until their producer next rewrites
+    /// them, so a consumer reads them while it dresses the frame (<see cref="SdfMeshDresser.Dress"/>), each through its own
+    /// <see cref="GpuRowCursor"/>.</summary>
+    public GpuRowChanges? MeshCopyChanges => m_composition.MeshCopyChanges;
     /// <summary>Gets the copy journal's endpoint captured with <see cref="MeshInstances"/>.</summary>
-    public long MeshCopyChangesSerial { get; private set; }
-    /// <summary>The host's immutable document version, retained through bake dressing for matching-state diagnostics.
-    /// Compared by value: a delivered client document need not be the authority's object.</summary>
-    public object? DiagnosticSource { get; init; }
+    public long MeshCopyChangesSerial => m_composition.MeshCopyChangesSerial;
     /// <summary>Gets the words <see cref="Program"/> differs in from the program built before it, which tables holding
     /// that earlier program upload alone, or <see langword="null"/> when its builder measured none.</summary>
-    public SdfProgramDelta? ProgramDelta { get; internal set; }
+    public SdfProgramDelta? ProgramDelta {
+        get => m_composition.ProgramDelta;
+        internal set => m_composition.ProgramDelta = value;
+    }
     /// <summary>Gets the snapshots <see cref="Program"/>'s sampled fields hold this frame, by handle
     /// (<see cref="SdfProgram.SampledFields"/>): the producer's capture (<see cref="SdfSampledSet.Capture"/>), or the
     /// program's own (<see cref="SdfProgram.Sampled"/>) when it set none. A field publishing new values moves this set and
     /// no program word; the mesh bake reads only its <see cref="SdfSampledSet.Baked"/> part and plans again only the
     /// groups that read a moved field.</summary>
     public SdfSampledSet Sampled {
-        get => (m_sampled ?? Program.Sampled);
-        init => m_sampled = value;
+        get => (m_composition.Sampled ?? Program.Sampled);
+        init => m_composition.Sampled = value;
     }
-
-    private SdfSampledSet? m_sampled;
-
-    /// <summary>Gets the slot ranges drawn on both sides of a portal this frame (<see cref="SdfSlotClip"/>): the frame's
-    /// producer fills it from the stamp pools whose slots the frame carries (a composition from every emitter's
-    /// <see cref="ISdfSceneEmitter.SlotClips"/>), and the mesh bake's dressing clips each draw in a range and adds its
-    /// carried copy through <see cref="SdfMeshRows.Writer.SetClips"/>. Empty when no body straddles a portal.</summary>
-    public IReadOnlyList<SdfSlotClip> SlotClips { get; set; } = [];
-    /// <summary>Per-frame transforms for the scene's moving entities, indexed by dynamic-transform slot. Must supply
-    /// at least the program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/> entries (the render frame
-    /// throws otherwise — a dynamic slot silently rendering at identity is a bug, not a default); empty is therefore
-    /// valid only for a program with no dynamic slots (the renderer then binds a single identity slot the program
-    /// never references). Updating this list is how entities move — the program (binding 1) is uploaded once and left
-    /// untouched.</summary>
-    public IReadOnlyList<DynamicTransform> DynamicTransforms { get; init; } = [];
-
-    /// <summary>The moved set of <see cref="DynamicTransforms"/>: which slots changed in each recent frame of the
-    /// table's producer. An engine stages only the rows moved since the frame it last consumed from this producer,
-    /// and every row when it has none of this producer's history. <see langword="null"/>, the default, declares the
-    /// table static: an engine stages it whole the first time it sees that table instance and never again, so a
-    /// producer whose transforms move must supply its moved set.</summary>
+    /// <inheritdoc cref="SdfFrameContent.SlotClips"/>
+    public IReadOnlyList<SdfSlotClip> SlotClips {
+        get => m_content.SlotClips;
+        init => m_content = (m_content with { SlotClips = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.DynamicTransforms"/>
+    public IReadOnlyList<DynamicTransform> DynamicTransforms {
+        get => m_content.DynamicTransforms;
+        init => m_content = (m_content with { DynamicTransforms = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.MovedTransforms"/>
     public SdfMovedTransforms? MovedTransforms {
-        get => m_movedTransforms;
-        init {
-            m_movedTransforms = value;
-            MovedTransformsSerial = (value?.Serial ?? 0);
-        }
+        get => m_content.MovedTransforms;
+        init => m_content = (m_content with { MovedTransforms = value });
     }
-
-    private SdfMovedTransforms? m_movedTransforms;
-
-    /// <summary>Gets the moved-set endpoint captured with this frame's borrowed transform table.</summary>
-    public long MovedTransformsSerial { get; private init; }
-
-    /// <summary>The frame's bounded flow and cloud volumes, at most
-    /// <see cref="SdfWorldTables.MaxVolumes"/>; submission refuses a list beyond that capacity.
-    /// Packed into its own structured buffer (never <c>sdfScreenLights</c>) and shaded by <c>shade-volumes.hlsli</c>'s
-    /// one call site at the end of the views stage (<c>sdfViewsStage</c>), after the surface color is final. Empty (the default) uploads an
-    /// all-zero table whose first bound ends the shader's scan.</summary>
-    public IReadOnlyList<SdfVolume> Volumes { get; init; } = [];
-    /// <summary>The frame's opaque triangle meshes: every placement and stamp of a prototype that carries a mesh. Empty by
-    /// default; rasterized per view before primary traversal. A residency's tables repack them when the list is a different one or
-    /// <see cref="MeshDrawsRevision"/> moved, so a producer that reuses one list rewrites it in place and moves the
-    /// revision.</summary>
-    public IReadOnlyList<SdfMeshDraw> MeshDraws { get; init; } = [];
+    /// <inheritdoc cref="SdfFrameContent.MovedTransformsSerial"/>
+    public long MovedTransformsSerial => m_content.MovedTransformsSerial;
+    /// <inheritdoc cref="SdfFrameContent.Volumes"/>
+    public IReadOnlyList<SdfVolume> Volumes {
+        get => m_content.Volumes;
+        init => m_content = (m_content with { Volumes = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.MeshDraws"/>
+    public IReadOnlyList<SdfMeshDraw> MeshDraws {
+        get => m_content.MeshDraws;
+        init => m_content = (m_content with { MeshDraws = value });
+    }
 
     /// <summary>The rows the mesh dresser retains and the frame was dressed into; <see langword="null"/> before dressing.
     /// The dresser owns them: the frame references them, and its revision, journal and cause are the rows' own. The host's
@@ -312,189 +351,297 @@ public sealed record SdfFrame(
 
     /// <summary>Gets the baked template slots, which draw only through MeshInstances.</summary>
     public IReadOnlyList<int> MeshAssetSlots {
-        get => m_meshAssetSlots;
-        init => m_meshAssetSlots = value;
+        get => (m_composition.MeshAssetSlots ?? []);
+        init => m_composition.MeshAssetSlots = value;
     }
     /// <summary>Gets the copies of local geometry assets.</summary>
     public IReadOnlyList<SdfMeshInstance> MeshInstances {
-        get => m_meshInstances;
-        init => m_meshInstances = value;
+        get => (m_composition.MeshInstances ?? []);
+        init => m_composition.MeshInstances = value;
     }
 
-    /// <summary>The revision of <see cref="MeshDraws"/>' content, which a producer that rewrites one list in place moves
-    /// whenever it does; 0 for a producer that supplies a new list instead. It is the host's input: dressing leaves it
-    /// as the producer set it.</summary>
-    public long MeshDrawsRevision { get; init; }
-    /// <summary>Gets the producer's bounded draw-row changes, or null when a consumer must compare the revised list.
-    /// The list and journal are borrowed together until their producer next rewrites them. It is the host's input:
-    /// dressing leaves it as the producer set it, and the dressed rows keep their own journal
-    /// (<see cref="SdfMeshRows.Changes"/>).</summary>
-    public GpuRowChanges? MeshDrawChanges { get; init; }
-    /// <summary>Gets the journal endpoint captured with <see cref="MeshDraws"/>. The dresser collects only through this
-    /// serial and retains its own rows when a later producer frame rewrites the borrowed list.</summary>
-    public long MeshDrawChangesSerial { get; init; }
+    /// <inheritdoc cref="SdfFrameContent.MeshDrawsRevision"/>
+    public long MeshDrawsRevision {
+        get => m_content.MeshDrawsRevision;
+        init => m_content = (m_content with { MeshDrawsRevision = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.MeshDrawChanges"/>
+    public GpuRowChanges? MeshDrawChanges {
+        get => m_content.MeshDrawChanges;
+        init => m_content = (m_content with { MeshDrawChanges = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.MeshDrawChangesSerial"/>
+    public long MeshDrawChangesSerial {
+        get => m_content.MeshDrawChangesSerial;
+        init => m_content = (m_content with { MeshDrawChangesSerial = value });
+    }
     /// <summary>The lit path's lights table, its shadow slots and its curvature shading. The default is the pinned sun
     /// an unauthored world renders.</summary>
     public SdfLights Lights {
-        get => (m_lights ??= SdfLights.Default());
-        init => m_lights = value;
+        get => (m_content.Lights ?? (m_defaultLights ??= SdfLights.Default()));
+        init => m_content = (m_content with { Lights = value });
     }
     /// <summary>The sky: its open layer stack, fog and environment gains.
     /// The default is the default look an unauthored world renders: the two-stop gradient and the default fog, as
     /// data.</summary>
     public SdfSky Sky {
-        get => (m_sky ??= new SdfSky());
-        init => m_sky = value;
+        get => (m_content.Sky ?? (m_defaultSky ??= new SdfSky()));
+        init => m_content = (m_content with { Sky = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.Exposure"/>
+    public SdfExposure Exposure {
+        get => m_content.Exposure;
+        init => m_content = (m_content with { Exposure = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.SlotRateCodes"/>
+    public ReadOnlyMemory<byte> SlotRateCodes {
+        get => m_content.SlotRateCodes;
+        init => m_content = (m_content with { SlotRateCodes = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.ScreenRateCodes"/>
+    public ReadOnlyMemory<byte> ScreenRateCodes {
+        get => m_content.ScreenRateCodes;
+        init => m_content = (m_content with { ScreenRateCodes = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.TickLocked"/>
+    public bool TickLocked {
+        get => m_content.TickLocked;
+        init => m_content = (m_content with { TickLocked = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.ConvergesLighting"/>
+    public bool ConvergesLighting {
+        get => m_content.ConvergesLighting;
+        init => m_content = (m_content with { ConvergesLighting = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.Clock"/>
+    public PresentedTick Clock {
+        get => m_content.Clock;
+        init => m_content = (m_content with { Clock = value });
+    }
+    /// <inheritdoc cref="SdfFrameContent.WorldLanes"/>
+    public System.Numerics.Vector4 WorldLanes {
+        get => m_content.WorldLanes;
+        init => m_content = (m_content with { WorldLanes = value });
     }
 
-    // Each default is built on its first read, so a producer that supplies its own allocates none.
-    private SdfLights? m_lights;
-    private SdfSky? m_sky;
-
-    /// <summary>The far distance, in world units: the depth past which a view draws nothing, which bounds its surfaces,
-    /// its far shadow cascade and the depth debug ramp. Authored as world data (<c>render.farDistance</c>). Must be
-    /// finite and positive — the render frame throws otherwise (a document validator already refuses it by name
-    /// upstream). Every pass block
-    /// carries it as <c>farDistance</c> (<see cref="SdfFrameBlock"/>), which the cadence signature folds, so a change
-    /// re-renders.</summary>
-    public float FarDistance { get; init; } = DefaultFarDistance;
-    /// <summary>How far the key light's shadow cascades reach (<c>render.shadowCoverage</c>), which
-    /// <see cref="SdfMeshShadowCascades.Fit"/> reads; the default is <see cref="SdfShadowCoverage.Default"/>.</summary>
-    public SdfShadowCoverage ShadowCoverage { get; init; } = SdfShadowCoverage.Default;
-    /// <summary>The key light's distant shadow map (<c>render.distantShadows</c> or the device table's row), which
-    /// <see cref="SdfMeshShadowCascades.Fit"/> adds to every view's cascade set while it is on; the default is off.</summary>
-    public SdfDistantShadows DistantShadows { get; init; }
-    /// <summary>How the key light's far shadow cascade keeps up with what moves (<c>render.farShadows</c> or the device
-    /// table's row) while <see cref="SdfUpdateRates.ShadowFar"/> is on: its refreshes a second and the light turn a held
-    /// cascade tolerates; the default refreshes it every frame (<see cref="SdfFarShadows.EveryFrame"/>).</summary>
-    public SdfFarShadows FarShadows { get; init; } = SdfFarShadows.EveryFrame;
-    /// <summary>The camera exposure every exposed view of the frame maps the luminance it shades to the display by
-    /// (<c>render.exposure</c>). The default is the manual exposure an unauthored world renders at.</summary>
-    public SdfExposure Exposure { get; init; } = SdfExposure.Default;
-    /// <summary>The display transform every view of the frame that converts for the display puts its exposed light
-    /// through before the encode (<c>render.tone</c>, the display pass); the default applies no curve.</summary>
-    public SdfToneCurve Tone { get; init; }
-
-    /// <summary>The world's default cel style (its ink and styled mark), which every material without a style of its own
-    /// takes, and the live suppression of every style (<see cref="SdfToon.Suppressed"/>); the default is off.</summary>
-    public SdfToon Toon { get; init; }
-    /// <summary>Measures authored programs beside the material layers, until their migration removes the lever.</summary>
-    public bool ShadePrograms { get; init; }
-    /// <summary>The authored default for materials that omit a program. Runtime overrides upload only presentation data.</summary>
-    public SdfShadeProgram? ShadeDefault { get; init; }
+    /// <inheritdoc cref="SdfFrameSettings.DiagnosticSource"/>
+    public object? DiagnosticSource {
+        get => m_settings.DiagnosticSource;
+        init => m_settings = (m_settings with { DiagnosticSource = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.FarDistance"/>
+    public float FarDistance {
+        get => m_settings.FarDistance;
+        init => m_settings = (m_settings with { FarDistance = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.ShadowCoverage"/>
+    public SdfShadowCoverage ShadowCoverage {
+        get => m_settings.ShadowCoverage;
+        init => m_settings = (m_settings with { ShadowCoverage = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.DistantShadows"/>
+    public SdfDistantShadows DistantShadows {
+        get => m_settings.DistantShadows;
+        init => m_settings = (m_settings with { DistantShadows = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.FarShadows"/>
+    public SdfFarShadows FarShadows {
+        get => m_settings.FarShadows;
+        init => m_settings = (m_settings with { FarShadows = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.Tone"/>
+    public SdfToneCurve Tone {
+        get => m_settings.Tone;
+        init => m_settings = (m_settings with { Tone = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.Toon"/>
+    public SdfToon Toon {
+        get => m_settings.Toon;
+        init => m_settings = (m_settings with { Toon = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.ShadePrograms"/>
+    public bool ShadePrograms {
+        get => m_settings.ShadePrograms;
+        init => m_settings = (m_settings with { ShadePrograms = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.ShadeDefault"/>
+    public SdfShadeProgram? ShadeDefault {
+        get => m_settings.ShadeDefault;
+        init => m_settings = (m_settings with { ShadeDefault = value });
+    }
     /// <summary>All programs the frame's shading jobs may invoke.</summary>
     public IEnumerable<SdfShadeProgram> ShadingPrograms => ((ShadeDefault is { } fallback)
         ? Program.Appearance.ShadingPrograms.Append(element: fallback) : Program.Appearance.ShadingPrograms);
-
-    /// <summary>Gets every program the documents behind the frame declare, which the residency specializes together with
-    /// the frame's active programs (<see cref="ShadingPrograms"/>), so its specialized kernels do not change while the
-    /// scene's composition does. The emitter passes one list for one set of documents, compared by reference; empty
-    /// declares none.</summary>
-    public IReadOnlyList<SdfShadeProgram> ShadeDeclared { get; init; } = [];
-
-    /// <summary>Engine-bench lever: skips the per-screen area-light loop (the diegetic screens stop spilling colored light
-    /// into the room). Default <see langword="false"/> = screen lights on. Directly measures the lit screens' cost for the
-    /// <c>sdf.screen-lights</c> bench toggle. The pass block carries it as <c>disableScreenLights</c>
-    /// (<see cref="SdfFrameBlock"/>). An unset frame uploads 0 and screen lights stay on.</summary>
-    public bool DisableScreenLights { get; init; }
-    /// <summary>Engine-bench lever: how much of the mesh draws the raster passes skip. The default,
-    /// <see cref="SdfMeshCullLevel.Occlusion"/>, skips what the box cull (<see cref="SdfMeshCull"/>) and the mesh pass's
-    /// occlusion test (<see cref="SdfMeshOcclusion"/>) find no pixel of, and far-cascade casters no current receiver can
-    /// read or whose entry is wholly hidden by light-space depth; every level changes no pixel, so the lever
-    /// measures each one's saving and checks it shows the same image. The cadence signature folds it, so a change
-    /// re-renders.</summary>
-    public SdfMeshCullLevel MeshCull { get; init; }
-    /// <summary>Engine-bench lever: which levels of detail the raster passes draw. The default,
-    /// <see cref="SdfMeshDetailLevel.Auto"/>, has each pass choose each draw's level by the error it can show
-    /// (<see cref="SdfMeshDetail"/>); a fixed level draws it everywhere, so the lever shows what a level changes. The
-    /// cadence signature folds it, so a change re-renders.</summary>
-    public SdfMeshDetailLevel MeshDetail { get; init; }
-    /// <summary>Which work the frame's views update less often when it is far or small on screen
-    /// (<see cref="SdfUpdateRates"/>, <c>world.rates</c>); the default, <see cref="SdfUpdateRates.None"/>, updates
-    /// everything every frame. The residency reads <see cref="SdfUpdateRates.ShadowFar"/>; the host reads the rest
-    /// before it composes the frame.</summary>
-    public SdfUpdateRates UpdateRates { get; init; }
-    /// <summary>The counters the frame's rated work counts into (<see cref="SdfUpdateRateCounts"/>), or
-    /// <see langword="null"/> to count nothing.</summary>
-    public WorkCounterSet? RateCounts { get; init; }
-    /// <summary>The window the frame's rated work records its intervals between updates into
-    /// (<see cref="SdfUpdateRateIntervals"/>), or <see langword="null"/> to record nothing.</summary>
-    public SdfUpdateRateIntervals? RateIntervals { get; init; }
-    /// <summary>Each dynamic-transform slot's <see cref="SdfUpdateRateCode"/>, indexed by slot, which a residency showing
-    /// a tier view (<see cref="DebugViewModes.ShowsRates"/>) packs into the slot's position row; a slot past the end
-    /// packs <see cref="SdfUpdateRateCode.None"/>. Empty, the default, tints nothing.</summary>
-    public ReadOnlyMemory<byte> SlotRateCodes { get; init; }
-    /// <summary>Each screen's <see cref="SdfUpdateRateCode"/>, indexed by screen, which a residency showing a tier view
-    /// binds into the screen's record; a screen past the end binds <see cref="SdfUpdateRateCode.None"/>. Empty, the
-    /// default, tints nothing.</summary>
-    public ReadOnlyMemory<byte> ScreenRateCodes { get; init; }
-    /// <summary>Enables the cadence gate: a presentation-only frame-graph optimization where a
-    /// frame whose render-consumed inputs are byte-for-byte unchanged from the last rendered frame skips the view's
-    /// passes and re-composites from the retained views output — pixel-identical to a
-    /// full re-render of the same inputs, at a fraction of the GPU cost. Built on change signatures (the packed
-    /// per-frame byte spans the skipped passes consume, plus a program/decal revision), never wall-clock heuristics, so
-    /// a camera ease — any input change at all — re-renders. The engine additionally forces a render whenever a live
-    /// screen source is bound or a carve bake is in progress (their content changes without touching a packed span).
-    /// Default <see langword="false"/> = the gate is off and every frame renders fully — byte-identical to a build
-    /// without the gate. Presentation-only: never involves simulation state, and a skipped frame's simulation is
-    /// unaffected.</summary>
-    public bool EnableCadenceGate { get; init; }
-    /// <summary>The indirect-light tier the frame asks for, which sizes the irradiance volume
-    /// (<see cref="SdfMeshIrradiance"/>). Off reads no volume.</summary>
-    public SdfIndirectTier IndirectTier { get; init; }
-    /// <summary>Whether the irradiance volume's background rays (its probe trace, the relight's shadow rays and the camera
-    /// sample) take the device's ray hardware where it runs the probe kernels' ray-query variants, through the scene's
-    /// acceleration structures; elsewhere, and when false, they take the software walk. Both answer the same hits within
-    /// float tolerance. Default <see langword="false"/>.</summary>
-    public bool RayQueries { get; init; }
-    /// <summary>Whether presentation uses completed simulation ticks and the frame's own time for exposure adaptation,
-    /// rather than the host interval. Lighting convergence is an independent request through
-    /// <see cref="ConvergesLighting"/>. Default <see langword="false"/>.</summary>
-    public bool TickLocked { get; init; }
-    /// <summary>Whether the renderer finishes this frame's scene, irradiance-window trace and lighting feedback before
-    /// rendering it: the work runs off the frame thread, and the frame is held, its residency answering waiting with where
-    /// the work stands (<see cref="SdfMeshIrradiance.Convergence"/>), until it lands. False retains ordinary budgeted
-    /// asynchronous lighting at the same quality settings. Independent of clock pinning: a tick-locked throughput run need
-    /// not hold every tick for its indirect light.</summary>
-    public bool ConvergesLighting { get; init; }
-
-    /// <summary>The independent origins the irradiance volume admits; the default admits all five categories.</summary>
-    public SdfIndirectSources IndirectSources { get; init; } = SdfIndirectSources.All;
-    /// <summary>Gets the source gains the irradiance volume traces under. Zero also disables that category in authored frames.</summary>
-    public SdfIndirectGains IndirectGains { get; init; } = SdfIndirectGains.One;
-
-    /// <summary>Gets requested feedback sweeps after direct, capped by the tier. Null uses its layout limit.</summary>
-    public int? IndirectBounces { get; init; }
-    /// <summary>Gets the irradiance work each frame grants the volume and the lighting age it reports past; the default
-    /// bounds nothing.</summary>
-    public SdfIndirectBudget IndirectBudget { get; init; }
-    /// <summary>Gets how many of the irradiance volume's levels the frame's views read, counted from the coarsest
-    /// (<see cref="SdfMeshIrradiance.LevelsOf"/>): the volume traces, relights and publishes those alone, so a world seen
-    /// through a small glass measures only its coarse light. Zero, the default, reads every level.</summary>
-    public int IndirectLevels { get; init; }
-    /// <summary>Gets the share of the display's pixels the frame's views are presented over, in [0, 1]: one for a frame
-    /// the presentation shows whole (the default), a glass's share for a world seen through it, zero for one no view
-    /// showed on the latest measured frame. It weighs the residency's draw on the presentation's one background budget
-    /// (<see cref="SdfGpuWork.Weigh"/>), and a frame no view shows owes no first light
-    /// (<see cref="SdfMeshIrradiance.OwesFirstLight"/>). Presentation only.</summary>
-    public float DisplayShare { get; init; } = 1f;
-    /// <summary>The fixed angular and radiometric grids used by indirect captures. Zero leaves values continuous.</summary>
-    public SdfIndirectLightingGrid IndirectLightingGrid { get; init; }
-
-    /// <summary>Gets receiver-only application controls, independent of the traced lighting.</summary>
-    public SdfIndirectApplication IndirectApply { get; init; } = SdfIndirectApplication.Default;
-
-    /// <summary>Gets the presented engine tick the sky and the bounded media animate on: the star-twinkle phase, the
-    /// cloud layer's drift, shear and spin, and each medium's advection and pulse, all reduced on the host (the sky
-    /// block, <see cref="SdfSkyBlock"/>, and the volume table), so no pass reads a raw tick. It comes from the
-    /// state mirror of the world the frame draws, never from <see cref="Time"/>, which advances by wall-clock
-    /// deltas, so a frame at a given tick and fraction draws the same sky and media on every run.</summary>
-    public PresentedTick Clock { get; init; }
-    /// <summary>Gets the world's four render lanes (<see cref="SdfLanes"/> 4 to 7), which every surface reads alike: the
-    /// host resolves them from the world's state at the frame's presented tick, as it resolves the sky's bindings, and the
-    /// pass block carries them (<c>SdfWorldPackage.WorldLanes</c>). Zero where the world authors none.</summary>
-    public System.Numerics.Vector4 WorldLanes { get; init; }
+    /// <inheritdoc cref="SdfFrameSettings.ShadeDeclared"/>
+    public IReadOnlyList<SdfShadeProgram> ShadeDeclared {
+        get => m_settings.ShadeDeclared;
+        init => m_settings = (m_settings with { ShadeDeclared = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.DisableScreenLights"/>
+    public bool DisableScreenLights {
+        get => m_settings.DisableScreenLights;
+        init => m_settings = (m_settings with { DisableScreenLights = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.MeshCull"/>
+    public SdfMeshCullLevel MeshCull {
+        get => m_settings.MeshCull;
+        init => m_settings = (m_settings with { MeshCull = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.MeshDetail"/>
+    public SdfMeshDetailLevel MeshDetail {
+        get => m_settings.MeshDetail;
+        init => m_settings = (m_settings with { MeshDetail = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.UpdateRates"/>
+    public SdfUpdateRates UpdateRates {
+        get => m_settings.UpdateRates;
+        init => m_settings = (m_settings with { UpdateRates = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.RateCounts"/>
+    public WorkCounterSet? RateCounts {
+        get => m_settings.RateCounts;
+        init => m_settings = (m_settings with { RateCounts = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.RateIntervals"/>
+    public SdfUpdateRateIntervals? RateIntervals {
+        get => m_settings.RateIntervals;
+        init => m_settings = (m_settings with { RateIntervals = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.EnableCadenceGate"/>
+    public bool EnableCadenceGate {
+        get => m_settings.EnableCadenceGate;
+        init => m_settings = (m_settings with { EnableCadenceGate = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.IndirectTier"/>
+    public SdfIndirectTier IndirectTier {
+        get => m_settings.IndirectTier;
+        init => m_settings = (m_settings with { IndirectTier = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.RayQueries"/>
+    public bool RayQueries {
+        get => m_settings.RayQueries;
+        init => m_settings = (m_settings with { RayQueries = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.IndirectSources"/>
+    public SdfIndirectSources IndirectSources {
+        get => m_settings.IndirectSources;
+        init => m_settings = (m_settings with { IndirectSources = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.IndirectGains"/>
+    public SdfIndirectGains IndirectGains {
+        get => m_settings.IndirectGains;
+        init => m_settings = (m_settings with { IndirectGains = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.IndirectBounces"/>
+    public int? IndirectBounces {
+        get => m_settings.IndirectBounces;
+        init => m_settings = (m_settings with { IndirectBounces = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.IndirectBudget"/>
+    public SdfIndirectBudget IndirectBudget {
+        get => m_settings.IndirectBudget;
+        init => m_settings = (m_settings with { IndirectBudget = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.IndirectLevels"/>
+    public int IndirectLevels {
+        get => m_settings.IndirectLevels;
+        init => m_settings = (m_settings with { IndirectLevels = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.DisplayShare"/>
+    public float DisplayShare {
+        get => m_settings.DisplayShare;
+        init => m_settings = (m_settings with { DisplayShare = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.IndirectLightingGrid"/>
+    public SdfIndirectLightingGrid IndirectLightingGrid {
+        get => m_settings.IndirectLightingGrid;
+        init => m_settings = (m_settings with { IndirectLightingGrid = value });
+    }
+    /// <inheritdoc cref="SdfFrameSettings.IndirectApply"/>
+    public SdfIndirectApplication IndirectApply {
+        get => m_settings.IndirectApply;
+        init => m_settings = (m_settings with { IndirectApply = value });
+    }
 
     /// <summary>The default far distance, 40 world units, which an unauthored <c>render.farDistance</c> resolves to.</summary>
     public const float DefaultFarDistance = 40f;
+
+    /// <summary>
+    /// Owns one frame and is the one door that changes it after construction: a producer that captures every frame keeps a
+    /// writer and writes its frame again for each capture, so capturing allocates nothing. Only the writer's holder can
+    /// change the frame, so a consumer handed it cannot; what a consumer must keep past the producer's next write it copies
+    /// into a frame its own writer owns (<see cref="CopyFrom(SdfFrame)"/>). The frame is created by the first write. Not
+    /// thread-safe: the producer writes on the thread that captures, while no consumer reads the frame.
+    /// </summary>
+    public sealed class Writer {
+        private SdfFrame? m_frame;
+
+        /// <summary>Gets the frame, or <see langword="null"/> before the first write.</summary>
+        public SdfFrame? Frame => m_frame;
+
+        /// <summary>Writes a frame of the producer's own: this content and these settings, and no composition or
+        /// dressing.</summary>
+        /// <param name="content">The frame's content.</param>
+        /// <param name="settings">The frame's settings.</param>
+        /// <returns>The written frame, the same object on every write.</returns>
+        public SdfFrame Write(in SdfFrameContent content, in SdfFrameSettings settings) {
+            var frame = Open(content: in content);
+
+            frame.m_settings = settings;
+            frame.m_composition = default;
+
+            return frame;
+        }
+        /// <summary>Replaces the written frame's settings alone, keeping its content and composition.</summary>
+        /// <param name="settings">The frame's settings.</param>
+        /// <returns>The written frame.</returns>
+        /// <exception cref="InvalidOperationException">Nothing has been written yet.</exception>
+        public SdfFrame Write(in SdfFrameSettings settings) {
+            var frame = (m_frame ?? throw new InvalidOperationException(message: "A frame's settings are replaced only after its first write."));
+
+            frame.m_settings = settings;
+
+            return frame;
+        }
+        /// <summary>Writes a copy of another frame: its content, settings and composition, and none of its dressing,
+        /// which belongs to the dresser that dressed it.</summary>
+        /// <param name="source">The frame to copy, which may be this writer's own.</param>
+        /// <returns>The written frame.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
+        public SdfFrame CopyFrom(SdfFrame source) {
+            ArgumentNullException.ThrowIfNull(argument: source);
+
+            return CopyFrom(content: in source.m_content, source: source);
+        }
+        /// <summary>Writes a copy of another frame's settings and composition with other content, and none of its
+        /// dressing.</summary>
+        /// <param name="source">The frame whose settings and composition are copied, which may be this writer's own.</param>
+        /// <param name="content">The written frame's content.</param>
+        /// <returns>The written frame.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
+        public SdfFrame CopyFrom(SdfFrame source, in SdfFrameContent content) {
+            ArgumentNullException.ThrowIfNull(argument: source);
+
+            // Read before the open: the source may be this writer's frame.
+            var settings = source.m_settings;
+            var composition = source.m_composition;
+            var frame = Open(content: in content);
+
+            frame.m_settings = settings;
+            frame.m_composition = composition;
+
+            return frame;
+        }
+        private SdfFrame Open(in SdfFrameContent content) {
+            if (m_frame is not { } frame) {
+                frame = new SdfFrame(Program: content.Program, ProgramChanged: content.ProgramChanged, Time: content.Time, Views: content.Views);
+                m_frame = frame;
+            }
+            frame.m_content = content;
+            frame.m_meshRows = null;
+            frame.m_dressedPickMap = null;
+
+            return frame;
+        }
+    }
 }
