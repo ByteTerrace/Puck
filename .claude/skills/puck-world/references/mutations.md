@@ -43,9 +43,10 @@ sweeps between steps 9 and 10):
    tick it was pumped).
 2. `DrainPendingOps` — drain the buffered live edits FIFO (mutations,
    whole-document swaps, undo), each applying at this tick boundary; deliver
-   the new definition to the client sink ONCE if at least one applied. An
-   `UpsertAddon`/`RemoveAddon` mutation carries its own addon-prepare gate —
-   the LAST fallible step before install — see [addons.md](addons.md).
+   the new definition to the client sink ONCE if at least one applied. A
+   mutation that changes a part the addon host's last preparation read (the
+   addon rows, the channels) passes the addon-prepare gate — the LAST fallible
+   step before install — see [addons.md](addons.md).
 3. Drain the tick's buffered intents (`m_intents` → `ApplyIntentSubmission`,
    under the per-tick Drive check).
 4. `WorldAddonRuntime.ApplyContributions` — the guests' staged contributions
@@ -148,10 +149,13 @@ journal → echo. Precisely:
    state-value write validates only the rows it touched
    (`TryValidateStateMutation`).
 4. **Plan the products.** `WorldDocument.PlanProducts` compares the
-   candidate with the document it was composed over part by part
+   candidate with the installed document part by part
    (`WorldDocumentInputs.Changed`) and rebuilds each compiled product whose
    recorded inputs hold a changed part: the render envelope's fit, the solid
-   field, the addon and machine hosts' preparations and the population. A
+   field, the addon and machine hosts' preparations, the population and the
+   input owners (`WorldInputRuntime.BuiltFrom`). A candidate that changes the
+   document's overlap terms (`WorldOverlapTerms`) while it declares adjacencies
+   is refused: the neighbour proof is remade only by a load or reload. A
    product records its inputs by building inside `WorldDocumentReads.Begin`,
    which every `WorldDefinition` member property notes into, so no list of
    mutation kinds decides what rebuilds. A reload's install and an undo's
@@ -167,7 +171,8 @@ journal → echo. Precisely:
    tuning instead of recompiling (`WorldSolidField.WithTuning`).
 7. **Install.** Swap the live definition; `Install` installs the field
    lattices and rebuilds the population when the plan says so (a part it was
-   built from changed, or it receives a new solid field). The
+   built from changed, or it receives a new solid field), then reconfigures
+   the input owners when a part they read changed or the population rebuilt. The
    `[world.products]` line (`host.log category world.products`) names what
    changed, what rebuilt and what each rebuild was moved by.
 8. **Journal.** Append a `WorldJournalEntry(Tick, EngineTick, Mutation)` to `WorldDocument`'s journal. The `dirty` count in

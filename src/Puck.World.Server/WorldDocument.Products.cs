@@ -29,6 +29,7 @@ public sealed partial class WorldDocument {
             Addons: changed.Intersect(other: (m_addonInputs ?? WorldDocumentInputs.All)),
             Changed: changed,
             Envelope: changed.Intersect(other: (m_envelopeInputs ?? WorldDocumentInputs.All)),
+            Input: changed.Intersect(other: Host.Input.BuiltFrom),
             Machines: changed.Intersect(other: (m_machineInputs ?? WorldDocumentInputs.All)),
             Population: changed.Intersect(other: Host.Population.BuiltFrom),
             Solids: solids,
@@ -218,6 +219,8 @@ public sealed partial class WorldDocument {
 /// <param name="Addons">The changed parts the addon host's last preparation read.</param>
 /// <param name="Machines">The changed parts the machine host's last preparation read.</param>
 /// <param name="Population">The changed parts the population was built from.</param>
+/// <param name="Input">The changed parts the input runtime and its owners were built from
+/// (<see cref="WorldInputRuntime.BuiltFrom"/>).</param>
 /// <param name="SolidsReachPopulation">Whether rebuilding the solid field hands the population a new field.</param>
 internal readonly record struct WorldProductPlan(
     WorldDocumentInputs Changed,
@@ -226,11 +229,15 @@ internal readonly record struct WorldProductPlan(
     WorldDocumentInputs Addons,
     WorldDocumentInputs Machines,
     WorldDocumentInputs Population,
+    WorldDocumentInputs Input,
     bool SolidsReachPopulation
 ) {
     /// <summary>Gets whether the population rebuilds: a part it was built from changed, or it receives a new solid
     /// field.</summary>
     public bool RebuildsPopulation => (!Population.IsEmpty || SolidsReachPopulation);
+    /// <summary>Gets whether the input runtime reconfigures its owners: a part they were built from changed, or the
+    /// population rebuilt the bodies and the input catalog they read.</summary>
+    public bool ReconfiguresInput => (!Input.IsEmpty || RebuildsPopulation);
     /// <summary>Gets whether the solid field's only changed input is the collision tuning, which leaves its compiled
     /// program as it is.</summary>
     public bool SolidsRetuneAlone => (Solids == WorldDocumentInputs.Of(WorldDocumentInput.Collision));
@@ -240,6 +247,7 @@ internal readonly record struct WorldProductPlan(
     /// <returns>The plan with only its envelope fit.</returns>
     public WorldProductPlan ForPresentation() => (this with {
         Addons = WorldDocumentInputs.None,
+        Input = WorldDocumentInputs.None,
         Machines = WorldDocumentInputs.None,
         Population = WorldDocumentInputs.None,
         Solids = WorldDocumentInputs.None,
@@ -259,6 +267,9 @@ internal readonly record struct WorldProductPlan(
         Add(name: "machines", parts: Machines);
         if (population) { rebuilt.Add(item: (Population.IsEmpty ? "population (new solid field)" : $"population ({Population})")); }
         else { kept.Add(item: "population"); }
+        if (!Input.IsEmpty) { rebuilt.Add(item: $"input ({Input})"); }
+        else if (population) { rebuilt.Add(item: "input (rebuilt population)"); }
+        else { kept.Add(item: "input"); }
         return $"rebuilt {((rebuilt.Count == 0) ? "nothing" : string.Join(separator: ", ", values: rebuilt))}; kept {((kept.Count == 0) ? "nothing" : string.Join(separator: ", ", values: kept))}";
 
         void Add(string name, WorldDocumentInputs parts) {

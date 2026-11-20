@@ -74,7 +74,7 @@ public sealed partial class WorldPersistence {
                 if (machines is not null) { Host.Machines.Commit(plan: machines); Host.Machines.Finish(plan: machines); }
                 Host.Document.RestoreSolidField(solids, checkpoint.Server.SolidRevision);
                 Host.Document.Install(
-                    authority: authority, definition: definition, rebuildPopulation: true, compilation: admission.Compilation);
+                    authority: authority, definition: definition, products: Host.Document.PlanProducts(candidate: definition, previous: Host.Definition, whole: true), compilation: admission.Compilation);
                 RestoreCheckpointCore(keys, checkpoint, admission, resetSessionEpochs: true,
                     restoreOwnedIdentities: restoreOwnedIdentities, preparedAddons: addonPlan, validated: validated);
                 return;

@@ -77,18 +77,9 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        candidate = WorldContributionState.Declare(definition: candidate);
-        // Every row the mutation did not name returns to the installed declaration here, so each install below changes
-        // only the rows the mutation names: a value install loads them alone, and a full install keeps the live arena
-        // when it named none, or carries every other row's live values into its replacement.
-        var edit = NameStateEdit(candidate: candidate, current: current);
+        var (edit, kind) = ClassifyComposed(composed: candidate, current: current, mutation: mutation);
 
         candidate = edit.Candidate;
-        var kind = InstallKindOf(
-            candidate: candidate,
-            mutation: mutation,
-            previous: current
-        );
         var installsArena = (kind == WorldInstallKind.Full);
         var keepsArena = (installsArena && Host.KeepsArena(candidate: candidate));
         // Pool snapshots include generated storage rows that cannot be admitted through the ordinary row-import
@@ -150,8 +141,7 @@ public sealed partial class WorldDocument {
             (candidate.Adjacencies is { Count: > 0 }) &&
             AdjacencyProofInputsChanged(
             candidate: candidate,
-            current: current,
-            mutation: mutation
+            current: m_definition
         )
         ) {
             reason = "the mutation changes an adjacency overlap input; apply it through world.load/world.reload so the neighbour can be re-proved outside the tick path";
@@ -200,9 +190,12 @@ public sealed partial class WorldDocument {
 
         // The compiled products a full install keeps unless a part they were built from changed; a presentation
         // install keeps every product but the envelope's fit, and a value install keeps them all.
+        // Planned against the installed document the products were built from, not the arena export the mutation
+        // composed over: the candidate holds the installed declaration of every state row it did not name, so only the
+        // parts the mutation changed read as changed.
         var products = kind switch {
-            WorldInstallKind.Full => PlanProducts(previous: current, candidate: candidate),
-            WorldInstallKind.Presentation => PlanProducts(previous: current, candidate: candidate).ForPresentation(),
+            WorldInstallKind.Full => PlanProducts(previous: m_definition, candidate: candidate),
+            WorldInstallKind.Presentation => PlanProducts(previous: m_definition, candidate: candidate).ForPresentation(),
             _ => default(WorldProductPlan),
         };
         WorldDocumentInputs? envelopeInputs = null;
@@ -371,7 +364,7 @@ public sealed partial class WorldDocument {
                         arena: prepared.Arena,
                         definition: candidate,
                         compilation: prepared.Compilation,
-                        rebuildPopulation: prepared.Products.RebuildsPopulation
+                        products: prepared.Products
                     );
                     NarrateProducts(plan: prepared.Products, population: prepared.Products.RebuildsPopulation);
                     break;
@@ -496,14 +489,21 @@ public sealed partial class WorldDocument {
     /// <param name="candidate">The document the mutation composes.</param>
     /// <param name="previous">The document it composes over.</param>
     /// <returns><see langword="true"/> when the install rebuilds the population.</returns>
-    internal bool RebuildsPopulation(WorldMutation mutation, WorldDefinition candidate, WorldDefinition previous) => (
-        (InstallKindOf(
-            candidate: candidate,
-            mutation: mutation,
-            previous: previous
-        ) == WorldInstallKind.Full) &&
-        PlanProducts(candidate: candidate, previous: previous).RebuildsPopulation
-    );
+    internal bool RebuildsPopulation(WorldMutation mutation, WorldDefinition candidate, WorldDefinition previous) {
+        var (edit, kind) = ClassifyComposed(composed: candidate, current: previous, mutation: mutation);
+
+        return ((kind == WorldInstallKind.Full) && PlanProducts(candidate: edit.Candidate, previous: m_definition).RebuildsPopulation);
+    }
+    // The one classification a staged mutation and the population forecast share: the composed candidate with every
+    // state row the mutation did not name returned to the installed declaration (NameStateEdit), so each install
+    // changes only the rows the mutation names (a value install loads them alone, and a full install keeps the live
+    // arena when it named none, or carries every other row's live values into its replacement), and the install it
+    // takes over the document it was composed over.
+    private (WorldStateEdit Edit, WorldInstallKind Kind) ClassifyComposed(WorldDefinition composed, WorldDefinition current, WorldMutation mutation) {
+        var edit = NameStateEdit(candidate: WorldContributionState.Declare(definition: composed), current: current);
+
+        return (edit, InstallKindOf(candidate: edit.Candidate, mutation: mutation, previous: current));
+    }
 
     /// <summary>Returns what installing <paramref name="mutation"/>, composed into <paramref name="candidate"/> over
     /// <paramref name="previous"/>, rebuilds: the one classification the prepare step, the install and the population

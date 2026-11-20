@@ -167,7 +167,7 @@ public sealed partial class WorldPopulation {
         m_navigation = new NavigationRuntime(
             domains: CompileNavigationDomains(definition: definition),
             geometry: NavigationGeometry(contact: m_baseContactField),
-            fields: ((m_fieldRegions.Count == 0) ? null : new NavigationMediumFieldAdapter(regions: m_fieldRegions)),
+            fields: ((m_fieldRegions.Length == 0) ? null : new NavigationMediumFieldAdapter(regions: m_fieldRegions)),
             capacity: new NavigationCapacity(
                 MaxConcurrentRequesters: WorldBodiesLimits.CapacityCeiling,
                 MaxMediumSegmentSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions
@@ -209,8 +209,8 @@ public sealed partial class WorldPopulation {
         }
 
         if (definition.FieldRegions.Count != definition.FieldPrograms.Count) { reason = "physical regions and compiled programs disagree"; return false; }
-        if (m_fieldRegions.Count != definition.FieldRegions.Count) { reason = "adding or removing regions changes allocation; restart the host"; return false; }
-        for (var index = 0; (index < m_fieldRegions.Count); index++) {
+        if (m_fieldRegions.Length != definition.FieldRegions.Count) { reason = "adding or removing regions changes allocation; restart the host"; return false; }
+        for (var index = 0; (index < m_fieldRegions.Length); index++) {
             var region = m_fieldRegions[index]; var document = definition.FieldRegions[index];
 
             if (region.Name != document.Name) { reason = $"region '{region.Name}' changed identity"; return false; }
@@ -219,6 +219,12 @@ public sealed partial class WorldPopulation {
         reason = null; return true;
     }
     /// <summary>Installs compatible programs preserving independent live cells.</summary>
+    /// <remarks>The region array is allocated once, by the first install, and every later install writes its regions in
+    /// place, so a consumer compiled over it (the solid field's lattice columns, navigation's media) reads the installed
+    /// regions whether or not the population rebuilt.</remarks>
+    /// <param name="definition">The definition whose field programs install.</param>
+    /// <exception cref="InvalidOperationException">The candidate's field runtime is incompatible with the live one
+    /// (<see cref="CanInstallFields"/>).</exception>
     public void InstallFields(WorldDefinition definition) {
         if (!CanInstallFields(definition: definition, reason: out var reason)) { throw new InvalidOperationException(message: reason); }
         if (!m_fieldsCompiled) {
@@ -226,15 +232,12 @@ public sealed partial class WorldPopulation {
                 new FieldLattice(input: CompileFieldLatticeInput(document: document, program: definition.FieldPrograms[index]), worldSeed: (definition.Generation?.WorldSeed ?? 0UL)), document.TravelResistance)).ToArray();
             m_fieldsCompiled = true;
         } else {
-            var updated = new WorldFieldRegion[m_fieldRegions.Count];
-
-            for (var index = 0; (index < updated.Length); index++) {
+            for (var index = 0; (index < m_fieldRegions.Length); index++) {
                 var region = m_fieldRegions[index]; var document = definition.FieldRegions[index];
 
                 region.Lattice.InstallInput(input: CompileFieldLatticeInput(document: document, program: definition.FieldPrograms[index]));
-                updated[index] = region with { TravelResistance = document.TravelResistance };
+                m_fieldRegions[index] = region with { TravelResistance = document.TravelResistance };
             }
-            m_fieldRegions = updated;
         }
     }
     /// <summary>Flattens a compiled field program into the plain input the Physics kernel reads — the same seam

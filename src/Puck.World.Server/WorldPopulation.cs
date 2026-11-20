@@ -280,7 +280,7 @@ public sealed partial class WorldPopulation {
     private int m_simulatedCount;
     private WorldSolidField? m_targetField;
 
-    private IReadOnlyList<WorldFieldRegion> m_fieldRegions = [];
+    private WorldFieldRegion[] m_fieldRegions = [];
 
     private bool m_fieldsCompiled;
 

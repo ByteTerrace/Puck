@@ -17,7 +17,7 @@ public sealed partial class WorldPopulation {
         var solids = ContactReadsLatticeSolids;
         var version = 0UL;
 
-        for (var index = 0; (index < m_fieldRegions.Count); index++) { version = unchecked((version + m_fieldRegions[index].Lattice.BodyReadRevision(solids: solids))); }
+        for (var index = 0; (index < m_fieldRegions.Length); index++) { version = unchecked((version + m_fieldRegions[index].Lattice.BodyReadRevision(solids: solids))); }
         return version;
     }
     // Grows the box over the read bounds of every region whose body-read cells changed since the sleepers last observed
@@ -25,7 +25,7 @@ public sealed partial class WorldPopulation {
     private void FoldFieldRegionChanges(ref WorldColliderBox box) {
         var solids = ContactReadsLatticeSolids;
 
-        for (var index = 0; (index < m_fieldRegions.Count); index++) {
+        for (var index = 0; (index < m_fieldRegions.Length); index++) {
             var lattice = m_fieldRegions[index].Lattice;
 
             if ((index < m_sleepRegionRevisions.Length) && (lattice.BodyReadRevision(solids: solids) == m_sleepRegionRevisions[index])) { continue; }
@@ -33,15 +33,15 @@ public sealed partial class WorldPopulation {
         }
     }
     private void RecordFieldRegionRevisions() {
-        if (m_sleepRegionRevisions.Length != m_fieldRegions.Count) { m_sleepRegionRevisions = new ulong[m_fieldRegions.Count]; }
+        if (m_sleepRegionRevisions.Length != m_fieldRegions.Length) { m_sleepRegionRevisions = new ulong[m_fieldRegions.Length]; }
         var solids = ContactReadsLatticeSolids;
 
-        for (var index = 0; (index < m_fieldRegions.Count); index++) { m_sleepRegionRevisions[index] = m_fieldRegions[index].Lattice.BodyReadRevision(solids: solids); }
+        for (var index = 0; (index < m_fieldRegions.Length); index++) { m_sleepRegionRevisions[index] = m_fieldRegions[index].Lattice.BodyReadRevision(solids: solids); }
     }
 
     /// <summary>Finds a region by topology identity.</summary>
     public WorldFieldRegion? TryFieldRegion(string name) {
-        for (var index = 0; (index < m_fieldRegions.Count); index++) {
+        for (var index = 0; (index < m_fieldRegions.Length); index++) {
             var region = m_fieldRegions[index];
 
             if (string.Equals(a: region.Name, b: name, comparisonType: StringComparison.Ordinal)) { return region; }
@@ -50,7 +50,7 @@ public sealed partial class WorldPopulation {
     }
     /// <summary>Resolves a field row to its region and local ordinal.</summary>
     public bool TryFieldForRow(string name, out WorldFieldRegion? region, out int field) {
-        for (var index = 0; (index < m_fieldRegions.Count); index++) {
+        for (var index = 0; (index < m_fieldRegions.Length); index++) {
             var candidate = m_fieldRegions[index];
 
             if (candidate.Lattice.TryFieldIndex(field: out field, name: name)) { region = candidate; return true; }
@@ -62,8 +62,8 @@ public sealed partial class WorldPopulation {
         new WorldFieldRegionCheckpoint(region.Name, region.Lattice.Input.Fields.Select(selector: field => field.Name).ToArray(), region.Lattice.Capture())).ToArray();
     /// <summary>Validates all regions before live state changes.</summary>
     public void ValidateFieldRegions(IReadOnlyList<WorldFieldRegionCheckpoint>? checkpoints) {
-        if ((checkpoints?.Count ?? 0) != m_fieldRegions.Count) { throw new InvalidOperationException(message: "The checkpoint's physical regions do not match its world definition."); }
-        for (var index = 0; (index < m_fieldRegions.Count); index++) {
+        if ((checkpoints?.Count ?? 0) != m_fieldRegions.Length) { throw new InvalidOperationException(message: "The checkpoint's physical regions do not match its world definition."); }
+        for (var index = 0; (index < m_fieldRegions.Length); index++) {
             var region = m_fieldRegions[index]; var image = checkpoints![index];
 
             if ((region.Name != image.Region) || !region.Lattice.Input.Fields.Select(selector: field => field.Name).SequenceEqual(image.FieldNames, StringComparer.Ordinal)) {
@@ -75,6 +75,6 @@ public sealed partial class WorldPopulation {
     /// <summary>Restores independently captured regions.</summary>
     public void RestoreFieldRegions(IReadOnlyList<WorldFieldRegionCheckpoint>? checkpoints) {
         ValidateFieldRegions(checkpoints: checkpoints);
-        for (var index = 0; (index < m_fieldRegions.Count); index++) { m_fieldRegions[index].Lattice.Restore(checkpoint: checkpoints![index].Cells); }
+        for (var index = 0; (index < m_fieldRegions.Length); index++) { m_fieldRegions[index].Lattice.Restore(checkpoint: checkpoints![index].Cells); }
     }
 }

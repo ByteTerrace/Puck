@@ -575,11 +575,20 @@ made from, and `WorldDocument.PlanProducts` intersects the two for each product:
 | The population | `WorldPopulation.BuiltFrom`: its construction or its last `Rebuild`, and the reconcile of inhabited placements after it |
 | The solid field | `WorldSolidField.BuiltFrom`, with what deciding whether the document needs a field reads (`WorldDocument.SolidInputsOf`) |
 | The render envelope's fit | the last fit an install ran |
-| The addon host | the last `IWorldAddonHost.TryPrepare` an install ran |
+| The addon host | the preparation that mounted it (`AttachAddons`' `preparedFrom`, or the checkpoint it restored from), then the last `IWorldAddonHost.TryPrepare` an install ran |
 | The machine host | the boot preparation, then the last `IWorldMachineHost.TryPrepare` an install ran |
+| The input runtime's owners | `WorldInputRuntime.BuiltFrom`: its construction, every owner it prepared and every `Reconfigure`, never forgetting a part |
 
 A rebuilt solid field that the population would build its contact and
-line-of-sight consumers from also rebuilds the population. A mutation's full
+line-of-sight consumers from also rebuilds the population, and a rebuilt
+population reconfigures the input owners, which read its bodies and input
+catalog. A mutation is planned against the installed document, not the arena
+export it composed over: the candidate holds the installed declaration of every
+state row the mutation did not name (`WorldDocument.NameStateEdit`), so only the
+parts it changed read as changed. The field lattices install on every full
+install, in place in the population's one region array, so the solid field and
+navigation compiled over it read them whether or not the population rebuilt. A
+mutation's full
 install, a reload's full install and an undo's install follow one plan; a load or
 a reset changes every part; a presentation install fits the envelope alone. The
 `[world.products]` line names the changed parts, each rebuilt product with the
