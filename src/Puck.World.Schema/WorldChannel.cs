@@ -121,6 +121,8 @@ public sealed class WorldChannelTable {
     private readonly string?[] m_names = new string?[ChannelLimits.MaxChannels];
 
     private readonly OrdinalTable m_ordinals;
+    // Ordinal translations into other tables, held against the target they were derived for.
+    private readonly Puck.Abstractions.CodeDerivedTable<WorldChannelTable, int[]> m_remaps = new();
 
     private int[] m_addresses = [];
     private ChannelShape[] m_logicalShapes = [];
@@ -336,6 +338,25 @@ public sealed class WorldChannelTable {
         }
         ordinal = -1;
         return false;
+    }
+    /// <summary>Gets, for each ordinal of this table, the ordinal of the channel with the same name in
+    /// <paramref name="target"/>, resolved once per pair: the plan an ingress or a mapping switch reads by ordinal
+    /// instead of resolving every name again.</summary>
+    /// <param name="target">The table to translate ordinals into.</param>
+    /// <returns>One entry per possible ordinal (<see cref="ChannelLimits.MaxChannels"/>): the target ordinal, or -1 when
+    /// this table declares nothing there or <paramref name="target"/> has no active channel of that name.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
+    public ReadOnlySpan<int> RemapTo(WorldChannelTable target) {
+        ArgumentNullException.ThrowIfNull(argument: target);
+
+        if (!m_remaps.TryGetValue(key: target, value: out var remap)) {
+            remap = new int[ChannelLimits.MaxChannels];
+            for (var ordinal = 0; (ordinal < remap.Length); ordinal++) {
+                remap[ordinal] = ((m_names[ordinal] is { } name) && target.TryGetOrdinal(name: name, ordinal: out var destination) ? destination : -1);
+            }
+            m_remaps.AddOrUpdate(key: target, value: remap);
+        }
+        return remap;
     }
     /// <summary>Resolves a semantic name even when its action is inactive in this mapping.</summary>
     public bool TryGetLogicalId(string name, out int logical) => m_ordinals.TryGetOrdinal(name: name, ordinal: out logical);

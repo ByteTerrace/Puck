@@ -28,7 +28,16 @@ public sealed record WorldSiloWorldRow(
     WorldSiloFederation Federation,
     bool Pinned = false,
     string? Extensions = null
-);
+) {
+    /// <summary>Gets the key this world's checkpoint and recovery root is held under: the owner's UUID and the world id.</summary>
+    public string RootKey => RootKeyOf(owner: Owner, world: World);
+
+    /// <summary>Returns the key a world's checkpoint and recovery root is held under.</summary>
+    /// <param name="owner">The owning identity's stable UUID.</param>
+    /// <param name="world">The world id under that owner's container.</param>
+    /// <returns>The owner's UUID in its hyphenated form, a slash and the world id.</returns>
+    public static string RootKeyOf(Guid owner, SafeName world) => $"{owner:D}/{world}";
+}
 /// <summary>The declared door budget — a silo-document field, never a hard-coded platform constant: the document
 /// declares its own limit, and a deployment lane writes a platform-derived value into it when one exists.</summary>
 /// <param name="Budget">The maximum number of <see cref="WorldSiloWorldRow.Pinned"/> rows this silo may activate at

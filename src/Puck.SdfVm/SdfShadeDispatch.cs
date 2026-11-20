@@ -194,5 +194,5 @@ public sealed class SdfShadeDispatch {
         return new(Jobs: tiles.CeilingDivide(divisor: width), TileWork: tileWork, Width: width);
     }
     private static uint Tiles(uint width, uint height) =>
-        checked(((width + (SdfVisibility.GroupEdgePixels - 1U)) / SdfVisibility.GroupEdgePixels) * ((height + (SdfVisibility.GroupEdgePixels - 1U)) / SdfVisibility.GroupEdgePixels));
+        checked(width.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels) * height.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels));
 }

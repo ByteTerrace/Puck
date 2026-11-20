@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Numerics;
 
 namespace Puck.State;
@@ -64,7 +65,7 @@ public readonly struct CellSet : IEquatable<CellSet> {
         if (count > Length) {
             return true;
         }
-        for (var word = WordCount(length: count); (word < WordCount(length: Length)); word++) {
+        for (var word = count.CeilingDivide(divisor: 64); (word < Length.CeilingDivide(divisor: 64)); word++) {
             if (Word(index: word) != 0UL) {
                 return false;
             }
@@ -122,12 +123,11 @@ public readonly struct CellSet : IEquatable<CellSet> {
             0UL,
             0UL,
             ((length > 256)
-                ? new ulong[(WordCount(length: length) - 4)]
+                ? new ulong[(length.CeilingDivide(divisor: 64) - 4)]
                 : null)
         );
     }
 
-    internal static int WordCount(int length) => ((length / 64) + (((length % 64) == 0) ? 0 : 1));
     internal ulong Word(int index) => index switch {
         0 => m_word0,
         1 => m_word1,
@@ -141,7 +141,7 @@ public readonly struct CellSet : IEquatable<CellSet> {
         if (Length != other.Length) {
             return false;
         }
-        for (var word = 0; (word < WordCount(length: Length)); word++) {
+        for (var word = 0; (word < Length.CeilingDivide(divisor: 64)); word++) {
             if (Word(index: word) != other.Word(index: word)) {
                 return false;
             }
@@ -150,12 +150,13 @@ public readonly struct CellSet : IEquatable<CellSet> {
     }
     /// <inheritdoc/>
     public override bool Equals(object? obj) => ((obj is CellSet other) && Equals(other: other));
+    // Construction and expression lowering keep unused inline words zero.
     /// <inheritdoc/>
     public override int GetHashCode() {
         var hash = new HashCode();
 
         hash.Add(value: Length);
-        for (var word = 0; (word < WordCount(length: Length)); word++) {
+        for (var word = 0; (word < Length.CeilingDivide(divisor: 64)); word++) {
             hash.Add(value: Word(index: word));
         }
         return hash.ToHashCode();

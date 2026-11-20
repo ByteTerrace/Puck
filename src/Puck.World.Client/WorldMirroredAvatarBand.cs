@@ -72,34 +72,28 @@ internal static class WorldMirroredAvatarBand {
     /// spin the limbs through dozens of cycles in one frame.</summary>
     public const float MaxGaitTravelPerFrame = 0.25f;
 
-    /// <summary>Wakes one mirrored avatar's transform owner for its interpolated pose and follows the pose with its
-    /// gait. A mirrored avatar is drawn at its source's pose with no follower, so it steps by a whole frame.</summary>
-    /// <param name="owners">The band's transform owners.</param>
-    /// <param name="owner">The avatar's owner index in the band.</param>
-    /// <param name="gait">The avatar's gait.</param>
-    /// <param name="moved">The frame's moved-transform journal.</param>
-    /// <param name="address">The pose's entity address.</param>
-    /// <param name="epoch">The pose's epoch.</param>
-    /// <param name="position">The interpolated render position.</param>
-    /// <param name="orientation">The interpolated render orientation.</param>
-    /// <returns><see langword="true"/> when the avatar must repack (<see cref="Pack"/>); <see langword="false"/> when its
-    /// pose holds still.</returns>
-    public static bool Wake(WorldTransformOwners owners, int owner, ref WorldAvatarGait gait, SdfMovedTransforms moved, WorldEntityAddress address, int epoch, Vector3 position, Quaternion orientation) {
-        if (!owners.Wake(
-            deltaSeconds: 1f,
-            discontinuity: gait.Breaks(address: address, epoch: epoch),
-            moved: moved,
-            orientation: orientation,
-            owner: owner,
-            position: position
-        )) {
+    public static void Park(WorldTransformOwners owners, int owner, ref WorldAvatarGait gait, SdfMovedTransforms moved, Span<DynamicTransform> table, int firstSlot, Vector3 parkPosition) {
+        gait.Seeded = false;
+        if (owners.Vacate(owner, moved)) {
+            WorldTransformOwners.Park(table, firstSlot, WorldRigCatalog.TransformSlotsPerBody, moved, parkPosition);
+        }
+    }
+
+    // The mirror has no root follower. It settles in a whole frame and ignores the footfall.
+    public static bool Wake(WorldTransformOwners owners, int owner, ref WorldAvatarGait gait, SdfMovedTransforms moved, WorldEntityAddress address, int epoch, Vector3 position, Quaternion orientation) =>
+        Wake(owners, owner, ref gait, moved, address, epoch, position, orientation, out _, out _, deltaSeconds: 1f);
+
+    public static bool Wake(WorldTransformOwners owners, int owner, ref WorldAvatarGait gait, SdfMovedTransforms moved, WorldEntityAddress address, int epoch, Vector3 position, Quaternion orientation, out bool continued, out bool footfall, float deltaSeconds) {
+        continued = false;
+        footfall = false;
+        if (!owners.Wake(owner, moved, position, orientation, deltaSeconds, discontinuity: gait.Breaks(address, epoch))) {
             return false;
         }
 
-        _ = gait.Follow(address: address, epoch: epoch, footfall: out _, position: position);
+        continued = gait.Follow(address, epoch, position, out footfall);
         return true;
     }
-    /// <summary>Packs one woken mirrored avatar's catalog body with its root at the pose its band draws it at, and
+    /// <summary>Packs one woken avatar's catalog body with its root at the pose its band draws it at, and
     /// settles its owner.</summary>
     /// <param name="owners">The band's transform owners.</param>
     /// <param name="owner">The avatar's owner index in the band.</param>
@@ -114,9 +108,10 @@ internal static class WorldMirroredAvatarBand {
     /// <param name="gaitAmplitude">The body's emitted gait amplitude, scaling its phase.</param>
     /// <param name="rootPosition">The root's position in the band's frame.</param>
     /// <param name="rootOrientation">The root's orientation in the band's frame.</param>
-    public static void Pack(WorldTransformOwners owners, int owner, in WorldAvatarGait gait, SdfMovedTransforms moved, Span<DynamicTransform> table, int firstSlot, int avatar, int catalogBase, int rig, float scale, float gaitAmplitude, Vector3 rootPosition, Quaternion rootOrientation) =>
+    /// <param name="deltaSeconds">The followed root's settle step, or a whole frame for a directly drawn root.</param>
+    public static void Pack(WorldTransformOwners owners, int owner, in WorldAvatarGait gait, SdfMovedTransforms moved, Span<DynamicTransform> table, int firstSlot, int avatar, int catalogBase, int rig, float scale, float gaitAmplitude, Vector3 rootPosition, Quaternion rootOrientation, float deltaSeconds = 1f) =>
         owners.Settle(
-            deltaSeconds: 1f,
+            deltaSeconds: deltaSeconds,
             moved: WorldTransformOwners.PackBody(
                 firstSlot: firstSlot,
                 avatar: avatar,
@@ -176,7 +171,7 @@ internal static class WorldMirroredAvatarBand {
     /// differ from <paramref name="identityIndex"/> when the palette is reused per band.</param>
     /// <param name="bodyMaterials">The body material id per material slot.</param>
     /// <param name="accentMaterials">The accent material id per material slot.</param>
-    public static void EmitPalette(SdfProgramBuilder builder, WorldLook look, DisplayColor bodyColor, byte catalogRig, float noseFactor, int identityIndex, int[] emittedRigs, float[] emittedScales, float[] emittedGaitAmplitudes, int materialIndex, int[] bodyMaterials, int[] accentMaterials) {
+    public static void EmitPalette(SdfProgramBuilder builder, WorldLook look, DisplayColor bodyColor, byte catalogRig, float noseFactor, int identityIndex, int[] emittedRigs, float[] emittedScales, float[] emittedGaitAmplitudes, int materialIndex, Span<int> bodyMaterials, Span<int> accentMaterials) {
         LatchIdentity(catalogRig: catalogRig, emittedGaitAmplitudes: emittedGaitAmplitudes, emittedRigs: emittedRigs, emittedScales: emittedScales, identityIndex: identityIndex, look: look);
         EmitMaterials(accentMaterials: accentMaterials, bodyColor: bodyColor, bodyMaterials: bodyMaterials, builder: builder, materialIndex: materialIndex, noseFactor: noseFactor);
     }

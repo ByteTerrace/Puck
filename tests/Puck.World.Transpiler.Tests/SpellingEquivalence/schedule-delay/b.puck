@@ -1,0 +1,21 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+template tick(delay) {
+  rule "tick" {
+    when go == 1
+    scheduleState(state: due, delaySeconds: delay)
+    scheduleState(state: due, delaySeconds: delay * 2)
+    scheduleState(state: due, delaySeconds: 0.5)
+    scheduleState(state: due, delaySeconds: 2)
+  }
+}
+
+state {
+  world {
+    slot go = 0
+    slot due = 0
+  }
+}
+
+tick(0.25)

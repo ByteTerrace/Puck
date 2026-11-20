@@ -11,7 +11,7 @@ namespace Puck.Maths;
 /// </remarks>
 public static class LowDiscrepancy {
     // floor(2^64 / φ): the conventional odd Weyl increment, which gives the phase recurrence its full 2^64 period.
-    private const ulong GoldenConjugateQ64 = 0x9E3779B97F4A7C15UL;
+    private const ulong GoldenConjugateQ64 = SplitMix64.GoldenGamma;
     private const ulong PlasticInverseQ64 = 13925035116211876495UL;         // round(2^64 / ρ)
     private const ulong PlasticInverseSquaredQ64 = 10511698010929265437UL;  // round(2^64 / ρ²)
 

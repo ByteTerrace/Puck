@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
@@ -84,7 +85,7 @@ public sealed class RenderGraphSourceConverter : IDisposable {
     public Surface Output => m_output;
     /// <summary>Gets the latest successful conversion's publication. The node's submission identity survives a
     /// reset, while a held output keeps its original identity until a conversion actually submits.</summary>
-    public GpuImagePublication Publication { get; private set; }
+    public ReferenceRevision Publication { get; private set; }
     /// <summary>Gets the layout the latest conversion's output rests in between submissions.</summary>
     public GpuImageLayout OutputLayout => m_node.PublishedLayout;
     /// <summary>Gets whether the conversion's graph is building on the thread pool
@@ -133,20 +134,7 @@ public sealed class RenderGraphSourceConverter : IDisposable {
             offset: ImageSourceUploadLayout.HeaderBytes
         );
 
-        var submitted = m_node.FrameCounter;
-        var surface = m_node.ProduceFrame(context: in context);
-
-        if (m_node.FrameCounter == submitted) {
-            Render = Unconverted();
-
-            return false;
-        }
-
-        m_output = surface;
-        Publication = new GpuImagePublication(Owner: m_node, Sequence: m_node.SubmissionCount);
-        Render = FrameRender.Rendered;
-
-        return true;
+        return ProduceConversion(in context);
     }
     /// <summary>Converts one imported image: binds it to the graph's external input for one frame and records the
     /// conversion. The frame that records holds <paramref name="lease"/> and retires it once that submission has
@@ -185,6 +173,10 @@ public sealed class RenderGraphSourceConverter : IDisposable {
             name: RenderGraphPackageCatalog.SourceInput
         );
 
+        return ProduceConversion(in context);
+    }
+
+    private bool ProduceConversion(in FrameContext context) {
         var submitted = m_node.FrameCounter;
         var surface = m_node.ProduceFrame(context: in context);
 
@@ -195,7 +187,7 @@ public sealed class RenderGraphSourceConverter : IDisposable {
         }
 
         m_output = surface;
-        Publication = new GpuImagePublication(Owner: m_node, Sequence: m_node.SubmissionCount);
+        Publication = new ReferenceRevision(Owner: m_node, Revision: m_node.SubmissionCount);
         Render = FrameRender.Rendered;
 
         return true;

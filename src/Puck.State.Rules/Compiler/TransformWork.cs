@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State.Rules;
 
 /// <summary>Prices one firing of an arena transform from the operands it can touch, all known at compile time: a
@@ -83,7 +85,7 @@ public static class TransformWork {
     /// <param name="toMembers">The admitted destination room.</param>
     public static long Move(RuleCompileContext context, int fromOrdinal, long fromMembers, int toOrdinal, long toMembers) =>
         ((((((((3L * Door) + Dimensions(context: context, rowOrdinal: fromOrdinal)) + Cell(context: context, rowOrdinal: fromOrdinal)) +
-        Cell(context: context, rowOrdinal: toOrdinal)) + 10L) + ((toMembers + 63L) / 64L)) +
+        Cell(context: context, rowOrdinal: toOrdinal)) + 10L) + toMembers.CeilingDivide(divisor: 64L)) +
         Membership(context: context, members: fromMembers, rowOrdinal: fromOrdinal)) + Membership(context: context, members: toMembers, rowOrdinal: toOrdinal));
     /// <summary>Returns the work drawing up to <paramref name="samples"/> bounded selections from one site's stream costs, charging the full
     /// raw-word attempt budget for each selection: the

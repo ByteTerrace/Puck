@@ -39,6 +39,21 @@ public sealed class RentedList<T>(int capacity = 0, IAllocationObserver? owner =
         items.CopyTo(destination: m_items.AsSpan(start: m_count));
         m_count += items.Length;
     }
+    /// <summary>Appends elements of unspecified value and returns them, growing the rented storage geometrically when they
+    /// do not fit.</summary>
+    /// <param name="count">The number of elements to append.</param>
+    /// <returns>The appended elements, a borrow that ends at the next append or at disposal.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
+    public Span<T> Extend(int count) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: count);
+        if ((m_count + count) > m_items.Length) { Grow(minimumLength: (m_count + count)); }
+
+        var appended = m_items.AsSpan(start: m_count, length: count);
+
+        m_count += count;
+
+        return appended;
+    }
     /// <summary>Empties the list, keeping its storage.</summary>
     public void Clear() => m_count = 0;
     /// <summary>Returns a borrow of the appended elements.</summary>

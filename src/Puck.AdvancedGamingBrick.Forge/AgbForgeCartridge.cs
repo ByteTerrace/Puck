@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Text;
 
 namespace Puck.AdvancedGamingBrick.Forge;
@@ -193,12 +194,9 @@ public static class AgbForgeCartridge {
             );
         }
 
-        var size = MinimumRomSize;
-
-        while (size < needed) {
-            size <<= 1;
-        }
-
-        return size;
+        return Math.Max(
+            val1: MinimumRomSize,
+            val2: ((int)((uint)needed).NextPowerOfTwo())
+        );
     }
 }

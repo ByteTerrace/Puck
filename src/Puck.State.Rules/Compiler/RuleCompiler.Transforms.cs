@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State.Rules;
 
 public static partial class RuleCompiler {
@@ -1051,7 +1053,7 @@ public static partial class RuleCompiler {
         var tokens = ((long)pool.Capacity);
         var door = TransformWork.Door;
         var leases = (((3L * cells) + (5L * tokens)) + 1L);
-        var snapshot = (tokens + ((tokens + 63L) / 64L));
+        var snapshot = (tokens + tokens.CeilingDivide(divisor: 64L));
         var link = (tokens * (door + 1L));
         var walk = cells;
         var occupants = (tokens * ((door + 4L) + (TransformWork.PatternStep(pattern: push.StopPattern) + (2L * TransformWork.PatternStep(pattern: push.PushPattern)))));

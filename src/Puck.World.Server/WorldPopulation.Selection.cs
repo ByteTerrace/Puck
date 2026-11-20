@@ -13,7 +13,7 @@ public sealed partial class WorldPopulation {
     }
     /// <summary>Reads the kit selected by the open arena transaction without changing the installed body kit.</summary>
     public string CandidateKitName(int bodyIndex, WorldDefinition definition) {
-        var selected = SelectRow(definition, definition.Assignment.Select, true, bodyIndex);
+        var selected = SelectRow(WorldBodyStateReads.PlanFor(definition: definition).KitSelect, definition.Assignment.Select, true, bodyIndex);
 
         return m_kitRows[((selected >= 0) ? selected : ((bodyIndex < LocalSeatCount) ? m_seatKit : m_entries[bodyIndex].KitIndex))].Name;
     }
@@ -60,9 +60,10 @@ public sealed partial class WorldPopulation {
     /// <c>WorldGrants.SyncState</c> is, once a tick after the world rules, and when a crossing lands a body.</summary>
     /// <param name="definition">The live document.</param>
     public void SyncBodyCells(WorldDefinition definition) {
-        var generations = (RegisterGeneration(definition: definition, name: definition.Population.Scale),
-            RegisterGeneration(definition: definition, name: definition.Assignment.Select?.BodyState),
-            RegisterGeneration(definition: definition, name: definition.LookAssignment.Select?.BodyState));
+        var plan = WorldBodyStateReads.PlanFor(definition: definition);
+        var generations = (RegisterGeneration(slot: plan.Scale),
+            RegisterGeneration(slot: plan.KitSelect),
+            RegisterGeneration(slot: plan.LookSelect));
 
         if (ReferenceEquals(objA: m_bodyCellDefinition, objB: definition) && (m_bodyCellRevision == m_revision) &&
             (m_bodyCellGenerations == generations)) { return; }
@@ -79,9 +80,7 @@ public sealed partial class WorldPopulation {
         m_revision = revision;
     }
 
-    private ulong RegisterGeneration(WorldDefinition definition, string? name) => (((name is not null) &&
-        WorldBodyStateReads.TryResolveSlot(definition: definition, kind: out _, name: name, slot: out var slot))
-        ? m_actionStateLane.Generation(slot: slot) : 0);
+    private ulong RegisterGeneration(int slot) => ((slot >= 0) ? m_actionStateLane.Generation(slot: slot) : 0);
 
     /// <summary>Resyncs every body's kit and look from the kit and look assignments' selectors
     /// (<see cref="WorldRowAssignment.Select"/>), which read each body's own <c>state.body</c> register. Called once a
@@ -177,15 +176,17 @@ public sealed partial class WorldPopulation {
         var kits = (m_selectedKits ??= new int[m_entries.Length]);
         var looks = (m_selectedLooks ??= new int[m_entries.Length]);
 
+        var plan = WorldBodyStateReads.PlanFor(definition: definition);
+
         SelectRows(
-            definition: definition,
             kits: true,
+            slot: plan.KitSelect,
             select: definition.Assignment.Select,
             selected: kits
         );
         SelectRows(
-            definition: definition,
             kits: false,
+            slot: plan.LookSelect,
             select: definition.LookAssignment.Select,
             selected: looks
         );
@@ -205,22 +206,16 @@ public sealed partial class WorldPopulation {
     // Writes the row each active body's register selects, -1 for every other body and for a value no case names. The
     // validator admits only a state.body Counter and a case value is a whole number, so a register holding a fraction
     // selects nothing.
-    private void SelectRows(WorldDefinition definition, WorldRowSelector? select, bool kits, int[] selected) {
+    private void SelectRows(int slot, WorldRowSelector? select, bool kits, int[] selected) {
         for (var bodyIndex = 0; (bodyIndex < selected.Length); bodyIndex++) {
-            selected[bodyIndex] = SelectRow(bodyIndex: bodyIndex, definition: definition, kits: kits, select: select);
+            selected[bodyIndex] = SelectRow(bodyIndex: bodyIndex, kits: kits, slot: slot, select: select);
         }
     }
-    private int SelectRow(WorldDefinition definition, WorldRowSelector? select, bool kits, int bodyIndex) {
+    private int SelectRow(int slot, WorldRowSelector? select, bool kits, int bodyIndex) {
         if (
             (select is null) ||
             !m_entries[bodyIndex].Active ||
-            !WorldBodyStateReads.TryResolveSlot(
-            definition: definition,
-            kind: out var kind,
-            name: select.BodyState,
-            slot: out var slot
-        ) ||
-            (kind != ActionStateKind.Counter)
+            (slot < 0)
         ) {
             return -1;
         }

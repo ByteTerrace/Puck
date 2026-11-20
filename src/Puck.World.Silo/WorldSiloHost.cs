@@ -317,7 +317,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             ) {
                 throw new InvalidDataException(message: $"authority root for '{identity.World}' is missing or still owned");
             }
-            roots[$"{identity.Owner:D}/{identity.World.Value}"] = current.Pin;
+            roots[identity.RootKey] = current.Pin;
         }
         _ = await RequireSourceOperationAsync(
             ct: ct,
@@ -359,7 +359,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
                 if (
                     !operation.RecoveryRoots.TryGetValue(
-                    key: $"{identity.Owner:D}/{identity.World}",
+                    key: identity.RootKey,
                     value: out var pin
                 ) ||
                     (await recovery.LoadRecoveryRootAsync(
@@ -399,7 +399,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 ).ConfigureAwait(continueOnCapturedContext: false) ?? throw new IOException(message: "maintenance ownership could not be acquired"));
                 var restored = await recovery.RestoreRecoveryRootAsync(
                     identity,
-                    operation.RecoveryRoots[$"{identity.Owner:D}/{identity.World}"],
+                    operation.RecoveryRoots[identity.RootKey],
                     operationId,
                     fence,
                     ct

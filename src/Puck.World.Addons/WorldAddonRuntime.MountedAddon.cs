@@ -2,6 +2,7 @@ using Puck.Commands;
 using Puck.Scripting;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.Maths;
 
 namespace Puck.World.Addons;
 
@@ -232,11 +233,11 @@ public sealed partial class WorldAddonRuntime {
         private byte[] m_poseHandles = [];
 
         public Span<byte> ReadBuffer(int length) {
-            if (m_readBuffer.Length < length) { Array.Resize(array: ref m_readBuffer, newSize: ((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)length)))); }
+            if (m_readBuffer.Length < length) { Array.Resize(array: ref m_readBuffer, newSize: ((int)(((uint)length)).NextPowerOfTwo())); }
             return m_readBuffer.AsSpan(length: length, start: 0);
         }
         public Span<byte> PoseHandles(int length) {
-            if (m_poseHandles.Length < length) { Array.Resize(array: ref m_poseHandles, newSize: ((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)length)))); }
+            if (m_poseHandles.Length < length) { Array.Resize(array: ref m_poseHandles, newSize: ((int)(((uint)length)).NextPowerOfTwo())); }
             return m_poseHandles.AsSpan(length: length, start: 0);
         }
 

@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 
@@ -435,7 +436,7 @@ public sealed partial class ArenaLayout {
         var laneTotal = 0L;
         var maskTotal = 0L;
         var poolCount = catalog.Pools.Count;
-        var poolWords = catalog.Pools.Sum(selector: static pool => ((pool.Capacity + 63L) / 64L));
+        var poolWords = catalog.Pools.Sum(selector: static pool => ((long)pool.Capacity).CeilingDivide(divisor: 64L));
         var ordinalsByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
         for (var ordinal = 0; (ordinal < catalog.Count); ordinal++) {

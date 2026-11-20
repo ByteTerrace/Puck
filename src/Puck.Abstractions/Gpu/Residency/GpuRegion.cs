@@ -664,12 +664,12 @@ public sealed unsafe class GpuRegion : IDisposable {
     public static (uint X, uint Y) CopyGroups(uint count) {
         ArgumentOutOfRangeException.ThrowIfZero(value: count);
 
-        var groups = ((((ulong)count) + (CopyWorkgroupSize - 1UL)) / CopyWorkgroupSize);
+        var groups = ((ulong)count).CeilingDivide(divisor: ((ulong)CopyWorkgroupSize));
 
         return ((groups <= CopyMaxGroupsPerDimension)
             ? (((uint)groups), 1U)
             : (CopyMaxGroupsPerDimension, ((uint)Math.Min(
-                val1: ((groups + (CopyMaxGroupsPerDimension - 1UL)) / CopyMaxGroupsPerDimension),
+                val1: groups.CeilingDivide(divisor: ((ulong)CopyMaxGroupsPerDimension)),
                 val2: CopyMaxRows
             )))
         );

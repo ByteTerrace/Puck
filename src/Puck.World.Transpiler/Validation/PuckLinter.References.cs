@@ -229,6 +229,9 @@ public static partial class PuckLinter {
                     sourceMap: sourceMap
                 );
                 foreach (var (key, value) in obj) {
+                    if ((key == "document") && IsBindingProfileDocument(pointer: DocumentJsonPointer.Child(name: key, pointer: pointer))) {
+                        continue;
+                    }
                     WalkForReferences(
                         catalog: catalog,
                         diagnostics: diagnostics,
@@ -269,6 +272,12 @@ public static partial class PuckLinter {
                 break;
         }
     }
+    // A binding overlay's `document` is a binding profile, not a world body: a context row's `state` there is the
+    // family state value a group is chosen for (BindingContextDefinition.State), never a state row's name. The
+    // sites in it that do name rows are registered, and the registry walk reads them.
+    private static bool IsBindingProfileDocument(string pointer) =>
+        (DocumentJsonPointer.TrySegments(pointer: pointer, segments: out var segments) &&
+        (segments is ["bindingOverlays", _, "document"]));
     private static void CheckShapeParents(JsonArray shapes, string pointer, SourceMap? sourceMap, DiagnosticBag diagnostics) {
         var siblingNames = new HashSet<string>(comparer: StringComparer.Ordinal);
 

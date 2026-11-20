@@ -504,7 +504,7 @@ public static partial class WorldConstructs {
         ),
         Effect(
             documentMember: "rules[].effects[][scheduleState]",
-            grammar: "schedule row[key] in Ns",
+            grammar: "schedule row[key] in delay",
             keyword: "schedule",
             members: [
                 EffectTarget(),
@@ -514,7 +514,7 @@ public static partial class WorldConstructs {
                     Name: "in",
                     Position: WorldMemberPosition.Header,
                     Required: true,
-                    Summary: "How far ahead the write lands; the time unit is required."
+                    Summary: "How far ahead the write lands, in seconds: a number with an optional time unit, or any compile-time value such as a template parameter."
                 ),
             ],
             snippet: "schedule ${1:row} in ${2:1s}",

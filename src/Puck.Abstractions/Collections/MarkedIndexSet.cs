@@ -1,3 +1,4 @@
+using Puck.Maths;
 namespace Puck.Abstractions.Collections;
 
 /// <summary>A set of non-negative indices that keeps its members in the order they were first added, so adding,
@@ -29,7 +30,7 @@ public sealed class MarkedIndexSet {
     public bool Add(int index) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: index);
         if (index >= m_marked.Length) {
-            Array.Resize(array: ref m_marked, newSize: (int)Math.Max(val1: 16u, val2: System.Numerics.BitOperations.RoundUpToPowerOf2(value: (uint)(index + 1))));
+            Array.Resize(array: ref m_marked, newSize: (int)Math.Max(val1: 16u, val2: ((uint)(index + 1)).NextPowerOfTwo()));
         }
         if (m_marked[index]) { return false; }
         m_marked[index] = true;

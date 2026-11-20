@@ -1,6 +1,5 @@
 using System.Globalization;
 using Puck.Maths;
-using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
@@ -90,16 +89,9 @@ public sealed partial class WorldServer {
     private bool TryWriteCrossingScale(WorldBody body, int slot, FixedQ4816 scale, out string reason) {
         var definition = m_document.Definition;
 
-        if (
-            (definition.Population.Scale is not { } register) ||
-            !WorldBodyStateReads.TryResolveSlot(
-            definition: definition,
-            kind: out var kind,
-            name: register,
-            slot: out var registerSlot
-        ) ||
-            (kind != ActionStateKind.Counter)
-        ) {
+        var registerSlot = WorldBodyStateReads.PlanFor(definition: definition).Scale;
+
+        if (registerSlot < 0) {
             reason = $"the pair scales a traveller by {Format(value: scale)}, and the world authors no bodies.scale register to hold a body's size";
 
             return false;
@@ -116,7 +108,7 @@ public sealed partial class WorldServer {
             (lane.Definitions[registerSlot].Envelope is { } envelope) &&
             !envelope.Contains(value: scaled.Value)
         ) {
-            reason = $"the pair scales body {slot} from {Format(value: current)} to {Format(value: scaled)}, outside bodies.scale '{register}' {Format(value: FixedQ4816.FromRawBits(value: envelope.Minimum))}..{Format(value: FixedQ4816.FromRawBits(value: envelope.Maximum))}";
+            reason = $"the pair scales body {slot} from {Format(value: current)} to {Format(value: scaled)}, outside bodies.scale '{definition.Population.Scale}' {Format(value: FixedQ4816.FromRawBits(value: envelope.Minimum))}..{Format(value: FixedQ4816.FromRawBits(value: envelope.Maximum))}";
 
             return false;
         }

@@ -27,14 +27,14 @@ public sealed class WorldFederatedLinkLawTests {
 
             return WorldRemoteAuthority.WithinDeadlineAsync(answer: gate.Task, clock: clock, endpoint: "peer", kind: kind);
         }
-        public bool TryCredential(int bodyIndex, out string sourceAuthority, out WorldMobilityIdentity mobility) {
-            sourceAuthority = "origin/world";
-            mobility = new WorldMobilityIdentity(
+        public bool TryRouteCredential(int bodyIndex, out WorldRemoteRouteCredential credential) {
+            var mobility = new WorldMobilityIdentity(
                 DepartedFrom: new WorldEntityAddress(Authority: "origin/world", Generation: 7, Index: 4),
                 Epoch: 1UL,
                 Incarnation: new WorldEntityAddress(Authority: "origin/world", Generation: 7, Index: 4)
             );
 
+            credential = new WorldRemoteRouteCredential(bodyIndex, "origin/world", mobility);
             return true;
         }
         public bool TryForwardIntent(int bodyIndex, in IntentSubmission submission, out string reason) {

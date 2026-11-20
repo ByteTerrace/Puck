@@ -133,7 +133,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         if (slot.Marks) { slot.Tables?.ObserveSelectionMarks(draws: slot.Draws, epoch: slot.RowEpoch, marks: read[SdfKernelInterfaces.MeshMarkBase..], source: this); }
     }
     // The bytes of the counts a frame marking a list of draws reads back: through the last draw's mark word.
-    private static ulong MarkedBytes(uint draws) => ((((ulong)SightWords) + MarkRoom + ((draws + (DrawsPerMarkWord - 1u)) / DrawsPerMarkWord)) * sizeof(uint));
+    private static ulong MarkedBytes(uint draws) => ((((ulong)SightWords) + MarkRoom + draws.CeilingDivide(divisor: DrawsPerMarkWord)) * sizeof(uint));
 
     // Each pass uploads constant-sized controls. The residency already uploaded each changed draw once.
     // A cascade that draws one layer of a split refresh (skipsDepth, skipsExit) emits and counts commands for that layer

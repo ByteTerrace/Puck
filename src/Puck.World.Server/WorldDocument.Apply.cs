@@ -912,7 +912,7 @@ public sealed partial class WorldDocument {
         var stateCells = Host.PublishedCellCount(full: !consumeContinuity);
         var cellCount = (latticeDeltas.Count + stateCells);
 
-        if (m_snapshotCells.Length < cellCount) { Array.Resize(array: ref m_snapshotCells, newSize: ((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)cellCount)))); }
+        if (m_snapshotCells.Length < cellCount) { Array.Resize(array: ref m_snapshotCells, newSize: ((int)(((uint)cellCount)).NextPowerOfTwo())); }
         var fieldCells = m_snapshotCells.AsMemory(length: cellCount, start: 0);
 
         for (var index = 0; (index < latticeDeltas.Count); index++) {

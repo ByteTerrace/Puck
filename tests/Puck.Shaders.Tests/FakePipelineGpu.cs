@@ -18,7 +18,9 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     IGpuBufferFactory, IGpuImageFactory, IGpuSurfaceTransferFactory, IGpuRenderPassFactory {
     // Where descriptor set handles start, far above every object handle the fake hands out.
     private const long SetHandleBase = 0x4000_0000;
-    public GpuQueueTimeline Timeline => throw new NotSupportedException("This graph witness does not model device timeline retirement.");
+    public GpuQueueTimeline Timeline => (m_timeline ??= new QueueTimeline(this));
+
+    private QueueTimeline? m_timeline;
 
     private readonly Dictionary<nint, Created> m_byHandle = [];
     private readonly Dictionary<nint, GpuDescriptorAdmission> m_poolRanges = [];
@@ -898,6 +900,23 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
         public void Dispose() => created.Dispose();
     }
+    private sealed class QueueTimeline(FakePipelineGpu gpu) : GpuQueueTimeline {
+        private readonly Queue<(ulong Value, long Submission)> m_checkpoints = new();
+        private ulong m_completed;
+
+        protected override void Signal(ulong value) => m_checkpoints.Enqueue((value, gpu.SubmissionsMade));
+
+        protected override ulong ReadCompleted() {
+            while (!gpu.QueueHeld && m_checkpoints.TryPeek(out var checkpoint) && (checkpoint.Submission <= gpu.CompletedThrough)) {
+                m_completed = m_checkpoints.Dequeue().Value;
+            }
+
+            return m_completed;
+        }
+
+        protected override void DisposeNative() => m_checkpoints.Clear();
+    }
+
     private sealed class FakeFence(FakePipelineGpu gpu, Created created) : IGpuSubmissionFence {
         // The submission the fence was last armed with, in queue order.
         public long Number;

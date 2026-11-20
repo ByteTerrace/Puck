@@ -32,7 +32,7 @@ internal static class PoolEffectWork {
             right: BinaryIntegerFunctions.MultiplySaturating(left: 2L, right: (valueWidth + metadata)));
     }
 
-    public static long OccupancyWords(StatePoolDescriptor pool) => ((pool.Capacity + 63L) / 64L);
+    public static long OccupancyWords(StatePoolDescriptor pool) => ((long)pool.Capacity).CeilingDivide(divisor: 64L);
 
 }
 // The identity rows every pool read depends on and the storage rows a claim or release mutates. Keep their order
