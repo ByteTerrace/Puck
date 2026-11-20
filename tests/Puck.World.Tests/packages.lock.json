@@ -1237,6 +1237,7 @@
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "Microsoft.Orleans.Server": "[10.*, )",
           "Puck.Launcher": "[1.0.0, )",
+          "Puck.Platform.Linux": "[1.0.0, )",
           "Puck.Storage": "[1.0.0, )",
           "Puck.World.Addons": "[1.0.0, )",
           "Puck.World.Client": "[1.0.0, )",
