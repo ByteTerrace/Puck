@@ -192,7 +192,7 @@ public sealed class WorldFederatedServerLink(IWorldRoutedRequests authority) : I
             WorldQuery.PlayerState state => state.Index,
             WorldQuery.PlayerTargets targets => targets.Index,
             WorldQuery.Contacts contacts => (contacts.Index - 1),
-            WorldQuery.MusicState music => (music.Index - 1),
+            WorldQuery.MusicClock music => (music.Index - 1),
             WorldQuery.InstrumentState instrument => (instrument.Index - 1),
             _ => -1,
         };

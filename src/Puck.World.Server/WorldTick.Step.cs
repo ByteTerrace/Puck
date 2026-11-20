@@ -8,18 +8,6 @@ using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
-    private readonly List<Puck.Audio.Simulation.MusicSenseEdge> m_senseEdgeScratch = [];
-
-    private IReadOnlyList<Puck.Audio.Simulation.MusicSenseEdge> ProjectSenseEdges() {
-        MusicDirectorFactory.ProjectSenseEdges(
-            edges: Host.Events.Edges,
-            projected: m_senseEdgeScratch
-        );
-
-        return m_senseEdgeScratch;
-    }
-
-
     /// <summary>Dispatches one server-authored event, either inline or through the ordered domain.</summary>
     /// <param name="serverEvent">The event.</param>
     /// <param name="ordered">Whether to enqueue it on the ordered domain rather than apply it inline.</param>
@@ -287,7 +275,7 @@ public sealed partial class WorldTick {
         m_cueMusicBoundary = 0;
         using var work = HostFrameWork.Measure(HostFrameWorkPart.TickIngress);
         Host.Input.BeginInterval(interval: new WorldInputInterval((context.Tick + 1), (context.ElapsedTicks - context.StepTicks), context.StepTicks,
-            ((m_musicClock is { } capturedClock) ? new(capturedClock.ElapsedTicks, capturedClock.TicksPerBeat, m_musicDirector!.CurrentSegmentId, capturedClock.BeatsPerBar) : null)));
+            ((m_musicClock is { } capturedClock) ? new(capturedClock.ElapsedTicks, capturedClock.TicksPerBeat, capturedClock.BeatsPerBar) : null)));
         TapFederatedIntents();
         // Settled here, before anything below can compose or rebase a mutation: context.ElapsedTicks is this whole
         // step's own engine-time coordinate (the exact engine tick the step completes at), so every write and read
@@ -538,29 +526,18 @@ public sealed partial class WorldTick {
             population: Host.Population
         );
 
-        // The music clock/director step HERE — immediately after Collect() so this tick's own edges (never a stale
-        // tick's) drive this tick's transition arming, and before anything else reads Host.Events.Edges (one call site,
-        // one reader, no second-consumer ordering to pin).
-        if (
-            (m_musicClock is { } musicClock) &&
-            (m_musicDirector is { } musicDirector)
-        ) {
+        // The music clock advances before the rules, so a clock(...) read sees this tick's position. The boundary it
+        // crossed, with any engaged diegetic instrument's beat folded in (InstrumentClockBoundary's remarks say why
+        // holding the screen application is the whole gate and why only Beat is contributed), is delivered with the
+        // tick's cues: each listener's score steps on it.
+        if (m_musicClock is { } musicClock) {
             var previousElapsedTicks = musicClock.ElapsedTicks;
-            var boundary = musicClock.Advance(stepTicks: context.StepTicks);
-            m_cueMusicBoundary = (byte)boundary;
-
-            // Diegetic-instrument clock fold — see InstrumentClockBoundary's own remarks for why holding the screen
-            // application is the whole gate (never a WorldSessionLever) and why only Beat, never Bar, is contributed.
-            boundary |= Host.InstrumentClockBoundary(
+            var boundary = musicClock.Advance(stepTicks: context.StepTicks) | Host.InstrumentClockBoundary(
                 previousElapsedTicks: previousElapsedTicks,
                 currentElapsedTicks: musicClock.ElapsedTicks
             );
 
-            musicDirector.Step(
-                boundary: boundary,
-                edges: ProjectSenseEdges(),
-                tick: tick
-            );
+            m_cueMusicBoundary = (byte)boundary;
         }
 
         // World rules evaluate HERE — after the event feed (so a $region gate reads this tick's settled occupancy)

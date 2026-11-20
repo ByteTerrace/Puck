@@ -792,15 +792,7 @@ public sealed partial class WorldPersistence {
                 RuleGroups: ruleGroups,
                 LastDocumentReceipt: Host.Document.LastDocumentReceipt,
                 SolidRevision: Host.Document.SolidRevision,
-                MusicClockElapsedTicks: Host.Tick.MusicClock?.ElapsedTicks,
-                MusicDirectorCurrentSegmentId: Host.Tick.MusicDirector?.CurrentSegmentId,
-                MusicDirectorArmed: Host.Tick.MusicDirector?.ArmedTransition,
-                MusicDirectorTransitionCount: (Host.Tick.MusicDirector?.TransitionCount ?? 0UL),
-                MusicDirectorLastTransitionTick: Host.Tick.MusicDirector?.LastTransitionTick,
-                MusicDirectorLastTransitionFromSegmentId: Host.Tick.MusicDirector?.LastTransitionFromSegmentId,
-                MusicDirectorLastTransitionToSegmentId: Host.Tick.MusicDirector?.LastTransitionToSegmentId,
-                MusicDirectorLastEmbellishmentPatchId: Host.Tick.MusicDirector?.LastEmbellishmentPatchId,
-                MusicDirectorLastEmbellishmentTick: Host.Tick.MusicDirector?.LastEmbellishmentTick
+                MusicClockElapsedTicks: Host.Tick.MusicClock?.ElapsedTicks
             );
 
             checkpoint = new WorldAuthorityCheckpoint(
@@ -1039,21 +1031,6 @@ public sealed partial class WorldPersistence {
             (server.MusicClockElapsedTicks is { } elapsedTicks)
         ) {
             Host.Tick.MusicClock.RestoreElapsedTicks(elapsedTicks: elapsedTicks);
-        }
-        if (
-            (Host.Tick.MusicDirector is not null) &&
-            (server.MusicDirectorCurrentSegmentId is { } segmentId)
-        ) {
-            Host.Tick.MusicDirector.Restore(
-                armed: server.MusicDirectorArmed,
-                currentSegmentId: segmentId,
-                lastEmbellishmentPatchId: server.MusicDirectorLastEmbellishmentPatchId,
-                lastEmbellishmentTick: server.MusicDirectorLastEmbellishmentTick,
-                lastTransitionFromSegmentId: server.MusicDirectorLastTransitionFromSegmentId,
-                lastTransitionTick: server.MusicDirectorLastTransitionTick,
-                lastTransitionToSegmentId: server.MusicDirectorLastTransitionToSegmentId,
-                transitionCount: server.MusicDirectorTransitionCount
-            );
         }
 
         // Restored catalogs mint new handles; retain cells but bind every reaction to that catalog.

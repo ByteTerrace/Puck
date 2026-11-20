@@ -34,7 +34,7 @@ the [rule-effects-land-on-the-arena contract](../../../../src/Puck.World.Server/
 ## The tick (`WorldServer.Step`, which runs `WorldTick.StepCore` in `src/Puck.World.Server/WorldTick.Step.cs`)
 
 The per-tick order of the steps this document cares about, transcribed from
-`StepCore` (it also runs the federated-intent taps, the music director, the rule
+`StepCore` (it also runs the federated-intent taps, the music clock, the rule
 host's `EvaluateWorldRules`, board, search and field steps, and the deadline
 sweeps between steps 9 and 10):
 

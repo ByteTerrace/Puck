@@ -132,8 +132,10 @@ public readonly record struct EntitySnapshot(
 /// <param name="SolidScales">The sizes contact sampled before this tick's body motion. The memory is borrowed scratch the
 /// next snapshot overwrites: a consumer copies what it keeps.</param>
 /// <param name="Cues">The one-shot rule effects disclosed to this recipient for this tick.</param>
-/// <param name="MusicBoundary">The score's beat and bar boundary flags for this step.</param>
-/// <param name="MusicSenses">The ambient score conditions disclosed to this recipient.</param>
+/// <param name="MusicBoundary">The beat and bar boundaries the authority's music clock crossed this step, an engaged
+/// instrument's beat folded in: the grid every listener's score steps on.</param>
+/// <param name="MusicSenses">The ambient score conditions disclosed to this recipient, one bit per
+/// <c>Puck.Audio.Simulation.MusicSenseFamily</c>.</param>
 /// <param name="InputAnswers">The last input the authority answered for each owner, disclosed only to that owner.</param>
 /// <remarks>Machine engagement pads do not ride this snapshot: <c>Server.WorldEngagement.FoldTick</c>'s per-screen
 /// pad fold is read directly by <c>Server.WorldMachineHost.Advance</c> (in <c>Puck.World.Machines</c>) inside <c>WorldServer.Step</c>, in-process,

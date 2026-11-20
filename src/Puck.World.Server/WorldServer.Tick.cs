@@ -87,8 +87,8 @@ public sealed partial class WorldServer {
     public void ConstrainTransferAuthorities(Func<string, bool> allowed) => m_tick.ConstrainTransferAuthorities(allowed: allowed);
     /// <inheritdoc cref="WorldTick.DescribeFields"/>
     public string DescribeFields() => m_tick.DescribeFields();
-    /// <inheritdoc cref="WorldTick.DescribeMusicState"/>
-    public string DescribeMusicState() => m_tick.DescribeMusicState();
+    /// <inheritdoc cref="WorldTick.DescribeMusicClock"/>
+    public string DescribeMusicClock() => m_tick.DescribeMusicClock();
     /// <inheritdoc cref="WorldTick.DescribePlacements"/>
     public string DescribePlacements(WorldStateReadView view) => m_tick.DescribePlacements(view: view);
     /// <inheritdoc cref="WorldTick.DescribeResponses"/>

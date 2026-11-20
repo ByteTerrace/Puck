@@ -6,7 +6,7 @@ music [
   {
     name: "score"
     source: "score.music.json"
-    hash: "sha256/285c743719854fc64eeb068ff18aa4d5b54b3105658145b4d60a7ec79c0e89c0"
+    hash: "sha256/f3ed4e54e63e0c87d194396e8e41fb2df8c75242e5d35ec89f27cbc31b146356"
   }
 ]
 

@@ -35,7 +35,7 @@ this file is corrected in the same change.
 | A one-shot sound on an event (a stinger, an edit echo) | an `audio.cues` row (`WorldAudioCue`) naming an event token and a `patches` row; `WorldAudioDirector.SubmitCue` | [audio reference](../../../docs/reference/audio.md) |
 | A rule fires a sound, pose, or score condition | `WorldRuleDisclosure` classifies the rule's dependencies from each fact's own `IWorldDisclosedFact`, `WorldTick.PresentCues` (or `PresentLocalCues`, per local seat) admits each cue against the recipient view, and the delivered snapshot drives `WorldCreationInstances.TriggerCue` and the listener's `MusicDirector` | [delivered rule cues](../../../docs/reference/audio.md#delivered-rule-cues) |
 | A synthesized instrument voice | a `puck.synthesizer-patch.v1` document, crossed into `VoicePatch` by `WorldVoicePatchFactory.FromDocument`, played by `VoiceSynth` | [World audio README](../../../src/Puck.World/Audio/README.md#document-intake-worldvoicepatchfactorycs) |
-| Background music that changes with play: segments, layers, embellishments, a beat clock | `music` rows (`WorldMusicRow`) compiled by `MusicDirectorFactory` into `MusicDirector` and `MusicClock`; edges from `WorldEventFeed` become `MusicSenseEdge`s. A rule drives it with `emitCue` and a score's `when: "cue:<name>"`: a transition arms on the cue, a layer plays on the ticks the cue is delivered (a `Level` rule holds it), an embellishment fires on it. The press's score (`worlds/debug/score.music.json`) is the live example | [audio reference](../../../docs/reference/audio.md#delivered-rule-cues) |
+| Background music that changes with play: segments, layers, embellishments, a beat clock | `music` rows (`WorldMusicRow`): the authority runs only the `MusicClock` and delivers each tick's boundary (an engaged instrument's beat folded in) and disclosed senses with its cues; each listener compiles the score with `MusicDirectorFactory` into its own `MusicDirector` (`WorldAudioDirector.PresentDeliveredCues`). A rule drives it with `emitCue` and a score's `when: "cue:<name>"`: a transition arms on the cue, a layer plays on the ticks the cue is delivered (a `Level` rule holds it) and joins on its authored `at` grid point (beat or bar; none joins at once), an embellishment fires on it. `music.state` reads the listener's score beside the authority's clock. The press's score (`worlds/debug/score.music.json`) is the live example | [audio reference](../../../docs/reference/audio.md#delivered-rule-cues) |
 | What the mixer was last handed: emitters in the mix, triggers, live cues, whether a mixer is attached | `audio.mix` (`WorldAudioDirector.TrySnapshot`, `LiveCueCount`, `MixerAttached`) | [audio reference](../../../docs/reference/audio.md#verifying) |
 | A graded press or a phrase on the beat | the standard's `rhythmJudge` (`worlds/standard/rhythm.puck`): authored rules over the clock operands below, with windows, grades and a phrase as data | [rhythm judge](../../../worlds/standard/README.md) |
 | A rhythm hit window | a range over a `$clock:<music>` operand; no dedicated grader. `phaseError` is the integer tick distance to the nearest beat at the clock's current position, and `phaseErrorAt:<owner>:<channel>:<kind>:<occurrence>` is the fixed-point seconds distance from a press, at its captured time and calibration, to the nearest beat. `beat`, `bar` and `beatInBar` read the current position's indices, and `beatAt`, `barAt` and `beatInBarAt` read a press's nearest beat | [audio reference](../../../docs/reference/audio.md#clock-operands) |
@@ -54,18 +54,20 @@ this file is corrected in the same change.
 
 ## Contracts that bite
 
-- **The listener steps its own music director.** The authority's director is
-  simulation state; what a player hears comes from a second director the audio
-  director steps from each delivered cue tick
-  (`WorldAudioDirector.PresentLocalCues`, `PresentRoutedAudio`), so a remote
-  listener hears what a local one does. The server calls out to no audio code:
-  a new music event is sounded by teaching that delivered path, never by a
-  callback from the tick.
-- **Sound decides nothing.** The mixer, synth and emitter table are
-  presentation: no simulation read depends on them. `MusicClock`,
-  `MusicDirector` and `VoiceBabbler` are the exception, simulation state
-  stepped by the server and hashed with it; they never read the wall clock and
-  their seeds fold identity, ordinal and index only.
+- **The score is the listener's; the clock is the authority's.** There is one
+  `MusicDirector` per listener and none on the authority: the audio director
+  steps it from each delivered tick (`WorldAudioDirector.PresentLocalCues`,
+  `PresentRoutedAudio`) on the cues and senses that listener's seat was told,
+  so a remote listener hears what a local one does and a cue a seat may not be
+  told never moves its music. The authority owns the `MusicClock` (rules read
+  it through `clock(...)`, it is checkpointed and hashed) and delivers the
+  boundary it crossed. The server calls out to no audio code: a new music event
+  is sounded by teaching that delivered path, never by a callback from the tick.
+- **Sound decides nothing.** The mixer, synth, emitter table and score are
+  presentation: no simulation read depends on them. `MusicClock` and
+  `VoiceBabbler` are the exception, simulation state stepped by the server; they
+  never read the wall clock and their seeds fold identity, ordinal and index
+  only.
 - **The document crosses in one place.** `Puck.Audio` references
   `Puck.Abstractions`, `Puck.Assets`, `Puck.Commands`, `Puck.Hosting` and
   `Puck.Maths` exactly (the architecture gate's closure). A patch becomes a
@@ -111,19 +113,21 @@ this file is corrected in the same change.
   Linux; the factories decline by name.
 - **A babbling identity has no world position.** Every syllable, like every
   embellishment, voices listener-placed.
-- **Music layer and embellishment `gainThousandths` do not reach presentation
-  gain** (`MusicLayerDocument.GainThousandths`).
+- **Music embellishment `gainThousandths` does not reach presentation gain**
+  (`MusicEmbellishmentDocument.GainThousandths`); a layer's does, at its bed
+  emitter.
 - **Nothing proves a region crossing's `music.transition` cue end to end.**
-- **The authority's director does not hear rule cues.** `WorldTick` steps it
-  from the event feed's edges alone, before the tick's rules run, so a score
-  driven by `cue:` conditions moves only the listener's director:
-  `music.state` (the authority's) stays on its first segment while
-  `speaker.state` and `audio.mix` show the layers playing. A rule that reads
-  `clock(...)` is unaffected; a rule or a remote reader that wanted the
-  current segment would be.
-- **A layer starts when its cue arrives, not on a boundary**, so a voice can
-  enter off the beat; and each layer's tune runs its own clock, not the
-  score's.
+- **A listener's score is a function of its delivery history.** A recipient
+  that joins mid-run, a routed view whose span is cut, or a history seek starts
+  or keeps a score that no delivered tick re-derives: it rests on the first
+  segment until a cue moves it (a `Level`-held layer recovers at once, a
+  segment does not). Priming a recipient means the authority holding each
+  recipient's score, admitted per view, and delivering it in the primer.
+- **A layer's tune starts on the grid tick, not phase-locked to the clock.**
+  A layer joins on its authored beat or bar (`MusicLayer.At`) and its tune host
+  starts from its head when the delivered tick reconciles, so it shares the
+  grid within presentation latency; a tune's own tempo is authored to match the
+  score, and nothing re-aligns a tune that drifts or starts on a sample frame.
 - **Highlights and `capture.start frames` are unproven on a window**: the
   press's row has not been watched writing a file.
 - **`LinearResampler` is linear**, not polyphase or anti-aliased.
@@ -144,9 +148,12 @@ this file is corrected in the same change.
   and the map sign in `worlds/debug/guide.puck` are the live examples.
 - Live sound needs a windowed World with an audio device, which is a GPU leg
   (`verification`): read `audio.state` (device, frames, faults, `peak`),
-  `audio.emitters`, `audio.mix`, `speaker.state` (including `lastCue:<token>`),
-  `voice.state`, `music.state` and `instrument.state` over stdin. A headless
-  World composes none of them.
+  `audio.emitters`, `audio.mix`, `speaker.state` (including `lastCue:<token>`)
+  and `voice.state` over stdin. A headless World composes none of them.
+- The score needs no device: `music.state` and `instrument.state`
+  (`WorldMusicCommandModule`) answer in a headless World, and
+  `WorldDeliveredScoreLawTests` steps the press's score through
+  `WorldAudioDirector.PresentLocalCues` on a real clock.
 - A clip: `capture.start`, `capture.status`, `capture.stop` on a windowed
   World, then inspect the file; a lane that declined reports its reason
   rather than failing the session.

@@ -25,7 +25,7 @@ public sealed partial class WorldTick {
             if (disclosed.Count == WorldRuleCapacity.MaxDeliveredCues) { break; }
         }
         return snapshot with { Cues = disclosed?.ToArray() ?? [], MusicBoundary = m_cueMusicBoundary,
-            MusicSenses = m_musicDirector is null ? (byte)0 : DisclosedMusicSenses(snapshot, view, bodies) };
+            MusicSenses = m_musicClock is null ? (byte)0 : DisclosedMusicSenses(snapshot, view, bodies) };
     }
 
     // The in-process presentation serves every local seat from one delivery, so each cue carries the seats whose own
@@ -50,7 +50,7 @@ public sealed partial class WorldTick {
             if (disclosed.Count == WorldRuleCapacity.MaxDeliveredCues) { break; }
         }
         byte senses = 0;
-        if (m_musicDirector is not null) {
+        if (m_musicClock is not null) {
             for (var seat = 0; seat < count; seat++) {
                 if (seats[seat].Observes) { senses |= DisclosedMusicSenses(snapshot, seats[seat]); }
             }
@@ -97,17 +97,19 @@ public sealed partial class WorldTick {
         }
     }
 
+    // One bit per Puck.Audio.Simulation.MusicSenseFamily the recipient may be told happened this tick: the event's body
+    // is in its delivery and, for a region event, the region's placement is in its projection.
     private byte DisclosedMusicSenses(in WorldSnapshot snapshot, WorldRecipientView view, WorldBodyView? bodies = null) {
         byte senses = 0;
         IReadOnlyList<WorldPlacement>? placements = null;
         foreach (var edge in Host.Events.Edges) {
-            if (edge.Family is not (WorldEventFamily.RegionEnter or WorldEventFamily.RegionExit or WorldEventFamily.SeatJoin)) { continue; }
+            if (MusicDirectorFactory.SenseOf(edge.Family) is not { } sense) { continue; }
             var body = (int)edge.A;
             var generation = Host.Population.Generation(body);
             if (!(bodies?.Contains(body, generation) ?? snapshot.TryFindEntity(body, generation, out _))) { continue; }
             if (edge.Family is WorldEventFamily.RegionEnter or WorldEventFamily.RegionExit &&
                 !(placements ??= view.Placements).Any(placement => placement.Id == edge.GateA.Id)) { continue; }
-            senses |= (byte)(1 << (int)edge.Family);
+            senses |= (byte)(1 << (int)sense);
         }
         return senses;
     }
