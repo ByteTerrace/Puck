@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -20,7 +21,12 @@ namespace Puck.World;
 /// owner names the world's account. Required together with <see cref="World"/>; refused alone.</param>
 /// <param name="World">The remote world's own <see cref="SafeName"/>-shaped id within its owner's account.
 /// Required together with <see cref="Owner"/>; refused alone.</param>
-public sealed record WorldReference(SafeName Name, string? Document = null, Guid? Owner = null, SafeName? World = null) {
+public sealed record WorldReference(
+    SafeName Name,
+    [property: DocumentText("a path or document locator")] string? Document = null,
+    Guid? Owner = null,
+    SafeName? World = null
+) {
     /// <summary>The prefix every owner-named <see cref="NeighbourKey"/> carries, and no <see cref="Document"/> may.</summary>
     public const string OwnerKeyPrefix = "owner/";
 
@@ -32,6 +38,7 @@ public sealed record WorldReference(SafeName Name, string? Document = null, Guid
     /// beginning with the reserved <c>"owner/"</c> prefix for exactly this reason — the local file resolver would
     /// otherwise satisfy an owner-shaped key with no signature ever checked).
     /// </summary>
+    [DocumentText("a neighbour document key")]
     [JsonIgnore]
     public string NeighbourKey => (Document ?? $"{OwnerKeyPrefix}{Owner:D}/{World}");
 }

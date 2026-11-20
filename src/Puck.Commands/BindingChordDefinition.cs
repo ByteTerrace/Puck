@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Assets.Documents;
 
 namespace Puck.Commands;
@@ -32,9 +33,11 @@ namespace Puck.Commands;
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingChordDefinition(
     DocumentIdentifier Group,
+    [property: DocumentText("input source identifiers")]
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Chord = null,
     BindingPageDefinition? Page = null,
     BindingCommandDefinition? Command = null,
+    [property: DocumentText("a chord source token")]
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Held = null
 ) {
     /// <summary>Gets a value indicating whether this row names the group's resting page (no members).</summary>
@@ -85,14 +88,14 @@ public sealed record BindingChordDefinition(
 /// buttons held walk forward while each button keeps its own drag.</param>
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingCommandDefinition(
-    string? Command = null,
+    [property: DocumentText("console command text")] string? Command = null,
     ChannelRef? Channel = null,
     float? Scale = null,
     bool HoldRelease = false,
-    string? Label = null,
-    string? Icon = null,
+    [property: DocumentText("literal text")] string? Label = null,
+    [property: DocumentText("an icon name")] string? Icon = null,
     CommandValue? Value = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] BindingEntryMode Mode = BindingEntryMode.Hold,
-    string? Text = null,
+    [property: DocumentText("literal text")] string? Text = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] bool PassThrough = false
 );

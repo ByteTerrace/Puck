@@ -42,7 +42,7 @@ internal static class MicroRoms {
 
         a.LdrConst(
             rd: 0,
-            value: 0x04000000u
+            value: AgbAddresses.IoBase
         );
         a.LdrLabel(
             label: "handler",
@@ -50,7 +50,7 @@ internal static class MicroRoms {
         );
         a.LdrConst(
             rd: 2,
-            value: 0x03007FFCu
+            value: AgbAddresses.BiosInterruptVector
         );
         a.Str(
             imm12: 0,
@@ -110,7 +110,7 @@ internal static class MicroRoms {
         a.Label(name: "handler");
         a.LdrConst(
             rd: 0,
-            value: 0x04000000u
+            value: AgbAddresses.IoBase
         );
         a.LdrConst(
             rd: 1,
@@ -174,7 +174,7 @@ internal static class MicroRoms {
 
         a.LdrConst(
             rd: 0,
-            value: 0x04000000u
+            value: AgbAddresses.IoBase
         );
         a.LdrLabel(
             label: "handler",
@@ -182,7 +182,7 @@ internal static class MicroRoms {
         );
         a.LdrConst(
             rd: 2,
-            value: 0x03007FFCu
+            value: AgbAddresses.BiosInterruptVector
         );
         a.Str(
             imm12: 0,
@@ -240,7 +240,7 @@ internal static class MicroRoms {
         a.Label(name: "handler");
         a.LdrConst(
             rd: 0,
-            value: 0x04000000u
+            value: AgbAddresses.IoBase
         );
         a.LdrConst(
             rd: 1,
@@ -260,15 +260,15 @@ internal static class MicroRoms {
 
         a.LdrConst(
             rd: 0,
-            value: 0x04000000u
+            value: AgbAddresses.IoBase
         );           // r0  = I/O base (word reads: SIOMULTI0..3)
         a.LdrConst(
             rd: 10,
-            value: 0x04000100u
+            value: AgbAddresses.Timer0Reload
         );          // r10 = halfword base for SIOCNT/SIOMLT_SEND/RCNT
         a.LdrConst(
             rd: 11,
-            value: 0x04000200u
+            value: AgbAddresses.InterruptEnable
         );          // r11 = halfword base for IF
         a.Mov(
             imm8: 0,
@@ -427,15 +427,15 @@ internal static class MicroRoms {
 
         a.LdrConst(
             rd: 0,
-            value: 0x04000000u
+            value: AgbAddresses.IoBase
         );           // r0  = I/O base (word reads: SIOMULTI0..3)
         a.LdrConst(
             rd: 10,
-            value: 0x04000100u
+            value: AgbAddresses.Timer0Reload
         );          // r10 = halfword base for SIOCNT/SIOMLT_SEND/RCNT
         a.LdrConst(
             rd: 11,
-            value: 0x04000200u
+            value: AgbAddresses.InterruptEnable
         );          // r11 = halfword base for IF
         a.Mov(
             imm8: 0,
@@ -569,7 +569,7 @@ internal static class MicroRoms {
 
         a.LdrConst(
             rd: 0,
-            value: 0x04000000u
+            value: AgbAddresses.IoBase
         );          // r0 = I/O base
         a.LdrLabel(
             label: "handler",
@@ -577,7 +577,7 @@ internal static class MicroRoms {
         );
         a.LdrConst(
             rd: 2,
-            value: 0x03007FFCu
+            value: AgbAddresses.BiosInterruptVector
         );          // BIOS user-IRQ-handler pointer
         a.Str(
             imm12: 0,
@@ -626,7 +626,7 @@ internal static class MicroRoms {
         a.Label(name: "handler");
         a.LdrConst(
             rd: 0,
-            value: 0x04000000u
+            value: AgbAddresses.IoBase
         );
         a.LdrConst(
             rd: 1,
@@ -650,7 +650,7 @@ internal static class MicroRoms {
 
         a.LdrConst(
             rd: 0,
-            value: 0x04000000u
+            value: AgbAddresses.IoBase
         );          // r0 = I/O base
         a.LdrConst(
             rd: 2,
@@ -680,7 +680,7 @@ internal static class MicroRoms {
         );
         a.LdrConst(
             rd: 3,
-            value: 0x03007FFCu
+            value: AgbAddresses.BiosInterruptVector
         );
         a.Str(
             imm12: 0,
@@ -726,7 +726,7 @@ internal static class MicroRoms {
         a.Label(name: "handler");
         a.LdrConst(
             rd: 0,
-            value: 0x04000000u
+            value: AgbAddresses.IoBase
         );
         a.LdrConst(
             rd: 1,

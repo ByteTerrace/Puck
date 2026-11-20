@@ -353,9 +353,4 @@ public static class WorldDefinitionRows {
         definition: definition,
         placement: placement
     ).Position;
-    /// <summary>Resolves a placement's composed world yaw, degrees (see <see cref="ResolvedFrame"/>).</summary>
-    public static float ResolvedYawDegrees(WorldDefinition definition, WorldPlacement placement) => ResolvedFrame(
-        definition: definition,
-        placement: placement
-    ).YawDegrees;
 }

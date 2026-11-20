@@ -202,8 +202,6 @@ public sealed class WorldInputCatalog {
     public ReadOnlySpan<WorldInputModeFamily> Families => m_families;
     /// <summary>Proven selector partitions, available on a document-bound catalog.</summary>
     public ReadOnlySpan<WorldInputSelector> Selectors => m_selectors;
-    /// <summary>Precompiled history programs and shared-group priorities.</summary>
-    public IReadOnlyList<CompiledWorldInputPattern> Patterns => m_patterns;
 
     /// <summary>Bounded worst-case history work charged at each rule read or consumption.</summary>
     public long PatternWork(int index, int capacity) => CompiledWorldInputPattern.Work(m_patterns, index, HistoryCapacity(ingressCapacity: capacity));

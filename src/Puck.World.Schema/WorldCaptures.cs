@@ -1,3 +1,5 @@
+using Puck.Abstractions.Documents;
+
 namespace Puck.World;
 
 /// <summary>
@@ -10,7 +12,7 @@ namespace Puck.World;
 /// row; not read against any other section's material table.</param>
 /// <param name="Color">The material's reference color, <c>#RRGGBB</c> or <c>#RRGGBBAA</c> (alpha ignored — the
 /// composed frame carries none).</param>
-public sealed record WorldCapturePaletteEntry(int Material, string Color);
+public sealed record WorldCapturePaletteEntry(int Material, [property: DocumentText("a color literal")] string Color);
 /// <summary>
 /// One tick-scheduled capture station: a stable name, the exact engine ticks it arms a composed-frame capture at,
 /// and the palette its per-pixel census sorts against. A station carries no camera reference of its own — what the
@@ -34,9 +36,14 @@ public sealed record WorldCapturePaletteEntry(int Material, string Color);
 /// <param name="Screen">The index of the screen whose source the station captures, before any screen shows it: the
 /// source instance the screen reads, which a machine output, a producer or a probe source is. Mutually exclusive with
 /// <paramref name="Instance"/>; <see langword="null"/> (the default) captures by instance.</param>
-public sealed record WorldCaptureRow(CellName Station, IReadOnlyList<ulong> Ticks, IReadOnlyList<WorldCapturePaletteEntry> Palette,
+public sealed record WorldCaptureRow(
+    [property: DocumentText("a capture station is the captures section's own namespace")] CellName Station,
+    IReadOnlyList<ulong> Ticks,
+    IReadOnlyList<WorldCapturePaletteEntry> Palette,
+    [property: DocumentText("a world instance")]
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Instance = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? Screen = null) {
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? Screen = null
+) {
     /// <summary>The number of frozen presentation frames to compose at the armed tick before capturing; zero captures normally.
     /// A positive count resets each contributing view's temporal history and advances only its sample index.</summary>
     public int Converge { get; init; }
@@ -74,7 +81,7 @@ public sealed record WorldCaptureRow(CellName Station, IReadOnlyList<ulong> Tick
 /// under its working directory; an authored relative path resolves beside the document (<see cref="WorldDocumentPaths"/>). A
 /// <c>--capture-dir</c> boot flag overrides either for a deployment run (the <c>--state-dir</c> pattern), so two
 /// backend legs of the same document can target sibling directories without two document copies.</param>
-public sealed record WorldCapturesSection(IReadOnlyList<WorldCaptureRow> Rows, string? Directory = null) {
+public sealed record WorldCapturesSection(IReadOnlyList<WorldCaptureRow> Rows, [property: DocumentText("a path or document locator")] string? Directory = null) {
     /// <summary>The directory, under the run's state root, captures write into when <see cref="Directory"/> is
     /// <see langword="null"/>.</summary>
     public const string DefaultDirectoryName = "captures";

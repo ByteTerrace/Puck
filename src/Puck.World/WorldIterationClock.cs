@@ -60,9 +60,6 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
     /// <inheritdoc/>
     public long Loops => m_count;
 
-    /// <summary>Gets whether a renderer is attached, without which no loop reaches a frame.</summary>
-    public bool Renders => (m_probe is not null);
-
     // One loop: when it began, what its edit must move past, and the timestamp each stage first held.
     private sealed class Loop(long number, string name, long started, WorldDocumentVersion after, long shaderInstalls, bool named) {
         public long Number { get; } = number;

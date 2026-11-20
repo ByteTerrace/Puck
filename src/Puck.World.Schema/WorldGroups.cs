@@ -43,7 +43,7 @@ public enum WorldGroupEvictionPolicy : byte {
 /// for.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldGroupRole(
-    string Name,
+    [property: DocumentText("a group role name")] string Name,
     IReadOnlyList<WorldCapability> Capabilities
 );
 /// <summary>A group kind — a policy bundle, never a size label. Every field here must be behavior-bearing: a kind
@@ -62,7 +62,7 @@ public sealed record WorldGroupRole(
 /// against.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldGroupKind(
-    string Name,
+    [property: DocumentText("a group kind name")] string Name,
     IReadOnlyList<WorldGroupRole> Roles,
     WorldGroupLifetime Lifetime,
     WorldGroupEvictionPolicy EvictionPolicy,
@@ -94,8 +94,9 @@ public sealed record WorldGroupKind(
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldGroup(
     SafeName Id,
-    string KindName,
+    [property: DocumentText("a group kind")] string KindName,
     IReadOnlyList<WorldGroupMember> Members,
+    [property: DocumentText("a tag")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Tags = null,
     long Revision = 0,
     int NextJoinOrdinal = 0
@@ -145,7 +146,7 @@ public readonly record struct OwnershipEscrow(
 /// lane widens <see cref="Kind"/> to item/instance subjects without reshaping this type.</summary>
 /// <param name="Kind">The subject flavor.</param>
 /// <param name="Id">The subject's stable id — a group id for <see cref="OwnershipSubjectKind.Group"/>.</param>
-public readonly record struct OwnershipSubject(OwnershipSubjectKind Kind, string Id) {
+public readonly record struct OwnershipSubject(OwnershipSubjectKind Kind, [property: DocumentText("an ownership subject id")] string Id) {
     /// <summary>Describes a short stable label for console echoes — <c>group:&lt;id&gt;</c> today, the only declared
     /// <see cref="OwnershipSubjectKind"/>.</summary>
     /// <returns>The label.</returns>
@@ -198,6 +199,7 @@ public readonly record struct OwnershipSubject(OwnershipSubjectKind Kind, string
 public readonly record struct OwnershipOwner(
     OwnershipOwnerKind Kind,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Principal? Principal = null,
+    [property: DocumentText("a group id")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? GroupId = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OwnershipEscrow? Escrow = null
 );

@@ -379,7 +379,7 @@ public sealed class WorldFaceCatalog {
 
         return null;
     }
-    private static ShapeDocument? FindShape(CreationDocument document, int? id) {
+    internal static ShapeDocument? FindShape(CreationDocument document, int? id) {
         if (
             (id is not { } targetId) ||
             (targetId < 0)

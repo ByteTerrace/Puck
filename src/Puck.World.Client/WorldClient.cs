@@ -210,9 +210,6 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
     private bool m_pendingStateInstall;
 
-    /// <summary>The number of active non-seat entities in the latest snapshot — the client's view of the simulated
-    /// census (drives the fleet-tier auto quality levers).</summary>
-    public int ActivePeerCount => m_activePeerCount;
     /// <summary>The authority stamped on the latest delivered entity image.</summary>
     public string Authority => m_authority;
     /// <summary>The server's live world definition — the boot definition, then whatever the server last delivered after
@@ -221,11 +218,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <summary>The monotonic definition-delivery counter — bumped each time the server delivers a new definition. The
     /// frame source watches it to know a scene/screen change landed (distinct from a population/roster change).</summary>
     public int DefinitionRevision => m_definitionRevision;
-    /// <summary>The monotonic response counter — bumped each time a value delivery replaces, adds or removes placement
-    /// rows without moving a presentation facet (<see cref="WorldPlacementChange.Appearance"/>). The frame source composes
-    /// again on it; nothing derived from the definition's shape reconciles.</summary>
-    public int ResponseRevision => m_responseRevision;
-    /// <summary>Gets the monotonic solid-response counter: bumped with <see cref="ResponseRevision"/> only when a solid
+    /// <summary>Gets the monotonic solid-response counter: bumped with the response revision only when a solid
     /// placement is among the rows the delivery moved, so a consumer of solid geometry alone (the static query field)
     /// holds across a lamp or a display swapping its creation.</summary>
     public int SolidResponseRevision => m_solidResponseRevision;
@@ -1183,7 +1176,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <remarks>A value-only mutation cannot have changed channels, target registers, or scene shape: the fresh
     /// definition is stored for state-value reads, and the state mirror refreshes the slots bound to the rows the stamp
     /// names. A delivery that replaced, added or removed placement rows (a holding swap, a dealt child, a contribution)
-    /// bumps <see cref="ResponseRevision"/>, so the frame source composes again, or, when a moved row shows a creation
+    /// bumps the response revision, so the frame source composes again, or, when a moved row shows a creation
     /// that derives a face, a camera or a sound, <see cref="DefinitionRevision"/>, so the presentation reconciles them as
     /// well (<see cref="WorldPlacementResponse.ComparePlacements"/>).</remarks>
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {

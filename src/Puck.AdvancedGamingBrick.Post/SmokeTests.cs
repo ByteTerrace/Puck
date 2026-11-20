@@ -62,7 +62,7 @@ internal static class SmokeTests {
         // Tile 0 (char base 0) is an 8bpp tile of colour index 1; map entry (0,0) = tile 0 (default).
         for (uint i = 0; (i < 64u); i += 2u) {
             ppu.WriteVideo(
-                address: (0x06000000u + i),
+                address: (AgbAddresses.VideoRam + i),
                 value: 0x0101,
                 width: 2
             );
@@ -289,22 +289,22 @@ internal static class SmokeTests {
 
         machine.Bus.Write32(
             access: BusAccessType.NonSequential,
-            address: 0x03007FFCu,
+            address: AgbAddresses.BiosInterruptVector,
             value: 0x03000000u
         ); // BIOS user-IRQ-handler pointer
         machine.Bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x04000004u,
+            address: AgbAddresses.DisplayStatus,
             value: 0x0008
         );       // DISPSTAT: V-blank IRQ enable
         machine.Bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x04000200u,
+            address: AgbAddresses.InterruptEnable,
             value: 0x0001
         );       // IE: V-blank
         machine.Bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x04000208u,
+            address: AgbAddresses.InterruptMasterEnable,
             value: 0x0001
         );       // IME
 
@@ -354,7 +354,7 @@ internal static class SmokeTests {
         // Tile 0 (char base 0): a 4bpp tile of colour index 1.
         for (uint i = 0; (i < 32u); i += 2u) {
             ppu.WriteVideo(
-                address: (0x06000000u + i),
+                address: (AgbAddresses.VideoRam + i),
                 value: 0x1111,
                 width: 2
             );
@@ -511,39 +511,39 @@ internal static class SmokeTests {
         // DMA3: src 0x03000000 (increment), dst 0x03000100 (fixed), 16-bit, VBlank timing, repeat, count = 2.
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000D4u,
+            address: AgbAddresses.Dma3Source,
             value: 0x0000
         ); // SAD lo
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000D6u,
+            address: (AgbAddresses.Dma3Source + 2),
             value: 0x0300
         ); // SAD hi → 0x03000000
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000D8u,
+            address: AgbAddresses.Dma3Destination,
             value: 0x0100
         ); // DAD lo
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000DAu,
+            address: (AgbAddresses.Dma3Destination + 2),
             value: 0x0300
         ); // DAD hi → 0x03000100
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000DCu,
+            address: AgbAddresses.Dma3Count,
             value: 0x0002
         ); // count = 2 (latched here)
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000DEu,
+            address: AgbAddresses.Dma3Control,
             value: 0x9240
         ); // enable+VBlank+repeat+dst-fixed
 
         // Rewrite the count to 4 AFTER enable — the first run must still transfer the latched 2, not 4.
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000DCu,
+            address: AgbAddresses.Dma3Count,
             value: 0x0004
         );
 
@@ -594,7 +594,7 @@ internal static class SmokeTests {
             value: 0x0403
         ); // Mode 3, BG2 enabled (bit 10)
         offPpu.WriteVideo(
-            address: 0x06000000u,
+            address: AgbAddresses.VideoRam,
             value: ((uint)ColorA),
             width: 2
         );
@@ -634,7 +634,7 @@ internal static class SmokeTests {
             value: 0x0001
         ); // GRSWP bit 0
         onPpu.WriteVideo(
-            address: 0x06000000u,
+            address: AgbAddresses.VideoRam,
             value: ((uint)ColorA),
             width: 2
         );
@@ -796,32 +796,32 @@ internal static class SmokeTests {
         );
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000B0u,
+            address: AgbAddresses.Dma0Source,
             value: 0x0000
         ); // SAD lo
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000B2u,
+            address: (AgbAddresses.Dma0Source + 2),
             value: 0x0300
         ); // SAD hi → 0x03000000
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000B4u,
+            address: AgbAddresses.Dma0Destination,
             value: 0x0100
         ); // DAD lo
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000B6u,
+            address: (AgbAddresses.Dma0Destination + 2),
             value: 0x0300
         ); // DAD hi → 0x03000100
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000B8u,
+            address: AgbAddresses.Dma0Count,
             value: 0x0001
         ); // count = 1
         bus.Write16(
             access: BusAccessType.NonSequential,
-            address: 0x040000BAu,
+            address: AgbAddresses.Dma0Control,
             value: 0x8400
         ); // enable + 32-bit + immediate
 
@@ -964,7 +964,7 @@ internal static class SmokeTests {
         // A single 8×8 4bpp tile (tile 0) of solid colour index 1, shared by every sprite below.
         for (uint i = 0; (i < 32u); i += 2u) {
             ppu.WriteVideo(
-                address: (0x06010000u + i),
+                address: (AgbAddresses.ObjectTileRam + i),
                 value: 0x1111,
                 width: 2
             );
@@ -972,14 +972,14 @@ internal static class SmokeTests {
 
         // OBJ palette colour index 1 = red.
         ppu.WriteVideo(
-            address: (0x05000000u + ((256u + 1u) * 2u)),
+            address: (AgbAddresses.PaletteRam + ((256u + 1u) * 2u)),
             value: 0x001F,
             width: 2
         );
 
         // Backdrop (BG palette index 0) = blue, unmistakably distinct from the sprite colour.
         ppu.WriteVideo(
-            address: 0x05000000u,
+            address: AgbAddresses.PaletteRam,
             value: 0x7C00,
             width: 2
         );
@@ -1052,7 +1052,7 @@ internal static class SmokeTests {
         // because 8-bit writes to the object region are dropped by hardware (the quirk above).
         for (uint i = 0; (i < 32u); i += 2u) {
             ppu.WriteVideo(
-                address: (0x06010000u + i),
+                address: (AgbAddresses.ObjectTileRam + i),
                 value: 0x1111,
                 width: 2
             );
@@ -1060,14 +1060,14 @@ internal static class SmokeTests {
 
         // OBJ palette colour index 1 = red (BGR555 0x001F); OBJ palette starts at palette index 256.
         ppu.WriteVideo(
-            address: (0x05000000u + ((256u + 1u) * 2u)),
+            address: (AgbAddresses.PaletteRam + ((256u + 1u) * 2u)),
             value: 0x001F,
             width: 2
         );
 
         // OAM sprite 0 at (0,0), 8×8 square, tile 0, priority 0.
         ppu.WriteVideo(
-            address: 0x07000000u,
+            address: AgbAddresses.ObjectAttributeRam,
             value: 0x0000,
             width: 2
         ); // attr0: y=0, normal
@@ -1133,7 +1133,7 @@ internal static class SmokeTests {
     }
     // Writes an 8×8, normal (non-affine), priority-0 OAM entry at (x, 0) referencing tile 0 / OBJ palette bank 0.
     private static void WriteBudgetSprite(AgbPpu ppu, int index, int x) {
-        var attributeBase = (0x07000000u + ((uint)(index * 8)));
+        var attributeBase = (AgbAddresses.ObjectAttributeRam + ((uint)(index * 8)));
 
         ppu.WriteVideo(
             address: attributeBase,

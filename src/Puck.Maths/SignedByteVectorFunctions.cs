@@ -159,23 +159,6 @@ public static class SignedByteVectorFunctions {
         return sum;
     }
 
-    /// <summary>Reports the highest hardware acceleration tier available on the current host.</summary>
-    internal static SignedByteVectorTier GetHardwareTier() {
-        if (Vector512.IsHardwareAccelerated) {
-            return SignedByteVectorTier.Vector512;
-        }
-
-        if (Vector256.IsHardwareAccelerated) {
-            return SignedByteVectorTier.Vector256;
-        }
-
-        if (Vector128.IsHardwareAccelerated) {
-            return SignedByteVectorTier.Vector128;
-        }
-
-        return SignedByteVectorTier.Scalar;
-    }
-
     /// <summary>Checks whether a given dot product hardware acceleration tier is supported.</summary>
     public static bool IsDotTierSupported(SignedByteVectorTier tier) => tier switch {
         SignedByteVectorTier.Scalar => true,

@@ -1,3 +1,5 @@
+using Puck.Abstractions.Documents;
+
 namespace Puck.Text;
 
 /// <summary>A named, hash-pinned font asset and the exact Unicode scalar set Puck generates for it.</summary>
@@ -12,11 +14,11 @@ namespace Puck.Text;
 /// <param name="Padding">The cell padding in pixels; null uses the distance range ceiling.</param>
 /// <param name="Columns">The preferred atlas column count; null uses 16.</param>
 public sealed record TextFontDefinition(
-    string Name,
-    string Source,
-    string Hash,
-    IReadOnlyList<string> CodePointRanges,
-    string? Characters = null,
+    [property: DocumentText("a font name")] string Name,
+    [property: DocumentText("a font's source is a file path")] string Source,
+    [property: DocumentText("a content digest")] string Hash,
+    [property: DocumentText("font characters or code points")] IReadOnlyList<string> CodePointRanges,
+    [property: DocumentText("font characters or code points")] string? Characters = null,
     int? PixelSize = null,
     float? DistanceRange = null,
     int? FaceIndex = null,
@@ -45,4 +47,4 @@ public sealed record TextFontDefinition(
 /// <summary>The named font catalog a document exposes to all of its text-bearing surfaces.</summary>
 /// <param name="DefaultFont">The font used when a text run omits an explicit name.</param>
 /// <param name="Fonts">The catalog rows.</param>
-public sealed record TextFontCatalogDefinition(string DefaultFont, IReadOnlyList<TextFontDefinition> Fonts);
+public sealed record TextFontCatalogDefinition([property: DocumentText("a font name")] string DefaultFont, IReadOnlyList<TextFontDefinition> Fonts);

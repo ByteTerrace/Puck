@@ -681,7 +681,11 @@ internal static class SdfDualContouring {
             }
         }
 
-        return Merge(anchors: anchors, besides: besides, block: Block, patches: patches, cellVertex: CellVertex, features: features, grid: grid, handoffs: handoffs, normals: normals, owners: owners, positions: positions, quadAxes: quadAxes, quadCorners: quadCorners, quads: quads, solveds: solveds, planeData: planeData, planeStarts: planeStarts, planeEnds: planeEnds);
+        // A piece whose merged vertex the settle had to return holds what one vertex cannot: the merge runs again with
+        // those pieces split at their creases (SplitAtCreases).
+        var surface = Merge(anchors: anchors, besides: besides, block: Block, patches: patches, cellVertex: CellVertex, features: features, grid: grid, handoffs: handoffs, normals: normals, owners: owners, positions: positions, quadAxes: quadAxes, quadCorners: quadCorners, quads: quads, solveds: solveds, planeData: planeData, planeStarts: planeStarts, planeEnds: planeEnds, returned: out var returned, unheld: null);
+
+        return ((returned is null) ? surface : Merge(anchors: anchors, besides: besides, block: Block, patches: patches, cellVertex: CellVertex, features: features, grid: grid, handoffs: handoffs, normals: normals, owners: owners, positions: positions, quadAxes: quadAxes, quadCorners: quadCorners, quads: quads, solveds: solveds, planeData: planeData, planeStarts: planeStarts, planeEnds: planeEnds, returned: out _, unheld: returned));
     }
     // The point of a merged piece every one of its fine vertices' tangent planes `planes` (world space, nx, ny, nz, d
     // each) passes through, within MergedResidual of a fine cell root mean square, solved toward the piece's mean along the
@@ -759,23 +763,23 @@ internal static class SdfDualContouring {
     // planes meet at (MergedFeature), inside the block where a convex crease lies past it, or at their mean, with their
     // mean normal, and drops the quads that collapse to fewer than three vertices. Two fine vertices of one block are one
     // piece when a quad joins them.
-    // A vertex's planes are planeData[planeStarts[v]..planeEnds[v]], or none where planeStarts[v] is negative.
-    private static SdfSurface Merge<TLattice>(TLattice grid, RentedList<double> positions, RentedList<double> normals, RentedList<double> anchors, RentedList<double> patches, RentedList<bool> features, RentedList<bool> solveds, RentedList<int> owners, RentedList<int> quads, RentedList<int> quadCorners, RentedList<sbyte> quadAxes, RentedList<double> planeData, RentedList<int> planeStarts, RentedList<int> planeEnds, RentedList<bool> besides, RentedList<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> cellVertex, Func<int, (int X, int Y, int Z, int Size)> block) where TLattice : ISdfRefinedContourLattice {
+    // A vertex's planes are planeData[planeStarts[v]..planeEnds[v]], or none where planeStarts[v] is negative. The pieces
+    // `unheld` names by their roots (fine vertex indices) split at their creases first (SplitAtCreases), which gives
+    // their fine vertices new owners in `owners`; `returned` names, the same way, every piece whose merged vertex the
+    // settle returned, or is null where it returned none.
+    private static SdfSurface Merge<TLattice>(TLattice grid, RentedList<double> positions, RentedList<double> normals, RentedList<double> anchors, RentedList<double> patches, RentedList<bool> features, RentedList<bool> solveds, RentedList<int> owners, RentedList<int> quads, RentedList<int> quadCorners, RentedList<sbyte> quadAxes, RentedList<double> planeData, RentedList<int> planeStarts, RentedList<int> planeEnds, RentedList<bool> besides, RentedList<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> cellVertex, Func<int, (int X, int Y, int Z, int Size)> block, IReadOnlySet<int>? unheld, out HashSet<int>? returned) where TLattice : ISdfRefinedContourLattice {
         var vertexCount = owners.Count;
-        using var pieceSets = new SdfDisjointSet(count: vertexCount);
+        var faces = SplitAtCreases(block: block, grid: grid, owners: owners, planeData: planeData, planeEnds: planeEnds, planeStarts: planeStarts, positions: positions, quads: quads, unheld: unheld);
+
+        if (faces.Count > 0) {
+            var whole = block;
+
+            block = owner => whole(faces.BlockOf(owner: owner));
+        }
+
+        using var pieceSets = Pieces(owners: owners, quads: quads);
 
         int Root(int vertex) => pieceSets.Find(element: vertex);
-
-        for (var quad = 0; (quad < quads.Count); quad += 4) {
-            for (var corner = 0; (corner < 4); corner++) {
-                var a = quads[(quad + corner)];
-                var b = quads[(quad + ((corner + 1) & 3))];
-
-                if ((owners[a] >= 0) && (owners[a] == owners[b])) {
-                    pieceSets.Union(first: a, second: b);
-                }
-            }
-        }
 
         // A merged vertex is an unowned vertex or the root of a piece, so the merged arrays are sized exactly once and
         // filled in place, rather than grown as lists and copied.
@@ -831,10 +835,11 @@ internal static class SdfDualContouring {
             (piece.PatchX, piece.PatchY, piece.PatchZ) = ((piece.PatchX + patches[(3 * vertex)]), (piece.PatchY + patches[((3 * vertex) + 1)]), (piece.PatchZ + patches[((3 * vertex) + 2)]));
             (piece.NormalX, piece.NormalY, piece.NormalZ) = ((piece.NormalX + normals[(3 * vertex)]), (piece.NormalY + normals[((3 * vertex) + 1)]), (piece.NormalZ + normals[((3 * vertex) + 2)]));
             piece.Feature |= features[vertex];
-            // The piece's fine crossings' tangent planes, for its feature point, gathered below in vertex order.
+            // The piece's fine crossings' tangent planes, for its feature point, gathered below in vertex order: a face
+            // a crease split off its piece keeps only that face's.
             if (planeStarts[vertex] >= 0) {
                 piece.HasPlanes = true;
-                piece.PlaneEnd += (planeEnds[vertex] - planeStarts[vertex]);
+                piece.PlaneEnd += faces.Keep(destination: [], owner: owners[vertex], planes: planeData.AsSpan()[planeStarts[vertex]..planeEnds[vertex]]);
             }
         }
 
@@ -856,10 +861,8 @@ internal static class SdfDualContouring {
             if ((owners[vertex] < 0) || (planeStarts[vertex] < 0)) { continue; }
 
             ref var piece = ref pieces[remap[vertex]];
-            var planes = planeData.AsSpan()[planeStarts[vertex]..planeEnds[vertex]];
 
-            planes.CopyTo(destination: piecePlanes.AsSpan(start: piece.PlaneEnd));
-            piece.PlaneEnd += planes.Length;
+            piece.PlaneEnd += faces.Keep(destination: piecePlanes.AsSpan(start: piece.PlaneEnd), owner: owners[vertex], planes: planeData.AsSpan()[planeStarts[vertex]..planeEnds[vertex]]);
         }
 
         // One scratch for every piece's planes in its block's unit coordinates (MergedFeature), as long as the longest run.
@@ -892,7 +895,7 @@ internal static class SdfDualContouring {
             var meeting = (((piece.Count > 1) && piece.HasPlanes) ? MergedFeature(grid: grid, mean: (x, y, z), block: block(owners[root]), planes: piecePlanes.AsSpan(start: piece.PlaneStart, length: (piece.PlaneEnd - piece.PlaneStart)), local: localPlanes.AsSpan(start: 0, length: (piece.PlaneEnd - piece.PlaneStart))) : null);
             var feature = ((meeting is var (fx, fy, fz, past, _, _, _) && (past <= 0.0)) ? (fx, fy, fz) : ((double X, double Y, double Z)?)null);
 
-            if ((feature is null) && (meeting is (var bx, var by, var bz, _, { } inside, var handOff, var besideCrease)) && piece.Feature) {
+            if ((feature is null) && (meeting is (var bx, var by, var bz, _, { } inside, var handOff, var besideCrease)) && piece.Feature && !faces.Splits(owner: owners[root])) {
                 if (handOff) {
                     mergedHandoffs.Add(item: (index, ((bx - origin.X) / unit.X), ((by - origin.Y) / unit.Y), ((bz - origin.Z) / unit.Z)));
                 }
@@ -900,7 +903,8 @@ internal static class SdfDualContouring {
                 mergedBesides[index] = besideCrease;
             }
             (x, y, z) = (feature ?? (x, y, z));
-            mergedFeatures[index] = ((feature is not null) ? piece.Feature : ((piece.Count == 1) && features[root]));
+            // A face split off a crease lies on that face alone, whatever crease its fine vertices touched.
+            mergedFeatures[index] = (!faces.Splits(owner: owners[root]) && ((feature is not null) ? piece.Feature : ((piece.Count == 1) && features[root])));
             mergedSolved[index] = true;
 
             mergedPositions[at] = x;
@@ -971,7 +975,13 @@ internal static class SdfDualContouring {
             keptQuads++;
         }
 
-        Settle(anchors: mergedAnchors.AsSpan(start: 0, length: (3 * mergedCount)), axes: mergedAxes, besides: mergedBesides, features: mergedFeatures, patches: mergedPatches.AsSpan(start: 0, length: (3 * mergedCount)), positions: mergedPositions.AsSpan(start: 0, length: (3 * mergedCount)), quads: mergedQuads, solveds: mergedSolved);
+        using var settled = new RentedList<int>();
+
+        Settle(anchors: mergedAnchors.AsSpan(start: 0, length: (3 * mergedCount)), axes: mergedAxes, besides: mergedBesides, features: mergedFeatures, patches: mergedPatches.AsSpan(start: 0, length: (3 * mergedCount)), positions: mergedPositions.AsSpan(start: 0, length: (3 * mergedCount)), quads: mergedQuads, returned: settled, solveds: mergedSolved);
+        returned = null;
+        foreach (var vertex in settled.AsSpan()) {
+            if (pieces[vertex].Count > 1) { (returned ??= []).Add(item: pieces[vertex].Root); }
+        }
 
         return new SdfSurface {
             Features = mergedFeatures,
@@ -984,6 +994,158 @@ internal static class SdfDualContouring {
             QuadCorners = mergedCorners,
             Quads = mergedQuads,
         };
+    }
+    // The pieces of the blocks' surfaces: two fine vertices of one owner are one piece where a quad edge joins them.
+    private static SdfDisjointSet Pieces(RentedList<int> owners, RentedList<int> quads) {
+        var sets = new SdfDisjointSet(count: owners.Count);
+
+        for (var quad = 0; (quad < quads.Count); quad += 4) {
+            for (var corner = 0; (corner < 4); corner++) {
+                var a = quads[(quad + corner)];
+                var b = quads[(quad + ((corner + 1) & 3))];
+
+                if ((owners[a] >= 0) && (owners[a] == owners[b])) {
+                    sets.Union(first: a, second: b);
+                }
+            }
+        }
+
+        return sets;
+    }
+    // Splits each piece `unheld` names (by its root) whose fine crossings' planes meet along a crease past its block
+    // into one piece per face, giving each face's fine vertices an owner of its own (CreaseFaces), and returns those
+    // owners; none where `unheld` is null. Merge names the pieces whose merged vertex its settle returned. A block's
+    // piece merges into one vertex, which lies on the crease where the crease lies in the block (MergedFeature); a piece
+    // holding both faces of a crease the block does not hold has no point that lies on both, and its one vertex,
+    // wherever it is put, lies on one face (or between them, inside the solid) while its quads reach the other: past the
+    // fine vertices the neighbouring cells place between the block and the crease, it turns their shared triangles over,
+    // so the settle returns it to its crossings' mean, inside the solid, and the field check then moves it onto the
+    // nearer face, where the triangles toward the other face turn against the field. Where two solids touch along a line
+    // (an XOR's pinch), the block beside the line sees both faces of one solid's wedge, whose edge is the line. A face's
+    // piece keeps its vertex on that face; the quads that joined the two faces' fine vertices join the two faces'
+    // vertices across the block, short of the crease the cells holding it place their vertices on. A fine vertex belongs
+    // to the face most of its crossings' planes face nearer, or, crossing neither, to the face whose plane passes nearer.
+    private static CreaseFaces SplitAtCreases<TLattice>(TLattice grid, RentedList<int> owners, RentedList<int> quads, RentedList<double> positions, RentedList<double> planeData, RentedList<int> planeStarts, RentedList<int> planeEnds, Func<int, (int X, int Y, int Z, int Size)> block, IReadOnlySet<int>? unheld) where TLattice : ISdfRefinedContourLattice {
+        var vertexCount = owners.Count;
+        var first = 0;
+
+        for (var vertex = 0; (vertex < vertexCount); vertex++) { first = Math.Max(val1: first, val2: (owners[vertex] + 1)); }
+
+        var faces = new CreaseFaces(first: first);
+
+        if ((unheld is null) || !grid.CrossingNormals) { return faces; }
+
+        using var sets = Pieces(owners: owners, quads: quads);
+        // Each piece's fine vertices back to back, pieces by their roots' order, each in vertex order.
+        using var startLease = RentedArrays.Rent<int>(array: out var starts, minimumLength: (vertexCount + 1));
+        using var memberLease = RentedArrays.Rent<int>(array: out var members, minimumLength: vertexCount);
+
+        starts.AsSpan(start: 0, length: (vertexCount + 1)).Clear();
+        for (var vertex = 0; (vertex < vertexCount); vertex++) {
+            if (owners[vertex] >= 0) { starts[(sets.Find(element: vertex) + 1)]++; }
+        }
+        for (var root = 0; (root < vertexCount); root++) { starts[(root + 1)] += starts[root]; }
+        using var fillLease = RentedArrays.Rent<int>(array: out var fill, minimumLength: vertexCount);
+
+        starts.AsSpan(start: 0, length: vertexCount).CopyTo(destination: fill);
+        for (var vertex = 0; (vertex < vertexCount); vertex++) {
+            if (owners[vertex] >= 0) { members[fill[sets.Find(element: vertex)]++] = vertex; }
+        }
+
+        using var planes = new RentedList<double>();
+        using var local = new RentedList<double>();
+
+        for (var root = 0; (root < vertexCount); root++) {
+            var piece = members.AsSpan(start: starts[root], length: (starts[(root + 1)] - starts[root]));
+
+            if ((piece.Length < 2) || !unheld.Contains(item: root)) { continue; }
+
+            var (mx, my, mz) = (0.0, 0.0, 0.0);
+
+            planes.Clear();
+            foreach (var vertex in piece) {
+                (mx, my, mz) = ((mx + positions[(3 * vertex)]), (my + positions[((3 * vertex) + 1)]), (mz + positions[((3 * vertex) + 2)]));
+                if (planeStarts[vertex] >= 0) { planes.AddRange(items: planeData.AsSpan()[planeStarts[vertex]..planeEnds[vertex]]); }
+            }
+            if (planes.Count == 0) { continue; }
+            local.Clear();
+            for (var at = 0; (at < planes.Count); at++) { local.Add(item: 0.0); }
+
+            var owner = owners[root];
+            var meeting = MergedFeature(block: block(owner), grid: grid, local: local.AsSpan(), mean: ((mx / piece.Length), (my / piece.Length), (mz / piece.Length)), planes: planes.AsSpan());
+
+            if (meeting is not { Past: > 0.0 }) { continue; }
+
+            var (faceA, faceB) = Faces(planes: local.AsSpan());
+
+            if (faceA < 0) { continue; }
+
+            var all = planes.AsSpan();
+            var a = (X: all[(4 * faceA)], Y: all[((4 * faceA) + 1)], Z: all[((4 * faceA) + 2)], D: all[((4 * faceA) + 3)]);
+            var b = (X: all[(4 * faceB)], Y: all[((4 * faceB) + 1)], Z: all[((4 * faceB) + 2)], D: all[((4 * faceB) + 3)]);
+            var (onA, onB) = (0, 0);
+
+            // Each fine vertex's face, held as its sign in `fill` (free once the members are listed): on A, or on B.
+            foreach (var vertex in piece) {
+                var votes = 0;
+
+                for (var plane = Math.Max(val1: 0, val2: planeStarts[vertex]); (planeStarts[vertex] >= 0) && (plane < planeEnds[vertex]); plane += 4) {
+                    var (nx, ny, nz) = (planeData[plane], planeData[(plane + 1)], planeData[(plane + 2)]);
+
+                    votes += ((((nx * a.X) + (ny * a.Y)) + (nz * a.Z)) >= (((nx * b.X) + (ny * b.Y)) + (nz * b.Z))) ? 1 : -1;
+                }
+                if (votes == 0) {
+                    var (px, py, pz) = (positions[(3 * vertex)], positions[((3 * vertex) + 1)], positions[((3 * vertex) + 2)]);
+
+                    votes = (Math.Abs(value: ((((a.X * px) + (a.Y * py)) + (a.Z * pz)) - a.D)) <= Math.Abs(value: ((((b.X * px) + (b.Y * py)) + (b.Z * pz)) - b.D))) ? 1 : -1;
+                }
+                fill[vertex] = votes;
+                (onA, onB) = ((votes > 0) ? ((onA + 1), onB) : (onA, (onB + 1)));
+            }
+            if ((onA == 0) || (onB == 0)) { continue; }
+
+            var ownerA = faces.Add(block: owner, face: (a.X, a.Y, a.Z), other: (b.X, b.Y, b.Z));
+            var ownerB = faces.Add(block: owner, face: (b.X, b.Y, b.Z), other: (a.X, a.Y, a.Z));
+
+            foreach (var vertex in piece) { owners[vertex] = ((fill[vertex] > 0) ? ownerA : ownerB); }
+        }
+
+        return faces;
+    }
+    // The owners SplitAtCreases gives the faces it splits off their pieces, numbered from the first number past every
+    // block's owner: per face, the block it stands in, its normal and the other face's, by which its fine vertices'
+    // crossings' planes are kept for its vertex (a plane facing nearer the other face is that face's).
+    private sealed class CreaseFaces(int first) {
+        private readonly List<(int Block, (double X, double Y, double Z) Face, (double X, double Y, double Z) Other)> m_faces = [];
+
+        public int Count => m_faces.Count;
+
+        public int Add(int block, (double X, double Y, double Z) face, (double X, double Y, double Z) other) {
+            m_faces.Add(item: (block, face, other));
+
+            return (first + m_faces.Count - 1);
+        }
+        // The block an owner stands in: its own, or for a face split off a piece, that piece's.
+        public int BlockOf(int owner) => (Splits(owner: owner) ? m_faces[(owner - first)].Block : owner);
+        public bool Splits(int owner) => (owner >= first);
+        // The planes of `planes` (nx, ny, nz, d each) a vertex of `owner` keeps, all of them or a split face's own, copied
+        // to `destination` unless it is empty, and how many values they hold.
+        public int Keep(int owner, ReadOnlySpan<double> planes, Span<double> destination) {
+            var kept = 0;
+
+            for (var plane = 0; (plane < planes.Length); plane += 4) {
+                if (Splits(owner: owner) && !Keeps(owner: owner, plane: planes.Slice(start: plane, length: 4))) { continue; }
+                if (!destination.IsEmpty) { planes.Slice(start: plane, length: 4).CopyTo(destination: destination[kept..]); }
+                kept += 4;
+            }
+
+            return kept;
+        }
+        private bool Keeps(int owner, ReadOnlySpan<double> plane) {
+            var (_, face, other) = m_faces[(owner - first)];
+
+            return ((((plane[0] * face.X) + (plane[1] * face.Y)) + (plane[2] * face.Z)) >= (((plane[0] * other.X) + (plane[1] * other.Y)) + (plane[2] * other.Z)));
+        }
     }
     // The values rounded to single precision, in an array of exactly their count.
     private static float[] Narrowed(ReadOnlySpan<double> values) {
@@ -1058,8 +1220,8 @@ internal static class SdfDualContouring {
     // cells around a lattice edge lie in its four quadrants, so a quad whose vertices each lie in their own cell always
     // has a split that faces out; a merged piece's vertex stands for several cells and has no such region, so it is the
     // check alone that holds its triangles. A vertex returned is pinned by no crossing (`solveds`), so the bake's field
-    // check moves it onto the surface, and is no crease.
-    private static void Settle(Span<double> positions, ReadOnlySpan<double> anchors, ReadOnlySpan<double> patches, ReadOnlySpan<int> quads, ReadOnlySpan<sbyte> axes, Span<bool> features, Span<bool> solveds, Span<bool> besides) {
+    // check moves it onto the surface, and is no crease; `returned`, when given, lists each vertex returned.
+    private static void Settle(Span<double> positions, ReadOnlySpan<double> anchors, ReadOnlySpan<double> patches, ReadOnlySpan<int> quads, ReadOnlySpan<sbyte> axes, Span<bool> features, Span<bool> solveds, Span<bool> besides, RentedList<int>? returned = null) {
         Span<int> moved = stackalloc int[4];
         Span<double> held = stackalloc double[3];
 
@@ -1109,10 +1271,12 @@ internal static class SdfDualContouring {
                 }
                 if (alone >= 0) {
                     Return(positions: positions, anchors: anchors, features: features, solveds: solveds, besides: besides, vertex: alone);
+                    returned?.Add(item: alone);
                     continue;
                 }
                 for (var index = 0; (index < count); index++) {
                     Return(positions: positions, anchors: anchors, features: features, solveds: solveds, besides: besides, vertex: moved[index]);
+                    returned?.Add(item: moved[index]);
                 }
             }
             if (!any) { break; }

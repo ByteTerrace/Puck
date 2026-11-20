@@ -38,14 +38,22 @@ public enum GeneratorMode : byte {
 /// exhausting mode each unit is drawn once per pass. A context's units total at most
 /// <see cref="GeneratorCapacity.MaxEntriesPerSet"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record GeneratorAlternative(string Token, ulong Weight, CellName Next, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Multiplicity = null);
+public sealed record GeneratorAlternative(
+    [property: DocumentText("literal text")] string Token,
+    ulong Weight,
+    [property: DocumentText("a context key is local to its generator")] CellName Next,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Multiplicity = null
+);
 /// <summary>One named context of a <see cref="StateGenerator"/> — the state the walk may be sitting in and the
 /// weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends
 /// the emission.</summary>
 /// <param name="Key">The stable context key, unique within the generator.</param>
 /// <param name="Alternatives">The weighted alternatives out of this context, or empty for a terminal context.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record GeneratorContext(CellName Key, IReadOnlyList<GeneratorAlternative>? Alternatives = null) {
+public sealed record GeneratorContext(
+    [property: DocumentText("a context key is local to its generator")] CellName Key,
+    IReadOnlyList<GeneratorAlternative>? Alternatives = null
+) {
     /// <summary>The weighted alternatives out of this context, or empty for a terminal context.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<GeneratorAlternative>? Alternatives { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Alternatives);
@@ -200,6 +208,7 @@ public sealed record StateGenerator(
     GeneratorSource Source = GeneratorSource.Markov,
     // Each source reads a disjoint field set, so the canonical writer omits the ones this source does not own rather
     // than emitting a wall of nulls a reader has to discount.
+    [property: DocumentText("a context key is local to its generator")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellName? Start = null,
     int Bound = StateGenerator.DefaultBound,
     IReadOnlyList<GeneratorContext>? Contexts = null,
@@ -293,7 +302,7 @@ public sealed record StateGenerator(
 /// <see cref="Draw.Source"/> resolves against.</param>
 /// <param name="Generator">The source itself.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record GeneratorRow(CellName Name, StateGenerator Generator);
+public sealed record GeneratorRow([property: DocumentName(WorldNameKind.Generator, WorldNameRole.Declares)] CellName Name, StateGenerator Generator);
 /// <summary>The <see cref="StateGenerator"/> caps the document validator enforces.</summary>
 /// <remarks>The context cap and the alternative cap are load-bearing together, not decorative: an exhausting mode
 /// records one <see cref="StateRow.DrawnMasks"/> mask per context, and each such mask is a 256-bit drawn set (so

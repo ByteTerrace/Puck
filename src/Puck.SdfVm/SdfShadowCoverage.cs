@@ -15,10 +15,6 @@ public readonly record struct SdfShadowCoverage(float Near, float Far, float Cas
     /// <summary>The coverage a world that authors none renders with: 16 m near, 120 m far and 200 m of casters.</summary>
     public static SdfShadowCoverage Default { get; } = new(Near: 16f, Far: 120f, Casters: 200f);
 
-    /// <summary>Gets whether the coverage is admissible: finite, a positive near reach below the far one, and
-    /// non-negative casters.</summary>
-    public bool IsValid => (float.IsFinite(f: Near) && float.IsFinite(f: Far) && float.IsFinite(f: Casters) && (Near > 0f) && (Near < Far) && (Casters >= 0f));
-
     /// <summary>Returns the radius, in metres, of the sphere enclosing a view's frustum slice from its eye to
     /// <paramref name="depth"/>, rounded up to a whole metre: the half extent of the cascade that covers it.</summary>
     /// <param name="depth">The slice's depth, in metres.</param>

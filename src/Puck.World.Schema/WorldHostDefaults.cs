@@ -18,7 +18,7 @@ namespace Puck.World;
 /// <see langword="null"/> to decline identity (local-only). Fed to the identity resolver's explicit-override source.</param>
 // The member is optional and null-meaningful — see None below. The explicit default is what tells the loader so, since
 // a parameter without one is required of the document.
-public sealed record WorldStorageDefaults(string? UserId = null) {
+public sealed record WorldStorageDefaults([property: DocumentText("a principal identifier")] string? UserId = null) {
     /// <summary>Gets the built-in default: no user-id (identity declined — local-only).</summary>
     public static WorldStorageDefaults None { get; } = new WorldStorageDefaults(UserId: null);
 }
@@ -276,17 +276,22 @@ public sealed record WorldHostDefaults(
     int ExitAfterSeconds,
     // OPTIONAL: both are documented as null-by-default (loopback-only, no genlock), so absence is the ordinary
     // case and saying so with a default is what keeps a world document from spelling the absence out.
+    [property: DocumentText("a clock election policy")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Genlock = null,
+    [property: DocumentText("a network endpoint")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Listen = null,
-    string? Authority = null,
-    string? AuthorityNamespace = null,
+    [property: DocumentText("a network endpoint")] string? Authority = null,
+    [property: DocumentText("an authority namespace")] string? AuthorityNamespace = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBackendPreference? Backend = null,
     // OPTIONAL — the authored-randomness facet over Backend above (see the param docs). XOR-BY-PRESENCE against it:
     // WorldHostDefaults is a CLASS, so a null Backend is honestly distinguishable from an authored one and declaring
     // both is refused BY NAME. (the capacity-row site needs no such guard — see its own remarks.)
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)]
     [property: JsonPropertyName("backendRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BackendRow = null,
     int JournalDepth = WorldHostDefaults.DefaultJournalDepth,
+    [property: DocumentText("literal text")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Title = null,
+    [property: DocumentText("a path or document locator")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Icon = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] DisplayColorSpace ColorSpace = DisplayColorSpace.Srgb,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? PaperWhiteNits = null
@@ -333,8 +338,8 @@ public sealed record WorldHostDefaults(
 /// <param name="KeepVersions">The number of most recently installed versions the launcher keeps beyond the current,
 /// rollback target, pending and running ones. Null = the app's own default.</param>
 public sealed record WorldUpdateDefaults(
-    string? Channel = null,
-    string? CacheRoot = null,
+    [property: DocumentText("an update channel")] string? Channel = null,
+    [property: DocumentText("a path or document locator")] string? CacheRoot = null,
     int? CheckIntervalSeconds = null,
     int? KeepVersions = null
 ) {

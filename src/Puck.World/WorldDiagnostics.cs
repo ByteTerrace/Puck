@@ -44,7 +44,6 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
     public string Instance { get; set; } = "world";
 
     public bool Amber { get; set; }
-    public IReadOnlyList<WorldDiagnosticCollider> Colliders => server.Population.DiagnosticColliders;
     public bool DrawnReady {
         get {
             if ((render?.Residency is not { Frame: { } frame } residency) || residency.MeshPathBake.Pending || !Equals(objA: frame.DiagnosticSource, objB: server.DocumentVersion)) { return false; }

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
@@ -86,7 +87,7 @@ public sealed record WorldCurveKnot(
 /// (open).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldCurveRow(
-    string Name,
+    [property: DocumentText("a curve name")] string Name,
     IReadOnlyList<WorldCurveKnot> Knots,
     bool Closed = false
 ) {

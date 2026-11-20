@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.State;
@@ -20,7 +21,12 @@ public abstract record ActionPredicate {
     /// <param name="Kind">The common Int or Fixed domain, or <see langword="null"/> to infer it the way a local's is:
     /// Int, unless both sides are constants alone and one holds a fraction, and the other domain when the first does
     /// not compile. No implicit conversion is performed between the sides.</param>
-    public sealed record CompareValue(ExpressionProgram Left, [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison, ExpressionProgram Right, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellKind? Kind = null) : ActionPredicate;
+    public sealed record CompareValue(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] ExpressionProgram Left,
+        [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] ExpressionProgram Right,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellKind? Kind = null
+    ) : ActionPredicate;
     /// <summary>Compares a named state cell against either a fixed authored value, or another named state
     /// cell/reserved channel read live at the same evaluation. Exactly one of <paramref name="Value"/>,
     /// <paramref name="Text"/> and <paramref name="ComparandState"/> must be present. The comparand-row spelling
@@ -46,12 +52,16 @@ public abstract record ActionPredicate {
     /// <param name="Text">A literal Text comparand instead of Value or ComparandState. Text supports ordinal
     /// equality and inequality; numeric and text kinds never compare implicitly.</param>
     public sealed record CompareState(
-        StateChannelRef State,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] StateChannelRef State,
         [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison,
         decimal? Value = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? ComparandState = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? ComparandKey = null,
+        [property: DocumentText("literal text")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null
     ) : ActionPredicate;
     /// <summary>Every inner predicate holds (conjunction).</summary>

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Maths;
 
@@ -10,7 +11,7 @@ namespace Puck.World;
 /// <param name="Offset">The signed phase added to the caller's stable index before sampling.</param>
 /// <param name="Step">The turn-sized increment for <see cref="Additive"/>; zero for every other sequence.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldSequence(string Name, int Offset, float Step) {
+public sealed record WorldSequence([property: DocumentText("a sequence name")] string Name, int Offset, float Step) {
     /// <summary>No fill sequence; the region supplies its own finite enumeration.</summary>
     public const string None = "none";
     /// <summary>The adjusted integer index, used for authored cycles.</summary>

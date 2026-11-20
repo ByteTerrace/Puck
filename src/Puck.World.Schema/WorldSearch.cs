@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
 using RuleCompiler = Puck.State.Rules.RuleCompiler;
 using CompiledRule = Puck.State.Rules.CompiledRule;
@@ -42,7 +43,11 @@ public abstract record WorldSearchShape {
     /// <param name="Codes">An integer row keyed by the tokens holding each token's code, which a pattern naming
     /// codes reads; required when one does.</param>
     /// <param name="Moves">The move patterns that narrow the targets tried; absent, every other cell is tried.</param>
-    public sealed record Relocate(bool Displace = true, string? Codes = null, IReadOnlyList<WorldSearchMove>? Moves = null) : WorldSearchShape;
+    public sealed record Relocate(
+        bool Displace = true,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Codes = null,
+        IReadOnlyList<WorldSearchMove>? Moves = null
+    ) : WorldSearchShape;
     /// <summary>A token whose current value is off the board (see <see cref="WorldSearchRow.Tokens"/>'s remarks)
     /// enters any cell no other token stands on.</summary>
     public sealed record Drop : WorldSearchShape;
@@ -55,7 +60,7 @@ public abstract record WorldSearchShape {
     /// <param name="Over">The directions tried, in the topology's own vocabulary (<c>CompiledTopology.Direction</c>).
     /// The single-element list <c>["any"]</c> tries every direction the topology declares.</param>
     /// <param name="MaxHops">How many hops one candidate may chain.</param>
-    public sealed record Jump(IReadOnlyList<string> Over, int MaxHops = 1) : WorldSearchShape;
+    public sealed record Jump([property: DocumentText("direction names are local to the board's topology")] IReadOnlyList<string> Over, int MaxHops = 1) : WorldSearchShape;
     /// <summary>The walked token relocates to the target cell and a second, fixed token — named by <see cref="With"/>,
     /// a cell key of <see cref="WorldSearchRow.Tokens"/> — relocates by the same lattice translation
     /// (<c>CompiledTopology.TryTranslation</c>: the axial step on a grid, ring, hex, or box), provided its own
@@ -63,13 +68,13 @@ public abstract record WorldSearchShape {
     /// primitive a castle's rook needs, not a general rule for every companion's own reach (see the schema README's
     /// search section for the reasoning).</summary>
     /// <param name="With">The companion token's cell key in <see cref="WorldSearchRow.Tokens"/>.</param>
-    public sealed record Tandem(string With) : WorldSearchShape;
+    public sealed record Tandem([property: DocumentText("a cell key of the job's token row")] string With) : WorldSearchShape;
     /// <summary>The walked token relocates onto any other cell, evicting what stood there, and its own code in
     /// <see cref="Codes"/> becomes one of <see cref="To"/> — one candidate per (cell, code). The judge decides where
     /// a code may change; the shape only offers the change.</summary>
     /// <param name="Codes">An integer row keyed by the tokens holding each token's code.</param>
     /// <param name="To">The codes a token may take, at most <see cref="SearchCapacity.MaxPromotions"/>.</param>
-    public sealed record Promote(string Codes, IReadOnlyList<long> To) : WorldSearchShape;
+    public sealed record Promote([property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string Codes, IReadOnlyList<long> To) : WorldSearchShape;
     /// <summary>The walked token — standing at the <see cref="Selector"/> end of one of the job's
     /// <see cref="WorldSearchRow.Zones"/> — moves onto any other of them, landing last (the top of the pile) or, with
     /// <see cref="InsertFirst"/>, first: the <c>transfer</c> transform as a candidate, so pile order is what the
@@ -104,7 +109,7 @@ public sealed record WorldSearchMove(IReadOnlyList<IReadOnlyList<int>> Offsets, 
 /// <param name="AtDepth">Negamax: the absolute ply (0 = root) whose move choice is replaced, <c>0..depth-1</c>.
 /// Tree: the 1-based playout ply the chance draw replaces.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldSearchChance(string Row, int AtDepth);
+public sealed record WorldSearchChance([property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string Row, int AtDepth);
 /// <summary>One search job.</summary>
 /// <param name="Name">The stable job name.</param>
 /// <param name="Tokens">The keyed integer row whose cells are the tokens and whose values are the board cells they
@@ -156,27 +161,27 @@ public sealed record WorldSearchChance(string Row, int AtDepth);
 /// <param name="Revision">Optional integer slot copied to best.revision with the completed answer.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSearchRow(
-    string Name,
-    string Tokens,
-    string? Board = null,
-    IReadOnlyList<string>? Zones = null,
-    string? Turn = null,
-    string? Verdict = null,
+    [property: DocumentText("a search job name is the search section's own namespace")] string Name,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string Tokens,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Board = null,
+    [property: DocumentName(WorldNameKind.Zone, WorldNameRole.Names)] IReadOnlyList<string>? Zones = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Turn = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Verdict = null,
     IReadOnlyList<WorldSearchShape>? Shapes = null,
-    string? Legal = null,
-    string? Reach = null,
-    string? Held = null,
-    string? Counts = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Legal = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Reach = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Held = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Counts = null,
     int? Nodes = null,
     int Depth = 1,
-    ExpressionProgram? Score = null,
-    string? Best = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] ExpressionProgram? Score = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] string? Best = null,
     SearchMethod Method = SearchMethod.Negamax,
     int Iterations = 256,
     WorldSearchChance? Chance = null,
-    string? Scores = null,
-    string? Enabled = null,
-    string? Revision = null
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Scores = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Enabled = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Revision = null
 ) {
     /// <summary>The one candidate shape a job with none authored enumerates: a plain relocation that evicts
     /// whatever stood on the target — this section's original, unconditional behavior.</summary>

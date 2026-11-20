@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 
@@ -11,7 +12,7 @@ namespace Puck.State;
 /// <param name="Identity">The model, revision, and component dimensions of the space's vectors.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StateSpace(
-    CellName Name,
+    [property: DocumentText("a space name declares a vector embedding space local to the document")] CellName Name,
     [property: JsonIgnore] EmbeddingIdentity Identity
 ) {
     /// <summary>The maximum character length of a space name.</summary>

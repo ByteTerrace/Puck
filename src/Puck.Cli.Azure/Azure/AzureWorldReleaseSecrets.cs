@@ -57,8 +57,7 @@ public static partial class AzureCommand {
                 hex: parts[1].AsSpan(start: (prefix.Length + 1)),
                 pin: out _
             ) ||
-                (parts[2].Length != 32) ||
-                parts[2].Any(predicate: character => !Uri.IsHexDigit(character: character))
+                !Puck.Abstractions.ContentDigest.IsHexDigits(length: 32, text: parts[2])
             ) {
                 throw new InvalidDataException(message: "retained deployment requires a full immutable release secret version");
             }

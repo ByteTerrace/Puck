@@ -1681,3 +1681,43 @@ capture and no capture waits on it.
 **Glass is a surface of its own after opaque visibility (the owner's ruling).**
 A see-through shell, a window pane and a screen's front glass are drawn as
 transparent surfaces over the opaque image, not painted fakes.
+
+## What the state-of-the-art audit found ahead, and what stays rejected
+
+An audit of the renderer's algorithms against published and shipped practice
+([the record](../plans/state-of-the-art/audit.md)) is the starting point for the
+next research round on these areas, so a round does not re-derive it.
+
+**Ahead of, or placed differently from, the shipped answers.**
+
+- *Content-addressed deterministic derived products.* Identity is computed from
+  inputs and a miss is derived again, so a cluster node or a mesh could be shared
+  across worlds by name.
+- *The dual-contouring core.* A regularised quadric error minimiser in the style
+  of Trettner and Kobbelt, with measured simplification. The next steps are a
+  per-vertex field certification and measuring each level against the field, not
+  against a finer mesh.
+- *Probe global illumination that is relit rather than retraced.* It is behind
+  on angular payload and its fixed 144 ray directions.
+- *Percentage-closer soft-shadow cascades*, cached under a moving sun.
+- *Exact resolve inputs.* Motion vectors and history identity are exact, so the
+  resolve infers neither.
+- *The exact, certifiable field.* It can prove a sight line or a bound, and it is
+  the one advantage the pipeline barely uses; the audit's amortisation findings
+  (per-vertex probe visibility, a visibility brick cache, certified bake
+  skipping, field-contoured levels) are all this advantage applied.
+
+**Rejections that still hold.** Each keeps its reason in the register above or in
+the plan that decided it; the audit reread them and found no reason to reopen one.
+
+- ReSTIR GI and path tracing as a baseline.
+- Lumen's final gather at the Steam Deck's bar.
+- Voxel cone tracing.
+- Dense radiance cascades, GIBS and SHaRC (watch).
+- Virtual shadow maps (watch).
+- Interpreting SDF programs in the frame
+  ([the frame does not interpret SDF programs](#the-frame-does-not-interpret-sdf-programs)).
+- Hardware variable-rate shading. Per-tile shading rate in the views pass is
+  Puck's own and is authored per device row.
+- Vendor upscalers as engine parts. They are opt-in packages, and generated
+  frames do not count toward the rendered-frame bar (the owner's call).

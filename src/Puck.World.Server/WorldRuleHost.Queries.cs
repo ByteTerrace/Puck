@@ -447,35 +447,6 @@ public sealed partial class WorldRuleHost {
     // The (row, key) PAIR rule at the mutation boundary: a null key means the row's SLOT cell, and a row that is
     // positively keyed (WorldStateRow.IsKeyed) has no single cell for a null key to mean — refused by name rather
     // than silently writing cells[0].
-    private static bool TryResolveTargetKey(WorldStateRow row, string? key, out CellName resolved, out string reason) {
-        if (key is not null) {
-            if (!CellName.TryParse(
-                candidate: key,
-                name: out resolved,
-                reason: out var keyReason
-            )) {
-                reason = $"cell key '{key}' {keyReason}";
-
-                return false;
-            }
-
-            reason = string.Empty;
-
-            return true;
-        }
-
-        resolved = WorldStateRow.SlotKey;
-
-        if (row.IsKeyed) {
-            reason = $"state row '{row.Name}' is keyed and no cell key was named — a keyed row has no single cell to write";
-
-            return false;
-        }
-
-        reason = string.Empty;
-
-        return true;
-    }
 
     // The places a body stands in, innermost first, and the innermost alone as `at`; the payload carries the list.
     private QueryAnswer DescribePlace(int index) {

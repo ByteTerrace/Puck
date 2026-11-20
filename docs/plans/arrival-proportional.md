@@ -373,9 +373,7 @@ row operations carry all four:
 | The end of a staging | Applies the slack and packing rules from running totals of placed, named and free words, which the operations above keep | A relocation owes every mesh, so every chain is staged absent |
 
 A row staged through a mesh's chain takes its placement from the arena, never
-from the placement words of the record it replaces
-(`SdfMeshRegion.ReadPlacement` is a shortcut only for a row whose mesh and
-placement stand). That keeps today's rule that a moved mesh is written together
+from the placement words of the record it replaces. That keeps today's rule that a moved mesh is written together
 with the records naming it: the mesh's words and its chain's records are owed
 by one staging call, so no row is left naming words the reserve took.
 

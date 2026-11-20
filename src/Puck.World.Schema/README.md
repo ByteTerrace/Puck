@@ -835,19 +835,13 @@ carries a basis- or import-bearing document: a live document's `Basis`/`Imports`
 are always `null` (stripped at load), so nothing reaches the wire un-flattened
 regardless.
 
-**Name registry and aliased imports.** `WorldNameRegistry.cs` lists every
-document member that carries a state, zone, rule, table, pattern, topology,
-generator, field, dynamics, placement or prototype name—keyed by C# member, with the role it
-carries the name in (`Declares`, `Names`, `Key`, `Expression`, `Binding`,
-`Template`)—and derives the JSON paths those members reach by walking
-`WorldJsonContext`, so [`docs/world-name-registry.md`](../../docs/world-name-registry.md)
-is generated (`puck registry`) and checked (`puck registry --check`), never
-hand-maintained. A member typed `CellName`, `ExpressionProgram`, `BindableScalar`,
-`BindableColor`, or `WorldLatticeScalar`, or a string member whose name reads
-like a name position, must be registered or excluded with a reason, so a field
-added without a registration fails the check; a member holding a value a state
-cell may stand in for (`BindableScalar`, `BindableColor`, a creation's
-`IDocumentStateValue`) is a `state.<row>` binding wherever it sits.
+**Name registry and aliased imports.** A model property declares its module namespace, spelling and export facet with
+`DocumentNameAttribute`. `DocumentTextAttribute` identifies literal text and names that
+belong to another vocabulary. Bindable values carry their state binding through their
+type. The schema generator embeds these classifications in `WorldModelShape`, including
+the converter-backed expression instruction arms. After changing the model, run `puck schema`,
+rebuild, and run `puck registry` to regenerate [the name positions](../../docs/world-name-registry.md).
+`puck registry --check` reports unclassified text and checks the generated reference.
 `WorldModuleNamespace.cs` reads the same registry at compose time: an import
 entry carrying `as` qualifies every name its fragment declares by the alias,
 `<alias>$<name>` (`GeneratedName.Qualify`, the generated spelling no author

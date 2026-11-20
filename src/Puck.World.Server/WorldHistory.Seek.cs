@@ -49,10 +49,6 @@ public sealed partial class WorldHistory {
     public ulong? OldestTick => ((m_segments.Count > 0)
         ? Oldest
         : null);
-    /// <summary>Gets every byte the history holds against its budget.</summary>
-    public long BytesHeld => HeldBytes;
-    /// <summary>Gets the memory budget, in bytes.</summary>
-    public long BudgetBytes => m_budgetBytes;
     /// <summary>Gets the tick the live world sits at in the history, or <see langword="null"/> while no window is
     /// held.</summary>
     public ulong? CursorTick => ((m_segments.Count > 0)

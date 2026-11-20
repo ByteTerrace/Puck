@@ -96,8 +96,6 @@ public readonly record struct WorldCustodyMintMember(WorldEntityAddress Incarnat
 /// <param name="Recalls">The epoch of every recall home recorded, in order; each owes its own notice.</param>
 /// <param name="Installed">Whether an install released the title (a pending one ends when its hop resolves).</param>
 public sealed record WorldCustodyTitle(WorldEntityAddress Incarnation, WorldCustodyKind Kind, string Custodian, ulong Epoch, WorldTransferKey? PendingKey, ulong MaxIssued, IReadOnlyList<ulong> Recalls, bool Installed) {
-    /// <summary>Gets the slot the title holds at home: its incarnation's index.</summary>
-    public int HeldSlot => Incarnation.Index;
 }
 /// <summary>The custody reducer of one authority: every durable custody fact is a function of the authority's custody
 /// records, folded by <see cref="Apply"/> in the order they became durable. Checkpoint restore, crossing-log recovery
@@ -456,24 +454,6 @@ public sealed class WorldCompanionCustody {
         next = hop.Next;
         return true;
     }
-    /// <summary>Returns whether home acknowledged this custodian's settlement notice for one companion's hop.</summary>
-    /// <param name="key">The hop's key.</param>
-    /// <param name="incarnation">The companion.</param>
-    /// <returns><see langword="true"/> once the acknowledgement is recorded.</returns>
-    public bool IsAcked(WorldTransferKey key, WorldEntityAddress incarnation) => m_acked.Contains(item: (key, incarnation));
-    /// <summary>Returns whether the companion was recorded stranded during the player's <paramref name="visit"/>th
-    /// visit here, and the grace window's deadline tick.</summary>
-    /// <param name="incarnation">The companion.</param>
-    /// <param name="visit">The visit.</param>
-    /// <param name="deadlineTick">The authority tick the grace window ends at.</param>
-    /// <returns><see langword="true"/> when the stranding is recorded.</returns>
-    public bool IsStranded(WorldEntityAddress incarnation, int visit, out ulong deadlineTick) => m_stranded.TryGetValue(key: (incarnation, visit), value: out deadlineTick);
-    /// <summary>Returns whether the grace window of the companion's stranding during <paramref name="visit"/> has
-    /// elapsed on record.</summary>
-    /// <param name="incarnation">The companion.</param>
-    /// <param name="visit">The visit.</param>
-    /// <returns><see langword="true"/> once the elapse is recorded.</returns>
-    public bool IsGraceElapsed(WorldEntityAddress incarnation, int visit) => m_graceElapsed.Contains(item: (incarnation, visit));
     /// <summary>Returns the settlements home owes its own hops, each a record of its own: once the key's crossing is
     /// settled, a hop arrived when the settlement landed the companion's member and did not otherwise (a settlement with
     /// no departure is an abandoned key, which landed nothing). A key still in flight or in doubt owes nothing yet.</summary>

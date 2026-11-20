@@ -30,9 +30,6 @@ public sealed partial class WorldServer {
     /// its inputs where it became durable, under the authority gate. The replay tape attaches here while it records, and
     /// its re-drive folds each record through the shadow's custody reducer.</summary>
     public Action<WorldCrossingRecord>? CustodyTap { get; set; }
-    /// <summary>Gets the durable crossing log this authority writes ahead through, or <see langword="null"/> when it
-    /// keeps no crossing beyond its own process.</summary>
-    public IWorldCrossingLog? CrossingLog => m_crossingLog;
     /// <summary>Gets the first crossing sequence this authority has not yet made durable — the watermark a checkpoint
     /// captures and recovery redoes from.</summary>
     public ulong CrossingSequence => ExecuteAuthorityOperation(operation: () => m_transferEscrow.CrossingSequence);

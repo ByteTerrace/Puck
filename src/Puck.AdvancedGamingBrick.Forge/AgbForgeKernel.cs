@@ -41,7 +41,7 @@ public sealed class AgbForgeKernel {
         );
         m_emitter.LoadConstant(
             destination: LowRegister.R5,
-            value: AgbHw.VideoRam
+            value: AgbAddresses.VideoRam
         );
         m_emitter.MoveImmediate(
             destination: LowRegister.R6,
@@ -133,7 +133,7 @@ public sealed class AgbForgeKernel {
         m_emitter.MarkLabel(label: m_frameSyncLabel);
         m_emitter.LoadConstant(
             destination: LowRegister.R0,
-            value: AgbHw.InterruptEnable
+            value: AgbAddresses.InterruptEnable
         );
         m_emitter.MoveImmediate(
             destination: LowRegister.R1,
@@ -146,7 +146,7 @@ public sealed class AgbForgeKernel {
         );
         m_emitter.LoadConstant(
             destination: LowRegister.R0,
-            value: AgbHw.PowerControl
+            value: AgbAddresses.PowerControl
         );
         m_emitter.MoveImmediate(
             destination: LowRegister.R1,
@@ -159,7 +159,7 @@ public sealed class AgbForgeKernel {
         );
         m_emitter.LoadConstant(
             destination: LowRegister.R0,
-            value: AgbHw.KeyInput
+            value: AgbAddresses.KeyInput
         );
         m_emitter.LoadHalf(
             baseRegister: LowRegister.R0,
@@ -316,7 +316,7 @@ public sealed class AgbForgeKernel {
 
         m_emitter.LoadConstant(
             destination: LowRegister.R0,
-            value: AgbHw.DisplayControl
+            value: AgbAddresses.DisplayControl
         );
         m_emitter.LoadConstant(
             destination: LowRegister.R1,
@@ -338,7 +338,7 @@ public sealed class AgbForgeKernel {
         );
         m_emitter.LoadConstant(
             destination: LowRegister.R0,
-            value: AgbHw.InterruptEnable
+            value: AgbAddresses.InterruptEnable
         );
         m_emitter.MoveImmediate(
             destination: LowRegister.R1,

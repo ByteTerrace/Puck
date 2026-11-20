@@ -18,10 +18,6 @@ namespace Puck.AdvancedGamingBrick.Forge;
 /// </para>
 /// </remarks>
 public sealed class AgbAffineBackground {
-    private const uint ControlAddress = 0x0400000Cu;
-    private const uint MatrixAddress = 0x04000020u;
-    private const uint ReferenceXAddress = 0x04000028u;
-    private const uint ReferenceYAddress = 0x0400002Cu;
 
     /// <summary>Steps in a whole turn; the angle value wraps within a byte.</summary>
     public const int TurnSteps = 256;
@@ -148,7 +144,7 @@ public sealed class AgbAffineBackground {
     /// <summary>Emits the layer's control register.</summary>
     /// <param name="control">The control halfword from <see cref="Control"/>.</param>
     public void EmitControl(uint control) => m_emitter.StoreHalfConstant(
-        address: ControlAddress,
+        address: AgbAddresses.Background2Control,
         value: control
     );
     /// <summary>Emits the per-frame matrix and reference point from the angle, zoom and centre already in memory.</summary>
@@ -183,7 +179,7 @@ public sealed class AgbAffineBackground {
 
         // The matrix: cosine, negated sine, sine, cosine.
         StoreHalfFrom(
-            address: MatrixAddress,
+            address: AgbAddresses.Background2Matrix,
             register: LowRegister.R7
         );
         m_emitter.MoveImmediate(
@@ -196,21 +192,21 @@ public sealed class AgbAffineBackground {
             source: LowRegister.R0
         );
         StoreHalfFrom(
-            address: (MatrixAddress + 2),
+            address: (AgbAddresses.Background2Matrix + 2),
             register: LowRegister.R0
         );
         StoreHalfFrom(
-            address: (MatrixAddress + 4),
+            address: (AgbAddresses.Background2Matrix + 4),
             register: LowRegister.R6
         );
         StoreHalfFrom(
-            address: (MatrixAddress + 6),
+            address: (AgbAddresses.Background2Matrix + 6),
             register: LowRegister.R7
         );
 
         // Reference = (centre << 8) - (matrix row . centre), so the centre pixel maps to itself.
         EmitReference(
-            address: ReferenceXAddress,
+            address: AgbAddresses.Background2ReferenceX,
             centreA: centreX,
             centreB: centreY,
             first: LowRegister.R7,
@@ -219,7 +215,7 @@ public sealed class AgbAffineBackground {
             self: centreX
         );
         EmitReference(
-            address: ReferenceYAddress,
+            address: AgbAddresses.Background2ReferenceY,
             centreA: centreX,
             centreB: centreY,
             first: LowRegister.R6,

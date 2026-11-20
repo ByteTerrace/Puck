@@ -13,7 +13,4 @@ namespace Puck.SdfVm;
 /// <param name="RemainderLevel">The remainder stage's level, or -1 where none answers.</param>
 /// <param name="RemainderMeasured">Whether the remainder stage read its probes bounded by their measured reach.</param>
 public readonly record struct SdfMeshProbeSelection(int Level, bool Measured, float Share, int RemainderLevel = -1, bool RemainderMeasured = false) {
-    /// <summary>Gets the share of the answer read bounded by the probes' measured reach, which a traced light's
-    /// visibility scales with.</summary>
-    public float MeasuredShare => ((Measured ? Share : 0f) + ((RemainderMeasured && (RemainderLevel >= 0)) ? (1f - Share) : 0f));
 }

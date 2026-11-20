@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 using Puck.Maths;
@@ -34,7 +35,7 @@ public abstract record ActionStateEnvelope {
 /// <param name="PlayerWritable">Whether the identity driving the body may submit a value for the slot.</param>
 /// <param name="Envelope">The visited world's admitted effective values. Required for a player-writable slot.</param>
 public sealed record ActionStateSlot(
-    string Name,
+    [property: DocumentText("a per-body slot name, the body-state lane's own namespace")] string Name,
     ActionStateKind Kind,
     float Initial = 0f,
     ActionFact? ResetFact = null,
@@ -55,8 +56,8 @@ public sealed record ActionStateSlot(
 /// <param name="PlanarTarget">The parameters of <see cref="BodyMotionOp.ComputePlanarTargetVelocity"/>, or
 /// <see langword="null"/> for a target at the full move speed in every direction.</param>
 public sealed record BodyMotionProgram(
-    string Name,
-    string Version,
+    [property: DocumentText("a body motion program name")] string Name,
+    [property: DocumentText("a schema or program version")] string Version,
     BodyProgramKind? Kind,
     IReadOnlyList<BodyMotionOp> Operations,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BodyTargetSource? Target = null,

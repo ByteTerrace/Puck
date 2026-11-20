@@ -19,8 +19,6 @@ public sealed class WorldActionStateLane {
 
     /// <summary>Gets the compiled register file the lanes answer, in slot order.</summary>
     public IReadOnlyList<CompiledActionStateSlot> Definitions => m_definitions;
-    /// <summary>Gets a value indicating whether an arena has been bound.</summary>
-    public bool IsBound => (m_arena is not null);
 
     /// <summary>Gets a register's live storage generation, including open writes and rewinds.</summary>
     /// <param name="slot">The register-file slot.</param>

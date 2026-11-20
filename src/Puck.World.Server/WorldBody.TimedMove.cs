@@ -51,10 +51,6 @@ public sealed partial class WorldBody {
 
     private bool HasTimedYaw => m_timedMove.IsActive && (m_timedMove.Motion.Yaw != FixedQ4816.Zero);
 
-    /// <summary>Reads the active move's intended world-space travel from now through the given engine-tick horizon.
-    /// Contact, locomotion and other effects are outside this prediction.</summary>
-    public FixedVector3 PredictTimedDisplacement(ulong horizonTicks) => m_timedMove.SampleStep(horizonTicks).Displacement;
-
     private static bool TimedYawUsesTransport(FixedVector3 up, FixedVector3 attitudeUp) =>
         (up != FixedVector3.UnitY) && ((attitudeUp == up) || (attitudeUp == FixedVector3.Zero));
 

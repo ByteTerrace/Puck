@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Collections;
@@ -44,7 +45,31 @@ namespace Puck.World.Authoring;
 /// <param name="Flow">The slot's flow layer (<see cref="PaletteFlowDocument"/>): shading that moves along an authored
 /// flow over still geometry; null moves nothing.</param>
 /// <param name="Shade">The slot's shade program (<see cref="ShadeReference"/>), or null for the world's default.</param>
-public sealed record PaletteEntryDocument(string Color, float? Emissive, float? Specular, float? Roughness, float? Sheen = null, float? Metal = null, float? Coat = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteWeatheringDocument? Weathering = null, float? Wrap = null, float? Soften = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fill = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteInsetDocument? Inset = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Bleed = null, float? Receive = null, IReadOnlyList<PalettePaintDocument>? Paints = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? EmissiveLane = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteGlassDocument? Glass = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ToonStyleDocument? Toon = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteToonSelectDocument? ToonSelect = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteFlowDocument? Flow = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShadeReference? Shade = null) {
+public sealed record PaletteEntryDocument(
+    [property: DocumentText("a color literal")] string Color,
+    float? Emissive,
+    float? Specular,
+    float? Roughness,
+    float? Sheen = null,
+    float? Metal = null,
+    float? Coat = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteWeatheringDocument? Weathering = null,
+    float? Wrap = null,
+    float? Soften = null,
+    [property: DocumentText("a color literal")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fill = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteInsetDocument? Inset = null,
+    [property: DocumentText("a color literal")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Bleed = null,
+    float? Receive = null,
+    IReadOnlyList<PalettePaintDocument>? Paints = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? EmissiveLane = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteGlassDocument? Glass = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ToonStyleDocument? Toon = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteToonSelectDocument? ToonSelect = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteFlowDocument? Flow = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShadeReference? Shade = null
+) {
     /// <summary>Gets up to <see cref="CreationDocument.MaxPalettePaints"/> paints, each drawn over the one before; null or
     /// empty paints none. The list is owned (a lattice field's material sits in a cached state row).</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

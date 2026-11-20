@@ -89,18 +89,6 @@ public sealed partial class WorldDocumentWalker {
 
         return FindMember(name: name, owner: owner)?.Property.PropertyType;
     }
-    /// <summary>Returns the JSON names of the document members of a type, the members <see cref="ReadMember"/> and
-    /// <see cref="WithMembers{T}"/> read and set, in the serializer's order.</summary>
-    /// <param name="owner">The type, which the document model describes.</param>
-    /// <returns>The members' JSON names; empty for a type the model does not describe.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="owner"/> is <see langword="null"/>.</exception>
-    public static IReadOnlyList<string> MemberNames(Type owner) {
-        ArgumentNullException.ThrowIfNull(argument: owner);
-
-        var tables = Everything.CurrentTables();
-
-        return ((tables.ShapeOf(type: owner) is { } shape) ? [.. tables.MembersOf(shape: shape).Select(selector: static member => member.Name)] : []);
-    }
     private static Member? FindMember(Type owner, string name) {
         var tables = Everything.CurrentTables();
 

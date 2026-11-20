@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization.Metadata;
 
 namespace Puck.World;
@@ -25,6 +26,20 @@ public enum WorldModelAccess : byte {
 /// <param name="Member">The C# member's name.</param>
 /// <param name="Access">How the member is read and written.</param>
 public sealed record WorldModelMember(string Name, Type Type, Type DeclaringType, string Member, WorldModelAccess Access) {
+    /// <summary>Gets the namespace and spelling of a module name position.</summary>
+    public WorldNameField? NameField {
+        get;
+        init {
+            field = value;
+            IdentifierBinding = value is { Role: not WorldNameRole.Binding } && Type == typeof(Puck.Assets.Documents.DocumentIdentifier)
+                ? new(DeclaringType, Member, WorldNameKind.State, WorldNameRole.Binding, WorldExportFacet.Binding)
+                : null;
+        }
+    }
+    // An identifier can be authored literally or supplied by a text state cell.
+    internal WorldNameField? IdentifierBinding { get; private init; }
+    /// <summary>Gets the meaning of literal text or a name outside module qualification.</summary>
+    public string? TextPurpose { get; init; }
     /// <summary>Gets the generated reader for this document member.</summary>
     public Func<object, object?>? Get { get; init; }
 }
@@ -93,8 +108,8 @@ public static partial class WorldModelShape {
 #else
     private static WorldModelArm A(string? discriminator, Type type) =>
         new(Discriminator: discriminator, Type: type);
-    private static WorldModelMember M(string name, Type type, Type declaringType, string member, WorldModelAccess access, Func<object, object?>? get = null) =>
-        new(Access: access, DeclaringType: declaringType, Member: member, Name: name, Type: type) { Get = get };
+    private static WorldModelMember M(string name, Type type, Type declaringType, string member, WorldModelAccess access, Func<object, object?>? get = null, WorldNameKind? kind = null, WorldNameRole role = WorldNameRole.Names, WorldExportFacet facet = WorldExportFacet.Read, string? text = null) =>
+        new(Access: access, DeclaringType: declaringType, Member: member, Name: name, Type: type) { Get = get, NameField = kind is { } ns ? new(declaringType, member, ns, role, facet) : null, TextPurpose = text };
     private static WorldModelType T(Type type, bool described, JsonTypeInfoKind kind, Type? elementType, WorldModelArm[] arms, WorldModelMember[] members, WorldModelMember[] properties) =>
         new(Arms: arms, Described: described, ElementType: elementType, Kind: kind, Members: members, Properties: properties, Type: type);
 #endif

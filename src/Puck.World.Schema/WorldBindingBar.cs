@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Numerics;
 using System.Text.Json.Serialization;
 using Puck.Commands;
@@ -44,7 +45,7 @@ public sealed record WorldBindingBarAnchor(BindingBarEdge Edge = BindingBarEdge.
 /// <see langword="null"/> is the up-right corner, <c>[1, 1]</c>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldBindingBarSlotPlacement(
-    string Source,
+    [property: DocumentText("an input source id")] string Source,
     float X,
     float Y,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<float>? Badge = null
@@ -77,7 +78,7 @@ public sealed record WorldBindingBarSlotPlacement(
 /// <see cref="WorldBindingBarSlotPlacement.Badge"/>. <see langword="null"/> keeps each row's own.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldBindingBarPiece(
-    string Table,
+    [property: DocumentText("a key of the layout's own tables")] string Table,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<float>? At = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<float>? Badge = null
 );
@@ -292,8 +293,8 @@ public sealed record WorldBindingBarLayout(
 /// <param name="ActiveAlpha">This bank's opacity when it IS the seat's currently active page; <see langword="null"/>
 /// draws fully opaque (1.0) while active.</param>
 public sealed record WorldBindingBarBank(
-    string Id,
-    string PageId,
+    [property: DocumentText("a binding bar bank id")] string Id,
+    [property: DocumentText("a binding page id")] string PageId,
     float Alpha,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? ActiveAlpha = null
 );
@@ -348,7 +349,7 @@ public sealed record WorldBindingBarBank(
 /// live layout places, the active one at full alpha and the rest as wings. The active page never changes the model. Ordinary state, flipped the same way <paramref name="LayoutCell"/> is.</param>
 /// <param name="Visible">The bar's visibility condition over presentation facts, or <see langword="null"/> for always.</param>
 public sealed record WorldBindingBarAuthoring(
-    IReadOnlyList<string> SlotSet,
+    [property: DocumentText("input source identifiers")] IReadOnlyList<string> SlotSet,
     IReadOnlyList<WorldBindingBarBank> Banks,
     bool Enabled = true,
     bool Text = true,
@@ -357,10 +358,14 @@ public sealed record WorldBindingBarAuthoring(
     bool PageLabel = true,
     bool HideUnbound = false,
     float MultiSeatAlpha = 1f,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Binding, WorldExportFacet.Binding)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IconRow = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldBindingBarLayout>? Layouts = null,
+    [property: DocumentText("a bar layout name")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Layout = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Binding, WorldExportFacet.Binding)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? LayoutCell = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Binding, WorldExportFacet.Binding)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ModelCell = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null
 ) {
@@ -454,7 +459,7 @@ public sealed record WorldBindingBarAuthoring(
 /// second reading of "compare a state cell" — the same <c>state</c>/<c>key</c>/<c>comparison</c>/<c>value</c> shape a
 /// placement's own response facet speaks. Re-evaluated whenever the routed definition changes, never per frame.</param>
 public sealed record WorldBindingOverlay(
-    string Id,
+    [property: DocumentText("a binding overlay id")] string Id,
     BindingProfileDocument Document,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBindingBarAuthoring? BindingBar = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementResponseCondition.StateCondition? When = null

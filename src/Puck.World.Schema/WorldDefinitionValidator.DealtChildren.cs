@@ -93,7 +93,7 @@ public static partial class WorldDefinitionValidator {
     // CreationShapeLaws.SolidRefusals names, and a fold the contact compilers cannot expand. A detail shape reaches no
     // contact compiler, so it owes none and contributes no collider. Returns the collider count the creation costs
     // (one per expanded copy), for the placement ceiling.
-    private static long RefuseSolidVariantShapes(WorldPrototype creation, string path, string variantId, List<string> errors) {
+    private static long RefuseSolidVariantShapes(WorldPrototype creation, string path, string variantId, List<string>? errors) {
         var colliders = 0L;
 
         foreach (var solidShape in (creation.Document.Shapes ?? [])) {
@@ -101,8 +101,8 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            foreach (var shapeRefusal in CreationShapeLaws.SolidRefusals(shape: solidShape)) {
-                errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} {shapeRefusal}");
+            foreach (var shapeRefusal in (errors is null ? [] : CreationShapeLaws.SolidRefusals(shape: solidShape))) {
+                errors?.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} {shapeRefusal}");
             }
 
             if (!ShapeDomainOps.TryExpand(
@@ -111,7 +111,7 @@ public static partial class WorldDefinitionValidator {
                 frames: out var solidFrames,
                 refusal: out var solidRefusal
             )) {
-                errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} carries {solidRefusal} — a solid row needs contact geometry for every copy its fold draws.");
+                errors?.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} carries {solidRefusal} — a solid row needs contact geometry for every copy its fold draws.");
 
                 continue;
             }

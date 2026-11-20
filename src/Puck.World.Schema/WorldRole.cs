@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -13,9 +14,12 @@ namespace Puck.World;
 /// companion re-adopted by its own home placement wears that placement's kit instead.</param>
 /// <param name="Look">The look an arriving companion wears. Absent: the default look.</param>
 public sealed record WorldRole(
-    string Name,
+    [property: DocumentText("a companion role name, which crossing companions carry and destinations declare")] string Name,
+    [property: DocumentText("an addon name")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Driver = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Accept = false,
+    [property: DocumentText("a kit in the composed world")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kit = null,
+    [property: DocumentText("a look in the composed world")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Look = null
 );

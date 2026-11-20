@@ -53,9 +53,47 @@ public sealed class ValidationPartitionLawTests {
         foreach (var partition in WorldDefinitionValidator.Partitions) {
             Assert.False(condition: owned.Overlaps(other: partition.Owns), userMessage: $"{partition} owns a part another partition owns");
             Assert.True(condition: (partition.Reads.Intersect(other: partition.Owns) == partition.Owns), userMessage: $"{partition} does not read what it owns");
+            if (partition.Granularity == WorldValidationGranularity.Rows) {
+                Assert.True(partition.SupportsBoundWrites, $"{partition} claims row granularity without a unit validator");
+            }
             owned |= partition.Owns;
         }
         Assert.Equal(expected: WorldDocumentInputs.All, actual: owned);
+    }
+
+    [Theory]
+    [InlineData(WorldDocumentInput.PlacementRows)]
+    [InlineData(WorldDocumentInput.Screens)]
+    [InlineData(WorldDocumentInput.Curves)]
+    [InlineData(WorldDocumentInput.Render)]
+    [InlineData(WorldDocumentInput.Probes)]
+    [InlineData(WorldDocumentInput.LookRows)]
+    [InlineData(WorldDocumentInput.LookAssignment)]
+    public void APartitionedSectionCanValidateBoundWrites(WorldDocumentInput input) {
+        var partition = Assert.Single(WorldDefinitionValidator.Partitions, partition => partition.Owns.Contains(input));
+        Assert.True(partition.SupportsBoundWrites, $"{partition} owns {input} but has no bound-write unit");
+    }
+
+    [Fact]
+    public void APlacementMoveDoesNotJudgeAnUnchangedPlacement() {
+        var before = WithBrokenNeighbour(Creation("lamp", "#D8D2C4")) with {
+            PlacementRowsRaw = [
+                new WorldPlacement("first", "lamp", Vector3.Zero, 0f, 1f),
+                new WorldPlacement("other", "lamp", Vector3.One, 0f, 1f, Mirror: new WorldPlacementMirror(Vector3.Zero, 0f)),
+            ],
+        };
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(before, out var full));
+        Assert.Contains("placements[1].mirror.normal", full);
+        var after = before with {
+            PlacementRowsRaw = [before.Placements[0] with { Position = Vector3.UnitX }, before.Placements[1]],
+        };
+        using var attribution = WorldBootWork.Attribute(m_work);
+        var start = Units();
+
+        Assert.True(WorldDefinitionValidator.TryValidateChange(before, after, out var reason, out _), reason);
+        var others = WorldDefinitionValidator.Partitions.Where(partition =>
+            !partition.Owns.Contains(WorldDocumentInput.PlacementRows) && partition.Reads.Contains(WorldDocumentInput.PlacementRows));
+        Assert.Equal(1L + others.Sum(partition => partition.UnitsIn(after)), Units() - start);
     }
     [Fact]
     public void APaletteEditIsOneUnitAndAnUnreachedInvalidUnitAnswersNothing() {

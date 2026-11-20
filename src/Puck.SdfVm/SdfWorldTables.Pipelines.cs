@@ -148,7 +148,6 @@ public sealed partial class SdfWorldTables {
         internal const GpuShaderStage MeshStages = (GpuShaderStage.Vertex | GpuShaderStage.Fragment);
         internal static readonly GpuPipelineLayoutDescription Mesh = SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: MeshStages);
         internal static readonly GpuPipelineLayoutDescription MeshOcclusion = SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: GpuShaderStage.Compute);
-        internal static readonly GpuPipelineLayoutDescription Environment = SdfWorldInterfaces.EnvironmentParameters.Layout.PipelineLayout(stages: GpuShaderStage.Compute);
         // One per kernel in SdfKernel order, with the layout and name from the same immutable kernel set.
         internal static readonly PipelineSpec[] Specs = [.. SdfKernelSet.Kernels.Select(selector: static kernel => Spec(kernel: kernel))];
         // The on-demand kernels join through SdfWorldPipelines.BuildOnDemandAsync; every other kernel is leased up front.

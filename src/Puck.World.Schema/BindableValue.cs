@@ -326,10 +326,6 @@ public readonly record struct BindableAngle {
     /// <param name="value">The literal, binding or keys, in radians.</param>
     public static implicit operator BindableAngle(BindableScalar value) => new(value: value);
 
-    /// <summary>Returns whether this angle is admissible against a document, as its scalar form is.</summary>
-    /// <param name="definition">The document to check the binding half against.</param>
-    /// <returns><see langword="true"/> when the angle is admissible.</returns>
-    public bool IsAuthorable(WorldDefinition definition) => Value.IsAuthorable(definition: definition);
     /// <inheritdoc/>
     public override string ToString() => Value.ToString();
 }

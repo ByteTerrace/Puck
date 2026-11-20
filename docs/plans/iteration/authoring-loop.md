@@ -509,9 +509,9 @@ measured before the next is built.
    (`WorldDefinitionValidator.Partitions`), and a run that reads past them
    refuses. A delta that touches creations runs the partitions that read
    creations; within the creations, a row whose change differs in shading
-   alone is judged alone. A delta that reaches the `document` partition, which
-   still owns most sections, runs it whole, off the tick, as before. The
-   mutation door runs the same runner (`TryValidateChange`).
+   alone is judged alone. Placement and screen edits run their reached rows,
+   alongside any shared checks they affect. The mutation door runs the same
+   runner (`TryValidateChange`).
 3. **Template expansions kept by what they read.** After layer 1, an edit to
    a shared `let` in a library still lowers every source that imports the
    library, where the same value written as a literal lowers one. That makes
@@ -751,7 +751,7 @@ a session with edits does not replay (replay), a spelling costs more to tune
 | Compiles of one source | The document compile and the tests compile | One product |
 | Forms of a document change | The keyed overlay (which `WorldReloadDelta` now carries member by member), `WorldMutation`, `WorldSourceEdits`'s pointer walk, `WorldProjectionDelta` | The keyed overlay, made by the session |
 | Code identities for a derived product | Assembly identities in `WorldCompileSession`, the closures in `CompiledWorldChunks` and the bake, the shader include closure | One reached-code helper, used per stage |
-| Validations of the same bytes | A preview's `ComposeSource` then `Compile` in the browser engine. A reload's sender no longer validates; its authority validates whole | Narrowed validation, once per side that must not trust the other |
+| Validations of the same bytes | A preview's `ComposeSource` then `Compile` in the browser engine. A reload's authority validates whole. A live mutation passes its admission to machine preparation | Narrowed validation, once per side that must not trust the other |
 | Ways to run the checkout's CLI | The global tool, the lane copy, the MCP install, the build store | The build store behind the stub |
 | Token grammars | `PuckParser` and the VS Code TextMate file | The parser, with the grammar generated or dropped |
 
@@ -831,19 +831,12 @@ stage order is in [the duplicates](#duplicates-to-remove).
    (`world.boot.presentation-rows-delivered` over
    `world.boot.presentation-deliveries`), and undoing it adds one
    presentation install and no full install.
-5. **Narrow validation**, for the delta and for `world.row.set` alike:
-   sections first, then rows by digest. Built in part: validation is one table
-   of partitions (`WorldDefinitionValidator.Partitions`), each declaring the
-   parts it owns and reads, with reads recorded and enforced; a document
-   mutation and a presentation reload run only the units their change reaches
-   (`TryValidateChange`), a palette edit validates its one creation, and
-   `world.boot.validations` counts units. Left: the `document` partition still
-   owns most sections and reads the whole document, so a placement, kit or
-   state declaration edit validates whole, and a full reload admits the whole
-   document ([the disclosure plan's checkpoint](../disclosure.md#validation-partition-checkpoint)
-   names the order). *Check:* a one-colour palette edit reads one unit in
-   `world.boot.validations`, and a load reads every unit
-   (`WorldDefinitionValidator.UnitsIn`).
+5. **Narrow the remaining document checks** for the delta and for
+   `world.row.set` alike. Start with state declarations and the shared checks
+   still in the `document` partition, then make a full reload validate its
+   delta. The [disclosure checkpoint](../disclosure.md#validation-partition-checkpoint)
+   tracks the remaining dependencies. Use `world.boot.validations` to check
+   how many units each edit reaches.
 6. **Content keys.** One store, products named by input digests and reached
    code, composed images and path keys deleted, the bound restated. The
    composition store now persists layers by their inputs and the code

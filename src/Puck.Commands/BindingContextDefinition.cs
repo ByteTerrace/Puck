@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Assets.Documents;
 
 namespace Puck.Commands;
@@ -23,7 +24,7 @@ namespace Puck.Commands;
 /// with <c>state.&lt;row&gt;[.&lt;key&gt;]</c>.</param>
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingContextDefinition(
-    string Family,
-    string State,
+    [property: DocumentText("a binding context family is a host vocabulary name, not a state row")] string Family,
+    [property: DocumentText("a binding family state token")] string State,
     DocumentIdentifier Group
 );

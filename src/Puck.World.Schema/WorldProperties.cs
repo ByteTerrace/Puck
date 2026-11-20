@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using System.Collections.Immutable;
 
@@ -27,7 +28,10 @@ namespace Puck.World;
 /// <c>int</c> state row of the same name.</param>
 /// <param name="Carriers">Enum fields selecting logical body bindings for each live instance.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldPropertyRegistrySection(IReadOnlyList<string> Names, IReadOnlyList<WorldPoolBodyCarrier>? Carriers = null) {
+public sealed record WorldPropertyRegistrySection(
+    [property: DocumentText("property names are the properties section's own namespace")] IReadOnlyList<string> Names,
+    IReadOnlyList<WorldPoolBodyCarrier>? Carriers = null
+) {
     /// <summary>Gets the immutable dynamic pool-to-body bindings.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<WorldPoolBodyCarrier>? Carriers { get => field; init => field = value?.ToImmutableArray(); } = Carriers?.ToImmutableArray();
@@ -39,14 +43,22 @@ public sealed record WorldPropertyRegistrySection(IReadOnlyList<string> Names, I
 /// <summary>Maps an enum field on each live instance to a declared logical body binding. Release removes the
 /// carrier; reclaim resolves the new lifetime's field value. Stored values never encode physical body indices.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldPoolBodyCarrier(CellName Pool, CellName Field, IReadOnlyList<WorldPoolBodyBinding> Bindings) {
+public sealed record WorldPoolBodyCarrier(
+    [property: DocumentName(WorldNameKind.Pool, WorldNameRole.Names)] CellName Pool,
+    [property: DocumentText("a field local to its pool record")] CellName Field,
+    IReadOnlyList<WorldPoolBodyBinding> Bindings
+) {
     /// <summary>Gets the immutable mapping, with exactly one entry for each enum member.</summary>
     public IReadOnlyList<WorldPoolBodyBinding> Bindings { get => field; init => field = (value?.ToImmutableArray() ?? []); } = (Bindings?.ToImmutableArray() ?? []);
 }
 /// <summary>Maps an enum member to a named inhabited placement or local seat. With neither target the member
 /// explicitly detaches the instance; specifying both targets is refused.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldPoolBodyBinding(CellName Member, string? Placement = null, int? Seat = null);
+public sealed record WorldPoolBodyBinding(
+    [property: DocumentText("an enum member local to the carrier field")] CellName Member,
+    [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)] string? Placement = null,
+    int? Seat = null
+);
 /// <summary>Capacity constants for the property registry — a made-up, sensible fixture ceiling (this is a generic
 /// engine primitive; a genre world authors its own property names, never a size drawn from a specific game's
 /// vocabulary).</summary>

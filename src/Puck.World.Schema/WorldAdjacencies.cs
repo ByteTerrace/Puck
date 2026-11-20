@@ -174,11 +174,11 @@ public sealed record WorldAdjacencyBoundary(DocumentVector3 Center, float Outwar
 /// never weaken its safety floor. Reciprocal rows must agree.</param>
 public sealed record WorldAdjacency(
     SafeName Name,
-    string Destination,
-    string Counterpart,
+    [property: DocumentText("a destination name")] string Destination,
+    [property: DocumentText("a counterpart in the destination world")] string Counterpart,
     WorldAdjacencyBoundary Boundary,
     WorldAdjacencyUnavailable Unavailable = WorldAdjacencyUnavailable.Closed,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OnUnavailable = null,
+    [property: DocumentText("logical input channels")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OnUnavailable = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Capacity = null,
     float LivenessGraceSeconds = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float Hysteresis = 0f

@@ -19,28 +19,8 @@ namespace Puck.AdvancedGamingBrick.Forge;
 /// </para>
 /// </remarks>
 public sealed class AgbSoundDriver {
-    /// <summary>The master enable register; bit seven powers the sound unit.</summary>
-    private const uint ControlEnableAddress = 0x04000084u;
-    /// <summary>The mixing register; the low two bits set the legacy channels' volume ratio.</summary>
-    private const uint ControlMixAddress = 0x04000082u;
-    /// <summary>The volume and routing register.</summary>
-    private const uint ControlVolumeAddress = 0x04000080u;
-    private const uint EffectDutyEnvelopeAddress = 0x04000062u;
-    private const uint EffectFrequencyControlAddress = 0x04000064u;
-    /// <summary>Pulse one's sweep register; the effect stream's first byte lands in its low half.</summary>
-    private const uint EffectSweepAddress = 0x04000060u;
-    private const uint NoiseFrequencyControlAddress = 0x0400007Cu;
-    private const uint NoiseLengthEnvelopeAddress = 0x04000078u;
-    private const uint Pulse2DutyEnvelopeAddress = 0x04000068u;
-    private const uint Pulse2FrequencyControlAddress = 0x0400006Cu;
     /// <summary>One voice's state: a read pointer, a loop start and a wait counter, word aligned.</summary>
     private const int VoiceStateSize = 12;
-    private const uint WaveFrequencyControlAddress = 0x04000074u;
-    private const uint WaveLengthVolumeAddress = 0x04000072u;
-    /// <summary>The first of the sixteen bytes holding the wave voice's thirty-two four-bit samples.</summary>
-    private const uint WavePatternAddress = 0x04000090u;
-    /// <summary>The wave voice's switch register; its five stream bytes span this and the two that follow.</summary>
-    private const uint WaveSwitchAddress = 0x04000070u;
 
     /// <summary>The state block's size: one uniform block for each of the four voices.</summary>
     public const int StateByteCount = (VoiceStateSize * 4);
@@ -242,49 +222,49 @@ public sealed class AgbSoundDriver {
         switch (voice) {
             case CartridgeVoice.Pulse2:
                 EmitRegisterPair(
-                    address: Pulse2DutyEnvelopeAddress,
+                    address: AgbAddresses.Sound2DutyEnvelope,
                     lowOffset: 0
                 );
                 EmitRegisterPair(
-                    address: Pulse2FrequencyControlAddress,
+                    address: AgbAddresses.Sound2Frequency,
                     lowOffset: 2
                 );
                 break;
             case CartridgeVoice.Noise:
                 EmitRegisterPair(
-                    address: NoiseLengthEnvelopeAddress,
+                    address: AgbAddresses.Sound4LengthEnvelope,
                     lowOffset: 0
                 );
                 EmitRegisterPair(
-                    address: NoiseFrequencyControlAddress,
+                    address: AgbAddresses.Sound4Frequency,
                     lowOffset: 2
                 );
                 break;
             case CartridgeVoice.Wave:
                 EmitRegisterByte(
-                    address: WaveSwitchAddress,
+                    address: AgbAddresses.Sound3Select,
                     offset: 0
                 );
                 EmitRegisterPair(
-                    address: WaveLengthVolumeAddress,
+                    address: AgbAddresses.Sound3LengthVolume,
                     lowOffset: 1
                 );
                 EmitRegisterPair(
-                    address: WaveFrequencyControlAddress,
+                    address: AgbAddresses.Sound3Frequency,
                     lowOffset: 3
                 );
                 break;
             default:
                 EmitRegisterByte(
-                    address: EffectSweepAddress,
+                    address: AgbAddresses.Sound1Sweep,
                     offset: 0
                 );
                 EmitRegisterPair(
-                    address: EffectDutyEnvelopeAddress,
+                    address: AgbAddresses.Sound1DutyEnvelope,
                     lowOffset: 1
                 );
                 EmitRegisterPair(
-                    address: EffectFrequencyControlAddress,
+                    address: AgbAddresses.Sound1Frequency,
                     lowOffset: 3
                 );
                 break;
@@ -302,10 +282,10 @@ public sealed class AgbSoundDriver {
         m_emitter.MarkLabel(label: done);
     }
     private static uint MuteAddress(CartridgeVoice voice) => voice switch {
-        CartridgeVoice.Noise => NoiseLengthEnvelopeAddress,
-        CartridgeVoice.Wave => WaveSwitchAddress,
-        CartridgeVoice.Pulse2 => Pulse2DutyEnvelopeAddress,
-        _ => EffectDutyEnvelopeAddress,
+        CartridgeVoice.Noise => AgbAddresses.Sound4LengthEnvelope,
+        CartridgeVoice.Wave => AgbAddresses.Sound3Select,
+        CartridgeVoice.Pulse2 => AgbAddresses.Sound2DutyEnvelope,
+        _ => AgbAddresses.Sound1DutyEnvelope,
     };
     private static uint StateOffset(CartridgeVoice voice) => ((uint)(((int)voice) * VoiceStateSize));
     private void StoreHalf(uint address, uint value) => m_emitter.StoreHalfConstant(
@@ -316,19 +296,19 @@ public sealed class AgbSoundDriver {
     /// <summary>Emits the sound unit's power-up: master on, both sides at full volume, legacy channels at full ratio.</summary>
     public void EmitBoot() {
         StoreHalf(
-            address: ControlEnableAddress,
+            address: AgbAddresses.SoundControlEnable,
             value: 0x0080u
         );
         StoreHalf(
-            address: ControlVolumeAddress,
+            address: AgbAddresses.SoundControlLow,
             value: 0xFF77u
         );
         StoreHalf(
-            address: ControlMixAddress,
+            address: AgbAddresses.SoundControlHigh,
             value: 0x0002u
         );
         StoreHalf(
-            address: Pulse2DutyEnvelopeAddress,
+            address: AgbAddresses.Sound2DutyEnvelope,
             value: 0x0000u
         );
         m_emitter.LoadConstant(
@@ -449,7 +429,7 @@ public sealed class AgbSoundDriver {
     /// <remarks>The voice's switch must be off while the pattern is written, so this clears it first.</remarks>
     public void EmitWavePatternLoad(uint patternAddress) {
         StoreHalf(
-            address: WaveSwitchAddress,
+            address: AgbAddresses.Sound3Select,
             value: 0x0000u
         );
         m_emitter.LoadConstant(
@@ -458,7 +438,7 @@ public sealed class AgbSoundDriver {
         );
         m_emitter.LoadConstant(
             destination: LowRegister.R1,
-            value: WavePatternAddress
+            value: AgbAddresses.WavePattern
         );
         m_emitter.MoveImmediate(
             destination: LowRegister.R2,

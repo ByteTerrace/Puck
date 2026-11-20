@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
 
@@ -13,5 +14,12 @@ namespace Puck.World;
 /// <param name="MinFacing">Minimum cosine of hit normal with the opposite cast direction, in [0,1].</param>
 /// <param name="RequireHit">Refuse derivation instead of dropping an occurrence when no proven eligible surface is found.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldPlacementSurface(IReadOnlyList<string> Targets, DocumentVector3 FromOffset,
-    DocumentVector3 Direction, float Reach, float Offset = 0f, float MinFacing = 0f, bool RequireHit = false);
+public sealed record WorldPlacementSurface(
+    [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)] IReadOnlyList<string> Targets,
+    DocumentVector3 FromOffset,
+    DocumentVector3 Direction,
+    float Reach,
+    float Offset = 0f,
+    float MinFacing = 0f,
+    bool RequireHit = false
+);

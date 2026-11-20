@@ -62,11 +62,6 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
         m_readings = readings;
     }
 
-    /// <summary>The body that most recently spoke, or -1 when nothing has.</summary>
-    public int RecentSpeakerBody => m_speech.RecentSpeakerBody;
-    /// <summary>Gets the speech clock the speaking facts read.</summary>
-    public WorldSpeechClock Speech => m_speech;
-
     // Distance between two subjects off the presentation poses; an unresolvable subject is infinitely far. An AnySeat
     // on either side quantifies over the joined seats (the nearest pair decides).
     private float Distance(int slot, OverlaySubject subject, OverlaySubject? of) {

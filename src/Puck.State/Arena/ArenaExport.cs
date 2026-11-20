@@ -221,28 +221,25 @@ public sealed partial class StateArena {
         }
         return slots;
     }
-    private StateRow ExportRow(int rowOrdinal, in ArenaRowLayout layout, StateRow row, StateRow? previous = null) => (row with {
-        CellSlots = ExportCellSlots(layout: layout),
-        ReservedCapacity = ((row.Capacity is null) && UsesLinks(layout: layout)) ? layout.CellCapacity : null,
-        Cells = ExportCells(
-        layout: layout,
-        previous: previous,
-        row: row,
-        rowOrdinal: rowOrdinal
-    ),
-        DrawCursor = ReadNumberRaw(
-        column: ArenaColumn.DrawCursor,
-        index: rowOrdinal
-    ),
-        DrawnMasks = ExportMasks(layout: layout),
-        HistoryCursor = m_historyCursors[rowOrdinal],
-        Phase = ((row.Phase is { } phase)
-        ? (phase with {
-            Sequence = ReadNumberRaw(
-            column: ArenaColumn.PhaseSequence,
-            index: rowOrdinal
-        ),
-        })
-        : null),
-    });
+    private StateRow ExportRow(int rowOrdinal, in ArenaRowLayout layout, StateRow row, StateRow? previous = null) {
+        var prior = previous ?? row;
+        var cellSlots = ExportCellSlots(layout: layout);
+        var masks = ExportMasks(layout: layout);
+        var exported = row with {
+            CellSlots = Reuse(prior.CellSlots, cellSlots),
+            ReservedCapacity = ((row.Capacity is null) && UsesLinks(layout: layout)) ? layout.CellCapacity : null,
+            Cells = ExportCells(layout: layout, previous: prior, row: row, rowOrdinal: rowOrdinal),
+            DrawCursor = ReadNumberRaw(column: ArenaColumn.DrawCursor, index: rowOrdinal),
+            DrawnMasks = Reuse(prior.DrawnMasks, masks),
+            HistoryCursor = m_historyCursors[rowOrdinal],
+            Phase = row.Phase is { } phase ? phase with {
+                Sequence = ReadNumberRaw(column: ArenaColumn.PhaseSequence, index: rowOrdinal),
+            } : null,
+        };
+
+        return exported == prior ? prior : exported;
+
+        static IReadOnlyList<T>? Reuse<T>(IReadOnlyList<T>? prior, IReadOnlyList<T>? exported) =>
+            (prior is not null && exported is not null && prior.SequenceEqual(exported)) ? prior : exported;
+    }
 }

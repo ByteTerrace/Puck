@@ -120,9 +120,7 @@ their `Puck.State.Rules.GateToken` programs run through `RuleEvaluation.Decide`,
 `FixedTimedMove.Sample` reads cumulative displacement and signed yaw at an
 offset in engine ticks. The host takes the difference between successive
 displacement samples and sends it through the ordinary body sweep at the
-sampled orientation. `WorldBody.PredictTimedDisplacement` reads the same
-displacement from the current sample through a requested horizon, before
-contact response. It covers the authored move's translation. The volume
+sampled orientation. The samples cover the authored move's translation. The volume
 swept by a rotating collider between samples belongs to
 [predicted sweep and frontier](../plans/readable-interaction.md#build-order).
 

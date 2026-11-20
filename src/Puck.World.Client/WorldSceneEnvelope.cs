@@ -6,9 +6,7 @@ public sealed class WorldSceneEnvelope {
 
     public WorldSceneCount Boot { get; }
     public Func<int>? DocumentMaterials { get; set; }
-    public int HeadroomInstances => 0;
     public int HeadroomScreens => 0;
-    public int ReservedInstances => Boot.Cost.Instances;
 
     public WorldSceneCount Measure(WorldDefinition candidate) => Of(candidate, documentMaterials: (DocumentMaterials?.Invoke() ?? 0));
     public static WorldSceneCount Of(WorldDefinition candidate, bool adjacency = true, int documentMaterials = 0) => new(
