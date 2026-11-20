@@ -150,6 +150,7 @@ public readonly struct CellSet : IEquatable<CellSet> {
     }
     /// <inheritdoc/>
     public override bool Equals(object? obj) => ((obj is CellSet other) && Equals(other: other));
+    // Construction and expression lowering keep unused inline words zero.
     /// <inheritdoc/>
     public override int GetHashCode() {
         var hash = new HashCode();

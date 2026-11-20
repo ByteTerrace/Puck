@@ -54,7 +54,7 @@ public sealed partial class SdfWorldTables {
 
                     // An image with no known publication, such as a portal's level that has not rendered because its glass
                     // is out of view, is missing: it writes a zero record rather than holding every other screen's.
-                    if ((input.Lease.ImageViewHandle == 0) || !input.Publication.IsKnown) { continue; }
+                    if ((input.Lease.ImageViewHandle == 0) || !input.Publication.IsPublished()) { continue; }
                     m_watch.Read(screen: screen);
                     m_watch.Observe(publication: input.Publication, screen: screen, tainted: input.Tainted);
                 }

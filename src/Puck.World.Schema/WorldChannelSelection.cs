@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 
@@ -49,13 +50,7 @@ public readonly record struct WorldChannelSelection {
     /// <summary>Compares logical selections independently of collection identity.</summary>
     public bool Equals(WorldChannelSelection other) => ((Registers == other.Registers) && Names.SequenceEqual(other: other.Names, comparer: StringComparer.Ordinal));
     /// <inheritdoc/>
-    public override int GetHashCode() {
-        var hash = new HashCode();
-
-        hash.Add(value: Registers);
-        foreach (var name in Names) { hash.Add(name, StringComparer.Ordinal); }
-        return hash.ToHashCode();
-    }
+    public override int GetHashCode() => HashCode.Combine(Registers, SequenceHash.Of(Names));
 
     // The sorted, distinct names as a span, which is empty for the default value.
     private ReadOnlySpan<string> Names => m_channels;
