@@ -23,7 +23,7 @@ public sealed class WorldWatchLawTests {
         var root = files.WriteText(name: (source ? "root.puck" : "root.world.json"), text: (source ? "imports [ { document: \"child\" } ]" : Json));
         var bytes = (source ? (WorldCompileSession.Shared.TryCompile(compiled: out var compiled, failure: out _, path: root) ? compiled!.Document! : throw new InvalidOperationException(message: "fixture source did not compile")) : Encoding.UTF8.GetBytes(s: Json));
 
-        Assert.True(condition: WorldCompileSession.Shared.TryCompose(root, bytes, out _, out _, out var reason), userMessage: reason);
+        Assert.True(condition: WorldCompileSession.Shared.TryCompose(root, bytes, out _, out var reason), userMessage: reason);
         var count = 0;
         var watch = new WorldSourceWatch(() => root);
 
