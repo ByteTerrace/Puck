@@ -9,12 +9,8 @@ public sealed partial class WorldServer {
     public WorldDocument Document { get { ThrowIfTickPending(); return m_document; } }
     /// <summary>Gets the per-entity snapshot scratch the tick's delivery fills.</summary>
     internal EntitySnapshot[] SnapshotEntries => m_tick.SnapshotEntries;
-    /// <summary>Gets whether each tracked slot saw a second, different-principal write this tick.</summary>
-    public bool[] TickCollided => m_tick.TickCollided;
     /// <summary>Gets the entity indices an allowed intent has already written this tick.</summary>
     public int[] TickWrittenEntity => m_tick.TickWrittenEntity;
-    /// <summary>Gets the principals that wrote the matching <see cref="TickWrittenEntity"/> slot.</summary>
-    public Principal[] TickWrittenPrincipal => m_tick.TickWrittenPrincipal;
 
     /// <summary>Adopts a widened contention-tracking trio in one step, so the three arrays can never disagree on
     /// length.</summary>

@@ -173,9 +173,6 @@ public sealed partial class WorldPopulation {
             return m_contactFieldVersion;
         }
     }
-    /// <summary>Gets the authored idle floor (<c>bodies.sleepAfterSeconds</c>), in engine ticks, before a non-seat body's
-    /// motion program and contact solve stop running — 0 means never sleep.</summary>
-    public ulong SleepAfterTicks => m_sleepAfterTicks;
     /// <summary>The world's compiled target-register table sharing the Drive reach-mask ordinal space.</summary>
     public WorldTargetRegisterTable TargetRegisters => m_targets;
     /// <summary>Gets this world's reserved local-seat count — the document's own <c>population.localSeats</c>

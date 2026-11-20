@@ -25,10 +25,6 @@ public sealed partial class WorldReplayTape {
     private int m_captureSuspensions;
     private WorldHistory? m_history;
 
-    /// <summary>Gets whether the per-tick capture taps are attached — while a recording is armed or an in-session
-    /// history is on, and never during a live drive.</summary>
-    public bool Capturing => m_capturing;
-
     // What the capture would have to record at the next close: anything the open tick has gathered beyond a
     // rate-lever fact, which applies as a no-op, and a query, whose re-execution moves no state.
     internal bool OpenTickHoldsInput {

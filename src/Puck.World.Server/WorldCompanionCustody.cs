@@ -96,8 +96,6 @@ public readonly record struct WorldCustodyMintMember(WorldEntityAddress Incarnat
 /// <param name="Recalls">The epoch of every recall home recorded, in order; each owes its own notice.</param>
 /// <param name="Installed">Whether an install released the title (a pending one ends when its hop resolves).</param>
 public sealed record WorldCustodyTitle(WorldEntityAddress Incarnation, WorldCustodyKind Kind, string Custodian, ulong Epoch, WorldTransferKey? PendingKey, ulong MaxIssued, IReadOnlyList<ulong> Recalls, bool Installed) {
-    /// <summary>Gets the slot the title holds at home: its incarnation's index.</summary>
-    public int HeldSlot => Incarnation.Index;
 }
 /// <summary>The custody reducer of one authority: every durable custody fact is a function of the authority's custody
 /// records, folded by <see cref="Apply"/> in the order they became durable. Checkpoint restore, crossing-log recovery

@@ -32,10 +32,6 @@ public sealed class WorldExtensions {
 
     private sealed record RecordedContribution(WorldRecordedExtension Owner, WorldMutation Mutation, long Sequence, Guid OperationId);
 
-    /// <summary>Gets the live integration epoch. Every attached extension carries the epoch it was admitted under;
-    /// a suppression bumps this, which is what retires a whole generation of runtimes at once.</summary>
-    private long Epoch => m_epoch;
-
     /// <summary>Gets the number of external operations currently dispatched and not yet settled — the count a
     /// retirement freeze and a replay entry both refuse on.</summary>
     internal int ExternalOperationsInFlight => m_externalOperationsInFlight;
