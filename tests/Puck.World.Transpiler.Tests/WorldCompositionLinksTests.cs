@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Lowering;
 using Puck.World.Transpiler.Lowering;
 using Xunit;
 

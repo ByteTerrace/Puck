@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 
 namespace Puck.Transpiler.Lowering;
 
