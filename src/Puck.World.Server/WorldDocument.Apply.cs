@@ -1051,7 +1051,7 @@ public sealed partial class WorldDocument {
     // (Host.CompletedTick/Host.LastStepTicks), which are still their default 0/0 before the very first Step has ever
     // run — the one case where 0/0 is the honest answer, preserved exactly.
     internal WorldSnapshot BuildPrimerSnapshot() {
-        lock (Host.AuthorityGate) {
+        using (Host.EnterAtTickBoundary()) {
             Host.ThrowIfTickPending();
             return BuildSnapshotCore(Host.CompletedTick, Host.LastStepTicks, consumeContinuity: false);
         }

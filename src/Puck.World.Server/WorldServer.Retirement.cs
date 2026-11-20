@@ -25,7 +25,7 @@ public sealed partial class WorldServer {
     /// Repeated calls are harmless. Storage failure leaves the same frozen state available for another save.</remarks>
     [Replaces(root: typeof(StateArena))]
     public void FreezeForRetirement() {
-        lock (m_authorityGate) {
+        using (EnterAtTickBoundary()) {
             ThrowIfTickPending();
             if (m_authorityRetiring) { return; }
             if (Extensions.ExternalOperationsInFlight != 0) {
@@ -57,7 +57,7 @@ public sealed partial class WorldServer {
     public bool TryFreezeForRetirement(Func<bool> admits) {
         ArgumentNullException.ThrowIfNull(argument: admits);
 
-        lock (m_authorityGate) {
+        using (EnterAtTickBoundary()) {
             if (m_tick.BlockedReason is not null) { return false; }
             if (m_authorityRetiring) { return true; }
             if ((Extensions.ExternalOperationsInFlight != 0) || !admits()) { return false; }
