@@ -10,7 +10,7 @@ namespace Puck.World.Server.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: the server's own counters — <c>state.arena</c>, <c>state.rules</c>, <c>state.search</c> — are
 /// registered for <c>world.counters</c>, and a reading never goes down across a definition rebuild
-/// (<c>world.reload</c>'s in-process path), although the rebuild replaces the arena and the search behind them: the
+/// (a forced <c>world.load</c>, the install that always builds the arena afresh; a reload that changes nothing keeps it), although the rebuild replaces the arena and the search behind them: the
 /// retired instances' totals are carried forward exactly once.
 /// </summary>
 public sealed class WorldServerCounterSourceLawTests {
@@ -43,7 +43,7 @@ public sealed class WorldServerCounterSourceLawTests {
 
         return values;
     }
-    private static void Reload(WorldFixture fixture) {
+    private static void Load(WorldFixture fixture) {
         var candidate = fixture.Server.Definition;
 
         fixture.Server.EnqueueRebuild(
@@ -52,8 +52,8 @@ public sealed class WorldServerCounterSourceLawTests {
                 ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: candidate)),
                 Definition: candidate,
                 Force: true,
-                Kind: WorldRebuildKind.Reload,
-                Origin: new WorldRebuildOrigin.File(Path: "counter-source-reload-probe.world.json")
+                Kind: WorldRebuildKind.Load,
+                Origin: new WorldRebuildOrigin.File(Path: "counter-source-load-probe.world.json")
             )
         );
         fixture.Step();
@@ -73,7 +73,7 @@ public sealed class WorldServerCounterSourceLawTests {
         var rulesBefore = Read(source: server.RuleHost.RuleWork);
         var searchBefore = Read(source: server.SearchWorkSource);
 
-        Reload(fixture: fixture);
+        Load(fixture: fixture);
 
         // The rebuild replaced both instances; read directly, the new ones start over.
         Assert.NotSame(expected: retiredArena, actual: server.Arena);

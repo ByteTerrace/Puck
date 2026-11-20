@@ -58,7 +58,7 @@ template leadWorld(led) {
       document {
         version: "puck.input.bindings.v1"
         modifiers []
-        chords [{ chord [], group: "play", page { id: "base", entries [
+        chords [{chord [], group: "play", page {id: "base", entries [
                 { id: "press", channel: "press", sources ["keyboard.u"] }
                 { id: "switch", channel: "switch", sources ["keyboard.o"] }
               ]
@@ -88,7 +88,11 @@ template leadWorld(led) {
   looks {
     assignment {
       rows ["lead"]
-      sequence { name: "r1", offset: 0, step: 0 }
+      sequence {
+        name: "r1"
+        offset: 0
+        step: 0
+      }
     }
     rows [{
         name: "lead", scale: 1, source: creation(prototypeId: leadBody)

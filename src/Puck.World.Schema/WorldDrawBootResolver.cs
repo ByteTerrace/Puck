@@ -286,10 +286,14 @@ public static class WorldDrawBootResolver {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
-        keys ??= WorldDrawSampler.Missing;
+        // A document with no private stream installs only its allocator, which no sampler decides, so the missing
+        // sampler is made only for a row that draws: a document whose rows are all filled resolves allocating nothing.
+        var sampler = keys;
+
         try {
-            definition = restore is not null ? keys.Install(definition, restore: restore) :
-                keys.Install(definition, previous);
+            definition = ((restore is not null) ? Authority().Install(definition, restore: restore)
+                : ((sampler is not null) || WorldDrawSampler.InstallsAny(definition: definition)) ? Authority().Install(definition, previous)
+                : WorldDrawSampler.WithLast(definition, (previous?.StateRaw?.DrawInstallCount ?? 0L)));
         } catch (InvalidDataException error) {
             resolved = definition;
             reason = error.Message;
@@ -317,7 +321,7 @@ public static class WorldDrawBootResolver {
 
             if (row.IsKeyed) {
                 if (!TryFillKeyedSite(
-                    authority: keys,
+                    authority: Authority(),
                     definition: definition,
                     filled: out var filledRow,
                     instanceIdentity: instanceIdentity,
@@ -330,14 +334,14 @@ public static class WorldDrawBootResolver {
                 }
 
                 state ??= new List<WorldStateRow>(collection: authored);
-                state[index] = keys.IsPreview && draw.PrivateStream ? filledRow with { BeforePrivatePreview = row } : filledRow;
+                state[index] = Authority().IsPreview && draw.PrivateStream ? filledRow with { BeforePrivatePreview = row } : filledRow;
                 changed = true;
 
                 continue;
             }
 
             if (!TryDrawSite(
-                authority: keys,
+                authority: Authority(),
                 definition: definition,
                 worldSeed: worldSeed,
                 instanceIdentity: instanceIdentity,
@@ -374,7 +378,7 @@ public static class WorldDrawBootResolver {
             );
             state ??= new List<WorldStateRow>(collection: authored);
             state[index] = row with {
-                BeforePrivatePreview = keys.IsPreview && draw.PrivateStream ? row : null,
+                BeforePrivatePreview = Authority().IsPreview && draw.PrivateStream ? row : null,
                 Cells = [cell],
                 DrawCursor = (row.DrawCursor + fired.Advances),
                 DrawnMasks = GeneratorEngine.MasksAfter(
@@ -477,5 +481,7 @@ public static class WorldDrawBootResolver {
         }
 
         return true;
+
+        WorldDrawSampler Authority() => (sampler ??= WorldDrawSampler.Missing);
     }
 }

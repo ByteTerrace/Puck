@@ -1533,7 +1533,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `hud.panels[].elements[].sources[].when[near].subject[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
 | `hud.panels[].elements[].sources[].when[near].of[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
 | `hud.panels[].elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
-| `state.world[].field.material.toonSelect.state` | State | Binding | Read | `PaletteToonSelectDocument.State` |
+| `state.world[].field.material.toonSelect.state` | State | Binding | Binding | `PaletteToonSelectDocument.State` |
 | `state.world[].field.paint[][draw].source` | Generator | Names | Read | `WorldLatticeFill.Draw.Source` |
 | `state.world[].witness` | State | Names | Read | `WorldStateRow.Witness` |
 | `state.world[].draw.source` | Generator | Names | Read | `Draw.Source` |

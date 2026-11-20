@@ -82,7 +82,7 @@ public sealed class RowReshapeJumpLawTests {
         fixture.Step();
         Assert.True(condition: Row(server: fixture.Server).IsSlot);
 
-        foreach (var kind in new[] { WorldRebuildKind.Load, WorldRebuildKind.Reload }) {
+        void Rebuild(WorldRebuildKind kind) {
             fixture.Server.EnqueueRebuild(
                 principal: Principal.Console,
                 request: new WorldRebuildRequest(
@@ -94,11 +94,19 @@ public sealed class RowReshapeJumpLawTests {
                 )
             );
             fixture.Step();
-            AssertKeyed(server: fixture.Server);
-            fixture.Server.EnqueueMutation(mutation: Reshape());
-            fixture.Step();
-            Assert.True(condition: Row(server: fixture.Server).IsSlot);
         }
+
+        // A load installs the document whole, so the keyed row comes back over the session's reshape.
+        Rebuild(kind: WorldRebuildKind.Load);
+        AssertKeyed(server: fixture.Server);
+        fixture.Server.EnqueueMutation(mutation: Reshape());
+        fixture.Step();
+        Assert.True(condition: Row(server: fixture.Server).IsSlot);
+
+        // A reload installs only what the source changed between its revisions, and the source did not change this
+        // row, so the session's reshape stands (WorldReloadDelta.TryMergeOver).
+        Rebuild(kind: WorldRebuildKind.Reload);
+        Assert.True(condition: Row(server: fixture.Server).IsSlot);
     }
     [Fact]
     public void AnUndoOfAKeyedToSlotReshapeInstallsItKeyed() {

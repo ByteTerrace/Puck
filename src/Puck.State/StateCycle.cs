@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
@@ -73,7 +74,7 @@ public sealed record StateCycle(
     /// <summary>The generator as a word of reflections — mirror nodes, one to eight, applied first to last — or <see
     /// langword="null"/> for the lattice's own cycle. A word that moves no node is refused: it loops nothing.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<int>? Word { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Word);
+    public IReadOnlyList<int>? Word { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Word);
     /// <summary>How many applications of the generator one step is; nonzero, and smaller in magnitude than the
     /// generator's order, since a power reduces modulo the order and a multiple of it would be the identity.</summary>
     public int Power { get; init; } = Power;

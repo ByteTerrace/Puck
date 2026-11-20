@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 using Puck.Maths;
 
@@ -26,7 +27,7 @@ public sealed record StateVisibility(IReadOnlyList<string>? Readers = null, Hidd
     string? ReadersFrom = null) {
     /// <summary>Canonical authenticated principal tokens; no seat or peer identity comes from the request payload.
     /// </summary>
-    public IReadOnlyList<string>? Readers { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Readers);
+    public IReadOnlyList<string>? Readers { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Readers);
     /// <summary>What an observer who may read the row learns about the cells it may not.</summary>
     public HiddenCells Hidden { get; init; } = Hidden;
     /// <summary>A keyed text row whose cell texts are principal tokens admitted beside <see cref="Readers"/>: the

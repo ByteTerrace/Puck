@@ -16,7 +16,7 @@ shade template inkLevels(threshold, width, inkColor) {
   light {
     let sine = sqrt(max(1 - light.cosine * light.cosine, 0))
     let terminator = inkLine(inkPixels(light.cosine - threshold, abs(surface.curvature) * sine), width)
-    diffuse = light.color * (light.weight * light.reach * max(light.cosine, 0) * light.visibility * (1 - terminator))
+    diffuse: light.color * (light.weight * light.reach * max(light.cosine, 0) * light.visibility * (1 - terminator))
   }
   compose {
     let g = saturate(-dot(surface.normal, surface.rayDirection))
@@ -24,7 +24,7 @@ shade template inkLevels(threshold, width, inkColor) {
     let contour = inkLine(inside / max(surface.footprint, 0.0000001), width)
     let breakup = smoothstep(0.35, 0.65, lattice(surface.layerPosition * 40, uint(7)))
     let lit = surface.albedo * (compose.radiance + compose.indirect) * compose.attenuation * compose.adaptation
-    color = mix(lit, inkColor * lit, contour * breakup)
+    color: mix(lit, inkColor * lit, contour * breakup)
   }
 }
 

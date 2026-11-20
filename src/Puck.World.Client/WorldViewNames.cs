@@ -25,6 +25,10 @@ public static class WorldViewNames {
     /// <param name="residency">The residency's complete name.</param>
     /// <returns>The name with its environment part.</returns>
     public static string Environment(string residency) => GeneratedName.Append(name: residency, part: "environment");
+    /// <summary>Returns the name of the scene a group of session screens shares, under its lead feed's view name.</summary>
+    /// <param name="lead">The lead feed's view registration name.</param>
+    /// <returns>The name with its shared part.</returns>
+    public static string Shared(string lead) => GeneratedName.Append(name: lead, part: "shared");
 
     /// <summary>The first part of a session screen's view name.</summary>
     public const string SessionHead = "session";

@@ -202,7 +202,10 @@ public class LspSugarTests {
         var name = prototypes["items"]?["properties"]?["document"]?["properties"]?["name"];
 
         Assert.NotNull(@object: name?["description"]);
-        // Hover annotations must not activate WorldJsonContext converter constraints in the creation serializer.
-        Assert.Null(@object: name?["type"]);
+        // A creation's name is a literal or a `state.` reference, both strings, so its converter restores the string type.
+        Assert.Equal(
+            actual: name?["type"]?.GetValue<string>(),
+            expected: "string"
+        );
     }
 }

@@ -25,16 +25,24 @@ prototypes {
   }
 }
 looks [{
-  name: "portal-row-witness", scale: 1, source: creation(prototypeId: `portal-row-witness`)
-  motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-}]
+    name: "portal-row-witness", scale: 1, source: creation(prototypeId: `portal-row-witness`)
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+  }
+]
 placements {
   placement "portal-row-witness" {
     prototype: "portal-row-witness"
     position [54.5, 0.05, 32.5]
     inhabit {
       count: 1
-      distribution { fill { name: "additive", offset: 0, step: 0.001 }, region: disc(radius: 0.01) }
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
       kit: "walker"
       look: "portal-row-witness"
       source: "Idle"

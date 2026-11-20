@@ -68,7 +68,10 @@ let glacierIceStyle = celStyle with {
     outlineTint [1, 1, 1]
   }
 }
-let glacierIcePalette = map(glacierPalette, (row, index) => (index == 5) ? celRock(row) : celMaterial(row, glacierIceStyle))
+let glacierIcePalette = map(
+  glacierPalette,
+  (row, index) => (index == 5) ? celRock(row) : celMaterial(row, glacierIceStyle)
+)
 
 // The wall's rock palette after its own: the trough's polished floor, the moraine's debris (a pale grit speckled dark, one
 // material over every heap so no seam shows between them) and a darker rock.

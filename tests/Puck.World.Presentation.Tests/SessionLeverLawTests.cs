@@ -351,6 +351,7 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.CadenceGate,
             WorldSessionLevers.Cull,
             WorldSessionLevers.Detail,
+            WorldSessionLevers.DistantShadows,
             WorldSessionLevers.ExposurePin,
             WorldSessionLevers.Indirect,
             WorldSessionLevers.MasterVolume,

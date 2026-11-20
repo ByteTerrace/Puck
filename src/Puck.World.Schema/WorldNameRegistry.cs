@@ -1359,7 +1359,8 @@ public static partial class WorldNameRegistry {
             typeof(Puck.World.Authoring.PaletteToonSelectDocument),
             nameof(Puck.World.Authoring.PaletteToonSelectDocument.State),
             WorldNameKind.State,
-            WorldNameRole.Binding
+            WorldNameRole.Binding,
+            WorldExportFacet.Binding
         ),
     ];
     private static readonly WorldNameExclusion[] Exclusions = [

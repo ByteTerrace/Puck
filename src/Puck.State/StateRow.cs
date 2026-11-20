@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 
@@ -236,7 +237,7 @@ public record StateRow(
 ) : StateRowShape(Name, Kind, Min, Max, Capacity, Overflow, Evicts, Advance, Dynamics, Cycle, Domain, ValuesFrom, Inverse, Visibility, Knowledge, PhaseOf, Space, Enum, HostOwned, CellVisibility) {
     /// <inheritdoc/>
     public override bool IsDraw => Draw is not null;
-    // Both lists are owned (StateLists.Freeze): a caller that keeps the collection it passed in cannot change the row,
+    // Both lists are owned (OwnedLists.Freeze): a caller that keeps the collection it passed in cannot change the row,
     // so every cache keyed by a row stays true while the row lives.
     /// <summary>The row's current cells (default empty). Refused past its effective capacity, and on a
     /// duplicate key, by name — unless <see cref="StateRowShape.Evicts"/> is set, in which case a write that would grow past capacity
@@ -244,13 +245,13 @@ public record StateRow(
     /// <see cref="StateRowShape.IsSlot"/>) holds exactly one cell keyed <see cref="StateRowShape.SlotKey"/>; a keyed row may hold any author-chosen
     /// keys except <see cref="StateRowShape.SlotKey"/> itself, which is reserved for the <c>value</c> sugar and refused as an
     /// authored cell key.</summary>
-    public IReadOnlyList<StateCell>? Cells { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Cells);
+    public IReadOnlyList<StateCell>? Cells { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Cells);
     /// <summary>This site's drawn masks — engine-minted bookkeeping a source under an exhausting
     /// <see cref="GeneratorMode"/> carries: one mask per context, by declaration ordinal, for a Markov source; exactly
     /// one for a weighted numeric source. Bit <c>i</c> is set when entry <c>i</c> has been drawn. Lives at the site rather
     /// than on the source row, which lets two sites reference one declared source and draw independently. Null or empty
     /// for a site whose source never exhausts.</summary>
-    public IReadOnlyList<ClosedBitset256>? DrawnMasks { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: DrawnMasks);
+    public IReadOnlyList<ClosedBitset256>? DrawnMasks { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: DrawnMasks);
 
     /// <summary>Gets the initial storage room reserved by a keyed row: its explicit capacity or its authored cells.
     /// Further growth is admitted and charged by the arena before a mint lands. This is storage only: the cells a
@@ -262,7 +263,7 @@ public record StateRow(
     /// with the same memory reservation. Authored rows normally omit it.</summary>
     public int? ReservedCapacity { get; init; }
     /// <summary>Gets the physical slots of exported members in logical order. Null uses contiguous slots.</summary>
-    public IReadOnlyList<int>? CellSlots { get => field; init => field = StateLists.Freeze(items: value); }
+    public IReadOnlyList<int>? CellSlots { get => field; init => field = OwnedLists.Freeze(items: value); }
     /// <summary>Gets the effective domain: the authored <see cref="StateRowShape.Domain"/>, or <see cref="InferDomain"/>'s answer
     /// when unauthored.</summary>
     [JsonIgnore]

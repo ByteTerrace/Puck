@@ -22,17 +22,22 @@ public sealed class WorldSharedGeometryRegressionLawTests {
         var scene = new Scene(definition, session);
 
         scene.Deliver(0, 1);
-        var first = scene.Frame();
+        _ = scene.Frame();
 
-        scene.Deliver(1, 2);
-        var changed = scene.Frame();
-        var fresh = new Scene(definition, session);
+        // A restyle's frame equals a fresh scene's of the look it selects. SdfProgram.Of keeps the program it replaces
+        // when every field input and the appearance match, so the program's identity says nothing of a rebuild: its
+        // words and the frame's transforms do.
+        for (var look = (byte)1; (look <= 2); look++) {
+            scene.Deliver(look, (ulong)(look + 1));
+            var changed = scene.Frame();
+            var fresh = new Scene(definition, session);
 
-        fresh.Deliver(1, 1);
-        Assert.NotSame(first.Program, changed.Program);
-        Assert.Equal(fresh.Frame().Program.Words.ToArray(), changed.Program.Words.ToArray());
-        scene.Deliver(2, 3);
-        Assert.NotSame(changed.Program, scene.Frame().Program);
+            fresh.Deliver(look, 1);
+            var expected = fresh.Frame();
+
+            Assert.Equal(expected.Program.Words.ToArray(), changed.Program.Words.ToArray());
+            Assert.Equal(expected.DynamicTransforms.ToArray(), changed.DynamicTransforms.ToArray());
+        }
     }
     [Fact]
     public void ARigidInhabitantLightKeepsItsShapesOffsetAndRotation() {

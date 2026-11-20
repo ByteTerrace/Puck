@@ -29,8 +29,7 @@ let meadowBlades = map(range(0, 144), i => {
 let landscapeTurn = [0.2, -0.4, -0.4, 0.8]
 function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, settle = 0.3, edge = 0, reach = 0.35, threshold = 0.16, noise = 0, patternScale = [
   1, 1, 1
-], softness = 0, octaves = 2, octaveRatio = 2.03, octaveGain = 0.534, turn = landscapeTurn, settleThreshold = 0.5,
-  settleWidth = 0) = base with {
+], softness = 0, octaves = 2, octaveRatio = 2.03, octaveGain = 0.534, turn = landscapeTurn, settleThreshold = 0.5, settleWidth = 0) = base with {
   shade: weathered(
     under,
     deposit,

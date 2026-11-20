@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using Puck.Abstractions.Collections;
 using System.Runtime.ExceptionServices;
 
 namespace Puck.SignedDistance;
@@ -9,7 +10,10 @@ namespace Puck.SignedDistance;
 public sealed record SdfPathSegment(Vector2 End, Vector2? Control = null, Vector2? Control2 = null,
     Vector2? ArcCenter = null, bool Clockwise = false);
 /// <summary>A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.</summary>
-public sealed record SdfPathContour(Vector2 Start, IReadOnlyList<SdfPathSegment> Segments, bool Closed = false);
+public sealed record SdfPathContour(Vector2 Start, IReadOnlyList<SdfPathSegment> Segments, bool Closed = false) {
+    /// <summary>Gets the contour's segments in order, each ending where the next begins. The list is owned.</summary>
+    public IReadOnlyList<SdfPathSegment> Segments { get => field; init => field = OwnedLists.Freeze(items: value)!; } = OwnedLists.Freeze(items: Segments)!;
+}
 /// <summary>Round-ended stroke radii. Smooth interpolates with smoothstep over [From, To]; otherwise interpolation
 /// is linear over that interval. Parameterization gives every authored segment an equal part of [0, 1].</summary>
 public sealed record SdfPathStroke(float RadiusStart, float RadiusEnd, bool Smooth = false, float From = 0f, float To = 1f);
@@ -25,6 +29,9 @@ public sealed record SdfPathShear(float Linear, float Quadratic = 0f, float Cubi
 /// are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.</summary>
 public sealed record SdfPathProfile(IReadOnlyList<SdfPathContour> Contours, float Tolerance = 0.001f,
     SdfPathStroke? Stroke = null, SdfPathShear? Shear = null) {
+    /// <summary>Gets the profile's contours, filled with even/odd fill. The list is owned, since <see cref="Compile"/>
+    /// caches its edges by the profile.</summary>
+    public IReadOnlyList<SdfPathContour> Contours { get => field; init => field = OwnedLists.Freeze(items: value)!; } = OwnedLists.Freeze(items: Contours)!;
     /// <summary>The bounded edge-table and per-ray loop ceiling.</summary>
     public const int MaxEdges = 128;
     /// <summary>Smallest emitted edge length in normalized profile space; protects GPU projection denominators.</summary>

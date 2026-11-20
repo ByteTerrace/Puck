@@ -662,8 +662,16 @@ public static partial class WorldDocumentEmitter {
         }
 
         // A construct with a lowering of its own reads its own grammar, so its body stands at no position; a
-        // generic block stands at the member its identifier names.
-        var lowered = DocumentLowering.At(context: null, scope: scope, lower: () => (WorldConstructs.Table.RootArmOf(keyword: id) ?? WorldRootArm.Field) switch {
+        // generic block stands at the member its identifier names. A root construct's keyword names that construct
+        // only at the root of the document or module body being lowered, as a test's does: inside another construct
+        // a block of that name is an ordinary member (a lattice field's `material`), never a root section. A shape is
+        // also a construct of the creation document a prototype holds, so it is read as one at any depth.
+        var arm = WorldConstructs.Table.RootArmOf(keyword: id);
+
+        if ((arm is not (null or WorldRootArm.Shapes)) && !ReferenceEquals(objA: parent, objB: scope.Annotations.GetValueOrDefault(key: "WorldDocumentRoot"))) {
+            arm = null;
+        }
+        var lowered = DocumentLowering.At(context: null, scope: scope, lower: () => (arm ?? WorldRootArm.Field) switch {
             WorldRootArm.Addons => LowerRowCollectionBlock(
                 block: block,
                 hashed: true,

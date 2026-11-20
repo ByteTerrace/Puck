@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Collections;
 
 namespace Puck.SignedDistance;
 
@@ -33,6 +34,10 @@ public enum SdfPrismProfileKind {
 /// coincident or collinear vertices, and convex. Ignored by every other kind.</param>
 /// <param name="Path">Required only for Path; its points are normalized profile coordinates.</param>
 public sealed record SdfPrismProfile(SdfPrismProfileKind Kind, float CornerRadius = 0f, int Sides = 6, IReadOnlyList<Vector2>? Vertices = null, SdfPathProfile? Path = null) {
+    /// <summary>Gets, for <see cref="SdfPrismProfileKind.Convex"/> only, 3 to <see cref="MaxConvexVertices"/> local XY
+    /// points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no
+    /// coincident or collinear vertices, and convex. Ignored by every other kind. The list is owned.</summary>
+    public IReadOnlyList<Vector2>? Vertices { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Vertices);
     /// <summary>The most vertices a <see cref="SdfPrismProfileKind.Convex"/> profile may carry: as many as a
     /// <see cref="SdfPrismProfileKind.Polygon"/> has sides, so every regular polygon lowers to the convex polygon of its
     /// scaled vertices, which the fixed-point evaluator answers exactly at any scale. The side table's per-shape budget

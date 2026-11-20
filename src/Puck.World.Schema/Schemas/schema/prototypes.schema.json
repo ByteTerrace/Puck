@@ -183,6 +183,36 @@
                       "type": "integer",
                       "default": 0
                     },
+                    "deposit": {
+                      "$ref": "./common.schema.json#/$defs/ShapeNullable",
+                      "default": null
+                    },
+                    "noise": {
+                      "type": "number",
+                      "default": 0
+                    },
+                    "patternScale": {
+                      "default": null
+                    },
+                    "softness": {
+                      "type": "number",
+                      "default": 0
+                    },
+                    "octaves": {
+                      "type": "integer",
+                      "default": 1
+                    },
+                    "octaveRatio": {
+                      "type": "number",
+                      "default": 2
+                    },
+                    "octaveGain": {
+                      "type": "number",
+                      "default": 0.5
+                    },
+                    "turn": {
+                      "default": null
+                    },
                     "under": {
                       "type": [
                         "array",
@@ -225,37 +255,8 @@
                         "additionalProperties": false,
                         "description": "One ascending coverage threshold and the surface it reveals."
                       },
-                      "default": null
-                    },
-                    "deposit": {
-                      "$ref": "./common.schema.json#/$defs/ShapeNullable",
-                      "default": null
-                    },
-                    "noise": {
-                      "type": "number",
-                      "default": 0
-                    },
-                    "patternScale": {
-                      "default": null
-                    },
-                    "softness": {
-                      "type": "number",
-                      "default": 0
-                    },
-                    "octaves": {
-                      "type": "integer",
-                      "default": 1
-                    },
-                    "octaveRatio": {
-                      "type": "number",
-                      "default": 2
-                    },
-                    "octaveGain": {
-                      "type": "number",
-                      "default": 0.5
-                    },
-                    "turn": {
-                      "default": null
+                      "default": null,
+                      "description": "Gets the surfaces the coverage reveals, each at an ascending threshold. The list is owned."
                     }
                   },
                   "additionalProperties": false,
@@ -307,6 +308,22 @@
                     "paint": {
                       "type": "object",
                       "properties": {
+                        "softness": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "modulationAmplitude": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "modulationFrequency": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "default": 0
+                        },
                         "stops": {
                           "type": "array",
                           "items": {
@@ -328,23 +345,8 @@
                             ],
                             "additionalProperties": false,
                             "description": "One ascending radial ramp stop."
-                          }
-                        },
-                        "softness": {
-                          "type": "number",
-                          "default": 0
-                        },
-                        "modulationAmplitude": {
-                          "type": "number",
-                          "default": 0
-                        },
-                        "modulationFrequency": {
-                          "type": "number",
-                          "default": 0
-                        },
-                        "seed": {
-                          "type": "integer",
-                          "default": 0
+                          },
+                          "description": "Gets the one to four radial stops, each an ascending radius and the colour it ramps to. The list is owned."
                         }
                       },
                       "required": [
@@ -379,111 +381,6 @@
                   ],
                   "default": null,
                   "description": "The finite nonnegative gain on received indirect light; null means one."
-                },
-                "paints": {
-                  "type": [
-                    "array",
-                    "null"
-                  ],
-                  "items": {
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "type": {
-                        "$ref": "./common.schema.json#/$defs/ShapeNonNullable50",
-                        "description": "The primitive, read as a shape\u0027s type: every primitive but a path profile."
-                      },
-                      "color": {
-                        "type": "string",
-                        "description": "The paint\u0027s color, #RRGGBB or a state binding."
-                      },
-                      "position": {
-                        "default": null,
-                        "description": "The primitive\u0027s position (null = the frame\u0027s origin)."
-                      },
-                      "rotation": {
-                        "default": null,
-                        "description": "The primitive\u0027s rotation (null = identity)."
-                      },
-                      "scale": {
-                        "default": null,
-                        "description": "The primitive\u0027s size, as a shape\u0027s scale (null = one)."
-                      },
-                      "stroke": {
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null,
-                        "description": "The half-width of the band painted about the primitive\u0027s surface, in the frame\u0027s units; null or zero fills the primitive."
-                      },
-                      "parent": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "default": null,
-                        "description": "The shape whose frame carries the paint, in that shape\u0027s local frame as a shape-riding volume is; null paints in the frame of the slot that owns the hit, or world space on a static placement. A static placement draws no parented paint."
-                      },
-                      "taper": {
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null,
-                        "description": "Prism only: the top-to-bottom width ratio."
-                      },
-                      "profile": {
-                        "$ref": "./common.schema.json#/$defs/ShapeNullable7",
-                        "description": "Prism only: the cross-section; a path profile is refused.",
-                        "default": null
-                      },
-                      "lift": {
-                        "$ref": "./common.schema.json#/$defs/ShapeNullable8",
-                        "description": "Prism only: extrude or revolve.",
-                        "default": null
-                      },
-                      "rounding": {
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null,
-                        "description": "The edge-rounding radius, as a shape\u0027s."
-                      },
-                      "chamfer": {
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null,
-                        "description": "The cap chamfer radius, as a shape\u0027s."
-                      },
-                      "exponent": {
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null,
-                        "description": "Superellipsoid only: the exponent."
-                      },
-                      "curve": {
-                        "$ref": "./common.schema.json#/$defs/ShapeNullable9",
-                        "description": "Sweep only: the curve, in the frame\u0027s units.",
-                        "default": null
-                      }
-                    },
-                    "required": [
-                      "type",
-                      "color"
-                    ],
-                    "additionalProperties": false,
-                    "description": "A paint over the palette slot\u0027s surface: a primitive of the shape vocabulary, placed like a shape, whose inside (or, with a Stroke, the band within that distance of its surface) takes Color. It never changes the field or the bake; the views pass draws it crisp at the pixel. A plane stroked at a half-width paints a stripe, an extruded ellipse prism stroked paints a ring projected along its axis, and a thin sweep paints a curved line where it crosses the surface."
-                  },
-                  "default": null,
-                  "description": "Up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none."
                 },
                 "emissiveLane": {
                   "type": [
@@ -568,7 +465,7 @@
                   "description": "The slot\u0027s glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque."
                 },
                 "toon": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNullable10",
+                  "$ref": "./common.schema.json#/$defs/ShapeNullable2",
                   "description": "The slot\u0027s own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world\u0027s default style (render.toon).",
                   "default": null
                 },
@@ -591,7 +488,7 @@
                         ],
                         "properties": {
                           "toon": {
-                            "$ref": "./common.schema.json#/$defs/ShapeNullable10",
+                            "$ref": "./common.schema.json#/$defs/ShapeNullable2",
                             "description": "The case\u0027s style (ToonStyleDocument), or null for none.",
                             "default": null
                           },
@@ -603,7 +500,7 @@
                         "additionalProperties": false,
                         "description": "One look a PaletteToonSelectDocument chooses: the slot\u0027s cel style and its shade program while the case is selected. A case that leaves either out shades the slot without it: no style of its own (the world\u0027s default style) and no program of its own (the world\u0027s render.shade)."
                       },
-                      "description": "The looks, the first for the value zero (PaletteToonCaseDocument)."
+                      "description": "Gets the looks, the first for the value zero (PaletteToonCaseDocument). The list is owned."
                     }
                   },
                   "required": [
@@ -753,6 +650,111 @@
                 "shade": {
                   "default": null,
                   "description": "The slot\u0027s shade program (ShadeReference), or null for the world\u0027s default."
+                },
+                "paints": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "type": {
+                        "$ref": "./common.schema.json#/$defs/ShapeNonNullable50",
+                        "description": "The primitive, read as a shape\u0027s type: every primitive but a path profile."
+                      },
+                      "color": {
+                        "type": "string",
+                        "description": "The paint\u0027s color, #RRGGBB or a state binding."
+                      },
+                      "position": {
+                        "default": null,
+                        "description": "The primitive\u0027s position (null = the frame\u0027s origin)."
+                      },
+                      "rotation": {
+                        "default": null,
+                        "description": "The primitive\u0027s rotation (null = identity)."
+                      },
+                      "scale": {
+                        "default": null,
+                        "description": "The primitive\u0027s size, as a shape\u0027s scale (null = one)."
+                      },
+                      "stroke": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "The half-width of the band painted about the primitive\u0027s surface, in the frame\u0027s units; null or zero fills the primitive."
+                      },
+                      "parent": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "The shape whose frame carries the paint, in that shape\u0027s local frame as a shape-riding volume is; null paints in the frame of the slot that owns the hit, or world space on a static placement. A static placement draws no parented paint."
+                      },
+                      "taper": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "Prism only: the top-to-bottom width ratio."
+                      },
+                      "profile": {
+                        "$ref": "./common.schema.json#/$defs/ShapeNullable8",
+                        "description": "Prism only: the cross-section; a path profile is refused.",
+                        "default": null
+                      },
+                      "lift": {
+                        "$ref": "./common.schema.json#/$defs/ShapeNullable9",
+                        "description": "Prism only: extrude or revolve.",
+                        "default": null
+                      },
+                      "rounding": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "The edge-rounding radius, as a shape\u0027s."
+                      },
+                      "chamfer": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "The cap chamfer radius, as a shape\u0027s."
+                      },
+                      "exponent": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "Superellipsoid only: the exponent."
+                      },
+                      "curve": {
+                        "$ref": "./common.schema.json#/$defs/ShapeNullable10",
+                        "description": "Sweep only: the curve, in the frame\u0027s units.",
+                        "default": null
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "color"
+                    ],
+                    "additionalProperties": false,
+                    "description": "A paint over the palette slot\u0027s surface: a primitive of the shape vocabulary, placed like a shape, whose inside (or, with a Stroke, the band within that distance of its surface) takes Color. It never changes the field or the bake; the views pass draws it crisp at the pixel. A plane stroked at a half-width paints a stripe, an extruded ellipse prism stroked paints a ring projected along its axis, and a thin sweep paints a curved line where it crosses the surface."
+                  },
+                  "default": null,
+                  "description": "Gets up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none. The list is owned (a lattice field\u0027s material sits in a cached state row)."
                 }
               },
               "required": [

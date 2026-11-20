@@ -356,7 +356,7 @@ public class ComprehensiveSyntheticTests {
             cells.Count
         );
         Assert.Equal(
-            "#1b4d3e",
+            "#1B4D3E",
             cells[0]?["value"]?.ToString()
         );
 
@@ -461,7 +461,7 @@ public class ComprehensiveSyntheticTests {
             mat0["name"]?.ToString()
         );
         Assert.Equal(
-            "#8b5a2b",
+            "#8B5A2B",
             mat0["albedo"]?.ToString()
         );
 

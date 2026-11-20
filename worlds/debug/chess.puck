@@ -343,9 +343,9 @@ let captureColumnX = [-0.2, 1.6]
 for side in range(0, 2) {
   for slot in range(0, 16) {
     rule $"chess-ai-capture-{16 * side + slot}" {
-      when (ai.pending == 1 and
-        pieceCell[$"piece{16 * side + slot}"] != ((aiBefore[$"piece{16 * side + slot}"] & 127) - 1) and
-        pieceCell[$"piece{16 * side + slot}"] < 0)
+      when ai.pending == 1 and pieceCell[$"piece{16 * side + slot}"] != (
+          (aiBefore[$"piece{16 * side + slot}"] & 127) - 1
+        ) and pieceCell[$"piece{16 * side + slot}"] < 0
       mode: Level
       poseCell(
         key: $"placement:piece{16 * side + slot}",

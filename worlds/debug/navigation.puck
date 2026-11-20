@@ -55,12 +55,39 @@ navigation {
     ],
     // Each storey of the hall above level 0, x 10 .. 70, z 12 .. 40: its probe starts 1.9 m over the floor (under every
     // doorway, over the next storey's flights) and reaches down to the half landing under it.
-    map(range(1, 3), level => walkable($"hall-level-{level}", [10, galleryFloor[level], 12], 0.5, 120, 56, 1.9, 2.35, 1024)),
+    map(
+      range(1, 3),
+      level => walkable($"hall-level-{level}", [10, galleryFloor[level], 12], 0.5, 120, 56, 1.9, 2.35, 1024)
+    ),
     // Flight A's side of the stairwell from each level to the next, x 10.25 .. 12.25, z 33.75 .. 39.75: its probe
     // starts 4.45 m over the lower floor, under the next storey's flight A (4.5 m), and reaches the lower floor.
-    map(range(0, 3), level => walkable($"hall-stairs-a-{level}", [10.25, (galleryFloor[level] + 2.2), 33.75], 0.25, 9, 25, 2.25, 2.6, 225)),
+    map(
+      range(0, 3),
+      level => walkable(
+        $"hall-stairs-a-{level}",
+        [10.25, (galleryFloor[level] + 2.2), 33.75],
+        0.25,
+        9,
+        25,
+        2.25,
+        2.6,
+        225
+      )
+    ),
     // Flight B's side, x 12.25 .. 14.5: its probe starts 0.4 m over the next level's floor, under the next storey's half
     // landing (2 m over that floor), and reaches the half landing 2.2 m below.
-    map(range(0, 3), level => walkable($"hall-stairs-b-{level}", [12.25, galleryFloor[(level + 1)], 33.75], 0.25, 10, 25, 0.4, 2.5, 250))
+    map(
+      range(0, 3),
+      level => walkable(
+        $"hall-stairs-b-{level}",
+        [12.25, galleryFloor[(level + 1)], 33.75],
+        0.25,
+        10,
+        25,
+        0.4,
+        2.5,
+        250
+      )
+    )
   )
 }

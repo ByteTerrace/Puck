@@ -178,7 +178,9 @@ template skirmishState(origin, cellSize) {
       { key: "score", value: 0 }
       { key: "revision", value: -1 }
     ]
-    visibility { readers [] }
+    visibility {
+      readers []
+    }
   }
 
   // Blue's search is entirely over its memory, including candidate generation and the judge.
@@ -191,7 +193,9 @@ template skirmishState(origin, cellSize) {
       min: -1
       max: skirmishCells - 1
       cells: map(range(1, 6), u => { key: $"{u}", value: -1 })
-      visibility { readers ["seat2"] }
+      visibility {
+        readers ["seat2"]
+      }
     }
   }
   for name in ["skirmishFairTurn", "skirmishFairVerdict"] {
@@ -199,7 +203,9 @@ template skirmishState(origin, cellSize) {
       name: name
       kind: "Int"
       cells [{ key: "$value", value: 0 }]
-      visibility { readers ["seat2"] }
+      visibility {
+        readers ["seat2"]
+      }
     }
   }
   row {
@@ -218,10 +224,13 @@ template skirmishState(origin, cellSize) {
   }
 }
 
-function skirmishStepLegal(from, to, mate1, mate2, turn, side, winner) = (
-  turn == side and from >= 0 and maximum(absolute(to / 6 - from / 6), absolute(to % 6 - from % 6)) == 1 and
-  skirmishWall[to] == 0 and mate1 != to and mate2 != to and winner == 0
-)
+function skirmishStepLegal(from, to, mate1, mate2, turn, side, winner) = (turn == side and
+  from >= 0 and
+  maximum(absolute(to / 6 - from / 6), absolute(to % 6 - from % 6)) == 1 and
+  skirmishWall[to] == 0 and
+  mate1 != to and
+  mate2 != to and
+  winner == 0)
 template skirmishRules() {
   // A seat's order puts its unit on the cell it names; the judge below accepts the step or puts the unit back.
   for s in range(1, 2) {
@@ -253,8 +262,15 @@ template skirmishRules() {
     rule $"skirmish-judge-{u}" {
       local from = skirmishLast[$"{u}"]
       local to = skirmishPos[$"{u}"]
-      local legal = skirmishStepLegal(from, to, skirmishPos[$"{skirmishMates[u][0]}"],
-        skirmishPos[$"{skirmishMates[u][1]}"], skirmishTurn, u <= 3 ? 1 : 2, skirmish.winner)
+      local legal = skirmishStepLegal(
+        from,
+        to,
+        skirmishPos[$"{skirmishMates[u][0]}"],
+        skirmishPos[$"{skirmishMates[u][1]}"],
+        skirmishTurn,
+        u <= 3 ? 1 : 2,
+        skirmish.winner
+      )
       when to != from and to >= 0
       skirmishVerdict = legal
       if legal {
@@ -340,8 +356,15 @@ template skirmishSearch() {
     rule $"skirmish-fair-judge-{u}" {
       local from = skirmishFairLast[$"{u}"]
       local to = skirmishFairPos[$"{u}"]
-      local legal = skirmishStepLegal(from, to, skirmishFairPos[$"{skirmishMates[u][0]}"],
-        skirmishFairPos[$"{skirmishMates[u][1]}"], skirmishFairTurn, 2, 0)
+      local legal = skirmishStepLegal(
+        from,
+        to,
+        skirmishFairPos[$"{skirmishMates[u][0]}"],
+        skirmishFairPos[$"{skirmishMates[u][1]}"],
+        skirmishFairTurn,
+        2,
+        0
+      )
       when search(ply) > 0 and to != from and to >= 0
       skirmishFairVerdict = legal
       if legal {

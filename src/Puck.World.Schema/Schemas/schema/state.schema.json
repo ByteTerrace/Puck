@@ -558,7 +558,40 @@
                         "type": "integer",
                         "default": 0
                       },
+                      "deposit": {
+                        "$ref": "./common.schema.json#/$defs/PaletteSurfaceDocument",
+                        "default": null
+                      },
+                      "noise": {
+                        "type": "number",
+                        "default": 0
+                      },
+                      "patternScale": {
+                        "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                        "default": null
+                      },
+                      "softness": {
+                        "type": "number",
+                        "default": 0
+                      },
+                      "octaves": {
+                        "type": "integer",
+                        "default": 1
+                      },
+                      "octaveRatio": {
+                        "type": "number",
+                        "default": 2
+                      },
+                      "octaveGain": {
+                        "type": "number",
+                        "default": 0.5
+                      },
+                      "turn": {
+                        "$ref": "./common.schema.json#/$defs/DocumentQuaternion",
+                        "default": null
+                      },
                       "under": {
+                        "description": "Gets the surfaces the coverage reveals, each at an ascending threshold. The list is owned.",
                         "type": [
                           "array",
                           "null"
@@ -599,38 +632,6 @@
                           "additionalProperties": false,
                           "title": "PaletteRevealDocument"
                         },
-                        "default": null
-                      },
-                      "deposit": {
-                        "$ref": "./common.schema.json#/$defs/PaletteSurfaceDocument",
-                        "default": null
-                      },
-                      "noise": {
-                        "type": "number",
-                        "default": 0
-                      },
-                      "patternScale": {
-                        "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                        "default": null
-                      },
-                      "softness": {
-                        "type": "number",
-                        "default": 0
-                      },
-                      "octaves": {
-                        "type": "integer",
-                        "default": 1
-                      },
-                      "octaveRatio": {
-                        "type": "number",
-                        "default": 2
-                      },
-                      "octaveGain": {
-                        "type": "number",
-                        "default": 0.5
-                      },
-                      "turn": {
-                        "$ref": "./common.schema.json#/$defs/DocumentQuaternion",
                         "default": null
                       }
                     },
@@ -684,7 +685,24 @@
                       "paint": {
                         "type": "object",
                         "properties": {
+                          "softness": {
+                            "type": "number",
+                            "default": 0
+                          },
+                          "modulationAmplitude": {
+                            "type": "number",
+                            "default": 0
+                          },
+                          "modulationFrequency": {
+                            "type": "number",
+                            "default": 0
+                          },
+                          "seed": {
+                            "type": "integer",
+                            "default": 0
+                          },
                           "stops": {
+                            "description": "Gets the one to four radial stops, each an ascending radius and the colour it ramps to. The list is owned.",
                             "type": "array",
                             "items": {
                               "description": "One ascending radial ramp stop.",
@@ -704,22 +722,6 @@
                               "additionalProperties": false,
                               "title": "PaletteRadialStopDocument"
                             }
-                          },
-                          "softness": {
-                            "type": "number",
-                            "default": 0
-                          },
-                          "modulationAmplitude": {
-                            "type": "number",
-                            "default": 0
-                          },
-                          "modulationFrequency": {
-                            "type": "number",
-                            "default": 0
-                          },
-                          "seed": {
-                            "type": "integer",
-                            "default": 0
                           }
                         },
                         "required": [
@@ -756,8 +758,279 @@
                     ],
                     "default": null
                   },
+                  "emissiveLane": {
+                    "description": "The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body\u0027s own look lanes (a placement without them reads zero), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the emissive static.",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "glass": {
+                    "description": "The slot\u0027s glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "depth": {
+                        "description": "The thickness, in creation units, over which light takes on the tint; finite and positive. A part twice this thick reads twice as deep.",
+                        "type": "number"
+                      },
+                      "ior": {
+                        "description": "The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5).",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "scatter": {
+                        "description": "The colour the glass scatters as a medium, the colour a deep body of it reads as under the light arriving at its surface (null = none).",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "scattering": {
+                        "description": "How much the medium scatters, per creation unit, finite and non-negative; it also dims what lies behind (null = 0, no scattering).",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "contact": {
+                        "description": "Foam or a wet margin where an opaque surface behind the glass comes within reach of its surface, revealed through the slot\u0027s flow coverage (null = none).",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "reach": {
+                            "description": "The distance, in creation units along the view from the glass surface to the opaque surface behind it, over which the added coverage falls to zero; positive.",
+                            "type": "number"
+                          },
+                          "coverage": {
+                            "description": "The coverage added where the opaque surface touches the glass\u0027s, in [0, 1].",
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "reach",
+                          "coverage"
+                        ],
+                        "additionalProperties": false,
+                        "default": null,
+                        "title": "PaletteGlassContactDocument"
+                      },
+                      "shadowDensity": {
+                        "description": "Shadow extinction per creation unit, finite and non-negative (null = zero).",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null,
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "depth"
+                    ],
+                    "additionalProperties": false,
+                    "default": null,
+                    "title": "PaletteGlassDocument"
+                  },
+                  "toon": {
+                    "$ref": "./common.schema.json#/$defs/ToonStyleDocument",
+                    "description": "The slot\u0027s own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world\u0027s default style (render.toon).",
+                    "default": null
+                  },
+                  "toonSelect": {
+                    "description": "The slot\u0027s styles chosen live by a state cell (PaletteToonSelectDocument), whose case replaces Toon while the cell names one; null keeps Toon.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "state": {
+                        "description": "The state.\u003Crow\u003E[.\u003Ckey\u003E] binding naming the cell.",
+                        "type": "string"
+                      },
+                      "cases": {
+                        "description": "Gets the looks, the first for the value zero (PaletteToonCaseDocument). The list is owned.",
+                        "type": "array",
+                        "items": {
+                          "description": "One look a PaletteToonSelectDocument chooses: the slot\u0027s cel style and its shade program while the case is selected. A case that leaves either out shades the slot without it: no style of its own (the world\u0027s default style) and no program of its own (the world\u0027s render.shade).",
+                          "type": "object",
+                          "properties": {
+                            "toon": {
+                              "$ref": "./common.schema.json#/$defs/ToonStyleDocument",
+                              "description": "The case\u0027s style (ToonStyleDocument), or null for none.",
+                              "default": null
+                            },
+                            "shade": {
+                              "$ref": "./common.schema.json#/$defs/ShadeReference",
+                              "description": "The case\u0027s program, or null for none.",
+                              "default": null
+                            }
+                          },
+                          "additionalProperties": false,
+                          "title": "PaletteToonCaseDocument"
+                        }
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "cases"
+                    ],
+                    "additionalProperties": false,
+                    "default": null,
+                    "title": "PaletteToonSelectDocument"
+                  },
+                  "flow": {
+                    "description": "The slot\u0027s flow layer (PaletteFlowDocument): shading that moves along an authored flow over still geometry; null moves nothing.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "velocity": {
+                        "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                        "description": "The flow, in units per second."
+                      },
+                      "scale": {
+                        "description": "The pattern\u0027s frequency, in cells per unit; positive (null = 1).",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "stretch": {
+                        "description": "How many times longer a pattern feature is along the flow than across; at least 1 (null = 1).",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "cycle": {
+                        "description": "The seconds a layer advects before it restarts, in [0.25, 4096] (null = 1).",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "tilt": {
+                        "description": "The normal tilt per unit slope of the pattern; non-negative (null = 0).",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "coverage": {
+                        "description": "The share of the slot the pattern reveals Surface over, in [0, 1] (null = 0).",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "softness": {
+                        "description": "The coverage edge\u0027s width, in [0, 1] (null = 0.1).",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "surface": {
+                        "$ref": "./common.schema.json#/$defs/PaletteSurfaceDocument",
+                        "description": "The surface the coverage reveals; required when Coverage is positive.",
+                        "default": null
+                      },
+                      "seed": {
+                        "description": "The pattern\u0027s seed (null = 0).",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "lane": {
+                        "description": "The render lane whose value scales the velocity: 0 to 3 an inhabited body\u0027s look lanes (a placement without them reads zero and stands still), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the velocity constant.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "frame": {
+                        "description": "The frame the velocity is authored in (null = Object).",
+                        "enum": [
+                          "Object",
+                          "World",
+                          null
+                        ],
+                        "default": null,
+                        "title": "SdfFlowFrame"
+                      },
+                      "coverageLane": {
+                        "description": "The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "region": {
+                        "description": "A sphere in world coordinates within which the velocity varies.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "center": {
+                            "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                            "description": "Centre in world coordinates."
+                          },
+                          "radius": {
+                            "description": "Radius in world units over which the velocity blends back to the base, finite and positive.",
+                            "type": "number"
+                          },
+                          "velocity": {
+                            "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                            "description": "Velocity at the centre in the flow\u0027s velocity frame, before placement scaling."
+                          }
+                        },
+                        "required": [
+                          "center",
+                          "radius",
+                          "velocity"
+                        ],
+                        "additionalProperties": false,
+                        "default": null,
+                        "title": "PaletteFlowRegionDocument"
+                      }
+                    },
+                    "required": [
+                      "velocity"
+                    ],
+                    "additionalProperties": false,
+                    "default": null,
+                    "title": "PaletteFlowDocument"
+                  },
+                  "shade": {
+                    "$ref": "./common.schema.json#/$defs/ShadeReference",
+                    "description": "The slot\u0027s shade program (ShadeReference), or null for the world\u0027s default.",
+                    "default": null
+                  },
                   "paints": {
-                    "description": "Up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none.",
+                    "description": "Gets up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none. The list is owned (a lattice field\u0027s material sits in a cached state row).",
                     "type": [
                       "array",
                       "null"
@@ -931,277 +1204,6 @@
                       "additionalProperties": false,
                       "title": "PalettePaintDocument"
                     },
-                    "default": null
-                  },
-                  "emissiveLane": {
-                    "description": "The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body\u0027s own look lanes (a placement without them reads zero), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the emissive static.",
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "default": null
-                  },
-                  "glass": {
-                    "description": "The slot\u0027s glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "depth": {
-                        "description": "The thickness, in creation units, over which light takes on the tint; finite and positive. A part twice this thick reads twice as deep.",
-                        "type": "number"
-                      },
-                      "ior": {
-                        "description": "The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "scatter": {
-                        "description": "The colour the glass scatters as a medium, the colour a deep body of it reads as under the light arriving at its surface (null = none).",
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "scattering": {
-                        "description": "How much the medium scatters, per creation unit, finite and non-negative; it also dims what lies behind (null = 0, no scattering).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "contact": {
-                        "description": "Foam or a wet margin where an opaque surface behind the glass comes within reach of its surface, revealed through the slot\u0027s flow coverage (null = none).",
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "properties": {
-                          "reach": {
-                            "description": "The distance, in creation units along the view from the glass surface to the opaque surface behind it, over which the added coverage falls to zero; positive.",
-                            "type": "number"
-                          },
-                          "coverage": {
-                            "description": "The coverage added where the opaque surface touches the glass\u0027s, in [0, 1].",
-                            "type": "number"
-                          }
-                        },
-                        "required": [
-                          "reach",
-                          "coverage"
-                        ],
-                        "additionalProperties": false,
-                        "default": null,
-                        "title": "PaletteGlassContactDocument"
-                      },
-                      "shadowDensity": {
-                        "description": "Shadow extinction per creation unit, finite and non-negative (null = zero).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null,
-                        "minimum": 0
-                      }
-                    },
-                    "required": [
-                      "depth"
-                    ],
-                    "additionalProperties": false,
-                    "default": null,
-                    "title": "PaletteGlassDocument"
-                  },
-                  "toon": {
-                    "$ref": "./common.schema.json#/$defs/ToonStyleDocument",
-                    "description": "The slot\u0027s own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world\u0027s default style (render.toon).",
-                    "default": null
-                  },
-                  "toonSelect": {
-                    "description": "The slot\u0027s styles chosen live by a state cell (PaletteToonSelectDocument), whose case replaces Toon while the cell names one; null keeps Toon.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "state": {
-                        "description": "The state.\u003Crow\u003E[.\u003Ckey\u003E] binding naming the cell.",
-                        "type": "string"
-                      },
-                      "cases": {
-                        "description": "The looks, the first for the value zero (PaletteToonCaseDocument).",
-                        "type": "array",
-                        "items": {
-                          "description": "One look a PaletteToonSelectDocument chooses: the slot\u0027s cel style and its shade program while the case is selected. A case that leaves either out shades the slot without it: no style of its own (the world\u0027s default style) and no program of its own (the world\u0027s render.shade).",
-                          "type": "object",
-                          "properties": {
-                            "toon": {
-                              "$ref": "./common.schema.json#/$defs/ToonStyleDocument",
-                              "description": "The case\u0027s style (ToonStyleDocument), or null for none.",
-                              "default": null
-                            },
-                            "shade": {
-                              "$ref": "./common.schema.json#/$defs/ShadeReference",
-                              "description": "The case\u0027s program, or null for none.",
-                              "default": null
-                            }
-                          },
-                          "additionalProperties": false,
-                          "title": "PaletteToonCaseDocument"
-                        }
-                      }
-                    },
-                    "required": [
-                      "state",
-                      "cases"
-                    ],
-                    "additionalProperties": false,
-                    "default": null,
-                    "title": "PaletteToonSelectDocument"
-                  },
-                  "flow": {
-                    "description": "The slot\u0027s flow layer (PaletteFlowDocument): shading that moves along an authored flow over still geometry; null moves nothing.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "velocity": {
-                        "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                        "description": "The flow, in units per second."
-                      },
-                      "scale": {
-                        "description": "The pattern\u0027s frequency, in cells per unit; positive (null = 1).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "stretch": {
-                        "description": "How many times longer a pattern feature is along the flow than across; at least 1 (null = 1).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "cycle": {
-                        "description": "The seconds a layer advects before it restarts, in [0.25, 4096] (null = 1).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "tilt": {
-                        "description": "The normal tilt per unit slope of the pattern; non-negative (null = 0).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "coverage": {
-                        "description": "The share of the slot the pattern reveals Surface over, in [0, 1] (null = 0).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "softness": {
-                        "description": "The coverage edge\u0027s width, in [0, 1] (null = 0.1).",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "surface": {
-                        "$ref": "./common.schema.json#/$defs/PaletteSurfaceDocument",
-                        "description": "The surface the coverage reveals; required when Coverage is positive.",
-                        "default": null
-                      },
-                      "seed": {
-                        "description": "The pattern\u0027s seed (null = 0).",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "lane": {
-                        "description": "The render lane whose value scales the velocity: 0 to 3 an inhabited body\u0027s look lanes (a placement without them reads zero and stands still), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the velocity constant.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "frame": {
-                        "description": "The frame the velocity is authored in (null = Object).",
-                        "enum": [
-                          "Object",
-                          "World",
-                          null
-                        ],
-                        "default": null,
-                        "title": "SdfFlowFrame"
-                      },
-                      "coverageLane": {
-                        "description": "The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "region": {
-                        "description": "A sphere in world coordinates within which the velocity varies.",
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "properties": {
-                          "center": {
-                            "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                            "description": "Centre in world coordinates."
-                          },
-                          "radius": {
-                            "description": "Radius in world units over which the velocity blends back to the base, finite and positive.",
-                            "type": "number"
-                          },
-                          "velocity": {
-                            "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                            "description": "Velocity at the centre in the flow\u0027s velocity frame, before placement scaling."
-                          }
-                        },
-                        "required": [
-                          "center",
-                          "radius",
-                          "velocity"
-                        ],
-                        "additionalProperties": false,
-                        "default": null,
-                        "title": "PaletteFlowRegionDocument"
-                      }
-                    },
-                    "required": [
-                      "velocity"
-                    ],
-                    "additionalProperties": false,
-                    "default": null,
-                    "title": "PaletteFlowDocument"
-                  },
-                  "shade": {
-                    "$ref": "./common.schema.json#/$defs/ShadeReference",
-                    "description": "The slot\u0027s shade program (ShadeReference), or null for the world\u0027s default.",
                     "default": null
                   }
                 },

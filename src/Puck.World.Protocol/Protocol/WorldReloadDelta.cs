@@ -57,11 +57,11 @@ public sealed record WorldReloadDelta(string BaseHash, string TargetHash, byte[]
             var basis = (before.TryGet(name: member.Name, member: out held) ? held.Tree() : null);
             var target = member.Tree();
             var delta = MemberDelta(name: member.Name, basis: basis, target: target);
-            var value = WorldDocumentWalker.ReadMember(name: member.Name, root: next);
-            var basisValue = WorldDocumentWalker.ReadMember(name: member.Name, root: previous);
+            var value = WorldDefinitionMembers.Value(definition: next, name: member.Name);
+            var basisValue = WorldDefinitionMembers.Value(definition: previous, name: member.Name);
 
             patch[member.Name] = delta;
-            shared[member.Name] = (((basis is not null) && (target is not null) && (delta is not null) && (value is not null) && (basisValue is not null))
+            shared[member.Name] = (((basis is not null) && (target is not null) && (delta is not null) && (value is not null) && (basisValue is not null) && WorldDefinitionMembers.IsModelMember(name: member.Name))
                 ? WorldDocumentWalker.Share(basis: basisValue, basisTree: basis, patch: delta, value: value, valueTree: target)
                 : value);
         }
@@ -208,10 +208,10 @@ public sealed record WorldReloadDelta(string BaseHash, string TargetHash, byte[]
             var after = WorldDefinitionMembers.Of(definition: next);
 
             foreach (var name in named) {
-                var liveValue = WorldDocumentWalker.ReadMember(name: name, root: live);
+                var liveValue = WorldDefinitionMembers.Value(definition: live, name: name);
 
-                if (ReferenceEquals(objA: liveValue, objB: WorldDocumentWalker.ReadMember(name: name, root: previous))) {
-                    taken[name] = WorldDocumentWalker.ReadMember(name: name, root: next);
+                if (ReferenceEquals(objA: liveValue, objB: WorldDefinitionMembers.Value(definition: previous, name: name))) {
+                    taken[name] = WorldDefinitionMembers.Value(definition: next, name: name);
                     continue;
                 }
 

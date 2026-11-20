@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -40,34 +41,34 @@ public sealed record WorldStateSection(
 
     /// <inheritdoc cref="World"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<WorldStateRow>? World { get => field; init => field = StateLists.Freeze(items: MarkHostOwned(rows: value)); } = StateLists.Freeze(items: MarkHostOwned(rows: World));
+    public IReadOnlyList<WorldStateRow>? World { get => field; init => field = OwnedLists.Freeze(items: MarkHostOwned(rows: value)); } = OwnedLists.Freeze(items: MarkHostOwned(rows: World));
     /// <inheritdoc cref="Body"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<ActionStateSlot>? Body { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Body);
+    public IReadOnlyList<ActionStateSlot>? Body { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Body);
     /// <inheritdoc cref="Identity"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<ActionStateSlot>? Identity { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Identity);
+    public IReadOnlyList<ActionStateSlot>? Identity { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Identity);
     /// <inheritdoc cref="Lattices"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Lattices);
+    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Lattices);
     /// <inheritdoc cref="Spaces"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateSpace>? Spaces { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Spaces);
+    public IReadOnlyList<StateSpace>? Spaces { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Spaces);
     /// <inheritdoc cref="Enums"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateEnum>? Enums { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Enums);
+    public IReadOnlyList<StateEnum>? Enums { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Enums);
     /// <inheritdoc cref="Families"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateFamily>? Families { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Families);
+    public IReadOnlyList<StateFamily>? Families { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Families);
     /// <inheritdoc cref="Records"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateRecord>? Records { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Records);
+    public IReadOnlyList<StateRecord>? Records { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Records);
     /// <inheritdoc cref="Pools"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StatePool>? Pools { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Pools);
+    public IReadOnlyList<StatePool>? Pools { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Pools);
     /// <summary>Gets the bounded pools of endpoint pairs.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StatePairPool>? PairPools { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: PairPools);
+    public IReadOnlyList<StatePairPool>? PairPools { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: PairPools);
 
     IReadOnlyList<StateEnum>? IStateSection.Enums => Enums;
     IReadOnlyList<StateFamily>? IStateSection.Families => Families;

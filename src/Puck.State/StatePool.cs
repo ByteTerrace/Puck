@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 
 namespace Puck.State;
@@ -7,7 +7,7 @@ namespace Puck.State;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StateRecord(CellName Name, IReadOnlyList<StatePoolField>? Fields = null) {
     /// <summary>Gets the immutable field declarations in authored order.</summary>
-    public IReadOnlyList<StatePoolField>? Fields { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Fields);
+    public IReadOnlyList<StatePoolField>? Fields { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Fields);
 
 }
 /// <summary>One typed field of a <see cref="StateRecord"/>.</summary>
@@ -37,14 +37,14 @@ public sealed record StatePoolValue(CellName Field, CellValue Value, StateCellCl
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StatePoolSeed(int Slot, IReadOnlyList<StatePoolValue>? Values = null, int? LeftSlot = null, int? RightSlot = null) {
     /// <summary>Gets the immutable field overrides.</summary>
-    public IReadOnlyList<StatePoolValue>? Values { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Values);
+    public IReadOnlyList<StatePoolValue>? Values { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Values);
 
 }
 /// <summary>A bounded deterministic allocator over instances of one declared record.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StatePool(CellName Name, CellName Record, int Capacity, IReadOnlyList<StatePoolSeed>? Initial = null, StatePoolSnapshot? Snapshot = null) {
     /// <summary>Gets the immutable statically live instances.</summary>
-    public IReadOnlyList<StatePoolSeed>? Initial { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Initial);
+    public IReadOnlyList<StatePoolSeed>? Initial { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Initial);
 
 }
 /// <summary>A bounded pool whose stable slots identify pairs of live instances from two endpoint pools.</summary>
@@ -61,7 +61,7 @@ public sealed record StatePairPool(
     StatePoolSnapshot? Snapshot = null
 ) {
     /// <summary>Gets the immutable statically live pair slots.</summary>
-    public IReadOnlyList<StatePoolSeed>? Initial { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Initial);
+    public IReadOnlyList<StatePoolSeed>? Initial { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Initial);
 
 }
 /// <summary>The complete persistent allocator continuation of one pool: every slot generation, including dead
@@ -69,14 +69,9 @@ public sealed record StatePairPool(
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StatePoolSnapshot(IReadOnlyList<long> Generations, IReadOnlyList<StatePoolSeed>? Live = null) {
     /// <summary>Gets one generation per pool slot.</summary>
-    public IReadOnlyList<long> Generations { get => field; init => field = FreezeRequired(values: value); } = FreezeRequired(values: Generations);
+    public IReadOnlyList<long> Generations { get => field; init => field = OwnedLists.Freeze(items: value)!; } = OwnedLists.Freeze(items: Generations)!;
     /// <summary>Gets the immutable live instances in ascending slot order.</summary>
-    public IReadOnlyList<StatePoolSeed>? Live { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Live);
-
-    private static IReadOnlyList<T> FreezeRequired<T>(IReadOnlyList<T> values) => (values switch {
-        ImmutableArray<T> => values,
-        _ => values.ToImmutableArray(),
-    });
+    public IReadOnlyList<StatePoolSeed>? Live { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Live);
 }
 /// <summary>A catalog-bound, generation-checked reference to one lifetime of one pool slot.</summary>
 public readonly record struct StateInstanceHandle {

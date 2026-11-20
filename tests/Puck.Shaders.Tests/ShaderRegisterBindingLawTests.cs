@@ -214,7 +214,7 @@ public sealed partial class ShaderRegisterBindingLawTests {
     private static IEnumerable<string[]> ShippedShaderProjects(string root) {
         foreach (var project in ShaderItems(root: root).GroupBy(keySelector: static item => item.Project)) {
             var files = project
-                .SelectMany(selector: static item => (item.File.EndsWith(
+                .SelectMany(selector: item => (item.File.EndsWith(
                     comparisonType: StringComparison.Ordinal,
                     value: ".graph.json"
                 )
@@ -222,6 +222,7 @@ public sealed partial class ShaderRegisterBindingLawTests {
                     : (StageItemTypes.Contains(value: item.ItemType)
                         ? ShaderSourceClosure.Collect(
                             generated: null,
+                            includeDirectories: [Path.GetFullPath(path: Path.Combine(path1: root, path2: ShaderIncludeDirectories.CheckoutDirectory))],
                             limits: ShaderSourceLimits.Default,
                             sources: [(item.File, File.ReadAllText(path: item.File))]
                         ).Includes.Select(selector: static include => include.Path).Prepend(element: item.File)

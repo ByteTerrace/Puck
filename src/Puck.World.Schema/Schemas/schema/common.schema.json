@@ -2545,86 +2545,6 @@
       ],
       "title": "SdfPrismProfileKind"
     },
-    "SdfPathSegment": {
-      "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame.",
-      "type": "object",
-      "properties": {
-        "end": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "control": {
-          "default": null,
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "control2": {
-          "default": null,
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "arcCenter": {
-          "default": null,
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "clockwise": {
-          "type": "boolean",
-          "default": false
-        }
-      },
-      "required": [
-        "end"
-      ],
-      "additionalProperties": false,
-      "title": "SdfPathSegment"
-    },
-    "SdfPathContour": {
-      "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.",
-      "type": "object",
-      "properties": {
-        "start": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "segments": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/SdfPathSegment"
-          }
-        },
-        "closed": {
-          "type": "boolean",
-          "default": false
-        }
-      },
-      "required": [
-        "start",
-        "segments"
-      ],
-      "additionalProperties": false,
-      "title": "SdfPathContour"
-    },
     "SdfPathStroke": {
       "description": "Round-ended stroke radii. Smooth interpolates with smoothstep over [From, To]; otherwise interpolation is linear over that interval. Parameterization gives every authored segment an equal part of [0, 1].",
       "type": [
@@ -2699,6 +2619,87 @@
       "additionalProperties": false,
       "title": "SdfPathShear"
     },
+    "SdfPathSegment": {
+      "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame.",
+      "type": "object",
+      "properties": {
+        "end": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "control": {
+          "default": null,
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "control2": {
+          "default": null,
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "arcCenter": {
+          "default": null,
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "clockwise": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "end"
+      ],
+      "additionalProperties": false,
+      "title": "SdfPathSegment"
+    },
+    "SdfPathContour": {
+      "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.",
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "closed": {
+          "type": "boolean",
+          "default": false
+        },
+        "segments": {
+          "description": "Gets the contour\u0027s segments in order, each ending where the next begins. The list is owned.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SdfPathSegment"
+          }
+        }
+      },
+      "required": [
+        "start",
+        "segments"
+      ],
+      "additionalProperties": false,
+      "title": "SdfPathContour"
+    },
     "SdfPathProfile": {
       "description": "A bounded presentation profile. Filled contours use even/odd fill, including holes. Curves are flattened once at composition, with a local-space geometric error at most Tolerance (apart from floating-point rounding). Strokes approximate the union of disks along the curve, including their varying radius, to the same tolerance. The emitted polygon/rounded-segment field is 1-Lipschitz; no margin moves its zero surface. At most 128 edges are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.",
       "type": [
@@ -2706,12 +2707,6 @@
         "null"
       ],
       "properties": {
-        "contours": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/SdfPathContour"
-          }
-        },
         "tolerance": {
           "type": "number",
           "default": 0.001
@@ -2723,6 +2718,13 @@
         "shear": {
           "$ref": "#/$defs/SdfPathShear",
           "default": null
+        },
+        "contours": {
+          "description": "Gets the profile\u0027s contours, filled with even/odd fill. The list is owned, since Compile caches its edges by the profile.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SdfPathContour"
+          }
         }
       },
       "required": [
@@ -2752,8 +2754,13 @@
           "type": "integer",
           "default": 6
         },
+        "path": {
+          "$ref": "#/$defs/SdfPathProfile",
+          "description": "Required only for Path; its points are normalized profile coordinates.",
+          "default": null
+        },
         "vertices": {
-          "description": "Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.",
+          "description": "Gets, for Convex only, 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind. The list is owned.",
           "type": [
             "array",
             "null"
@@ -2767,11 +2774,6 @@
             "minItems": 2,
             "maxItems": 2
           }
-        },
-        "path": {
-          "$ref": "#/$defs/SdfPathProfile",
-          "description": "Required only for Path; its points are normalized profile coordinates.",
-          "default": null
         }
       },
       "required": [
@@ -10121,6 +10123,51 @@
       ],
       "additionalProperties": false
     },
+    "ShapeNullable2": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null,
+          "description": "Whether the style is on; absent is on. False on a palette row keeps that material unstyled whatever the world\u0027s default is; false on render.toon leaves the world\u0027s default off."
+        },
+        "outlineWidth": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "description": "The close outline radius in output pixels, in [0, 4]; zero disables outlines."
+        },
+        "outlineDistance": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "description": "The distance in metres at which the outline radius halves, in [0.1, 1000]."
+        },
+        "outlineNormal": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "description": "The crease normal cosine, in [0, 0.95]."
+        },
+        "outlineTint": {
+          "default": null,
+          "description": "The outline multiplier, three linear RGB values in [0, 1]."
+        }
+      },
+      "additionalProperties": false
+    },
     "ShapeNonNullable50": {
       "enum": [
         "Sphere",
@@ -10171,72 +10218,7 @@
         "Path": "Filled contours or variable-width strokes, flattened with an explicit tolerance and edge budget."
       }
     },
-    "ShapeNullable2": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "end": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "control": {
-          "default": null
-        },
-        "control2": {
-          "default": null
-        },
-        "arcCenter": {
-          "default": null
-        },
-        "clockwise": {
-          "type": "boolean",
-          "default": false
-        }
-      },
-      "required": [
-        "end"
-      ],
-      "additionalProperties": false
-    },
     "ShapeNullable3": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "start": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        "segments": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ShapeNullable2",
-            "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame."
-          }
-        },
-        "closed": {
-          "type": "boolean",
-          "default": false
-        }
-      },
-      "required": [
-        "start",
-        "segments"
-      ],
-      "additionalProperties": false
-    },
-    "ShapeNullable4": {
       "type": [
         "object",
         "null"
@@ -10267,7 +10249,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable5": {
+    "ShapeNullable4": {
       "type": [
         "object",
         "null"
@@ -10306,30 +10288,97 @@
       ],
       "additionalProperties": false
     },
+    "ShapeNullable5": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "end": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "control": {
+          "default": null
+        },
+        "control2": {
+          "default": null
+        },
+        "arcCenter": {
+          "default": null
+        },
+        "clockwise": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "end"
+      ],
+      "additionalProperties": false
+    },
     "ShapeNullable6": {
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "contours": {
+        "start": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/ShapeNullable3",
-            "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed."
-          }
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
         },
+        "closed": {
+          "type": "boolean",
+          "default": false
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeNullable5",
+            "description": "A line, quadratic/cubic Bezier, or circular arc ending at End. An arc uses ArcCenter and Clockwise; Beziers use Control and optionally Control2. Controls are in the profile\u0027s local XY frame."
+          },
+          "description": "Gets the contour\u0027s segments in order, each ending where the next begins. The list is owned."
+        }
+      },
+      "required": [
+        "start",
+        "segments"
+      ],
+      "additionalProperties": false
+    },
+    "ShapeNullable7": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
         "tolerance": {
           "type": "number",
           "default": 0.001
         },
         "stroke": {
-          "$ref": "#/$defs/ShapeNullable4",
+          "$ref": "#/$defs/ShapeNullable3",
           "default": null
         },
         "shear": {
-          "$ref": "#/$defs/ShapeNullable5",
+          "$ref": "#/$defs/ShapeNullable4",
           "default": null
+        },
+        "contours": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ShapeNullable6",
+            "description": "A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed."
+          },
+          "description": "Gets the profile\u0027s contours, filled with even/odd fill. The list is owned, since Compile caches its edges by the profile."
         }
       },
       "required": [
@@ -10337,7 +10386,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable7": {
+    "ShapeNullable8": {
       "type": [
         "object",
         "null"
@@ -10357,18 +10406,18 @@
           "default": 6,
           "description": "Polygon side count, from 3 through 32."
         },
+        "path": {
+          "$ref": "#/$defs/ShapeNullable7",
+          "description": "Required only for Path; its points are normalized profile coordinates.",
+          "default": null
+        },
         "vertices": {
           "type": [
             "array",
             "null"
           ],
           "default": null,
-          "description": "Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind."
-        },
-        "path": {
-          "$ref": "#/$defs/ShapeNullable6",
-          "description": "Required only for Path; its points are normalized profile coordinates.",
-          "default": null
+          "description": "Gets, for Convex only, 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind. The list is owned."
         }
       },
       "required": [
@@ -10376,7 +10425,7 @@
       ],
       "additionalProperties": false
     },
-    "ShapeNullable8": {
+    "ShapeNullable9": {
       "enum": [
         "Revolve",
         "Extrude",
@@ -10387,7 +10436,7 @@
         "Extrude": "Extrude the 2D profile along the local Z axis (the extrude lift operator) to the given half-height (the shape\u0027s liftAmount): a prism/slab whose cross-section is the exact 2D shape. Exact for any exact 2D field, and 1-Lipschitz."
       }
     },
-    "ShapeNullable9": {
+    "ShapeNullable10": {
       "type": [
         "object",
         "null"
@@ -10453,51 +10502,6 @@
         "radiusStart",
         "radiusEnd"
       ],
-      "additionalProperties": false
-    },
-    "ShapeNullable10": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "enabled": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "default": null,
-          "description": "Whether the style is on; absent is on. False on a palette row keeps that material unstyled whatever the world\u0027s default is; false on render.toon leaves the world\u0027s default off."
-        },
-        "outlineWidth": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null,
-          "description": "The close outline radius in output pixels, in [0, 4]; zero disables outlines."
-        },
-        "outlineDistance": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null,
-          "description": "The distance in metres at which the outline radius halves, in [0.1, 1000]."
-        },
-        "outlineNormal": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null,
-          "description": "The crease normal cosine, in [0, 0.95]."
-        },
-        "outlineTint": {
-          "default": null,
-          "description": "The outline multiplier, three linear RGB values in [0, 1]."
-        }
-      },
       "additionalProperties": false
     },
     "ShapeNullable11": {
@@ -11391,12 +11395,12 @@
           "description": "Only for Prism: top width divided by bottom width, finite in [0, 1]. Null uses 0.5; zero makes a triangular profile and one a rectangular profile. Scale holds bottom half-width, half-height and extrusion half-depth. Rotate the prism to reverse its taper."
         },
         "profile": {
-          "$ref": "#/$defs/ShapeNullable7",
+          "$ref": "#/$defs/ShapeNullable8",
           "description": "Optional Prism cross-section controls. Null uses a trapezoid; other profiles expose rounded rectangles, polygons, and ellipses with flat extruded caps.",
           "default": null
         },
         "lift": {
-          "$ref": "#/$defs/ShapeNullable8",
+          "$ref": "#/$defs/ShapeNullable9",
           "description": "Only for Prism: how the XY profile becomes a solid. Null or extrude sweeps it along local Z to scale.z. revolve sweeps it about the local Y axis with scale.z as the radial offset \u2014 zero gives a solid of revolution (a cowl, a boot cuff, a pauldron dome), a positive offset a ring. Renderable for every profile; a solid placement refuses it, because both contact compilers read a per-axis-scaled local box and a revolve reads scale.z as an offset rather than an extent.",
           "default": null
         },
@@ -11472,7 +11476,7 @@
           "default": null
         },
         "curve": {
-          "$ref": "#/$defs/ShapeNullable9",
+          "$ref": "#/$defs/ShapeNullable10",
           "description": "The shape\u0027s swept-curve geometry (null = none) \u2014 see ShapeCurveDocument. Admitted only, and required, on Sweep (refused elsewhere, by name; a Sweep with no curve is refused, by name); refused alongside Panel, Trims, Flare, Shear, Bumps, or Domain on the same shape.",
           "default": null
         },
@@ -13429,15 +13433,16 @@
           "minItems": 2,
           "maxItems": 2
         },
+        "closed": {
+          "type": "boolean",
+          "default": false
+        },
         "segments": {
+          "description": "Gets the contour\u0027s segments in order, each ending where the next begins. The list is owned.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/SdfPathSegmentNullable"
           }
-        },
-        "closed": {
-          "type": "boolean",
-          "default": false
         }
       },
       "required": [
@@ -13454,12 +13459,6 @@
         "null"
       ],
       "properties": {
-        "contours": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/SdfPathContourNullable"
-          }
-        },
         "tolerance": {
           "type": "number",
           "default": 0.001
@@ -13471,6 +13470,13 @@
         "shear": {
           "$ref": "#/$defs/SdfPathShear",
           "default": null
+        },
+        "contours": {
+          "description": "Gets the profile\u0027s contours, filled with even/odd fill. The list is owned, since Compile caches its edges by the profile.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SdfPathContourNullable"
+          }
         }
       },
       "required": [
@@ -13500,8 +13506,13 @@
           "type": "integer",
           "default": 6
         },
+        "path": {
+          "$ref": "#/$defs/SdfPathProfileNullable",
+          "description": "Required only for Path; its points are normalized profile coordinates.",
+          "default": null
+        },
         "vertices": {
-          "description": "Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.",
+          "description": "Gets, for Convex only, 3 to MaxConvexVertices local XY points, clockwise (X right, Y up \u2014 each turn\u0027s 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind. The list is owned.",
           "type": [
             "array",
             "null"
@@ -13515,11 +13526,6 @@
             "minItems": 2,
             "maxItems": 2
           }
-        },
-        "path": {
-          "$ref": "#/$defs/SdfPathProfileNullable",
-          "description": "Required only for Path; its points are normalized profile coordinates.",
-          "default": null
         }
       },
       "required": [

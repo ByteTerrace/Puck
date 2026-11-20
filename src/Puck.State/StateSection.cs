@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 
 namespace Puck.State;
@@ -78,43 +78,35 @@ public sealed record StateSection(
 ) : IStateSection {
     /// <inheritdoc cref="Spaces"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateSpace>? Spaces { get => field; init => field = Freeze(items: value); } = Freeze(items: Spaces);
+    public IReadOnlyList<StateSpace>? Spaces { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Spaces);
     /// <inheritdoc cref="Rows"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateRow>? Rows { get => field; init => field = Freeze(items: value); } = Freeze(items: Rows);
+    public IReadOnlyList<StateRow>? Rows { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Rows);
     /// <inheritdoc cref="Lattices"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = Freeze(items: value); } = Freeze(items: Lattices);
+    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Lattices);
     /// <inheritdoc cref="ParticipantSlots"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateSlot>? ParticipantSlots { get => field; init => field = Freeze(items: value); } = Freeze(items: ParticipantSlots);
+    public IReadOnlyList<StateSlot>? ParticipantSlots { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: ParticipantSlots);
     /// <inheritdoc cref="IdentitySlots"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateSlot>? IdentitySlots { get => field; init => field = Freeze(items: value); } = Freeze(items: IdentitySlots);
+    public IReadOnlyList<StateSlot>? IdentitySlots { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: IdentitySlots);
     /// <inheritdoc cref="Enums"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateEnum>? Enums { get => field; init => field = Freeze(items: value); } = Freeze(items: Enums);
+    public IReadOnlyList<StateEnum>? Enums { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Enums);
     /// <inheritdoc cref="Families"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateFamily>? Families { get => field; init => field = Freeze(items: value); } = Freeze(items: Families);
+    public IReadOnlyList<StateFamily>? Families { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Families);
     /// <inheritdoc cref="Records"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateRecord>? Records { get => field; init => field = Freeze(items: value); } = Freeze(items: Records);
+    public IReadOnlyList<StateRecord>? Records { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Records);
     /// <inheritdoc cref="Pools"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StatePool>? Pools { get => field; init => field = Freeze(items: value); } = Freeze(items: Pools);
+    public IReadOnlyList<StatePool>? Pools { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Pools);
     /// <inheritdoc cref="PairPools"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StatePairPool>? PairPools { get => field; init => field = Freeze(items: value); } = Freeze(items: PairPools);
+    public IReadOnlyList<StatePairPool>? PairPools { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: PairPools);
 
     IReadOnlyList<IStateSlot>? IStateSection.ParticipantSlots => ParticipantSlots;
     IReadOnlyList<IStateSlot>? IStateSection.IdentitySlots => IdentitySlots;
-
-    // A list that is already an immutable array is handed straight back, box and all: copying it would produce an
-    // equal value, and re-boxing it would allocate on every `with` for each member the caller did not change.
-    private static IReadOnlyList<T>? Freeze<T>(IReadOnlyList<T>? items) => (items switch {
-        null => null,
-        ImmutableArray<T> => items,
-        _ => items.ToImmutableArray(),
-    });
 }

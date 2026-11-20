@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
 using Puck.World.Authoring;
@@ -443,7 +444,7 @@ public sealed record WorldStateFieldTrait(
 ) {
     /// <summary>The initial fills, applied in order over <see cref="Initial"/>.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<WorldLatticeFill>? Paint { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Paint);
+    public IReadOnlyList<WorldLatticeFill>? Paint { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Paint);
     /// <summary>Marks this field a fluid MEDIUM, or <see langword="null"/> for an ordinary field. A medium field's
     /// value times <see cref="HeightScale"/> over the lattice origin is a free surface every active body samples
     /// each tick at its coupled cell — the same body-coupling ceiling <see cref="WorldReaction.Emit"/>/

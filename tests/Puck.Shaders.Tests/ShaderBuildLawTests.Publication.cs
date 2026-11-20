@@ -64,7 +64,8 @@ public sealed partial class ShaderBuildLawTests {
         var tools = Path.Combine(path1: root, path2: "tools");
 
         _ = Directory.CreateDirectory(path: tools);
-        File.WriteAllBytes(bytes: [0], path: Path.Combine(path1: tools, path2: ShaderCompiler.DxcTool));
+        // Named as the host finds an executable (ChildProcess.FindExecutable adds Windows' extension).
+        File.WriteAllBytes(bytes: [0], path: Path.Combine(path1: tools, path2: (OperatingSystem.IsWindows() ? (ShaderCompiler.DxcTool + ".exe") : ShaderCompiler.DxcTool)));
 
         return tools;
     }

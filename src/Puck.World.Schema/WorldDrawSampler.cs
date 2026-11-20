@@ -62,6 +62,18 @@ public class WorldDrawSampler : PrivateDrawAuthority {
         if (rows is not null) { definition = definition.WithWorldState(rows); }
         return WithLast(definition, last);
     }
+    /// <summary>Returns whether any of a document's rows declares a private stream, the rows <see cref="Install"/>
+    /// binds; a document with none installs only its allocator (<see cref="WithLast"/>).</summary>
+    /// <param name="definition">The document.</param>
+    /// <returns><see langword="true"/> when a row declares a private stream.</returns>
+    internal static bool InstallsAny(WorldDefinition definition) {
+        var rows = definition.AuthoredState;
+
+        for (var index = 0; (index < rows.Count); index++) {
+            if (rows[index].InstallationInput.Draw?.PrivateStream == true) { return true; }
+        }
+        return false;
+    }
 
     /// <summary>Updates the private-site allocator on a speculative document. Refused edits drop the allocation.</summary>
     public static WorldDefinition WithLast(WorldDefinition definition, long last) =>

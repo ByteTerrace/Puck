@@ -52,6 +52,12 @@ internal sealed class WorldShadeLowering {
         ? compilation.Programs : new Dictionary<string, JsonNode>());
 
     public static JsonNode? Lower(ExpressionNode expression, DocumentScope scope) {
+        // A use written as a key is the document's own spelling of a use: it names a row of the root `shades` table, which
+        // the canonical walk (WorldDocumentMembers) refuses in a whole document that does not hold it, and which every
+        // door that loads the world checks is that program's identity (WorldShadeTable).
+        if (expression is LiteralExpressionNode { Value: string { Length: > 0 } written }) {
+            return scope.Budget.Adopt(value: JsonValue.Create(value: written), span: expression.Span);
+        }
         var compilation = Compilations.GetValue(key: scope.Budget, createValueCallback: static _ => new());
         var cacheKey = CacheKeyOf(expression: expression, scope: scope, compilation: compilation);
 

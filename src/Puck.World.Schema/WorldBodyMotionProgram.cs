@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 using Puck.Maths;
 using Puck.Physics.Motion;
@@ -21,7 +22,7 @@ public abstract record ActionStateEnvelope {
     /// <param name="Values">The admitted values.</param>
     public sealed record Set(IReadOnlyList<float> Values) : ActionStateEnvelope {
         /// <summary>The admitted values.</summary>
-        public IReadOnlyList<float> Values { get => field; init => field = StateLists.Freeze(items: value)!; } = StateLists.Freeze(items: Values)!;
+        public IReadOnlyList<float> Values { get => field; init => field = OwnedLists.Freeze(items: value)!; } = OwnedLists.Freeze(items: Values)!;
     }
 }
 /// <summary>Declares one named body-state slot shared by every kit action in the world. The carrying
