@@ -594,18 +594,19 @@ public sealed class MemoryAccount {
     // Under m_gate: whether a pool has room for extra bytes of promise.
     private bool Fits(PhysicalMemory pool, long extra) => ((extra <= 0L) || (RoomOf(pool: pool) is not { } room) || (extra <= room));
 
-    // Ordinary admission leaves headroom. Fixed storage and the one forced job may spend that reserve,
-    // but no new promise or unreserved acquisition can pass an explicit host bar.
+    // Ordinary admission leaves headroom. Storage that gives way may spend that reserve when it acquires, but no promise
+    // or acquisition that gives way can pass an explicit host bar, the process's private bytes beyond its owners counted.
     private bool FitsHostBar(PhysicalMemory pool, long extra) =>
         pool != PhysicalMemory.Host || extra <= 0 || m_hostBar is null ||
         extra <= Math.Min(m_hostBar.Value, DefaultBudget) - m_privateBeyondHeld - HeldOf(pool) - PromisedOf(pool);
     // Under m_gate: whether extra bytes of promise fit the authored host bar counting only what the host pool's owners
     // hold and are promised. The private bytes beyond them (m_privateBeyondHeld: the collector's and allocator's slack,
     // the runtime, the driver, storage no owner names) are a sampled reading no admission can shrink, and can stand past
-    // the bar for as long as work runs; the admissions that work needs to progress at all (the forced job, an owner's
-    // progress floor) are judged without them, so that work still settles, one job at a time.
-    private bool FitsChargedHostBar(long extra) =>
-        (extra <= 0L) || (m_hostBar is not { } bar) || (extra <= ((Math.Min(val1: bar, val2: DefaultBudget) - HeldOf(pool: PhysicalMemory.Host)) - PromisedOf(pool: PhysicalMemory.Host)));
+    // the bar for as long as work runs; what cannot give way (fixed storage, a reservation's floor) and what work needs to
+    // progress at all (the forced job, an owner's progress floor) are judged without them, so the presentation keeps its
+    // tables and work still settles, one job at a time, while every byte the owners name stays under the bar.
+    private bool FitsChargedHostBar(PhysicalMemory pool, long extra) =>
+        (pool != PhysicalMemory.Host) || (extra <= 0L) || (m_hostBar is not { } bar) || (extra <= ((Math.Min(val1: bar, val2: DefaultBudget) - HeldOf(pool: pool)) - PromisedOf(pool: pool)));
     // Under m_gate.
     private MemorySegmentLimit? RecordedLimit(GpuMemorySegment segment) {
         foreach (var recorded in m_segmentLimits) {
@@ -764,7 +765,7 @@ public sealed class MemoryAccount {
                 // admitted like fixed storage. The floor is measured in the owner's own bytes, so it covers a resource
                 // within it whatever the block the device allocates to place it: a small resource's shared block is
                 // many times the resource, and judged by the block no floor would ever admit one.
-                if (!FitsHostBar(pool, net) || givesWay || ((entry is { Classified: true }) && MemoryClasses.GivesWay(memoryClass: entry.Class) && ((entry.Held + Math.Min(val1: payerBytes, val2: bytes)) > entry.Floor))) {
+                if (!FitsChargedHostBar(extra: net, pool: pool) || givesWay || ((entry is { Classified: true }) && MemoryClasses.GivesWay(memoryClass: entry.Class) && ((entry.Held + Math.Min(val1: payerBytes, val2: bytes)) > entry.Floor))) {
                     Refused(pool: pool, owner: payer ?? segment.Name);
 
                     return new(Bytes: bytes, Net: net, Payer: null, Verdict: GpuMemoryVerdict.Refused);
@@ -973,7 +974,7 @@ public sealed class MemoryAccount {
                 var extra = (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise);
 
                 if (!m_account.Fits(extra: extra, pool: PhysicalMemory.Host)) {
-                    if (!progress || !m_account.FitsChargedHostBar(extra: extra)) { return RefusePeak(peak); }
+                    if (!progress || !m_account.FitsChargedHostBar(extra: extra, pool: PhysicalMemory.Host)) { return RefusePeak(peak); }
 
                     var state = m_account.m_pools[((int)PhysicalMemory.Host)];
 
@@ -1014,7 +1015,7 @@ public sealed class MemoryAccount {
                 ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
                 ThrowIfNotAdmitted();
                 if ((m_account.m_forced is { } holder) && !ReferenceEquals(objA: holder, objB: this)) { return false; }
-                if (!m_account.FitsChargedHostBar(extra: (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise))) { return RefusePeak(peak); }
+                if (!m_account.FitsChargedHostBar(extra: (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise), pool: PhysicalMemory.Host)) { return RefusePeak(peak); }
                 if (m_account.m_forced is null) { m_account.m_forcedJobs++; }
                 m_account.m_forced = this;
                 m_account.m_forcedBytes = peak;
@@ -1096,7 +1097,12 @@ public sealed class MemoryAccount {
             lock (m_account.m_gate) {
                 ThrowIfNotAdmitted();
                 var extra = bytes - Promise;
-                if (!m_account.FitsHostBar(PhysicalMemory.Host, extra) ||
+                // Storage that cannot give way is judged on what the owners name alone (FitsChargedHostBar).
+                var fitsBar = (MemoryClasses.GivesWay(memoryClass: EffectiveClass)
+                    ? m_account.FitsHostBar(PhysicalMemory.Host, extra)
+                    : m_account.FitsChargedHostBar(extra: extra, pool: PhysicalMemory.Host));
+
+                if (!fitsBar ||
                     (EffectiveClass == MemoryClass.Cached && !m_account.Fits(PhysicalMemory.Host, extra))) {
                     m_account.Refused(PhysicalMemory.Host, Name, trim: EffectiveClass != MemoryClass.Cached);
                     return false;
@@ -1270,7 +1276,11 @@ public sealed class MemoryAccount {
 
                 var extra = (Math.Max(val1: 0L, val2: ((m_entry.Peak + (peak - m_peak)) - m_entry.Held)) - m_entry.Promise);
 
-                if (!m_account.FitsHostBar(m_entry.Pool, extra) || ((peak > floor) && !m_account.Fits(extra: extra, pool: m_entry.Pool))) {
+                // A reservation within its floor holds what the holder cannot run without, judged on what the owners name
+                // alone; past the floor it gives way, and the private bytes beyond the owners count too.
+                var fitsBar = ((peak > floor) ? m_account.FitsHostBar(m_entry.Pool, extra) : m_account.FitsChargedHostBar(extra: extra, pool: m_entry.Pool));
+
+                if (!fitsBar || ((peak > floor) && !m_account.Fits(extra: extra, pool: m_entry.Pool))) {
                     m_account.Refused(pool: m_entry.Pool, owner: Owner);
                     return false;
                 }
