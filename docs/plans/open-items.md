@@ -541,7 +541,7 @@ costs.
     values release their blocks on retirement or the next write/accounting
     visit after their readers leave. Table replacement still allocates arrays;
     its byte report includes arena machinery, held retired values and block
-    headers. Then the dressed `SdfFrame` copies.
+    headers.
     On the bake writer thread `CacheRetention.EnforceSetsCore` enumerates the
     store on every write. Small: `BindingBarSeatComposer.PlacedSlots`
     enumerating `CompiledBindingBarLayout.Banks.Values` once a slot,
@@ -703,15 +703,6 @@ What an arrival and a hand-over still cost the frame:
   that worked a few milliseconds and then waited in the pacer
   (`PresentPacingPolicy`); a quiet window holds the bar. Whether a loaded
   machine should cost Vulkan's pacer more than Direct3D 12's is not found.
-- [medium] A residency's final release waits on the frame thread for two
-  builds once the device's retirement runs it (`GpuDeviceRetirement.Poll`, from
-  `RenderGraphRuntime`'s frame): `SdfWorldPipelineSource.Release` cancels and waits its lease
-  acquisition, releasing a last `GpuBuildLease` whose entry is still building
-  waits out the creation in the driver (`GpuBuildCache.Retire`), and
-  `SdfWorldResidency.CancelShaderReload` waits a reload's builds. A routed
-  residency left while its kernels build cold stalls the frame. Retire them
-  through `RetiredBuilds` as the specialization does, moving the cache's
-  last-lease retire onto the same table. Unmeasured.
 
 The frame thread's CPU work, largest first:
 
@@ -2767,13 +2758,6 @@ state, the shader cache and the GC-hole retirement.
   The opposite direction (a refused row on a machine that now prepares) was
   fixed to boot it from power-on.
 
-- [high] Production deploy fails at "Publish containers and apply application
-  configuration": `az acr repository list` answers "authentication required",
-  because `ReusePublishedContainerAsync` begins with a catalog listing
-  (`AzureContainerRetention.cs`) the publishing identity deliberately cannot
-  make. Ask for the known tag (`az acr repository show --image
-  <repo>:<commit>`) and treat only a not-found answer as "not published"; do
-  not grant the catalog role.
 - [medium] Cold debug-world silo activation spends most of its time before
   checkpoint decode, in storage and definition admission (`WorldSiloHost`'s
   per-step timers; `WorldAuthorityBlobStore`). Profile that phase and compare

@@ -33,5 +33,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     SdfHit hit = mapCore(probe.xyz, SDF_INSTANCE_MASK_ALL, true);
 
-    fieldResults[uint2((slot % FieldResultsWidth), (slot / FieldResultsWidth))] = float4(hit.distance, asfloat(hit.material), sdfProgramLayout.stepScale, 0.0);
+    fieldResults[uint2((slot % FieldResultsWidth), (slot / FieldResultsWidth))] = float4(hit.distance, asfloat(hit.material), 0.0, 0.0);
 }

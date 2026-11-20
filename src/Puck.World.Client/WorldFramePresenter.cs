@@ -2200,68 +2200,72 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         }
 
         m_frameScreenRateCodes = null;
-        m_dressedFrame = new SdfFrame(
-            Program: program,
-            ProgramChanged: programChanged,
-            Time: m_elapsedSeconds,
-            Views: m_frameViews
-        ) {
-            DynamicTransforms = transforms,
-            MovedTransforms = moved,
-            // A frame whose render inputs match the previous one re-composites the retained image instead of
-            // re-marching it; any camera, program, pose, lever or twinkle change renders.
-            EnableCadenceGate = m_settings.CadenceGate,
-            // A settled capture disables rated updates but keeps two-phase occlusion. Each phase preserves staged
-            // order; an exact coplanar depth tie across phases can still depend on the preceding visible set.
-            MeshCull = m_settings.Cull,
-            MeshDetail = m_settings.Detail,
-            UpdateRates = RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture),
-            TickLocked = TickLocked,
-            ConvergesLighting = LightingConvergence?.Invoke() ?? false,
-            RateCounts = m_settings.RateCounts,
-            RateIntervals = m_settings.RateIntervals,
-            // A tier view's codes: the stamp pool's bodies as its pack this frame rated them, and the screens as the graph
-            // host's footprints asked for them, each copied so the frame keeps its own.
-            SlotRateCodes = (m_settings.RateTints ? m_animator.SlotRateCodes.ToArray() : ReadOnlyMemory<byte>.Empty),
-            ScreenRateCodes = (m_settings.RateTints ? ScreenRateCodes() : ReadOnlyMemory<byte>.Empty),
-            IndirectTier = m_settings.IndirectTier,
-            RayQueries = m_settings.RayQueries,
-            IndirectSources = lighting.Indirect.Gains.Sources,
-            IndirectGains = lighting.Indirect.Gains,
-            IndirectBounces = lighting.Indirect.Bounces,
-            IndirectBudget = lighting.Indirect.Budget,
-            IndirectLightingGrid = lighting.Indirect.LightingGrid,
-            IndirectApply = lighting.Indirect.Apply,
-            Volumes = m_volumes,
-            // Every emitter's mesh draws: the static placements' and the stamp pool's, then the neighbour worlds'.
-            MeshDraws = meshDraws,
-            MeshDrawsRevision = meshDrawsRevision,
-            // The stamp pool's bodies straddling a same-world door, drawn on both sides of it.
-            SlotClips = m_animator.SlotClips,
-            // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
-            // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
-            FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
-            ShadowCoverage = WorldRenderFarDistance.ResolveShadowCoverage(defaults: m_client.Definition.Render),
-            // The distant shadow map: render.distantShadows at boot, then the device table's row a quality preset applies.
-            DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: m_settings.DistantShadows),
-            FarShadows = WorldRenderFarDistance.ResolveFarShadows(authored: m_settings.FarShadows),
-            // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at its
-            // clock's presented phase (a world.row.set render lands on the next frame).
-            Lights = lighting.Lights,
-            Exposure = WorldRenderSettings.Pinned(exposure: lighting.Exposure, pin: m_settings.ExposurePin),
-            Toon = m_settings.ResolveToon(render: m_client.Definition.Render),
-            Tone = WorldRenderSettings.ToneOf(render: m_client.Definition.Render),
-            ShadePrograms = m_settings.ShadePrograms,
-            ShadeDefault = m_settings.ResolveShade(m_client.Definition.Render, program),
-            ShadeDeclared = WorldRenderSettings.DeclaredShades(definition: m_client.Definition),
-            Sky = lighting.Sky,
-            // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
-            // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.
-            Clock = m_client.StateMirror.Presented,
-            // render.lanes at the presented tick, resolved with the sky through the state mirror.
-            WorldLanes = lighting.Lanes,
-            DiagnosticSource = m_diagnosticSource,
-        };
+        // The presentation's one frame, written again for each capture: a residency renders its own copy of it.
+        m_dressedFrame = m_frameWriter.Write(
+            content: new SdfFrameContent(
+                Program: program,
+                ProgramChanged: programChanged,
+                Time: m_elapsedSeconds,
+                Views: m_frameViews
+            ) {
+                DynamicTransforms = transforms,
+                MovedTransforms = moved,
+                TickLocked = TickLocked,
+                ConvergesLighting = LightingConvergence?.Invoke() ?? false,
+                // A tier view's codes: the stamp pool's bodies as its pack this frame rated them, and the screens as the
+                // graph host's footprints asked for them, each copied so the frame keeps its own.
+                SlotRateCodes = (m_settings.RateTints ? m_animator.SlotRateCodes.ToArray() : ReadOnlyMemory<byte>.Empty),
+                ScreenRateCodes = (m_settings.RateTints ? ScreenRateCodes() : ReadOnlyMemory<byte>.Empty),
+                Volumes = m_volumes,
+                // Every emitter's mesh draws: the static placements' and the stamp pool's, then the neighbour worlds'.
+                MeshDraws = meshDraws,
+                MeshDrawsRevision = meshDrawsRevision,
+                // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at
+                // its clock's presented phase (a world.row.set render lands on the next frame).
+                Lights = lighting.Lights,
+                Exposure = WorldRenderSettings.Pinned(exposure: lighting.Exposure, pin: m_settings.ExposurePin),
+                Sky = lighting.Sky,
+                // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state
+                // at, never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.
+                Clock = m_client.StateMirror.Presented,
+                // render.lanes at the presented tick, resolved with the sky through the state mirror.
+                WorldLanes = lighting.Lanes,
+            },
+            settings: new SdfFrameSettings {
+                // A frame whose render inputs match the previous one re-composites the retained image instead of
+                // re-marching it; any camera, program, pose, lever or twinkle change renders.
+                EnableCadenceGate = m_settings.CadenceGate,
+                // A settled capture disables rated updates but keeps two-phase occlusion. Each phase preserves staged
+                // order; an exact coplanar depth tie across phases can still depend on the preceding visible set.
+                MeshCull = m_settings.Cull,
+                MeshDetail = m_settings.Detail,
+                UpdateRates = RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture),
+                RateCounts = m_settings.RateCounts,
+                RateIntervals = m_settings.RateIntervals,
+                IndirectTier = m_settings.IndirectTier,
+                RayQueries = m_settings.RayQueries,
+                IndirectSources = lighting.Indirect.Gains.Sources,
+                IndirectGains = lighting.Indirect.Gains,
+                IndirectBounces = lighting.Indirect.Bounces,
+                IndirectBudget = lighting.Indirect.Budget,
+                IndirectLightingGrid = lighting.Indirect.LightingGrid,
+                IndirectApply = lighting.Indirect.Apply,
+                // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
+                // lands on the next frame, like the lighting), or the engine's pinned default when unauthored.
+                FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
+                ShadowCoverage = WorldRenderFarDistance.ResolveShadowCoverage(defaults: m_client.Definition.Render),
+                // The distant shadow map: render.distantShadows at boot, then the device table's row a quality preset
+                // applies.
+                DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: m_settings.DistantShadows),
+                FarShadows = WorldRenderFarDistance.ResolveFarShadows(authored: m_settings.FarShadows),
+                Toon = m_settings.ResolveToon(render: m_client.Definition.Render),
+                Tone = WorldRenderSettings.ToneOf(render: m_client.Definition.Render),
+                ShadePrograms = m_settings.ShadePrograms,
+                ShadeDefault = m_settings.ResolveShade(m_client.Definition.Render, program),
+                ShadeDeclared = WorldRenderSettings.DeclaredShades(definition: m_client.Definition),
+                DiagnosticSource = m_diagnosticSource,
+            }
+        );
 
         FitSkyViews?.Invoke(m_frameViews, lighting.Sky, width, height);
         // The next pack holds no body a shadow of this frame's views and lights may show.

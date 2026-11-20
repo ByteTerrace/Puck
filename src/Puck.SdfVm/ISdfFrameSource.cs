@@ -18,7 +18,8 @@ public interface ISdfFrameSource {
     /// <param name="deltaSeconds">The presentation frame delta in seconds (for time-based presentation smoothing).</param>
     /// <param name="interpolationAlpha">The fraction in <c>[0, 1)</c> between the previous and current fixed simulation tick, for interpolating presentation state toward the variable display rate; a static source may ignore it.</param>
     /// <returns>The frame to render, or <see langword="null"/> when the source films nothing this frame, so the frame
-    /// it filmed last stands.</returns>
+    /// it filmed last stands. The frame is the source's and borrowed until its next capture, which may write it again
+    /// (<see cref="SdfFrame.Writer"/>); a caller that keeps it longer keeps a copy of its own.</returns>
     SdfFrame? CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha);
     /// <summary>Gets why the latest <see cref="CaptureFrame"/> filmed nothing, or a frame that does not yet show what its
     /// content calls for, naming the work it waits on; <see langword="null"/>, the default, when the frame shows it. A

@@ -244,8 +244,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets whether the latest staging held a draw out of the frame because its mesh had not landed
     /// (<see cref="SdfWorldTables.DrawsAwaitMeshes"/>); <see langword="false"/> before the tables are built.</summary>
     public bool DrawsAwaitMeshes => (m_tables?.DrawsAwaitMeshes ?? false);
-    /// <summary>Gets the latest captured frame, which every view of the residency renders, or <see langword="null"/>
-    /// before the first.</summary>
+    /// <summary>Gets the residency's copy of its latest captured frame, which every view of the residency renders, or
+    /// <see langword="null"/> before the first. The residency writes its frames again at later captures, so a reader keeps
+    /// no reference past the frame it read it in.</summary>
     public SdfFrame? Frame => m_frame;
     /// <summary>Gets the screens the residency binds, or <see langword="null"/> for none.</summary>
     public ISdfScreenSources? ScreenSources => m_screenSources;
@@ -268,7 +269,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public long ProgramBuilds => ((m_frameSource as SdfCompositionFrameSource)?.ProgramBuilds ?? 0);
     /// <summary>Gets the bounded volume count in the latest captured frame, before per-ray rejection.</summary>
     public int LiveVolumes { get; private set; }
-    /// <summary>Gets the last uploaded program's Lipschitz step scale (1 = no clamp), or 0 before the first upload.</summary>
+    /// <summary>Gets the last uploaded program's residual CPU query multiplier, or 0 before the first upload.</summary>
     public float LiveProgramStepScale { get; private set; }
     /// <summary>Gets the last uploaded program's step-scale binder (see <see cref="SdfProgram.StepScaleBinder"/>), or
     /// <see langword="null"/> before the first upload and whenever nothing unscoped binds the step scale.</summary>
@@ -404,28 +405,50 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         m_disposed = true;
         if (m_deviceContext is { } device) {
-            device.Services.Retirement.Retire(item: new Puck.Abstractions.DisposeOnce(action: ReleaseDeviceObjects));
+            device.Services.Retirement.Retire(item: new Puck.Abstractions.DisposeOnce(action: () => ReleaseDeviceObjects(deviceLost: false)));
         } else {
-            ReleaseDeviceObjects();
+            ReleaseDeviceObjects(deviceLost: false);
         }
     }
 
-    // Runs once, after the last hold: at once without a device, otherwise from the device's retirement once no
-    // submission reads the objects, or at its drain after a loss or at teardown.
-    private void ReleaseDeviceObjects() {
-        MeshIrradiance.Dispose();
+    // The one release of the residency's device objects: its tables, its pipeline set and specializations, and a kernel
+    // reload in flight. A final release runs once, after the last hold: at once without a device, otherwise from the
+    // device's retirement once no submission reads the objects (GpuDeviceRetirement.Poll, on the frame thread), or at its
+    // drain after a loss or at teardown; it also lets go of the residency's bake, lighting and meshes. A loss keeps those,
+    // reports every shading submission as unproven and readies the residency to rebuild on the recreated device.
+    //
+    // Nothing here waits for a build: a pipeline lease still being taken, a last lease whose creation is still in the
+    // driver, a specialization's compile and a reload's builds are each retired into the catalog's table, which outlives
+    // the residency and discards each on the pool as it finishes, and a reload's kernel compiles are canceled without
+    // waiting. A loss alone then drains that table, since no lease of the lost device may outlive its recovery; the host's
+    // teardown drains it before the device goes.
+    private void ReleaseDeviceObjects(bool deviceLost) {
+        if (deviceLost) {
+            LoseShade();
+            Array.Clear(array: m_boundScreenSources);
+            Array.Clear(array: m_renderedSignatures);
+            m_frameSource.NotifyDeviceLost();
+        } else {
+            MeshIrradiance.Dispose();
+        }
         m_tables?.Dispose();
         m_tables = null;
         m_probeTables = null;
         ResetReady();
-        CancelShaderReload(reason: "the residency was released");
-        ReleaseShadePipelines(deviceLost: false);
-        m_meshDresser.Dispose();
-        MeshPathBake.Retire();
-        m_ownedLibrary?.Dispose();
-        // A pipeline still building is retired with the specializations, not waited for: the catalog's table outlives the
-        // residency, and the host's teardown and every residency's device loss drain it while the device lives.
+        CancelShaderReload(reason: (deviceLost ? "the device was lost" : "the residency was released"));
+        ReleaseShadePipelines();
         m_pipelines.Release(retired: m_pipelines.Catalog.RetiredBuilds);
+        if (deviceLost) {
+            m_pipelines.Catalog.RetiredBuilds.Drain();
+            m_work.Invalidate();
+            m_glyphAtlasInitialized = false;
+            m_uploadedGlyphAtlas = null;
+            m_deviceContext = null;
+        } else {
+            m_meshDresser.Dispose();
+            MeshPathBake.Retire();
+            m_ownedLibrary?.Dispose();
+        }
     }
 
     // The library the residency made for itself when its host shared none, which it disposes on its last release.
@@ -865,25 +888,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     /// <summary>Releases every device object after the device was lost, without waiting for any submission; the next
     /// frame rebuilds the tables on the recreated device, and every view renders again.</summary>
-    public void OnDeviceLost() {
-        LoseShade();
-        Array.Clear(array: m_boundScreenSources);
-        Array.Clear(array: m_renderedSignatures);
-        m_frameSource.NotifyDeviceLost();
-        m_tables?.Dispose();
-        m_tables = null;
-        m_probeTables = null;
-        ResetReady();
-        // A pipeline build or kernel reload still in flight is waited out and discarded before the host recreates the
-        // device; the rebuilt tables build their pipelines anew on the recreated one.
-        CancelShaderReload(reason: "the device was lost");
-        ReleaseShadePipelines(deviceLost: true);
-        m_pipelines.Release();
-        m_work.Invalidate();
-        m_glyphAtlasInitialized = false;
-        m_uploadedGlyphAtlas = null;
-        m_deviceContext = null;
-    }
+    public void OnDeviceLost() => ReleaseDeviceObjects(deviceLost: true);
 
     /// <summary>Gets the bake of the residency's program into the meshes its views draw.</summary>
     public SdfMeshPathBake MeshPathBake { get; }
@@ -926,6 +931,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private SdfFrame? m_pendingFrame;
     private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
     private SdfFrame? m_frozenFrame;
+    // The residency's own frames: a capture is copied into the one the tables do not hold (Capture), and a converging
+    // capture's first frame into the frozen one, so the frame the views render is never the source's, which its next
+    // capture may write again, and capturing allocates nothing.
+    private readonly SdfFrame.Writer[] m_captures = [new(), new()];
+    private readonly SdfFrame.Writer m_frozen = new();
 
     /// <summary>Gets whether the residency holds its frame for a capture (<see cref="BeginConvergence"/>): until the
     /// capture completes, every frame renders the frame the capture's first frame took.</summary>
@@ -968,10 +978,13 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
 
         var converging = HoldsFrame;
+        // A capture is written into the residency's own frame that the tables do not hold, so the packed frame, which a
+        // frame waiting on a pipeline keeps rendering, is never written while it stands.
+        var capture = (ReferenceEquals(objA: m_captures[0].Frame, objB: m_packedFrame) ? m_captures[1] : m_captures[0]);
         SdfFrame frame;
 
         if (converging && (m_frozenFrame is { } frozen)) {
-            frame = frozen with { ProgramChanged = false };
+            frame = capture.CopyFrom(content: (frozen.Content with { ProgramChanged = false }), source: frozen);
             SourceWaiting = null;
             m_frameSource.PresentHeldFrame();
         } else {
@@ -997,11 +1010,13 @@ public sealed partial class SdfWorldResidency : IDisposable {
             if (captured is null) {
                 return;
             }
-            frame = captured;
+            // The source's frame is borrowed until its next capture, which may write it again: the residency renders its
+            // own copy.
+            frame = capture.CopyFrom(source: captured);
             if (converging && (SourceWaiting is null)) {
                 // Freeze the authored frame, while derived meshes can still finish under the capture's hold. A frame the
                 // source says is incomplete is never frozen; a later one is.
-                m_frozenFrame = frame;
+                m_frozenFrame = m_frozen.CopyFrom(source: frame);
             }
         }
 

@@ -225,6 +225,8 @@ public sealed partial class SdfFieldEvaluator {
         var segmentBounds = m_segmentBounds;
         var local = world;
         var distanceScale = Point(value: FixedQ4816.One);
+        var frames = m_rootFrames.Span;
+        var root = new PointFrame<IntervalVector3, FixedInterval>();
         var result = FixedInterval.FromPoint(value: FarDistance);
         // A pending LaneErode's effect on the next shape (WalkPoints' laneErodeSkip and laneErodeAmount): skipped, or
         // eroded by an interval of its reach; cleared by ResetPoint.
@@ -282,6 +284,7 @@ public sealed partial class SdfFieldEvaluator {
                 }
             }
 
+            root.Capture(index: index, point: local, scale: distanceScale);
             ref readonly var instruction = ref m_instructions[index];
 
             ++visited;
@@ -297,6 +300,8 @@ public sealed partial class SdfFieldEvaluator {
 
                         if (cull && (segment >= 0) && segmentBounds[segment].Reach.Boxed && segmentBounds[segment].Reach.BoxClears(query: in query, threshold: SegmentThreshold(above: result.Upper, below: result.Lower, bound: in segmentBounds[segment]))) {
                             index = (segmentBounds[segment].End - 1);
+                        } else if (!frames.IsEmpty) {
+                            root.Reset(frame: frames[index], index: ref index, point: ref local, scale: ref distanceScale);
                         }
 
                         break;
@@ -391,7 +396,7 @@ public sealed partial class SdfFieldEvaluator {
 
                         var candidate = ((ShapeBounds(instruction: instruction, p: local) * distanceScale) + erosion);
 
-                        result = BlendBounds(blend: instruction.Blend, candidate: candidate, current: result, smoothRadius: instruction.Data1X);
+                        result = BlendBounds(blend: instruction.Blend, candidate: ScaleCandidateBounds(candidate: candidate, scale: instruction.ScopeScale), current: result, smoothRadius: instruction.Data1X);
                         break;
                     }
                 case SdfIntervalAction.Unsupported: {
@@ -693,16 +698,17 @@ public sealed partial class SdfFieldEvaluator {
             ? new FixedInterval(lower: lower, upper: upper)
             : first);
     }
+    private static FixedInterval ScaleCandidateBounds(FixedInterval candidate, long scale) =>
+        ((scale > 0L) && !candidate.IsUnbounded)
+        ? new FixedInterval(
+            lower: (ScaleScope(candidate: candidate.Lower, scale: scale) - FixedQ4816.Epsilon),
+            upper: (ScaleScope(candidate: candidate.Upper, scale: scale) + FixedQ4816.Epsilon))
+        : candidate;
+
     private static FixedInterval PopFieldBounds(FixedInterval candidate, FixedInterval saved, in CompiledInstruction instruction) {
         var isStairs = (instruction.Blend is ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction));
 
-        if ((instruction.ScopeScale > 0L) && !candidate.IsUnbounded) {
-            // The point walk rounds each end's product to nearest; a raw past either end encloses it.
-            candidate = new FixedInterval(
-                lower: (ScaleScope(candidate: candidate.Lower, scale: instruction.ScopeScale) - FixedQ4816.Epsilon),
-                upper: (ScaleScope(candidate: candidate.Upper, scale: instruction.ScopeScale) + FixedQ4816.Epsilon)
-            );
-        }
+        candidate = ScaleCandidateBounds(candidate: candidate, scale: instruction.ScopeScale);
 
         if (instruction.Blend == ((uint)SdfBlendOp.Morph)) {
             var from = Point(value: instruction.Data0Y);

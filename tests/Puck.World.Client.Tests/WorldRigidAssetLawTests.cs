@@ -17,13 +17,15 @@ public sealed class WorldRigidAssetLawTests {
         var frames = new SdfCompositionFrameSource([emitter], new Dresser());
         var tick = 0UL;
 
-        (SdfProgram Program, SdfMeshInstance Copy) Frame(float x, EntityContinuity continuity, int generation = 1) {
+        // The copy is a row its producer rewrites in place, so each frame's identities are read as that frame left them.
+        (SdfProgram Program, (object Identity, object? MotionIdentity) Copy) Frame(float x, EntityContinuity continuity, int generation = 1) {
             client.DeliverSnapshot(snapshot: new WorldSnapshot(++tick, 1, 1,
                 new[] { new EntitySnapshot(0, new Vector3(x: x, y: 0, z: 0), Quaternion.Identity, Vector3.One, true, 0, 0, 0, continuity, generation) }, "a"), stream: default);
             client.UpdateRenderPoses(alpha: 1);
             var frame = frames.CaptureFrame(deltaSeconds: 0, height: 64, interpolationAlpha: 1, width: 64)!;
+            var copy = Assert.Single(collection: frame.MeshInstances);
 
-            return (frame.Program, Assert.Single(collection: frame.MeshInstances));
+            return (frame.Program, (copy.Identity, copy.MotionIdentity));
         }
         var first = Frame(0, EntityContinuity.Continuous);
         var moved = Frame(1, EntityContinuity.Continuous);

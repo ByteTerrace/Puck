@@ -152,17 +152,6 @@ uint sdfInstanceDirectoryOffset() {
 
     return sdfInstanceDirectoryOffsetFrom(segmentOffset, SDF_SEGMENT_COUNT(sdfProgramWord(segmentOffset)));
 }
-// The per-PROGRAM Lipschitz STEP SCALE (1/L in (0, 1]), baked HOST-SIDE into the segment-directory header's otherwise-
-// free .y lane (SdfProgram.AnalyzeLipschitz). mapCore multiplies EVERY returned distance by it, so a consumer that
-// compares that distance against a WORLD-space quantity (a penumbra ratio, a footprint threshold) rather than taking a
-// STEP with it must divide the clamp back out. == 1.0 exactly for an isometric, warp-free program (x * 1.0f == x to the
-// bit for every finite x), so those scenes stay byte-identical. The `> 0` guard keeps a pre-writer all-zero stream
-// rendering as before.
-float sdfStepScale() {
-    float stepScale = asfloat(SDF_SEGMENT_STEP_SCALE(sdfProgramWord(sdfSegmentDirectoryOffset())));
-
-    return ((stepScale > 0.0) ? stepScale : 1.0);
-}
 // The element offset of instance `index`'s directory entry (i0 = bound, i1 = meta at +1) within the directory at
 // `instanceOffset` — the ONE statement of the 2-uint4-per-instance entry stride.
 uint sdfInstanceEntryOffset(uint instanceOffset, uint index) {

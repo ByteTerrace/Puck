@@ -178,7 +178,7 @@ public sealed partial class SdfWorldResidency {
     }
     // An overtaken or released compile is canceled without waiting and retired to the catalog, which disposes a result
     // it completed anyway on the pool as it finishes and outlives this residency; a device loss drains the catalog's
-    // retired builds before the device is recreated (ReleaseShadePipelines), the host's teardown before it is destroyed.
+    // retired builds before the device is recreated (ReleaseDeviceObjects), the host's teardown before it is destroyed.
     private void CancelShadeBuild() {
         m_pipelines.Catalog.RetiredBuilds.Retire(build: m_shadeBuild.Detach(), discard: static result => result.Dispose());
         m_shadeRequest = null;
@@ -216,13 +216,11 @@ public sealed partial class SdfWorldResidency {
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not a shading kernel."),
     };
 
-    // Device teardown and a residency's final idle drain are the only places that free sets regardless of their pins. The
-    // final release waits for no compile or driver: a build still running is retired, and the sets disposed here are
-    // built, so their leases hold no build to wait out. A device loss drains every retired build of the composition, so
-    // no lease of the lost device outlives its recovery.
-    private void ReleaseShadePipelines(bool deviceLost) {
+    // Device teardown and a residency's release (ReleaseDeviceObjects) are the only places that free sets regardless of
+    // their pins. It waits for no compile or driver: a build still running is retired, and the sets disposed here are
+    // built, so their leases hold no build to wait out.
+    private void ReleaseShadePipelines() {
         CancelShadeBuild();
-        if (deviceLost) { m_pipelines.Catalog.RetiredBuilds.Drain(); }
         m_shadeCurrent?.Dispose();
         m_shadeCurrent = null;
         foreach (var retired in m_shadeRetired) { retired.Dispose(); }

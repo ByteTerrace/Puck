@@ -29,6 +29,7 @@ public sealed partial class SdfProgram {
         var sweeps = new List<SdfSweepCurve>();
         var paths = new List<SdfCompiledPath>();
         var samples = new List<SdfSampledBinding>();
+        var rawShapes = new HashSet<int>();
         // The source of each instruction the excerpt holds, so a relief can tell whether its rows already precede it.
         var sources = new List<int>(capacity: indices.Count);
 
@@ -68,6 +69,7 @@ public sealed partial class SdfProgram {
             var at = (instructions.Count - 1);
 
             if ((source.Op != SdfOp.ShapeBlend) || (at < 0)) { continue; }
+            if (ShapeStepScaleAt(instructionIndex: index) == 1f) { _ = rawShapes.Add(item: at); }
             foreach (var entry in m_sampledBindings) {
                 if (entry.InstructionIndex == index) { samples.Add(entry with { InstructionIndex = at }); }
             }
@@ -90,6 +92,7 @@ public sealed partial class SdfProgram {
             instances: null,
             instructions: instructions,
             paths: paths,
+            rawExcerptShapes: rawShapes,
             reservedPathWords: 0,
             sampledBindings: samples,
             sweepCurves: sweeps

@@ -1248,8 +1248,7 @@ Live requests (C0.8):
 
 Teardown, with [its three outcomes](#teardown): `BackgroundBuild.cs:84` and
 `:254`, `GpuBuildCache.cs:158` and `:176`, `RetiredBuilds.cs:76`
-(`Task.WaitAll`), `GpuImageLeases.cs:93`, `SdfKernelTreeLoad.cs:142`,
-`SdfMesh.Restore.cs:173`, `SdfGpuWorkReadback.WaitReleased` and
+(`Task.WaitAll`), `GpuImageLeases.cs:93`, `SdfMesh.Restore.cs:173`, `SdfGpuWorkReadback.WaitReleased` and
 `SdfGpuWork.Dispose`'s fence waits, `SdfMeshProbeGpuWork.Scene.cs:117`, `JobPool.cs:127`,
 `QueuedWorkerLifecycle.cs:247` and `:250`, `QueuedMachineWorker.cs:840`,
 `LinkedMachineGroup.cs:300`, `GamepadDevice.cs:800` (`Task.WaitAny` on a join's
