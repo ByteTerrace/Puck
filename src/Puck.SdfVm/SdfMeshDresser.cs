@@ -175,11 +175,10 @@ public sealed class SdfMeshDresser : IDisposable {
         if (SdfRowChecks.Enabled) { CheckDress(access: access, frame: frame); }
         m_writer.Publish(cause: (startOver ? (retry ? SdfMeshStagingCause.Retry : SdfMeshStagingCause.Rebuild) : null));
         if ((m_map is null) || !ReferenceEquals(objA: m_map.Inner, objB: frame.HostPickMap)) { m_map = ((frame.HostPickMap is { } inner) ? new SdfDressedPickMap(inner: inner, rows: m_rows) : null); }
-        // The frame answers with this dresser's rows and map by reference, so a frame that stands is the frame answered
-        // and no copy is made. A frame another dresser dressed is copied first: its rows are theirs to keep.
-        var result = (((frame.MeshRows is null) || ReferenceEquals(objA: frame.MeshRows, objB: m_rows)) ? frame : (frame with { }));
-
-        result.AdoptDressing(rows: m_rows, picks: m_map);
+        // The frame answers with this dresser's rows and map by reference, so the frame handed in is the frame answered
+        // and no copy is made. A frame is dressed by one dresser: a residency dresses the copy its own writer holds, which
+        // carries no dressing (SdfFrame.Writer.CopyFrom).
+        frame.AdoptDressing(rows: m_rows, picks: m_map);
 
         // A whole answer resizes to the list (a count change always answers whole), and every answer rewrites the copies
         // its runs name, so m_copies is the list at the endpoint the cursor commits.
@@ -202,7 +201,7 @@ public sealed class SdfMeshDresser : IDisposable {
         SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressedRecordsUpdated, updated);
         SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressGroupsVisited, groupsVisited);
         SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressCopiesVisited, copiesVisited);
-        return result;
+        return frame;
     }
     // Reconciles every group the bake lists with the mesh it draws, its copies and the tier its mesh was baked at,
     // rebinding a group's rows only where one of those changed, and frees the rows of groups the bake no longer lists.
