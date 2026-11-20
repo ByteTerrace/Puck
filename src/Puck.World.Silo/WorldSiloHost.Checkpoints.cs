@@ -122,7 +122,7 @@ public sealed partial class WorldSiloHost {
             if (
                 bookkeeping.Initializing ||
                 bookkeeping.Released ||
-                bookkeeping.PersistenceBlocked ||
+                bookkeeping.Publications.Blocked ||
                 bookkeeping.CheckpointUpload is { IsCompleted: false } ||
                 (m_masterElapsedEngineTicks < bookkeeping.CadenceRetryAfter) ||
                 !Instances.TryGet(
@@ -169,7 +169,7 @@ public sealed partial class WorldSiloHost {
     }
     // A refusal the same activation can never overcome by retrying: the store already holds different bytes at the
     // address, the capture contradicts the authoritative root, or an operation id names another payload. A stale or
-    // uncertain fence blocks the whole activation through PersistenceBlocked instead.
+    // uncertain fence blocks the whole activation through its publication queue instead.
     private static bool IsPermanentRefusal(WorldAuthorityStoreOutcomeKind kind) => kind is
         WorldAuthorityStoreOutcomeKind.AlreadyExists or
         WorldAuthorityStoreOutcomeKind.PreconditionFailed or
@@ -236,17 +236,12 @@ public sealed partial class WorldSiloHost {
                 return false;
             }
             var bookkeeping = m_rows[row.Name];
-            Task<long> coverage;
 
             FlushJournal(bookkeeping);
-            lock (bookkeeping.TailGate) {
-                coverage = CaptureJournalCoverageAsync(bookkeeping: bookkeeping, previous: bookkeeping.JournalTail);
-                bookkeeping.JournalTail = coverage;
-            }
             capture = new(
                 Admitted: Volatile.Read(location: ref bookkeeping.JournalAdmitted),
                 AdmittedBytes: Volatile.Read(location: ref bookkeeping.JournalAdmittedBytes),
-                Coverage: coverage,
+                Coverage: bookkeeping.Publications.After(operation: static published => Task.FromResult(result: published.JournalSequence)),
                 Encoded: encoded,
                 Tick: row.CompletedTicks
             );
@@ -254,122 +249,72 @@ public sealed partial class WorldSiloHost {
         outcome = "ok";
         return true;
     }
-    private static async Task<long> CaptureJournalCoverageAsync(Task previous, RowBookkeeping bookkeeping) {
-        await ObservePersistenceAsync(operation: previous, ct: CancellationToken.None).ConfigureAwait(continueOnCapturedContext: false);
-        return bookkeeping.PublishedJournalSequence;
-    }
-    private void RecordCheckpointFailure(string worldId, RowBookkeeping bookkeeping, Exception error) {
-        Post(action: () => {
-            if (
-                m_rows.TryGetValue(
-                key: worldId,
-                value: out var current
-            ) &&
-                ReferenceEquals(
-                objA: current,
-                objB: bookkeeping
-            )
-            ) {
-                bookkeeping.LastCheckpointOutcome = $"failed ({error.Message})";
-            }
-        });
-    }
+    // Called under the row's authority gate, so the upload joins the publication queue right behind its capture.
     private Task<WorldAuthorityStoreOutcome> QueueCheckpoint(RowCapture capture, WorldAuthorityIdentity identity, string worldId,
         RowBookkeeping bookkeeping, CancellationToken cancellationToken) {
-        lock (bookkeeping.TailGate) {
-            var previous = bookkeeping.JournalTail;
-            var queued = Task.Run(function: () => UploadCheckpointAsync(
-                bookkeeping: bookkeeping,
-                cancellationToken: cancellationToken,
-                capture: capture,
-                identity: identity,
-                previous: previous,
-                worldId: worldId
-            ));
+        var queued = UploadCheckpointAsync(
+            bookkeeping: bookkeeping,
+            cancellationToken: cancellationToken,
+            capture: capture,
+            identity: identity,
+            worldId: worldId
+        );
 
-            bookkeeping.JournalTail = queued;
-            bookkeeping.CheckpointUpload = queued;
-            bookkeeping.QueuedCapture = capture;
-            if (bookkeeping.CadenceRequested) {
-                bookkeeping.CadenceUpload = queued;
-            }
-            return queued;
+        bookkeeping.CheckpointUpload = queued;
+        bookkeeping.QueuedCapture = capture;
+        if (bookkeeping.CadenceRequested) {
+            bookkeeping.CadenceUpload = queued;
         }
+        return queued;
     }
     private async Task<WorldAuthorityStoreOutcome> UploadCheckpointAsync(RowCapture capture, WorldAuthorityIdentity identity, string worldId,
-        RowBookkeeping bookkeeping, Task previous, CancellationToken cancellationToken) {
+        RowBookkeeping bookkeeping, CancellationToken cancellationToken) {
+        WorldAuthorityStoreOutcome outcome;
+
         try {
-            await ObservePersistenceAsync(
-                ct: cancellationToken,
-                operation: previous
-            );
-            if (bookkeeping.PersistenceBlocked) { return WorldAuthorityStoreOutcome.RecoveryRequired(detail: "This activation must recover before publishing again."); }
-            var outcome = await m_store.WriteCheckpointAsync(
+            outcome = await bookkeeping.Publications.Enqueue(cancellationToken: cancellationToken, write: async fence => await m_store.WriteCheckpointAsync(
                 cancellationToken: cancellationToken,
                 encoded: capture.Encoded,
                 identity: identity,
                 tick: capture.Tick,
-                fence: bookkeeping.Fence,
+                fence: fence,
                 capturedJournalSequence: await capture.Coverage.ConfigureAwait(continueOnCapturedContext: false)
-            );
-
-            ObservePublication(
-                bookkeeping: bookkeeping,
-                outcome: outcome
-            );
-
-            Post(action: () => {
-                if (
-                    m_rows.TryGetValue(
-                    key: worldId,
-                    value: out var current
-                ) &&
-                    ReferenceEquals(
-                    objA: current,
-                    objB: bookkeeping
-                )
-                ) {
-                    bookkeeping.LastCheckpointOutcome = (outcome.Ok
-                        ? "ok"
-                        : $"failed ({outcome.Detail})"
-                    );
-
-                    if (outcome.PublishedRoot is { } published) {
-                        bookkeeping.RetiredObjects += outcome.RetiredObjects;
-                        if (outcome.RetentionFailure is { } failure) {
-                            bookkeeping.LastCheckpointOutcome = $"ok (retention will retry: {failure})";
-                            bookkeeping.RetentionFailure = failure;
-                            bookkeeping.RetentionFailures++;
-                        } else {
-                            bookkeeping.RetentionFailure = null;
-                            bookkeeping.RetentionFailures = 0;
-                        }
-                        bookkeeping.CheckpointTimestamp = m_clock.GetTimestamp();
-                        bookkeeping.LastCheckpointOrdinal = published.Root.CheckpointOrdinal;
-                        bookkeeping.LastCheckpointTick = published.Root.CheckpointTick;
-                        if (published.Root.CheckpointTick == capture.Tick) {
-                            bookkeeping.CheckpointAdmitted = capture.Admitted;
-                            bookkeeping.CheckpointAdmittedBytes = capture.AdmittedBytes;
-                        }
-                        bookkeeping.UncoveredTimestamp = null;
-                        bookkeeping.CadenceRefusal = null;
-                        if (ReferenceEquals(
-                            objA: bookkeeping.QueuedCapture,
-                            objB: capture
-                        )) {
-                            bookkeeping.QueuedCapture = null;
-                        }
-                    }
-                }
-            });
-            return outcome;
-        } catch (Exception error) {
-            RecordCheckpointFailure(
-                bookkeeping: bookkeeping,
-                error: error,
-                worldId: worldId
-            );
+            ).ConfigureAwait(continueOnCapturedContext: false)).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (OperationCanceledException error) {
+            Record(landed: WorldAuthorityStoreOutcome.Failed(detail: error.Message));
             throw;
         }
+        Record(landed: outcome);
+        return outcome;
+
+        void Record(WorldAuthorityStoreOutcome landed) => Post(action: () => {
+            if (!m_rows.TryGetValue(key: worldId, value: out var current) || !ReferenceEquals(objA: current, objB: bookkeeping)) { return; }
+            bookkeeping.LastCheckpointOutcome = (landed.Ok
+                ? "ok"
+                : $"failed ({landed.Detail})"
+            );
+            if (landed.PublishedRoot is not { } published) { return; }
+            bookkeeping.RetiredObjects += landed.RetiredObjects;
+            if (landed.RetentionFailure is { } failure) {
+                bookkeeping.LastCheckpointOutcome = $"ok (retention will retry: {failure})";
+                bookkeeping.RetentionFailure = failure;
+                bookkeeping.RetentionFailures++;
+            } else {
+                bookkeeping.RetentionFailure = null;
+                bookkeeping.RetentionFailures = 0;
+            }
+            bookkeeping.CheckpointTimestamp = m_clock.GetTimestamp();
+            bookkeeping.LastCheckpointOrdinal = published.Root.CheckpointOrdinal;
+            bookkeeping.LastCheckpointTick = published.Root.CheckpointTick;
+            if (published.Root.CheckpointTick == capture.Tick) {
+                bookkeeping.CheckpointAdmitted = capture.Admitted;
+                bookkeeping.CheckpointAdmittedBytes = capture.AdmittedBytes;
+            }
+            bookkeeping.UncoveredTimestamp = null;
+            bookkeeping.CadenceRefusal = null;
+            if (ReferenceEquals(objA: bookkeeping.QueuedCapture, objB: capture)) {
+                bookkeeping.QueuedCapture = null;
+            }
+        });
     }
 }

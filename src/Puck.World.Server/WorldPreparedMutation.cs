@@ -14,13 +14,13 @@ public sealed partial class WorldDocument {
         private readonly ulong m_engineTick;
         private readonly int? m_stateMark;
         private readonly CellName? m_evicted;
-        private DocumentStage m_stage;
+        private readonly DocumentStage? m_stage;
         private bool m_pending = true;
         private MutationDrawHistory? m_privateWords;
         private Action? m_commitJournal;
 
         private WorldPreparedMutation(WorldDocument document, WorldMutation mutation, ulong tick, ulong engineTick,
-            int? stateMark, CellName? evicted, DocumentStage stage) {
+            int? stateMark, CellName? evicted, DocumentStage? stage) {
             m_document = document;
             m_mutation = mutation;
             m_tick = tick;
@@ -48,7 +48,7 @@ public sealed partial class WorldDocument {
             MutationDrawHistory? words = null;
             using var capture = WorldJournalEntry.MayDraw(host.Configuration, mutation)
                 ? host.DrawKeys.Capture(word => (words ??= new()).Record(host.Arena, word)) : null;
-            DocumentStage stage = default;
+            DocumentStage? stage = null;
             try {
                 bool accepted;
                 if (document.IsStateCommand(mutation)) {
@@ -57,7 +57,7 @@ public sealed partial class WorldDocument {
                     accepted = document.TryStateMembers(reads, mutation, in time, out reason, out evicted) &&
                         host.ValidateStateTransaction(mutation.Principal, out reason, reads);
                 } else {
-                    accepted = document.TryStageDocument(mutation, tick, engineTick, out stage, out reason);
+                    accepted = document.TryStageDocument(mutation, tick, engineTick, out stage, out evicted, out reason);
                 }
                 if (!reads.Failed) {
                     if (!accepted) { return false; }
@@ -82,7 +82,7 @@ public sealed partial class WorldDocument {
                 if (prepared is null) {
                     if (mark is { } open) { host.RewindStateTransaction(open); }
                     else if (words is not null) { host.DrawKeys.AdvanceGeneration(); }
-                    stage.Dispose();
+                    stage?.Dispose();
                 }
             }
             document.m_lastMutationFailureCode = WorldRecipientMutations.NotDisclosedCode;
@@ -97,10 +97,10 @@ public sealed partial class WorldDocument {
             if (m_stateMark is { } mark) {
                 m_document.Host.CommitStateTransaction(mark);
                 m_document.Host.PublishArena();
-                m_document.RecordCommittedMutation(m_mutation, m_tick, m_engineTick, connectionId, correlationId, m_evicted, derived: derived, privateWords: m_privateWords, commitJournal: m_commitJournal);
             } else {
-                m_document.InstallPrepared(m_stage, connectionId, correlationId, derived: derived, privateWords: m_privateWords, commitJournal: m_commitJournal);
+                m_document.CommitInstall(stage: m_stage!);
             }
+            m_document.RecordCommittedMutation(m_mutation, m_tick, m_engineTick, connectionId, correlationId, m_evicted, m_stage, derived, m_privateWords, m_commitJournal);
         }
 
         public void Dispose() {
@@ -109,68 +109,7 @@ public sealed partial class WorldDocument {
             if (m_stateMark is { } mark) { m_document.Host.RewindStateTransaction(mark); }
             else {
                 if (m_privateWords is not null) { m_document.Host.DrawKeys.AdvanceGeneration(); }
-                m_stage.Dispose();
-            }
-        }
-    }
-
-    private struct DocumentStage(
-        WorldMutation mutation,
-        WorldGrants.PreparedAuthorityTransition authority,
-        WorldDefinition candidate,
-        WorldRuleCompilation? compilation,
-        StateArena? arena,
-        WorldSolidField? solids,
-        WorldProductPlan products,
-        (WorldDocumentInputs? Envelope, WorldDocumentInputs? Addons, WorldDocumentInputs? Machines) productInputs,
-        IWorldAddonPreparedPlan? addonPlan,
-        IWorldMachinePreparedPlan? machinePlan,
-        int[]? tickWrittenEntity,
-        Principal[]? tickWrittenPrincipal,
-        bool[]? tickCollided,
-        CellName? evictedKey,
-        WorldInstallKind kind,
-        ulong tick,
-        ulong engineTick
-    ) : IDisposable {
-        private bool m_addonSettled;
-        private bool m_machineSettled;
-
-        public IWorldAddonPreparedPlan? AddonPlan { get; } = addonPlan;
-        public StateArena? Arena { get; } = arena;
-        public WorldDefinition Candidate { get; } = candidate;
-        public WorldRuleCompilation? Compilation { get; } = compilation;
-        public ulong EngineTick { get; } = engineTick;
-        public CellName? EvictedKey { get; } = evictedKey;
-        /// <summary>Gets what the install rebuilds, decided against the document the candidate was composed over.</summary>
-        public WorldInstallKind Kind { get; } = kind;
-        public IWorldMachinePreparedPlan? MachinePlan { get; } = machinePlan;
-        public WorldMutation Mutation { get; } = mutation;
-        public WorldGrants.PreparedAuthorityTransition Authority { get; } = authority;
-        /// <summary>Gets which compiled products the install rebuilds (<see cref="PlanProducts"/>).</summary>
-        public WorldProductPlan Products { get; } = products;
-        /// <summary>Gets what the envelope's fit and the hosts' preparations read of the candidate, each
-        /// <see langword="null"/> when the install keeps that product.</summary>
-        public (WorldDocumentInputs? Envelope, WorldDocumentInputs? Addons, WorldDocumentInputs? Machines) ProductInputs { get; } = productInputs;
-        public WorldSolidField? Solids { get; } = solids;
-        public ulong Tick { get; } = tick;
-        public bool[]? TickCollided { get; } = tickCollided;
-        public int[]? TickWrittenEntity { get; } = tickWrittenEntity;
-        public Principal[]? TickWrittenPrincipal { get; } = tickWrittenPrincipal;
-
-        /// <summary>Records that the addon host committed its plan, so disposal leaves it alone.</summary>
-        public void MarkAddonCommitted() => m_addonSettled = true;
-        /// <summary>Records that the machine host committed its plan, so disposal leaves it alone.</summary>
-        public void MarkMachineCommitted() => m_machineSettled = true;
-        /// <inheritdoc/>
-        public void Dispose() {
-            if (!m_addonSettled) {
-                m_addonSettled = true;
-                AddonPlan?.Dispose();
-            }
-            if (!m_machineSettled) {
-                m_machineSettled = true;
-                MachinePlan?.Dispose();
+                m_stage?.Dispose();
             }
         }
     }
