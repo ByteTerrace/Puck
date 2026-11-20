@@ -168,11 +168,19 @@ restore, so the publish passes `--no-restore`. A publish that restores with
 `-r` fails with NU1004 in every library: `-r` reaches each project's restore,
 and the libraries' lock files carry no runtime identifier. That failed restore
 also leaves the libraries' assets files broken, so run the plain restore again
-after one. On the debug world headless, a ReadyToRun publish JIT-compiles about
-24,200 methods to `world.status` where the IL build compiles about 43,900;
-22,400 of those left are generic instantiations the precompiler cannot reach
-outside the framework, 15,800 of them `System.Text.Json`'s metadata for the
-document model. CI publishes the already-built portable assemblies with
+after one. A per-assembly ReadyToRun image leaves the generic instantiations
+over framework types to the JIT, `System.Text.Json`'s metadata for the document
+model most of them, because the precompiler cannot reach them outside the
+framework's version bubble. A composite image puts the framework and Puck in
+one bubble (`-p:PublishReadyToRunComposite=true` with a self-contained
+publish), and `puck world player` publishes that way. On the debug world
+headless (`--devices none`), `host.memory`'s `jit methods` read just after
+`world.status` on a warm cache is about 33,000 for a self-contained
+per-assembly publish and about 4,000 to 4,500 for the composite one. The
+composite artifact is about half again as large (one image,
+`Puck.World.r2r.dll`, holds most of the difference) and takes several times
+longer to publish. Because that image holds the framework's code with Puck's,
+every Puck change rewrites it, so a release uploads it again whole. CI publishes the already-built portable assemblies with
 `AppendRuntimeIdentifierToOutputPath=false` and `--no-build`; the project
 regenerates the runtime-specific dependency manifest in the publish directory.
 Precompilation does not rebuild C# sources or replace the portable build's

@@ -17,7 +17,7 @@ The Windows concrete backends behind `Puck.Platform`'s contracts.
   `WindowsInputTransports.CreateGamepadManager` wires both into one
   `GamepadManager`.
 - **`Win32PrecisionWaiter`**—a standalone high-resolution waitable timer
-  for the headless tick host's pacing loop.
+  for the host loop's pacing loop and device-loss backoff in every boot shape.
 - Generated CsWin32 native interop (`NativeMethods.json`/`.txt`) and the
   WinRT/`Microsoft.Windows.SDK.NET` projection the Windows Graphics Capture
   path needs.

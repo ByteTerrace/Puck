@@ -241,7 +241,6 @@ public sealed class WindowHostPresentation {
                     : 0
                 );
                 var nextDisplayTimingRetryTimestamp = 0L;
-                var precisionWaiter = (window as IPrecisionWaiter);
                 // An optional HELD root capability that sees every raw event. Mouse events can have two projections:
                 // this observer updates presentation state, while WindowInputMapper independently feeds their
                 // relative motion/buttons/wheel into command bindings. Resolved once: contributions never change.
@@ -314,7 +313,7 @@ public sealed class WindowHostPresentation {
                     rootHostContext: m_rootHostContext,
                     sleep: duration => HostWaits.Until(
                         deadlineTimestamp: (m_time.GetTimestamp() + ((long)(duration.TotalSeconds * frequency))),
-                        precisionWaiter: precisionWaiter,
+                        precisionWaiter: loop.PrecisionWaiter,
                         time: m_time
                     ),
                     time: m_time,
@@ -702,7 +701,7 @@ public sealed class WindowHostPresentation {
                                 // Serviced: background work that completes before the slot is taken up in this wait.
                                 HostWaits.Pace(
                                     deadlineTimestamp: nextRenderDeadline,
-                                    precisionWaiter: precisionWaiter,
+                                    precisionWaiter: loop.PrecisionWaiter,
                                     time: m_time
                                 );
 

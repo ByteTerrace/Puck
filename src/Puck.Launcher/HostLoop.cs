@@ -93,6 +93,11 @@ public sealed class HostLoop(
     private readonly ISnapshotInputCapture[] m_captures = [.. captures];
     private readonly IPrecisionWaiter? m_waiter = waiters.FirstOrDefault();
 
+    /// <summary>Gets the platform's high-resolution waiter the pacer sleeps on, or <see langword="null"/> where the host
+    /// registered none. The presentation adapters take their deadline waits (<see cref="HostWaits.Until"/>) from it too,
+    /// so one waiter serves the whole pump thread.</summary>
+    public IPrecisionWaiter? PrecisionWaiter => m_waiter;
+
     // The control phases run and the iterations minted, on the pump thread: an iteration is minted at most once per
     // control phase (HostIteration's constructor calls Mint).
     private long m_controlPhases;

@@ -7,6 +7,7 @@ using Puck.Abstractions.Machines;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Launcher;
+using Puck.Platform.Linux;
 using Puck.World.Machines;
 using Puck.World.Server;
 
@@ -206,6 +207,11 @@ public static class WorldSiloApplication {
             registry: sp.GetRequiredService<CommandRegistry>()
         ));
         builder.Services.AddLauncherHeadlessTerminal(readStandardInput: false);
+        // The container's tick pacer sleeps on the platform's precision wait. A silo started on Windows registers
+        // none, so its pacer sleeps in coarse steps.
+        if (OperatingSystem.IsLinux()) {
+            builder.Services.AddLinuxPrecisionWaiter();
+        }
         builder.Services.AddHostedService(implementationFactory: static sp => new SiloStdinRouter(
             administrative: sp.GetRequiredService<TextCommandSource>(),
             host: sp.GetRequiredService<WorldSiloHost>(),

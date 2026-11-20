@@ -10,9 +10,9 @@ using Windows.Win32.Foundation;
 
 namespace Puck.Platform.Windows;
 
-// Display timing and precision-wait capabilities. The active presentation cadence comes from CCD; VRR support comes
+// Display timing capability. The active presentation cadence comes from CCD; VRR support comes
 // only from explicit declarations in the effective monitor EDID. Neither affects deterministic simulation state.
-internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecisionWaiter {
+internal sealed partial class Win32NativeWindow : IDisplayTimingInfo {
     private const uint DicsFlagGlobal = 0x00000001u;
     private const uint DiregDevice = 0x00000001u;
     private const uint DisplayConfigPathSupportVirtualMode = 0x00000008u;
@@ -21,8 +21,6 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
     private const uint KeyRead = 0x00020019u;
     private const int MaxDisplayConfigQueryAttempts = 3;
 
-    private Win32PrecisionWaiter? m_precisionWaiter;
-    private bool m_precisionWaiterResolved;
     private ulong m_displayConfigurationVersion;
     private nint m_lastMonitorHandle;
 
@@ -89,25 +87,6 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
 
         return DisplayTimingSnapshot.Unknown;
     }
-    /// <inheritdoc/>
-    public bool TryWait(TimeSpan duration) => (PrecisionWaiter()?.TryWait(duration: duration) ?? false);
-    /// <inheritdoc/>
-    public bool TryWait(TimeSpan duration, WaitHandle wake, out bool woken) {
-        woken = false;
-
-        return (PrecisionWaiter()?.TryWait(duration: duration, wake: wake, woken: out woken) ?? false);
-    }
-
-    // The window's waiter, created on its first wait; null where the platform has no high-resolution timer.
-    private Win32PrecisionWaiter? PrecisionWaiter() {
-        if (!m_precisionWaiterResolved) {
-            m_precisionWaiter = Win32PrecisionWaiter.TryCreate();
-            m_precisionWaiterResolved = true;
-        }
-
-        return m_precisionWaiter;
-    }
-
     private void OnDisplayConfigurationChanged() {
         ++m_displayConfigurationVersion;
     }

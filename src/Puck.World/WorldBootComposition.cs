@@ -1303,17 +1303,20 @@ public static class WorldBootComposition {
             return new WorldSimulation(sp.GetRequiredService<WorldHostStep>(), postStep);
         });
 
+        // The platform's high-resolution wait for every shape's pacing loop and device-loss backoff, registered by the
+        // composition root so Puck.Launcher stays platform-neutral. Each host's loop reads it from the container; a
+        // platform that registers none (or an OS too old for a high-resolution timer) leaves the pacer a coarse sleep.
+        if (OperatingSystem.IsWindows()) {
+            services.AddWindowsPrecisionWaiter();
+        } else if (OperatingSystem.IsLinux()) {
+            services.AddLinuxPrecisionWaiter();
+        }
+
         if (hostSettings.Headless) {
             services.AddSingleton<ICommandModule, HostMemoryCommandModule>();
             // No window, GPU device, swapchain, allocator, backend presenter, or audio device (command pump + tick
             // host). Nothing under AddWorldPresentation is ever called on this path.
             services.AddLauncherHeadlessTerminal();
-            // The standalone high-resolution precision waiter for the headless tick host's pacing loop — Windows only,
-            // registered by the composition root so Puck.Launcher stays platform-neutral. A no-op on an unsupported
-            // OS version (the tick host falls back to a coarse sleep).
-            if (OperatingSystem.IsWindows()) {
-                services.AddWindowsPrecisionWaiter();
-            }
 
             services.AddFixedStepSimulation<WorldSimulation>(bindings: seatBindings);
         } else if (hostSettings.Offscreen) {
@@ -1321,9 +1324,6 @@ public static class WorldBootComposition {
             // steps exactly like the headless shape; the shared host loop steps it one
             // tick per produced frame.
             services.AddLauncherOffscreenTerminal();
-            if (OperatingSystem.IsWindows()) {
-                services.AddWindowsPrecisionWaiter();
-            }
 
             services.AddWorldOffscreenPresentation(hostsOnDirectX: hostSettings.HostsOnDirectX);
             services.AddFixedStepSimulation<WorldSimulation>(bindings: seatBindings);

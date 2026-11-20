@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Puck.Abstractions.Pacing;
 using Puck.Abstractions.Recording;
 using Puck.Platform.Probes;
 using Puck.Platform.Recording;
@@ -38,6 +39,20 @@ public static class LinuxPlatformServiceRegistration {
         services.TryAddSingleton<IClipboardService, NullClipboardService>();
         services.TryAddEnumerable(descriptor: ServiceDescriptor.Singleton<INativeWindowBackend, WaylandNativeWindowBackend>());
         services.TryAddEnumerable(descriptor: ServiceDescriptor.Singleton<INativeWindowBackend, XcbNativeWindowBackend>());
+
+        return services;
+    }
+    /// <summary>Registers the <see cref="LinuxPrecisionWaiter"/> the host loop's pacer sleeps on, on Linux; a no-op
+    /// elsewhere, so a composition root for both desktops calls it beside <c>AddWindowsPrecisionWaiter</c>.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The same service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
+    public static IServiceCollection AddLinuxPrecisionWaiter(this IServiceCollection services) {
+        ArgumentNullException.ThrowIfNull(services);
+
+        if (LinuxPrecisionWaiter.TryCreate() is { } waiter) {
+            services.TryAddSingleton<IPrecisionWaiter>(instance: waiter);
+        }
 
         return services;
     }
