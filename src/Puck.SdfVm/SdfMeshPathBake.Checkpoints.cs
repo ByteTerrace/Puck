@@ -13,36 +13,26 @@ public sealed partial class SdfMeshPathBake {
     private sealed record PackedField(UInt128 Hash);
     private static readonly Puck.Abstractions.CodeDerivedTable<SdfProgram, PackedField> PackedFields = new();
 
-    // Checkpoints keep the numeric palette and poses. The drawn product can use the group's canonical geometry.
-    private static SdfMeshGeometry CheckpointInput(Group group, SdfProgram program) {
-        var hash = new XxHash128();
-        var packed = PackedFields.GetValue(program, static field =>
-            new PackedField(XxHash128.HashToUInt128(MemoryMarshal.AsBytes(field.FieldWords))));
-        Span<byte> header = stackalloc byte[44];
-        BinaryPrimitives.WriteUInt128LittleEndian(header, group.Sealed.Hash);
-        BinaryPrimitives.WriteUInt128LittleEndian(header[16..], packed.Hash);
-        BinaryPrimitives.WriteInt32LittleEndian(header[32..], group.MaterialOrder.Length);
-        BinaryPrimitives.WriteInt32LittleEndian(header[36..], group.PoseRows.Length);
-        BinaryPrimitives.WriteInt32LittleEndian(header[40..], group.PoseFirst);
-        hash.Append(header);
-        hash.Append(MemoryMarshal.AsBytes(group.MaterialOrder.AsSpan()));
-        hash.Append(MemoryMarshal.AsBytes(group.PoseRows.AsSpan()));
-        return new SdfMeshGeometry(Dynamic: group.Dynamic, Hash: hash.GetCurrentHashAsUInt128());
-    }
+    // The key a group's stage checkpoints (its contour and simplified meshes) are kept under: its sealed geometry, tier
+    // included, with the numeric palette and poses (GroupInput). The drawn product can use the group's canonical geometry.
+    private static SdfMeshGeometry CheckpointInput(Group group, SdfProgram program) => GroupInput(group, program, geometry: group.Sealed.Hash);
 
     // What a group's samples depend on beside each lattice's own row: its shape (SdfMeshBakeGroup.Shape, its geometry
-    // before the tier and the operands' poses join it), the program's packed field and step scale, its numeric palette
-    // and the pose rows its lattices read, which hold every slot pose the kernel reads, a skin member's and an operand's
-    // included. Everything a tier changes in what a lattice samples reaches the kernel through those rows (an operand's
-    // pose snapped to the tier's cell) or the lattice's row (its spacing, a glyph's cell), so a detail tier takes its
-    // floor's coarse search and final slabs from the store when they sample alike, and no sample set of another field is
-    // ever taken.
-    private static SdfMeshGeometry SampleFieldInput(Group group, SdfProgram program) {
+    // before the tier and the operands' poses join it) and what GroupInput adds, whose pose rows hold every slot pose the
+    // kernel reads, a skin member's and an operand's included. Everything a tier changes in what a lattice samples reaches
+    // the kernel through those rows (an operand's pose snapped to the tier's cell) or the lattice's row (its spacing, a
+    // glyph's cell), so a detail tier takes its floor's coarse search and final slabs from the store when they sample
+    // alike, and no sample set of another field is ever taken.
+    private static SdfMeshGeometry SampleFieldInput(Group group, SdfProgram program) => GroupInput(group, program, geometry: group.Shape);
+
+    // A group's geometry hash with what the bake reads beside it: the program's packed field and step scale, the
+    // group's numeric palette and the pose rows its lattices read.
+    private static SdfMeshGeometry GroupInput(Group group, SdfProgram program, UInt128 geometry) {
         var hash = new XxHash128();
         var packed = PackedFields.GetValue(program, static field =>
             new PackedField(XxHash128.HashToUInt128(MemoryMarshal.AsBytes(field.FieldWords))));
         Span<byte> header = stackalloc byte[48];
-        BinaryPrimitives.WriteUInt128LittleEndian(header, group.Shape);
+        BinaryPrimitives.WriteUInt128LittleEndian(header, geometry);
         BinaryPrimitives.WriteUInt128LittleEndian(header[16..], packed.Hash);
         BinaryPrimitives.WriteInt32LittleEndian(header[32..], group.MaterialOrder.Length);
         BinaryPrimitives.WriteInt32LittleEndian(header[36..], group.PoseRows.Length);

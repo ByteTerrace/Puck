@@ -110,6 +110,9 @@ public static class AtomicFile {
 
     private delegate void Fill<TState>(FileStream stream, TState state) where TState : allows ref struct;
 
+    // Writes complete content held as bytes: every byte-content write stages through it.
+    private static readonly Fill<ReadOnlySpan<byte>> FillBytes = static (stream, content) => stream.Write(buffer: content);
+
     [UnsupportedOSPlatform(platformName: "windows")]
     private static void KeepUnixMode(FileStream stream, string destination) {
         UnixFileMode mode;
@@ -313,7 +316,7 @@ public static class AtomicFile {
     /// <returns>The unpublished write.</returns>
     /// <param name="unixCreateMode">An explicit creation mode for private files on Unix.</param>
     public static PendingWrite StageAllBytes(string path, ReadOnlySpan<byte> bytes, UnixFileMode? unixCreateMode = null) =>
-        Stage(path: path, unixCreateMode: unixCreateMode, state: bytes, fill: static (stream, content) => stream.Write(buffer: content));
+        Stage(path: path, unixCreateMode: unixCreateMode, state: bytes, fill: FillBytes);
     /// <summary>Atomically and durably replaces <paramref name="path"/> with <paramref name="bytes"/>: the content is
     /// flushed to stable storage, then renamed over the destination with <see cref="PendingWrite.CommitDurably"/>. When
     /// this returns, a power loss leaves the new file; when it throws, the destination is the old file. A killed writer
@@ -403,7 +406,7 @@ public static class AtomicFile {
     /// destination. The destination is unchanged.</exception>
     public static void WriteAllBytes(string path, ReadOnlySpan<byte> bytes, UnixFileMode? unixCreateMode = null) =>
         Replace(
-            fill: static (stream, content) => stream.Write(buffer: content),
+            fill: FillBytes,
             path: path,
             state: bytes,
             unixCreateMode: unixCreateMode
@@ -425,7 +428,7 @@ public static class AtomicFile {
     public static void WriteVerifiedCacheBytes(string path, ReadOnlySpan<byte> bytes) =>
         Replace(
             durable: false,
-            fill: static (stream, content) => stream.Write(buffer: content),
+            fill: FillBytes,
             path: path,
             state: bytes,
             unixCreateMode: null

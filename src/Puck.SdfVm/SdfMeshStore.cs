@@ -445,24 +445,17 @@ public sealed class SdfMeshStore {
                 _ = Interlocked.Increment(location: ref m_droppedWrites);
                 return false;
             }
-            RunWrite(write: write);
+            _ = Quietly(action: write);
             return true;
         }
         Writes.Enqueue(item: () => {
             try {
-                RunWrite(write: write);
+                _ = Quietly(action: write);
             } finally {
                 _ = Interlocked.Add(location1: ref m_pendingWriteBytes, value: -bytes);
             }
         });
         return true;
-    }
-    private static void RunWrite(Action write) {
-        try {
-            write();
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or OutOfMemoryException or OverflowException)) {
-            // The entry stays as it was; a later bake derives it again.
-        }
     }
     private static bool IsMeshEntry(string name) => name.EndsWith(value: Extension, comparisonType: StringComparison.Ordinal);
     private static bool IsIntermediateEntry(string name) =>
@@ -488,14 +481,11 @@ public sealed class SdfMeshStore {
         var path = PathOf(identity, key, CheckpointExtension);
 
         if (mesh is { OwnsNativeStorage: true }) {
-            byte[] bytes;
+            var bytes = Array.Empty<byte>();
 
-            try {
-                bytes = SdfMeshStoreCodec.EncodeExact(key, mesh);
-            } catch (Exception exception) when (exception is OutOfMemoryException or OverflowException) {
-                return;
+            if (Quietly(action: () => bytes = SdfMeshStoreCodec.EncodeExact(key, mesh))) {
+                _ = WriteLater(bytes: bytes.LongLength, behind: Behind.Inline, write: () => WriteEntry(path, bytes, queued: true));
             }
-            _ = WriteLater(bytes: bytes.LongLength, behind: Behind.Inline, write: () => WriteEntry(path, bytes, queued: true));
             return;
         }
         _ = WriteLater(bytes: (mesh?.StorageBytes ?? 0L), behind: Behind.Inline, write: () => WriteEntry(path, SdfMeshStoreCodec.EncodeExact(key, mesh), queued: true));
@@ -824,13 +814,15 @@ public sealed class SdfMeshStore {
     private static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) => SdfMeshStoreCodec.Encode(key: key, materials: materials, mesh: mesh);
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));
-    // Runs a file-system action, answering whether the file system allowed it.
+    // Runs a file-system action, or an entry's encode and write, answering whether it ran: one the file system refused,
+    // or whose encode found no memory or overflowed an entry's counts, leaves the entry as it was, and a later bake
+    // derives it again (the store is a cache).
     private static bool Quietly(Action action) {
         try {
             action();
 
             return true;
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or OutOfMemoryException or OverflowException)) {
             return false;
         }
     }
