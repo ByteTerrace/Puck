@@ -551,10 +551,16 @@ laws exercise that boundary.
   logical count separately. The
   done line's `managed=[allocated,gc-pause,collections]` reads the process's
   allocation and collector pauses over the bake's window. The contour, crossing
-  search, weld and crease split rent theirs; the collapse
-  (`SdfMeshCollapse.Collapser`), planar merge, chunking and material cut still
-  allocate theirs afresh for each mesh
-  ([open](../../../../docs/plans/open-items.md#refactoring-campaign)).
+  search, weld and crease split rent theirs, and so do the collapse
+  (`SdfMeshCollapse.Collapser`), the planar merge, the chunk binning and the
+  material cut's working lists, through a `RentedScope` the stage disposes
+  (every table of one build, charged to the group's `mesh-bake-group` owner); the
+  store's entry encoder collects its payload in a `RentedMemoryStream` and writes
+  each byte plane in chunks. A mesh the bake passes on keeps its welded sites
+  (`SdfMesh.BakedSites`) through a record copy, so a later stage never hashes the
+  positions again. The stages' outputs are still allocated exactly, and a large
+  rental the pool cannot answer is a fresh array: read `rented-large-fresh` on the
+  done line beside `allocated`, which counts it.
 - **A dispatch fills its samples.** A take takes lattices by priority until
   `MeshBakeMaxSamples`, passing over one too large for what is left and taking
   smaller ones behind it; stopping at the first that did not fit left the debug

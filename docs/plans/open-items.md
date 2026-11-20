@@ -514,15 +514,22 @@ costs.
     enumerating `CompiledBindingBarLayout.Banks.Values` once a slot,
     `BindableScalar.AuthoredValues`' iterator and `WorldMachineHost.State`'s
     strings.
-  - Cold bake: `SdfMeshPathBake.ContourProjection`'s triangles,
-    `SdfContour.SplitAtCreases`, `SdfMeshCollapse.Collapser`,
-    `SdfMeshPlanarMerge.Merger`, the lattice's gradient and crossing
-    dictionaries, and the piece, dictionary and plane bookkeeping inside
-    `Merge`. Large rented scratch (`ExtractRefined`'s lists, `Merge`'s
-    outputs, the weld and split tables) now comes from `RentedArrays`' bounded
-    large pool, so the next group reuses it; the encode path streams into the
-    entry's temporary file. The cold-bake allocated-bytes reading
-    (`[sdf.mesh-bake] done`'s `allocated:`) is owed from a windowed boot.
+  - Cold bake: `SdfMeshPathBake.ContourProjection`'s triangles, the stages'
+    exact outputs (`SdfContour.SplitAtCreases`, `SdfMeshMaterialCut.Build`'s
+    copies out of its lists, `SdfDualContouring.ExtractRefined`'s surface
+    arrays), the collapse's `m_rejected` and line dictionaries, the material
+    cut's site weld (`SdfMeshWeld`, a `Dictionary<Vector3, int>` per group),
+    and the piece, dictionary and plane bookkeeping inside `Merge`. The
+    collapse, planar merge, chunk binning, the material cut's lists and the
+    entry encoder now rent through a `RentedScope` or write in chunks; a cold
+    debug-world bake's `allocated:` fell from 78.5 GB to about 50 GB (`done`
+    line, windowed Direct3D 12). What is left is mostly large rentals the pool
+    cannot answer (`rented-large-fresh`, about 29 GB), above all
+    `ExtractRefined`'s per-vertex lists (about 200 bytes a fine vertex, with the
+    plane data twice, then the merged copy of each): a chunk-wise or in-place
+    merge, or a narrower per-vertex record, is the next cut. A pool that keeps
+    1 GB, evicts its oldest array and matches up to twice the length did not
+    change `allocated`.
   - GPU side: `SdfMeshProbeGpuWork` recreates a slot's origins buffer
     whenever the batch size changes.
 
