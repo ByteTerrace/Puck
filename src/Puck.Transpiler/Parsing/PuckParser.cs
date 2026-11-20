@@ -281,15 +281,17 @@ public static partial class PuckParser {
             var len = Math.Max(val1: 1, val2: (cursor.Offset - startOffset));
 
             return new ErrorStatementNode(ex.Message, startOffset, len, line, col);
-        } catch (Exception ex) {
+        } catch (Exception) {
             if (diagnostics is null) {
                 throw;
             }
-            diagnostics.ReportError(code: PuckDiagnosticCodes.Syntax, message: ex.Message, span: new SourceSpan(startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col));
+            const string InternalParserMessage = "Could not read this statement due to an internal parser error.";
+
+            diagnostics.ReportError(code: PuckDiagnosticCodes.Syntax, message: InternalParserMessage, span: new SourceSpan(startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col));
             SynchronizeToStatementBoundary(context: context);
             var len = Math.Max(val1: 1, val2: (cursor.Offset - startOffset));
 
-            return new ErrorStatementNode(ex.Message, startOffset, len, line, col);
+            return new ErrorStatementNode(InternalParserMessage, startOffset, len, line, col);
         }
     }
     // `allow CODE "reason"` acknowledges one diagnostic over the statement that follows it. A property or block named
@@ -345,15 +347,15 @@ public static partial class PuckParser {
         try {
             return ParseRuleBodyStatementCore(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset);
         } catch (Exception ex) when ((diagnostics is not null)) {
-            var (code, offset, faultLine, faultCol) = (((ex as PuckParseException) is { } pex)
-                ? (pex.Code, pex.Offset, pex.Line, pex.Column)
-                : (PuckDiagnosticCodes.Syntax, startOffset, line, col)
+            var (code, offset, faultLine, faultCol, message) = (((ex as PuckParseException) is { } pex)
+                ? (pex.Code, pex.Offset, pex.Line, pex.Column, pex.Reason)
+                : (PuckDiagnosticCodes.Syntax, startOffset, line, col, "Could not read this statement due to an internal parser error.")
             );
 
-            diagnostics.ReportError(code: code, message: ((ex as PuckParseException)?.Reason ?? ex.Message), span: new SourceSpan(offset, Math.Max(val1: 1, val2: (cursor.Offset - offset)), faultLine, faultCol));
+            diagnostics.ReportError(code: code, message: message, span: new SourceSpan(offset, Math.Max(val1: 1, val2: (cursor.Offset - offset)), faultLine, faultCol));
             SynchronizeToStatementBoundary(context: context);
 
-            return new ErrorStatementNode(ex.Message, startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col);
+            return new ErrorStatementNode(message, startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col);
         }
     }
     private static StatementNode ParseStatementCore(ParseContext context, DiagnosticBag? diagnostics, string? schema = null, IDocumentVocabulary? vocabulary = null) {

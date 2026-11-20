@@ -175,32 +175,12 @@ public static class ModuleResolver {
         HashSet<string> visited,
         List<string> activeChain,
         DiagnosticBag diagnostics,
-        ImportContext context
+        ImportContext context,
+        DiagnosticRelated? importedFrom = null
     ) {
         context.CancellationToken.ThrowIfCancellationRequested();
-        if (activeChain.Count >= DocumentEvaluationBudget.DepthLimit) {
-            diagnostics.ReportError(code: PuckDiagnosticCodes.EvaluationLimit, message: $"An import graph nests at most {DocumentEvaluationBudget.DepthLimit} source documents.", span: SourceSpan.None);
-            return false;
-        }
         var fullPath = Path.GetFullPath(path: currentPath);
         var currentDir = (Path.GetDirectoryName(path: fullPath) ?? "");
-
-        if (activeChain.Contains(
-            fullPath,
-            Puck.Abstractions.PuckPaths.Comparer
-        )) {
-            var cycle = string.Join(
-                separator: " -> ",
-                values: activeChain.Concat(second: [fullPath]).Select(selector: Path.GetFileName)
-            );
-
-            diagnostics.ReportError(
-                code: PuckDiagnosticCodes.UnresolvedLet,
-                message: $"Circular import dependency detected: {cycle}",
-                span: SourceSpan.None
-            );
-            return false;
-        }
 
         if (visited.Contains(item: fullPath)) {
             return true;
@@ -213,6 +193,8 @@ public static class ModuleResolver {
 
         // Every source the walk reads past the root is a library: a document import is never walked here.
         var inLibrary = (activeChain.Count > 1);
+        var currentSourcePath = (inLibrary ? fullPath : null);
+        using var sourceScope = diagnostics.PushSource(related: importedFrom, sourcePath: currentSourcePath);
 
         foreach (var importNode in doc.Statements.OfType<ImportNode>()) {
             // The parser refuses a file spelling wherever it reads one: into the root's diagnostics, and as a parse
@@ -250,8 +232,43 @@ public static class ModuleResolver {
                 continue;
             }
 
+            if (activeChain.Contains(
+                library,
+                Puck.Abstractions.PuckPaths.Comparer
+            )) {
+                var cycle = string.Join(
+                    separator: " -> ",
+                    values: activeChain.Concat(second: [library]).Select(selector: Path.GetFileName)
+                );
+
+                diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.ImportGraph,
+                    message: $"Circular import dependency detected: {cycle}",
+                    span: importNode.Span
+                );
+                success = false;
+
+                continue;
+            }
+
+            if (activeChain.Count >= DocumentEvaluationBudget.DepthLimit) {
+                diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.EvaluationLimit,
+                    message: $"An import graph nests at most {DocumentEvaluationBudget.DepthLimit} source documents.",
+                    span: importNode.Span
+                );
+                success = false;
+
+                continue;
+            }
+
             try {
                 var subDoc = context.Read(path: library);
+                var nextRelated = new DiagnosticRelated(
+                    Message: $"Imported '{importNode.Path}' here.",
+                    SourcePath: currentSourcePath,
+                    Span: importNode.Span
+                );
 
                 if (!TraverseImports(
                     activeChain: activeChain,
@@ -259,6 +276,7 @@ public static class ModuleResolver {
                     currentPath: library,
                     diagnostics: diagnostics,
                     doc: subDoc,
+                    importedFrom: nextRelated,
                     visited: visited
                 )) {
                     success = false;
@@ -332,7 +350,7 @@ public static class ModuleResolver {
                 span: SourceSpan.None
             );
         } catch (DocumentEvaluationException ex) {
-            diagnostics.ReportError(code: ex.Code, message: ex.Message, span: ex.Span);
+            diagnostics.Report(diagnostic: ex.ToDiagnostic());
             return null;
         }
         var collected = new List<StatementNode>();
@@ -352,13 +370,17 @@ public static class ModuleResolver {
         string currentDir,
         Dictionary<string, ImportCost> memo,
         ImportContext context,
-        int traversalDepth = 1
+        int traversalDepth = 1,
+        string? currentSourcePath = null
     ) {
         if (traversalDepth > DocumentEvaluationBudget.DepthLimit) {
             throw new DocumentEvaluationException(
                 $"An import graph nests at most {DocumentEvaluationBudget.DepthLimit} source documents.",
                 document.Span
-            );
+            ) {
+                SourceAttributed = true,
+                SourcePath = currentSourcePath,
+            };
         }
         var declarations = 0L;
         var rewriteWork = 0L;
@@ -371,7 +393,7 @@ public static class ModuleResolver {
             if (!memo.TryGetValue(key: path, value: out var child)) {
                 var imported = context.Read(path: path);
                 var ownDeclarations = imported.Statements.LongCount(predicate: static statement => (statement is LetNode or TemplateNode));
-                var descendants = MeasureImportedModules(imported, (Path.GetDirectoryName(path: path) ?? ""), memo, context, (traversalDepth + 1));
+                var descendants = MeasureImportedModules(imported, (Path.GetDirectoryName(path: path) ?? ""), memo, context, (traversalDepth + 1), currentSourcePath: path);
                 var ownRewriteWork = ((ownDeclarations == 0)
                     ? 0L
                     : Math.Max(val1: 1, val2: context.SourceLength(path: path))
@@ -389,7 +411,10 @@ public static class ModuleResolver {
                 throw new DocumentEvaluationException(
                     $"An import graph nests at most {DocumentEvaluationBudget.DepthLimit} source documents.",
                     import.Span
-                );
+                ) {
+                    SourceAttributed = true,
+                    SourcePath = currentSourcePath,
+                };
             }
             declarations = AddBounded(left: declarations, right: child.Declarations);
             rewriteWork = AddBounded(left: rewriteWork, right: child.RewriteWork);

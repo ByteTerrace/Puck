@@ -158,7 +158,8 @@ A document's `schema:` field selects its vocabulary, never the filename.
   statement on the next line (a row, a `let`, a template call), never an error.
   It changes nothing in the document; an unknown code, a missing reason or
   nothing to cover is **PUCK124**. A diagnostic is reported against the file and
-  line that authored it, an imported library's or a basis's included, and
+  line that authored it, an imported library's or a basis's included (with the
+  use site attached as related information in the language server), and
   `puck lint <dir>` prints one placed in another file once.
 - **Spellings that mean the same compile to one document.** The
   spelling-equivalence corpus
@@ -256,7 +257,9 @@ puck test <path-or-dir>               # boots each test block headless, one verd
   rows of several elements keep the author's lines; the language server and `puck
   decompile` print through the same printer. Formatting is a fixed point and
   never moves a compiled document; reformat sources after a printer change.
-- `puck lsp` serves completion, hover, symbols, formatting and diagnostics.
+- `puck lsp` serves completion, hover, go-to-definition, code actions, symbols,
+  formatting and diagnostics (grouping findings by the file that authored them
+  with the use site as related information).
 - `puck migrate <name> <path> [--check]` applies one registered source rewrite
   and proves each rewritten source compiles to the document it did before.
   A syntax migration must also visit retained write-target operands

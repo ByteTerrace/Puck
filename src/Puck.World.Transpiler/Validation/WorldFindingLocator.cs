@@ -3,7 +3,6 @@ using Puck.Abstractions;
 using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Validation;
 
@@ -47,13 +46,6 @@ internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? sourc
         return m_provenance;
     }
 
-    private static string PathToken(string message) {
-        var colon = message.IndexOf(value: ':');
-
-        return ((colon > 0)
-            ? message[..colon].Trim()
-            : (message.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ').FirstOrDefault() ?? ""));
-    }
     // The authored origin of `node`: its own when it is a value, or else the shallowest value under it with one, the
     // origin's pointer trimmed back up to `node`.
     private static bool TryAuthor(WorldDocumentOrigins origins, JsonNode node, out string documentPath, out string documentPointer) {
@@ -140,22 +132,23 @@ internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? sourc
     }
     private bool IsRoot(string? path) => ((path is null) || ((sourcePath is not null) && PuckPaths.Comparer.Equals(x: PuckPaths.Normalize(path: path), y: PuckPaths.Normalize(path: sourcePath))));
 
-    /// <summary>Returns the finding <paramref name="message"/> reports, placed on the line that authored what its path
-    /// names; <see langword="null"/> when the authoring source acknowledges it with an <c>allow</c> line.</summary>
+    /// <summary>Returns the finding <paramref name="message"/> reports, placed on the line that authored what
+    /// <paramref name="pointer"/> names; <see langword="null"/> when the authoring source acknowledges it with an
+    /// <c>allow</c> line.</summary>
     /// <param name="code">The diagnostic code.</param>
     /// <param name="severity">The diagnostic severity.</param>
-    /// <param name="message">The finding, its document path first.</param>
-    /// <param name="pointer">The JSON pointer the finding is about, when the finding's source names it already;
-    /// <see langword="null"/> reads it from the document path the message starts with.</param>
+    /// <param name="message">The human-readable finding message.</param>
+    /// <param name="pointer">The JSON pointer the finding is about, or <see langword="null"/>/empty for the whole
+    /// document.</param>
     /// <returns>The located diagnostic, or <see langword="null"/> when it is acknowledged.</returns>
-    public Diagnostic? Locate(string code, DiagnosticSeverity severity, string message, string? pointer = null) {
+    public Diagnostic? Locate(string code, DiagnosticSeverity severity, string message, string? pointer) {
         var diagnostic = new Diagnostic(Code: code, Message: message, Severity: severity, Span: SourceSpan.None);
 
         if (sourceMap is null) {
             return diagnostic;
         }
 
-        var composedPointer = (pointer ?? WorldDocumentPointers.ToJsonPointer(path: PathToken(message: message), table: WorldConstructs.Table));
+        var composedPointer = (pointer ?? string.Empty);
         var layerPointer = (((source is null) || ReferenceEquals(objA: source, objB: composed))
             ? composedPointer
             : WorldDocumentBasis.TraceToLayer(composed: composed, layer: source, pointer: composedPointer));

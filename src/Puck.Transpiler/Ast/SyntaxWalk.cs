@@ -138,7 +138,11 @@ public static class SyntaxWalk {
         return path;
     }
 
-    private static bool Spans(SyntaxNode node, int offset) => ((offset >= node.Offset) && (offset < (node.Offset + node.Length)));
+    /// <summary>Returns whether <paramref name="offset"/> falls within <paramref name="node"/>'s source span.</summary>
+    /// <param name="node">The syntax node to test.</param>
+    /// <param name="offset">The 0-based character offset.</param>
+    /// <returns><see langword="true"/> when <paramref name="offset"/> lies in <c>[node.Offset, node.Offset + node.Length)</c>.</returns>
+    public static bool Spans(SyntaxNode node, int offset) => ((offset >= node.Offset) && (offset < (node.Offset + node.Length)));
     private static SyntaxNode[] Present(params SyntaxNode?[] nodes) => [.. nodes.OfType<SyntaxNode>()];
     private static IEnumerable<SyntaxNode> Family(ExpressionNode? size, IReadOnlyList<FamilyMemberNode>? members) => [.. Present(size), .. (members ?? [])];
 }
