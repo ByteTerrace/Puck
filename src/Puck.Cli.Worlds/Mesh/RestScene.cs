@@ -33,6 +33,11 @@ public sealed record RestBody(int BodyIndex, WorldPrototype Creation, Vector3 Or
         return new Vector3(x: -local.X, y: local.Y, z: -local.Z);
     }
 }
+/// <summary>One bake group of a rest scene, named by the hash of the geometry it seals at its finest tier
+/// (<see cref="RestScene.PlanKeys"/>).</summary>
+/// <param name="Digest">The hash of the group's geometry (<see cref="SdfMeshGeometry.Hash"/>).</param>
+/// <param name="Label">The group's label (<see cref="RestScene.Label"/>).</param>
+public sealed record RestGroupKey(UInt128 Digest, string Label);
 /// <summary>
 /// A world's presentation at rest, composed offline as a World composes its frame (<see cref="WorldSceneEmitter"/> through
 /// <see cref="SdfCompositionFrameSource"/>), with no device: one body per creation look, standing unturned at rest, so
@@ -193,6 +198,13 @@ public sealed class RestScene {
     /// <returns>The groups, in plan order.</returns>
     public List<SdfMeshBakeGroup> Plan(float farDistance, Func<SdfMeshBakeGroup, int>? tier = null) =>
         SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: farDistance, program: Program, tier: tier, transforms: Transforms);
+    /// <summary>Names each bake group the scene plans at its finest tier by the hash of its sealed geometry, which moves
+    /// when a document change moves the group's surface and when the bake's code changes how geometry is hashed. Two
+    /// plans of the same documents under the same bake code list the same keys, on any machine.</summary>
+    /// <param name="farDistance">The far distance the world renders to (<see cref="WorldRenderFarDistance.Resolve"/>).</param>
+    /// <returns>Each group's key, in plan order.</returns>
+    public IReadOnlyList<RestGroupKey> PlanKeys(float farDistance) =>
+        [.. Plan(farDistance: farDistance).Select(selector: group => new RestGroupKey(Digest: group.Sealed.Hash, Label: Label(group: group, owner: Owner(group: group))))];
     /// <summary>Returns the placement a group's first instance was emitted for, or <see langword="null"/> for a shared
     /// template, a body's group or anonymous world geometry.</summary>
     /// <param name="group">The bake group.</param>

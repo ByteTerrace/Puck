@@ -269,9 +269,9 @@ producer needs no deployment access. The
 release job (`player` in the Azure workflow) assembles the folder without
 baking boots, and `puck world caches fetch` takes the cache set whose identity
 equals its own build's, verifies every file's content pin and unpacks it; the
-deployment's own identity then publishes the release. When no set matches, the
-release notes and the build's record name the miss for that backend instead of
-shipping a cold store silently. A derived product is never committed
+deployment's own identity then publishes the release. When no set matches, or a
+matching set was produced for other groups than the release's world plans, the
+verb holds the publish (below). A derived product is never committed
 ([decision](engine-design.md#a-derived-product-is-a-cache-never-the-truth)),
 so a release asset carries it, never a branch. A GPU runner later runs the same
 `produce --push`, and nothing else changes.
@@ -283,7 +283,13 @@ mesh (the owner's ruling: the consumer machine runs what a player runs and
 never cold-bakes), so a set that misses any group the release's world needs,
 whether its identity moved or its world documents changed, does not ship: the
 `player` job holds the channel's publish for that build and names the miss,
-and the lead produces the set before the release is retried.
+and the lead produces the set before the release is retried. The job fails and
+the deploy does not; the channel keeps its last complete release. Whether the
+documents moved is read without a GPU: a set's record carries the hashes of the
+groups its world planned, and the release compares its own world's plan
+(`WorldCachePlan`, from the rest scene `puck mesh audit` also plans). The plan
+is compared, not looked up in the store, because a live frame keys a posed
+character's parts by poses a rest scene does not stand.
 
 ## Vendor binaries
 

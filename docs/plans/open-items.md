@@ -89,9 +89,10 @@ correctness rests on an invariant is designed and reviewed before code
 2. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): the
    production deploy's catalog listing, which every push to `main` and every
    player release needs; then the first consumer release to the RTX 2060
-   through the player channel with a cache set per backend; then a missing or
-   stale cache set holding the channel's publish, so the consumer machine
-   never meets a cold store. Every 2060 reading waits on this.
+   through the player channel with a cache set per backend, which the lead
+   produces for the build being released
+   ([the hold](../development/ci.md#the-player-channel) refuses a release
+   without one). Every 2060 reading waits on this.
 3. [high] [The RTX 2060's frame](rendering.md#the-rtx-2060s-frame): step 1's
    reading of the player build at 1920 by 1080 on both backends, with a
    CPU-sampling and verbose GC trace beside it. That one trace settles what the
@@ -2847,15 +2848,6 @@ is pushed to `main` ([the player channel](../development/ci.md#the-player-channe
   and a verbose GC trace. The machine's only readings came from a source
   build before the device table applied and before the far and distant
   shadow work landed, so they describe nothing current.
-- [high] A release whose mesh bake identity has no cache set reaches the 2060
-  as a cold store. The `player` job names the miss in the release notes and
-  publishes anyway ([decision](../decisions/runtime-and-delivery.md#the-player-channel)),
-  and the identity moves with every change to bake code or kernel bytecode, so
-  any release that touched the bake ships one unless the lead produced its set
-  first. A whole-store miss is a cold bake, which the consumer machine never
-  does. Make a missing set hold the `player` channel's publish for that build
-  (the deploy itself goes ahead), and have the lead's release step produce the
-  set whenever the build's identity moved.
 - [medium] Composite ReadyToRun puts the framework and Puck in one image of
   about 291 MB (`Puck.World.r2r.dll`), so every engine change re-downloads it
   whole through a channel built to ship only the files that changed. Read
