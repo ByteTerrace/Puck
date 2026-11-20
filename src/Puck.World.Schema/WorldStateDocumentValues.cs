@@ -124,9 +124,7 @@ public static class WorldStateDocumentValues {
             if (arena.Keys.TryResolve(name: name, key: out var key) && arena.TryReadLive(rowOrdinal: ordinal, key: key, time: in time, value: out var value)) {
                 text = value.Kind switch {
                     CellKind.Text => value.AsText,
-                    CellKind.Fixed => FixedQ4816.FromRawBits(value: value.AsFixed).ToString(),
-                    CellKind.Bool => value.AsBool ? "1" : "0",
-                    CellKind.Int => value.AsInt.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                    CellKind.Fixed or CellKind.Bool or CellKind.Int => NumberText(kind: value.Kind, raw: value.Raw),
                     _ => null,
                 };
             }
@@ -139,6 +137,13 @@ public static class WorldStateDocumentValues {
 
         private sealed record Memo(StateArena Arena, int Ordinal, ulong Generation, ulong Tick, string? Text);
     }
+    // The text a numeric cell offers a value bound to it, the spelling a document carries literally, whether the value
+    // is resolved once or read live: a decimal for int and fixed, true or false for bool.
+    private static string NumberText(CellKind kind, long raw) => kind switch {
+        CellKind.Fixed => FixedQ4816.FromRawBits(value: raw).ToString(),
+        CellKind.Bool => (raw != 0L) ? "true" : "false",
+        _ => raw.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+    };
     // The diagnostic path is formatted only for a refusal.
     private static string Refusal(string root, WorldDocumentSite site, string reference, string message) {
         var path = site.Path;
@@ -257,14 +262,7 @@ public static class WorldStateDocumentValues {
                     return Refuse(message: "names a cell that holds no value", reference: reference, site: site, value: value);
                 }
 
-                text = stateRow.Kind switch {
-                    CellKind.Fixed => FixedQ4816.FromRawBits(value: raw).ToString(),
-                    CellKind.Bool => ((raw != 0L)
-                    ? "true"
-                    : "false"),
-                    CellKind.Int => raw.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
-                    _ => raw.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
-                };
+                text = NumberText(kind: stateRow.Kind, raw: raw);
             }
             if (text is null) {
                 return Refuse(message: "names a cell that holds no value", reference: reference, site: site, value: value);
@@ -292,7 +290,7 @@ public static class WorldStateDocumentValues {
     }
     // Reports whether a reference is present (any reference, or one naming a sought row), or collects every
     // referenced row's name, touching nothing; a search stops at its first hit, a collection never stops early.
-    private sealed class Finder(string? soughtRow, ISet<string>? collected) : IWorldDocumentVisitor {
+    private sealed class Finder(string? soughtRow, ISet<string>? collected, bool identityOnly = false) : IWorldDocumentVisitor {
         public bool Found { get; private set; }
         public bool Stopped => Found;
 
@@ -300,7 +298,7 @@ public static class WorldStateDocumentValues {
             if (value is not IDocumentStateValue holder) {
                 return true;
             }
-            if (holder.Reference is not { } reference) {
+            if ((holder.Reference is not { } reference) || (identityOnly && (holder is IDocumentSpatialValue))) {
                 return false;
             }
 
@@ -473,6 +471,44 @@ public static class WorldStateDocumentValues {
             refreshed: out refreshed,
             soughtRow: rowName
         );
+    }
+    /// <summary>Checks that every document value bound to <paramref name="rowName"/> reads the row's current cell in
+    /// the live store as a value of its own shape, reading no other row: the one check a cell write into a bound row
+    /// owes its bindings, scoped to the row it wrote.</summary>
+    /// <remarks>Nothing is rewritten for the caller: the resolved copies are discarded. A refusal's text carries the
+    /// document path of the first holder that refused, so a caller answering a recipient words its own refusal.</remarks>
+    /// <param name="definition">The live document whose values are checked.</param>
+    /// <param name="rowName">The written row.</param>
+    /// <param name="arena">The live store holding the written cell.</param>
+    /// <param name="time">The live clock coordinate.</param>
+    /// <param name="reason">Why a value bound to the row could not read it, on failure.</param>
+    /// <returns><see langword="true"/> when every value bound to the row reads it.</returns>
+    public static bool TryCheckBound(WorldDefinition definition, string rowName, StateArena arena, ArenaTime time, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentException.ThrowIfNullOrEmpty(argument: rowName);
+        ArgumentNullException.ThrowIfNull(argument: arena);
+
+        return TryRewrite<WorldDefinition>(
+            graph: definition,
+            reason: out reason,
+            resolver: new Resolver(arena: arena, definition: definition, deferDrawSites: false, detach: false, root: "definition", soughtRow: rowName, time: time),
+            rewritten: out _
+        );
+    }
+    /// <summary>Reports whether a value bound to <paramref name="rowName"/> is an identity other units refer to (a
+    /// prototype's or a look's name, any bound value that is not a spatial one), so that writing the row renames an
+    /// entity rather than moves a value: a write whose checks reach every unit that refers to the name.</summary>
+    /// <param name="definition">The document whose values are read.</param>
+    /// <param name="rowName">The row sought.</param>
+    /// <returns><see langword="true"/> when a non-spatial value is bound to the row.</returns>
+    public static bool BindsIdentity(WorldDefinition definition, string rowName) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentException.ThrowIfNullOrEmpty(argument: rowName);
+
+        var finder = new Finder(collected: null, soughtRow: rowName, identityOnly: true);
+
+        Walker.Walk(root: definition, visitor: finder);
+        return finder.Found;
     }
     /// <summary>Returns a candidate whose every document value is resolved against the candidate's own state cells:
     /// what a row write that introduces a bound value composes, so validation and every derived rebuild read a

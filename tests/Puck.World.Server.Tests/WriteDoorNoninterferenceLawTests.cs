@@ -177,6 +177,34 @@ public sealed class WriteDoorNoninterferenceLawTests {
         Assert.Empty(unresolved);
     }
 
+    // Decision 3a's H1: removing a key from a public domain is judged by the hidden row keyed over it whatever that
+    // row holds, empty, holding the removed key or holding another, so the verdict is the declaration's, never the
+    // membership's. A cell removed, a cell set and the row removed are each probed against the domain, with a public
+    // keyed row as the control the door admits.
+    [Fact]
+    public void ARemovalFromADomainAHiddenRowIsKeyedOverAnswersAlikeWhateverThatRowHolds() {
+        var writes = new Func<string, WorldMutation>[] {
+            row => new WorldMutation.RemoveStateCell(Writer, row, "a"),
+            row => new WorldMutation.UpsertStateCell(Writer, row, "c", 1, WorldDocumentWriteKind.Set),
+            row => new WorldMutation.RemoveStateRow(Writer, row),
+        };
+        List<string> Answers(string[] held, bool hidden) {
+            var deck = new WorldStateRow(CellName.Parse(candidate: "deck"), CellKind.Int,
+                Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: 1)), new StateCell(CellName.Parse(candidate: "b"), CellValue.Int(value: 2))]);
+            var hand = new WorldStateRow(CellName.Parse(candidate: "hand"), CellKind.Bool, Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "deck")),
+                Visibility: hidden ? new StateVisibility(Readers: []) : null,
+                Cells: [.. held.Select(key => new StateCell(CellName.Parse(candidate: key), CellValue.Bool(value: true)))]);
+            var view = WorldRecipientView.ForComposition(new WorldDefinition(StateRaw: new WorldStateSection(World: [deck, hand])), Writer);
+            return [.. writes.Select(write => view.Admits(write("deck"), out var refused) ? "admitted" : $"refused {refused}")];
+        }
+        var empty = Answers([], hidden: true);
+
+        Assert.Equal(empty, Answers(["a"], hidden: true));
+        Assert.Equal(empty, Answers(["b"], hidden: true));
+        Assert.All(empty, answer => Assert.Equal("refused deck", answer));
+        Assert.All(Answers(["a"], hidden: false), answer => Assert.Equal("admitted", answer));
+    }
+
     // A row's live audience lists who reads it, so a write into the audience row is judged by every row reading
     // through it: a reverse dependency the token-domain relation does not hold. A writer who cannot read the
     // audienced row would otherwise widen it to itself, and be refused or not by what that row holds.
