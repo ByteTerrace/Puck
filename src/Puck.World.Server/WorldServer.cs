@@ -305,8 +305,8 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// document-row effect — was submitted by no session and raises no echo; it is narrated on the transcript
     /// alone.</summary>
     public Action<WorldEditEcho>? EchoTap { get; set; }
-    internal WorldSnapshot PresentCues(in WorldSnapshot snapshot, WorldRecipientView view, bool fullBodies) =>
-        Tick.PresentCues(snapshot, view, fullBodies);
+    internal WorldSnapshot PresentCues(in WorldSnapshot snapshot, WorldRecipientView view, bool fullBodies, WorldBodyView? bodies = null) =>
+        Tick.PresentCues(snapshot, view, fullBodies, bodies);
     /// <summary>Gets the engagement fold (headless design §1.8) — the seat/peer→screen route decision
     /// (<see cref="WorldCommand.ComposeControl"/>/<see cref="WorldCommand.DissolveControl"/> apply through it, from
     /// <see cref="ApplyCommand"/>), its per-tick pad fold (<see cref="Server.WorldEngagement.FoldTick"/>, folded into

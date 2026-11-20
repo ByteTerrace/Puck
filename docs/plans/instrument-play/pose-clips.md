@@ -824,7 +824,7 @@ Otherwise the layer's driver reads its cell, as the shared pose's does.
   authority has answered for that owner, taken or refused, and the tick it
   answered in. It goes to that owner only, as the input publication does
   (`WorldOwnedRecords.ForOwner`); an observer with a body disclosure is no
-  owner and is handed none (`WorldOutputHub.Observed`). Without it a remote
+  owner and is handed none (`WorldOutputHub.DeliverSnapshot`). Without it a remote
   client cannot tell a late answer from a refusal. Prediction will need the
   same fact. The answer carries the batch's input epoch, since event sequences
   restart each epoch, and it is delivery only: it is neither hashed nor
@@ -1128,7 +1128,7 @@ Each was opened in the code before it was answered.
 | R4 | The guess reaches other views, session windows sharing the scene, camera screens and `body.rig`. | Confirmed for the views, windows and screens, which all drew the shared table. | The overlay reaches the seat's own view alone. `body.rig` prints the layer's drivers only to that seat or the operator. |
 | R5 | A stun, a Drive denial or a reach refusal returns before the answer is written; the answer was written before the body and epoch checks; `leadSeconds` has no maximum. | Confirmed for the first two. | The answer is written first, for the current epoch's own-route batches only. `leadSeconds` stays uncapped: it changes only the owning seat's picture. |
 | R6 | A restored checkpoint or a cut drops the answer and revives an answered guess; the guess's age reads the wall clock. | Confirmed. | The producer forgets an edge once its answer is presented, and the age is presented time. |
-| R7 | A body-disclosure observer is handed every owner's answers. | Confirmed for the observer door; a colocated endpoint is the same process's own client. | The observer door strips owned records (`WorldOutputHub.Observed`), and a leak's excerpt names answers. |
+| R7 | A body-disclosure observer is handed every owner's answers. | Confirmed for the observer door; a colocated endpoint is the same process's own client. | The observer door strips owned records (`WorldOutputHub.DeliverSnapshot`), and a leak's excerpt names answers. |
 | R8 | A parked attached reader keeps rating its last target, and a reader later in the pool lags one frame. | Confirmed for the first. | A parked row clears its packed root. The one-frame lag stands. |
 
 ## At the scale of an MMO

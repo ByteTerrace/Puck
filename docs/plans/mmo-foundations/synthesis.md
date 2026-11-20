@@ -118,7 +118,7 @@ the memo:
    (`WorldSessionSink`, `WorldSessionObservation.View`). Step 2 also routes
    reads through that live view without advancing the delivery cursor.
 
-   Body disclosure still runs through `Redact` at the hub until I1. The order
+   The shared spatial grid now supplies the recipient view’s body projection. The order
    of work keeps step 1 as the floor the table and interest-management steps
    stand on ([decision 5](#decision-5-seams), [the order](#6-the-order-of-work)).
 3. **A13 is refuted for today's hosts.** Lane B asked for a confirmation; lane

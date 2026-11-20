@@ -2,10 +2,13 @@ using Puck.World.Protocol;
 using Puck.Commands;
 using System.Buffers.Binary;
 using Xunit;
+using System.Numerics;
+using System.Threading.Channels;
+using Puck.Networking;
 
 namespace Puck.World.Server.Tests;
 
-public sealed class WorldProjectionBackpressureLawTests {
+public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output) {
     [Theory]
     [InlineData(WorldDisclosureTier.Replica)]
     [InlineData(WorldDisclosureTier.Presentation)]
@@ -235,6 +238,94 @@ public sealed class WorldProjectionBackpressureLawTests {
             expected: WorldFederationProjectionSink.BackpressureDetachReason,
             actual: System.Text.Encoding.UTF8.GetString(bytes: terminal.Body.Span)
         );
+    }
+
+    [Fact]
+    public async Task SharedRadiusDeltasUseTheImageEachPeerAcknowledged() {
+        const int Sessions = 8;
+        var ct = TestContext.Current.CancellationToken;
+        var hub = new WorldOutputHub();
+        var policy = new WorldSinkDisclosure(new(WorldObserverDisclosureMode.Radius, Radius: 15.5f, UpdateSeconds: 0), 0);
+        var wires = new InterestWire[Sessions];
+        var pumps = new Task[Sessions];
+        var leases = new IDisposable[Sessions];
+        var receivers = new WorldSnapshotReceiver[Sessions];
+        var rows = Enumerable.Range(0, 64).Select(i => new EntitySnapshot(i, new Vector3(i, 0, 0),
+            Quaternion.Identity, Vector3.One, true, 0, 0, 0, EntityContinuity.Continuous)).ToArray();
+        var state = new long[] { 1 };
+        rows[1] = rows[1] with { State = state };
+
+        for (var i = 0; i < Sessions; i++) {
+            var sink = new WorldFederationProjectionSink(WorldDisclosureTier.Replica, "interest", () => policy);
+            leases[i] = hub.Subscribe(sink);
+            receivers[i] = new();
+            wires[i] = new();
+            pumps[i] = sink.StreamAsync(wires[i], ct);
+        }
+        try {
+            for (ulong tick = 1; tick <= 3; tick++) {
+                if (tick == 2) {
+                    state[0]++;
+                    rows[15] = rows[15] with { Position = new Vector3(50, 0, 0) };
+                    rows[16] = rows[16] with { Position = new Vector3(15, 0, 0) };
+                }
+                var snapshot = new WorldSnapshot(tick, 0, 1, rows, "interest");
+                hub.DeliverSnapshot(snapshot);
+                var expected = rows.Where(row => policy.Policy.Discloses(row, 0, Vector3.Zero)).ToArray();
+                var before = WorldFederationCodec.EncodeSnapshot(snapshot with { Entries = expected }).Length;
+                var overhead = WorldFederationCodec.EncodeSnapshot(snapshot with { Entries = default }).Length;
+                var wireBytes = 0;
+                for (var i = 0; i < Sessions; i++) {
+                    var bytes = await wires[i].Frames.Reader.ReadAsync(ct);
+                    wireBytes += bytes.Length;
+                    using var frameStream = new MemoryStream(bytes);
+                    var record = await WorldFederationCodec.ReadResponseAsync(frameStream, ct);
+                    Assert.True(record.Ok);
+                    var delta = record.Kind == (byte)WorldFederationResponse.SnapshotDelta;
+                    Assert.Equal(tick > 1, delta);
+                    Assert.True(WorldFederationCodec.TryReadStamped(record.Body.Span, out var stamp, out var body, out _));
+                    Assert.True(receivers[i].TryReceive(stamp, delta, body, out var received));
+                    Assert.Equal(expected.Select(e => e.Index), received.Entries.ToArray().Select(e => e.Index));
+                    Assert.Equal(state[0], received.Entries.Span[1].State.Span[0]);
+                    // Half the peers stay on the first baseline for the third tick.
+                    if (tick == 1 || (tick == 2 && i % 2 == 0)) { await wires[i].Ack(stamp, ct); }
+                }
+                output.WriteLine($"tick {tick}, {Sessions} sessions: body encodes {Sessions * expected.Length} -> {hub.EncodedBodies.Bodies}, body bytes {Sessions * (before - overhead)} -> {hub.EncodedBodies.Bytes}, wire bytes {Sessions * (before + WorldFederationCodec.StreamStampBytes + FrameCodec.PrefixBytes)} -> {wireBytes}");
+                Assert.Equal(tick == 1 ? 16 : 2, hub.EncodedBodies.Bodies);
+            }
+        } finally {
+            foreach (var wire in wires) { wire.CloseInput(); }
+            await Task.WhenAll(pumps);
+            foreach (var lease in leases) { lease.Dispose(); }
+            foreach (var wire in wires) { wire.Dispose(); }
+        }
+    }
+
+    private sealed class InterestWire : MemoryStream {
+        private readonly Channel<(byte[] Bytes, TaskCompletionSource? Done)> m_input =
+            Channel.CreateUnbounded<(byte[], TaskCompletionSource?)>();
+        private TaskCompletionSource? m_processed;
+        public Channel<byte[]> Frames { get; } = Channel.CreateUnbounded<byte[]>();
+
+        public async Task Ack(WorldStreamStamp stamp, CancellationToken ct) {
+            var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            await m_input.Writer.WriteAsync((WorldFederationCodec.Stamped(stamp, []), done), ct);
+            await done.Task.WaitAsync(ct);
+        }
+        public void CloseInput() => m_input.Writer.TryWrite(([], null));
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) {
+            m_processed?.TrySetResult();
+            var (bytes, done) = await m_input.Reader.ReadAsync(cancellationToken);
+            bytes.CopyTo(buffer);
+            m_processed = done;
+            return bytes.Length;
+        }
+        public override Task FlushAsync(CancellationToken cancellationToken) {
+            var bytes = ToArray();
+            SetLength(0);
+            Frames.Writer.TryWrite(bytes);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class ProjectionWire : MemoryStream {

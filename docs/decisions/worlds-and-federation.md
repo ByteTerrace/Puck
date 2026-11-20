@@ -320,6 +320,29 @@ owner's deferred call.
 **Evidence.** [Synthesis, decision 5](../plans/mmo-foundations/synthesis.md#decision-5-seams);
 [seams, options](../plans/mmo-foundations/seams.md#3-options-for-puck).
 
+### Body interest and acknowledgements
+
+Body interest belongs to the disclosure plan's I1. The authority decides which
+bodies a recipient can see. A screen session, a traveling player and a
+federation observer all need that decision, including when a definition change
+requires a new primer while the world is paused. Putting a second radius or
+audience test in the transport would let those paths disagree.
+
+`WorldRecipientView.Bodies` supplies the live policy and the authority-assigned
+body. `WorldInterestFrame` indexes one publication and shares a radius query
+among observers at the same position. Between samples the federation sampler
+retains disclosed continuity events. It asks for the body table when a frame
+is due. Cues and music check individual body membership at the tick they occur.
+
+A federation receiver acknowledges a snapshot's stream, generation and ordinal
+after reconstructing and delivering it. `WorldBodyHistory` accepts an exact
+stamp from that stream's retained body images. The next delta carries changed
+entries and the slots that left that image. When the acknowledged image expires
+or a cut starts a new generation, the next snapshot carries a complete table.
+Traveler relays forward the acknowledgement to the authority that encoded the
+image. Streams sharing a projected table and baseline share the encoded body
+bytes. Each stream still owns its stamps, cells, input answers and cues.
+
 ## The tables
 
 **Decided.**

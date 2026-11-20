@@ -91,9 +91,10 @@ public sealed class FixedSweepGrid {
     public FixedSweepSphere Sphere(int ordinal) => m_rows[ordinal].Sphere;
     /// <summary>Replaces the image with the supplied spheres and sorts them into sweep order.</summary>
     /// <param name="spheres">Spheres with distinct slots inside capacity and radii at least zero; never mutated.</param>
+    /// <param name="minimumCellWidth">Optional broad-phase cell width for point or small-sphere range queries.</param>
     /// <exception cref="ArgumentException">The input exceeds capacity, repeats a slot, names a slot outside capacity
     /// or carries a negative radius. A refused rebuild leaves an empty image.</exception>
-    public void Rebuild(ReadOnlySpan<FixedSweepSphere> spheres) {
+    public void Rebuild(ReadOnlySpan<FixedSweepSphere> spheres, FixedQ4816 minimumCellWidth = default) {
         m_count = 0;
         m_cellCount = 0;
         m_maximumRadius = 0L;
@@ -122,7 +123,7 @@ public sealed class FixedSweepGrid {
         m_maximumRadius = maximumRadius;
         // Two spheres whose bounds meet on Y and Z lie within the sum of their radii, never more than this width, so
         // their centres fall in the same or adjacent cells. Raw units keep the floor division exact on either side of 0.
-        m_width = Math.Max(val1: 2L, val2: maximumRadius.AddSaturating(right: maximumRadius));
+        m_width = Math.Max(Math.Max(2L, minimumCellWidth.Value), maximumRadius.AddSaturating(right: maximumRadius));
         m_count = spheres.Length;
 
         Array.Clear(array: m_cellStart, index: 0, length: (m_count + 1));

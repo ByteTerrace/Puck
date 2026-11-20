@@ -94,12 +94,8 @@ public sealed partial class WorldDocument {
                 if (disclosure.IsFull) {
                     sink.DeliverSnapshot(snapshot: in primer, stream: WorldStreamStamp.Unspanned);
                 } else {
-                    var scratch = Array.Empty<EntitySnapshot>();
-                    var redacted = WorldOutputHub.Observed(
-                        disclosure: in disclosure,
-                        scratch: ref scratch,
-                        snapshot: in primer
-                    );
+                    var frame = WorldInterestFrame.ForPrimer(primer);
+                    var redacted = primer with { Entries = frame.Project(disclosure), Inputs = default, InputAnswers = default };
 
                     sink.DeliverSnapshot(snapshot: in redacted, stream: WorldStreamStamp.Unspanned);
                 }
