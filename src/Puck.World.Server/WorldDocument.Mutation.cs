@@ -324,6 +324,7 @@ public sealed partial class WorldDocument {
     /// <param name="record">Whether to journal and echo here; a coalesced cell run records each original act.</param>
     /// <param name="derived">Whether the mutation is guest output excluded from the external-edit recovery tail.</param>
     /// <param name="privateWords">Private inputs used by the prepared mutation.</param>
+    /// <param name="commitJournal">Publishes the reserved journal entry once the edit has installed.</param>
     private void InstallPrepared(DocumentStage prepared, int connectionId, long correlationId, bool record = true, bool derived = false, MutationDrawHistory? privateWords = null, Action? commitJournal = null) {
         var mutation = prepared.Mutation;
         var candidate = prepared.Candidate;
@@ -408,7 +409,7 @@ public sealed partial class WorldDocument {
         RecordCommittedMutation(mutation: mutation, tick: prepared.Tick, engineTick: prepared.EngineTick, connectionId: connectionId,
             correlationId: correlationId, evictedKey: prepared.EvictedKey, addonPlan: prepared.AddonPlan, machinePlan: prepared.MachinePlan, derived: derived, privateWords: privateWords, commitJournal: commitJournal);
     private void RecordCommittedMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId,
-        CellName? evictedKey = null, IWorldAddonPreparedPlan? addonPlan = null, IWorldMachinePreparedPlan? machinePlan = null, bool derived = false, MutationDrawHistory? privateWords = null) {
+        CellName? evictedKey = null, IWorldAddonPreparedPlan? addonPlan = null, IWorldMachinePreparedPlan? machinePlan = null, bool derived = false, MutationDrawHistory? privateWords = null, Action? commitJournal = null) {
         var entry = new WorldJournalEntry(
             EngineTick: engineTick,
             Mutation: mutation,

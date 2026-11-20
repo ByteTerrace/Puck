@@ -424,14 +424,7 @@ the destination namespace (`WorldFederationCodec.BindProofChallenge`,
 **World authorities.** A silo row reads a PKCS8 key from `federation.keyFile`
 and signs `SignsDirectly` claims valid for `MaximumClaimAge`, five minutes
 (`src/Puck.World.Protocol/Codecs/WorldAttestedAuthenticator.cs:36-38`)
-**[opened]** (`src/Puck.World.Silo/WorldSiloHost.cs:804-831`):
-
-```csharp
-                : new LocalKeySigningOracle(
-                                key: key,
-                                subject: subject,
-                                validity: WorldAttestedAuthenticator.MaximumClaimAge
-```
+**[opened]** (`WorldSiloHost.TryBuildFederationIdentity`).
 
 The desktop does the same from `--federation-key-file` **[opened]**
 (`src/Puck.World/Program.cs:187-190`):

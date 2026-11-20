@@ -8604,7 +8604,7 @@ export type WorldHostDefaults = {
    */
   backendRow?: string | null;
   /**
-   * The undo horizon, in journal entries: world.undo can never reach past this many trailing entries. 0 is unbounded — every world authored before this field existed keeps growing its journal for the life of the process, exactly as before. A positive depth bounds it: once the journal holds more than this many entries, the oldest ones fold forward into the base the journal already keeps (the same document-level replay WorldServer.ApplyUndo performs, run forward), so a checkpoint restore and a replay from the new base plus the retained tail still reproduce the live definition bit-identically. world.status echoes the authored value; world.undo names it when a requested count reaches past what the horizon has kept.
+   * The undo horizon, in journal entries: world.undo can never reach past this many trailing entries. Omission uses the bounded DefaultJournalDepth. Explicit 0 opts into unbounded history. At a positive depth, once the journal holds more than this many entries, the oldest ones fold forward into the base the journal already keeps (the same document-level replay WorldServer.ApplyUndo performs, run forward), so a checkpoint restore and a replay from the new base plus the retained tail still reproduce the live definition bit-identically. world.status echoes the authored value; world.undo names it when a requested count reaches past what the horizon has kept.
    */
   journalDepth?: number;
   /**

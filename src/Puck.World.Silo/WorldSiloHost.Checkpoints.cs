@@ -168,7 +168,6 @@ public sealed partial class WorldSiloHost {
                     );
 
                     if (outcome.PublishedRoot is { } published) {
-                        bookkeeping.JournalSegments = published.Root.JournalSegmentCount;
                         bookkeeping.RetiredObjects += outcome.RetiredObjects;
                         if (outcome.RetentionFailure is { } failure) {
                             bookkeeping.LastCheckpointOutcome = $"ok (retention will retry: {failure})";

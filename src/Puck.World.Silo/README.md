@@ -344,7 +344,10 @@ uncovered journal segments. It retires superseded payloads through the object
 store and retries cleanup at the next checkpoint if deletion fails. Explicit
 release recovery points keep archive copies under their operation IDs, so an
 ordinary checkpoint can retire the live copies without affecting a protected
-restore. A cadence request stays pending per row until that row's upload
+restore. The segmented journal uses a new authority root format. The first
+release using it needs a fresh development authority store.
+
+A cadence request stays pending per row until that row's upload
 succeeds. Other rows can checkpoint on schedule while a row is deferred.
 
 In a hosted run, use `silo.grains` to watch `journalPending` and

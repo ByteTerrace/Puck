@@ -134,32 +134,18 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         throw new InvalidDataException($"hosted definition for '{identity.World}' failed to load: {reason}");
     }
     /// <inheritdoc/>
-    public async Task<WorldAuthorityJournalTail> LoadJournalTailAsync(WorldAuthorityIdentity identity, long afterOrdinal, CancellationToken cancellationToken) {
-        var rooted = await LoadRecoveryAsync(
-            cancellationToken: cancellationToken,
-            identity: identity
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
-        if (rooted is { } recovery) {
-            if (recovery.Root.Root.CheckpointOrdinal != afterOrdinal) {
-                throw new InvalidDataException(message: "requested checkpoint ordinal is not the authoritative root checkpoint");
+    public Task<WorldAuthorityJournalTail> LoadJournalTailAsync(WorldAuthorityIdentity identity, long afterOrdinal, CancellationToken cancellationToken) =>
+        ReadCurrentPublicationAsync(identity, async rooted => {
+            if (rooted.Root.CheckpointOrdinal != afterOrdinal) {
+                throw new InvalidDataException("requested checkpoint ordinal is not the authoritative root checkpoint");
             }
-            return recovery.Journal;
-        }
-        return new WorldAuthorityJournalTail(
-            CheckpointOrdinal: afterOrdinal,
-            Entries: []
-        );
-    }
-    /// <inheritdoc/>
-    public async Task<WorldAuthorityCheckpointBlob?> LoadLatestAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
-        var rooted = await LoadRecoveryAsync(
-            cancellationToken: cancellationToken,
-            identity: identity
-        ).ConfigureAwait(continueOnCapturedContext: false);
+            return await ReadJournalTailAsync(identity, rooted.Root, cancellationToken).ConfigureAwait(false);
+        }, new WorldAuthorityJournalTail(afterOrdinal, []), cancellationToken);
 
-        return rooted?.Checkpoint;
-    }
+    /// <inheritdoc/>
+    public Task<WorldAuthorityCheckpointBlob?> LoadLatestAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) =>
+        ReadCurrentPublicationAsync(identity, rooted => ReadCheckpointAsync(identity, rooted.Root, cancellationToken), null, cancellationToken);
+
     /// <inheritdoc/>
     public async Task<WorldAuthorityStoreOutcome> PublishDefinitionAsync(WorldAuthorityIdentity identity, WorldDefinition composed, CancellationToken cancellationToken, WorldAuthorityFence? fence = null) {
         ArgumentNullException.ThrowIfNull(composed);
@@ -389,13 +375,20 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
                 cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false);
         }
-        var snapshot = await ReadRootSnapshotAsync(
-            cancellationToken: cancellationToken,
-            identity: identity
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
-        if (snapshot is not { } captured) return null;
-        await ArchiveRecoveryPayloadsAsync(identity, captured.Root, operationId, cancellationToken).ConfigureAwait(false);
+        var snapshot = await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
+        WorldAuthorityRootSnapshot captured;
+        for (var attempt = 1; ; attempt++) {
+            if (snapshot is not { } selected) { return null; }
+            try {
+                await VerifyRecoveryMetadataAsync(identity, selected.Root, cancellationToken).ConfigureAwait(false);
+                await ArchiveRecoveryPayloadsAsync(identity, selected.Root, operationId, cancellationToken).ConfigureAwait(false);
+                captured = selected;
+                break;
+            } catch (InvalidDataException) when (attempt < MaxCasAttempts) {
+                snapshot = await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
+                if (snapshot is null || snapshot.Value.VersionToken == selected.VersionToken) { throw; }
+            }
+        }
         var bytes = WorldAuthorityRecoveryRootCodec.Encode(
             identity: identity,
             operationId: operationId,
@@ -498,45 +491,26 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         await VerifyRecoveryPayloadsAsync(
             identity,
             reference.Root,
-            operationId,
-            cancellationToken
+            cancellationToken,
+            archiveOnly: operationId
         ).ConfigureAwait(continueOnCapturedContext: false);
         return reference;
     }
-    private async Task VerifyRecoveryPayloadsAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, Guid operationId, CancellationToken cancellationToken) {
-        async Task VerifyAsync(ObjectBlobAddress address, string hash) {
-            var bytes = await ReadAsync(
-                address: address,
-                cancellationToken: cancellationToken
-            ).ConfigureAwait(continueOnCapturedContext: false);
-
-            if (
-                (bytes is not { } found) ||
-                !string.Equals(
-                a: WorldDefinitionFileSource.ComputeContentHash(content: found.Content.Span),
-                b: hash,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                throw new InvalidDataException(message: $"protected recovery payload '{address.Key}' is missing or corrupt");
-            }
-        }
-        if (root.DefinitionHash is { } definition) {
-            await VerifyAsync(
-            address: DefinitionCandidateAddress(
-                hash: definition,
-                identity: identity
-            ),
-            hash: definition
-        ).ConfigureAwait(continueOnCapturedContext: false);
-        }
+    private async Task VerifyRecoveryPayloadsAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, CancellationToken cancellationToken, Guid archiveOnly = default) {
         if (root.CheckpointHash is { } checkpoint) {
-            await VerifyAsync(
-                ArchiveAddress(identity, operationId, CheckpointCandidateAddress(identity, root.CheckpointStorageSequence, checkpoint)),
-                checkpoint
-            ).ConfigureAwait(false);
+            _ = await ReadPinnedPayloadAsync(identity, archiveOnly == Guid.Empty ? root.PayloadArchive : archiveOnly,
+                CheckpointCandidateAddress(identity, root.CheckpointStorageSequence, checkpoint),
+                checkpoint, cancellationToken, archiveOnly: archiveOnly != Guid.Empty).ConfigureAwait(false);
         }
-        await foreach (var segment in ReadJournalSegmentsAsync(identity, root, cancellationToken, archiveOnly: operationId).ConfigureAwait(false)) { }
+        await foreach (var segment in ReadJournalSegmentsAsync(identity, root, cancellationToken, archiveOnly: archiveOnly).ConfigureAwait(false)) { }
+        await VerifyRecoveryMetadataAsync(identity, root, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task VerifyRecoveryMetadataAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, CancellationToken cancellationToken) {
+        if (root.DefinitionHash is { } definition) {
+            _ = await ReadPinnedPayloadAsync(identity, Guid.Empty, DefinitionCandidateAddress(identity, definition),
+                definition, cancellationToken).ConfigureAwait(false);
+        }
         var receipts = await LoadReceiptIndexAsync(
             cancellationToken: cancellationToken,
             identity: identity,
@@ -909,35 +883,55 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         );
     }
     /// <inheritdoc/>
-    public async Task<WorldAuthorityRecovery?> LoadRecoveryAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken, WorldPrivateDrawKeys? drawKeys = null) {
+    public Task<WorldAuthorityRecovery?> LoadRecoveryAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken, WorldPrivateDrawKeys? drawKeys = null) =>
+        ReadCurrentPublicationAsync<WorldAuthorityRecovery?>(identity,
+            async rooted => await ReadRecoveryAsync(identity, rooted, cancellationToken, drawKeys).ConfigureAwait(false),
+            null, cancellationToken);
+
+    private async Task<T> ReadCurrentPublicationAsync<T>(WorldAuthorityIdentity identity, Func<WorldAuthorityRootSnapshot, Task<T>> read,
+        T absent, CancellationToken cancellationToken) {
         var snapshot = await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
         for (var attempt = 1; snapshot is { } rooted; attempt++) {
             try {
-                return await ReadRecoveryAsync(identity, rooted, cancellationToken, drawKeys).ConfigureAwait(false);
+                return await read(rooted).ConfigureAwait(false);
             } catch (InvalidDataException) when (attempt < MaxCasAttempts) {
                 // A checkpoint can retire objects under this read. Retry only if the root actually moved.
                 snapshot = await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false);
                 if (snapshot is null || snapshot.Value.VersionToken == rooted.VersionToken) { throw; }
             }
         }
-        return null;
+        return absent;
+    }
+
+    private async Task<WorldAuthorityCheckpointBlob?> ReadCheckpointAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root,
+        CancellationToken cancellationToken) {
+        if (root.CheckpointHash is not { } hash) { return null; }
+        var bytes = await ReadPinnedPayloadAsync(identity, root.PayloadArchive,
+            CheckpointCandidateAddress(identity, root.CheckpointStorageSequence, hash), hash, cancellationToken).ConfigureAwait(false);
+        return new(bytes, root.CheckpointOrdinal, root.CheckpointTick);
+    }
+
+    private async Task<WorldAuthorityJournalTail> ReadJournalTailAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root,
+        CancellationToken cancellationToken) {
+        var segments = new Stack<(IReadOnlyList<WorldAuthorityJournalEntry> Entries, int Offset)>();
+        await foreach (var segment in ReadJournalSegmentsAsync(identity, root, cancellationToken).ConfigureAwait(false)) {
+            segments.Push((segment.Entries, segment.Offset));
+        }
+        // Only allocate from the declared count once it has been verified against the payloads.
+        var journal = new WorldAuthorityJournalEntry[root.JournalEntryCount];
+        var journalIndex = 0;
+        foreach (var (entries, offset) in segments) {
+            for (var i = offset; i < entries.Count; i++) {
+                journal[journalIndex++] = entries[i];
+            }
+        }
+        return new(root.CheckpointOrdinal, journal);
     }
 
     private async Task<WorldAuthorityRecovery> ReadRecoveryAsync(WorldAuthorityIdentity identity, WorldAuthorityRootSnapshot rooted,
         CancellationToken cancellationToken, WorldPrivateDrawKeys? drawKeys) {
-        WorldAuthorityCheckpointBlob? checkpoint = null;
-
-        if (rooted.Root.CheckpointHash is { } hash) {
-            var bytes = await ReadPinnedPayloadAsync(identity, rooted.Root.PayloadArchive,
-                CheckpointCandidateAddress(identity, rooted.Root.CheckpointStorageSequence, hash), hash, cancellationToken).ConfigureAwait(false);
-            checkpoint = new(bytes, rooted.Root.CheckpointOrdinal, rooted.Root.CheckpointTick);
-        }
-        var journal = new WorldAuthorityJournalEntry[rooted.Root.JournalEntryCount];
-        await foreach (var segment in ReadJournalSegmentsAsync(identity, rooted.Root, cancellationToken).ConfigureAwait(false)) {
-            for (var i = segment.Offset; i < segment.Entries.Count; i++) {
-                journal[segment.Destination + i - segment.Offset] = segment.Entries[i];
-            }
-        }
+        var checkpoint = await ReadCheckpointAsync(identity, rooted.Root, cancellationToken).ConfigureAwait(false);
+        var journal = await ReadJournalTailAsync(identity, rooted.Root, cancellationToken).ConfigureAwait(false);
         ObjectBlobContent? definitionBytes = null;
 
         if (rooted.Root.DefinitionHash is { } definitionHash) {
@@ -981,14 +975,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
             if (loaded.Admission is null) throw new InvalidDataException(message: $"root-qualified definition is invalid — {loaded.Reason}");
             admission = loaded.Admission;
         }
-        return new WorldAuthorityRecovery(
-            rooted,
-            checkpoint,
-            new WorldAuthorityJournalTail(
-                CheckpointOrdinal: rooted.Root.CheckpointOrdinal,
-                Entries: journal
-            )
-        ) { Admission = admission };
+        return new WorldAuthorityRecovery(rooted, checkpoint, journal) { Admission = admission };
     }
 
     private async Task<WorldAuthorityStoreOutcome> AppendRootAsync(WorldAuthorityIdentity identity, IReadOnlyList<WorldAuthorityJournalEntry> entries, WorldAuthorityFence? suppliedFence, WorldAuthorityOperationReceipt? receipt, CancellationToken cancellationToken) {

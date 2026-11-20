@@ -51,7 +51,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         public long PendingJournalBytes;
         public List<WorldAuthorityJournalEntry> JournalBatch = [];
         public long JournalBatchBytes;
-        public int JournalSegments;
+        public volatile int JournalSegments;
         public long JournalMutationsWritten;
         public long JournalBytesWritten;
         public long RetiredObjects;

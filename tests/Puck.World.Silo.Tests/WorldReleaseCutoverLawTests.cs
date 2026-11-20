@@ -123,7 +123,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
 
     private sealed class FixtureReadStore(IObjectBlobStore inner) : IObjectBlobStore {
         public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
-            m_store.DeleteAsync(target, address, cancellationToken);
+            inner.DeleteAsync(target, address, cancellationToken);
 
         public bool Armed;
 

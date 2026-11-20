@@ -70,8 +70,7 @@ public sealed partial class WorldSiloHost {
             row.PendingJournalBytes -= bytes;
             row.JournalTimestamp = m_clock.GetTimestamp();
             row.LastJournalOutcome = outcome.Ok ? "ok" : $"failed ({outcome.Detail})";
-            if (outcome.PublishedRoot is { } publication) {
-                row.JournalSegments = publication.Root.JournalSegmentCount;
+            if (outcome.Ok) {
                 row.JournalBytesWritten += outcome.JournalBytesWritten;
                 row.JournalMutationsWritten += entries.Count;
             }

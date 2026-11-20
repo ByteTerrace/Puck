@@ -82,6 +82,7 @@ public sealed partial class WorldSiloHost {
                 throw new InvalidDataException(message: "A successful authority publication did not return this activation's root.");
             }
             bookkeeping.PublishedJournalSequence = publication.Root.JournalSequence;
+            bookkeeping.JournalSegments = publication.Root.JournalSegmentCount;
         }
     }
 }

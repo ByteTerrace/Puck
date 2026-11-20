@@ -10,8 +10,7 @@ public sealed partial class WorldAuthorityBlobStore {
         ObjectBlobAddress Address,
         ReadOnlyMemory<byte> Bytes,
         IReadOnlyList<WorldAuthorityJournalEntry> Entries,
-        int Offset,
-        int Destination
+        int Offset
     );
 
     private static ObjectBlobAddress ArchiveAddress(WorldAuthorityIdentity identity, Guid operationId, ObjectBlobAddress source) {
@@ -60,7 +59,7 @@ public sealed partial class WorldAuthorityBlobStore {
             var take = Math.Min(remaining, entries.Count);
             remaining -= take;
             segmentCount++;
-            yield return new(address, bytes, entries, entries.Count - take, remaining);
+            yield return new(address, bytes, entries, entries.Count - take);
             sequence = previousSequence;
             hash = previousHash;
         }
@@ -103,11 +102,11 @@ public sealed partial class WorldAuthorityBlobStore {
                     return false;
                 }
                 var name = key.AsSpan(address.Key.Length);
-                const int sequenceDigits = 20;
-                return name.Length == sequenceDigits + 1 + 64 + fileExtension.Length &&
-                    name[sequenceDigits] == '-' &&
-                    !name.Slice(sequenceDigits + 1, 64).ContainsAnyExcept("0123456789abcdef") &&
-                    long.TryParse(name[..sequenceDigits], NumberStyles.None, CultureInfo.InvariantCulture, out var sequence) &&
+                const int SequenceDigits = 20;
+                return name.Length == SequenceDigits + 1 + 64 + fileExtension.Length &&
+                    name[SequenceDigits] == '-' &&
+                    !name.Slice(SequenceDigits + 1, 64).ContainsAnyExcept("0123456789abcdef") &&
+                    long.TryParse(name[..SequenceDigits], NumberStyles.None, CultureInfo.InvariantCulture, out var sequence) &&
                     sequence > 0 && sequence <= previous.Sequence;
             });
             await Parallel.ForEachAsync(superseded, new ParallelOptions { MaxDegreeOfParallelism = 16, CancellationToken = token }, async (key, ct) => {
