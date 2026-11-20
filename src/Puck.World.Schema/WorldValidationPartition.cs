@@ -25,11 +25,12 @@ public sealed class WorldValidationPartition {
     private readonly Func<WorldDefinition, int> m_rowCount;
 
     internal WorldValidationPartition(string name, WorldValidationGranularity granularity, WorldDocumentInputs owns, WorldDocumentInputs reads,
-        Action<WorldValidationRun, IReadOnlyList<int>?> validate, Func<WorldDefinition, int>? rowCount = null, Func<WorldDefinition, WorldDefinition, WorldValidationRowChange>? rowChange = null) {
+        Action<WorldValidationRun, IReadOnlyList<int>?> validate, Func<WorldDefinition, int>? rowCount = null, Func<WorldDefinition, WorldDefinition, WorldValidationRowChange>? rowChange = null,
+        WorldBoundValidation? bound = null, Func<WorldDefinition, WorldDefinition, WorldDocumentInputs, IReadOnlyList<int>?>? selectDependentRows = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
         ArgumentNullException.ThrowIfNull(argument: validate);
-        if ((granularity == WorldValidationGranularity.Rows) != ((rowCount is not null) && (rowChange is not null))) {
-            throw new ArgumentException(message: "A row partition counts and compares its rows; a section partition does neither.", paramName: nameof(granularity));
+        if (granularity == WorldValidationGranularity.Rows && (rowCount is null || rowChange is null || bound is null)) {
+            throw new ArgumentException(message: "A row partition must count, compare and validate individual rows.", paramName: nameof(granularity));
         }
 
         Name = name;
@@ -39,6 +40,8 @@ public sealed class WorldValidationPartition {
         Validate = validate;
         m_rowCount = (rowCount ?? (static _ => 1));
         RowChange = rowChange;
+        Bound = bound;
+        SelectDependentRows = selectDependentRows;
     }
 
     /// <summary>Gets the partition's name, which a refusal of its own reads and the unit count's reports use.</summary>
@@ -54,6 +57,11 @@ public sealed class WorldValidationPartition {
     internal Action<WorldValidationRun, IReadOnlyList<int>?> Validate { get; }
     // How a row partition's rows changed between two documents; null for a section partition.
     internal Func<WorldDefinition, WorldDefinition, WorldValidationRowChange>? RowChange { get; }
+    internal WorldBoundValidation? Bound { get; }
+    internal Func<WorldDefinition, WorldDefinition, WorldDocumentInputs, IReadOnlyList<int>?>? SelectDependentRows { get; }
+
+    /// <summary>Whether bound writes can validate individual units through this partition.</summary>
+    public bool SupportsBoundWrites => Bound is not null;
 
     /// <summary>Returns how many units the partition validates in a whole-document validation of
     /// <paramref name="definition"/>: one for a section partition, one per row for a row partition.</summary>
@@ -70,6 +78,14 @@ public sealed class WorldValidationPartition {
     public override string ToString() => $"{Name} (owns {Owns}; reads {Reads})";
 }
 
+internal sealed record WorldBoundValidation(
+    Func<WorldDefinition, IEnumerable<object>> Enumerate,
+    Func<WorldDefinition, object, Func<object, object?>, WorldBoundValidationUnit?> Resolve,
+    Func<WorldDefinition, WorldDefinition> Remove
+);
+
+internal sealed record WorldBoundValidationUnit(WorldDefinition Definition, IReadOnlyList<int>? Rows = null);
+
 /// <summary>How a row partition's rows changed between two documents.</summary>
 /// <param name="Rows">The indices, in the later document, of the rows to validate; empty when none changed.</param>
 /// <param name="Private">Whether every change is one no other partition reads: the same rows, in the same order, each
@@ -79,6 +95,7 @@ internal readonly record struct WorldValidationRowChange(IReadOnlyList<int> Rows
 /// <summary>One validation's inputs and the refusals its partitions collect, shared by every partition it runs.</summary>
 internal sealed class WorldValidationRun {
     public required WorldDefinition Definition { get; init; }
+    public bool BoundUnit { get; init; }
     public List<string> Errors { get; } = [];
     public ICollection<string>? Deferred { get; init; }
     public Puck.Abstractions.Machines.IMachineValidationCatalog? Machines { get; init; }

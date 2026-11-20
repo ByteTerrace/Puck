@@ -15,16 +15,14 @@ public static partial class WorldDefinitionValidator {
     // and index. A channel name is never checkable here (the manifest lives behind WorldProbeVocabularyHook, which
     // answers only "is this kind registered", not "what channels does it declare") — the host checks it by name at
     // boot, the same precedent a post pass's own config field follows.
-    private static void ValidateProbes(WorldDefinition definition, HashSet<string> cameras, List<string> errors, ICollection<string>? deferred) {
+    private static void ValidateProbes(WorldDefinition definition, HashSet<string> cameras, List<string> errors, ICollection<string>? deferred, IReadOnlyList<int>? rows = null) {
         if (definition.ProbesRaw is not { } probes) {
             return;
         }
 
-        var probeIds = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var axisSources = new HashSet<string>(comparer: StringComparer.Ordinal);
         var localSeats = definition.Population.LocalSeats;
 
-        for (var index = 0; (index < probes.Count); index++) {
+        foreach (var index in RowOrdinals(probes.Count, rows)) {
             var probe = probes[index];
             var path = $"probes[{index}]";
 
@@ -47,8 +45,7 @@ public static partial class WorldDefinitionValidator {
                 // A seat-relative probe's instances are keyed '<id>$<seat>' in the probe-id namespace
                 // (WorldProbes.CreateInstance), so an authored id in that form could name another row's instance.
                 errors.Add(item: $"{path}.id {generatedReason}.");
-            } else if (!probeIds.Add(item: probe.Id)) {
-                errors.Add(item: $"{path}.id '{probe.Id}' is declared more than once.");
+
             }
 
             if (string.IsNullOrWhiteSpace(value: probe.Kind)) {
@@ -89,7 +86,6 @@ public static partial class WorldDefinitionValidator {
 
             for (var bindingIndex = 0; (bindingIndex < bindings.Count); bindingIndex++) {
                 ValidateProbeBinding(
-                    axisSources: axisSources,
                     binding: bindings[bindingIndex],
                     definition: definition,
                     errors: errors,
@@ -98,6 +94,25 @@ public static partial class WorldDefinitionValidator {
                     path: $"{path}.bindings[{bindingIndex}]",
                     probeId: probe.Id
                 );
+            }
+        }
+    }
+
+    private static void ValidateProbeReservations(WorldDefinition definition, List<string> errors) {
+        if (definition.ProbesRaw is not { } probes) { return; }
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        var sources = new HashSet<string>(StringComparer.Ordinal);
+
+        for (var index = 0; index < probes.Count; index++) {
+            if (probes[index] is not { } probe) { continue; }
+            if (probe.Id is { Length: > 0 } id && !ids.Add(id)) {
+                errors.Add(item: $"probes[{index}].id '{id}' is declared more than once.");
+            }
+            if (probe.Bindings is not { } bindings) { continue; }
+            for (var binding = 0; binding < bindings.Count; binding++) {
+                if (bindings[binding] is WorldProbeBinding.Axis { Source: { Length: > 0 } source } && !sources.Add(source)) {
+                    errors.Add(item: $"probes[{index}].bindings[{binding}].source '{source}' is declared by more than one axis binding.");
+                }
             }
         }
     }
@@ -243,7 +258,7 @@ public static partial class WorldDefinitionValidator {
 
         return false;
     }
-    private static void ValidateProbeBinding(WorldDefinition definition, WorldProbeBinding? binding, HashSet<string> axisSources, bool isSeatRelative, int localSeats, List<string> errors, string path, string? probeId) {
+    private static void ValidateProbeBinding(WorldDefinition definition, WorldProbeBinding? binding, bool isSeatRelative, int localSeats, List<string> errors, string path, string? probeId) {
         if (binding is null) {
             errors.Add(item: $"{path} is required.");
 
@@ -265,7 +280,6 @@ public static partial class WorldDefinitionValidator {
             case WorldProbeBinding.Axis axis:
                 ValidateProbeAxisBinding(
                     axis: axis,
-                    axisSources: axisSources,
                     errors: errors,
                     isSeatRelative: isSeatRelative,
                     localSeats: localSeats,
@@ -297,14 +311,12 @@ public static partial class WorldDefinitionValidator {
                 break;
         }
     }
-    private static void ValidateProbeAxisBinding(WorldProbeBinding.Axis axis, HashSet<string> axisSources, bool isSeatRelative, int localSeats, List<string> errors, string path) {
+    private static void ValidateProbeAxisBinding(WorldProbeBinding.Axis axis, bool isSeatRelative, int localSeats, List<string> errors, string path) {
         if (
             !IsKebabCase(value: axis.Source) ||
             (axis.Source.Length > 64)
         ) {
             errors.Add(item: $"{path}.source '{axis.Source}' must be 1..64 lowercase kebab-case characters.");
-        } else if (!axisSources.Add(item: axis.Source)) {
-            errors.Add(item: $"{path}.source '{axis.Source}' is declared by more than one axis binding.");
         } else if (
             (InputSourceVocabularyHook.IsKnownSourceId is { } isKnown) &&
             !isKnown($"probe.{axis.Source}")
