@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Numerics;
 using Puck.SignedDistance;
 
@@ -28,7 +29,7 @@ public sealed class SdfViewExposures {
     private bool[] m_adapting = [];
     private float[] m_metered = [];
     private string[] m_meterSources = [];
-    private SdfViewCut[] m_cuts = [];
+    private ReferenceRevision[] m_cuts = [];
     // Each slot's occupant (its view's source and cut) and generation, which moves whenever another occupant takes the
     // slot: a reading carries the generation its view was recorded under, and one from a retired generation is discarded.
     private long[] m_generations = [];

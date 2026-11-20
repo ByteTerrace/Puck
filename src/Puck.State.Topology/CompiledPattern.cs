@@ -808,16 +808,8 @@ public sealed class CompiledPattern {
             public static TermComparer Instance { get; } = new();
 
             public bool Equals(Term x, Term y) => ((x.Kind == y.Kind) && (x.Mask == y.Mask) && (x.Left == y.Left) && (x.Right == y.Right) && x.Items.AsSpan().SequenceEqual(other: y.Items));
-            public int GetHashCode(Term term) {
-                var hash = new HashCode();
-
-                hash.Add(value: term.Kind);
-                hash.Add(value: term.Mask);
-                hash.Add(value: term.Left);
-                hash.Add(value: term.Right);
-                foreach (var item in term.Items) { hash.Add(value: item); }
-                return hash.ToHashCode();
-            }
+            public int GetHashCode(Term term) =>
+                HashCode.Combine(term.Kind, term.Mask, term.Left, term.Right, SequenceHash.Of<int>(term.Items.AsSpan()));
         }
     }
 }

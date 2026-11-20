@@ -486,11 +486,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // Whether a frame's static draws, as drawn, are the given draws, counted as multisets of their mesh, transform and
     // material. Under the gate.
     private static bool Draws(SdfMeshDraw[] draws, int count, SdfFrame frame) {
-        var counts = new Dictionary<(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material), int>(comparer: DrawKeyComparer.Instance);
+        var counts = new Dictionary<(ByReference<SdfMesh> Mesh, Matrix4x4 ObjectToWorld, int Material), int>();
 
         for (var i = 0; (i < count); i++) {
             var draw = draws[i];
-            var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+            if (!HasComparableTransform(in draw)) { return false; }
+            (ByReference<SdfMesh>, Matrix4x4, int) key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
 
             counts[key] = (counts.GetValueOrDefault(key: key) + 1);
         }
@@ -500,7 +501,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             var draw = rows[row];
 
             if (!draw.IsStatic) { continue; }
-            var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+            if (!HasComparableTransform(in draw)) { return false; }
+            (ByReference<SdfMesh>, Matrix4x4, int) key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
 
             if (!counts.TryGetValue(key: key, value: out var left)) { return false; }
             if (left == 1) { counts.Remove(key: key); } else { counts[key] = (left - 1); }
@@ -527,7 +529,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // takes no claim.
     private readonly SdfMeshClaims m_snapshotClaims = new();
     // A build's count of the static draws the scene it replaces held, kept across builds (one runs at a time).
-    private readonly Dictionary<(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material), int> m_changeCounts = new(comparer: DrawKeyComparer.Instance);
+    private readonly Dictionary<(ByReference<SdfMesh> Mesh, Matrix4x4 ObjectToWorld, int Material), int> m_changeCounts = new();
     private readonly List<Box> m_changeBoxes = [];
 
     // The static-draw digests of the installed scene and of the build in flight; null for none.
@@ -1077,11 +1079,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         try {
             foreach (ref readonly var draw in before) {
+                if (!HasComparableTransform(in draw)) { return null; }
                 ref var count = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: counts, key: (draw.Mesh, draw.ObjectToWorld, draw.Material), exists: out _);
 
                 count++;
             }
             foreach (ref readonly var draw in after) {
+                if (!HasComparableTransform(in draw)) { return null; }
                 ref var count = ref CollectionsMarshal.GetValueRefOrNullRef(dictionary: counts, key: (draw.Mesh, draw.ObjectToWorld, draw.Material));
 
                 if (!System.Runtime.CompilerServices.Unsafe.IsNullRef(source: ref count) && (count > 0)) {
@@ -1105,6 +1109,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             changed.Clear();
         }
     }
+    // Matrix4x4.Equals groups NaN entries. Invalid transforms cannot certify unchanged geometry.
+    private static bool HasComparableTransform(in SdfMeshDraw draw) {
+        var transform = draw.ObjectToWorld;
+        return transform == draw.ObjectToWorld;
+    }
+
     private static bool TryBox(in SdfMeshDraw draw, out Box box) {
         if (!SdfMeshBox.TryOf(box: out var oriented, draw: in draw)) {
             box = default;
@@ -3276,15 +3286,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         return new Vector3(x: (radius * MathF.Cos(x: angle)), y: z, z: (radius * MathF.Sin(x: angle)));
     }
 
-    // A static draw's mesh by reference, as the scene key counts it, with its transform and material.
-    private sealed class DrawKeyComparer : IEqualityComparer<(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material)> {
-        public static DrawKeyComparer Instance { get; } = new();
-
-        public bool Equals((SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material) x, (SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material) y) =>
-            (ReferenceEquals(objA: x.Mesh, objB: y.Mesh) && (x.ObjectToWorld == y.ObjectToWorld) && (x.Material == y.Material));
-        public int GetHashCode((SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material) obj) =>
-            HashCode.Combine(value1: System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o: obj.Mesh), value2: obj.ObjectToWorld, value3: obj.Material);
-    }
     // An axis-aligned world box.
     private readonly record struct Box(Vector3 Low, Vector3 High);
     // A probe the worker lists: its level and cell, whether it lacks a trace against the current geometry, the capture

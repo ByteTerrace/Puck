@@ -118,18 +118,17 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var avatarAccentMaterials = accentMaterials.Span;
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (!IsAvatarPresented(index: index) || m_animator.HasBodyRegistration(bodyIndex: index)) { continue; }
-            var bodyColor = (TryPresentedAppearance(
-                bodyColor: out var presentedColor,
-                catalogRig: out _,
-                index: index,
-                look: out _
-            )
-                ? presentedColor
-                : client.BodyColor(index: index)
+            if (m_catalog.Slots[index] < 0) { continue; }
+            var (rig, look, color) = CatalogAppearance(index);
+            WorldMirroredAvatarBand.EmitPalette(
+                builder: builder, look: look, bodyColor: new DisplayColor(rgb: color), catalogRig: rig,
+                noseFactor: m_noseFactor, identityIndex: index, emittedRigs: m_emittedAvatarRigs,
+                emittedScales: m_emittedAvatarScales, emittedGaitAmplitudes: m_emittedAvatarGaitAmplitudes,
+                materialIndex: index, bodyMaterials: avatarBodyMaterials, accentMaterials: avatarAccentMaterials
             );
-
-            WorldMirroredAvatarBand.EmitMaterials(accentMaterials: avatarAccentMaterials, bodyColor: new DisplayColor(rgb: bodyColor), bodyMaterials: avatarBodyMaterials, builder: builder, materialIndex: index, noseFactor: m_noseFactor);
+            m_avatarFollows[index] = WorldDynamicsResponse.TryResolveResponse(
+                name: look.Motion.Dynamics, response: out m_avatarResponse[index], rows: client.Definition.Dynamics
+            );
         }
 
         // The diegetic screens: each a sampled ScreenSlab whose lit face samples its bound source (or shades as dark
@@ -163,53 +162,16 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_animator.Emit(
             builder: builder,
             colors: m_bakedColors,
-            slotBase: (slotBase + m_catalogSlotCount),
+            slotBase: (slotBase + m_catalog.SlotCount),
             picks: m_picks,
             textCatalog: m_text.Catalog,
             screens: screens
         );
 
-        // The view's active avatars: 12..20 independently animated leaves and 60..100 authored VM instructions in
-        // the detailed band, one coarse capsule thereafter; each active body takes the representation fixed by its
-        // stable body index.
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            var hasPresented = TryPresentedAppearance(
-                bodyColor: out _,
-                catalogRig: out var presentedRig,
-                index: index,
-                look: out var presentedLook
-            );
-            var look = (hasPresented
-                ? presentedLook
-                : m_client.Look(index: index)
-            );
-            var catalogRig = (hasPresented
-                ? presentedRig
-                : m_client.CatalogRig(index: index)
-            );
-
-            // A Creation look's body renders through the stamp pool (its catalog avatar parks at the composed
-            // ParkPosition), so RigFor's Creation-look fallback is reached here only as the pool-pressure
-            // fallback — a body a full stamp pool starved renders as a catalog avatar rather than vanishing.
-            WorldMirroredAvatarBand.LatchIdentity(catalogRig: catalogRig, emittedGaitAmplitudes: m_emittedAvatarGaitAmplitudes, emittedRigs: m_emittedAvatarRigs, emittedScales: m_emittedAvatarScales, identityIndex: index, look: look);
-
-            // A body rendering its creation through the stamp pool already carries its own root follower there
-            // (Creation looks: root + parts) — this catalog-avatar follower is the root-only twin for a Catalog
-            // look, and the pool-pressure fallback for a Creation look the stamp pool had no free slot for.
-            m_avatarFollows[index] = (
-                !m_animator.HasBodyRegistration(bodyIndex: index) &&
-                WorldDynamicsResponse.TryResolveResponse(
-                name: look.Motion.Dynamics,
-                response: out m_avatarResponse[index],
-                rows: client.Definition.Dynamics
-            )
-            );
-        }
-
         WorldRigCatalog.Emit(
             builder: builder,
-            isActive: IsAvatarPresented,
-            slotFor: index => m_catalogSlots[index],
+            isActive: index => (m_catalog.Slots[index] >= 0),
+            slotFor: index => m_catalog.Slots[index],
             bodyMaterials: avatarBodyMaterials,
             accentMaterials: avatarAccentMaterials,
             slotBase: slotBase,
@@ -243,35 +205,17 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             position: out _
         );
     }
-    private bool TryPresentedAppearance(int index, out Vector3 bodyColor, out WorldLook look, out byte catalogRig) {
-        if (!IsPresentedElsewhere(index: index) && m_client.IsActive(index: index)) {
-            bodyColor = m_client.BodyColor(index: index);
-            look = m_client.Look(index: index);
-            catalogRig = m_client.CatalogRig(index: index);
-            return true;
-        }
-        if (TryTravelingRoute(
-            index: index,
-            route: out var route
-        )) {
+    private (byte Rig, WorldLook Look, Vector3 Color) CatalogAppearance(int index) {
+        // A traveling seat keeps its roster color. Its look and rig come from the authority presenting it.
+        var color = m_client.BodyColor(index);
+        if (!m_client.IsActive(index) && TryTravelingRoute(index, out var route)) {
             var entity = route.Entity;
-
-            // A travelling seat keeps its roster's color, as it has at home; its look and rig are its authority's.
-            if (route.Endpoint.TryEntityAppearance(
-                bodyColor: out _,
-                catalogRig: out catalogRig,
-                entity: in entity,
-                look: out look
-            )) {
-                bodyColor = m_client.BodyColor(index: index);
-
-                return true;
+            if (route.Endpoint.TryEntityAppearance(in entity, out _, out var look, out var rig)) {
+                return (rig, look, color);
             }
         }
-        bodyColor = default;
-        look = WorldLook.Implicit;
-        catalogRig = 0;
-        return false;
+
+        return (m_client.CatalogRig(index), m_client.Look(index), color);
     }
     private bool TryPresentedPose(int index, out Vector3 position, out Quaternion orientation, out WorldEntityAddress address) {
         if (!IsPresentedElsewhere(index: index) && m_client.IsActive(index: index)) {
@@ -351,31 +295,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         );
     }
 
-    private (int Body, string Hash, float Scale, WorldLook Look)[] m_articulated = [];
-
-    private int m_articulatedRevision;
-
-    private readonly int[] m_catalogSlots = new int[WorldBodiesLimits.CapacityCeiling];
-
-    private int m_catalogSlotCount;
-
-    private (int Body, int Rig, WorldLook Look, Vector3 Color)[] m_catalogImage = [];
-
-    private int m_catalogRevision;
-
-    private void PrepareCatalog() {
-        m_catalogSlotCount = 0;
-        Array.Fill(array: m_catalogSlots, value: -1);
-        for (var body = 0; (body < m_catalogSlots.Length); body++) {
-            if (!IsAvatarPresented(index: body)) { continue; }
-            m_catalogSlots[body] = m_catalogSlotCount;
-            m_catalogSlotCount += WorldRigCatalog.TransformSlotsPerBody;
-        }
-        var image = Enumerable.Range(0, m_catalogSlots.Length).Where(predicate: index => (m_catalogSlots[index] >= 0))
-            .Select(selector: index => (index, ((int)m_client.CatalogRig(index: index)), m_client.Look(index: index), m_client.BodyColor(index: index))).ToArray();
-
-        if (!m_catalogImage.AsSpan().SequenceEqual(other: image)) { m_catalogImage = image; m_catalogRevision++; }
-    }
+    private readonly WorldCatalogBand m_catalog;
 
     private readonly int[] m_preparedRevision = new int[WorldClient.RevisionComponentCount];
 
@@ -398,8 +318,11 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_prepared = true;
         m_preparedPresentation = m_continuum.PresentationRevision;
         m_preparedCode = Puck.Abstractions.CodeRevision.Current;
-        var definition = m_client.Definition;
+        ReconcileStamps();
+    }
 
+    private void ReconcileStamps() {
+        var definition = m_client.Definition;
         m_census.Refresh(source: m_client);
         m_presentedStamps.Clear();
         foreach (var stamp in m_census.Stamps) {
@@ -407,9 +330,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 m_presentedStamps.Add(item: stamp);
             }
         }
-        var articulated = m_presentedStamps.Where(predicate: stamp => !WorldRigidAssets.IsRigid(creation: stamp.Creation, look: stamp.Look)).Select(selector: stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
-
-        if (!m_articulated.AsSpan().SequenceEqual(other: articulated)) { m_articulated = articulated; m_articulatedRevision++; }
+        m_catalog.ObserveArticulation(m_presentedStamps);
         m_animator.Rigid.ReconcileStatic(definition, definition.Placements);
         m_animator.Reconcile(
             placementFrames: definition.PlacementFrames,
@@ -419,7 +340,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             dynamics: definition.Dynamics,
             bodyStamps: m_presentedStamps
         );
-        PrepareCatalog();
+        m_catalog.Prepare();
     }
 
     public IReadOnlyList<int> MeshAssetSlots => m_animator.Rigid.Slots;
@@ -449,32 +370,22 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// or pose epoch moves, or its root follower is still settling; a body that stops drawing
     /// parks its range once. Local seats fire one footstep cue per gait half-cycle.</remarks>
     public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
-        m_animator.SetCatalogSlots(m_catalogSlots, context.SlotBase);
+        m_animator.SetCatalogSlots(m_catalog.Slots, context.SlotBase);
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (m_catalogSlots[index] < 0) { continue; }
+            if (m_catalog.Slots[index] < 0) { continue; }
             if (!TryPresentedPose(
                 address: out var address,
                 index: index,
                 orientation: out var orientation,
                 position: out var position
             )) {
-                m_avatarGaits[index].Seeded = false;
-
-                if (m_avatarOwners.Vacate(
-                    moved: moved,
-                    owner: index
-                )) {
-                    WorldTransformOwners.Park(
-                        count: WorldRigCatalog.TransformSlotsPerBody,
-                        start: (context.SlotBase + m_catalogSlots[index]),
-                        moved: moved,
-                        parkPosition: context.ParkPosition,
-                        table: slots
-                    );
-                }
+                WorldMirroredAvatarBand.Park(
+                    m_avatarOwners, index, ref m_avatarGaits[index], moved, slots,
+                    (context.SlotBase + m_catalog.Slots[index]), context.ParkPosition
+                );
 
                 continue;
             }
@@ -508,30 +419,17 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
             var poseEpoch = m_client.PoseEpoch(index: index);
 
-            if (!m_avatarOwners.Wake(
-                deltaSeconds: deltaSeconds,
-                moved: moved,
-                orientation: orientation,
-                owner: index,
-                position: position,
-                discontinuity: gait.Breaks(address: address, epoch: poseEpoch)
-            )) {
-                continue;
-            }
+            if (!WorldMirroredAvatarBand.Wake(
+                m_avatarOwners, index, ref gait, moved, address, poseEpoch, position, orientation,
+                out var continued, out var footfall, deltaSeconds
+            )) { continue; }
 
-            if (gait.Follow(address: address, epoch: poseEpoch, footfall: out var footfall, position: position)) {
-                // The player.footstep cue: LOCAL seat avatars fire one at-site cue per gait-phase half-cycle, so cadence
-                // follows walking speed and an idle avatar is silent. Keyed on the body's index band, not the perception
-                // anchor: the walking body emits the cue at its own site, and a possessed higher-index body stays silent.
-                if (footfall && (index < WorldBodiesLimits.LocalSeatCount)) {
-                    m_audio.SubmitCue(
-                        eventToken: WorldAudioCue.PlayerFootstep,
-                        site: position
-                    );
-                }
-            } else {
+            if (!continued) {
                 m_avatarPositionFollower[index].Reseed();
                 m_avatarOrientationFollower[index].Reseed();
+            } else if (footfall && (index < WorldBodiesLimits.LocalSeatCount)) {
+                // Only local seats sound their own steps, at the walking body's site.
+                m_audio.SubmitCue(eventToken: WorldAudioCue.PlayerFootstep, site: position);
             }
 
             var followedPosition = position;
@@ -551,31 +449,11 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 m_avatarOrientationFollower[index].Reseed();
             }
 
-            // Resolve the entity's LOOK: a catalog rig pin, a uniform render scale, and a gait-amplitude phase scale.
-            // GaitAmplitude scales the gait phase (1 = the pre-look swing; 0 stills the limbs at their rest pose).
-            // A creation-STAMP body (inhabitant / crowd creation-look) renders its creation through the stamp pool, so
-            // its catalog avatar packs HIDDEN below the floor (culled) — the "never black, never vanished" degradation
-            // is gone: the body shows its actual creation geometry instead.
-            m_avatarOwners.Settle(
-                deltaSeconds: (m_avatarFollows[index]
-                ? deltaSeconds
-                : 1f),
-                moved: WorldTransformOwners.PackBody(
-                firstSlot: m_catalogSlots[index],
-                avatar: index,
-                catalogBase: context.SlotBase,
-                gaitPhase: (gait.Phase * m_emittedAvatarGaitAmplitudes[index]),
-                moved: moved,
-                rig: m_emittedAvatarRigs[index],
-                rootOrientation: followedOrientation,
-                rootPosition: (m_animator.HasBodyRegistration(bodyIndex: index)
-                ? context.ParkPosition
-                : followedPosition),
-                reseat: m_avatarOwners.Reseats(owner: index),
-                scale: m_emittedAvatarScales[index],
-                table: slots
-            ),
-                owner: index
+            WorldMirroredAvatarBand.Pack(
+                m_avatarOwners, index, in gait, moved, slots, m_catalog.Slots[index], index, context.SlotBase,
+                m_emittedAvatarRigs[index], m_emittedAvatarScales[index], m_emittedAvatarGaitAmplitudes[index],
+                (m_animator.HasBodyRegistration(bodyIndex: index) ? context.ParkPosition : followedPosition),
+                followedOrientation, (m_avatarFollows[index] ? deltaSeconds : 1f)
             );
         }
 
@@ -587,7 +465,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             transforms: slots,
             client: m_client,
             moved: moved,
-            slotBase: (context.SlotBase + m_catalogSlotCount),
+            slotBase: (context.SlotBase + m_catalog.SlotCount),
             parkPosition: context.ParkPosition
         );
     }
@@ -616,8 +494,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <param name="destination">The exactly-<see cref="RevisionComponentCount"/>-long span to fill.</param>
     public void WriteRevision(Span<int> destination) {
         m_client.WriteRevision(destination: destination[..WorldClient.RevisionComponentCount]);
-        destination[0] = m_articulatedRevision;
-        destination[1] = m_catalogRevision;
+        destination[0] = m_catalog.ArticulatedRevision;
+        destination[1] = m_catalog.Revision;
 
         destination[WorldClient.RevisionComponentCount] = m_continuum.Revision;
 
@@ -706,6 +584,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_meshDraws = new WorldSceneMeshDraws(pool: animator);
         m_text = text;
         m_audio = audio;
+        m_catalog = new WorldCatalogBand(IsAvatarPresented, CatalogAppearance);
 
         var definition = client.Definition;
 
@@ -723,27 +602,13 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             derivedFaceScreens: m_derivedFaceScreens
         );
 
-        // A booted world may already stamp animated/attached placements or inhabited bodies — register them before the probe
-        // so the worst-case build sees the same pool the first live build will (body stamps are empty until the first
-        // snapshot).
-        m_census.Refresh(source: m_client);
-        var articulated = m_presentedStamps.Where(predicate: stamp => !WorldRigidAssets.IsRigid(creation: stamp.Creation, look: stamp.Look)).Select(selector: stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
-
-        if (!m_articulated.AsSpan().SequenceEqual(other: articulated)) { m_articulated = articulated; m_articulatedRevision++; }
-        m_animator.Rigid.ReconcileStatic(definition, definition.Placements);
-        m_animator.Reconcile(
-            placementFrames: definition.PlacementFrames,
-            looks: definition.Looks,
-            placements: definition.Placements,
-            creations: definition.Creations,
-            dynamics: definition.Dynamics,
-            bodyStamps: m_census.Stamps
-        );
+        // The capacity probe sees the same registered stamp and avatar bands as the live emitter.
+        ReconcileStamps();
     }
 
     /// <summary>The frozen transform-slot count this emitter declares: maximum-sized rigs for the detailed body band,
     /// one root slot per remaining crowd body, then the reserved creation-stamp pool.</summary>
-    public int DynamicSlotCount => (m_catalogSlotCount + m_animator.DynamicSlotCount);
+    public int DynamicSlotCount => (m_catalog.SlotCount + m_animator.DynamicSlotCount);
     /// <summary>Always <see langword="true"/>: this emitter's material palette is its own. Sole tenancy makes this
     /// true; the scope makes it structural, so a positional stride this
     /// scene grows later (a wallpaper fold or polar repeat over a sculpted creation) can only ever recolor materials

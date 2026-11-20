@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Numerics;
 
 namespace Puck.State;
@@ -150,16 +151,10 @@ public readonly struct CellSet : IEquatable<CellSet> {
     }
     /// <inheritdoc/>
     public override bool Equals(object? obj) => ((obj is CellSet other) && Equals(other: other));
+    // Construction and expression lowering keep unused inline words zero.
     /// <inheritdoc/>
-    public override int GetHashCode() {
-        var hash = new HashCode();
-
-        hash.Add(value: Length);
-        for (var word = 0; (word < WordCount(length: Length)); word++) {
-            hash.Add(value: Word(index: word));
-        }
-        return hash.ToHashCode();
-    }
+    public override int GetHashCode() =>
+        HashCode.Combine(Length, m_word0, m_word1, m_word2, m_word3, SequenceHash.Of<ulong>(m_tail.AsSpan()));
 
     /// <summary>Compares two sets structurally.</summary>
     public static bool operator ==(CellSet left, CellSet right) => left.Equals(other: right);

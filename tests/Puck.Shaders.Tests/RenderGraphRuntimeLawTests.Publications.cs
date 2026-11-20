@@ -31,8 +31,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var original = Assert.Single(collection: world.Publications);
         var node = runtime.NodeOf(instance: ReadSource)!;
 
-        Assert.Same(expected: node, actual: original.Owner);
-        Assert.True(condition: original.IsKnown);
+        Assert.Same(expected: node, actual: original.Owner.Value);
+        Assert.True(condition: original.IsPublished());
         node.Paused = true;
         for (var held = 0; (held < 4); held++) {
             Next();
@@ -42,8 +42,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         node.Reset();
         node.Paused = false;
         Next();
-        Assert.True(condition: (Assert.Single(collection: world.Publications).Sequence > original.Sequence));
-        Assert.Same(expected: original.Owner, actual: Assert.Single(collection: world.Publications).Owner);
+        Assert.True(condition: (Assert.Single(collection: world.Publications).Revision > original.Revision));
+        Assert.Same(expected: original.Owner.Value, actual: Assert.Single(collection: world.Publications).Owner.Value);
     }
     [Fact]
     public void AForwardedExternalImageKeepsItsAcquiredPublicationThroughRepeatedReads() {
@@ -89,9 +89,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
         });
         var original = Assert.Single(collection: world.Publications);
 
-        Assert.Same(expected: source, actual: original.Owner);
-        Assert.True(condition: original.IsKnown);
-        Assert.Equal(expected: source.Produced, actual: original.Sequence);
+        Assert.Same(expected: source, actual: original.Owner.Value);
+        Assert.True(condition: original.IsPublished());
+        Assert.Equal(expected: source.Produced, actual: original.Revision);
         for (var read = 0; (read < 4); read++) {
             Next();
             Assert.Equal(expected: original, actual: Assert.Single(collection: world.Publications));
@@ -101,8 +101,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Next();
         var changed = Assert.Single(collection: world.Publications);
 
-        Assert.Same(expected: source, actual: changed.Owner);
-        Assert.Equal(expected: (original.Sequence + 1L), actual: changed.Sequence);
+        Assert.Same(expected: source, actual: changed.Owner.Value);
+        Assert.Equal(expected: (original.Revision + 1L), actual: changed.Revision);
         Assert.Equal(expected: source.ImageView, actual: Assert.Single(collection: world.Seen).ImageView);
     }
 }
