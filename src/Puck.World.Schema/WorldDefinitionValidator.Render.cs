@@ -540,7 +540,7 @@ public static partial class WorldDefinitionValidator {
                         if (stars.Density is { } density) {
                             RequirePositive(
                                 errors: errors,
-                                name: $"{layerPath}.density",
+                                name: new Subject(Member: ".density", Path: layerPath),
                                 value: density
                             );
                         }
@@ -600,10 +600,10 @@ public static partial class WorldDefinitionValidator {
                         JudgeColor(color: aurora.Color, definition: definition, errors: errors, path: $"{layerPath}.color");
                         JudgeColor(color: aurora.Top, definition: definition, errors: errors, path: $"{layerPath}.top");
                         if (aurora.Rays is { } rays) {
-                            RequirePositive(errors: errors, name: $"{layerPath}.rays", value: rays);
+                            RequirePositive(errors: errors, name: new Subject(Member: ".rays", Path: layerPath), value: rays);
                         }
                         if (aurora.Waves is { } waves) {
-                            RequirePositive(errors: errors, name: $"{layerPath}.waves", value: waves);
+                            RequirePositive(errors: errors, name: new Subject(Member: ".waves", Path: layerPath), value: waves);
                         }
 
                         break;
@@ -613,7 +613,7 @@ public static partial class WorldDefinitionValidator {
                         JudgeColor(color: noise.Low, definition: definition, errors: errors, path: $"{layerPath}.low");
                         JudgeColor(color: noise.High, definition: definition, errors: errors, path: $"{layerPath}.high");
                         if (noise.Scale is { } scale) {
-                            RequirePositive(errors: errors, name: $"{layerPath}.scale", value: scale);
+                            RequirePositive(errors: errors, name: new Subject(Member: ".scale", Path: layerPath), value: scale);
                         }
                         if ((noise.Softness is { } softness) && !((softness >= SdfSky.MinCloudSoftness) && (softness <= 1f))) {
                             errors.Add(item: $"{layerPath}.softness {softness} lies outside [{SdfSky.MinCloudSoftness}, 1]: a narrower band leaves the noise's covered edge without two distinct edges.");
@@ -744,7 +744,7 @@ public static partial class WorldDefinitionValidator {
                             errors.Add(item: $"{layerPath}.relief {relief} must be finite and not negative.");
                         }
                         if (clouds.Extinction is { } extinction) {
-                            RequirePositive(errors: errors, name: $"{layerPath}.extinction", value: extinction);
+                            RequirePositive(errors: errors, name: new Subject(Member: ".extinction", Path: layerPath), value: extinction);
                         }
 
                         if ((clouds.Color is { } cloudColor) && !cloudColor.IsAuthorable(definition: definition)) {

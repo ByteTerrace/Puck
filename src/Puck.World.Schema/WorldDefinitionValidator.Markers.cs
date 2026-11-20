@@ -82,7 +82,7 @@ public static partial class WorldDefinitionValidator {
             );
             RequirePositive(
                 errors: errors,
-                name: $"{path}.style.size",
+                name: new Subject(Member: ".style.size", Path: path),
                 value: marker.Style.Size
             );
 

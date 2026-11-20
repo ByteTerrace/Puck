@@ -251,7 +251,7 @@ public static partial class WorldDefinitionValidator {
 
                     RequireFinite(
                         value: offset.SpreadPullback,
-                        name: $"{opPath}.spreadPullback",
+                        name: new Subject(Member: ".spreadPullback", Path: opPath),
                         errors: errors
                     );
 
@@ -264,8 +264,8 @@ public static partial class WorldDefinitionValidator {
                     if (!VectorFunctions.IsFinite(vector: firstPerson.EyePoint)) {
                         errors.Add(item: $"{opPath}.eyePoint must contain finite coordinates.");
                     }
-                    RequirePositive(value: firstPerson.TransitionSeconds, name: $"{opPath}.transitionSeconds", errors: errors);
-                    RequirePositive(value: firstPerson.HideRadius, name: $"{opPath}.hideRadius", errors: errors);
+                    RequirePositive(value: firstPerson.TransitionSeconds, name: new Subject(Member: ".transitionSeconds", Path: opPath), errors: errors);
+                    RequirePositive(value: firstPerson.HideRadius, name: new Subject(Member: ".hideRadius", Path: opPath), errors: errors);
                     JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.FirstPersonActive,
                         path: $"{opPath}.active", scalar: firstPerson.Active);
                     break;
@@ -290,7 +290,7 @@ public static partial class WorldDefinitionValidator {
                     if (lookAt.Subject is null) {
                         RequireNonNegative(
                             value: lookAt.FocusDistance,
-                            name: $"{opPath}.focusDistance",
+                            name: new Subject(Member: ".focusDistance", Path: opPath),
                             errors: errors
                         );
                     } else {
@@ -319,7 +319,7 @@ public static partial class WorldDefinitionValidator {
 
                     RequirePositive(
                         value: orbit.Distance,
-                        name: $"{opPath}.distance",
+                        name: new Subject(Member: ".distance", Path: opPath),
                         errors: errors
                     );
 
@@ -400,12 +400,12 @@ public static partial class WorldDefinitionValidator {
 
                     RequireFinite(
                         value: clampPitch.MinPitch,
-                        name: $"{opPath}.minPitch",
+                        name: new Subject(Member: ".minPitch", Path: opPath),
                         errors: errors
                     );
                     RequireFinite(
                         value: clampPitch.MaxPitch,
-                        name: $"{opPath}.maxPitch",
+                        name: new Subject(Member: ".maxPitch", Path: opPath),
                         errors: errors
                     );
 
@@ -628,7 +628,7 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateRoute(WorldScreenRoute route, WorldScreenSource? source, string path, ISet<string> channelNames, IReadOnlyDictionary<string, IReadOnlyDictionary<string, WorldPadElement>> padKits, List<string> errors) {
         RequireNonNegative(
             value: route.EngageRadius,
-            name: $"{path}.engageRadius",
+            name: new Subject(Member: ".engageRadius", Path: path),
             errors: errors
         );
 
@@ -736,12 +736,12 @@ public static partial class WorldDefinitionValidator {
         }
         RequireNonNegative(
             errors: errors,
-            name: $"{path}.rampSeconds",
+            name: new Subject(Member: ".rampSeconds", Path: path),
             value: padPointer.RampSeconds
         );
         RequireNonNegative(
             errors: errors,
-            name: $"{path}.scrollSpeed",
+            name: new Subject(Member: ".scrollSpeed", Path: path),
             value: padPointer.ScrollSpeed
         );
     }
@@ -867,13 +867,13 @@ public static partial class WorldDefinitionValidator {
             }
 
             _ = RequireUniqueName(value: material.Id, seen: ids, path: path, field: "id", errors: errors);
-            RequireUnitInterval(value: material.Scanlines, name: $"{path}.scanlines", errors: errors);
-            RequireUnitInterval(value: material.SubpixelStripes, name: $"{path}.subpixelStripes", errors: errors);
-            RequireUnitInterval(value: material.Vignette, name: $"{path}.vignette", errors: errors);
-            RequireUnitInterval(value: material.Glint, name: $"{path}.glint", errors: errors);
-            RequirePositive(value: material.GlintPower, name: $"{path}.glintPower", errors: errors);
-            RequireRange(value: material.CornerRadius, min: 0f, max: 0.5f, maxExclusive: true, name: $"{path}.cornerRadius", errors: errors);
-            RequireRange(value: material.EdgeSoftness, min: 0f, max: 0.5f, maxExclusive: true, name: $"{path}.edgeSoftness", errors: errors);
+            RequireUnitInterval(value: material.Scanlines, name: new Subject(Member: ".scanlines", Path: path), errors: errors);
+            RequireUnitInterval(value: material.SubpixelStripes, name: new Subject(Member: ".subpixelStripes", Path: path), errors: errors);
+            RequireUnitInterval(value: material.Vignette, name: new Subject(Member: ".vignette", Path: path), errors: errors);
+            RequireUnitInterval(value: material.Glint, name: new Subject(Member: ".glint", Path: path), errors: errors);
+            RequirePositive(value: material.GlintPower, name: new Subject(Member: ".glintPower", Path: path), errors: errors);
+            RequireRange(value: material.CornerRadius, min: 0f, max: 0.5f, maxExclusive: true, name: new Subject(Member: ".cornerRadius", Path: path), errors: errors);
+            RequireRange(value: material.EdgeSoftness, min: 0f, max: 0.5f, maxExclusive: true, name: new Subject(Member: ".edgeSoftness", Path: path), errors: errors);
         }
     }
     // A screen's or face's material names a declared screen material, and never on a window: a window is an opening onto
@@ -989,18 +989,18 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.yawReference is unknown.");
         }
         if (control.Boom is { } boom) {
-            RequirePositive(value: boom.Minimum, name: $"{path}.boom.minimum", errors: errors);
-            RequirePositive(value: boom.Maximum, name: $"{path}.boom.maximum", errors: errors);
-            RequirePositive(value: boom.Step, name: $"{path}.boom.step", errors: errors);
+            RequirePositive(value: boom.Minimum, name: new Subject(Member: ".boom.minimum", Path: path), errors: errors);
+            RequirePositive(value: boom.Maximum, name: new Subject(Member: ".boom.maximum", Path: path), errors: errors);
+            RequirePositive(value: boom.Step, name: new Subject(Member: ".boom.step", Path: path), errors: errors);
             if (boom.Maximum < boom.Minimum) {
                 errors.Add(item: $"{path}.boom.maximum must be at least minimum.");
             }
         }
         if (control.AutoFirstPerson is { } automatic) {
-            RequirePositive(value: automatic.EntryDistance, name: $"{path}.autoFirstPerson.entryDistance", errors: errors);
-            RequirePositive(value: automatic.ExitDistance, name: $"{path}.autoFirstPerson.exitDistance", errors: errors);
-            RequirePositive(value: automatic.EntrySeconds, name: $"{path}.autoFirstPerson.entrySeconds", errors: errors);
-            RequirePositive(value: automatic.ExitSeconds, name: $"{path}.autoFirstPerson.exitSeconds", errors: errors);
+            RequirePositive(value: automatic.EntryDistance, name: new Subject(Member: ".autoFirstPerson.entryDistance", Path: path), errors: errors);
+            RequirePositive(value: automatic.ExitDistance, name: new Subject(Member: ".autoFirstPerson.exitDistance", Path: path), errors: errors);
+            RequirePositive(value: automatic.EntrySeconds, name: new Subject(Member: ".autoFirstPerson.entrySeconds", Path: path), errors: errors);
+            RequirePositive(value: automatic.ExitSeconds, name: new Subject(Member: ".autoFirstPerson.exitSeconds", Path: path), errors: errors);
             if (automatic.ExitDistance <= automatic.EntryDistance) {
                 errors.Add(item: $"{path}.autoFirstPerson.exitDistance must exceed entryDistance.");
             }
@@ -1030,7 +1030,7 @@ public static partial class WorldDefinitionValidator {
         if (control.Follow is { } follow) {
             RequirePositive(
                 value: follow.Rate,
-                name: $"{path}.follow.rate",
+                name: new Subject(Member: ".follow.rate", Path: path),
                 errors: errors
             );
             if (control.YawReference != WorldSeatYawReference.World) {
@@ -1044,19 +1044,19 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateSeatLook(WorldSeatCameraFeel seatLook, string path, List<string> errors) {
         RequireNonNegative(
             value: seatLook.YawSensitivity,
-            name: $"{path}.yawSensitivity",
+            name: new Subject(Member: ".yawSensitivity", Path: path),
             errors: errors
         );
 
         RequireNonNegative(
             value: seatLook.PitchSensitivity,
-            name: $"{path}.pitchSensitivity",
+            name: new Subject(Member: ".pitchSensitivity", Path: path),
             errors: errors
         );
 
         RequireNonNegative(
             value: seatLook.StickLookRate,
-            name: $"{path}.stickLookRate",
+            name: new Subject(Member: ".stickLookRate", Path: path),
             errors: errors
         );
 
@@ -1064,7 +1064,7 @@ public static partial class WorldDefinitionValidator {
 
         RequireNonNegative(
             value: gyro.Scale,
-            name: $"{path}.gyro.scale",
+            name: new Subject(Member: ".gyro.scale", Path: path),
             errors: errors
         );
         if (
