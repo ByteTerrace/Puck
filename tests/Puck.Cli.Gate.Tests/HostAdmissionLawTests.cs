@@ -5,11 +5,13 @@ using Xunit;
 namespace Puck.Cli.Gate.Tests;
 
 public sealed class HostAdmissionLawTests {
-    // The 16 GB, six-thread developer machine without a commit reserve, so the laws about a start's own need read the
-    // commit headroom against that need alone: pressure below 2 GB free, disk pressure below 10 GB.
-    private static readonly HostLoadThresholds Thresholds = (HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6) with { CommitReservePercent = 0 });
-    // The same machine with its default commit reserve (10% of the limit).
-    private static readonly HostLoadThresholds Reserved = HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6);
+    // The 16 GB, six-thread developer machine's thresholds without a commit reserve, so the laws about a start's own need
+    // read the commit headroom against that need alone: pressure below 2 GB free, disk pressure below 10 GB. Its installed
+    // memory reads 24 GB, whose account budget (18 GB) holds every kind's full default peak, so these laws read the kinds'
+    // own figures; the 16 GB machine's own peaks are AWindowedWorldOnASixteenGigabyteMachineExpectsItsAccountBudget's.
+    private static readonly HostLoadThresholds Thresholds = (HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6) with { CommitReservePercent = 0, InstalledRamGb = 24 });
+    // The same thresholds with their default commit reserve (10% of the limit).
+    private static readonly HostLoadThresholds Reserved = (HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6) with { InstalledRamGb = 24 });
     // The 32 GB, 16-thread machine with its defaults: pressure below 4 GB free, a tenth of the commit limit in reserve.
     private static readonly HostLoadThresholds Desk = HostLoadThresholds.For(installedRamGb: 32, logicalProcessors: 16);
 
@@ -296,14 +298,12 @@ public sealed class HostAdmissionLawTests {
 
         Assert.Equal(expected: (11.0, 16.0), actual: (tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld).ResidentGb, tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld).PrivateGb));
     }
-    // A kind the idle machine could not hold is refused by name at once, however long the bound: its working set plus the
-    // pressure floor exceed the installed memory, or its commit plus the reserve exceed the commit limit.
+    // A kind the idle machine could not hold is refused by name at once, however long the bound: its commit plus the reserve
+    // exceed the commit limit.
     [Fact]
     public void AStartThatCanNeverFitTheMachineIsRefusedByNameAtOnce() {
-        var smallRam = HostLoadThresholds.For(installedRamGb: 8, logicalProcessors: 6);
         var smallCommit = HostLoadThresholds.For(installedRamGb: 32, logicalProcessors: 16);
         var cases = new (HostLoadThresholds Thresholds, HostSample Reading, string Expected)[] {
-            (smallRam, Sample(commit: 10, limit: 64), "a windowed World can never be admitted on this machine, it expects 12.6GB of private working set and the pressure floor is 1.0GB, over the machine's 8.0GB of memory"),
             (smallCommit, Sample(commit: 10, limit: 19), "a windowed World can never be admitted on this machine, it expects 18.0GB of commit and the commit reserve is 1.9GB, over the machine's 19.0GB commit limit"),
         };
 
@@ -315,6 +315,19 @@ public sealed class HostAdmissionLawTests {
             Assert.Contains(expectedSubstring: expected, actualString: error.ToString());
             Assert.Equal(expected: TimeSpan.Zero, actual: clock.GetElapsedTime(startingTimestamp: 0));
         }
+    }
+    // An unmeasured windowed World on a 16 GB machine is expected at its account budget there (12 GB, three quarters of the
+    // machine), not at a large machine's 18 GB, so an idle 16 GB machine with a 19 GB commit limit admits it.
+    [Fact]
+    public void AWindowedWorldOnASixteenGigabyteMachineExpectsItsAccountBudget() {
+        var machine = HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6);
+        var clock = new GateClock();
+        using var error = new StringWriter();
+
+        Assert.Equal(expected: 12.0, actual: HostLoadThresholds.DefaultPeakGb(installedRamGb: 16, kind: HostStartKind.WindowedWorld));
+        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb, actual: HostLoadThresholds.DefaultPeakGb(installedRamGb: 64, kind: HostStartKind.WindowedWorld));
+        Assert.Equal(expected: 12.0, actual: new HostStartTracker().ExpectedPeaks(kind: HostStartKind.WindowedWorld, thresholds: machine).PrivateGb);
+        Assert.True(condition: HostAdmission.Wait("start", false, false, () => Sample(commit: 10, limit: 19, ram: 13), clock, _ => Assert.Fail(message: "an idle machine admits at once"), error, CancellationToken.None, machine, TimeSpan.FromMinutes(minutes: 30), null, HostStartKind.WindowedWorld, new HostStartTracker()));
     }
     // Starts that have not finished growing hold their remaining working-set growth out of free memory too: a headless
     // World that has not reported ready keeps the start waiting that would be admitted beside it once it has.
