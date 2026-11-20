@@ -82,6 +82,13 @@
               "null"
             ],
             "default": null
+          },
+          "rootKey": {
+            "description": "Gets the key this world\u0027s checkpoint and recovery root is held under: the owner\u0027s UUID and the world id.",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
