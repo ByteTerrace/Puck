@@ -24,27 +24,11 @@ public static class HexColor {
             provider: CultureInfo.InvariantCulture,
             handler: $"#{Byte(value: rgb.X):X2}{Byte(value: rgb.Y):X2}{Byte(value: rgb.Z):X2}"
         );
-    /// <summary>Formats a display colour as an uppercase <c>#RRGGBB</c> string when opaque, else
-    /// <c>#RRGGBBAA</c>.</summary>
-    /// <param name="color">The colour.</param>
-    /// <returns>The <c>#RRGGBB</c> or <c>#RRGGBBAA</c> string.</returns>
-    public static string Format(DisplayColor color) {
-        var rgb = Format(rgb: color.Rgb);
-
-        return ((color.Alpha >= 1f)
-            ? rgb
-            : string.Create(provider: CultureInfo.InvariantCulture, handler: $"{rgb}{Byte(value: color.Alpha):X2}"));
-    }
     /// <summary>Parses an opaque colour, falling back when it does not parse.</summary>
     /// <param name="value">The candidate string.</param>
     /// <param name="fallback">The colour returned when <paramref name="value"/> is not an opaque colour.</param>
     /// <returns>The colour.</returns>
     public static DisplayColor Parse(string? value, DisplayColor fallback) => (TryParse(color: out var color, value: value) ? color : fallback);
-    /// <summary>Parses a colour in any of the grammar's four forms, falling back when it does not parse.</summary>
-    /// <param name="value">The candidate string.</param>
-    /// <param name="fallback">The colour returned when <paramref name="value"/> does not parse.</param>
-    /// <returns>The colour.</returns>
-    public static DisplayColor ParseRgba(string? value, DisplayColor fallback) => (TryParseRgba(color: out var color, value: value) ? color : fallback);
     /// <summary>Parses an opaque colour: <c>#RGB</c> or <c>#RRGGBB</c>.</summary>
     /// <param name="value">The candidate string.</param>
     /// <param name="color">The colour, opaque; <see langword="default"/> when this returns <see langword="false"/>.</param>
@@ -152,12 +136,4 @@ public readonly record struct SceneColor {
     /// <param name="linear">The linear red, green and blue.</param>
     /// <returns>The scene colour.</returns>
     public static SceneColor FromLinear(Vector3 linear) => new(linear: linear);
-    /// <summary>Encodes the colour for the display, the inverse of <see cref="DisplayColor.ToScene"/>.</summary>
-    /// <param name="alpha">The straight alpha the display colour carries.</param>
-    /// <returns>The display colour.</returns>
-    public DisplayColor ToDisplay(float alpha = 1f) => new(rgb: new Vector3(
-        x: SrgbTransfer.ToEncoded(linear: Linear.X),
-        y: SrgbTransfer.ToEncoded(linear: Linear.Y),
-        z: SrgbTransfer.ToEncoded(linear: Linear.Z)
-    ), alpha: alpha);
 }
