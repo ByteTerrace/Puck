@@ -1295,7 +1295,11 @@ public static partial class PuckPrinter {
                 case ScheduleStatementNode schedule: {
                         m_builder.Append(value: "schedule ");
                         Row(row: schedule.Target);
-                        m_builder.Append(value: " in ").Append(value: Number(value: schedule.DelaySeconds)).Append(value: 's');
+                        m_builder.Append(value: " in ");
+                        Expression(
+                            expression: schedule.Delay,
+                            level: level
+                        );
 
                         break;
                     }

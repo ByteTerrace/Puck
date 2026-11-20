@@ -21,7 +21,7 @@ internal static class WorldDocumentMembers {
     // Writes the canonical form of every value whose position the model types (a float's one spelling, a rotation's
     // one sign, a convex profile's one start vertex, a shape member whose zero is the member omitted), and, given
     // diagnostics, refuses a member no document member consumes.
-    internal static void Canonicalize(JsonObject? document, SourceMap sourceMap, DiagnosticBag? diagnostics) {
+    internal static void Canonicalize(JsonObject? document, SourceMap sourceMap, DiagnosticBag? diagnostics, string? basePath) {
         if ((document is null) || ((document["schema"]?.ToString() is { } schema) && (schema != Puck.World.WorldDefinition.SchemaVersion))) { return; }
         // A document that names a basis or imports is a delta over documents not yet composed: a shape row of it that
         // omits a member refines the row of that name, so such a row keeps exactly what the author wrote. Only a
@@ -34,6 +34,26 @@ internal static class WorldDocumentMembers {
 
         _ = Visit(node: document, refuse: true, type: typeof(WorldDefinition));
         Tabulate();
+
+        static string? AssetFamily(Type type) =>
+            ((type == typeof(WorldMusicRow)) ? Puck.Assets.Documents.AssetRowFamilies.Music
+                : (type == typeof(WorldPatch)) ? Puck.Assets.Documents.AssetRowFamilies.Patch
+                : (type == typeof(Puck.State.TableRow)) ? Puck.Assets.Documents.AssetRowFamilies.Table
+                : (type == typeof(WorldTune)) ? Puck.Assets.Documents.AssetRowFamilies.Tune
+                : null);
+
+        void ResolveAutoPin(string family, JsonObject obj) {
+            var name = (obj["name"]?.ToString() ?? string.Empty);
+            var source = (obj["source"]?.ToString() ?? string.Empty);
+
+            if (WorldAssetRowLoader.TryCanonicalHash(family: family, documentDirectory: basePath, name: name, source: source, pin: out var digest, error: out var error)) {
+                obj["hash"] = digest;
+            } else {
+                diagnostics?.Report(diagnostic: sourceMap.Place(
+                    diagnostic: Diagnostic.Error(code: PuckDiagnosticCodes.SemanticValidation, message: $"Cannot compute the {family} content pin of '{name}': {error}", span: SourceSpan.None),
+                    jsonPointer: DocumentJsonPointer.Child(name: "hash", pointer: Pointer())));
+            }
+        }
 
         string Pointer() {
             var pointer = string.Empty;
@@ -121,6 +141,12 @@ internal static class WorldDocumentMembers {
             if (((type == typeof(WorldPrototype)) || (type == typeof(WorldPatch)) || (type == typeof(WorldTune)) || (type == typeof(WorldMusicRow)) || (type == typeof(Puck.State.TableRow))) &&
                 Puck.Assets.ContentPin.TryParse(text: obj["hash"]?.ToString(), pin: out var pin)) {
                 obj["hash"] = pin.Hex;
+            }
+            // `hash: auto` on a row that references a document is that document's canonical digest, computed here from
+            // the source beside the document the row is authored in.
+            if ((AssetFamily(type: type) is { } family) && (obj["hash"] is JsonValue { } authored) && authored.TryGetValue<string>(value: out var spelling) &&
+                string.Equals(a: spelling, b: "auto", comparisonType: StringComparison.Ordinal)) {
+                ResolveAutoPin(family: family, obj: obj);
             }
             if (whole && (type == typeof(ShapeDocument))) {
                 WorldDocumentRowDefaults.OmitAbsentShapeMembers(shape: obj);

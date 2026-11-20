@@ -1506,7 +1506,7 @@ public static partial class WorldDocumentEmitter {
         var obj = new JsonObject {
             ["$type"] = "scheduleState",
             ["state"] = resolved.State,
-            ["delaySeconds"] = schedule.DelaySeconds,
+            ["delaySeconds"] = LowerExpression(expr: schedule.Delay, fieldKey: "delaySeconds", scope: scope),
         };
 
         if (resolved.Key is not null) {
