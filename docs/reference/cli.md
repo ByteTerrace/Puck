@@ -130,7 +130,7 @@ half of these rules on every command, with no exemptions.
 | [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `verify-published`, `smoke`. |
 | [`puck official`](#puck-officialthe-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.manifest.v1` tree—the shipped engine, the authoring workspace, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
 | [`puck packages`](#puck-packagespublished-nuget-package-report) | writes the published `ByteTerrace.Puck.*` NuGet package list into `docs/site/index.html`, or checks it. |
-| [`puck parity`](#puck-paritycross-backend-parity-over-the-authored-parity-world) | boots a parity world it is given offscreen once per graphics backend and judges every capture it schedules: content gate, exact state hash, an exact reference image where a station names one, and per-tile pixels. |
+| [`puck parity`](#puck-paritycross-backend-parity-over-the-authored-parity-world) | boots a parity world it is given offscreen once per graphics backend and judges every capture it schedules: content gate, exact state hash and per-tile pixels. |
 | [`puck prewarm`](../../src/Puck.Cli.Worlds/PlayerDerivedProducts.cs) | produces the AGB BIOS and Rust addon derived caches into a player output through the runtime loaders. |
 | [`puck publish`](#puck-publishunsigned-release-source-trees) | writes an unsigned `puck.release.manifest.v1` release-source tree from one runtime identifier's built output. |
 | [`puck pull-request`](#puck-pull-requestautomatic-pr-formatting) | the formatting bot's two halves: `format` prepares a pull request's formatting artifact, and `submit-format` is CI's trusted applier. |
@@ -2040,12 +2040,7 @@ Per capture, these independent verdicts, in order:
    instance): each side's `sourceVerdict` must hold, the frame equal to that
    image of the captured tick, pixel for pixel. `SOURCE-FAILED` prints both
    sides' verdicts.
-5. **Reference verdict**—only for a station whose contract entry names a
-   `reference`: each side must equal the frame computed on the CPU from the
-   station's own documents, byte for byte, so a mistake both backends share
-   still fails. `REFERENCE-FAILED` names the side, the differing byte count and
-   the first differing pixel.
-6. **Pixel verdict**—per-tile mean/max deltas against the station's contract
+5. **Pixel verdict**—per-tile mean/max deltas against the station's contract
    thresholds. A localized defect cannot dilute itself across a whole-frame
    mean.
 
@@ -2053,8 +2048,7 @@ Failures write both frames, a per-pixel delta heatmap, and a per-verdict
 summary into the run's `evidence/` directory—a red names its tile and shows
 its pixels. A run whose captures all hold deletes its run directory; a run
 with a red keeps it and names it (see [Conventions](#conventions)). There are no stored baselines: both runs come from the same build,
-and a reference is computed from the documents the run renders, so a content
-change fails only where it and its reference disagree.
+so a content change fails only where the two backends disagree.
 The runner resolves the `Puck.World` build for the checkout's current sources,
 keeping the build's logs beside its transcripts when this run built it (see
 [where the World artifact is built](#where-the-world-artifact-is-built)), runs

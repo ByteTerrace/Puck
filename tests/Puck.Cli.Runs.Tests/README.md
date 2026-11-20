@@ -7,7 +7,7 @@ reports, parity comparison, determinism, qualification verdicts, release profile
 Reports require explicit detail keys and pass detail labels.
 
 Quarantined: the laws that read the canary corpus, the parity documents, the determinism manifest, the release
-profile or the verdict worlds (`DeterminismLawTests`, most of `ParityBindingReferenceLawTests`, and the shipped-corpus
+profile or the verdict worlds (`DeterminismLawTests` and the shipped-corpus
 laws of the canary, determinism-attestation and release-profile classes) live in
 `experimental/tests/Puck.Cli.Runs.Tests/` beside those files.
 

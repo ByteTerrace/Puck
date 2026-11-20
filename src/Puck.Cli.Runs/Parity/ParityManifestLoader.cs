@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Puck.World;
 
@@ -10,7 +9,6 @@ namespace Puck.Cli.Parity;
 /// pinned contract — a comparator this strict about its own inputs cannot silently misread a producer's
 /// output as agreement.</summary>
 public static class ParityManifestLoader {
-    private const string BindingReferenceKind = "binding";
     private const string ContractSchema = "puck.parity.contract.v1";
     private const int DefaultTileSize = 16;
     private const int MaxDepth = 16;
@@ -261,120 +259,7 @@ public static class ParityManifestLoader {
 
         return result;
     }
-    private static ParityBindingReference ReadReference(JsonElement element, string context, string contractDirectory) {
-        var row = CliStrictJson.RequireObject(
-            context: context,
-            element: element,
-            refusal: Refusal
-        );
-
-        CliStrictJson.RequireOnlyMembers(
-            element: row,
-            context: context,
-            unknownMemberDetail: "strict documents refuse fields the comparator does not read.",
-            refusal: Refusal,
-            "kind",
-            "graph",
-            "world",
-            "parameters"
-        );
-
-        var kind = CliStrictJson.ReadRequiredString(
-            context: context,
-            element: row,
-            member: "kind",
-            refusal: Refusal
-        );
-
-        if (!string.Equals(
-            a: kind,
-            b: BindingReferenceKind,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            throw new ParityDocumentRefusal(message: $"{context} kind '{kind}' is not a reference the comparator computes; the one it knows is '{BindingReferenceKind}'.");
-        }
-
-        var graph = Path.GetFullPath(
-            basePath: contractDirectory,
-            path: CliStrictJson.ReadRequiredString(
-                context: context,
-                element: row,
-                member: "graph",
-                refusal: Refusal
-            )
-        );
-        var world = Path.GetFullPath(
-            basePath: contractDirectory,
-            path: CliStrictJson.ReadRequiredString(
-                context: context,
-                element: row,
-                member: "world",
-                refusal: Refusal
-            )
-        );
-
-        // The steps of each bound parameter's row, keyed by pass and field as a world's views.graphs row keys them, each
-        // an object from the simulation tick a value starts at to the value: the field reads it from that tick on.
-        var parameters = new Dictionary<(string Pass, string Field), IReadOnlyList<(ulong From, uint Value)>>();
-
-        if (row.TryGetProperty(
-            propertyName: "parameters",
-            value: out var parametersElement
-        )) {
-            foreach (var pass in CliStrictJson.RequireObject(
-                context: $"{context} parameters",
-                element: parametersElement,
-                refusal: Refusal
-            ).EnumerateObject()) {
-                foreach (var field in CliStrictJson.RequireObject(
-                    context: $"{context} parameters.{pass.Name}",
-                    element: pass.Value,
-                    refusal: Refusal
-                ).EnumerateObject()) {
-                    var steps = new List<(ulong From, uint Value)>();
-
-                    foreach (var step in CliStrictJson.RequireObject(
-                        context: $"{context} parameters.{pass.Name}.{field.Name}",
-                        element: field.Value,
-                        refusal: Refusal
-                    ).EnumerateObject()) {
-                        if (!ulong.TryParse(
-                            provider: CultureInfo.InvariantCulture,
-                            result: out var from,
-                            s: step.Name,
-                            style: NumberStyles.None
-                        )) {
-                            throw new ParityDocumentRefusal(message: $"{context} parameters.{pass.Name}.{field.Name} key '{step.Name}' must be the simulation tick the value starts at.");
-                        }
-                        if (
-                            (step.Value.ValueKind != JsonValueKind.Number) ||
-                            !step.Value.TryGetUInt32(value: out var value)
-                        ) {
-                            throw new ParityDocumentRefusal(message: $"{context} parameters.{pass.Name}.{field.Name}.{step.Name} must be a whole number from 0 to {uint.MaxValue}.");
-                        }
-
-                        steps.Add(item: (from, value));
-                    }
-                    if (steps.Count == 0) {
-                        throw new ParityDocumentRefusal(message: $"{context} parameters.{pass.Name}.{field.Name} must state at least one step.");
-                    }
-
-                    parameters[(pass.Name, field.Name)] = steps;
-                }
-            }
-        }
-
-        return (ParityBindingReference.TryLoad(
-            error: out var error,
-            graphPath: graph,
-            parameters: parameters,
-            reference: out var reference,
-            worldPath: world
-        )
-            ? reference
-            : throw new ParityDocumentRefusal(message: $"{context}: {error}"));
-    }
-    private static ParityStationContract ReadStationContract(JsonElement element, string context, string contractDirectory) {
+    private static ParityStationContract ReadStationContract(JsonElement element, string context) {
         var row = CliStrictJson.RequireObject(
             context: context,
             element: element,
@@ -388,8 +273,7 @@ public static class ParityManifestLoader {
             refusal: Refusal,
             "tileMeanDelta",
             "tileMaxDelta",
-            "censusFloor",
-            "reference"
+            "censusFloor"
         );
 
         var tileMeanDelta = CliStrictJson.ReadRequiredFiniteNumber(
@@ -440,16 +324,6 @@ public static class ParityManifestLoader {
 
         return new ParityStationContract(
             CensusFloor: censusFloor,
-            Reference: (row.TryGetProperty(
-                propertyName: "reference",
-                value: out var referenceElement
-            )
-                ? ReadReference(
-                    context: $"{context} reference",
-                    contractDirectory: contractDirectory,
-                    element: referenceElement
-                )
-                : null),
             TileMaxDelta: tileMaxDelta,
             TileMeanDelta: tileMeanDelta
         );
@@ -524,7 +398,6 @@ public static class ParityManifestLoader {
             foreach (var property in stationsElement.EnumerateObject()) {
                 stations[property.Name] = ReadStationContract(
                     context: $"contract stations.{property.Name}",
-                    contractDirectory: (Path.GetDirectoryName(path: Path.GetFullPath(path: path)) ?? "."),
                     element: property.Value
                 );
             }
