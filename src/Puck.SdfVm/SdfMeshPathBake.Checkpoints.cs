@@ -114,10 +114,15 @@ public sealed partial class SdfMeshPathBake {
             m_accounts.SimplifyMisses++;
             m_accounts.ContourMisses++;
         }
-        var pending = request;
         group.Contouring = true;
-        Schedule(group: group, work: () => LoadSamples(group, pending, store));
+        ScheduleSampleLoad(group, request, store);
         return true;
+    }
+    // Its own method, so a probe that returns early above allocates no closure.
+    private void ScheduleSampleLoad(Group group, in SdfMeshBakeRequest request, SdfMeshStore store) {
+        var pending = request;
+
+        Schedule(group: group, work: () => LoadSamples(group, pending, store));
     }
 
     private void LoadSamples(Group group, SdfMeshBakeRequest request, SdfMeshStore store) {

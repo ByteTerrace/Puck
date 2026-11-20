@@ -401,7 +401,7 @@ means measured and printed with no bound: it is what the envelope still holds.
 | The probe cache's blocks | A cached owner in bytes, trimmed first | 9 |
 | The composed-document store | Released after boot where nothing reads it | 6 |
 | Speculative work: bakes, loads and decodes for a predicted demand | A share of the workspace class, cancelled when the demand leaves or pressure asks | 3, 10 |
-| Rented arrays the shared pool keeps | `RentedArrays` limits shared buckets by payload size. Larger rentals are eligible for collection when released | 2, 11 |
+| Rented arrays the shared pool keeps | `RentedArrays` limits shared buckets by payload size. Larger reference-free rentals come from a bounded large pool, trimmed when a bake ends | 2, 11 |
 | Native allocator slack | Collected when an arrival settles and on pressure (`IAllocatorStatistics`); named | 2 |
 | The managed heap's other tenants | Named by a heap walk; each one past a stated size becomes an owner with a capacity. No hard limit on the heap: it would turn pressure into an exception where everything else turns it into a coarser picture | 2, then per tenant |
 | Runtime code and loader heaps | Named; not controllable at run time | 2 |

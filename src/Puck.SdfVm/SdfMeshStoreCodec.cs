@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using System.IO.Hashing;
 using System.Numerics;
+using Puck.Abstractions;
 using Puck.SignedDistance.Illumination;
 
 namespace Puck.SdfVm;
@@ -67,17 +68,17 @@ internal static class SdfMeshStoreCodec {
         }
     }
 
-    internal static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) {
+    internal static void Encode(Stream output, UInt128 key, SdfMesh? mesh, int[] materials) {
         var pieces = PiecesOf(mesh: mesh);
         var canonical = SdfMeshMaterials.Canonical(materials: materials, pieces: pieces);
-        return EncodePlanes(key, pieces, mesh is { Chunks.Count: > 0 }, GridOf(pieces), materials, canonical, exact: false);
+        EncodePlanes(output, key, pieces, mesh is { Chunks.Count: > 0 }, GridOf(pieces), materials, canonical, exact: false);
     }
 
     // A checkpoint feeds later geometry operations. Quantizing it here would make a warm derivation differ from a cold one.
-    internal static byte[] EncodeExact(UInt128 key, SdfMesh? mesh) => EncodePlanes(
-        key, PiecesOf(mesh), mesh is { Chunks.Count: > 0 }, new PositionGrid(default, default, 4), [], [], exact: true);
+    internal static void EncodeExact(Stream output, UInt128 key, SdfMesh? mesh) => EncodePlanes(
+        output, key, PiecesOf(mesh), mesh is { Chunks.Count: > 0 }, new PositionGrid(default, default, 4), [], [], exact: true);
 
-    private static byte[] EncodePlanes(UInt128 key, IReadOnlyList<SdfMesh> pieces, bool chunked, PositionGrid grid,
+    private static void EncodePlanes(Stream output, UInt128 key, IReadOnlyList<SdfMesh> pieces, bool chunked, PositionGrid grid,
         int[] materials, int[] canonical, bool exact) {
         var (low, high, width) = grid;
         using var payload = new MemoryStream();
@@ -89,26 +90,37 @@ internal static class SdfMeshStoreCodec {
             writer.Write(value: pieces.Count);
             foreach (var piece in pieces) { WriteMesh(from: materials, high: high, low: low, mesh: piece, to: canonical, width: width, writer: writer, exact: exact); }
         }
-        return EncodePayload(key, payload.GetBuffer().AsSpan(0, checked((int)payload.Length)));
+        EncodePayload(output, key, payload.GetBuffer().AsSpan(0, checked((int)payload.Length)));
     }
 
-    internal static byte[] EncodePayload(UInt128 key, ReadOnlySpan<byte> payload) {
-        using var output = new MemoryStream();
+    // Writes an entry's envelope, header then zlib-compressed payload then the checksum of both, straight to the stream
+    // with no entry-sized staging: the checksum is accumulated over the bytes as they pass.
+    internal static void EncodePayload(Stream output, UInt128 key, ReadOnlySpan<byte> payload) {
+        Span<byte> header = stackalloc byte[HeaderBytes];
 
-        output.Write(buffer: new byte[HeaderBytes]);
-        using (var compressor = new ZLibStream(output, CompressionLevel.Fastest, leaveOpen: true)) {
+        BinaryPrimitives.WriteUInt64LittleEndian(destination: header, value: Magic);
+        BinaryPrimitives.WriteUInt128LittleEndian(destination: header[8..], value: key);
+        BinaryPrimitives.WriteInt32LittleEndian(destination: header[24..], value: payload.Length);
+
+        var hashed = new HashingStream(output);
+
+        hashed.Write(buffer: header);
+        using (var compressor = new ZLibStream(hashed, CompressionLevel.Fastest, leaveOpen: true)) {
             compressor.Write(buffer: payload);
         }
-        var length = checked((int)output.Length);
+        Span<byte> checksum = stackalloc byte[ChecksumBytes];
 
-        output.Write(buffer: new byte[ChecksumBytes]);
-        var bytes = output.ToArray();
+        BinaryPrimitives.WriteUInt128LittleEndian(destination: checksum, value: hashed.Hash);
+        output.Write(buffer: checksum);
+    }
 
-        BinaryPrimitives.WriteUInt64LittleEndian(destination: bytes, value: Magic);
-        BinaryPrimitives.WriteUInt128LittleEndian(destination: bytes.AsSpan(start: 8), value: key);
-        BinaryPrimitives.WriteInt32LittleEndian(destination: bytes.AsSpan(start: 24), value: payload.Length);
-        BinaryPrimitives.WriteUInt128LittleEndian(destination: bytes.AsSpan(start: length), value: XxHash128.HashToUInt128(bytes.AsSpan(length: length, start: 0)));
-        return bytes;
+    // Passes bytes to the entry's stream and folds each into a running XxHash128, the checksum the envelope ends in.
+    private sealed class HashingStream(Stream inner) : DigestingStream(inner: inner) {
+        private readonly XxHash128 m_hash = new();
+
+        public UInt128 Hash => m_hash.GetCurrentHashAsUInt128();
+
+        protected override void Append(ReadOnlySpan<byte> bytes) => m_hash.Append(source: bytes);
     }
     private static void WriteMesh(BinaryWriter writer, SdfMesh mesh, Vector3 low, Vector3 high, int width, int[] from, int[] to, bool exact) {
         WriteVector(writer, mesh.BakeCell);

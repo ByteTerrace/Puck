@@ -40,7 +40,7 @@ public sealed partial class SdfMeshPathBake {
             var group = m_groups[index];
 
             if (group.Retired || !group.Done || (group.Replaces is not null) || group.Ahead || (group.KeptFloor is not { } floor) || (group.Mesh is not { } mesh)) { continue; }
-            if (!AnyPiece(mesh: mesh, test: tables.RefusesMesh) || AnyPiece(mesh: floor, test: piece => !tables.MeshStands(mesh: piece))) { continue; }
+            if (!AnyPiece(mesh: mesh, tables: tables, test: static (region, piece) => region.RefusesMesh(mesh: piece)) || AnyPiece(mesh: floor, tables: tables, test: static (region, piece) => !region.MeshStands(mesh: piece))) { continue; }
             m_evictions.Add(item: (group, index));
         }
     }
@@ -104,7 +104,7 @@ public sealed partial class SdfMeshPathBake {
         foreach (var group in m_groups) {
             if (group.Retired) { continue; }
             if (group.Shown is { } shown) {
-                if (!AnyPiece(mesh: shown, test: tables.OwesMesh)) { continue; }
+                if (!AnyPiece(mesh: shown, tables: tables, test: static (region, piece) => region.OwesMesh(mesh: piece))) { continue; }
             } else if (group.Done) {
                 continue;
             }
@@ -193,8 +193,10 @@ public sealed partial class SdfMeshPathBake {
             }
         }
     }
-    private static bool AnyPiece(SdfMesh mesh, Func<SdfMesh, bool> test) {
-        for (var piece = 0; (piece < mesh.PieceCount); piece++) { if (test(arg: mesh.Piece(index: piece))) { return true; } }
+    // Whether a test holds of any piece of a mesh. A static test and its tables as an argument allocate no delegate or
+    // closure per call, which a frame makes for every group it holds.
+    private static bool AnyPiece(SdfMesh mesh, SdfWorldTables tables, Func<SdfWorldTables, SdfMesh, bool> test) {
+        for (var piece = 0; (piece < mesh.PieceCount); piece++) { if (test(arg1: tables, arg2: mesh.Piece(index: piece))) { return true; } }
         return false;
     }
 

@@ -111,6 +111,23 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
             m_length = length;
         }
     }
+    /// <summary>Appends an element after the logical contents, doubling the capacity (to at least sixteen elements) when it
+    /// is full, so a run of appends allocates and copies a geometric series rather than once each. The growth preserves the
+    /// contents; every earlier borrow ends at the call.</summary>
+    /// <param name="item">The element.</param>
+    /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
+    public void Append(T item) {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        if (m_length == m_capacity) {
+            var length = m_length;
+
+            Resize(length: ((int)Math.Min(val1: Math.Max(val1: 16L, val2: (2L * m_capacity)), val2: Array.MaxLength)), clear: false);
+            m_length = length;
+            if (m_length == m_capacity) { throw new OutOfMemoryException(message: $"Cannot grow {typeof(T).Name} storage past {m_capacity} elements."); }
+        }
+        if (m_pointer is not null) { m_pointer[m_length] = item; } else { m_managed![m_length] = item; }
+        m_length++;
+    }
     /// <summary>Frees the storage after every borrow has ended, keeping the owner usable: its length and capacity become
     /// zero, a span of a memory view taken earlier throws <see cref="ArgumentOutOfRangeException"/> as one past the
     /// owner's length does, and a later <see cref="Resize"/> allocates again, after which those views read the new
