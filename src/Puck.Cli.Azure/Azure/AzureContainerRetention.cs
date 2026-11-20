@@ -5,42 +5,28 @@ namespace Puck.Cli.Azure;
 public static partial class AzureCommand {
     // A pipeline retry must not push through a release's registry write lock. Reuse an existing commit tag
     // only after its immutable manifest matches the locally built image identity.
+    // The publishing identity holds repository-scoped rights only and is deliberately denied the registry catalog, so
+    // the reuse check asks for the one known tag and treats only a not-found answer as "not published"; any other
+    // refusal (authentication, throttling) still fails the deploy by name.
     private static async Task<string?> ReusePublishedContainerAsync(string registry, string repository, string commit, string server) {
-        var repositories = await AzJsonAsync(
-            "acr",
-            "repository",
-            "list",
-            "--name",
-            registry,
-            "-o",
-            "json"
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        JsonNode metadata;
 
-        if (!repositories.AsArray().Any(predicate: row => (Text(value: row) == repository))) { return null; }
-        var tags = await AzJsonAsync(
-            "acr",
-            "repository",
-            "show-tags",
-            "--name",
-            registry,
-            "--repository",
-            repository,
-            "-o",
-            "json"
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
-        if (!tags.AsArray().Any(predicate: row => (Text(value: row) == commit))) { return null; }
-        var metadata = await AzJsonAsync(
-            "acr",
-            "repository",
-            "show",
-            "--name",
-            registry,
-            "--image",
-            ((repository + ":") + commit),
-            "-o",
-            "json"
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        try {
+            metadata = await AzJsonAsync(
+                "acr",
+                "repository",
+                "show",
+                "--name",
+                registry,
+                "--image",
+                ((repository + ":") + commit),
+                "-o",
+                "json"
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        }
+        catch (InvalidOperationException exception) when (IsRegistryNotFound(message: exception.Message)) {
+            return null;
+        }
         var digest = Text(value: metadata["digest"]);
 
         _ = ParseWorldReleaseImage(image: ((((server + "/") + repository) + "@") + digest));
@@ -65,6 +51,16 @@ public static partial class AzureCommand {
         }
         return reference;
     }
+
+    /// <summary>Reports whether an <c>az acr</c> failure says the asked repository or tag does not exist, as opposed to a refusal of the request.</summary>
+    /// <param name="message">The failure text, carrying the command's standard error.</param>
+    /// <returns><see langword="true"/> when the registry answered that the image is unknown.</returns>
+    public static bool IsRegistryNotFound(string message) =>
+        message.Contains(value: "MANIFEST_UNKNOWN", comparisonType: StringComparison.OrdinalIgnoreCase)
+        || message.Contains(value: "NAME_UNKNOWN", comparisonType: StringComparison.OrdinalIgnoreCase)
+        || message.Contains(value: "manifest unknown", comparisonType: StringComparison.OrdinalIgnoreCase)
+        || message.Contains(value: "does not exist", comparisonType: StringComparison.OrdinalIgnoreCase)
+        || message.Contains(value: "not found", comparisonType: StringComparison.OrdinalIgnoreCase);
 
     public static bool MatchesPublishedContainer(string digest, JsonNode built, JsonNode retained) {
         // Containerd's Id is the OCI index digest, while the classic Docker store exposes a config digest.
