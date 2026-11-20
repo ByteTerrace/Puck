@@ -95,6 +95,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private PresentationRate m_presentationRate;
 
     private readonly Func<string, OverlayResolvedGlyph> m_resolveIcon;
+    // The per-frame delegates over this presenter's methods, converted once: a method group converted at a call site
+    // allocates a new delegate on every frame.
+    private readonly Func<int, NormalizedRect?> m_matteOf;
+    private readonly Func<WorldAnchor, SdfAnchor?> m_resolveLightAnchor;
     private readonly PlayerRoster m_roster;
     // The first-party puck.sdf.v1 document emitter (world.sdf.load) — a SECOND tenant of the same live composition
     // seam m_emitter already exercises, never a parallel composition point (see WorldSdfDocumentEmitter's remarks).
@@ -956,7 +960,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             return null;
         }
 
-        foreach (var screen in m_client.Definition.Screens) {
+        // Indexed, since the rows are an interface list and a foreach over one boxes its enumerator.
+        var screens = m_client.Definition.Screens;
+
+        for (var row = 0; (row < screens.Count); row++) {
+            var screen = screens[row];
+
             if (screen.Index != index) {
                 continue;
             }
@@ -966,9 +975,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 screen: screen
             )) {
                 if (screen.Carry?.Camera is { } name) {
-                    foreach (var camera in m_client.Definition.Cameras) {
-                        if (string.Equals(a: camera.Name, b: name, comparisonType: StringComparison.Ordinal)) {
-                            held = camera;
+                    var cameras = m_client.Definition.Cameras;
+
+                    for (var at = 0; (at < cameras.Count); at++) {
+                        if (string.Equals(a: cameras[at].Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                            held = cameras[at];
 
                             break;
                         }
@@ -1508,7 +1519,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 ? WorldScreenFraming.Fill(screen: m_engagedViews[0].Screen)
                 : null),
             mattes: ((m_engagedViews.Count > 0)
-                ? MatteOf
+                ? m_matteOf
                 : null),
             panesCover: panesCover,
             rendered: ViewRendered,
@@ -2170,7 +2181,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             definition: m_client.Definition,
             revision: m_client.DefinitionRevision,
             mirror: m_client.StateMirror,
-            resolveLightAnchor: ResolveLightAnchor,
+            resolveLightAnchor: m_resolveLightAnchor,
             shadows: m_settings.ShadowSlots,
             layers: m_settings.SkyLayers,
             shadowSelection: m_deliveredShadows,
@@ -2180,6 +2191,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         m_volumes.Clear();
         AppendVolumes(volumes: m_emitter.StaticVolumes);
         AppendVolumes(volumes: m_animator.Volumes);
+        AppendVolumes(volumes: m_animator.RigidVolumes);
 
         // The document version a diagnostic compares frames by, boxed once for each version rather than every frame.
         if ((m_diagnosticSource is null) || (m_diagnosticVersion != m_client.DocumentVersion)) {
@@ -2328,6 +2340,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         m_markers = markers;
         m_resolveIcon = resolveIcon;
+        m_matteOf = MatteOf;
+        m_resolveLightAnchor = ResolveLightAnchor;
         m_domains = domains;
         m_environment = new WorldEnvironmentResolve(domains: domains);
 

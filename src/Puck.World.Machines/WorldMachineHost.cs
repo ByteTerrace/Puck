@@ -243,7 +243,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     }
     // Providers own format recognition, parsing, compilation, and exported addresses. The host pins the input
     // bytes and the executable image without depending on a provider's source-document or compiler types.
-    private bool TryResolveContent(IMachineEngine engine, string contentPath, string? documentDirectory, byte[] content, out byte[] bytes, out WorldMachineCartridge? cartridge, out PreparedMachineContent? compilation, out string? fault) {
+    private bool TryResolveContent(IMachineEngine engine, string contentPath, string? documentDirectory, byte[] content, out byte[] bytes, out PreparedMachineContent? compilation, out string? fault) {
         _ = Catalog.ContentProviders.TryGetValue(
             key: engine.Id,
             value: out var compiler
@@ -257,17 +257,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                 WorldBootWork.Count(kind: WorldBootWork.AssetLoads);
                 compilation = compiler.Prepare(content: content, contentPath: WorldDocumentPaths.Resolve(documentDirectory: documentDirectory, path: contentPath));
                 bytes = compilation.Image;
-                cartridge = new WorldMachineCartridge(
-                    Path: contentPath,
-                    SourceHash: compilation.SourceHash,
-                    RomHash: WorldDefinitionFileSource.ComputeContentHash(content: bytes)
-                );
                 fault = null;
 
                 return true;
             } catch (MachineContentException exception) {
                 bytes = [];
-                cartridge = null;
                 compilation = null;
                 fault = $"content '{contentPath}' refused: {exception.Message}";
 
@@ -277,7 +271,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         if (!Catalog.RequiresPreparation(contentPath: contentPath)) {
             bytes = content;
-            cartridge = null;
             compilation = null;
             fault = null;
 
@@ -285,7 +278,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         }
 
         bytes = [];
-        cartridge = null;
         compilation = null;
         fault = $"content '{contentPath}' needs a content provider, and engine '{engine.Id}' recognizes none";
 
@@ -792,6 +784,19 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         return [.. m_reconcileRemovals];
     }
     /// <inheritdoc/>
+    public string? FaultOf(int index) =>
+        (m_slots.TryGetValue(
+            key: index,
+            value: out var slot
+        ) &&
+        (slot.DeclaredSource is WorldScreenSource.Machine source) &&
+        m_instances.TryGetValue(
+            key: source.Instance,
+            value: out var instance
+        ))
+            ? instance.Lease.Fault
+            : null;
+    /// <inheritdoc/>
     public WorldMachineState? State(int index) {
         if (m_slots.TryGetValue(
             key: index,
@@ -812,12 +817,8 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
             WorldMachineCartridge? cartridge = null;
 
             foreach (var asset in lease.Assets.Values) {
-                if (asset.PreparedContent is { } content) {
-                    cartridge = new WorldMachineCartridge(
-                        asset.Path,
-                        content.SourceHash,
-                        WorldDefinitionFileSource.ComputeContentHash(content: asset.Image.Span)
-                    );
+                if (asset is { PreparedContent: { } content, ImageHash: { } imageHash }) {
+                    cartridge = new WorldMachineCartridge(asset.Path, content.SourceHash, imageHash);
                     break;
                 }
             }

@@ -15,6 +15,10 @@ namespace Puck.World;
 /// so possession follows, and to a position off the client's render poses or the stamp pool.</summary>
 internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
     private static readonly int FactCount = Enum.GetValues<OverlayFact>().Length;
+    // The enclosing seat scope, and each joined seat as a numbered subject: shared, since a subject is immutable and an
+    // evaluation per seat every frame would otherwise allocate one per seat.
+    private static readonly OverlaySubject.Seat EnclosingSeat = new();
+    private static readonly OverlaySubject.Seat[] SeatSubjects = [.. Enumerable.Range(start: 1, count: PlayerRoster.MaxSlots).Select(static number => new OverlaySubject.Seat(Number: number))];
 
     private readonly WorldClient m_client;
     private readonly IConsoleSessions? m_consoles;
@@ -76,7 +80,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                         y: Distance(
                             of: of,
                             slot: slot,
-                            subject: new OverlaySubject.Seat(Number: (seat + 1))
+                            subject: SeatSubjects[seat]
                         )
                     );
                 }
@@ -91,7 +95,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                     nearest = MathF.Min(
                         x: nearest,
                         y: Distance(
-                            of: new OverlaySubject.Seat(Number: (seat + 1)),
+                            of: SeatSubjects[seat],
                             slot: slot,
                             subject: subject
                         )
@@ -111,7 +115,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
             !TryResolvePosition(
             position: out var to,
             slot: slot,
-            subject: (of ?? new OverlaySubject.Seat())
+            subject: (of ?? EnclosingSeat)
         )
         ) {
             return float.PositiveInfinity;
@@ -235,8 +239,14 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
     };
     // A subject's speaking presence: the speech clock's last stamp for its body, through the same window/fade curve
     // a recency fact reads. AnySeat takes the maximum over the joined seats.
-    private float SpeakingPresence(int slot, OverlayPredicate.Speaking speaking) {
-        if (speaking.Subject is OverlaySubject.AnySeat) {
+    private float SpeakingPresence(int slot, OverlayPredicate.Speaking speaking) => SpeakingPresence(
+        fadeSeconds: speaking.FadeSeconds,
+        slot: slot,
+        subject: speaking.Subject,
+        windowSeconds: speaking.WindowSeconds
+    );
+    private float SpeakingPresence(int slot, OverlaySubject subject, float windowSeconds, float fadeSeconds) {
+        if (subject is OverlaySubject.AnySeat) {
             var presence = 0f;
 
             for (var seat = 0; (seat < PlayerRoster.MaxSlots); seat++) {
@@ -244,8 +254,10 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                     presence = MathF.Max(
                         x: presence,
                         y: SpeakingPresence(
+                            fadeSeconds: fadeSeconds,
                             slot: slot,
-                            speaking: (speaking with { Subject = new OverlaySubject.Seat(Number: (seat + 1)) })
+                            subject: SeatSubjects[seat],
+                            windowSeconds: windowSeconds
                         )
                     );
                 }
@@ -257,15 +269,15 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
         if (!TryResolveBody(
             body: out var body,
             slot: slot,
-            subject: speaking.Subject
+            subject: subject
         )) {
             return 0f;
         }
 
         return RecentPresence(
-            fadeSeconds: speaking.FadeSeconds,
+            fadeSeconds: fadeSeconds,
             lastHeldTick: m_speech.LastSpokeTick(bodyIndex: body),
-            windowSeconds: speaking.WindowSeconds
+            windowSeconds: windowSeconds
         );
     }
     // Subject to body: Seat through the perception anchor (possession follows), Entity by index, RecentSpeaker
@@ -349,28 +361,35 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                     slot: slot,
                     windowSeconds: recently.WindowSeconds
                 );
-            case OverlayPredicate.All all:
-                foreach (var inner in (all.Predicates ?? [])) {
-                    if (!Evaluate(
-                        predicate: inner,
-                        slot: slot
-                    )) {
-                        return false;
-                    }
-                }
+            // Indexed, since the lists are interfaces and a foreach over one boxes its enumerator for each predicate every frame.
+            case OverlayPredicate.All all: {
+                    var inners = (all.Predicates ?? []);
 
-                return true;
-            case OverlayPredicate.Any any:
-                foreach (var inner in (any.Predicates ?? [])) {
-                    if (Evaluate(
-                        predicate: inner,
-                        slot: slot
-                    )) {
-                        return true;
+                    for (var index = 0; (index < inners.Count); index++) {
+                        if (!Evaluate(
+                            predicate: inners[index],
+                            slot: slot
+                        )) {
+                            return false;
+                        }
                     }
-                }
 
-                return false;
+                    return true;
+                }
+            case OverlayPredicate.Any any: {
+                    var inners = (any.Predicates ?? []);
+
+                    for (var index = 0; (index < inners.Count); index++) {
+                        if (Evaluate(
+                            predicate: inners[index],
+                            slot: slot
+                        )) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
             case OverlayPredicate.Not not:
                 return !Evaluate(
                     predicate: not.Predicate,

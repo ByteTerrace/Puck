@@ -392,6 +392,7 @@ public static class WorldGaitDrivers {
             } else {
                 var amount = ((term.Amplitude.Value * Wave(
                     argument: (phases[driver] + (term.Phase?.Value ?? 0f)),
+                    curveName: term.WaveCurve,
                     definition: definition,
                     wave: term.Wave
                 )) * share);
@@ -653,11 +654,15 @@ public static class WorldGaitDrivers {
     /// <param name="argument">The driver phase plus the facet's phase offset, radians.</param>
     /// <param name="definition">The live definition the curve rows come from.</param>
     /// <returns>The waveform value.</returns>
-    public static float Wave(string? wave, float argument, WorldDefinition? definition) {
-        if (!CreationWave.TryCurveName(
-            name: out var name,
-            wave: wave
-        )) {
+    public static float Wave(string? wave, float argument, WorldDefinition? definition) => Wave(
+        argument: argument,
+        curveName: (CreationWave.TryCurveName(name: out var name, wave: wave) ? name : null),
+        definition: definition,
+        wave: wave
+    );
+    // The waveform with its curve row's name already split from the form, which a rig term does once at compile.
+    private static float Wave(string? wave, string? curveName, float argument, WorldDefinition? definition) {
+        if (curveName is null) {
             return CreationWave.Evaluate(
                 argument: argument,
                 wave: wave
@@ -667,7 +672,7 @@ public static class WorldGaitDrivers {
             (definition is null) ||
             (WorldDefinitionRows.FindCurve(
             curves: definition.Curves,
-            name: name
+            name: curveName
         ) is not { } row)
         ) {
             return 0f;

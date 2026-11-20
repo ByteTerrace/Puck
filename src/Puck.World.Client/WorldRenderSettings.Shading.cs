@@ -6,6 +6,7 @@ namespace Puck.World;
 
 public sealed partial class WorldRenderSettings {
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, IReadOnlyList<SdfShadeProgram>> DeclaredShadeSets = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldPrototype>, DeclaredShadeEntry> DeclaredShadeInputs = new();
     private SdfShadeProgram? m_shadeOverride;
     private SdfProgram? m_shadeScene;
     private readonly Dictionary<string, SdfShadeProgram> m_namedShades = new(StringComparer.Ordinal);
@@ -59,9 +60,40 @@ public sealed partial class WorldRenderSettings {
     public static IReadOnlyList<SdfShadeProgram> DeclaredShades(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(definition);
 
-        return DeclaredShadeSets.GetValue(key: definition, derive: static definition => SdfShadeHlsl.Canonical(
-            programs: DeclaredShadeMaterials(definition: definition).Select(selector: static material => material.Program)
-                .Concat(second: ((CompileShade(definition.Render.Shade) is { } fallback) ? [fallback] : []))));
+        return DeclaredShadeSets.GetValue(key: definition, derive: static definition => DeclaredShadesOf(definition: definition));
+    }
+    // The set reads the creations, the field regions and render.shade alone, so a definition a mutation replaced that
+    // still holds the same three objects holds the same list, whose identity the renderer's specialization keys on.
+    private static IReadOnlyList<SdfShadeProgram> DeclaredShadesOf(WorldDefinition definition) {
+        var entry = DeclaredShadeInputs.GetValue(key: definition.Creations, derive: static _ => new DeclaredShadeEntry());
+        var regions = definition.FieldRegions;
+        var shade = definition.Render.Shade;
+
+        lock (entry) {
+            if (
+                (entry.Programs is { } held) &&
+                ReferenceEquals(objA: entry.Regions, objB: regions) &&
+                ReferenceEquals(objA: entry.Shade, objB: shade)
+            ) {
+                return held;
+            }
+
+            var programs = SdfShadeHlsl.Canonical(
+                programs: DeclaredShadeMaterials(definition: definition).Select(selector: static material => material.Program)
+                    .Concat(second: ((CompileShade(shade) is { } fallback) ? [fallback] : [])));
+
+            entry.Regions = regions;
+            entry.Shade = shade;
+            entry.Programs = programs;
+
+            return programs;
+        }
+    }
+    // The programs derived for one creation list, with the other two inputs they were derived under.
+    private sealed class DeclaredShadeEntry {
+        public IReadOnlyList<SdfShadeProgram>? Programs;
+        public object? Regions;
+        public object? Shade;
     }
 
     /// <summary>Resolves the live override or a world's own default and inventories its named material programs.</summary>

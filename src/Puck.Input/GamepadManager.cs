@@ -538,6 +538,29 @@ public sealed class GamepadManager : IDisposable {
             return ids;
         }
     }
+    /// <summary>Reads the family of the connected device that holds the lowest player slot, the one
+    /// <see cref="ConnectedDevices"/> lists first, without building the list.</summary>
+    /// <param name="type">The device's family, or <see cref="GamepadType.Unknown"/> when none is connected.</param>
+    /// <returns><see langword="true"/> when a device is connected.</returns>
+    public bool TryGetFirstType(out GamepadType type) {
+        lock (m_gate) {
+            IGamepadConnection? first = null;
+
+            foreach (var device in m_devices) {
+                if (
+                    !device.IsFaulted &&
+                    (device.PlayerIndex >= 0) &&
+                    ((first is null) || (device.PlayerIndex < first.PlayerIndex))
+                ) {
+                    first = device;
+                }
+            }
+
+            type = (first?.Type ?? GamepadType.Unknown);
+
+            return (first is not null);
+        }
+    }
     /// <summary>Stops acquisition and releases the connected gamepad resources.</summary>
     public void Dispose() {
         IGamepadAcquisitionSource? acquisitionSource;

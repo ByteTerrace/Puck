@@ -110,6 +110,9 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
 
         public int Slots => Motion.SlotCount;
 
+        // The screen rows this registration last carried, by the authored row (reference), each at the frame it was built for.
+        public Dictionary<WorldScreen, WorldScreen>? CarriedScreens;
+
         public readonly DynamicTransform[] ShapeTransforms = new DynamicTransform[rig.ShapeCount];
 
         public DynamicTransform? PackedRoot;
@@ -342,11 +345,23 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     public int RegistrationCount => m_pool.Length;
 
     public int SlotsAt(int index) => (m_pool[index]?.Slots ?? 0);
-    public int RootSlotOffset(int index) {
+    // The dynamic-transform slots the registrations before a pool index reserve: a prefix sum over the pool's slot counts,
+    // refilled by ReconcileSlots, the only writer of the pool and of a registration's motion plan. Index m_pool.Length
+    // is the whole pool's count.
+    public int RootSlotOffset(int index) => m_rootSlotOffsets[index];
+    private int[] m_rootSlotOffsets = [0];
+    private void RefillRootSlotOffsets() {
+        if (m_rootSlotOffsets.Length != (m_pool.Length + 1)) {
+            m_rootSlotOffsets = new int[(m_pool.Length + 1)];
+        }
+
         var offset = 0;
 
-        for (var entry = 0; (entry < index); entry++) { offset = checked((offset + SlotsAt(index: entry))); }
-        return offset;
+        for (var entry = 0; (entry < m_pool.Length); entry++) {
+            m_rootSlotOffsets[entry] = offset;
+            offset = checked((offset + SlotsAt(index: entry)));
+        }
+        m_rootSlotOffsets[m_pool.Length] = offset;
     }
 
     // The Registration-cached text layout for hasText's (document, scale): a cache hit when the last layout this
@@ -830,16 +845,11 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     public bool HasBodyRegistration(int bodyIndex) => (Rigid.ContainsBody(body: bodyIndex) || (FindBody(bodyIndex: bodyIndex) is not null));
 
     /// <summary>Gets the bounded volumes the pool's live registrations author, as packed by the latest
-    /// <see cref="PackTransforms"/> — each riding its registration's root slot or its parent shape's slot.</summary>
-    private readonly List<SdfVolume> m_allVolumes = [];
-
-    public IReadOnlyList<SdfVolume> Volumes {
-        get {
-            m_allVolumes.Clear(); m_allVolumes.AddRange(collection: m_volumes); m_allVolumes.AddRange(collection: Rigid.Volumes);
-            if (m_allVolumes.Count > SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException(message: $"The world's creations need {m_allVolumes.Count} bounded volumes; the renderer holds {SdfProgramBuilder.MaxVolumes}."); }
-            return m_allVolumes;
-        }
-    }
+    /// <see cref="PackTransforms"/> — each riding its registration's root slot or its parent shape's slot. The rigid
+    /// assets' volumes are <see cref="RigidVolumes"/>; the frame's volume list takes both without a joined copy of them.</summary>
+    public IReadOnlyList<SdfVolume> Volumes => m_volumes;
+    /// <summary>Gets the bounded volumes the rigid assets author.</summary>
+    public IReadOnlyList<SdfVolume> RigidVolumes => Rigid.Volumes;
 
     // Volumes follow the root or motion owner with the authored parent frame composed in. Overflow refuses by name.
     private void AppendVolumes(Registration live, CreationDocument document, float placementScale, int rootSlot, bool[]? hidden) {
@@ -1138,6 +1148,8 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
                 dynamics: dynamics
             );
         }
+
+        RefillRootSlotOffsets();
     }
 
     /// <summary>Advances every live replay cursor on the render clock (hold-style: each frame holds

@@ -10,9 +10,12 @@ namespace Puck.Abstractions.Machines;
 /// <param name="PreparedContent">Optional canonical source identity and symbols produced by a content provider.</param>
 /// <param name="Role">The role of the configuration field that names the asset: the machine's content, or an auxiliary
 /// asset such as firmware.</param>
+/// <param name="ImageHash">The digest of <paramref name="Image"/>, hashed once when the host prepared a provider's
+/// content, or <see langword="null"/> for an asset no provider prepared.</param>
 public sealed record PreparedMachineAsset(
     string Path, ReadOnlyMemory<byte> Image, string ContentHash, ReadOnlyMemory<byte> SourceBytes,
-    PreparedMachineContent? PreparedContent = null, MachineFieldRole Role = MachineFieldRole.ContentPath
+    PreparedMachineContent? PreparedContent = null, MachineFieldRole Role = MachineFieldRole.ContentPath,
+    string? ImageHash = null
 );
 /// <summary>A complete construction request. Configuration paths refer to the supplied immutable asset set;
 /// providers do not reread authored paths during construction.</summary>
