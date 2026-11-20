@@ -21,12 +21,11 @@ internal sealed class WorldHighlightDirector(FrameCaptureController capture, Wor
     // The pace frames are written at: a highlight is a short burst a person steps through, not a recording.
     private const int FramesPerSecond = 30;
 
-    private readonly Dictionary<string, float> m_seen = new(comparer: StringComparer.Ordinal);
+    private readonly WorldSignalEdges m_edges = new();
 
     private CaptureSink? m_armed;
     private string? m_armedStem;
     private ulong m_busy;
-    private int m_lifetime = -1;
     private string? m_lastStem;
     private long m_pendingDue;
     private int m_pendingFrames;
@@ -44,21 +43,14 @@ internal sealed class WorldHighlightDirector(FrameCaptureController capture, Wor
         var mirror = client.StateMirror;
         var rows = client.Definition.Highlights;
 
-        if (m_lifetime != mirror.Lifetime) {
-            m_lifetime = mirror.Lifetime;
-            m_seen.Clear();
-        }
-
         foreach (var row in rows) {
             var signal = row.Signal;
-            var value = mirror.Scalar(delivered: true, fallback: 0f, scalar: in signal);
 
-            if (m_seen.TryGetValue(key: row.Id, value: out var last) && (value != last) && (m_pendingId is null)) {
+            if (m_edges.Observe(mirror: mirror, id: row.Id, signal: in signal).HasFlag(flag: SignalEdge.Changed) && (m_pendingId is null)) {
                 m_pendingId = row.Id;
                 m_pendingFrames = row.Frames;
                 m_pendingDue = (Stopwatch.GetTimestamp() + ((long)(row.DelaySeconds * Stopwatch.Frequency)));
             }
-            m_seen[row.Id] = value;
         }
 
         if ((m_pendingId is { } id) && (Stopwatch.GetTimestamp() >= m_pendingDue)) {
