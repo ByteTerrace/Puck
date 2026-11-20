@@ -342,10 +342,10 @@ word. How many are spare was not counted.
 **The seam of a smooth blend.** This is the line a mesh renderer has no way to
 find.
 Puck's smooth union weighs its two operands by a share
-(`field/sdf-blend.hlsli:18`):
+(`isa/sdf-field-blend-formulas.hlsli:7`, generated from `SdfFieldFormulas`):
 
 ```hlsl
-    float h = clamp((0.5 + ((0.5 * (b - a)) / k)), 0.0, 1.0);
+    precise float h = clamp((0.5 + ((0.5 * (b - a)) / k)), 0.0, 1.0);
 ```
 
 The share is one half exactly where the two shapes are equally near, which is

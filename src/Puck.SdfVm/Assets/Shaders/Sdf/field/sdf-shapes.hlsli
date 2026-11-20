@@ -1,187 +1,27 @@
-// The primitive distance functions, the glyph and sampled-region primitives, the sweep, and evaluateShape.
+// The target-escape primitives (the star polygon, the convex polygon, the path, the glyph, the sampled region and the
+// sweep) and evaluateShape. Every other primitive, and the 2D lift every profile shares, is a shared formula generated
+// with its fixed-point twin (Puck.SignedDistance's SdfFieldFormulas, isa/sdf-field-shape-formulas.hlsli).
 #ifndef FIELD_SDF_SHAPES_HLSLI
 #define FIELD_SDF_SHAPES_HLSLI
-// The 2D box distance (puckBoxDistance2) and the glyph median decode (puckMsdfReconstruct) are the overlays' too.
+// The glyph median decode (puckMsdfReconstruct) is the overlays' too.
 #include "Shared/msdf.hlsli"
-// The exact distance to a box centred on the origin, from q = abs(p) - halfExtents: the outside part's length plus the
-// inside part's largest (never positive) component. Every box below reads it; the 2D cylinder, slab and extrude
-// profiles read puckBoxDistance2.
-precise float sdfBoxDistance(float3 q) {
-    return (length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0));
-}
-precise float sdfSphere(float3 p, float radius) {
-    return (length(p) - radius);
-}
-// `cornerRadius` deliberately does NOT shadow the HLSL round() intrinsic (which this file's fold ops rely on).
-precise float sdfBox(float3 p, float3 halfExtents, float cornerRadius) {
-    float3 q = (abs(p) - (halfExtents - cornerRadius));
-    return (sdfBoxDistance(q) - cornerRadius);
-}
-precise float sdfTorus(float3 p, float major, float minor) {
-    float2 q = float2((length(p.xz) - major), p.y);
-    return (length(q) - minor);
-}
-precise float sdfPlane(float3 p, float3 normal, float offset) {
-    return (dot(p, normal) + offset);
-}
-// The segment parameter is dot(p, e) / dot(e, e), clamped to [0, 1], from the endpoint alone (a zero endpoint is a
-// sphere): the formula the fixed-point evaluator rounds once (FixedVector3.SegmentParameter). KEEP IN SYNC with
-// Puck.SignedDistance.Queries.SdfFieldEvaluator.SdfCapsule.
-precise float sdfCapsule(float3 p, float3 endpoint, float radius) {
-    float lengthSquared = dot(endpoint, endpoint);
-    float h = ((lengthSquared > 0.0) ? clamp((dot(p, endpoint) / lengthSquared), 0.0, 1.0) : 0.0);
-    return (length(p - (h * endpoint)) - radius);
-}
-precise float sdfCylinder(float3 p, float radius, float halfHeight) {
-    return puckBoxDistance2(float2(length(p.xz), abs(p.y)) - float2(radius, halfHeight));
-}
-// The superellipsoid's gauge ratios carried in metres, q = |p| * min(r) / r, the form the fixed-point evaluator rounds
-// once (SdfFieldEvaluator.SuperellipsoidScaledRatio): the radii lie on the grid both carriers hold, so both scale by
-// the same smallest radius.
-precise float3 sdfSuperellipsoidRatios(float3 p, float minRadius, float3 inverseRadii) {
-    return (abs(p) * (minRadius * inverseRadii));
-}
-// The ellipsoid: the superellipsoid's scaled gauge at e = 2, |p * min(r) / r| - min(r). EXACTLY 1-Lipschitz at every
-// eccentricity (SdfProgramBuilder.Superellipsoid's proof covers e = 2), so it needs no step clamp and no field scope;
-// it shares its zero set with the true ellipsoid and underestimates Euclidean distance away from it. The center
-// returns -min(r) like the general path's m <= 0 branch (length(0) = 0). KEEP IN SYNC with the e == 2 fast path of
-// Puck.SignedDistance.Queries.SdfFieldEvaluator.SdfSuperellipsoid.
-precise float sdfEllipsoidGauge(float3 p, float3 radii, float3 inverseRadii) {
-    float minRadius = min(radii.x, min(radii.y, radii.z));
-
-    return (length(sdfSuperellipsoidRatios(p, minRadius, inverseRadii)) - minRadius);
-}
-precise float sdfSuperellipsoidNormFactor(float exponent) {
-    return 1.0 - (7.0 / 25.0) * (exponent - 2.0);
-}
+// The ellipse's projection core, a primitive of each reader that the ellipse formula calls.
+#include "sdf-ellipse.hlsli"
+#include "../isa/sdf-field-shape-formulas.hlsli"
+// The gauge-envelope device probe distinguishes the clamped endpoints.
 bool sdfSuperellipsoidNormIsClamped(float approximate, float norm, float exponent) {
     return ((asuint(approximate) & 0x7F800000u) == 0x7F800000u)
-        || approximate < sdfSuperellipsoidNormFactor(exponent) * norm || approximate > norm;
-}
-// For 2 < e <= 3 the exact Lp norm lies between (1-(7/25)*(e-2))*L2 and L2. The rational lower
-// factor follows from convexity of 3^(1/e-1/2) and ln(3)/4 < 7/25. Clamping to that band keeps the field a
-// conservative distance without assuming an error bound for pow.
-precise float sdfClampSuperellipsoidNorm(float approximate, float norm, float exponent) {
-    if ((asuint(approximate) & 0x7F800000u) == 0x7F800000u) { return norm; }
-    return clamp(approximate, sdfSuperellipsoidNormFactor(exponent) * norm, norm);
-}
-precise float sdfSuperellipsoidPowerNorm(float3 q, float m, float exponent) {
-    float3 u = pow(q / m, exponent);
-    return m * pow((u.x + u.y) + u.z, 1.0 / exponent);
-}
-// The superellipsoid: with q = |p| * min(r) / r, d = pow(sum(q_i^e), 1/e) - min(r). EXACTLY
-// 1-Lipschitz for every radius and every e >= 1 (see SdfProgramBuilder.Superellipsoid's remarks for the proof) — no
-// AnalyzeLipschitz step clamp is needed. e == 2 (every ellipsoid) takes sdfEllipsoidGauge's pow-free form, the same
-// field. inverseRadii = 1/radii, HOST-BAKED (data1.yzw); minRadius = min(radii) is cheap enough to read straight off
-// data0.xyz per eval. For 2 < e <= 3 the power norm is clamped to its certified band around length(q), in both readers.
-// The l_e gauge is computed in its FACTORED form, m * (sum((q_i/m)^e))^(1/e) with m = max(q): every pow() argument
-// stays in [0, 1] (the sum in [1, 3]), so a far query never overflows — the plain sum(q_i^e) reaches float infinity at
-// |p|/r ~ 1e5 for e = 8 (and saturates the fixed-point mirror's Q48.16 carrier at |p|/r ~ 60), which would collapse
-// the far field. Mathematically identical to sum(q_i^e)^(1/e). KEEP IN SYNC with
-// Puck.SignedDistance.Queries.SdfFieldEvaluator.SdfSuperellipsoid.
-precise float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, float exponent) {
-    if (exponent == 2.0) {
-        return sdfEllipsoidGauge(p, radii, inverseRadii);
-    }
-
-    float minRadius = min(radii.x, min(radii.y, radii.z));
-    float3 q = sdfSuperellipsoidRatios(p, minRadius, inverseRadii);
-    float m = max(q.x, max(q.y, q.z));
-
-    if (m <= 0.0) {
-        return -minRadius;
-    }
-
-    float norm = sdfSuperellipsoidPowerNorm(q, m, exponent);
-    if (exponent > 2.0 && exponent <= 3.0) {
-        norm = sdfClampSuperellipsoidNorm(norm, length(q), exponent);
-    }
-    return (norm - minRadius);
-}
-// slope b = (lowerRadius - upperRadius)/height and its complement a = sqrt(1 - b*b) are HOST-BAKED (data0.w / data1.y).
-precise float sdfRoundCone(float3 p, float lowerRadius, float upperRadius, float height, float b, float a) {
-    float2 q = float2(length(p.xz), p.y);
-    float k = dot(q, float2(-b, a));
-
-    if (k < 0.0) {
-        return (length(q) - lowerRadius);
-    }
-
-    if (k > (a * height)) {
-        return (length(q - float2(0.0, height)) - upperRadius);
-    }
-
-    return (dot(q, float2(a, b)) - lowerRadius);
-}
-// The vesica (lens): the exact 2D vesica revolved around Y. r = the two circles' radius, d = their half-separation (d < r),
-// b = sqrt(r*r - d*d) = the tip half-height, HOST-BAKED by SdfProgramBuilder.Vesica to skip the per-eval sqrt. Exact
-// and convex, so revolving the exact 2D field yields a true 3D distance (earns a cull bound, factor-1 Lipschitz). The
-// lens is pointed along +/-Y and is a disc of radius (r - d) in the XZ plane.
-precise float sdfVesica(float3 p, float r, float d, float b) {
-    float2 q = float2(length(p.xz), abs(p.y));
-
-    return (((q.y - b) * d) > (q.x * b))
-        ? (length(q - float2(0.0, b)))
-        : (length(q - float2(-d, 0.0)) - r);
+        || approximate != sdfClampSuperellipsoidNorm(approximate, norm, exponent);
 }
 
 // === The 2D-primitive family: exact 2D SDFs lifted to 3D solids =====================================================
-// Each primitive is an exact 2D signed-distance field, then LIFTED to 3D one of two ways (data1.y): EXTRUDE along Z
-// (a prism/slab) or REVOLVE around Y (a lathe). Extrusion of an exact 2D field is exact; revolution is exact when the
-// profile clears the axis and a harmless conservative underestimate near it. Both are 1-Lipschitz, so no
-// AnalyzeLipschitz step clamp is needed and each earns a real cull bound. The lifted wrappers below are what
-// evaluateShape calls; the 2D cores are reusable.
+// Each primitive is an exact 2D signed-distance field LIFTED to 3D (data1.y): EXTRUDED along Z (a prism) or REVOLVED
+// around Y (a lathe), by the formulas' shared sdfExtrudeChamfer2D and sdfRevolve2D. data1.w is the family-wide
+// edge-rounding radius the host insets the profile by, offset back out here; data1.z is the extrude's cap bevel.
 
-// --- lift operators (extrude along Z / revolve around Y) ---
 // Extrude an exact 2D distance d (evaluated on the XY plane) to half-height h along Z: exact for any exact d.
 precise float sdfExtrude2D(float d, float pz, float h) {
-    return puckBoxDistance2(float2(d, (abs(pz) - h)));
-}
-// The chamfered extrude join: sdfExtrude2D's box/slab intersection, further intersected with a 45-degree bevel plane
-// across the cap seam — the chamfer-intersection of the 2D field and the +/-Z slab, so an extruded 2D shape's TOP/
-// BOTTOM edges bevel by c as well as whatever its own profile does at the sides. Exact inside/on the surface, a
-// 1-Lipschitz lower bound outside past the bevel's vertex (see sdfChamferBox2D). c = 0 collapses to sdfExtrude2D
-// exactly: w.x + w.y is bounded above by sqrt(2)*length(max(w,0)) (equality only on-axis) plus the (always
-// non-positive) `min(max(w.x,w.y),0)` inside term, so the bevel arm never exceeds the plain join and max() picks the
-// plain value unchanged to the bit.
-precise float sdfExtrudeChamfer2D(float d, float pz, float h, float c) {
-    float2 w = float2(d, (abs(pz) - h));
-    float plain = puckBoxDistance2(w);
-    float bevel = ((w.x + w.y + c) * SDF_SQRT_HALF);
-    return max(plain, bevel);
-}
-// The meridian point for revolving around Y at radial offset o: the 2D core is evaluated at (length(p.xz) - o, p.y).
-precise float2 sdfRevolve2D(float3 p, float o) {
-    return float2((length(p.xz) - o), p.y);
-}
-
-// --- exact 2D cores ---
-// Rounded box, single corner radius r: the box half-extents are b, corners rounded by r (staying within b).
-precise float sdfRoundBox2D(float2 p, float2 b, float r) {
-    float2 q = ((abs(p) - b) + r);
-    return (puckBoxDistance2(q) - r);
-}
-// 45-degree-chamfered box: the plain box field intersected (max) with a diagonal bevel plane offset by chamfer c.
-// Exact inside and on the surface and a 1-Lipschitz conservative LOWER BOUND outside, in the wedge past each bevel
-// vertex where the nearest point is the vertex rather than either plane (the same class of bound the chamfer blend
-// carries; march- and contact-safe, not the branchy true-distance form). c = 0 collapses to the plain box exactly, by
-// the same triangle-inequality argument as sdfExtrudeChamfer2D (q.x + q.y is bounded above by
-// sqrt(2)*length(max(q,0)) for q outside the box, so the bevel arm never wins).
-precise float sdfChamferBox2D(float2 p, float2 b, float c) {
-    float2 q = (abs(p) - b);
-    float boxDistance = puckBoxDistance2(q);
-    float bevel = ((q.x + q.y + c) * SDF_SQRT_HALF);
-    return max(boxDistance, bevel);
-}
-// Isosceles trapezoid: r1 = bottom half-width, r2 = top half-width, he = half-height.
-precise float sdfTrapezoid2D(float2 p, float r1, float r2, float he) {
-    float2 k1 = float2(r2, he);
-    float2 k2 = float2((r2 - r1), (2.0 * he));
-    p.x = abs(p.x);
-    float2 ca = float2((p.x - min(p.x, ((p.y < 0.0) ? r1 : r2))), (abs(p.y) - he));
-    float2 cb = ((p - k1) + (k2 * clamp((dot((k1 - p), k2) / dot(k2, k2)), 0.0, 1.0)));
-    float s = (((cb.x < 0.0) && (ca.y < 0.0)) ? -1.0 : 1.0);
-    return (s * sqrt(min(dot(ca, ca), dot(cb, cb))));
+    return sdfBoxDistance2(float2(d, (abs(pz) - h)));
 }
 // Exact star-polygon SDF (n points, inner-radius control m): r = outer radius, an = pi/n (baked), ecs = (cos(pi/m), sin(pi/m))
 // (baked). ecs = (0, 1) collapses this to the exact regular n-gon (m = 2). The GLSL `mod` is FLOOR modulo — use the
@@ -194,38 +34,6 @@ precise float sdfStar2D(float2 p, float r, float an, float2 ecs) {
     p = (p + (ecs * clamp((-dot(p, ecs)), 0.0, ((r * acs.y) / ecs.y))));
     return (length(p) * sign(p.x));
 }
-// Exact distance to an ellipse with semi-axes ab (the analytic depressed-cubic solve; branches on the
-// discriminant). The host guards ab.x != ab.y (l = ab.y^2 - ab.x^2 divides), so a perfect circle never reaches here.
-// The final sqrt is SATURATED: at extreme eccentricity (measured: aspect > ~100:1) rounding pushes `co` past 1, and an
-// unguarded sqrt(1 - co*co) returns NaN — which then poisons the blend min() and diverges between backends, whose
-// min(NaN, x) differ. saturate() only ever clamps the negative side (co*co >= 0 bounds the argument above by 1), so it
-// leaves finite inputs unchanged. At the exact centre p == (0,0) this returns 0 rather than
-// -min(ab): sign(p.y - r.y) is 0 there. That is a deliberate convention at a measure-zero point, and only observable
-// through a Subtraction/Onion of an ellipse exactly at its centre.
-#include "sdf-ellipse.hlsli"
-
-// --- lifted wrappers (data1.y > 0.5 selects EXTRUDE; else REVOLVE) — what evaluateShape dispatches to ---
-// data1.w is the family-wide EDGE-ROUNDING radius r. The host already inset the Data0 profile params (and, for an
-// extrude, the lift half-height) by r, so subtracting r here is the outward half of a morphological opening: the
-// solid keeps the authored outer extent and its edges fillet at radius r. Subtracting exactly 0 is the identity on
-// every finite float, so a shape that authors no rounding evaluates to the same bits as before this lane had meaning.
-// data1.z is a CAP-chamfer radius bevelling the extrude's top/bottom rims — 0 (every program predating this lane)
-// takes the plain join exactly, so an unchamfered rounded rectangle is unchanged. Revolve has no cap seam to bevel
-// and ignores it, matching the family's existing per-shape-constant convention for data1.z (RegularPolygon/Star bake
-// ecs.y there instead; RoundedRectangle's lane was unused before this).
-precise float sdfRoundedRect(float3 p, float4 data0, float4 data1) {
-    return (((data1.y > 0.5)
-        ? sdfExtrudeChamfer2D(sdfRoundBox2D(p.xy, data0.xy, data0.z), p.z, data0.w, data1.z)
-        : sdfRoundBox2D(sdfRevolve2D(p, data0.w), data0.xy, data0.z)) - data1.w);
-}
-// The chamfered rectangle: the 2D core already bevels its own four corners at c (data0.z); the extrude join bevels
-// the two cap rims at the SAME c, so a chamfered box reads chamfered on all twelve edges from one parameter. data1.w
-// is the family-wide edge-rounding radius, applied on top exactly as sdfRoundedRect's is.
-precise float sdfChamferedRect(float3 p, float4 data0, float4 data1) {
-    return (((data1.y > 0.5)
-        ? sdfExtrudeChamfer2D(sdfChamferBox2D(p.xy, data0.xy, data0.z), p.z, data0.w, data0.z)
-        : sdfChamferBox2D(sdfRevolve2D(p, data0.w), data0.xy, data0.z)) - data1.w);
-}
 // Regular polygon AND star share this: data0 = (r, an, ecs.x, lift), data1.z = ecs.y (the polygon bakes ecs = (0, 1)).
 precise float sdfPolyStar(float3 p, float4 data0, float4 data1) {
     float2 ecs = float2(data0.z, data1.z);
@@ -233,19 +41,6 @@ precise float sdfPolyStar(float3 p, float4 data0, float4 data1) {
     return (((data1.y > 0.5)
         ? sdfExtrude2D(sdfStar2D(p.xy, data0.x, data0.y, ecs), p.z, data0.w)
         : sdfStar2D(sdfRevolve2D(p, data0.w), data0.x, data0.y, ecs)) - data1.w);
-}
-// data1.z is a CAP-chamfer radius (0 = the plain extrude join exactly), unused before this lane and free here — the
-// Trapezoid shape never baked a per-shape constant into it.
-precise float sdfTrapezoidSolid(float3 p, float4 data0, float4 data1) {
-    return (((data1.y > 0.5)
-        ? sdfExtrudeChamfer2D(sdfTrapezoid2D(p.xy, data0.x, data0.y, data0.z), p.z, data0.w, data1.z)
-        : sdfTrapezoid2D(sdfRevolve2D(p, data0.w), data0.x, data0.y, data0.z)) - data1.w);
-}
-// data1.z is a CAP-chamfer radius (0 = the plain extrude join exactly), unused before this lane.
-precise float sdfEllipseSolid(float3 p, float4 data0, float4 data1) {
-    return (((data1.y > 0.5)
-        ? sdfExtrudeChamfer2D(sdfEllipse2D(p.xy, data0.xy), p.z, data0.w, data1.z)
-        : sdfEllipse2D(sdfRevolve2D(p, data0.w), data0.xy)) - data1.w);
 }
 // One vertex of a SDF_SHAPE_CONVEX_POLYGON side table (see its own define comment): two packed (x, y) vertices per
 // uvec4 word in sdfWords, so vertex index i lives at word (tableOffset + (i >> 1)), lane .xy for an even index and
@@ -374,7 +169,7 @@ precise float2 sdfGlyphUnpackUv(float packed) {
 // bound evaluates this — a conservative UNDERESTIMATE of the true glyph distance, since the letter is strictly inside
 // its cell, so a bound skip never holes. halfWidth/halfHeight in data1.yz, extrudeHalfDepth in data0.w.
 precise float sdfGlyphQuad(float3 p, float4 data0, float4 data1) {
-    return sdfExtrude2D(puckBoxDistance2(abs(p.xy) - float2(data1.y, data1.z)), p.z, data0.w);
+    return sdfExtrude2D(sdfBoxDistance2(abs(p.xy) - float2(data1.y, data1.z)), p.z, data0.w);
 }
 
 #ifdef SDF_GLYPH_ATLAS
@@ -443,7 +238,7 @@ static float sdfGlyphStroke = 0.0;
 
 precise float sdfGlyph(float3 p, float4 data0, float4 data1) {
     float2 halfSize = float2(data1.y, data1.z);
-    float dQuad = puckBoxDistance2(abs(p.xy) - halfSize);
+    float dQuad = sdfBoxDistance2(abs(p.xy) - halfSize);
     float distanceScale = data0.z;
     float band = (0.5 * distanceScale);
     float halfDepth = data0.w;
@@ -464,7 +259,7 @@ precise float sdfGlyph(float3 p, float4 data0, float4 data1) {
             float2 ink = max((halfSize - band), 0.0);
             float grow = min(max(((0.5 * SDF_GLYPH_THICKEN_CELLS * sdfGlyphCell) - min(ink.x, ink.y)), 0.0), band);
 
-            return sdfExtrude2D((puckBoxDistance2(abs(p.xy) - ink) - grow), p.z, halfDepth);
+            return sdfExtrude2D((sdfBoxDistance2(abs(p.xy) - ink) - grow), p.z, halfDepth);
         }
     }
 

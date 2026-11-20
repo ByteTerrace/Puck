@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Puck.SignedDistance;
 
 namespace Puck.Analyzers;
 
@@ -26,6 +27,11 @@ public sealed class SdfFieldCatalogueGenerator : IIncrementalGenerator {
         var entryContract = type.BaseType!;
         var facets = ImmutableArray.CreateBuilder<Facet>();
         var shaders = ImmutableArray.CreateBuilder<string>();
+        string? formula = null;
+        Location? invalidFormula = null;
+        // A facet whose action enum carries a Formula member (the C# point reader) says whether the generated formula
+        // or a hand-written escape answers; it must agree with the entry's Formula.
+        (bool Formula, Location Location)? reader = null;
 
         foreach (var member in entryContract.GetMembers()) {
             if (member is not IPropertySymbol { IsAbstract: true } property) { continue; }
@@ -37,13 +43,27 @@ public sealed class SdfFieldCatalogueGenerator : IIncrementalGenerator {
             if (implementation is null) { continue; } // The C# compiler reports the missing abstract override.
 
             var syntax = (PropertyDeclarationSyntax)implementation.DeclaringSyntaxReferences[0].GetSyntax(cancellationToken);
+            if (property.Type.Name == nameof(SdfFormula)) {
+                var formulaExpression = syntax.ExpressionBody?.Expression;
+                var symbol = formulaExpression is null ? null : context.SemanticModel.GetSymbolInfo(formulaExpression, cancellationToken).Symbol;
+                if (symbol is IFieldSymbol { IsStatic: true } field && field.ContainingType.Name == nameof(SdfFieldFormulas)) {
+                    formula = field.Name;
+                } else if (formulaExpression?.IsKind(SyntaxKind.NullLiteralExpression) != true) {
+                    invalidFormula = syntax.Identifier.GetLocation();
+                }
+                continue;
+            }
             var value = syntax.ExpressionBody is { Expression: { } expression }
                 ? context.SemanticModel.Compilation.GetSemanticModel(expression.SyntaxTree).GetConstantValue(expression, cancellationToken)
                 : default;
             var facetType = property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var constant = value.HasValue ? FormatConstant(value.Value, facetType) : null;
             facets.Add(new Facet(property.Name, facetType, constant, syntax.Identifier.GetLocation()));
+            if (property.Type.TypeKind == TypeKind.Enum && property.Type.GetMembers("Formula").OfType<IFieldSymbol>().FirstOrDefault() is { HasConstantValue: true } formulaMember) {
+                reader = (value.HasValue && Equals(value.Value, formulaMember.ConstantValue), syntax.Identifier.GetLocation());
+            }
         }
+        var readerMismatch = reader is { } declared && declared.Formula != (formula is not null) ? declared.Location : null;
 
         var arguments = catalogue.GetAttributes().Single(static attribute => attribute.AttributeClass?.Name == "SdfFieldCatalogueAttribute").ConstructorArguments;
         return new Entry(
@@ -55,7 +75,10 @@ public sealed class SdfFieldCatalogueGenerator : IIncrementalGenerator {
             Documentation(catalogue, cancellationToken),
             Documentation(type, cancellationToken),
             facets.ToImmutable(),
-            shaders.ToImmutable()
+            shaders.ToImmutable(),
+            formula,
+            invalidFormula,
+            readerMismatch
         );
     }
 
@@ -79,6 +102,22 @@ public sealed class SdfFieldCatalogueGenerator : IIncrementalGenerator {
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true
     );
+    private static readonly DiagnosticDescriptor InvalidFormula = new(
+        id: "PUCKFIELD002",
+        title: "Field formula must name a shared definition",
+        messageFormat: "Use a field from SdfFieldFormulas, or null for an entry whose readers are hand-written target escapes",
+        category: "Puck.Field",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true
+    );
+    private static readonly DiagnosticDescriptor ReaderMismatch = new(
+        id: "PUCKFIELD003",
+        title: "Field reader must match the formula",
+        messageFormat: "Declare the Formula reader exactly when the entry names a shared formula",
+        category: "Puck.Field",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true
+    );
 
     private static void Emit(SourceProductionContext context, ImmutableArray<Entry> entries) {
         foreach (var group in entries.GroupBy(static entry => entry.Catalogue)) {
@@ -86,6 +125,14 @@ public sealed class SdfFieldCatalogueGenerator : IIncrementalGenerator {
             var catalogue = group.Key;
             var discriminator = ordered[0].Discriminator;
             var source = new StringBuilder("// <auto-generated/>\nnamespace Puck.SignedDistance;\n\n");
+            foreach (var entry in ordered) {
+                if (entry.InvalidFormula is { } location) {
+                    context.ReportDiagnostic(Diagnostic.Create(InvalidFormula, location));
+                }
+                if (entry.ReaderMismatch is { } reader) {
+                    context.ReportDiagnostic(Diagnostic.Create(ReaderMismatch, reader));
+                }
+            }
 
             source.AppendLine("#pragma warning disable CS1591 // Preserve the catalogue's documented enum members.");
             source.Append(ordered[0].CatalogueDocumentation).AppendLine($"public enum {discriminator}{(ordered[0].Unsigned ? " : uint" : "")} {{");
@@ -121,14 +168,48 @@ public sealed class SdfFieldCatalogueGenerator : IIncrementalGenerator {
                 }
                 source.AppendLine("    }");
             }
+            var formulas = ordered.Where(static entry => entry.Formula is not null).ToArray();
+            if (formulas.Length != 0) {
+                source.AppendLine("    /// <summary>Lowers the catalogue's shared formulas to shader functions.</summary>");
+                source.AppendLine("    public static string GenerateFormulasHlsl() => SdfFormula.EmitAll(true,");
+                source.AppendLine("        " + string.Join(", ", formulas.Select(static entry => "SdfFieldFormulas." + entry.Formula)) + ");");
+            }
             source.AppendLine("}");
             context.AddSource(catalogue + ".g.cs", source.ToString());
+            if (formulas.Length != 0) {
+                EmitFormulaEvaluator(context, catalogue, discriminator, formulas);
+            }
         }
     }
 
+    private static void EmitFormulaEvaluator(SourceProductionContext context, string catalogue, string discriminator, Entry[] entries) {
+        var formulas = entries.Select(entry => (Entry: entry, Formula: GetFormula(entry.Formula!))).ToArray();
+        var source = new StringBuilder("// <auto-generated/>\nusing Puck.Maths;\n\nnamespace Puck.SignedDistance.Queries;\n\npublic sealed partial class SdfFieldEvaluator {\n");
+        var shape = discriminator == "SdfShapeType";
+        // A shape without a formula is a target escape: its point reader is hand-written (EvaluateShapeEscape), as is its
+        // shader action. Every blend has a formula.
+        source.AppendLine(shape
+            ? "    private static FixedQ4816 EvaluateShape(in CompiledInstruction instruction, FixedVector3 p, ref PowerWork powerWork) => ((SdfShapeType)instruction.Shape) switch {"
+            : "    private static FixedQ4816 BlendShape(FixedQ4816 current, FixedQ4816 candidate, uint blend, FixedQ4816 smoothRadius) => ((SdfBlendOp)blend) switch {");
+        foreach (var (entry, formula) in formulas) {
+            source.AppendLine($"        {discriminator}.{entry.Name} => {formula.Dispatch(shader: false)},");
+        }
+        source.AppendLine(shape
+            ? "        _ => EvaluateShapeEscape(instruction: instruction, p: p),"
+            : "        _ => throw new global::System.ArgumentOutOfRangeException(nameof(blend), blend, \"No field blend formula for this value.\"),");
+        source.AppendLine("    };");
+        source.Append(SdfFormula.EmitAll(false, formulas.Select(static item => item.Formula).ToArray()));
+        source.AppendLine("}");
+        context.AddSource(catalogue + ".Formulas.g.cs", source.ToString());
+    }
+
+    private static SdfFormula GetFormula(string name) =>
+        (SdfFormula)typeof(SdfFieldFormulas).GetField(name, System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
+
     private sealed record Entry(
         string Catalogue, string Name, int Id, string Discriminator, bool Unsigned, string CatalogueDocumentation,
-        string Documentation, ImmutableArray<Facet> Facets, ImmutableArray<string> Shaders
+        string Documentation, ImmutableArray<Facet> Facets, ImmutableArray<string> Shaders, string? Formula, Location? InvalidFormula,
+        Location? ReaderMismatch
     );
     private sealed record Facet(string Name, string Type, string? Constant, Location Location);
 }

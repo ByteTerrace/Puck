@@ -128,7 +128,7 @@ public sealed partial class SdfFieldEvaluator {
         var q = new FixedVector2(X: p.X, Y: p.Y);
         var distance2D = (stroke ? SdfPathStroke2D(edges: edges, p: q) : SdfPolygon2D(edges: new PathEdges(edges: edges), p: q));
 
-        return SdfExtrudeChamfer2D(c: FixedQ4816.Zero, distance2D: distance2D, halfDepth: halfDepth, z: p.Z);
+        return SdfExtrudeChamfer2D(d: distance2D, pz: p.Z, h: halfDepth, c: FixedQ4816.Zero);
     }
     // The exact edge-list field over a box: the least distance enclosed edge by edge, and the crossing parity followed
     // while every edge's three tests keep one answer over the box; once one does not, the sign is either, and the bound is

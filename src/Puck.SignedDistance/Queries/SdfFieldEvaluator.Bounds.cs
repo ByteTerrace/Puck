@@ -740,7 +740,7 @@ public sealed partial class SdfFieldEvaluator {
 
         return BlendBounds(blend: instruction.Blend, candidate: candidate, current: saved, smoothRadius: instruction.Data1X);
     }
-    // BlendShape over intervals, operation for operation.
+    // The blend formulas (BlendShape, SdfFieldFormulas) over intervals, operation for operation.
     private static FixedInterval BlendBounds(FixedInterval current, FixedInterval candidate, uint blend, FixedQ4816 smoothRadius) {
         var smoothK = FixedQ4816.Max(x: smoothRadius, y: SmoothRadiusMin);
         var chamfer = Point(value: FixedQ4816.Max(x: smoothRadius, y: FixedQ4816.Zero));
@@ -764,7 +764,7 @@ public sealed partial class SdfFieldEvaluator {
             _ => throw new InvalidOperationException(message: "Invalid IntervalBlend action."),
         };
     }
-    // BlendSmoothUnion over intervals. The exact polynomial smooth minimum rises with each operand (its gradient is
+    // The smooth minimum (SdfBlendSmoothMinimum) over intervals. The exact polynomial smooth minimum rises with each operand (its gradient is
     // (h, 1 − h)), so over the box it lies between its values at the operands' lower ends and at their upper ends, and
     // the point blend lies within its rounding allowance r of the exact one (SmoothBlendRoundingRaws): the answer is the
     // point blend at those two corners widened by 2r, so a chain of smooth unions widens by 4r a blend. The operation-for-
@@ -795,8 +795,8 @@ public sealed partial class SdfFieldEvaluator {
         return Intersect(
             first: stepped,
             second: Within(
-                lower: (((Int128)BlendSmoothUnion(a: a.Lower, b: b.Lower, k: k).Value) - rounding),
-                upper: (((Int128)BlendSmoothUnion(a: a.Upper, b: b.Upper, k: k).Value) + rounding)
+                lower: (((Int128)SdfBlendSmoothMinimum(a: a.Lower, b: b.Lower, k: k).Value) - rounding),
+                upper: (((Int128)SdfBlendSmoothMinimum(a: a.Upper, b: b.Upper, k: k).Value) + rounding)
             )
         );
     }
@@ -1103,7 +1103,7 @@ public sealed partial class SdfFieldEvaluator {
                 ? body
                 : FixedInterval.Union(first: cap, second: body)));
     }
-    // ProjectLiftPoint and ApplyLift: an extruded profile (lift above one half) or a revolved one.
+    // The lifted formulas (SdfFieldFormulas.Lifted) over intervals: an extruded profile (lift above one half) or a revolved one.
     // The profile is chosen by a switch on the instruction's shape rather than a delegate, so a bounds walk, which a
     // moving body's certified sweep runs every tick, allocates nothing.
     private static FixedInterval LiftedBounds(IntervalVector3 p, in CompiledInstruction instruction, FixedQ4816 liftAmount, FixedQ4816 lift, FixedQ4816 capChamfer) {

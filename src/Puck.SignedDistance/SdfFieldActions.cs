@@ -154,20 +154,9 @@ internal enum SdfCertificateAction {
     Unavailable,
 }
 
+// The fixed-point point reader: the entry's generated formula, or a hand-written escape.
 internal enum SdfShapePointAction : byte {
-    Sphere,
-    Box,
-    Torus,
-    Plane,
-    RoundCone,
-    Capsule,
-    Cylinder,
-    Vesica,
-    Ellipse,
-    RoundedRectangle,
-    Trapezoid,
-    ChamferedRectangle,
-    Superellipsoid,
+    Formula,
     ConvexPolygon,
     Sweep,
     Path,
@@ -406,23 +395,6 @@ internal enum SdfUnboundedFoldAction {
     RepeatLimit,
     WallpaperLimit,
     Bounded,
-}
-
-internal enum SdfPointBlendAction {
-    SmoothUnion,
-    Subtraction,
-    Intersection,
-    Xor,
-    SmoothIntersection,
-    SmoothSubtraction,
-    GrooveUnion,
-    PipeUnion,
-    GrooveSubtraction,
-    PipeSubtraction,
-    ChamferUnion,
-    ChamferIntersection,
-    ChamferSubtraction,
-    Union,
 }
 
 internal enum SdfMaterialWinnerAction {

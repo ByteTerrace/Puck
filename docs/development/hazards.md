@@ -48,7 +48,8 @@ preferred outcome.
 |---|---|---|
 | Determinism: same document and input, bit-identical state | `puck test --reproduce`; fixed-point `Puck.Maths` types in simulation state | No |
 | The C# and HLSL shader interface: bindings, block layout, strides | One `ShaderInterface` generates both sides; `ShaderInterfaceLayout.Mismatch` refuses a module that disagrees | No |
-| The SDF ISA's C# encoder and HLSL decoder (`SdfProgram.IsaLayout`, the SdfVm README's contract pairs) | Convention | Yes |
+| The SDF field's C# and HLSL readers: dispatch over every op, shape, blend and relief row, and the arithmetic of every shape and blend with a shared formula (`SdfFieldFormulas`) | One catalogue entry per member generates both dispatches, and one formula lowers to both readers ([sync pairs](../../.claude/skills/rendering/references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters)); `puck shaders generate --check` and `SdfIsaFingerprint.Field` refuse drift | No |
+| The SDF ISA's hand-written halves: the program's packed layout and its HLSL decoders (`SdfProgram.IsaLayout`, the SdfVm README's contract pairs), and the target-escape shapes' C# and HLSL readers (`ConvexPolygon`, `Path`, `Sweep`, the ellipse's projection core) | Convention; `SdfFieldDeviceLawTests` samples agreement | Yes |
 | An exactness-preserving skip in an exact evaluator: a cull, certificate or bound that claims a skipped part could not change the answer (`SdfFieldEvaluator`'s segment hierarchy and relief certificates) | Counterexample tests at the arithmetic edges (overflow, seeds, ties); sampled agreement with a reference evaluator misses them | Yes |
 | [A reference read after its replacement](#a-reference-captured-across-a-replacement) | `STALE001`-`003` | No |
 | GPU fences and resource lifetimes: a buffer retired, reused or resized while a queue still reads it | Review | Yes |
@@ -232,14 +233,13 @@ or one adds a field the other forgets.
   `HeapAllocator`, now one `tests/Shared/HeapAllocator.cs`.
 - The box cull is written in C# and HLSL (`SdfMeshCull.Keeps`,
   `sdf-mesh-selection.hlsli`).
-- The Superellipsoid and the Capsule are written in C#
-  (`SdfFieldEvaluator.SdfSuperellipsoid`, `SdfCapsule`) and HLSL
-  (`sdfSuperellipsoid`, `sdfCapsule`). Both readers evaluate one formula from
-  the same lanes: a capsule projects by its endpoint's own squared length, and a
-  superellipsoid's radii and exponent lie on the grid both carriers hold
-  (`SdfDerivedLanes.FixedGrid`), so both scale its gauge by one smallest radius.
-  `SdfFieldDeviceLawTests`' shape-formula leg evaluates both on the same inputs
-  on both backends.
+- Every primitive and blend the fixed-point evaluator and the kernels both
+  read was written once in C# and once in HLSL, and the Superellipsoid and the
+  Capsule drifted apart. Each is now one formula (`SdfFieldFormulas.Superellipsoid`,
+  `SdfFieldFormulas.Capsule` and the rest) that the generators lower to both
+  readers; the shapes that need a side table, a texture or a loop stay
+  hand-written target escapes, and `SdfFieldDeviceLawTests`' shape-formula leg
+  evaluates every formula on the same inputs on both backends.
 - The irradiance probe gather is written in C# (`SdfMeshIrradiance.Select` and
   `Gather`, `SdfMeshProbeDepth.Visibility`) and HLSL (`sdfMeshProbesAt`,
   `shade/sdf-mesh-irradiance.hlsli`). `SdfMeshIrradianceGatherDeviceLawTests`

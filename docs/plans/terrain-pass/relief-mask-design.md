@@ -998,8 +998,8 @@ Two notes on the table. The second option's seam cannot be blended away: a
 smooth union lowers the field by a quarter of its radius wherever its two
 operands read the same value, and two solids that abut on a region's wall read
 the same value all along it, so the blend would draw a ridge where the fade
-should be. That is read from the blend's formula (`blendSmoothUnion` in
-`field/sdf-blend.hlsli`) and was not run. And the lattice is not rejected for
+should be. That is read from the blend's formula (`sdfBlendSmoothMinimum`, a
+shared formula in `SdfFieldFormulas`) and was not run. And the lattice is not rejected for
 good. When a sector's regions outgrow a short list, or an artist wants to
 paint them, a lattice is a second source of the same weight: the relief's arm
 multiplies by a number in [0, 1] with a declared slope either way. The plan

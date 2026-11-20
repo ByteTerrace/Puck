@@ -18,7 +18,7 @@ case SDF_SHAPE_TORUS:
 }
 case SDF_SHAPE_CYLINDER:
 {
-    result = (sdfCylinder(p, data0.x, data0.y) - data1.w); break;
+    result = sdfCylinder(p, data0.x, data0.y, data1.w); break;
 }
 case SDF_SHAPE_PLANE:
 {
@@ -30,7 +30,7 @@ case SDF_SHAPE_VESICA:
 }
 case SDF_SHAPE_ROUNDED_RECTANGLE:
 {
-    result = sdfRoundedRect(p, data0, data1); break;
+    result = sdfRoundedRectangle(p, data0.x, data0.y, data0.z, data1.z, data0.w, data1.y, data1.w); break;
 }
 case SDF_SHAPE_REGULAR_POLYGON:
 case SDF_SHAPE_STAR:
@@ -43,11 +43,11 @@ case SDF_SHAPE_ROUND_CONE:
 }
 case SDF_SHAPE_TRAPEZOID:
 {
-    result = sdfTrapezoidSolid(p, data0, data1); break;
+    result = sdfTrapezoid(p, data0.x, data0.y, data0.z, data1.z, data0.w, data1.y, data1.w); break;
 }
 case SDF_SHAPE_ELLIPSE:
 {
-    result = sdfEllipseSolid(p, data0, data1); break;
+    result = sdfEllipse(p, data0.x, data0.y, data1.z, data0.w, data1.y, data1.w); break;
 }
 case SDF_SHAPE_GLYPH:
 {
@@ -64,7 +64,7 @@ case SDF_SHAPE_SAMPLED_REGION:
 }
 case SDF_SHAPE_CHAMFERED_RECTANGLE:
 {
-    result = sdfChamferedRect(p, data0, data1); break;
+    result = sdfChamferedRectangle(p, data0.x, data0.y, data0.z, data0.w, data1.y, data1.w); break;
 }
 case SDF_SHAPE_SUPERELLIPSOID:
 {

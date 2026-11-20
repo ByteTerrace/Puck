@@ -150,7 +150,7 @@ public sealed partial class SdfProgram {
                 );
                 return true;
             case SdfBlendDistanceGainAction.SmoothUnion:
-                // blendSmoothUnion is nondecreasing in both operands and at least min(a, b) - k/4. With one operand at
+                // sdfBlendSmoothMinimum is nondecreasing in both operands and at least min(a, b) - k/4. With one operand at
                 // least M and the other at least M - S, it is at least M - max(S, k); with both sagging, at least
                 // M - max(S) - k/4. The kernel floors the radius at SDF_SMOOTH_RADIUS_MIN.
                 var radius = MathF.Max(x: MathF.Abs(x: smoothRadius), y: SmoothRadiusMin);

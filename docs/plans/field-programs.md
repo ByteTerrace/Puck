@@ -221,7 +221,10 @@ To close both missing arms and arithmetic drift by structure:
   required facets on each entry so rotations and folds keep tight geometric
   enclosures. Shapes with side tables or textures (`Glyph`, `SampledRegion`,
   `Path`, `Sweep`, `ConvexPolygon`) use an explicit target-escape facet paired
-  with a device witness in `SdfFieldDeviceLawTests`.
+  with a device witness in `SdfFieldDeviceLawTests`, as do the GPU-only star
+  polygon (`RegularPolygon`, `Star`, which no CPU reader evaluates) and the
+  ellipse's bisected projection root, a per-target primitive the ellipse's
+  formula calls because the expression language has no loop.
 
 **Invariant, enforcement, and boundary.** *Invariant:* every admitted op,
 shape, blend, and relief-row kind has an explicit outcome in every CPU reader,
