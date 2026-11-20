@@ -42,12 +42,11 @@ public interface IObjectBlobStore {
     /// <param name="cancellationToken">A token to observe.</param>
     /// <returns><see langword="true"/> when the blob exists with exactly those bytes; <see langword="false"/> when it
     /// is absent or differs.</returns>
-    async ValueTask<bool> ContentEqualsAsync(ObjectStorageTarget target, ObjectBlobAddress address, ReadOnlyMemory<byte> expected,
-        CancellationToken cancellationToken = default) => ((await ReadAsync(
-            address: address,
-            cancellationToken: cancellationToken,
-            target: target
-        ).ConfigureAwait(continueOnCapturedContext: false)) is { } found) && found.Content.Span.SequenceEqual(other: expected.Span);
+    ValueTask<bool> ContentEqualsAsync(ObjectStorageTarget target, ObjectBlobAddress address, ReadOnlyMemory<byte> expected,
+        CancellationToken cancellationToken = default) => ObjectBlobContent.MatchesAsync(
+            expected: expected,
+            read: ReadAsync(target, address, cancellationToken)
+        );
     /// <summary>Lists the keys of every blob under an object beneath <paramref name="keyPrefix"/> — the
     /// cloud-discovery half of the store: a caller that only knows its local and previously-tracked ids uses this to
     /// find objects it has never seen before. Matching is by whole path SEGMENT, not by raw characters: a prefix

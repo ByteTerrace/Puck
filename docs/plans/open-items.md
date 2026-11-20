@@ -2328,6 +2328,20 @@ grow:
   step thread from a copy-on-write image, and make checkpoints incremental;
   the document a checkpoint carries twice is
   [delivery's item](#delivery-launcher-and-ci).
+- [high] A crossing record blocks the silo's one step thread on blob round
+  trips. `WorldSiloHost.RowCrossingLog.Append` waits on the row's publication
+  queue (`GetAwaiter().GetResult()`), which checkpoint uploads also join, and
+  it is reached from the step through `WorldInstanceHost.DrainPendingTransfers`
+  and every other synchronous `WorldServer.RecordCrossingHeld` caller
+  (`WorldTransferEscrow`, `WorldServer.Custody`, the companion, departure and
+  settlement paths in `WorldInstanceHost`). Make the record asynchronous the
+  way federated transfers resume at tick boundaries: `IWorldCrossingLog`
+  answers pending, the authority holds one in-flight record per crossing
+  sequence (the sequence must stay dense) together with the step that waits
+  on it, and the step resumes at the next drain once the record is durable;
+  an arrival lands only then. Retried steps rebuild their records (a
+  settlement's lists), so the in-flight record is kept by the transfer, never
+  matched by value.
 - [medium] Hard caps with no admission story: 4096 bodies a world
   (`WorldBodiesLimits.CapacityCeiling`), 256 authenticated federation
   connections a host (`WorldPeerHost.MaximumFederationConnections`), and one
