@@ -60,6 +60,7 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
     private sealed class State(string? directory, PuckSourceTable sources) {
         public string? Directory = directory;
         public bool DeferCompositionWrites;
+        public string? LayerCodeHash;
 
         public ConcurrentDictionary<string, Lock> Compiling { get; } = new(comparer: StringComparer.Ordinal);
         public ConcurrentDictionary<string, WorldCompiledSource> Held { get; } = new(comparer: StringComparer.Ordinal);
@@ -456,10 +457,10 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
 
         return true;
     }
-    private string? EntryPath(string key) => ((Directory is { } directory)
+    private string? EntryPath(string key, string identity) => ((Directory is { } directory)
         ? Path.Combine(
             path1: directory,
-            path2: (ContentPin.OfText(text: $"{CompilerIdentity}\n{key}").Hex[..32] + EntryExtension)
+            path2: (ContentPin.OfText(text: $"{identity}\n{key}").Hex[..32] + EntryExtension)
         )
         : null
     );

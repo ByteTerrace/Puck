@@ -21,9 +21,8 @@ source, merges the one root member it writes, and installs as a presentation
 install with no rule compile, keeping every live edit the source did not also
 change. What is still wrong:
 
-- **The unit is a root member, held only in memory.** A changed member merges
-  its whole list again across the layers that write it, and a process's first
-  recomposition of a persisted image merges the root whole.
+- **The composition unit is a root member.** A changed member merges its
+  whole list again across the layers that write it.
 - **Validation is whole.** Every install but a state-value one validates the
   whole candidate, and so does every `world.row.set` that changes more than
   state values.
@@ -185,9 +184,10 @@ code now works this way:
 |---|---|---|---|
 | Held declarations (`WorldSourceIndex`) | What each source declares it emits | The digest of the source's bytes; on disk, also the compiler's identity | Fine as a table. The reads that feed it are the cost above |
 | Held compiles (`WorldCompileSession.TryCompile`, in memory and under the `compilations` directory) | One source's documents and every file fact its compile read | The compiler's identity, the source's full path, and whether tests are lowered. Served only while every recorded input re-reads the same | The path is in the key, so two checkouts holding the same bytes share nothing. The identity is the build identity of every non-framework assembly the compiler references (`WorldCompileSession.CompilerIdentity`), so any rebuild of any of them empties the cache. A source is compiled twice when one caller wants tests and another does not |
-| Held compositions (`WorldDefinitionFileSource.HoldComposedImage`, persisted through `IWorldCompositionStore`) | A composed document whole, its own document's bytes, and the digest of every document it read, each once | The resolved path, the machine catalog's fingerprint and the source type; valid while every input re-reads the same | Whole-document images: the debug root's is 26 MiB, written again for each compiler build, off the thread that composed it. In memory an image keeps the layers it composed from (`WorldDefinitionFileSource.ComposedLayers`), so a recomposition merges again only the root members a changed layer writes; a persisted image keeps no layers, so a new process's first recomposition merges whole |
+| Held compositions (`WorldDefinitionFileSource.HoldComposedImage`, persisted through `IWorldCompositionStore`) | A whole composed document, its input facts, and references to its shaped layers | The resolved path, the machine catalog's fingerprint and the source type. Every input must still hold to serve the whole image | The debug root's image is 26 MiB and is written again for each compiler build, off the thread that composed it |
+| Shaped composition layers (`WorldDefinitionFileSource.LayerKey`) | A layer's shaped bytes, root member ranges, and export walk | Its input document digest, paths used in relocation, import alias, machine catalog and reached shaping code | Layer entries share the compile cache's retention bound. A miss shapes the layer again |
 | Compiled worlds (`CompiledWorldCache`, `.puckb`) | The drawn definition, assets and curves, as chunks | A file named for the document's path; each chunk by the code that derives it (`CompiledWorldChunks.EngineBuild`, a closure over the methods the producers reach) and its recorded inputs | Keyed by reached code, which is the right identity, but one chunk covers the whole definition, so one row's change derives it all again |
-| The device cache (`WorldCacheRoots`) | The three directories above for compiles, compiled worlds and meshes, per user or under `--cache-dir` | — | The compile directory is bounded at 256 MiB (`WorldCompileSession.MaxPersistedBytes`). One compiler build's entries for the debug world are about 75 MiB, so three or four builds fill it and a machine with several worktrees evicts constantly |
+| The device cache (`WorldCacheRoots`) | Directories for compiles, compiled worlds and meshes, per user or under `--cache-dir` | — | Compiles, composition images and layer entries share the bound in `WorldCompileSession.MaxPersistedBytes`. Builds with distinct compiler identities compete for that space |
 | The mesh store (`SdfMeshStore`) | Baked meshes | Geometry (`SdfMeshGeometryBuilder`) and the bake's identity; each bake stage's products by that stage's own code closure | Not this memo's: the iteration plan's step 2 keyed the stages |
 | The shade program table (a document's root `shades`) | Each authored shading program once | The program's name and the SHA-256 of its canonical form (`ShadeReference.KeyOf`) | Nothing. It is the model the others should follow: identity is content, so equal programs are one row wherever they are written |
 | Specialized shading kernels (`SdfWorldResidency.PrepareShade`, the shader cache) | Compiled kernels for the active programs | The programs' identities, the op table's fingerprint and the kernel sources' content | Nothing for this loop: the interpreter shows an edited program on the next frame and the specialized kernel follows |
@@ -788,14 +788,14 @@ stage order is in [the duplicates](#duplicates-to-remove).
 3. **Deltas from changed sources.** Built in part: a value edit recompiles
    only the source it is in, because a compile rests on what a sibling it
    resolved a name in declares (`CompileInputKind.Declaration`), not on the
-   sibling's bytes; a recomposition reuses every layer that composed to the
-   same image and merges again only the root members a changed layer writes
+   sibling's bytes; a recomposition reuses layers with unchanged inputs,
+   including on the first reload after a warm boot, and merges again only
+   the root members whose layer values changed
    (`WorldDefinitionFileSource.ComposedLayers`, counted as
    `world.boot.composition-members`); and the incremental-equals-clean law is
    `IncrementalCompositionLawTests`. Left: the unit is a root member, not a
    keyed row, so a changed member merges its whole list again; changed sources
-   are not lowered in parallel; layers are held in memory only, so a process's
-   first recomposition of a persisted image merges whole; and the delta is cut
+   are not lowered in parallel; and the delta is cut
    by the reload's sender from two composed revisions rather than emitted by
    the session from the rows that moved, so the sender still reads the whole
    next revision into the typed model and draws it
@@ -845,9 +845,13 @@ stage order is in [the duplicates](#duplicates-to-remove).
    `world.boot.validations`, and a load reads every unit
    (`WorldDefinitionValidator.UnitsIn`).
 6. **Content keys.** One store, products named by input digests and reached
-   code, composed images and path keys deleted, the bound restated. Not
-   started: a held compile is still keyed by the compiler's assembly build
-   identities and the source's full path (`WorldCompileSession.CompilerIdentity`).
+   code, composed images and path keys deleted, the bound restated. The
+   composition store now persists layers by their inputs and the code
+   that shapes them. It keeps the result of the code walk for the same build,
+   so a warm process can name layers on its first reload without repeating
+   the walk. The composed image still uses a path index. Held compiles
+   are still keyed by the compiler's assembly build identities and the
+   source's full path (`WorldCompileSession.CompilerIdentity`).
    The reached code comes from the walker the compiled world's chunks and the
    bake's stage keys already share (`CodeClosure`), never a third. *Check:* two
    checkouts at one commit share every entry (hits counted, no misses), and an
@@ -918,8 +922,8 @@ stage order is in [the duplicates](#duplicates-to-remove).
   --measure` three times each with the cache warm, and in a headless World
   one `world.reload` of a one-colour edit to `day.puck`, the first after boot
   and a second. The counts already decided the steps; the timing says what the
-  author gets from them, and the first-after-boot reload says what the
-  persisted image's missing layers cost.
+  author gets from them, and the first-after-boot reload includes the cost of
+  reading the persisted layers.
 
 ## Defects found on the way
 

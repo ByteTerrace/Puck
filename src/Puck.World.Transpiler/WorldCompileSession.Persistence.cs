@@ -7,8 +7,9 @@ using Puck.Hosting.Jobs;
 namespace Puck.World.Transpiler;
 
 public sealed partial class WorldCompileSession {
-    private T? ReadPersisted<T>(string key, Func<BinaryReader, T> read) where T : class {
-        if (EntryPath(key: key) is not { } path) { return null; }
+    private T? ReadPersisted<T>(string key, Func<BinaryReader, T> read, string? identity = null) where T : class {
+        identity ??= CompilerIdentity;
+        if (EntryPath(identity: identity, key: key) is not { } path) { return null; }
         try {
             if (!File.Exists(path: path)) { return null; }
             var bytes = File.ReadAllBytes(path: path);
@@ -22,27 +23,28 @@ public sealed partial class WorldCompileSession {
             using var stream = new MemoryStream(bytes, Magic.Length, (body.Length - Magic.Length), writable: false);
             using var reader = new BinaryReader(stream, Encoding.UTF8);
 
-            if ((reader.ReadString() != CompilerIdentity) || (reader.ReadString() != key)) { return null; }
+            if ((reader.ReadString() != identity) || (reader.ReadString() != key)) { return null; }
             var value = read(reader);
 
             if (stream.Position != stream.Length) { return null; }
             // A served entry is used now, so the directory's retention keeps it over entries no read wants.
             Puck.Abstractions.CacheRetention.Stamp(path: path);
             return value;
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or FormatException or ArgumentException or OverflowException)) {
+        } catch (Exception exception) when ((exception is IOException or InvalidDataException or UnauthorizedAccessException or FormatException or ArgumentException or OverflowException)) {
             return null;
         }
     }
     // Hash while writing the atomic file; no entry-sized staging buffer or copy is needed.
-    private void WritePersisted(string key, Action<BinaryWriter> write) {
-        if (EntryPath(key: key) is not { } path) { return; }
+    private void WritePersisted(string key, Action<BinaryWriter> write, string? identity = null) {
+        identity ??= CompilerIdentity;
+        if (EntryPath(identity: identity, key: key) is not { } path) { return; }
         try {
             AtomicFile.Write(path: path, write: stream => {
                 using var hashing = new Puck.Abstractions.Sha256Stream(inner: stream);
 
                 using (var writer = new BinaryWriter(hashing, Encoding.UTF8, leaveOpen: true)) {
                     writer.Write(buffer: Magic);
-                    writer.Write(value: CompilerIdentity);
+                    writer.Write(value: identity);
                     writer.Write(value: key);
                     write(writer);
                 }
@@ -73,15 +75,48 @@ public sealed partial class WorldCompileSession {
         if (CompositionWrites.Unfinished > 0) { _ = CompositionWrites.WaitIdle(timeout: CompositionWritesExitDrain); }
         return ReadPersisted(key: ("composition\0" + key), read: ReadImage);
     }
+
+    // The compile cache's build guard can answer whether this build has already walked its layer code. The layer
+    // entries use the result of the walk, allowing another build with the same shaping code to share them.
+    string IWorldCompositionStore.GetLayerCodeHash(Func<string> derive) {
+        if (Volatile.Read(location: ref m_state.LayerCodeHash) is { } held) { return held; }
+        lock (m_state.PersistLock) {
+            if (m_state.LayerCodeHash is { } existing) { return existing; }
+            const string Key = "composition-layer-code";
+            var hash = ReadPersisted(key: Key, read: static reader => {
+                var value = reader.ReadString();
+
+                return ((value.Length == 32) && (value.AsSpan().IndexOfAnyExcept(values: "0123456789abcdef") < 0))
+                    ? value : throw new InvalidDataException(message: "Invalid composition layer code hash.");
+            });
+            if (hash is null) {
+                hash = derive();
+                var derived = hash;
+
+                ScheduleCompositionWrite(() => WritePersisted(key: Key, write: writer => writer.Write(value: derived)));
+            }
+            Volatile.Write(location: ref m_state.LayerCodeHash, value: hash);
+            return hash;
+        }
+    }
+
+    // The layer key already carries the reached code and input digests. Use the same envelope and retention
+    // as the compile cache without adding the assembly identity of its transport to the layer's name.
+    private const string CompositionLayerIdentity = "composition-layer";
+    T? IWorldCompositionStore.ReadLayer<T>(string key, Func<BinaryReader, T> read) where T : class =>
+        ReadPersisted(identity: CompositionLayerIdentity, key: key, read: read);
+
+    void IWorldCompositionStore.WriteLayer(string key, Action<BinaryWriter> write) =>
+        ScheduleCompositionWrite(() => WritePersisted(identity: CompositionLayerIdentity, key: key, write: write));
     private static WorldComposedDocument ReadImage(BinaryReader reader) {
-        var inputs = new CompileInput[ReadCount(reader: reader)];
+        var inputs = new CompileInput[BinaryCacheEntry.ReadCount(reader: reader)];
 
         for (var index = 0; (index < inputs.Length); index++) {
             inputs[index] = new CompileInput(reader.ReadString(), ((CompileInputKind)reader.ReadByte()), reader.ReadString());
         }
         var reach = reader.ReadInt32();
         var json = ReadBytes(reader: reader);
-        var links = new WorldComposedLink[ReadCount(reader: reader)];
+        var links = new WorldComposedLink[BinaryCacheEntry.ReadCount(reader: reader)];
 
         for (var index = 0; (index < links.Length); index++) {
             var path = reader.ReadString();
@@ -91,7 +126,7 @@ public sealed partial class WorldCompileSession {
         }
         if ((links.Length > 0) && (links[0].Bytes is null)) { throw new InvalidDataException(message: "A composition's own document has no bytes."); }
         if ((links.Length == 0) || (reach < 0) || (reach >= WorldDocumentBasis.MaxChainDepth)) { throw new InvalidDataException(message: "Invalid composition reach or chain."); }
-        return new WorldComposedDocument(Chain: links, ComposedJson: json, Inputs: inputs, Reach: reach);
+        return new WorldComposedDocument(Chain: links, ComposedJson: json, Inputs: inputs, Reach: reach).ReadLayerIndex(reader: reader);
     }
     /// <inheritdoc />
     /// <remarks>A session that defers its composition writes (<see cref="DeferCompositionWrites"/>) queues the image and
@@ -100,12 +135,14 @@ public sealed partial class WorldCompileSession {
         ArgumentNullException.ThrowIfNull(argument: image);
 
         var inputs = (image.Inputs ?? throw new ArgumentException(message: "A persistent composition requires its input facts.", paramName: nameof(image)));
-        void Write() => WritePersisted(key: ("composition\0" + key), write: writer => WriteImage(image: image, inputs: inputs, writer: writer));
+        ScheduleCompositionWrite(() => WritePersisted(key: ("composition\0" + key), write: writer => WriteImage(image: image, inputs: inputs, writer: writer)));
+    }
 
+    private void ScheduleCompositionWrite(Action write) {
         if (Volatile.Read(location: ref m_state.DeferCompositionWrites)) {
-            CompositionWrites.Enqueue(item: Write);
+            CompositionWrites.Enqueue(item: write);
         } else {
-            Write();
+            write();
         }
     }
     private static void WriteImage(WorldComposedDocument image, IReadOnlyList<CompileInput> inputs, BinaryWriter writer) {
@@ -132,13 +169,8 @@ public sealed partial class WorldCompileSession {
                 writer.Write(buffer: link.Bytes);
             }
         }
+        image.WriteLayerIndex(writer: writer);
     }
 
-    private static int ReadCount(BinaryReader reader) {
-        var count = reader.ReadInt32();
-
-        if ((count < 0) || (count > (reader.BaseStream.Length - reader.BaseStream.Position))) { throw new InvalidDataException(message: "Invalid cache length."); }
-        return count;
-    }
-    private static byte[] ReadBytes(BinaryReader reader) => reader.ReadBytes(count: ReadCount(reader: reader));
+    private static byte[] ReadBytes(BinaryReader reader) => reader.ReadBytes(count: BinaryCacheEntry.ReadCount(reader: reader));
 }

@@ -30,9 +30,18 @@ internal static class WorldDocumentMembers {
         // The keys the document's shade program uses name, and the programs uses that held one inline were hoisted to.
         var named = new SortedSet<string>(comparer: StringComparer.Ordinal);
         var hoisted = new Dictionary<string, JsonNode>(comparer: StringComparer.Ordinal);
+        var segments = new List<(string? Name, int Index)>();
 
-        _ = Visit(node: document, pointer: "", refuse: true, type: typeof(WorldDefinition));
+        _ = Visit(node: document, refuse: true, type: typeof(WorldDefinition));
         Tabulate();
+
+        string Pointer() {
+            var pointer = string.Empty;
+            foreach (var (name, index) in segments) {
+                pointer = name is null ? DocumentJsonPointer.Child(index: index, pointer: pointer) : DocumentJsonPointer.Child(name: name, pointer: pointer);
+            }
+            return pointer;
+        }
 
         // A program is held once, in the root's `shades` table under its identity, and every use names it by key: a whole
         // document keeps exactly the rows its uses name, and one naming a row no layer could supply is refused; a delta
@@ -68,10 +77,10 @@ internal static class WorldDocumentMembers {
         // Returns the node to keep in the visited one's place: itself, rewritten in place, or a canonical scalar. Below
         // a converter-backed type (a creation document) the walk reads the properties the converter reads, for their
         // canonical form only: the converter, not this walk, owns what such a type admits.
-        JsonNode? Visit(JsonNode? node, Type type, string pointer, bool refuse) {
+        JsonNode? Visit(JsonNode? node, Type type, bool refuse) {
             type = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
             if (type == typeof(ShadeReference)) {
-                return Use(node: node, pointer: pointer);
+                return Use(node: node);
             }
             var list = (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>)));
 
@@ -95,7 +104,11 @@ internal static class WorldDocumentMembers {
                     WorldDocumentRowDefaults.CompleteShapes(shapes: array);
                 }
                 for (var index = 0; (index < array.Count); ++index) {
-                    if ((Visit(node: array[index], type: type, pointer: DocumentJsonPointer.Child(index: index, pointer: pointer), refuse: refuse) is var element) && !ReferenceEquals(objA: element, objB: array[index])) {
+                    segments.Add(item: (null, index));
+                    var element = Visit(node: array[index], type: type, refuse: refuse);
+
+                    segments.RemoveAt(index: segments.Count - 1);
+                    if (!ReferenceEquals(objA: element, objB: array[index])) {
                         array[index] = element;
                     }
                 }
@@ -127,20 +140,20 @@ internal static class WorldDocumentMembers {
                 (members, refuse) = (shape.Properties, false);
             }
             List<(string Key, JsonNode? Value)>? replaced = null;
+            var root = (segments.Count == 0);
 
             foreach (var (key, value) in obj) {
-                var child = DocumentJsonPointer.Child(name: key, pointer: pointer);
                 Type? memberType = null;
 
-                if ((pointer.Length == 0) && (WorldConstructs.Table.RootArmWriting(documentKey: key) is WorldRootArm.Shapes)) {
+                if (root && (WorldConstructs.Table.RootArmWriting(documentKey: key) is WorldRootArm.Shapes)) {
                     memberType = typeof(IReadOnlyList<ShapeDocument>);
                 } else if ((shape.Kind == System.Text.Json.Serialization.Metadata.JsonTypeInfoKind.Dictionary) && (shape.ElementType is { } element)) {
                     memberType = element;
                 } else if (ReadMembers.GetValue(key: members, derive: IndexReadMembers).TryGetValue(key: key, value: out var member)) {
                     memberType = member.Type;
                 } else if (refuse && (diagnostics is not null) && !((polymorphic && (key == "$type")) ||
-                    ((pointer.Length > 0) && (key is "$replace" or "$drop" or "$before")) ||
-                    ((pointer.Length == 0) && (WorldConstructs.Table.RootArmWriting(documentKey: key) is WorldRootArm.Materials or WorldRootArm.Cartridge)) ||
+                    (!root && (key is "$replace" or "$drop" or "$before")) ||
+                    (root && (WorldConstructs.Table.RootArmWriting(documentKey: key) is WorldRootArm.Materials or WorldRootArm.Cartridge)) ||
                     ((shape.Members.Any(predicate: static member => ((member.Access & WorldModelAccess.ExtensionData) != 0))) && DocumentExtensionsPolicy.IsReservedKey(key: key)))) {
                     var finding = Diagnostic.Error(
                         code: PuckDiagnosticCodes.UnknownMember,
@@ -148,10 +161,14 @@ internal static class WorldDocumentMembers {
                         span: SourceSpan.None
                     );
 
-                    diagnostics.Report(diagnostic: sourceMap.Place(diagnostic: finding, jsonPointer: child));
+                    diagnostics.Report(diagnostic: sourceMap.Place(diagnostic: finding, jsonPointer: DocumentJsonPointer.Child(name: key, pointer: Pointer())));
                 }
-                if ((memberType is not null) && (Visit(node: value, pointer: child, refuse: refuse, type: memberType) is var kept) && !ReferenceEquals(objA: kept, objB: value)) {
-                    (replaced ??= []).Add(item: (key, kept));
+                if (memberType is not null) {
+                    segments.Add(item: (key, 0));
+                    var kept = Visit(node: value, refuse: refuse, type: memberType);
+
+                    segments.RemoveAt(index: segments.Count - 1);
+                    if (!ReferenceEquals(objA: kept, objB: value)) { (replaced ??= []).Add(item: (key, kept)); }
                 }
             }
             foreach (var (key, value) in (replaced ?? [])) {
@@ -167,7 +184,7 @@ internal static class WorldDocumentMembers {
         }
         // A use's one spelling is its program's key: a key is kept and noted, and a program written inline is admitted,
         // hoisted into the table under its identity and replaced by that key.
-        JsonNode? Use(JsonNode? node, string pointer) {
+        JsonNode? Use(JsonNode? node) {
             switch (node) {
                 case JsonValue key when key.TryGetValue<string>(value: out var text):
                     _ = named.Add(item: text);
@@ -184,7 +201,7 @@ internal static class WorldDocumentMembers {
                         _ = named.Add(item: identity);
                         return JsonValue.Create(value: identity);
                     } catch (Exception error) when (error is SdfShadeException or System.Text.Json.JsonException) {
-                        diagnostics?.Report(diagnostic: sourceMap.Place(diagnostic: Diagnostic.Error(code: PuckDiagnosticCodes.SemanticValidation, message: error.Message, span: SourceSpan.None), jsonPointer: pointer));
+                        diagnostics?.Report(diagnostic: sourceMap.Place(diagnostic: Diagnostic.Error(code: PuckDiagnosticCodes.SemanticValidation, message: error.Message, span: SourceSpan.None), jsonPointer: Pointer()));
                         return node;
                     }
                 default:

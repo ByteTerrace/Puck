@@ -54,6 +54,12 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     /// document composed whole, and only the members a changed layer writes differently when a held composition is
     /// recomposed by layer.</summary>
     public static WorkKind CompositionMembers { get; } = Registry.Declare(name: "world.boot.composition-members", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting verified composition layers read from the persistent cache.</summary>
+    public static WorkKind CompositionLayerHits { get; } = Registry.Declare(name: "world.boot.composition-layer-hits", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting unavailable or invalid entries in the persistent composition layer cache.</summary>
+    public static WorkKind CompositionLayerMisses { get; } = Registry.Declare(name: "world.boot.composition-layer-misses", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting newly shaped layers recorded by the incremental composer.</summary>
+    public static WorkKind CompositionLayersShaped { get; } = Registry.Declare(name: "world.boot.composition-layers-shaped", unit: "count", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the kind counting keyed rows considered by a source reload's three-way merge.</summary>
     public static WorkKind ReloadRowsMerged { get; } = Registry.Declare("world.boot.reload-rows-merged", "count", WorkClass.Pacing);
