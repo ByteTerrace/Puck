@@ -735,10 +735,12 @@ public sealed class MemoryAccount {
 
     // Ordinary admission leaves headroom. Storage that gives way may spend that reserve when it acquires, but no promise
     // or acquisition that gives way can pass an explicit host bar on what play holds, the process's private bytes beyond
-    // its owners counted; authoring storage, apart from play, may spend the headroom past its own room and no more.
+    // its owners counted. Authoring storage apart from play reserves only past play's entitlement (Fits), but a charge past
+    // its reservation (a bake stage's scratch its peak does not cover) is transient and needs only the machine's budget, so a
+    // busy machine defers a bake's next group rather than restarting one already running.
     private bool FitsHostBar(PhysicalMemory pool, long extra, MemoryAllowance allowance = MemoryAllowance.Play) {
         if ((pool != PhysicalMemory.Host) || (extra <= 0L)) { return true; }
-        if (Apart(allowance: allowance)) { return (extra <= (AuthoringRoomLocked() + Headroom)); }
+        if (Apart(allowance: allowance)) { return (extra <= ((MachineBudget() - HeldOf(pool: pool)) - PromisedOf(pool: pool))); }
 
         return ((m_hostBar is not { } bar) || (extra <= (((Math.Min(val1: bar, val2: DefaultBudget) - m_playBeyondHeld) - PlayHeldOf(pool: pool)) - PlayPromisedOf(pool: pool))));
     }
