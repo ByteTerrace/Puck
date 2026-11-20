@@ -31,7 +31,30 @@ public interface IAllocationObserver {
 /// <param name="owner">The owner whose work needed the buffer.</param>
 /// <param name="bytes">The requested allocation size.</param>
 public sealed class HostMemoryRefusedException(string owner, long bytes)
-    : Exception($"The host memory account refused {bytes} bytes for {owner}.");
+    : Exception($"The host memory account refused {bytes} bytes for {owner}.") {
+    /// <summary>Gets the owner whose work needed the buffer.</summary>
+    public string Owner { get; } = owner;
+    /// <summary>Gets the requested allocation size, in bytes.</summary>
+    public long Bytes { get; } = bytes;
+
+    /// <summary>Returns the refusal an exception reports: the exception itself, or the first refusal of an aggregate
+    /// (parallel work) whose every inner exception is a refusal.</summary>
+    /// <param name="exception">The exception a piece of work threw.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the exception is, or holds, anything else.</returns>
+    public static HostMemoryRefusedException? Of(Exception exception) {
+        ArgumentNullException.ThrowIfNull(argument: exception);
+        if (exception is HostMemoryRefusedException refused) { return refused; }
+        if (exception is not AggregateException aggregate) { return null; }
+
+        HostMemoryRefusedException? first = null;
+
+        foreach (var inner in aggregate.Flatten().InnerExceptions) {
+            if (inner is not HostMemoryRefusedException each) { return null; }
+            first ??= each;
+        }
+        return first;
+    }
+}
 /// <summary>Optional physical allocator readings; these include allocator slack and are not payload counts.</summary>
 public interface IAllocatorStatistics {
     /// <summary>Reads the allocator's committed and reserved address-space bytes.</summary>

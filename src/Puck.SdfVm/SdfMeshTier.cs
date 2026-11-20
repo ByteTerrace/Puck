@@ -29,6 +29,10 @@ public static class SdfMeshTier {
     public const int MeasureFrames = 8;
     /// <summary>The fewest boxes a frame measures, so a small world is measured whole each frame.</summary>
     public const int MeasureBoxes = 256;
+    /// <summary>The mesh pieces a frame reads, at least, looking for a finer tier the mesh region refuses while the floor
+    /// the group keeps stands (<see cref="SdfMeshPathBake"/>'s eviction sweep), so a region that refuses meshes costs
+    /// each frame that share, and a refused draw waits one sweep at most.</summary>
+    public const int EvictionPieces = 2048;
     /// <summary>The frames a residency's bake must have left its detail alone, nothing replaced, landing, waiting its
     /// hold or pressed by the budget, before its detail is settled (<see cref="SdfMeshPathBake.DetailSettled"/>): two
     /// whole measures (<see cref="MeasureFrames"/>), the one under way when the demand last moved and one whole

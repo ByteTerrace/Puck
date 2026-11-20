@@ -640,9 +640,6 @@ public sealed partial class SdfWorldTables {
 
     // The draws naming owed meshes by priority, reused frame to frame.
     private readonly List<(float Priority, int Index)> m_owedOrder = [];
-    // Higher priority first, then the list's order.
-    private static readonly Comparison<(float Priority, int Index)> ByPriority = static (left, right) =>
-        ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index));
 
     // Owes one placed mesh's words to this frame's upload: the region keeps no copy of the mesh section, and the upload's
     // flush stages the words from the mesh itself (WriteSourcedMeshWords). Only a mesh a grown draw reserve moved is

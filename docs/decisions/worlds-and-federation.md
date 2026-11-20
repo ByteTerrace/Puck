@@ -553,6 +553,27 @@ is filed where each step's cause lives, and each names its check in
 - body disclosure in the recipient view: [disclosure](../plans/disclosure.md#open-items);
 - signed remote write-back: [remote home adoption](../plans/records-and-pools.md#remote-home-adoption).
 
+## What the state-of-the-art audit found ahead
+
+An audit of Puck's algorithms against published and shipped practice
+([the record](../plans/state-of-the-art/audit.md)) judged the federation and
+network side ahead in structure and a generation behind in scale:
+
+- *One deterministic world per authority, with durably fenced crossings.* The
+  audit placed this ahead of the shipped designs it compared: each world has one
+  reproducible history, and a crossing is a durable record rather than a
+  handoff message.
+- *Deterministic work budgets.* A world's rule work per tick is priced and
+  bounded (`RuleCapacity.MaxWorkUnitsPerTick`) before it runs.
+- *A new option that follows from both: tick dilation per world.* A world over its
+  allowance steps slower in wall time while its history stays the same, as EVE
+  slows a congested system, with no runtime split of the place. It is recorded in
+  [the synthesis](../plans/mmo-foundations/synthesis.md#4-puck-native-combinations)
+  and is open work, not a decision.
+- *Behind in scale, and filed as open work:* client prediction, interest priority
+  under a byte budget, the wire's encoding, and incremental checkpoints
+  ([the transfers packet](../plans/open-items.md#transfers-federation-and-server)).
+
 ---
 
 [Decisions](README.md) · [Worlds and federation](../architecture/worlds.md) · [Companions](companions.md) · [MMO foundations](../plans/mmo-foundations.md) · [Synthesis](../plans/mmo-foundations/synthesis.md)

@@ -36,11 +36,14 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
     /// <param name="slot">The frame slot the command buffer belongs to, whose fence has retired.</param>
     /// <param name="handsToReaders">Whether <see cref="Finish"/> hands the copied buffer to the readers; false when the
     /// readers' own barriers, in command lists submitted after this one, do.</param>
+    /// <param name="flushed">Whether the caller flushed the region's slot itself since its last write
+    /// (<see cref="GpuRegion.Flush"/>), as one that must take the staging buffer before it commits to the copy does, so
+    /// the recording does not stage the owed words again.</param>
     /// <exception cref="ArgumentNullException"><paramref name="region"/> is <see langword="null"/>.</exception>
-    public void Record(GpuRegion region, int slot, bool handsToReaders) {
+    public void Record(GpuRegion region, int slot, bool handsToReaders, bool flushed = false) {
         ArgumentNullException.ThrowIfNull(argument: region);
 
-        region.Flush(slot: slot);
+        if (!flushed) { region.Flush(slot: slot); }
 
         var copies = region.OwesCopy;
 

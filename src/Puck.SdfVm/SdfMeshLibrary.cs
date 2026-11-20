@@ -219,7 +219,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <summary>Takes the latest mesh the library holds of a dynamic group's form, baked at whatever pose its other slots
     /// stood in (<see cref="SdfMeshGeometryBuilder.Form"/>): the same shapes, which the mesh's skin carries through each
     /// member's slot (<see cref="SdfMesh.Members"/>), renumbered for the taking group's materials as
-    /// <see cref="TryTake"/> renumbers. A body crossing into another world mid-stride takes the mesh its other pose
+    /// <see cref="TryTake(SdfMeshGeometry, int[], out SdfMesh?, UInt128)"/> renumbers. A body crossing into another world mid-stride takes the mesh its other pose
     /// baked.</summary>
     /// <param name="form">The form.</param>
     /// <param name="materials">The taking group's material ids, by their place in the geometry.</param>
@@ -269,7 +269,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <returns><see langword="false"/> when the store is known to hold no entry for it.</returns>
     public bool MayHold(UInt128 identity, SdfMeshGeometry geometry) => (Disk?.MayHold(geometry: geometry, identity: identity) ?? false);
     /// <summary>Takes a geometry's mesh from <see cref="Disk"/> for a group whose shapes carry <paramref name="materials"/>,
-    /// holding it for the run as <see cref="Store"/> would, then taking it as <see cref="TryTake"/> does. Groups share
+    /// holding it for the run as <see cref="Store"/> would, then taking it as <see cref="TryTake(SdfMeshGeometry, int[], out SdfMesh?, UInt128)"/> does. Groups share
     /// one decode per identity and geometry until the library empties; a failed read is retried next time.</summary>
     /// <param name="identity">The bake's identity.</param>
     /// <param name="geometry">The geometry.</param>
@@ -354,14 +354,21 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <param name="materials">The taking group's material ids, by their place in the geometry.</param>
     /// <param name="mesh">The mesh, when this returns <see langword="true"/>.</param>
     /// <param name="identity">The taking bake's identity; only a mesh baked under it is taken.</param>
-    /// <returns><see langword="true"/> when the library holds the geometry under <paramref name="identity"/>.</returns>
+    /// <returns><see langword="true"/> when the library holds the geometry under <paramref name="identity"/>; a renumbered
+    /// copy the host memory account has no room for is a miss, and the taking group bakes or loads the geometry instead.</returns>
     /// <remarks>A successful take returns an owned mesh claim; the consumer releases it after its last borrowed view ends.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="materials"/> is <see langword="null"/>.</exception>
-    public bool TryTake(SdfMeshGeometry geometry, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, UInt128 identity = default) {
+    public bool TryTake(SdfMeshGeometry geometry, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, UInt128 identity = default) =>
+        TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh, refused: out _);
+    // As the public TryTake, also answering the refusal of a renumbered copy the account had no room for, which a caller
+    // that would rather wait than bake the geometry again parks on (SdfMeshPathBake.TakeLanded).
+    internal bool TryTake(SdfMeshGeometry geometry, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, out HostMemoryRefusedException? refused, UInt128 identity = default) {
         ArgumentNullException.ThrowIfNull(argument: materials);
 
         var key = (identity, geometry);
         Variant source;
+
+        refused = null;
 
         lock (m_gate) {
             if (!m_held.TryGet(hash: key, value: out var held) || (held.Variants.Count == 0)) {
@@ -383,6 +390,10 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
         try {
             renumbered = Renumber(mesh: source.Mesh, from: source.Materials, to: materials);
+        } catch (HostMemoryRefusedException refusal) {
+            refused = refusal;
+            mesh = null;
+            return false;
         } finally {
             source.Mesh.Release();
         }

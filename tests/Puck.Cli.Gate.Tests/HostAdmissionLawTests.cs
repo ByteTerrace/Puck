@@ -208,7 +208,7 @@ public sealed class HostAdmissionLawTests {
 
         foreach (var id in ((parent > 0) ? new[] { Environment.ProcessId, parent } : [Environment.ProcessId])) {
             using var process = System.Diagnostics.Process.GetProcessById(processId: id);
-            var before = ProcessInspection.PrivateResidentBytes(processId: id);
+            var before = Puck.Hosting.HostMemory.PrivateResidentBytes(processId: id);
 
             process.Refresh();
             var workingSet = process.WorkingSet64;

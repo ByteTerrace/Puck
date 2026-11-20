@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 using Puck.SignedDistance;
 using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
@@ -119,6 +120,7 @@ public sealed partial class SdfMeshPathBake {
 
         private SdfMeshBakeReport.Gate m_site;
         private long m_entered;
+        private long m_nested;
         private Lock.Scope m_scope;
 
         public GateScope(SdfMeshPathBake owner, Lock.Scope scope, SdfMeshBakeReport.Gate site, long waited) {
@@ -126,6 +128,7 @@ public sealed partial class SdfMeshPathBake {
             m_scope = scope;
             m_site = site;
             m_entered = Stopwatch.GetTimestamp();
+            m_nested = owner.m_accounts.GateNestedTicks;
             Waited = waited;
             SdfMeshBakeReport.GateEntered();
         }
@@ -138,14 +141,17 @@ public sealed partial class SdfMeshPathBake {
         public void Continue(SdfMeshBakeReport.Gate site) {
             var now = Stopwatch.GetTimestamp();
 
-            m_owner.m_accounts.GateHeld(held: (now - m_entered), site: m_site, waited: Waited);
-            (m_site, m_entered, Waited) = (site, now, 0L);
+            m_owner.m_accounts.GateHeld(held: HeldAt(now: now), site: m_site, waited: Waited);
+            (m_site, m_entered, m_nested, Waited) = (site, now, m_owner.m_accounts.GateNestedTicks, 0L);
         }
         public void Dispose() {
-            m_owner.m_accounts.GateHeld(held: (Stopwatch.GetTimestamp() - m_entered), site: m_site, waited: Waited);
+            m_owner.m_accounts.GateHeld(held: HeldAt(now: Stopwatch.GetTimestamp()), site: m_site, waited: Waited);
             m_scope.Dispose();
             SdfMeshBakeReport.GateLeft();
         }
+        // The ticks held by `now`, less the sections counted under a site of their own meanwhile (a new bake's accounts
+        // start at none, which leaves nothing to take out).
+        private readonly long HeldAt(long now) => Math.Max(val1: 0L, val2: ((now - m_entered) - Math.Max(val1: 0L, val2: (m_owner.m_accounts.GateNestedTicks - m_nested))));
     }
     // Adds the time since a timestamp to a stage's account; the report names a stage that held one group's worker for
     // seconds, so the bake's long poles can be found.
@@ -156,64 +162,94 @@ public sealed partial class SdfMeshPathBake {
             SdfMeshBakeReport.Slow(detail: detail, dynamic: group.Dynamic, instances: group.Instances, residency: Residency, selector: group.Selector, stage: stage, ticks: ticks);
         }
     }
-    // Measures every group still owing a mesh by its demand box at the demand points; with none, the priorities stand as
-    // they were and the plan's order decides. It runs on the frame's thread with the gate open: the frame's thread alone
-    // replaces the group list and the copy index (Restart, Revisit, IndexCopies), and a priority only orders work, never
-    // changes a mesh, so a worker reading one mid-measure, or finishing a group this measures, orders no mesh differently.
-    // Also marks each group in view (Group.InView: SdfMeshDemand.Sees, which takes every box with no demand point) and
-    // counts the groups that owe the frame (OwesFrame), which the bake's owed takes read (OwedGroups).
-    private void Prioritize() {
+    // The measure of every group still baking by its demand box, spread over SdfMeshTier.MeasureFrames frames
+    // (Prioritize), and the epoch the groups' recorded holes are counted in (CountHoles).
+    private GroupSweep m_prioritySweep;
+    private int m_holeEpoch;
+
+    // Measures a frame's share of the groups still owing a mesh by their demand boxes at the demand points, from the
+    // group the last frame's share ended at, and every group when `whole`: a restart ranks the groups it plans before
+    // its first take. With no demand point the priorities stand as they were and the plan's order decides. A priority
+    // only orders work, never changes a mesh, so one up to a sweep old, or one a worker reads mid-measure, orders no mesh
+    // differently. It runs on the frame's thread with the gate open: the frame's thread alone replaces the group list and
+    // the copy index (Restart, Revisit, IndexCopies). Also marks each group in view (Group.InView: SdfMeshDemand.Sees,
+    // which takes every box with no demand point) and keeps the count of the groups that owe the frame (OwesFrame), which
+    // the bake's owed takes read (OwedGroups), and of those still bringing a first mesh (m_unshown), by the visits.
+    private void Prioritize(bool whole = false) {
         // With every group done there is nothing to order: the done cursor makes this check constant once the bake ends.
-        using (EnterGate(site: BakeGate.Frame)) {
+        using (EnterGate(site: BakeGate.Prioritize)) {
             while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
             if (m_doneThrough >= m_groups.Count) {
+                m_holeEpoch++;
                 Volatile.Write(location: ref m_owedGroups, value: 0);
                 m_unshown = 0;
                 return;
             }
         }
 
+        var count = m_groups.Count;
         var measured = (Demand.Count > 0);
+        var share = (whole ? long.MaxValue : m_prioritySweep.Share);
+        var at = (whole ? 0 : m_prioritySweep.Start(count: count));
+        var spent = 0L;
 
-        foreach (var group in m_groups) {
-            if (group.Done || !group.HasDemandBox) { continue; }
-            group.InView = MeasureSees(group: group);
-            if (measured) { group.Priority = MeasureDemand(group, priority: true); }
+        // A whole measure counts the holes again from none: the groups' records are of an epoch that has passed.
+        if (whole) {
+            m_holeEpoch++;
+            Volatile.Write(location: ref m_owedGroups, value: 0);
+            m_unshown = 0;
         }
-        // A group baking geometry other groups wait on ranks as the most wanted of them, and is in view where any of them
-        // is: this bake's followers, then the waiters of any bake holding the library, each of which publishes its own
-        // priority for its leader to read.
-        foreach (var group in m_groups) {
-            if (!group.Done && (group.Leader is { } leader)) {
-                leader.Priority = MathF.Max(x: leader.Priority, y: group.Priority);
-                leader.InView |= group.InView;
+        for (var visited = 0; ((visited < count) && (spent < share)); visited++) {
+            var boxes = Prioritized(group: m_groups[at], measured: measured);
+
+            spent += boxes;
+            at = m_prioritySweep.Visited(at: at, boxes: boxes, count: count);
+        }
+        if (!whole) { m_prioritySweep.Stop(at: at); }
+    }
+    // Measures one group, and returns the boxes it read, at least one. A group baking geometry other groups wait on ranks
+    // as the most wanted of them, and is in view where any of them is: this bake's followers, then the waiters of any
+    // bake holding the library, each of which publishes its own priority for its leader to read.
+    private int Prioritized(Group group, bool measured) {
+        var boxes = 1;
+
+        if (!group.Done) {
+            if (group.HasDemandBox) {
+                boxes = Math.Max(val1: 1, val2: (CopiesOf(group: group)?.Count ?? 1));
+                group.InView = MeasureSees(group: group);
+                if (measured) { group.Priority = MeasureDemand(group, priority: true); }
             }
-        }
+            if (group.Followers is { } followers) {
+                // By index: the list only grows, and only on this thread, but a worker may hand it over (TakeFollowers).
+                for (var at = 0; (at < followers.Count); at++) {
+                    var follower = followers[at];
 
-        var holes = 0;
-        var unshown = 0;
-
-        foreach (var group in m_groups) {
-            if (OwesFrame(group: group)) { holes++; }
-            if (!group.Done && !group.Retired && group.HasDemandBox && (group.Shown is null) && (group.Priority > 1f)) { unshown++; }
-        }
-        Volatile.Write(location: ref m_owedGroups, value: holes);
-        m_unshown = unshown;
-        if (measured) {
-            foreach (var group in m_groups) {
-                if (group.Done) { continue; }
+                    if (follower.Done || !ReferenceEquals(objA: follower.Leader, objB: group)) { continue; }
+                    group.Priority = MathF.Max(x: group.Priority, y: follower.Priority);
+                    group.InView |= follower.InView;
+                }
+            }
+            if (measured) {
                 if (group.Waiter is { } waiter) { waiter.Priority = group.Priority; }
                 if ((group.Share is { HasWaiters: true } share)) { group.Priority = MathF.Max(x: group.Priority, y: Library.MostWanted(share: share)); }
             }
         }
-        // The ranks stand until the next measure: the takes until then walk this order rather than sorting.
-        var version = m_groups.Version;
+        CountHoles(group: group, listed: true);
 
-        Order(order: m_spareOrder, from: Volatile.Read(location: ref m_doneThrough));
-        using (EnterGate(site: BakeGate.Frame)) {
-            (m_order, m_spareOrder) = (m_spareOrder, m_order);
-            m_orderVersion = version;
-        }
+        return boxes;
+    }
+    // Moves the counts of the groups that owe the frame and of those still bringing a first mesh to what a group's state
+    // is now, or to none for one leaving the list: the group records what it last added in the epoch it was counted in,
+    // so a count never holds a contribution that nothing can take back. On the frame's thread.
+    private void CountHoles(Group group, bool listed) {
+        var before = ((group.HoleEpoch == m_holeEpoch) ? group.HoleBits : 0);
+        var now = ((listed && OwesFrame(group: group)) ? 1 : 0) | ((listed && !group.Done && !group.Retired && group.HasDemandBox && (group.Shown is null) && (group.Priority > 1f)) ? 2 : 0);
+
+        group.HoleBits = now;
+        group.HoleEpoch = m_holeEpoch;
+        if (now == before) { return; }
+        Volatile.Write(location: ref m_owedGroups, value: (m_owedGroups + ((now & 1) - (before & 1))));
+        m_unshown += ((now >> 1) - (before >> 1));
     }
     // The leaders done since Follow last ran that groups follow (Group.Done enqueues them), under the gate.
     private readonly List<Group> m_followable = [];
@@ -255,7 +291,14 @@ public sealed partial class SdfMeshPathBake {
     // whose leader left nothing in the library (it retired or failed, or the library let its mesh go) starts its geometry
     // again (Start), waiting on another group that started it meanwhile or leading it itself. On the pool.
     private void TakeLanded(Group group, SdfMeshBakeShare? share) {
-        var taken = Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh);
+        var taken = Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refused: out var refused);
+
+        // A take that renumbers the leader's mesh copies its materials into the library under the account; one it has no
+        // room for waits parked rather than baking the geometry again (Park).
+        if (refused is not null) {
+            Park(bytes: refused.Bytes, group: group, refused: refused, work: () => TakeLanded(group: group, share: share));
+            return;
+        }
 
         using (EnterGate(site: BakeGate.Taken)) {
             // A waiter that already took, deserted or retired is no longer this share's to finish.
@@ -317,7 +360,13 @@ public sealed partial class SdfMeshPathBake {
 
         if (waiter is null) {
             group.Share = share;
-            return (Begin(group: group) ? Started.Loading : Started.Baking);
+
+            var began = Stopwatch.GetTimestamp();
+            var loading = Begin(group: group);
+
+            m_accounts.GateNested(held: (Stopwatch.GetTimestamp() - began), site: BakeGate.Begin);
+
+            return (loading ? Started.Loading : Started.Baking);
         }
         group.Joined = share;
         group.Waiter = waiter;
@@ -388,15 +437,20 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
-    // Queues work for which the group's job count is already taken (Group.QueueWork). A stage that throws finishes its
-    // group with no new mesh (Fail), so its reservation and workspace are released and the bake still settles. An
-    // urgent answer runs even once its group retires, since it owns its decoded samples and frees them.
+    // Queues work for which the group's job count is already taken (Group.QueueWork). A stage the host memory account
+    // refused starts its group's final lattice again under a larger admission (Readmit); any other stage that throws
+    // finishes its group with no new mesh (Fail), so its reservation and workspace are released and the bake still
+    // settles. An urgent answer runs even once its group retires, since it holds its answered samples and lets them go.
     private void Enqueue(Group group, Action work, bool urgent) {
         void Run() {
             try {
                 if (urgent || !group.Retired) { work(); }
             } catch (Exception exception) {
-                Fail(exception: exception, group: group);
+                if (HostMemoryRefusedException.Of(exception: exception) is { } refused) {
+                    Readmit(group: group, refused: refused);
+                } else {
+                    Fail(exception: exception, group: group);
+                }
             } finally {
                 group.EndWork();
                 Offer();
@@ -496,8 +550,10 @@ public sealed partial class SdfMeshPathBake {
                 group.Retired = true;
                 group.InFlight = false;
             }
+            m_parked.Clear();
         }
         lock (WorkGate) { _ = WorkQueue.RemoveAll(match: item => { if (!item.Group.Retired) { return false; } item.Group.EndWork(); return true; }); }
+        RetireReadback();
     }
 
     // A worker: runs the queued work, answers first, then the highest priority, and waits for more once none is queued.
@@ -615,7 +671,10 @@ public sealed partial class SdfMeshPathBake {
     public void ObserveResidency(SdfWorldTables tables) {
         ArgumentNullException.ThrowIfNull(argument: tables);
 
-        using (EnterGate(site: BakeGate.Observe)) {
+        // A mutable local, not a using variable, which reads each part of the hold under its own site (Continue).
+        var scope = EnterGate(site: BakeGate.Observe);
+
+        try {
             // The grant is the tables', read once: its budget and bias are the selector's from then on (Retier).
             if (!ReferenceEquals(objA: m_detail, objB: tables.Grant)) {
                 m_detail = tables.Grant;
@@ -625,7 +684,11 @@ public sealed partial class SdfMeshPathBake {
             m_regionNamedBytes = ((long)tables.MeshRegionNamedBytes);
             m_regionRefused = tables.MeshRegionRefused;
             ServeAhead(tables: tables);
-            if (m_regionRefused > 0) { CollectEvictions(tables: tables); }
+            if (m_regionRefused > 0) {
+                scope.Continue(site: BakeGate.Evict);
+                CollectEvictions(tables: tables);
+                scope.Continue(site: BakeGate.Observe);
+            }
             if (m_allResident) {
                 m_holes = 0;
                 return;
@@ -657,6 +720,8 @@ public sealed partial class SdfMeshPathBake {
             m_holes = holes;
             if (holes > 0) { m_holeFrames++; }
             m_allResident = ((m_unresident.Count == 0) && (DoneThrough() >= m_groups.Count));
+        } finally {
+            scope.Dispose();
         }
     }
     // Takes a group out of the set ObserveResidency walks, which a later change to it hands back through
@@ -701,10 +766,20 @@ public sealed partial class SdfMeshPathBake {
 
                 for (var piece = 0; (piece < mesh.PieceCount); piece++) { m_aheadMeshes.Add(item: mesh.Piece(index: piece)); }
             }
-            foreach (var group in m_groups) {
-                if (group.Retired || (group.KeptFloor is not { } floor)) { continue; }
+            // Only the groups that keep a floor hold one, and the walk drops the retired ones from that list, in order.
+            var kept = 0;
+
+            for (var at = 0; (at < m_keepers.Count); at++) {
+                var group = m_keepers[at];
+
+                if (group.Retired || (group.KeptFloor is not { } floor)) {
+                    group.Keeping = false;
+                    continue;
+                }
+                m_keepers[kept++] = group;
                 for (var piece = 0; (piece < floor.PieceCount); piece++) { m_aheadMeshes.Add(item: floor.Piece(index: piece)); }
             }
+            m_keepers.RemoveRange(index: kept, count: (m_keepers.Count - kept));
             tables.NameMeshesAhead(meshes: m_aheadMeshes);
             m_aheadNamed = m_aheadRevision;
             m_floorsNamed = m_floorRevision;

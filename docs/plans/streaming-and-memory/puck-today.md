@@ -50,7 +50,7 @@ All paths are under `src/` unless stated.
 
 - **Driven by:** `Prioritize` sets `group.Priority = MeasureDemand(group, priority: true)` for undone groups and raises
   a leader to its followers' max (src/Puck.SdfVm/SdfMeshPathBake.Residency.cs:90-106); the shared pool takes the highest-priority queued work
-  (`TakeWork`, src/Puck.SdfVm/SdfMeshPathBake.Residency.cs:290-309) **[opened]**. Lattice batches take candidates sorted `ByPriority`
+  (`TakeWork`, src/Puck.SdfVm/SdfMeshPathBake.Residency.cs:290-309) **[opened]**. Lattice batches take candidates in `ByRank` order
   (SdfMeshPathBake.cs:662) **[opened]**.
 - **Bound (CPU memory):** a group starting its final lattice reserves its peak from the process account:
   `if (!group.Memory.TryReserve(available: available, peak: peak)) {` (SdfMeshPathBake.cs:709), paced by
