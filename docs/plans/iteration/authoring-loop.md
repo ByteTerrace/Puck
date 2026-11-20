@@ -802,6 +802,13 @@ stage order is in [the duplicates](#duplicates-to-remove).
    snapshot rows. The [live edit path](../iteration.md#the-live-edit-path-step-3)
    describes the mechanisms and counters. Section-scoped admission for remote
    authors stays with the [published-world decision](#what-the-owner-settled).
+   Left: in the debug world a one-colour save still delivers every creation in
+   the roster, because `WorldPresentationRows.Between` finds moved rows by
+   instance and the reloaded roster arrives with new instances for rows the
+   edit left alone; and `world.undo` of a reload replays the journal as a full
+   install that delivers the whole definition. *Check:* a one-colour save in
+   the debug world reads one row in `world.boot.presentation-rows-delivered`
+   per primed sink, and undoing it is a presentation install.
 5. **Narrow validation**, for the delta and for `world.row.set` alike:
    sections first, then rows by digest. Not started: only a state-value
    install validates part of the document
