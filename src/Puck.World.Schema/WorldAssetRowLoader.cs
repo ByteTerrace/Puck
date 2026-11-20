@@ -48,21 +48,60 @@ public static class WorldAssetRowLoader {
 
         return definition with {
             PatchesRaw = [.. definition.Patches.Select(patch => Embed(AudioFamily.Patch, patch.Name, patch.Source, patch.Hash,
-                () => TryLoadPatch(directory, patch, out var document, out var error) ? Loaded.From(SynthPatchCanonicalizer.Canonicalize(document!)) : Loaded.Failed(error))
+                () => LoadCanonical(AssetRowFamilies.Patch, directory, patch.Name, patch.Source, patch.Hash))
                 is { } source ? patch with { Source = source } : null).OfType<WorldPatch>()],
             TunesRaw = [.. definition.Tunes.Select(tune => Embed(AudioFamily.Tune, tune.Name, tune.Source, tune.Hash,
-                () => TryLoadTune(directory, tune, out var document, out var error) ? Loaded.From(AudioCanonicalizer.Canonicalize(document!)) : Loaded.Failed(error))
+                () => LoadCanonical(AssetRowFamilies.Tune, directory, tune.Name, tune.Source, tune.Hash))
                 is { } source ? tune with { Source = source } : null).OfType<WorldTune>()],
             Music = definition.Music?.Select(row => Embed(AudioFamily.Music, row.Name, row.Source, row.Hash,
-                () => TryLoadMusic(directory, row, out var document, out var error) ? Loaded.From(MusicCanonicalizer.Canonicalize(document!)) : Loaded.Failed(error))
+                () => LoadCanonical(AssetRowFamilies.Music, directory, row.Name, row.Source, row.Hash))
                 is { } source ? row with { Source = source } : null).OfType<WorldMusicRow>().ToArray(),
         };
     }
 
-    // One row's loaded canonical content, or why it did not load.
+    /// <summary>Computes the canonical content pin of an asset reference row's source document: the digest every
+    /// reference row of its family carries as <c>hash</c>, so an author writes <c>hash: auto</c> and the compiler fills
+    /// it with this.</summary>
+    /// <param name="family">The row's family, one of <see cref="AssetRowFamilies"/>.</param>
+    /// <param name="documentDirectory">The directory of the document that authored the row.</param>
+    /// <param name="name">The row's name, quoted by a refusal.</param>
+    /// <param name="source">The row's authored source path.</param>
+    /// <param name="pin">The SHA-256 hex64 of the canonical bytes, when this method returns <see langword="true"/>.</param>
+    /// <param name="error">Why the document did not load or canonicalize, when this method returns <see langword="false"/>.</param>
+    /// <returns>Whether the source loaded and canonicalized.</returns>
+    public static bool TryCanonicalHash(string family, string? documentDirectory, string name, string source, out string pin, out string error) {
+        var loaded = LoadCanonical(family: family, documentDirectory: documentDirectory, name: name, source: source, hash: null);
+
+        pin = (loaded.Hash ?? string.Empty);
+        error = (loaded.Error ?? string.Empty);
+
+        return (loaded.Hash is not null);
+    }
+
+    // One row's loaded canonical content, or why it did not load. The family's document type and canonicalizer are
+    // named here once, for every consumer of a row's canonical hash.
     private readonly record struct Loaded(string? Hash, byte[]? Bytes, string? Error) {
         public static Loaded From<T>(CanonicalDocument<T> canonical) => new(canonical.Hash, canonical.Bytes, null);
         public static Loaded Failed(string? error) => new(null, null, error);
+    }
+
+    private static Loaded LoadCanonical(string family, string? documentDirectory, string name, string source, string? hash) => family switch {
+        AssetRowFamilies.Music => LoadCanonical<MusicDocument>(documentDirectory, source, hash, document => Loaded.From(MusicCanonicalizer.Canonicalize(document: document, source: name))),
+        AssetRowFamilies.Patch => LoadCanonical<SynthPatchDocument>(documentDirectory, source, hash, document => Loaded.From(SynthPatchCanonicalizer.Canonicalize(document: document, source: name))),
+        AssetRowFamilies.Table => LoadCanonical<TableDocument>(documentDirectory, source, hash, document => Loaded.From(TableCanonicalizer.Canonicalize(document: document, source: name))),
+        AssetRowFamilies.Tune => LoadCanonical<AudioDocument>(documentDirectory, source, hash, document => Loaded.From(AudioCanonicalizer.Canonicalize(document: document, source: name))),
+        _ => Loaded.Failed($"'{family}' is not an asset row family."),
+    };
+    private static Loaded LoadCanonical<TDocument>(string? documentDirectory, string source, string? hash, Func<TDocument, Loaded> canonicalize) where TDocument : class {
+        if (!TryLoad(documentDirectory: documentDirectory, source: source, document: out TDocument? document, error: out var error, hash: hash)) {
+            return Loaded.Failed(error);
+        }
+
+        try {
+            return canonicalize(document!);
+        } catch (Exception exception) when (exception is DocumentValidationException or InvalidOperationException) {
+            return Loaded.Failed(exception.Message.ReplaceLineEndings(replacementText: " "));
+        }
     }
 
     private static string? Embed(AudioFamily family, string name, string source, string hash, Func<Loaded> load) {

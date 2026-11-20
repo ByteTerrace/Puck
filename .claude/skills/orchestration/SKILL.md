@@ -1150,6 +1150,8 @@ not "religious"):
 
 **Word a review brief for what it is.** Codex's safety filter refused a brief titled an "adversarial security review" that asked it to "attack" a disclosure change, and the lane burned its tokens and stalled. A review of Puck's own access-control or disclosure code is a correctness review: say what the code intends, ask whether it does it, and keep "attack" and "exploit" out of the brief.
 
+**A hung process never holds the queue.** When `puck lease list` shows waiters stuck on "waiting for host capacity" with the lease idle, run `puck host load`: a `start … ready=False` row whose process sits idle (flat CPU and private bytes) is blocking every admission. The lead may stop a hung process that belongs to one of this repository's worktrees (the owner's ruling), tells the owning lane, and treats the hang as a finding for that lane.
+
 **A finished lane is never missed.** The lane watch (`puck lanes --watch`) expires every 30 minutes, and a lane that finishes while it is down sits unlanded for hours, which happened twice in one session. Re-arm the watch on every expiry notice, and run `puck lanes` for `done` rows at every hand-back and before every status report.
 
 **An optimization found is dispatched at once** (the owner's ruling in AGENTS.md). Every hand-back's Found list and every research hunt is read for optimizations the same session, and each goes to a lane before the next wave: a specified one (an index rebuilt per call, a hand-rolled helper with a shared home, a copy, an allocation in a loop) to a cheap model (Haiku or Sonnet `implementer`), batched by area; one whose correctness rests on an invariant (GPU retirement, determinism, a cache's invalidation) to Opus or Codex. `lead-owed.md` holds one only between waves.

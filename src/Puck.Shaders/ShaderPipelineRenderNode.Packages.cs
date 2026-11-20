@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -45,13 +46,13 @@ public sealed partial class ShaderPipelineRenderNode {
             var buffer = ((resource.Buffers is { } buffers)
                 ? buffers[HistoryIndex(previous: false, resource: resource, slot: slot)] : null);
 
-            var publication = default(GpuImagePublication);
+            var publication = default(ReferenceRevision);
 
             if (buffer is not null) {
-                publication = new GpuImagePublication(Owner: this, Sequence: m_submissions);
+                publication = new ReferenceRevision(Owner: this, Revision: m_submissions);
                 foreach (var version in resource.Cadence) {
                     if ((version.Name == name) && version.Valid) {
-                        publication = new GpuImagePublication(Owner: version, Sequence: version.Generation);
+                        publication = new ReferenceRevision(Owner: version, Revision: version.Generation);
                         break;
                     }
                 }
@@ -63,7 +64,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 image = ResolveImage(index: instance, name: publishedName, resource: published) with {
                     Layout = (published.Spec.IsExternal ? m_externalImages[publishedName].Layout : m_outputLayout),
                 };
-                publication = new GpuImagePublication(Owner: this, Sequence: m_submissions);
+                publication = new ReferenceRevision(Owner: this, Revision: m_submissions);
             }
             next[index] = new BufferOutput(Buffer: buffer, Image: image, Name: name, Publication: publication);
         }
@@ -77,18 +78,10 @@ public sealed partial class ShaderPipelineRenderNode {
         m_publishedBufferDefault = null;
     }
 
-    // Reads the actual last published frame, not an unrendered replacement's allocations. Null names select the
-    // default of the graph that published it; image outputs and withdrawn publications have no buffer.
-    internal IGpuBuffer? LatestOutputBuffer(string? name = null) {
-        name ??= m_publishedBufferDefault;
+    // Reads the actual last published default output, not an unrendered replacement's allocations.
+    internal BufferOutput LatestOutputBuffer() {
         foreach (var output in m_publishedBuffers) {
-            if (output.Name == name) { return output.Buffer; }
-        }
-        return null;
-    }
-    internal GpuImagePublication LatestOutputBufferPublication() {
-        foreach (var output in m_publishedBuffers) {
-            if (output.Name == m_publishedBufferDefault) { return output.Publication; }
+            if (output.Name == m_publishedBufferDefault) { return output; }
         }
         return default;
     }
@@ -103,7 +96,7 @@ public sealed partial class ShaderPipelineRenderNode {
         return result;
     }
 
-    internal readonly record struct BufferOutput(string Name, IGpuBuffer? Buffer, GpuImagePublication Publication, ShaderPipelineExternalImage Image = default);
+    internal readonly record struct BufferOutput(string Name, IGpuBuffer? Buffer, ReferenceRevision Publication, ShaderPipelineExternalImage Image = default);
 
     // What a package pass's factory builds and creates its recorder for, captured on the frame thread's request and read
     // on the pool.

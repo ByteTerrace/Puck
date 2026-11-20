@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
@@ -354,7 +355,7 @@ public sealed partial class RenderGraphRuntime {
             Image: surface,
             Layout: node.PublishedLayout,
             StateTick: node.PublishedStateTick,
-            Publication: new GpuImagePublication(Owner: node, Sequence: node.SubmissionCount),
+            Publication: new ReferenceRevision(Owner: node, Revision: node.SubmissionCount),
             StandsFor: Standing.Own,
             Tainted: false
         );

@@ -117,8 +117,6 @@ public static class PuckDiagnosticCodes {
     public const string RuleNameMissing = "PUCK011";
     /// <summary>A <c>rule</c> block carrying no effect statements.</summary>
     public const string RuleWithoutEffects = "PUCK026";
-    /// <summary>A <c>schedule ... in</c> delay missing a unit the seconds dimension admits.</summary>
-    public const string ScheduleDelayUnit = "PUCK010";
     /// <summary>A document the engine schema rejected outright.</summary>
     public const string SchemaRejected = "PUCK031";
     /// <summary>PUCK123: a section block holding only its rows (<c>kits { rows [ … ] }</c>); such a section is written

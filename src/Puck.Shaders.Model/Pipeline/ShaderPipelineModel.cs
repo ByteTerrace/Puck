@@ -275,17 +275,7 @@ public sealed record ShaderPipelineCountTerm(
         Per.SequenceEqual(second: other.Per)
     );
     /// <inheritdoc/>
-    public override int GetHashCode() {
-        var hash = new HashCode();
-
-        hash.Add(value: Elements);
-
-        foreach (var basis in Per) {
-            hash.Add(value: basis);
-        }
-
-        return hash.ToHashCode();
-    }
+    public override int GetHashCode() => HashCode.Combine(Elements, SequenceHash.Of(Per));
 }
 /// <summary>The counts a host resolves counted buffers against. A basis the host leaves at zero zeroes every term that
 /// scales with it, and a counted buffer whose terms all resolve to zero is refused.</summary>

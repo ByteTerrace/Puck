@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Text.Json;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
@@ -235,7 +236,7 @@ public sealed partial class RenderGraphCadenceLawTests {
         using var first = gpu.CreateDeviceLocal(16, GpuBufferUsage.Storage, new GpuObjectName("test", "first"));
         using var replacement = gpu.CreateDeviceLocal(16, GpuBufferUsage.Storage, new GpuObjectName("test", "replacement"));
         using var node = Node(gpu, model, input: input);
-        var publication = new GpuImagePublication(Owner: first, Sequence: 1);
+        var publication = new ReferenceRevision(Owner: new ByReference<object>(first), Revision: 1);
 
         node.BindBuffer(buffer: first, name: "source", publication: publication);
         node.ProduceUntilInstalled();
@@ -245,11 +246,11 @@ public sealed partial class RenderGraphCadenceLawTests {
         }
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (1, 1));
 
-        publication = publication with { Sequence = 2 };
+        publication = publication with { Revision = 2 };
         node.BindBuffer(buffer: first, name: "source", publication: publication);
         node.ProduceFrame(context: default);
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (2, 2));
-        publication = publication with { Owner = replacement };
+        publication = publication with { Owner = new ByReference<object>(replacement) };
         node.BindBuffer(buffer: first, name: "source", publication: publication);
         node.ProduceFrame(context: default);
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (3, 3));
@@ -285,7 +286,7 @@ public sealed partial class RenderGraphCadenceLawTests {
         using var buffer = gpu.CreateDeviceLocal(16, GpuBufferUsage.Storage, new GpuObjectName("test", "mutable"));
         using var node = Node(gpu, model, graph: graph, input: input, compositeReadsPredecessor: true);
 
-        node.BindBuffer(buffer: buffer, name: "source", publication: new GpuImagePublication(Owner: buffer, Sequence: 1));
+        node.BindBuffer(buffer: buffer, name: "source", publication: new ReferenceRevision(Owner: new ByReference<object>(buffer), Revision: 1));
         node.ProduceUntilInstalled();
         var records = model.Writes;
 

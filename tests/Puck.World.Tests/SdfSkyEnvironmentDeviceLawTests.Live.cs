@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
@@ -70,9 +71,9 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         var stage = "residency pipelines";
         string? previousStatus = null;
 
-        string Status() => (((((string)$"{target} {stage}: frame={index}, residency={(residency.NotReadyReason ?? "ready")}; converter={(converter.Render.Reason ?? "rendered")}, source={converter.Publication.Sequence}; ") +
+        string Status() => (((((string)$"{target} {stage}: frame={index}, residency={(residency.NotReadyReason ?? "ready")}; converter={(converter.Render.Reason ?? "rendered")}, source={converter.Publication.Revision}; ") +
             $"environment={NodeStatus(node: graph.Node(instance: 1))}, observer={NodeStatus(node: graph.Node(instance: 2))}; ") +
-            $"submitted={residency.Tables?.SubmittedSkyEnvironment?.Sequence}, completed={residency.Tables?.CompletedSkyEnvironment.Sequence}; ") +
+            $"submitted={residency.Tables?.SubmittedSkyEnvironment?.Sequence}, completed={residency.Tables?.CompletedSkyEnvironment.Revision}; ") +
             $"graph={(graph.Render.Reason ?? "rendered")}");
         static string NodeStatus(ShaderPipelineRenderNode node) => (node.LastSwapError?.Message ??
             $"ready={node.IsReady}, building={node.IsBuildingCandidate}, pending={node.HasPendingCandidate}");
@@ -105,7 +106,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         }
         bool Building() => (converter.IsBuilding || graph.Node(instance: 1).IsBuildingCandidate || graph.Node(instance: 2).IsBuildingCandidate);
         stage = "initial panorama publication";
-        TestLiveness.Within(frames: 16, step: () => { Produce(); return (residency.Tables?.CompletedSkyEnvironment.IsKnown == true); },
+        TestLiveness.Within(frames: 16, step: () => { Produce(); return (residency.Tables?.CompletedSkyEnvironment.IsPublished() == true); },
             building: Building, reason: Status);
         var tables = residency.Tables!;
         var initial = tables.CompletedSkyEnvironment;
@@ -123,8 +124,8 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         TestLiveness.Within(frames: 16, step: () => { Produce(); return (tables.CompletedSkyEnvironment != initial); },
             building: Building, reason: Status);
         Assert.NotEqual(input, converter.Publication);
-        Assert.Same(initial.Owner, tables.CompletedSkyEnvironment.Owner);
-        Assert.Equal((initial.Sequence + 1), tables.CompletedSkyEnvironment.Sequence);
+        Assert.Same(initial.Owner.Value, tables.CompletedSkyEnvironment.Owner.Value);
+        Assert.Equal((initial.Revision + 1), tables.CompletedSkyEnvironment.Revision);
         Assert.False(condition: tables.SubmittedSkyEnvironment!.Value.Tainted);
         AssertPanorama(red: false);
         var updated = tables.CompletedSkyEnvironment;
@@ -199,7 +200,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
     private static RenderGraphInstance LiveInstance() => new(Name: "feed", ExternalPackage: "test.live-pixels", Passes: 1,
         Reads: [], Refresh: RenderGraphRefresh.EveryFrame) { OutputExtent = new(Height: 4, Width: 4) };
 
-    private readonly record struct PixelRead(Surface Image, GpuImageLayout Layout, GpuImagePublication Publication, bool Tainted);
+    private readonly record struct PixelRead(Surface Image, GpuImageLayout Layout, ReferenceRevision Publication, bool Tainted);
     private sealed class PixelReaders : IRenderGraphPackageFactory {
         public bool SamplesReads => true;
         public Dictionary<string, PixelRead> Seen { get; } = [];
@@ -268,7 +269,7 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
         }
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
             output = default;
-            if (!Converter.Publication.IsKnown) { return false; }
+            if (!Converter.Publication.IsPublished()) { return false; }
             Acquired++;
             output = new(Image: Converter.Output, Layout: Converter.OutputLayout,
                 Lease: new GpuImageLease(Converter.ImageViewHandle, _ => Released++, Publication: Converter.Publication) { Image = Converter.Output }, Tainted: Tainted);

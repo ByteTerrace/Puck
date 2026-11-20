@@ -131,7 +131,11 @@ A document's `schema:` field selects its vocabulary, never the filename.
   than inventing an empty digest or an automatic hash.
   Font pins cover the font bytes; canonical document rows (creations, patches, tunes,
   music and tables) pin their canonical document, whose compiled identity is
-  still the canonicalizer's digest. The printer restores the authored prefix.
+  still the canonicalizer's digest. A tune, patch, music or table row takes
+  `hash: auto` too: the compiler loads the row's `source` beside the document and
+  writes the canonical digest (`WorldAssetRowLoader.TryCanonicalHash`, applied in
+  `WorldDocumentMembers`); a creation's pin is omitted instead, which resolves to
+  the computed hash. The printer restores the authored prefix.
 - Generated names use `$` inside a document and `~` in file names
   (`Puck.State.GeneratedName`); an author name using them is **PUCK113**.
 - **Control flow is core-parsed; each vocabulary decides what its rule shape

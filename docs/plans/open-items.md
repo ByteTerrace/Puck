@@ -868,9 +868,9 @@ Stalls and hitches to attribute:
   it grounded. Find whether the support normal's tilt leaves a residue the
   contact write-back keeps.
 - [low] `WorldPopulation.SyncBodyCells` resyncs every body's scale, kit and
-  look, resolving each register by name (`WorldBodyStateReads.TryResolveSlot`),
-  whenever one body's register moves. Resync only the bodies whose lane cells
-  the commit touched (`StateArena.CollectOpenLaneOrdinals`).
+  look whenever one body's register moves (the registers resolve once per
+  document, `WorldBodyStateReads.PlanFor`). Resync only the bodies whose lane
+  cells the commit touched (`StateArena.CollectOpenLaneOrdinals`).
 - [low] Every rigid advance zero-fills the step's capture snapshot
   (`WorldBody.CaptureMotion` into `CaptureIntegrationResidue`).
 - [low] A reading taken while the compositor is not composing looks like a
