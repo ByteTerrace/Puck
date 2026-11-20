@@ -195,6 +195,23 @@ var storageAccountPublicCorsRules = {
     }
   ]
 }
+// A storage account's `audit` category group carries StorageRead as well as StorageWrite and StorageDelete, and
+// the reads (Front Door's origin probes, the Functions host's lease and property checks, Orleans membership
+// polling) were most of a month's ingestion. The change trail is what an operator audits, so only mutations are
+// sent to the workspace.
+var storageDiagnosticSettings = [
+  {
+    logCategoriesAndGroups: [
+      {
+        category: 'StorageDelete'
+      }
+      {
+        category: 'StorageWrite'
+      }
+    ]
+    workspaceResourceId: logAnalyticsWorkspace.id
+  }
+]
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Existing Resources
@@ -281,6 +298,9 @@ module functionApplication 'br/public:avm/res/web/site:0.24.0' = {
           ConfigurationStore__Endpoint: function.applicationSettings.configurationStoreEndpoint
           DataProtection__BlobUri: '${storageAccountPrivate.outputs.primaryBlobEndpoint}${function.applicationSettings.dataProtection.blobContainerName}${function.applicationSettings.dataProtection.blobPath}'
           DataProtection__KeyUri: '${dataProtection_keyVault.properties.vaultUri}keys/${function.applicationSettings.dataProtection.keyName}'
+          // Stops the Azure Monitor exporter sending its per-interval resource metric, an `_APPRESOURCEPREVIEW_`
+          // row that nothing reads.
+          OTEL_DOTNET_AZURE_MONITOR_ENABLE_RESOURCE_METRICS: 'false'
           OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID: applicationRegistration_userAssignedIdentity.properties.clientId
           RedisCache__Configuration: function.applicationSettings.redisCacheEndpoint
           WEBSITE_AUTH_AAD_ALLOWED_TENANTS: tenant().tenantId
@@ -540,7 +560,7 @@ module storageAccountPrivate 'br/public:avm/res/storage/storage-account:0.33.1' 
       deleteRetentionPolicyAllowPermanentDelete: false
       deleteRetentionPolicyDays: 13
       deleteRetentionPolicyEnabled: true
-      diagnosticSettings: defaultAuditDiagnosticSettings
+      diagnosticSettings: storageDiagnosticSettings
       isVersioningEnabled: true
       lastAccessTimeTrackingPolicyEnabled: true
       restorePolicyDays: null
@@ -559,7 +579,7 @@ module storageAccountPrivate 'br/public:avm/res/storage/storage-account:0.33.1' 
     enableTelemetry: enableTelemetry
     fileServices: {
       corsRules: []
-      diagnosticSettings: defaultAuditDiagnosticSettings
+      diagnosticSettings: storageDiagnosticSettings
       protocolSettings: {
         smb: {
           authenticationMethods: 'Kerberos'
@@ -651,7 +671,7 @@ module storageAccountPrivate 'br/public:avm/res/storage/storage-account:0.33.1' 
     publicNetworkAccess: publicNetworkAccess
     queueServices: {
       corsRules: []
-      diagnosticSettings: defaultAuditDiagnosticSettings
+      diagnosticSettings: storageDiagnosticSettings
       queues: []
     }
     requireInfrastructureEncryption: true
@@ -676,7 +696,7 @@ module storageAccountPrivate 'br/public:avm/res/storage/storage-account:0.33.1' 
     supportsHttpsTrafficOnly: true
     tableServices: {
       corsRules: []
-      diagnosticSettings: defaultAuditDiagnosticSettings
+      diagnosticSettings: storageDiagnosticSettings
       tables: []
     }
     tags: storage.private.?tags
@@ -732,7 +752,7 @@ module storageAccountPublic 'br/public:avm/res/storage/storage-account:0.33.1' =
         deleteRetentionPolicyAllowPermanentDelete: false
         deleteRetentionPolicyDays: 13
         deleteRetentionPolicyEnabled: true
-        diagnosticSettings: defaultAuditDiagnosticSettings
+        diagnosticSettings: storageDiagnosticSettings
         isVersioningEnabled: true
         lastAccessTimeTrackingPolicyEnabled: true
         restorePolicyDays: null
@@ -751,7 +771,7 @@ module storageAccountPublic 'br/public:avm/res/storage/storage-account:0.33.1' =
       enableTelemetry: enableTelemetry
       fileServices: {
         corsRules: storageAccountPublicCorsRules.file
-        diagnosticSettings: defaultAuditDiagnosticSettings
+        diagnosticSettings: storageDiagnosticSettings
         protocolSettings: {
           smb: {
             authenticationMethods: 'Kerberos'
@@ -790,7 +810,7 @@ module storageAccountPublic 'br/public:avm/res/storage/storage-account:0.33.1' =
       publicNetworkAccess: 'Enabled'
       queueServices: {
         corsRules: storageAccountPublicCorsRules.queue
-        diagnosticSettings: defaultAuditDiagnosticSettings
+        diagnosticSettings: storageDiagnosticSettings
         queues: []
       }
       requireInfrastructureEncryption: true
@@ -798,7 +818,7 @@ module storageAccountPublic 'br/public:avm/res/storage/storage-account:0.33.1' =
       supportsHttpsTrafficOnly: true
       tableServices: {
         corsRules: storageAccountPublicCorsRules.table
-        diagnosticSettings: defaultAuditDiagnosticSettings
+        diagnosticSettings: storageDiagnosticSettings
         tables: []
       }
       tags: account.?tags

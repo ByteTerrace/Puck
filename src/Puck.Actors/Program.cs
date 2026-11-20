@@ -72,11 +72,21 @@ if (!string.IsNullOrWhiteSpace(value: configuration.GetValue<string>(key: "APPLI
             azureMonitorOptions.Credential = tokenCredential;
         })
         .WithMetrics(configure: static meterProviderBuilder => {
-            meterProviderBuilder.AddMeter(names: "Microsoft.Orleans");
+            meterProviderBuilder
+                .AddMeter(names: "Microsoft.Orleans")
+                // A histogram exports one series per bucket per dimension set, so it is the silo's largest
+                // metric. Nothing reads it, and the request spans below carry the same latency.
+                .AddView(
+                    instrumentName: "orleans-app-requests-latency",
+                    metricStreamConfiguration: MetricStreamConfiguration.Drop
+                );
         })
         .WithTracing(configure: static tracerProviderBuilder => {
             tracerProviderBuilder
-                .AddAspNetCoreInstrumentation()
+                // The platform probes /healthz continuously; a probe is not worth a request record.
+                .AddAspNetCoreInstrumentation(configureAspNetCoreTraceInstrumentationOptions: static options => {
+                    options.Filter = static httpContext => !httpContext.Request.Path.StartsWithSegments(other: "/healthz");
+                })
                 .AddHttpClientInstrumentation()
                 .AddSource(names: [
                     "Microsoft.Orleans.Application",

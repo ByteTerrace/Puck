@@ -47,6 +47,11 @@ public sealed class WorldRenderEnvelope {
 
     private long m_nextId;
 
+    /// <summary>Gets a count that moves whenever a measurer is registered. What a fit read is recorded against it,
+    /// because a fit made before a measurer registered says nothing about the parts that measurer reads. Removing a
+    /// measurer leaves it, since the parts the rest read are among those recorded.</summary>
+    public long Revision { get; private set; }
+
     /// <summary>Registers one render consumer's measurer.</summary>
     /// <param name="measure">Counts a candidate definition's render scene as this consumer would draw it. It runs once
     /// per render-relevant mutation, so it counts rather than emits; a candidate it cannot measure throws
@@ -58,6 +63,7 @@ public sealed class WorldRenderEnvelope {
 
         var id = m_nextId++;
 
+        Revision++;
         m_measurers.Add(
             key: id,
             value: measure
