@@ -20,12 +20,23 @@ public static partial class AzureCommand {
             CliFiles.ReadJson(path: "artifacts/release-source.json")["commit"]!.GetValue<string>(),
             File.ReadAllText(path: "artifacts/world-silo.digest").Trim(),
             "artifacts/azure/silo-worlds",
+            LocalWorldsDirectory,
             outputDirectory
         );
 
     /// <summary>Applies deployment-owned endpoint/admission bindings before hashing the official release inventory.
     /// All composed co-hosted worlds become explicit pinned members of the maintenance group.</summary>
-    public static void PrepareOfficialWorldReleasePackage(JsonNode outputs, string revision, string image, string sourceDirectory, string outputDirectory) {
+    /// <param name="outputs">The deployment's outputs.</param>
+    /// <param name="revision">The full source commit the release was built from.</param>
+    /// <param name="image">The immutable registry reference of the world-silo image that runs the release.</param>
+    /// <param name="sourceDirectory">The directory <c>puck world prepare</c> wrote the composed documents into.</param>
+    /// <param name="assetDirectory">The local copy of the asset layout the image ships the documents into
+    /// (<see cref="LocalWorldsDirectory"/>): every document validates beside it, as the deployed silo resolves its
+    /// relative paths beside <see cref="WorldSiloImageLayout.WorldsDirectory"/>. Never packaged; the image digest retains it.</param>
+    /// <param name="outputDirectory">The release package directory written.</param>
+    /// <exception cref="InvalidDataException">The revision or image is not immutable, the inventory lacks the configured
+    /// primary world, or a document does not validate beside <paramref name="assetDirectory"/>.</exception>
+    public static void PrepareOfficialWorldReleasePackage(JsonNode outputs, string revision, string image, string sourceDirectory, string assetDirectory, string outputDirectory) {
         if (
             !Regex.IsMatch(
             input: revision,
@@ -70,7 +81,8 @@ public static partial class AzureCommand {
 
             Directory.CreateDirectory(path: package);
             // This temporary silo is only a validated inventory for manifest preparation; its key and store
-            // never become package artifacts or production deployment inputs.
+            // never become package artifacts or production deployment inputs. Its document directory is the local copy
+            // of the layout the deployed silo's documentDirectory names, which the documents validate beside.
             var silo = SiloDocument(
                 "",
                 owner,
@@ -83,7 +95,8 @@ public static partial class AzureCommand {
                 )),
                     },
                 },
-                primary
+                primary,
+                documentDirectory: Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: assetDirectory))
             );
 
             silo["stateDir"] = Puck.Abstractions.PuckPaths.Slashed(path: Path.Combine(

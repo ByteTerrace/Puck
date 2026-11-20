@@ -144,6 +144,9 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
 
         config["stateDir"] = "/fixture/state";
         config["store"]!["settings"]!["path"] = "/fixture/store";
+        // The leg's silo runs inside the image, whose asset layout the release's definitions resolve their relative
+        // paths beside, as the deployed silo does.
+        config["documentDirectory"] = WorldSiloImageLayout.WorldsDirectory;
         foreach (var row in config["worlds"]!.AsArray()) { row!["federation"]!["keyFile"] = $"/fixture/keys/{row["owner"]}-{row["world"]}.pk8"; }
         File.WriteAllText(
             Path.Combine(

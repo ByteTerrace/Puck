@@ -100,6 +100,7 @@ public sealed class WorldReleaseBootstrapTests {
                 archive: archive,
                 authority: authority,
                 cancellationToken: token,
+                documentDirectory: null,
                 manifest: manifest,
                 owner: owner
             ));
@@ -119,6 +120,7 @@ public sealed class WorldReleaseBootstrapTests {
                 archive: archive,
                 authority: authority,
                 cancellationToken: token,
+                documentDirectory: null,
                 manifest: manifest,
                 owner: owner
             );
@@ -126,6 +128,7 @@ public sealed class WorldReleaseBootstrapTests {
                 archive: archive,
                 authority: authority,
                 cancellationToken: token,
+                documentDirectory: null,
                 manifest: manifest,
                 owner: owner
             );
@@ -258,6 +261,7 @@ public sealed class WorldReleaseBootstrapTests {
             archive: archive,
             authority: authority,
             cancellationToken: token,
+            documentDirectory: null,
             manifest: manifest,
             owner: owner
         );

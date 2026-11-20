@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
+using Puck.Cli.Automation;
 using Puck.Storage;
 using Puck.World;
 using Puck.World.Server;
@@ -512,7 +513,7 @@ public static partial class AzureCommand {
         try {
             await DockerAsync(
                 "cp",
-                "silo-source:/app/worlds/.",
+                $"silo-source:{WorldSiloImageLayout.WorldsDirectory}/.",
                 Path.Combine(
                     path1: fixture,
                     path2: "worlds"
@@ -557,7 +558,7 @@ public static partial class AzureCommand {
             }
         }
         var silo = SiloDocument(
-            documentDirectory: ImageWorldsDirectory,
+            documentDirectory: WorldSiloImageLayout.WorldsDirectory,
             keyFile: "/fixture/federation.pk8",
             owner: Owner,
             store: new JsonObject { ["type"] = "directory", ["settings"] = new JsonObject { ["path"] = "/fixture/store" } },

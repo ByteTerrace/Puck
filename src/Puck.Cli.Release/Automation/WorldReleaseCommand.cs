@@ -58,6 +58,15 @@ public static class WorldReleaseCommand {
         var definitionFiles = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
         var artifacts = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
         var definitionPaths = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+        // A composed definition validates beside the directory its silo resolves every hosted document's relative paths
+        // beside (WorldSiloDefinition.DocumentDirectory, resolved as WorldSiloHost resolves it): the asset layout the
+        // documents run in, which holds the patches, scores, sample sets and machine content they name. The package
+        // carries only the documents and release artifacts, so its own directory is never that layout; a silo naming no
+        // directory refuses a relative path here exactly as it would at activation.
+        var documentDirectory = ((silo.DocumentDirectory is { } named)
+            ? Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: named))
+            : null
+        );
 
         foreach (var row in silo.Worlds.OrderBy(keySelector: static row => row.Owner).ThenBy(
             static row => row.World.ToString(),
@@ -72,7 +81,7 @@ public static class WorldReleaseCommand {
             if (!WorldDefinitionLoader.TryReadPublishable(
                 catalog: machines,
                 definition: out var definition,
-                documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: definitionPath),
+                documentDirectory: documentDirectory,
                 json: File.ReadAllText(path: definitionPath),
                 reason: out var definitionReason,
                 sourceName: definitionPath
@@ -283,7 +292,7 @@ public static class WorldReleaseCommand {
     public static Command Create(TimeProvider clock, IWorldReleaseQualificationContainers? containers = null) {
         var host = new Option<string?>(name: "--host") { Description = "Installed release host key; defaults to the single installed host.", Recursive = true };
         var package = new Argument<string>(name: "package-directory") { Description = "Package directory containing composed worlds and release artifacts." };
-        var silo = new Option<string>("--silo") { Description = "Validated silo configuration whose owner/world rows name the composed definitions.", Required = true };
+        var silo = new Option<string>("--silo") { Description = "Validated silo configuration whose owner/world rows name the composed definitions; each definition validates beside its documentDirectory, the asset layout it runs in.", Required = true };
         var output = CliOptions.Output(description: "The manifest's path; absent, release.json in the package directory.");
         var label = new Option<string>("--label") { Description = "The release's human-readable label.", Required = true };
         var revision = new Option<string>("--source-revision") { Description = "The full source commit the release was built from.", Required = true };
