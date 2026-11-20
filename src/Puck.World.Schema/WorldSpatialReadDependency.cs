@@ -44,8 +44,7 @@ public sealed record WorldSpatialReadDependency(
             return false;
         }
         if (
-            (Fingerprint is not { Length: 64 }) ||
-            Fingerprint.Any(predicate: c => !char.IsAsciiHexDigit(c: c))
+            !Puck.Abstractions.ContentDigest.IsHex(text: Fingerprint)
         ) {
             reason = "a spatial read fingerprint must be a SHA-256 hex value";
             return false;

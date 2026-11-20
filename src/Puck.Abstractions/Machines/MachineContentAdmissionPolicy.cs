@@ -58,8 +58,18 @@ public sealed class MachineContentAdmissionPolicy : IMachineContentAdmissionPoli
             );
         }
 
-        m_trustedSourceFormats = CloneFormats(formats: trustedSourceFormats);
-        m_executableSha256Exceptions = CloneHashes(hashes: executableSha256Exceptions);
+        m_trustedSourceFormats = CloneSet(
+            admit: static format => (string.IsNullOrWhiteSpace(value: format) ? null : format),
+            message: "Trusted source format IDs must be non-empty.",
+            paramName: nameof(trustedSourceFormats),
+            values: trustedSourceFormats
+        );
+        m_executableSha256Exceptions = CloneSet(
+            admit: static hash => (ContentDigest.IsHex(text: hash) ? hash.ToUpperInvariant() : null),
+            message: "Executable SHA-256 exceptions must be 64 hexadecimal characters.",
+            paramName: nameof(executableSha256Exceptions),
+            values: executableSha256Exceptions
+        );
         if (
             (mode == MachineContentAdmissionMode.AuthoredFormatsOnly) &&
             (m_trustedSourceFormats.Count == 0)
@@ -89,43 +99,16 @@ public sealed class MachineContentAdmissionPolicy : IMachineContentAdmissionPoli
         Code: code,
         Detail: detail
     );
-    private static FrozenSet<string> CloneFormats(IEnumerable<string>? formats) {
-        if (formats is null) {
-            return Array.Empty<string>().ToFrozenSet(comparer: StringComparer.Ordinal);
+    private static FrozenSet<string> CloneSet(IEnumerable<string>? values, Func<string?, string?> admit, string message, string paramName) {
+        if (values is null) {
+            return FrozenSet<string>.Empty;
         }
-        var values = new List<string>();
+        var admitted = new List<string>();
 
-        foreach (var format in formats) {
-            if (string.IsNullOrWhiteSpace(value: format)) {
-                throw new ArgumentException(
-                    message: "Trusted source format IDs must be non-empty.",
-                    paramName: nameof(formats)
-                );
-            }
-            values.Add(item: format);
+        foreach (var value in values) {
+            admitted.Add(item: admit(arg: value) ?? throw new ArgumentException(message: message, paramName: paramName));
         }
-        return values.ToFrozenSet(comparer: StringComparer.Ordinal);
-    }
-    private static FrozenSet<string> CloneHashes(IEnumerable<string>? hashes) {
-        if (hashes is null) {
-            return Array.Empty<string>().ToFrozenSet(comparer: StringComparer.Ordinal);
-        }
-        var values = new List<string>();
-
-        foreach (var hash in hashes) {
-            if (
-                (hash is null) ||
-                (hash.Length != 64) ||
-                hash.Any(predicate: character => !Uri.IsHexDigit(character: character))
-            ) {
-                throw new ArgumentException(
-                    message: "Executable SHA-256 exceptions must be 64 hexadecimal characters.",
-                    paramName: nameof(hashes)
-                );
-            }
-            values.Add(item: hash.ToUpperInvariant());
-        }
-        return values.ToFrozenSet(comparer: StringComparer.Ordinal);
+        return admitted.ToFrozenSet(comparer: StringComparer.Ordinal);
     }
     private MachineContentAdmissionDecision EvaluateAuthoredFormat(MachineContentAdmissionRequest request) {
         if (request.VerifiedSourceFormat is null) {

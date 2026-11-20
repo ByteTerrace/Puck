@@ -62,7 +62,6 @@ public sealed class LocalEndpointCapability {
 
         return new DateTimeOffset(dateTime: self.StartTime.ToUniversalTime());
     }
-    private static bool IsHex(string? text, int length) => ((text?.Length == length) && !text.AsSpan().ContainsAnyExcept(values: "0123456789abcdefABCDEF"));
     private static string Proof(LocalEndpointDescriptor descriptor, string role, string serverNonce, string clientNonce) => Convert.ToHexString(inArray: HMACSHA256.HashData(
         key: Convert.FromHexString(s: descriptor.Secret),
         source: Encoding.UTF8.GetBytes(s: $"puck-control:{descriptor.Revision}:{descriptor.Host}:{role}:{serverNonce}:{clientNonce}")
@@ -99,18 +98,12 @@ public sealed class LocalEndpointCapability {
         if (
             (hello.Revision != descriptor.Revision) ||
             (hello.Host != descriptor.Host) ||
-            !IsHex(
-            hello.Nonce,
-            64
-        )
+            !Puck.Abstractions.ContentDigest.IsHex(text: hello.Nonce)
         ) { throw new UnauthorizedAccessException(message: "Attachment host or revision mismatch."); }
     }
     private static void Verify(string proof, string expected) {
         if (
-            !IsHex(
-            length: 64,
-            text: proof
-        ) ||
+            !Puck.Abstractions.ContentDigest.IsHex(text: proof) ||
             !CryptographicOperations.FixedTimeEquals(
             left: Convert.FromHexString(s: proof),
             right: Convert.FromHexString(s: expected)
@@ -281,10 +274,7 @@ public sealed class LocalEndpointCapability {
             "N",
             out _
         ) ||
-            !IsHex(
-            descriptor.Secret,
-            64
-        )
+            !Puck.Abstractions.ContentDigest.IsHex(text: descriptor.Secret)
         ) {
             throw new InvalidDataException(message: "Invalid attachment descriptor or unsupported revision.");
         }

@@ -19,5 +19,5 @@ public sealed record WorldDefinitionReadDependency(IReadOnlyList<string> Placeme
     )) &&
         (PlacementIds.Distinct(comparer: StringComparer.Ordinal).Count() == PlacementIds.Count) &&
         (StateRows.Distinct(comparer: StringComparer.Ordinal).Count() == StateRows.Count) &&
-        (Fingerprint is { Length: 64 }) && Fingerprint.All(predicate: char.IsAsciiHexDigit));
+        Puck.Abstractions.ContentDigest.IsHex(text: Fingerprint));
 }
