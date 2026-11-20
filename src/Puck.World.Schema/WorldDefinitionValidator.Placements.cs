@@ -646,30 +646,20 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} '{name}' is not drawn left to right; a driver curve is open, each knot further along X than the last, each tangent pointing toward +X.");
         }
     }
-    // The ids a reference to a creation resolves against: every creation row's non-blank id.
-    private static HashSet<string> CreationIds(WorldDefinition definition) {
-        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        foreach (var creation in definition.Creations) {
-            if (!string.IsNullOrWhiteSpace(value: creation?.Id.Value)) { _ = ids.Add(item: creation.Id.Value); }
-        }
-        return ids;
-    }
     // The prototypes partition: every creation row (a null list) or the listed rows. A row is judged alone: the one
     // fact it shares with the rows beside it is that no other row carries its id.
-    private static void ValidateCreationRows(WorldDefinition definition, IReadOnlyList<int>? rows, List<string> errors) {
+    // A row may be judged as another value than the document holds at its index (a bound row resolved at the write's
+    // clock), through replacement.
+    private static void ValidateCreationRows(WorldDefinition definition, IReadOnlyList<int>? rows, List<string> errors, WorldPrototype? replacement = null) {
         var creations = definition.Creations;
         var text = definition.Text;
-        var fontNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var fontNames = DeclaredNames(rows: text?.Fonts, name: static font => font.Name);
 
-        foreach (var font in (text?.Fonts ?? [])) {
-            if (!string.IsNullOrWhiteSpace(value: font?.Name)) { _ = fontNames.Add(item: font.Name); }
-        }
         if (rows is null) {
             var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             for (var index = 0; (index < creations.Count); index++) {
-                ValidateCreationRow(definition: definition, errors: errors, fontNames: fontNames, hasTextCatalog: (text is not null), index: index, seen: ids);
+                ValidateCreationRow(creation: creations[index], definition: definition, errors: errors, fontNames: fontNames, hasTextCatalog: (text is not null), path: $"prototypes[{index}]", seen: ids);
             }
             return;
         }
@@ -680,18 +670,17 @@ public static partial class WorldDefinitionValidator {
             if (!string.IsNullOrWhiteSpace(value: creation?.Id.Value)) { counts[creation.Id.Value] = (counts.GetValueOrDefault(key: creation.Id.Value) + 1); }
         }
         foreach (var index in rows) {
+            var creation = (replacement ?? creations[index]);
             // The ids of the other rows, as far as this row's own uniqueness asks: its id when another row carries it.
             var others = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             if ((creations[index]?.Id.Value is { } id) && (counts.GetValueOrDefault(key: id) > 1)) { _ = others.Add(item: id); }
-            ValidateCreationRow(definition: definition, errors: errors, fontNames: fontNames, hasTextCatalog: (text is not null), index: index, seen: others);
+            ValidateCreationRow(creation: creation, definition: definition, errors: errors, fontNames: fontNames, hasTextCatalog: (text is not null), path: $"prototypes[{index}]", seen: others);
         }
     }
     // One creation row: its id, the document's own schema and invariants through CreationCanonicalizer (the one
     // pipeline), the hash pin, the facets that reach outside the creation, and its inline mesh.
-    private static void ValidateCreationRow(WorldDefinition definition, int index, HashSet<string> seen, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
-        var creation = definition.Creations[index];
-        var path = $"prototypes[{index}]";
+    private static void ValidateCreationRow(WorldDefinition definition, WorldPrototype? creation, string path, HashSet<string> seen, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
 
         if (creation is null) {
             errors.Add(item: $"{path} is required.");

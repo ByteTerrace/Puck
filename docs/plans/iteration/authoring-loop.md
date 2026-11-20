@@ -494,14 +494,14 @@ measured before the next is built.
    into the previous definition, which shares every other row. The delta is
    the set of rows whose digest moved. Sources that must be lowered again
    are independent of each other and are lowered in parallel.
-2. **Validation of what the delta can reach.** Each validator declares the
-   sections it reads and receives a view that holds only those. A delta that
-   touches creations runs the validators that read creations. Within a
-   section, a check that is a function of one row and the rows it names is
-   kept by the row's digest. `WorldDefinitionValidator.TryValidateTouchedStateRows`
-   is the precedent. Until a validator is narrowed this way, a delta that
-   reaches its section runs it whole, off the tick, as today. The mutation
-   door gains the same narrowing, since it runs the same validator.
+2. **Validation of what the delta can reach.** Each validator belongs to a
+   partition that declares the parts it owns and reads
+   (`WorldDefinitionValidator.Partitions`), and a run that reads past them
+   refuses. A delta that touches creations runs the partitions that read
+   creations; within the creations, a row whose change differs in shading
+   alone is judged alone. A delta that reaches the `document` partition, which
+   still owns most sections, runs it whole, off the tick, as before. The
+   mutation door runs the same runner (`TryValidateChange`).
 3. **Template expansions kept by what they read.** After layer 1, an edit to
    a shared `let` in a library still lowers every source that imports the
    library, where the same value written as a literal lowers one. That makes
@@ -810,11 +810,18 @@ stage order is in [the duplicates](#duplicates-to-remove).
    the debug world reads one row in `world.boot.presentation-rows-delivered`
    per primed sink, and undoing it is a presentation install.
 5. **Narrow validation**, for the delta and for `world.row.set` alike:
-   sections first, then rows by digest. Not started: only a state-value
-   install validates part of the document
-   (`WorldDefinitionValidator.TryValidateTouchedStateRows`). *Check:*
-   `world.boot.validations` counts rows validated, and a palette edit validates
-   one creation.
+   sections first, then rows by digest. Built in part: validation is one table
+   of partitions (`WorldDefinitionValidator.Partitions`), each declaring the
+   parts it owns and reads, with reads recorded and enforced; a document
+   mutation and a presentation reload run only the units their change reaches
+   (`TryValidateChange`), a palette edit validates its one creation, and
+   `world.boot.validations` counts units. Left: the `document` partition still
+   owns most sections and reads the whole document, so a placement, kit or
+   state declaration edit validates whole, and a full reload admits the whole
+   document ([the disclosure plan's checkpoint](../disclosure.md#validation-partition-checkpoint)
+   names the order). *Check:* a one-colour palette edit reads one unit in
+   `world.boot.validations`, and a load reads every unit
+   (`WorldDefinitionValidator.UnitsIn`).
 6. **Content keys.** One store, products named by input digests and reached
    code, composed images and path keys deleted, the bound restated. Not
    started: a held compile is still keyed by the compiler's assembly build
@@ -919,7 +926,7 @@ capability and the technique, not only the expected name.
 | Watch a dependency set | `DependencyWatch`, `WorldSourceWatch` | Reused. `puck compile --watch` was the duplicate and is deleted |
 | Describe a document change by key | `WorldDocumentBasis.Diff` and `TryMerge`, `WorldReloadDelta`, `WorldProjectionDelta` | The overlay is reused as the one form |
 | Apply a small change and rebuild only what it reaches | `WorldMutation`, `WorldDocument.InstallKindOf`, `WorldPrototype.DiffersInShadingAlone`, `WorldDocumentWalker.Share` | Reused as the door, which the iteration plan's live edit path extends |
-| Validate only what a change reaches | `WorldDefinitionValidator.TryValidateTouchedStateRows` | The precedent step 5 generalizes |
+| Validate only what a change reaches | `WorldDefinitionValidator.TryValidateTouchedStateRows`, `WorldDocumentReads` | The touched-row walk was the precedent; the document-read recording became the partitions' enforcement |
 | Write an edit back into source text | `WorldSourceSave`, `WorldSourceEdits`, `WorldDocumentOrigins`, `SourceOrigin`, `PuckPrinter` | Reused. Step 8 adds derivations and the bounded proof |
 | Identify the code behind a product | `CodeClosure`, `AssemblyReach`, `CodeRevision`, `SdfMeshBakeClosure` | `CodeClosure` is the one to use; `AssemblyReach` as a key is the defect |
 | Keep one program per content | `ShadeReference.KeyOf`, `WorldShadeLowering` | The model for content keys and for kept expansions |

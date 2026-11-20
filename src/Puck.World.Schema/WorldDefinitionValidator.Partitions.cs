@@ -3,7 +3,10 @@ using Puck.Abstractions.Machines;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    private static readonly WorldDocumentInputs StateDeclarations = (WorldDocumentInputs.State | WorldDocumentInputs.Of(WorldDocumentInput.Identity, WorldDocumentInput.Properties));
+    // What reading the state rows reads: the declarations as the expansion lays them out (pool carriers bind bodies),
+    // and, for a value, the rate and dynamics a cell's clock is read through (WorldStateReader).
+    private static readonly WorldDocumentInputs StateInputs = (WorldDocumentInputs.State |
+        WorldDocumentInputs.Of(WorldDocumentInput.Identity, WorldDocumentInput.Properties, WorldDocumentInput.Bodies, WorldDocumentInput.Simulation, WorldDocumentInput.Dynamics));
 
     // The one table of validation partitions, in the order a whole-document validation runs them. The state expansion
     // runs first, since every reader of the state rows reads them expanded; the document partition runs last, so the
@@ -14,7 +17,7 @@ public static partial class WorldDefinitionValidator {
             name: "state.expansion",
             granularity: WorldValidationGranularity.Section,
             owns: WorldDocumentInputs.None,
-            reads: StateDeclarations,
+            reads: StateInputs,
             validate: static (run, _) => {
                 if (!TryValidatePoolExpansion(definition: run.Definition, reason: out var reason)) {
                     run.Errors.Add(item: reason);
@@ -26,7 +29,7 @@ public static partial class WorldDefinitionValidator {
             name: "prototypes",
             granularity: WorldValidationGranularity.Rows,
             owns: WorldDocumentInputs.Of(WorldDocumentInput.Prototypes),
-            reads: (StateDeclarations | WorldDocumentInputs.Of(WorldDocumentInput.Text, WorldDocumentInput.Dynamics, WorldDocumentInput.Channels, WorldDocumentInput.Curves)),
+            reads: (StateInputs | WorldDocumentInputs.Of(WorldDocumentInput.Text, WorldDocumentInput.Dynamics, WorldDocumentInput.Channels, WorldDocumentInput.Curves)),
             validate: static (run, rows) => ValidateCreationRows(definition: run.Definition, rows: rows, errors: run.Errors),
             rowCount: static definition => definition.Creations.Count,
             rowChange: CreationRowChange
@@ -35,9 +38,9 @@ public static partial class WorldDefinitionValidator {
             name: "hud",
             granularity: WorldValidationGranularity.Section,
             owns: WorldDocumentInputs.Of(WorldDocumentInput.Hud),
-            reads: (StateDeclarations | WorldDocumentInputs.Of(WorldDocumentInput.Cameras, WorldDocumentInput.PlacementRows, WorldDocumentInput.Patches, WorldDocumentInput.DocumentDirectory)),
+            reads: (StateInputs | WorldDocumentInputs.Of(WorldDocumentInput.Cameras, WorldDocumentInput.PlacementRows, WorldDocumentInput.Patches, WorldDocumentInput.DocumentDirectory)),
             validate: static (run, _) => ValidateHud(
-                cameras: DeclaredCameraNames(definition: run.Definition),
+                cameras: DeclaredNames(rows: run.Definition.Cameras, name: static camera => camera.Name),
                 definition: run.Definition,
                 errors: run.Errors,
                 hud: run.Definition.Hud,
@@ -56,14 +59,14 @@ public static partial class WorldDefinitionValidator {
             name: "replays",
             granularity: WorldValidationGranularity.Section,
             owns: WorldDocumentInputs.Of(WorldDocumentInput.Replays),
-            reads: (StateDeclarations | WorldDocumentInputs.Of(WorldDocumentInput.Bodies)),
+            reads: (StateInputs | WorldDocumentInputs.Of(WorldDocumentInput.Bodies)),
             validate: static (run, _) => ValidateScopedReplays(definition: run.Definition, errors: run.Errors)
         ),
         new(
             name: "haptics",
             granularity: WorldValidationGranularity.Section,
             owns: WorldDocumentInputs.Of(WorldDocumentInput.Haptics),
-            reads: (StateDeclarations | WorldDocumentInputs.Of(WorldDocumentInput.Bodies)),
+            reads: (StateInputs | WorldDocumentInputs.Of(WorldDocumentInput.Bodies)),
             validate: static (run, _) => ValidateHaptics(definition: run.Definition, errors: run.Errors, localSeats: run.Definition.Population.LocalSeats)
         ),
         new(
@@ -340,15 +343,6 @@ public static partial class WorldDefinitionValidator {
         return new WorldValidationRowChange(Private: false, Rows: rows);
     }
 
-    // The camera names a reference resolves against: every camera row's non-blank name.
-    private static HashSet<string> DeclaredCameraNames(WorldDefinition definition) {
-        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        foreach (var camera in definition.Cameras) {
-            if (!string.IsNullOrWhiteSpace(value: camera?.Name)) { _ = names.Add(item: camera.Name); }
-        }
-        return names;
-    }
     // The state rows a binding resolves against: each authored row by its name, the first of a duplicated name.
     private static Dictionary<string, WorldStateRow> DeclaredStateRows(WorldDefinition definition) {
         var rows = new Dictionary<string, WorldStateRow>(comparer: StringComparer.Ordinal);

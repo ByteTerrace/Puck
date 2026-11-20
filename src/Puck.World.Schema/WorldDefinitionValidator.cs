@@ -1536,7 +1536,7 @@ public static partial class WorldDefinitionValidator {
         scope.FontNames = fontNames;
         scope.HasTextCatalog = (definition.Text is not null);
 
-        var prototypeIds = CreationIds(definition: definition);
+        var prototypeIds = DeclaredNames(rows: definition.Creations, name: static creation => creation.Id.Value);
 
         scope.PrototypeIds = prototypeIds;
 

@@ -41,10 +41,11 @@ public sealed partial class WorldServer {
     /// <summary>Checks live grants and bound presentation values against the complete open transaction.</summary>
     /// <remarks>Input selections are checked for the owners of the bodies whose selection registers the transaction
     /// touched. A transaction that wrote a row a document value binds revalidates the whole document for the authority,
-    /// which reads it whole; for a recipient it validates only what the written rows reach
-    /// (<see cref="TryValidateWrittenBindings"/>), so its verdict never reads a unit the write does not name. A write
-    /// into a row an identity is bound to renames an entity other units refer to, and is validated whole for every
-    /// writer.</remarks>
+    /// which reads it whole; for a recipient it validates every check of each unit the written rows reach
+    /// (<see cref="TryValidateWrittenBindings"/>), so its verdict reads no placement or creation the write does not
+    /// name. Every bound value is read at <see cref="DeliveryTime"/>, the clock the write takes effect at. A write into
+    /// a row a creation's id or a look's name is bound to renames an entity other units refer to, and is validated
+    /// whole for every writer.</remarks>
     /// <param name="principal">The principal whose transaction is open.</param>
     /// <param name="reason">The refusal, or empty when the transaction may commit.</param>
     /// <param name="reads">The open preparation's read access, whose fault the caller publishes as its own refusal, or
@@ -83,12 +84,23 @@ public sealed partial class WorldServer {
                         return false;
                     }
                 }
-                try {
-                    if (!WorldDefinitionValidator.TryValidateLocally(definition: m_document.Definition, reason: out reason)) { return false; }
-                } catch (InvalidOperationException exception) { reason = exception.Message; return false; }
+                return TryValidateWholeAtDelivery(reason: out reason);
             }
             return true;
         } finally { ClearTransactionRows(); }
+    }
+    // The whole document as the write leaves it, every bound value read at the one clock the write takes effect at
+    // (DeliveryTime, the clock TryCheckBound reads), never the live values' own clock, which still reads the previous
+    // step's rule time while the tick drains its ops.
+    private bool TryValidateWholeAtDelivery(out string reason) {
+        var definition = m_document.Definition;
+
+        if (!WorldStateDocumentValues.TryFlatten(arena: m_arena, flattened: out var literal, graph: definition, reason: out reason, source: definition, time: DeliveryTime)) {
+            return false;
+        }
+        try {
+            return WorldDefinitionValidator.TryValidateLocally(definition: literal, reason: out reason);
+        } catch (InvalidOperationException exception) { reason = exception.Message; return false; }
     }
     // Whether the transaction wrote a row an identity is bound to (a prototype's or a look's name), which renames an
     // entity every unit naming it refers to: the whole document is that write's unit, for every writer.
@@ -103,43 +115,86 @@ public sealed partial class WorldServer {
     }
     // A recipient's binding validation reads only what its written rows reach. Each written row a document value binds
     // is acquired through the transaction, so a row the recipient cannot read whole faults the access; every value
-    // bound to it must read the cell the write left (TryCheckBound reads that row alone); and every placement whose
-    // geometry reads it is a unit validated whole, so every row the placement's values bind (the geometry's whole
-    // read universe: its other fields are literals) is admitted first, from the declarations alone, and then its
-    // geometry is checked. A dealt child is judged by its template, whose values the child copies: the children
-    // exist only for members, so asking of them would read membership. No other
-    // unit is validated: a hidden unit left invalid by an authority write (a rule firing, a clock) answers nothing to
-    // the recipient's write. The refusal names only the written row, never a path into the document, whose indices
-    // can count hidden placements.
+    // bound to it must read the cell the write left (TryCheckBound reads that row alone); and every unit whose values
+    // bind it is validated whole, with every check its partition makes of it: every row the unit's values bind is
+    // admitted first, from the declarations alone, then the unit is resolved to literals at the write's clock
+    // (DeliveryTime, the one clock every read here takes) and judged. A placement is judged with its parent chain
+    // (WorldDefinitionValidator.TryValidatePlacementUnit), a creation as its own row (TryValidateCreationUnit). A
+    // dealt child is judged by its template, whose values the child copies: the children exist only for members, so
+    // asking of them would read membership. A hidden unit left invalid by an authority write (a rule firing, a clock)
+    // answers nothing to the write. A value bound in any other section has no unit validator of its own yet, so a write
+    // reaching one validates the whole document at the same clock, which a hidden unit can refuse; the refusal names
+    // only the written row, never a path into the document, whose indices can count hidden placements.
     private bool TryValidateWrittenBindings(WorldRecipientView view, StateReadAccess access, out string reason) {
         reason = string.Empty;
         var definition = m_document.Definition;
         var bound = DocumentValueRows();
+        var time = DeliveryTime;
         var universe = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var placements = definition.Placements;
+        var byId = WorldPlacementIndex.ById(placements: placements);
+        var unit = new List<WorldPlacement>();
+        WorldDefinition? rest = null;
+        var whole = false;
+
         foreach (var ordinal in m_transactionWritten) {
             if (ordinal >= m_documentRowCount) { continue; }
             var name = m_arena.Catalog.Descriptors[ordinal].Name;
             if (!bound.Contains(item: name)) { continue; }
             _ = access.ResolveRow(name);
-            if (!WorldStateDocumentValues.TryCheckBound(definition, name, m_arena, DeliveryTime, out _)) {
+            if (!WorldStateDocumentValues.TryCheckBound(definition, name, m_arena, time, out _)) {
                 reason = $"state '{name}' holds a value a binding of it cannot read";
                 return false;
             }
-            foreach (var placement in definition.Placements) {
+            foreach (var placement in placements) {
                 if (WorldPlacementDeal.TrySplitChildId(placement.Id, out _, out _) ||
                     !WorldStateDocumentValues.ReferencesRow(definition, placement, name)) { continue; }
-                universe.Clear();
-                WorldStateDocumentValues.CollectReferencedRows(placement, universe);
-                foreach (var read in universe) {
-                    if (!view.Admits(read)) { access.Refuse(); }
+                unit.Clear();
+                for (var row = placement; (row is not null); row = ((row.Parent is { } parent) && byId.TryGetValue(key: parent, value: out var above) && !unit.Contains(item: above)) ? above : null) {
+                    unit.Insert(index: 0, item: row);
                 }
-                if (!WorldDefinitionValidator.TryValidatePlacementGeometry(placement, out var geometry)) {
-                    reason = $"state '{name}' places a placement it binds where it cannot stand: {geometry}";
+                for (var index = 0; (index < unit.Count); index++) {
+                    if (Literal(view, access, definition, unit[index], time) is not { } literal) {
+                        reason = $"state '{name}' leaves a placement it binds unreadable";
+                        return false;
+                    }
+                    unit[index] = literal;
+                }
+                if (!WorldDefinitionValidator.TryValidatePlacementUnit(definition: definition, reason: out var invalid, unit: unit)) {
+                    reason = $"state '{name}' leaves a placement it binds invalid: {invalid}";
                     return false;
                 }
             }
+            foreach (var creation in definition.Creations) {
+                if ((creation is null) || !WorldStateDocumentValues.ReferencesRow(definition, creation, name)) { continue; }
+                if (Literal(view, access, definition, creation, time) is not { } literal) {
+                    reason = $"state '{name}' leaves a creation it binds unreadable";
+                    return false;
+                }
+                if (!WorldDefinitionValidator.TryValidateCreationUnit(creation: literal, definition: definition, reason: out var invalid)) {
+                    reason = $"state '{name}' leaves a creation it binds invalid: {invalid}";
+                    return false;
+                }
+            }
+            rest ??= (definition with { CreationsRaw = null, PlacementsRaw = ((definition.PlacementsRaw ?? new WorldPlacementsSection()) with { Rows = null }) });
+            whole |= WorldStateDocumentValues.ReferencesRow(definition, rest, name);
+        }
+        if (whole && !TryValidateWholeAtDelivery(reason: out var wholeReason)) {
+            reason = $"the write leaves the document invalid: {wholeReason}";
+            return false;
         }
         return true;
+
+        // A unit's values as literals at the write's clock, every row they bind admitted first; null when one does not
+        // read as its holder's value.
+        T? Literal<T>(WorldRecipientView reader, StateReadAccess reads, WorldDefinition source, T value, ArenaTime at) where T : class {
+            universe.Clear();
+            WorldStateDocumentValues.CollectReferencedRows(value, universe);
+            foreach (var read in universe) {
+                if (!reader.Admits(read)) { reads.Refuse(); }
+            }
+            return WorldStateDocumentValues.TryFlatten(arena: m_arena, flattened: out var literal, graph: value, reason: out _, source: source, time: at) ? literal : null;
+        }
     }
     /// <summary>Validates and closes a batch, restoring every member when any requirement refuses it.</summary>
     public bool TryCommitStateTransaction(int mark, Principal principal, out string reason) {
