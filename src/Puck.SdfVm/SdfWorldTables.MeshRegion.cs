@@ -54,12 +54,13 @@ public sealed partial class SdfWorldTables {
         version = m_meshPlacementVersion;
         return (BindsBackgroundWork && (m_meshRequiredUpload <= m_uploads) && scene.HasGpuPlacements(placements, m_meshesOwed.Set));
     }
-    // A mapped region (GpuRegion.Mapped) grows in place; only one no kernel sizes by its buffer's length may be one, since
-    // a mapped buffer's length is the range it reserves.
-    internal GpuRegion CreateProbeSceneRegion(int bytes, int slots = 1, bool mapped = false) => new(
+    // A staged region of the probe service's (the trace scene, the feedback volume), named by its part so the memory reports
+    // attribute each apart. A mapped region (GpuRegion.Mapped) grows in place; only one no kernel sizes by its buffer's
+    // length may be one, since a mapped buffer's length is the range it reserves.
+    internal GpuRegion CreateProbeRegion(string part, int bytes, int slots = 1, bool mapped = false) => new(
         policy: GpuResidencyPolicy.Staged, memory: GpuResidency.RingMemory(profile: m_deviceContext.MemoryProfile),
         byteCount: bytes, slotCount: slots, buffers: m_gpu.BufferFactory, bindings: m_gpu.Bindings,
-        recorder: m_gpu.Recorder, copyPipeline: m_regionCopyPipeline, name: NameOf("probe-scene"), mapped: mapped);
+        recorder: m_gpu.Recorder, copyPipeline: m_regionCopyPipeline, name: NameOf(part), mapped: mapped);
 
     private SdfMeshClaims? m_meshClaims;
     private bool m_meshTrimListening;
@@ -199,6 +200,21 @@ public sealed partial class SdfWorldTables {
     private int m_stagedCount;
 
     private ulong[] m_stagedOccupancies = [];
+    // Per staged row, its static caster's (SdfMeshDraw.SameCaster) state since the caster last changed: CasterNeverStood,
+    // CasterStands, or the value of m_castersRead when its mesh went absent. A landing moves the static revision when the
+    // caster never stood, or when a pass read the casters (CastersRead) while it was absent; a tier swap or an eviction no
+    // pass saw leaves the held map's shadow standing for the same caster.
+    private long[] m_stagedCasterState = [];
+    private const long CasterNeverStood = long.MinValue;
+    private const long CasterStands = -1;
+    // One more for every recording of a pass that draws the static casters alone (the distant shadow map).
+    private long m_castersRead;
+
+    /// <summary>Records that a pass drawing the static casters alone and holding them (the distant shadow map) recorded
+    /// over the staged records as they stand now: a caster absent now and landing later moves
+    /// <see cref="StaticDrawRevision"/>, since the map may have been drawn without it. Called on the frame thread by the
+    /// recording.</summary>
+    internal void CastersRead() => m_castersRead++;
 
     private SdfMeshDraws m_currentDrawRows;
 
@@ -218,11 +234,13 @@ public sealed partial class SdfWorldTables {
     private static long StaticDrawRevisions;
     private long m_staticDrawRevision = Interlocked.Increment(location: ref StaticDrawRevisions);
 
-    /// <summary>Gets the revision of the staged records of the static scene (<see cref="SdfMeshDraw.IsStatic"/>):
-    /// a new value whenever a staging changes what such a draw draws (its mesh, placement, material or clip), lands its
-    /// mesh, leaves it absent, or adds or removes such a draw, and never otherwise, so a moving body, a pose or a mesh the
-    /// arena only relocated leaves it as it was. Unique across every table of the process. A pass that draws static casters
-    /// alone and holds them (the distant shadow map) draws again exactly when it changes. Read on the frame thread.</summary>
+    /// <summary>Gets the revision of the static scene's casters (<see cref="SdfMeshDraw.IsStatic"/>): a new value whenever
+    /// a staging adds or removes such a draw, changes its caster (<see cref="SdfMeshDraw.SameCaster"/>: its placement,
+    /// material or clip, or its mesh other than by the tier of one bake group), or lands a caster that has not stood since
+    /// it changed, and never otherwise, so a moving body, a pose, a mesh the arena only relocated, a tier swap the view or
+    /// the memory budget makes and an eviction leave it as it was. Unique across every table of the process. A pass that
+    /// draws static casters alone at a texel coarser than a tier's step and holds them (the distant shadow map) draws again
+    /// when it changes. Read on the frame thread.</summary>
     public long StaticDrawRevision => m_staticDrawRevision;
 
     private void StaticDrawsChanged() => m_staticDrawRevision = Interlocked.Increment(location: ref StaticDrawRevisions);
@@ -402,6 +420,7 @@ public sealed partial class SdfWorldTables {
             var capacity = Math.Max(val1: draws.Count, val2: (2 * m_stagedDraws.Length));
 
             Array.Resize(array: ref m_stagedDraws, newSize: capacity); Array.Resize(array: ref m_stagedOccupancies, newSize: capacity);
+            Array.Resize(array: ref m_stagedCasterState, newSize: capacity);
         }
         for (var row = draws.Count; (row < m_stagedCount); row++) { Unname(row: row); }
         for (var run = 0; (run < m_owedDraws.Count); run++) {
@@ -451,7 +470,7 @@ public sealed partial class SdfWorldTables {
         if (m_stagedDraws[row].IsStatic) { StaticDrawsChanged(); }
         if (m_stagedDraws[row].Mesh is { } mesh) { m_meshClaims!.Release(mesh: mesh); }
         m_rowsByMesh.Remove(row: row); m_absentRows.Remove(item: row); m_glassIndices.Remove(item: row);
-        m_stagedDraws[row] = default; m_stagedOccupancies[row] = 0;
+        m_stagedDraws[row] = default; m_stagedOccupancies[row] = 0; m_stagedCasterState[row] = CasterNeverStood;
     }
     private void FinishMeshStaging(SdfFrame frame) {
         AccountMeshOwed(frame: true);
@@ -566,12 +585,24 @@ public sealed partial class SdfWorldTables {
                     var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
                     var previous = m_stagedDraws[index];
 
-                    // What a static draw draws changed: its content, or whether its mesh stands (a landing or an
-                    // eviction). A relocation or an occupancy change alone draws the same triangles.
-                    if ((draw.IsStatic || previous.IsStatic) &&
-                        ((index >= m_stagedCount) || !draw.SameStagedContent(other: in previous) ||
-                            ((draw.Mesh is not null) && (m_absentRows.Contains(item: index) == MeshStands(mesh: draw.Mesh))))) {
-                        StaticDrawsChanged();
+                    // What the static scene casts changed: a static row's caster (SdfMeshDraw.SameCaster: its placement,
+                    // material and clip, its mesh up to the tier of one bake group) appeared or changed, or it lands
+                    // where a held map may lack it (m_stagedCasterState). A relocation, an occupancy change, and a tier
+                    // swap or an eviction of a caster that stood while no pass read the casters cast the same shadow.
+                    var stands = ((draw.Mesh is not null) && MeshStands(mesh: draw.Mesh));
+
+                    if (draw.IsStatic || previous.IsStatic) {
+                        ref var state = ref m_stagedCasterState[index];
+
+                        if ((index >= m_stagedCount) || (draw.IsStatic != previous.IsStatic) || !draw.SameCaster(other: in previous)) {
+                            StaticDrawsChanged();
+                            state = ((draw.IsStatic && stands) ? CasterStands : CasterNeverStood);
+                        } else if (stands) {
+                            if ((state == CasterNeverStood) || ((state >= 0) && (state != m_castersRead))) { StaticDrawsChanged(); }
+                            state = CasterStands;
+                        } else if (state == CasterStands) {
+                            state = m_castersRead;
+                        }
                     }
 
                     var mask = StageMeshDraw(draw: in draw, incremental: true, index: index, old: old, record: record, tally: ref tally);

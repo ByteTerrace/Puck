@@ -388,9 +388,17 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// including the exact bits of each floating-point field.</summary>
     /// <param name="other">The draw to compare.</param>
     /// <returns>Whether staging either draw gives the same content.</returns>
-    public bool SameStagedContent(in SdfMeshDraw other) {
+    public bool SameStagedContent(in SdfMeshDraw other) => Same(other: in other, groupMesh: false);
+    /// <summary>Returns whether two draws place the same caster: the same staged content, except that a mesh may differ
+    /// where both draws name one bake group's mesh at two tiers (the same non-null <see cref="Trace"/>, the group's floor).
+    /// A held map whose texel is far coarser than a tier's step (the distant shadow map) stands across such a swap.</summary>
+    /// <param name="other">The draw to compare.</param>
+    /// <returns>Whether either draw places the same caster.</returns>
+    public bool SameCaster(in SdfMeshDraw other) => Same(other: in other, groupMesh: true);
+
+    private bool Same(in SdfMeshDraw other, bool groupMesh) {
         if (
-            !ReferenceEquals(objA: this.Mesh, objB: other.Mesh) ||
+            (!ReferenceEquals(objA: this.Mesh, objB: other.Mesh) && !(groupMesh && (this.Trace is { } trace) && ReferenceEquals(objA: trace, objB: other.Trace))) ||
             (this.Material != other.Material) ||
             (this.Glass != other.Glass) ||
             (this.IsDynamic != other.IsDynamic) ||
