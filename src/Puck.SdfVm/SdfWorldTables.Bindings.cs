@@ -111,8 +111,8 @@ public sealed partial class SdfWorldTables {
     private void WriteWorldSet(nint set, int slot) {
         WriteWorldBuffer(buffer: m_programRegion.Buffer(slot: slot), member: SdfWorldPackage.ProgramWords, set: set);
         WriteWorldBuffer(buffer: m_dynamicTransformRegion.Buffer(slot: slot), member: SdfWorldPackage.DynamicTransforms, set: set);
-        WriteWorldBuffer(buffer: m_previousDynamicTransforms, member: SdfWorldPackage.PreviousDynamicTransforms, set: set);
-        WriteWorldBuffer(buffer: m_previousMeshTransforms, member: SdfWorldPackage.PreviousMeshTransforms, set: set);
+        WriteWorldBuffer(buffer: m_previousDynamicTransforms.Buffer!, member: SdfWorldPackage.PreviousDynamicTransforms, set: set);
+        WriteWorldBuffer(buffer: m_previousMeshTransforms.Buffer!, member: SdfWorldPackage.PreviousMeshTransforms, set: set);
         WriteWorldBuffer(buffer: m_screenSurfaceRegion.Buffer(slot: slot), member: SdfWorldPackage.ScreenSurfaces, set: set);
         WriteWorldBuffer(buffer: m_screenMappingRegion.Buffer(slot: slot), member: SdfWorldPackage.ScreenMappings, set: set);
         WriteWorldBuffer(buffer: ScreenEmission, member: SdfWorldPackage.ScreenLights, set: set);
@@ -120,7 +120,7 @@ public sealed partial class SdfWorldTables {
         WriteWorldBuffer(buffer: m_volumeRegion.Buffer(slot: slot), member: SdfWorldPackage.Volumes, set: set);
         WriteWorldBuffer(buffer: m_meshRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshRegion, set: set);
         WriteWorldBuffer(buffer: m_dummyBuffer, member: SdfWorldPackage.MeshBakePoints, set: set);
-        WriteWorldBuffer(buffer: m_meshIrradiance ?? m_dummyBuffer, member: SdfWorldPackage.MeshIrradiance, set: set);
+        WriteWorldBuffer(buffer: m_meshIrradiance.Buffer ?? m_dummyBuffer, member: SdfWorldPackage.MeshIrradiance, set: set);
         WriteWorldBuffer(buffer: m_dummyBuffer, member: SdfWorldPackage.SampledValues, set: set);
         WriteWorldBuffer(buffer: m_frameSampledRegion.Buffer(slot: slot), member: SdfWorldPackage.FrameSampled, set: set);
         WriteLightAndSkySet(set: set, slot: slot);

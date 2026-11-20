@@ -1,10 +1,11 @@
 using System.Numerics;
-using Puck.World.Authoring;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
-using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.Text;
+using Puck.World.Authoring;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -27,6 +28,9 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     private const float GroupBoundMargin = 0.4f;
 
     private Registration?[] m_pool = [];
+    private int m_poolCount;
+    private readonly Stack<int> m_freeSlots = [];
+    private readonly Dictionary<string, int> m_rowSlots = new(StringComparer.Ordinal);
 
     /// <summary>Returns the pose serial of a body's registration (moved each time a full pack changes one of its slots),
     /// which a rig that reads the body hashes (<see cref="WorldRigReads.Revision"/>).</summary>
@@ -36,7 +40,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
 
     public WorldRigidAssets Rigid { get; } = new();
 
-    public int ArticulatedSlotCount => RootSlotOffset(index: m_pool.Length);
+    public int ArticulatedSlotCount => RootSlotOffset(index: m_poolCount);
 
     private int m_packedSlotBase = -1;
 
@@ -54,7 +58,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     public int Reseed(int bodyIndex) {
         var reseeded = 0;
 
-        foreach (var registration in m_pool) {
+        foreach (var registration in m_pool.AsSpan(0, m_poolCount)) {
             if (
                 (registration is not { } live) ||
                 (live.BodyIndex != bodyIndex)
@@ -342,26 +346,24 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     /// <summary>The whole pool's reserved dynamic-transform slot count — the frame source adds this onto the avatar
     /// catalog's frozen capacity.</summary>
     public int DynamicSlotCount => (ArticulatedSlotCount + Rigid.SlotCount + m_guessRows);
-    public int RegistrationCount => m_pool.Length;
+    public int RegistrationCount => m_poolCount;
 
     public int SlotsAt(int index) => (m_pool[index]?.Slots ?? 0);
     // The dynamic-transform slots the registrations before a pool index reserve: a prefix sum over the pool's slot counts,
-    // refilled by ReconcileSlots, the only writer of the pool and of a registration's motion plan. Index m_pool.Length
+    // refilled by ReconcileSlots, the only writer of the pool and of a registration's motion plan. Index m_poolCount
     // is the whole pool's count.
     public int RootSlotOffset(int index) => m_rootSlotOffsets[index];
     private int[] m_rootSlotOffsets = [0];
     private void RefillRootSlotOffsets() {
-        if (m_rootSlotOffsets.Length != (m_pool.Length + 1)) {
-            m_rootSlotOffsets = new int[(m_pool.Length + 1)];
-        }
+        ArrayCapacity.EnsureScratch(ref m_rootSlotOffsets, m_poolCount + 1);
 
         var offset = 0;
 
-        for (var entry = 0; (entry < m_pool.Length); entry++) {
+        for (var entry = 0; (entry < m_poolCount); entry++) {
             m_rootSlotOffsets[entry] = offset;
             offset = checked((offset + SlotsAt(index: entry)));
         }
-        m_rootSlotOffsets[m_pool.Length] = offset;
+        m_rootSlotOffsets[m_poolCount] = offset;
     }
 
     // The Registration-cached text layout for hasText's (document, scale): a cache hit when the last layout this
@@ -405,24 +407,8 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         public int MaterialOf(ShapeDocument shape, int paletteSlot) => paletteIds[(paletteSlot % paletteIds.Length)];
     }
 
-    private Registration? FindBody(int bodyIndex) {
-        if (!m_bodySlotsStale) {
-            return (((((uint)bodyIndex) < ((uint)m_bodySlots.Length)) && (m_bodySlots[bodyIndex] is var slot and >= 0))
-                ? m_pool[slot]
-                : null);
-        }
-
-        foreach (var live in m_pool) {
-            if (
-                (live is { BodyIndex: { } index }) &&
-                (index == bodyIndex)
-            ) {
-                return live;
-            }
-        }
-
-        return null;
-    }
+    private Registration? FindBody(int bodyIndex) =>
+        TryFindBody(bodyIndex, out _, out var live) ? live : null;
     private static BodyStamp? FindBodyStamp(IReadOnlyList<BodyStamp> bodyStamps, int bodyIndex) {
         foreach (var stamp in bodyStamps) {
             if (stamp.BodyIndex == bodyIndex) {
@@ -432,22 +418,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
 
         return null;
     }
-    private Registration? FindRow(string id) {
-        foreach (var live in m_pool) {
-            if (
-                (live is { BodyIndex: null }) &&
-                string.Equals(
-                a: live.Row!.Id,
-                b: id,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return live;
-            }
-        }
-
-        return null;
-    }
+    private Registration? FindRow(string id) => m_rowSlots.TryGetValue(id, out var slot) ? m_pool[slot] : null;
     // The memoized shape-id → pose index for one frame cursor (null at cursor 0 — the rest pose).
     private static Dictionary<int, FrameTransformDocument>? FramePoses(Registration live, int frameCursor) {
         if (
@@ -473,19 +444,17 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
 
         return poses;
     }
-    // A creation that fits a compact registration takes one first, so small creations never crowd the full ones; any
-    // creation then takes a free full registration.
-    private int FreeSlot(CreationDocument document) {
-        for (var index = 0; (index < m_pool.Length); index++) {
-            if (m_pool[index] is null) { return index; }
+    private int FreeSlot() {
+        if (m_freeSlots.TryPop(out var slot)) { return slot; }
+        var required = checked(m_poolCount + 1);
+        if (required > m_pool.Length) {
+            var capacity = ArrayCapacity.Grown(m_poolCount, required);
+            Array.Resize(ref m_packedRegistrations, capacity);
+            Array.Resize(ref m_meshDraws, capacity);
+            m_owners.EnsureCapacity(capacity);
+            Array.Resize(ref m_pool, capacity);
         }
-        var next = m_pool.Length;
-
-        Array.Resize(array: ref m_pool, newSize: (next + 1));
-        Array.Resize(array: ref m_packedRegistrations, newSize: (next + 1));
-        Array.Resize(array: ref m_meshDraws, newSize: (next + 1));
-        m_owners.EnsureCapacity(capacity: (next + 1));
-        return next;
+        return m_poolCount++;
     }
     private static bool GroupNeedsScope(IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex) {
         for (var member = fromIndex; (member < shapes.Count); member++) {
@@ -767,32 +736,11 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         return (live.StaticFrame.Position, live.StaticFrame.Rotation, live.StaticFrame.Scale);
     }
     private bool TryFindBody(int bodyIndex, out int poolIndex, out Registration live) {
-        if (!m_bodySlotsStale) {
-            if ((((uint)bodyIndex) < ((uint)m_bodySlots.Length)) && (m_bodySlots[bodyIndex] is var slot and >= 0) && (m_pool[slot] is { } registration)) {
-                poolIndex = slot;
-                live = registration;
-
-                return true;
-            }
-
-            poolIndex = -1;
-            live = null!;
-
-            return false;
+        if ((uint)bodyIndex < (uint)m_bodySlots.Length && m_bodySlots[bodyIndex] is var entry and > 0) {
+            poolIndex = entry - 1;
+            live = m_pool[poolIndex]!;
+            return true;
         }
-
-        for (var index = 0; (index < m_pool.Length); index++) {
-            if (
-                (m_pool[index] is { BodyIndex: { } candidate } registration) &&
-                (candidate == bodyIndex)
-            ) {
-                poolIndex = index;
-                live = registration;
-
-                return true;
-            }
-        }
-
         poolIndex = -1;
         live = null!;
 
@@ -819,7 +767,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, int slotBase, PackedFontAtlasCatalog? textCatalog = null, WorldPickMapBuilder? picks = null, IReadOnlyList<WorldScreen>? screens = null) {
         ArgumentNullException.ThrowIfNull(argument: colors);
 
-        for (var index = 0; (index < m_pool.Length); index++) {
+        for (var index = 0; (index < m_poolCount); index++) {
             if (m_pool[index] is not { } live) {
                 continue;
             }
@@ -941,21 +889,14 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     public void Reconcile(IReadOnlyDictionary<string, CompiledPlacementFrame> placementFrames, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps, IReadOnlyList<WorldLook>? looks = null) {
         Rigid.Reconcile(bodies: bodyStamps, creations: creations, looks: looks, placements: placements);
         bodyStamps = bodyStamps.Where(predicate: stamp => !WorldRigidAssets.IsRigid(creation: stamp.Creation, look: stamp.Look)).ToArray();
-        m_bodySlotsStale = true;
         ReconcileSlots(bodyStamps: bodyStamps, creations: creations, dynamics: dynamics, placementFrames: placementFrames, placements: placements);
-        IndexBodySlots();
+        IndexBodyReaders();
     }
 
-    // Indexes each body-rooted registration by its body, which only a reconcile moves, so a lookup per body costs no
-    // scan of the pool.
-    private void IndexBodySlots() {
-        Array.Fill(array: m_bodySlots, value: -1);
+    private void IndexBodyReaders() {
         m_bodyReaders.Clear();
         m_selectedBodyReaders.Clear();
-        for (var index = 0; (index < m_pool.Length); index++) {
-            if ((m_pool[index] is { BodyIndex: { } body }) && (((uint)body) < ((uint)m_bodySlots.Length)) && (m_bodySlots[body] < 0)) {
-                m_bodySlots[body] = index;
-            }
+        for (var index = 0; (index < m_poolCount); index++) {
             if (m_pool[index] is not { } live) {
                 continue;
             }
@@ -976,7 +917,6 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
             }
         }
 
-        m_bodySlotsStale = false;
     }
 
     // The registrations whose rig reads each body (CreationRigReadKind.Body), by the body read, valid while no reconcile
@@ -986,18 +926,8 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     // when a rate is decided, through the reader's own view.
     private readonly List<(Registration Reader, CreationRigRead Read)> m_selectedBodyReaders = [];
 
-    // The pool slot of each body's registration, or -1, valid while no reconcile is running.
-    private readonly int[] m_bodySlots = NewBodySlots();
-
-    private bool m_bodySlotsStale;
-
-    private static int[] NewBodySlots() {
-        var slots = new int[WorldBodiesLimits.CapacityCeiling];
-
-        Array.Fill(array: slots, value: -1);
-
-        return slots;
-    }
+    // Zero denotes an empty entry. Live entries store the pool slot plus one.
+    private readonly int[] m_bodySlots = new int[WorldBodiesLimits.CapacityCeiling];
     private void ReconcileSlots(IReadOnlyDictionary<string, CompiledPlacementFrame> placementFrames, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
         // Diff-by-stable-key, shared by both root kinds a slot can hold (KeyedReconciler.Reconcile): the entry's
         // current row resolves the fate — gone releases the slot, changed content releases+recreates, otherwise the
@@ -1029,7 +959,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
 
         // Pass 1 — retire: a registration whose backing row/stamp vanished, went static (lost its frames or its attach
         // facet), or changed creation content releases its slot here; a same-content edit updates in place.
-        for (var index = 0; (index < m_pool.Length); index++) {
+        for (var index = 0; (index < m_poolCount); index++) {
             if (m_pool[index] is not { } live) {
                 continue;
             }
@@ -1097,6 +1027,11 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
                 live.Reads.Release();
             }
             m_pool[index] = reconciled;
+            if (reconciled is null) {
+                m_freeSlots.Push(index);
+                if (live.BodyIndex is int body) { m_bodySlots[body] = 0; }
+                else { m_rowSlots.Remove(live.Row!.Id); }
+            }
         }
 
         // Pass 2 — admit new row-rooted (animated or attached) rows into free slots (the validator holds the ceiling; a
@@ -1116,17 +1051,15 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
                 continue;
             }
 
-            var slot = FreeSlot(document: creation.EngineDocument);
-
-
-
             var registered = RegisterRow(
                 frame: placementFrames[placement.Id],
                 creation: creation,
                 row: placement
             );
 
+            var slot = FreeSlot();
             m_pool[slot] = registered;
+            m_rowSlots.Add(placement.Id, slot);
         }
 
         // Pass 3 — admit new body-rooted stamps into the remaining free slots.
@@ -1135,13 +1068,11 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
                 continue;
             }
 
-            var slot = FreeSlot(document: stamp.Creation.EngineDocument);
-
-
-
             var fresh = RegisterBody(stamp: stamp);
 
+            var slot = FreeSlot();
             m_pool[slot] = fresh;
+            m_bodySlots[stamp.BodyIndex] = slot + 1;
             ApplyMotion(
                 live: fresh,
                 motion: stamp.Look.Motion,
@@ -1160,7 +1091,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     public void Tick(float deltaSeconds) {
         m_pendingDeltaSeconds += deltaSeconds;
 
-        foreach (var live in m_pool) {
+        foreach (var live in m_pool.AsSpan(0, m_poolCount)) {
             if (live is null) {
                 continue;
             }

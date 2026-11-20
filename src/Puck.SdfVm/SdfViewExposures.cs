@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Memory;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -20,30 +21,29 @@ namespace Puck.SdfVm;
 /// at its whole exposure. Presentation only: no value here reaches simulation state.
 /// </summary>
 public sealed class SdfViewExposures {
-    private float[] m_ev100 = [];
-    // The meter's state in metered EV100, before compensation and bounds: the reading the exposure follows or holds, the
-    // value eased toward it (whose luminance MeteredOf gives the local adaptation), and whether a reading left the band.
-    private float[] m_heldEv = [];
-    private float[] m_meterEv = [];
-    private bool[] m_adapting = [];
-    private float[] m_metered = [];
-    private string[] m_meterSources = [];
-    private SdfViewCut[] m_cuts = [];
-    // Each slot's occupant (its view's source and cut) and generation, which moves whenever another occupant takes the
-    // slot: a reading carries the generation its view was recorded under, and one from a retired generation is discarded.
-    private long[] m_generations = [];
-    // A cut owes the camera sample a fresh reading at the camera and the meter a reading rendered after it.
-    private bool[] m_sampleOwed = [];
-    private bool[] m_meterOwed = [];
-    private float[] m_multipliers = [];
-    private float[] m_airLight = [];
-    // Six rows a view (LightOf), W one once the camera sample has read.
-    private Vector4[] m_light = [];
-    private bool[] m_sampled = [];
-    private string[] m_sampleSources = [];
-    // Per view, the presentation clock and the frame serial it was last staged at.
-    private double[] m_stagedAt = [];
-    private long[] m_stagedFrame = [];
+    [System.Runtime.CompilerServices.InlineArray(6)]
+    private struct LightRows { private Vector4 m_first; }
+
+    private struct ViewState {
+        internal float Ev100;
+        internal float HeldEv;
+        internal float MeterEv;
+        internal bool Adapting;
+        internal float Metered;
+        internal string? MeterSource;
+        internal SdfViewCut Cut;
+        internal long Generation;
+        internal bool SampleOwed;
+        internal bool MeterOwed;
+        internal float Multiplier;
+        internal float AirLight;
+        internal LightRows Light;
+        internal bool Sampled;
+        internal string? SampleSource;
+        internal double StagedAt;
+        internal long StagedFrame;
+    }
+    private ViewState[] m_views = [];
     private int m_count;
     // The open frame (Stage) its views stage against on their first read, the presentation clock its seconds advance, and
     // whether reads may stage (false while a frame holds every exposure).
@@ -104,7 +104,7 @@ public sealed class SdfViewExposures {
         if (words.Length != SdfExposure.MeterWords) { throw new ArgumentException(message: $"The image meter's readback is {SdfExposure.MeterWords} words.", paramName: nameof(words)); }
         if (view < 0) { return; }
         lock (m_readingGate) {
-            if (m_readings.Length <= view) { Array.Resize(array: ref m_readings, newSize: Math.Max(val1: (view + 1), val2: (m_readings.Length * 2))); }
+            ArrayCapacity.EnsureLength(ref m_readings, view + 1);
             var reading = (m_readings[view] ??= new Reading());
 
             words.CopyTo(destination: reading.Words);
@@ -121,7 +121,7 @@ public sealed class SdfViewExposures {
             (multiplier, reference, local) = (0f, float.NaN, 0f);
             if ((view >= m_readings.Length) || (m_readings[view] is not { Fresh: true } reading)) { return false; }
             reading.Fresh = false;
-            if (reading.Generation != m_generations[view]) { return false; }
+            if (reading.Generation != m_views[view].Generation) { return false; }
             reading.Words.CopyTo(destination: words);
             (multiplier, reference, local) = (reading.Multiplier, reading.Reference, reading.Local);
             return true;
@@ -134,7 +134,7 @@ public sealed class SdfViewExposures {
     /// frame does not hold.</summary>
     /// <param name="view">The view's index in the frame's views.</param>
     /// <returns>The generation.</returns>
-    public long GenerationOf(int view) => (((view < 0) || (view >= m_count)) ? 0L : m_generations[view]);
+    public long GenerationOf(int view) => (((view < 0) || (view >= m_count)) ? 0L : m_views[view].Generation);
     /// <summary>Opens a frame's exposures: each view is staged on its first read in the frame (<see cref="MultiplierOf"/>,
     /// <see cref="AirLightOf"/>, <see cref="MeteredOf"/>, <see cref="LightOf"/>), its <c>EV100</c> eased toward its target
     /// over the presentation time since it was last staged, so a view nothing renders or reads meters nothing and a view
@@ -150,38 +150,18 @@ public sealed class SdfViewExposures {
 
         var count = frame.Views.Count;
 
-        if (m_ev100.Length < count) {
-            var grown = Math.Max(val1: count, val2: (m_ev100.Length * 2));
-            var first = m_ev100.Length;
-
-            Array.Resize(array: ref m_ev100, newSize: grown);
-            Array.Resize(array: ref m_heldEv, newSize: grown);
-            Array.Resize(array: ref m_meterEv, newSize: grown);
-            Array.Resize(array: ref m_adapting, newSize: grown);
-            Array.Resize(array: ref m_metered, newSize: grown);
-            Array.Resize(array: ref m_meterSources, newSize: grown);
-            Array.Resize(array: ref m_cuts, newSize: grown);
-            Array.Resize(array: ref m_generations, newSize: grown);
-            Array.Resize(array: ref m_sampleOwed, newSize: grown);
-            Array.Resize(array: ref m_meterOwed, newSize: grown);
-            Array.Resize(array: ref m_multipliers, newSize: grown);
-            Array.Resize(array: ref m_airLight, newSize: grown);
-            Array.Resize(array: ref m_light, newSize: (grown * 6));
-            Array.Resize(array: ref m_sampled, newSize: grown);
-            Array.Resize(array: ref m_sampleSources, newSize: grown);
-            Array.Resize(array: ref m_stagedAt, newSize: grown);
-            Array.Resize(array: ref m_stagedFrame, newSize: grown);
-            Array.Fill(array: m_ev100, count: (grown - first), startIndex: first, value: float.NaN);
-            Array.Fill(array: m_heldEv, count: (grown - first), startIndex: first, value: float.NaN);
-            Array.Fill(array: m_meterEv, count: (grown - first), startIndex: first, value: float.NaN);
-            Array.Fill(array: m_multipliers, count: (grown - first), startIndex: first, value: 1f);
-            Array.Fill(array: m_airLight, count: (grown - first), startIndex: first, value: 1f);
+        if (count > m_views.Length) {
+            var first = m_views.Length;
+            ArrayCapacity.EnsureLength(ref m_views, count);
+            m_views.AsSpan(first).Fill(new ViewState {
+                Ev100 = float.NaN, HeldEv = float.NaN, MeterEv = float.NaN, Multiplier = 1f, AirLight = 1f,
+            });
         }
         for (var index = count; (index < m_count); index++) {
-            m_ev100[index] = float.NaN;
-            m_heldEv[index] = float.NaN;
-            m_meterEv[index] = float.NaN;
-            m_adapting[index] = false;
+            m_views[index].Ev100 = float.NaN;
+            m_views[index].HeldEv = float.NaN;
+            m_views[index].MeterEv = float.NaN;
+            m_views[index].Adapting = false;
         }
 
         m_count = count;
@@ -199,30 +179,30 @@ public sealed class SdfViewExposures {
     // Stages a view on its first read in an open frame: samples the volume at its camera, takes its newest image reading
     // and eases its EV100 over the presentation time since it was last staged.
     private void StageView(int index) {
-        if (!m_open || (m_stagedFrame[index] == m_frameSerial) || (m_frame is not { } frame) || (m_irradiance is not { } irradiance)) {
+        if (!m_open || (m_views[index].StagedFrame == m_frameSerial) || (m_frame is not { } frame) || (m_irradiance is not { } irradiance)) {
             return;
         }
 
-        m_stagedFrame[index] = m_frameSerial;
+        m_views[index].StagedFrame = m_frameSerial;
 
         var view = frame.Views[index];
         var exposure = frame.Exposure;
-        var seconds = (float.IsFinite(f: m_ev100[index]) ? ((float)(m_clock - m_stagedAt[index])) : 0f);
+        var seconds = (float.IsFinite(f: m_views[index].Ev100) ? ((float)(m_clock - m_views[index].StagedAt)) : 0f);
 
-        m_stagedAt[index] = m_clock;
+        m_views[index].StagedAt = m_clock;
         // Another view in the slot is a cut: a new generation, whose camera sample and meter the slot owes afresh.
-        if (view.Cut != m_cuts[index]) {
-            m_cuts[index] = view.Cut;
-            m_generations[index]++;
-            m_sampled[index] = false;
-            m_sampleOwed[index] = true;
-            m_meterOwed[index] = true;
+        if (view.Cut != m_views[index].Cut) {
+            m_views[index].Cut = view.Cut;
+            m_views[index].Generation++;
+            m_views[index].Sampled = false;
+            m_views[index].SampleOwed = true;
+            m_views[index].MeterOwed = true;
         }
         // Another residency renders the view and meters it there; its camera is in that world's coordinates.
         if (view.Elsewhere) {
-            m_sampleSources[index] = "elsewhere";
-            m_meterSources[index] = "elsewhere";
-            m_multipliers[index] = SdfPhotometry.ExposureOf(ev100: (float.IsFinite(f: m_ev100[index]) ? m_ev100[index] : exposure.Ev100));
+            m_views[index].SampleSource = "elsewhere";
+            m_views[index].MeterSource = "elsewhere";
+            m_views[index].Multiplier = SdfPhotometry.ExposureOf(ev100: (float.IsFinite(f: m_views[index].Ev100) ? m_views[index].Ev100 : exposure.Ev100));
             return;
         }
         SampleCamera(index: index, irradiance: irradiance, view: view);
@@ -231,44 +211,44 @@ public sealed class SdfViewExposures {
         var ev100 = exposure.Ev100;
 
         if (exposure.Mode == SdfExposureMode.Auto) {
-            var current = m_ev100[index];
+            var current = m_views[index].Ev100;
 
-            if (!float.IsFinite(f: m_heldEv[index])) {
+            if (!float.IsFinite(f: m_views[index].HeldEv)) {
                 ev100 = (float.IsFinite(f: current) ? current : exposure.Clamp(ev100: exposure.Ev100));
             } else {
-                var target = exposure.Clamp(ev100: (m_heldEv[index] - exposure.Compensation));
+                var target = exposure.Clamp(ev100: (m_views[index].HeldEv - exposure.Compensation));
 
-                ev100 = ((snap || !float.IsFinite(f: current)) ? target : (m_meterOwed[index] ? current : exposure.Adapt(current: current, seconds: seconds, target: target)));
+                ev100 = ((snap || !float.IsFinite(f: current)) ? target : (m_views[index].MeterOwed ? current : exposure.Adapt(current: current, seconds: seconds, target: target)));
             }
         }
-        m_ev100[index] = ev100;
-        m_multipliers[index] = SdfPhotometry.ExposureOf(ev100: ev100);
+        m_views[index].Ev100 = ev100;
+        m_views[index].Multiplier = SdfPhotometry.ExposureOf(ev100: ev100);
 
         // The meter eases toward the reading it follows; once it arrives, the band holds again.
-        if (!snap && !m_meterOwed[index] && float.IsFinite(f: m_heldEv[index])) {
-            m_meterEv[index] = exposure.Adapt(current: m_meterEv[index], seconds: seconds, target: m_heldEv[index]);
-            if (m_meterEv[index] == m_heldEv[index]) { m_adapting[index] = false; }
+        if (!snap && !m_views[index].MeterOwed && float.IsFinite(f: m_views[index].HeldEv)) {
+            m_views[index].MeterEv = exposure.Adapt(current: m_views[index].MeterEv, seconds: seconds, target: m_views[index].HeldEv);
+            if (m_views[index].MeterEv == m_views[index].HeldEv) { m_views[index].Adapting = false; }
         }
     }
     // Samples the volume at the view's camera; a failed sample holds the last one (none before the first).
     private void SampleCamera(int index, SdfMeshIrradiance irradiance, SdfViewSnapshot view) {
         Span<Vector3> light = stackalloc Vector3[6];
 
-        var sampled = irradiance.TrySampleCamera(fresh: m_sampleOwed[index], light: light, position: view.Camera.Position, skyVisibility: out var airLight, source: out var source);
+        var sampled = irradiance.TrySampleCamera(fresh: m_views[index].SampleOwed, light: light, position: view.Camera.Position, skyVisibility: out var airLight, source: out var source);
 
         if (sampled) {
-            m_sampleOwed[index] = false;
-            m_sampled[index] = true;
-            m_airLight[index] = airLight;
-            for (var axis = 0; (axis < 6); axis++) { m_light[(index * 6) + axis] = new Vector4(value: light[axis], w: 1f); }
-        } else if (!m_sampled[index]) {
-            m_airLight[index] = 1f;
-            m_light.AsSpan(length: 6, start: (index * 6)).Clear();
+            m_views[index].SampleOwed = false;
+            m_views[index].Sampled = true;
+            m_views[index].AirLight = airLight;
+            for (var axis = 0; (axis < 6); axis++) { m_views[index].Light[axis] = new Vector4(value: light[axis], w: 1f); }
+        } else if (!m_views[index].Sampled) {
+            m_views[index].AirLight = 1f;
+            m_views[index].Light = default;
         }
-        m_sampleSources[index] = (source switch {
+        m_views[index].SampleSource = (source switch {
             SdfCameraSampleSource.Probes => "probes",
             SdfCameraSampleSource.CameraTrace => "camera-trace",
-            _ => (m_sampled[index] ? "held" : "none"),
+            _ => (m_views[index].Sampled ? "held" : "none"),
         });
     }
     // Takes the view's newest image reading, settled for the local adaptation it was shaded with, and moves the band: a
@@ -285,22 +265,22 @@ public sealed class SdfViewExposures {
             var covered = (float)Math.Clamp(value: (words[SdfExposure.MeterBins] / total), min: 0d, max: 1d);
             var reading = SdfExposure.Settled(covered: covered, local: local, reading: SdfPhotometry.MeteredEv100(luminance: luminance), reference: reference);
 
-            m_metered[index] = ((SdfPhotometry.MeterCalibration / 100f) * MathF.Pow(x: 2f, y: reading));
-            m_meterSources[index] = "image";
-            if (m_meterOwed[index] || !float.IsFinite(f: m_heldEv[index])) {
-                m_meterOwed[index] = false;
-                m_adapting[index] = false;
-                m_heldEv[index] = reading;
-                m_meterEv[index] = reading;
+            m_views[index].Metered = ((SdfPhotometry.MeterCalibration / 100f) * MathF.Pow(x: 2f, y: reading));
+            m_views[index].MeterSource = "image";
+            if (m_views[index].MeterOwed || !float.IsFinite(f: m_views[index].HeldEv)) {
+                m_views[index].MeterOwed = false;
+                m_views[index].Adapting = false;
+                m_views[index].HeldEv = reading;
+                m_views[index].MeterEv = reading;
                 return true;
             }
-            if (m_adapting[index] || (MathF.Abs(x: (reading - m_heldEv[index])) > exposure.Band)) {
-                m_adapting[index] = true;
-                m_heldEv[index] = reading;
+            if (m_views[index].Adapting || (MathF.Abs(x: (reading - m_views[index].HeldEv)) > exposure.Band)) {
+                m_views[index].Adapting = true;
+                m_views[index].HeldEv = reading;
             }
             return false;
         }
-        m_meterSources[index] = ((m_meterOwed[index] && float.IsFinite(f: m_heldEv[index])) ? "cut" : (float.IsFinite(f: m_heldEv[index]) ? "held" : "initial"));
+        m_views[index].MeterSource = ((m_views[index].MeterOwed && float.IsFinite(f: m_views[index].HeldEv)) ? "cut" : (float.IsFinite(f: m_views[index].HeldEv) ? "held" : "initial"));
         return false;
     }
     /// <summary>Returns a view's exposure multiplier, staging the view on its first read in the frame, or one for a view
@@ -310,7 +290,7 @@ public sealed class SdfViewExposures {
     public float MultiplierOf(int view) {
         if ((view < 0) || (view >= m_count)) { return 1f; }
         StageView(index: view);
-        return m_multipliers[view];
+        return m_views[view].Multiplier;
     }
     /// <summary>Returns the share of the sky the air about a view's camera sees open, which scales the sky's in-scatter
     /// into the view's atmosphere, staging the view on its first read in the frame: one in the open, held at its last
@@ -320,7 +300,7 @@ public sealed class SdfViewExposures {
     public float AirLightOf(int view) {
         if ((view < 0) || (view >= m_count)) { return 1f; }
         StageView(index: view);
-        return m_airLight[view];
+        return m_views[view].AirLight;
     }
     /// <summary>Returns the scene luminance a view's image meter stands at, in nits, eased as its exposure is and held
     /// within its band, which the local adaptation measures each surface's illumination against, staging the view on its
@@ -330,8 +310,8 @@ public sealed class SdfViewExposures {
     public float MeteredOf(int view) {
         if ((view < 0) || (view >= m_count)) { return 0f; }
         StageView(index: view);
-        return (float.IsFinite(f: m_meterEv[view])
-            ? ((SdfPhotometry.MeterCalibration / 100f) * MathF.Pow(x: 2f, y: m_meterEv[view]))
+        return (float.IsFinite(f: m_views[view].MeterEv)
+            ? ((SdfPhotometry.MeterCalibration / 100f) * MathF.Pow(x: 2f, y: m_views[view].MeterEv))
             : 0f);
     }
     /// <summary>Writes the light a view's camera sample receives along each of its six axes (+X, -X, +Y, -Y, +Z, -Z), RGB
@@ -346,12 +326,12 @@ public sealed class SdfViewExposures {
         rows[..6].Clear();
         if ((view < 0) || (view >= m_count)) { return; }
         StageView(index: view);
-        m_light.AsSpan(length: 6, start: (view * 6)).CopyTo(destination: rows);
+        ((ReadOnlySpan<Vector4>)m_views[view].Light).CopyTo(rows);
     }
     /// <summary>Returns the <c>EV100</c> a view rendered at in the frame last staged, without staging it.</summary>
     /// <param name="view">The view's index in the frame's views.</param>
     /// <returns>The <c>EV100</c>, or <see cref="float.NaN"/> for a view the frame does not hold or that has not rendered.</returns>
-    public float Ev100Of(int view) => (((view < 0) || (view >= m_count)) ? float.NaN : m_ev100[view]);
+    public float Ev100Of(int view) => (((view < 0) || (view >= m_count)) ? float.NaN : m_views[view].Ev100);
     /// <summary>Describes each staged view's exposure: its <c>EV100</c> and multiplier; its image meter's latest reading,
     /// the <c>EV100</c> that reading aims for, where the reading came from (<c>image</c>, <c>held</c> without a new
     /// reading, <c>cut</c> awaiting one rendered after a cut, <c>initial</c> before any) and whether the band holds or
@@ -362,12 +342,12 @@ public sealed class SdfViewExposures {
         var exposure = m_exposure;
 
         for (var index = 0; (index < m_count); index++) {
-            var metered = float.IsFinite(f: m_heldEv[index]);
-            var reading = (metered ? $"{m_metered[index]:0.###} nits target={exposure.Target(luminance: m_metered[index]):0.00} band={(m_adapting[index] ? "following" : "holding")}" : "none");
+            var metered = float.IsFinite(f: m_views[index].HeldEv);
+            var reading = (metered ? $"{m_views[index].Metered:0.###} nits target={exposure.Target(luminance: m_views[index].Metered):0.00} band={(m_views[index].Adapting ? "following" : "holding")}" : "none");
             // A view without a fresh camera sample names what the sample waits for now.
-            var wait = (((m_sampleSources[index] is "none" or "held") && (m_irradiance is { } irradiance)) ? $" wait={irradiance.CameraSampleWait()}" : string.Empty);
+            var wait = (((m_views[index].SampleSource is "none" or "held") && (m_irradiance is { } irradiance)) ? $" wait={irradiance.CameraSampleWait()}" : string.Empty);
 
-            lines.Add(item: $"view {index}: ev100={m_ev100[index]:0.00} multiplier={m_multipliers[index]:G4} meter={reading} source={m_meterSources[index]} camera={m_sampleSources[index]}{wait} air={m_airLight[index]:0.###}");
+            lines.Add(item: $"view {index}: ev100={m_views[index].Ev100:0.00} multiplier={m_views[index].Multiplier:G4} meter={reading} source={m_views[index].MeterSource} camera={m_views[index].SampleSource}{wait} air={m_views[index].AirLight:0.###}");
         }
 
         return lines;

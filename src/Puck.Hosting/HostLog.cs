@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Puck.Abstractions.Memory;
 
 namespace Puck.Hosting;
 
@@ -385,7 +386,7 @@ public sealed class HostLog(int capacity = HostLog.Capacity, int characterBudget
 
             if (kept > 0) {
                 if ((m_pendingLength + kept) > m_pending.Length) {
-                    Array.Resize(array: ref m_pending, newSize: Math.Min(val1: MaxLineCharacters, val2: Math.Max(val1: (m_pendingLength + kept), val2: (2 * m_pending.Length))));
+                    Array.Resize(ref m_pending, ArrayCapacity.Grown(m_pending.Length, m_pendingLength + kept, ceiling: MaxLineCharacters));
                 }
 
                 text[..kept].CopyTo(destination: m_pending.AsSpan(start: m_pendingLength));

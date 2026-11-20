@@ -2,12 +2,12 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
-using Puck.Abstractions;
+using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Collections;
 using Puck.Abstractions.Counting;
-using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Memory;
 using Puck.Abstractions.Waiting;
+using Puck.Abstractions;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -1597,7 +1597,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             Array.Clear(array: m_drawStatic); Array.Clear(array: m_drawKeys);
             m_staticRows.Clear();
         }
-        if (m_drawKeys.Length < draws.Count) { var size = Math.Max(val1: draws.Count, val2: (2 * m_drawKeys.Length)); Array.Resize(array: ref m_drawKeys, newSize: size); Array.Resize(array: ref m_drawStatic, newSize: size); }
+        if (m_drawKeys.Length < draws.Count) { var size = ArrayCapacity.Grown(m_drawKeys.Length, draws.Count); Array.Resize(array: ref m_drawKeys, newSize: size); Array.Resize(array: ref m_drawStatic, newSize: size); }
         for (var row = draws.Count; (row < m_keyExtent); row++) {
             if (m_drawStatic[row]) { m_keyValue = m_keyValue.Remove(element: m_drawKeys[row]); m_keyStatic--; }
             m_drawStatic[row] = false; m_drawKeys[row] = 0;
@@ -2508,7 +2508,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var blockProbes = Math.Max(val1: BatchProbes, val2: count);
         var borrowed = (traces && (GpuTrace is not null));
 
-        if (borrowed) { GrowScratch(array: ref m_gpuHits, length: (blockProbes * SdfMeshProbeDepth.HitWords)); }
+        if (borrowed) { ArrayCapacity.EnsureScratch(ref m_gpuHits, (blockProbes * SdfMeshProbeDepth.HitWords)); }
         var hits = (traces ? new ProbeBlock(count: blockProbes, hits: (borrowed ? m_gpuHits : null)) : null);
         var lights = new LightBlock(count: count, inputs: lighting.Inputs);
         var feedback = (lighting.Feedback && snapshot.Layout.Bounce && (pass != 0));
@@ -2519,7 +2519,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var changes = snapshot.Changes;
         var sweep = snapshot.Sweep;
 
-        GrowScratch(array: ref m_gpuFresh, length: count);
+        ArrayCapacity.EnsureScratch(ref m_gpuFresh, count);
         var fresh = m_gpuFresh;
         var prepared = (traces ? PlaceBatch(block: hits!, candidates: candidates, count: count, first: first, fresh: fresh, geometry: geometry, layout: layout, lows: lows, parallel: parallel, scene: scene) : null);
         var committed = true;

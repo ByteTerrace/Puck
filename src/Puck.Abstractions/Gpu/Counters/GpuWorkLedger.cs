@@ -1,4 +1,5 @@
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Memory;
 
 namespace Puck.Abstractions.Gpu;
 
@@ -537,9 +538,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
                 Counts = grown;
             }
 
-            if (States.Length < labels.Length) {
-                States = new GpuPassState[labels.Length];
-            }
+            ArrayCapacity.EnsureScratch(ref States, labels.Length);
 
             Counts.AsSpan(
                 length: (countLength - Columns),
@@ -555,7 +554,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         public void BindDetails(GpuWorkDetail[] details) {
             var length = checked((((Labels.Length + details.Length) + 1) * Columns));
 
-            if (Counts.Length < length) { Array.Resize(array: ref Counts, newSize: length); }
+            ArrayCapacity.EnsureLength(ref Counts, length);
             Counts.AsSpan(start: ((Labels.Length + 1) * Columns), length: (details.Length * Columns)).Clear();
             Details = details;
         }

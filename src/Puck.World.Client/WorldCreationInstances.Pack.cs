@@ -155,7 +155,7 @@ public sealed partial class WorldCreationInstances {
 
         m_pendingDeltaSeconds = 0f;
 
-        for (var index = 0; (index < m_pool.Length); index++) {
+        for (var index = 0; (index < m_poolCount); index++) {
             var rootSlot = (slotBase + RootSlotOffset(index: index));
             var slots = SlotsAt(index: index);
             var live = m_pool[index];
@@ -414,7 +414,7 @@ public sealed partial class WorldCreationInstances {
             var identitiesChanged = false;
             var drawIndex = 0;
 
-            for (var poolIndex = 0; (poolIndex < m_meshDraws.Length); poolIndex++) {
+            for (var poolIndex = 0; (poolIndex < m_poolCount); poolIndex++) {
                 if (m_meshDraws[poolIndex] is { } posed) {
                     m_meshDrawList.Add(item: posed);
                     identitiesChanged |= ((drawIndex >= m_pickMeshTargets.Length) ||
@@ -425,7 +425,7 @@ public sealed partial class WorldCreationInstances {
             if (identitiesChanged || (drawIndex != m_pickMeshTargets.Length)) {
                 m_pickMeshTargets = new WorldPickTarget?[drawIndex];
                 drawIndex = 0;
-                for (var poolIndex = 0; (poolIndex < m_meshDraws.Length); poolIndex++) {
+                for (var poolIndex = 0; (poolIndex < m_poolCount); poolIndex++) {
                     if (m_meshDraws[poolIndex] is not null) {
                         m_pickMeshTargets[drawIndex++] = m_pool[poolIndex]?.PickTarget;
                     }

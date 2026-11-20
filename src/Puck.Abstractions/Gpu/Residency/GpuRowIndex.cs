@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>An intrusive index from a reference key to the rows that name it. Each row has exactly one key; setting
@@ -31,7 +32,7 @@ public sealed class GpuRowIndex<T> where T : notnull {
     public void Set(int row, T key) {
         ArgumentOutOfRangeException.ThrowIfNegative(row);
         if (row >= m_keys.Length) {
-            var capacity = Math.Max(val1: (row + 1), val2: Math.Max(val1: 4, val2: (2 * m_keys.Length)));
+            var capacity = ArrayCapacity.Grown(m_keys.Length, row + 1, minimum: 4);
 
             Array.Resize(array: ref m_keys, newSize: capacity);
             Array.Resize(array: ref m_next, newSize: capacity);

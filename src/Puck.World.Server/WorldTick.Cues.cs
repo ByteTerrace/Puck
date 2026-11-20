@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -34,7 +35,7 @@ public sealed partial class WorldTick {
     internal WorldSnapshot PresentLocalCues(in WorldSnapshot snapshot, IReadOnlyList<WorldRecipientView> seats) {
         if (!m_deliveringCues) { return snapshot; }
         var count = Math.Min(seats.Count, WorldGameplayCue.MaxAudienceSeats);
-        if (m_localAdmissions.Length < count) { m_localAdmissions = new CueAdmission[count]; }
+        ArrayCapacity.EnsureScratch(ref m_localAdmissions, count, ceiling: WorldGameplayCue.MaxAudienceSeats);
         for (var seat = 0; seat < count; seat++) { m_localAdmissions[seat] = new(seats[seat], fullBodies: true); }
 
         List<WorldGameplayCue>? disclosed = null;

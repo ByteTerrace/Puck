@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using Puck.Abstractions.Presentation;
 using Puck.Text;
 
@@ -303,7 +304,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
         var requested = Math.Clamp(element.PlotSamples, 0, m_plotRemaining);
         m_plotRemaining -= requested;
         if (requested == 0 || element.Binding is not { } binding || element.PlotMax <= element.PlotMin) { return; }
-        if (m_plotSamples.Length < requested) { m_plotSamples = new PresentationReading[requested]; }
+        ArrayCapacity.EnsureScratch(ref m_plotSamples, requested, ceiling: builder.Leases.Capacity.HudPlotSamplesPerPanel);
         var count = Math.Clamp(m_bindings.CopyRecent(binding, m_seat, m_plotSamples.AsSpan(0, requested)), 0, requested);
         var current = m_bindings.ReadReading(binding, m_seat);
 

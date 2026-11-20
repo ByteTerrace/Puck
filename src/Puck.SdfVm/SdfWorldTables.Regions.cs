@@ -121,7 +121,7 @@ public sealed partial class SdfWorldTables {
             RegionAt(index: index)?.Dispose();
         }
 
-        m_meshIrradiance?.Dispose();
+        m_meshIrradiance.Dispose();
         m_shadowHandoffBuffer.Dispose();
         m_regionCopyPool.Dispose();
         m_regionHostCopies.Dispose();
@@ -168,7 +168,7 @@ public sealed partial class SdfWorldTables {
     /// grows by replacing its buffers. View-local readbacks remain charged to their recorders.</summary>
     public GpuMemoryBytes TableBytes {
         get {
-            var bytes = (new GpuMemoryBytes(DeviceLocal: (((m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes) + m_shadowHandoffBuffer.SizeBytes) + ScreenEmission.SizeBytes), HostVisible: 0));
+            var bytes = (new GpuMemoryBytes(DeviceLocal: (((m_previousDynamicTransforms.Buffer!.SizeBytes + m_previousMeshTransforms.Buffer!.SizeBytes) + m_shadowHandoffBuffer.SizeBytes) + ScreenEmission.SizeBytes), HostVisible: 0));
 
             bytes += m_meshHistoryCopies.OwnedBytes;
             bytes += MeshIrradianceBufferBytes;

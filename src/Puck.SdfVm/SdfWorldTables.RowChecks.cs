@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 
 namespace Puck.SdfVm;
 
@@ -35,7 +36,7 @@ public sealed partial class SdfWorldTables {
         var extent = draws.Count;
 
         if (!m_ledgerEnabled) { m_rowLedger = []; m_ledgerExtent = 0; m_ledgerEnabled = true; }
-        if (m_rowLedger.Length < extent) { Array.Resize(array: ref m_rowLedger, newSize: extent); }
+        ArrayCapacity.EnsureLength(ref m_rowLedger, extent);
         var words = MemoryMarshal.Cast<byte, uint>(span: m_meshRegion.ContentsAt(length: (extent * SdfMeshRegion.DrawBytes), offset: 0));
         Span<uint> expected = stackalloc uint[SdfMeshRecord.DrawWords];
 

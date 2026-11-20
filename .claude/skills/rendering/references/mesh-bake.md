@@ -351,7 +351,7 @@ the saved pose rows appended to its input point table. Each slot of the
 background GPU work holds its batch's point table, a host-visible buffer the
 kernel reads in place (`SdfMeshBakeGpuWork`), which the service owns and
 reserves (`SdfGpuWorkRecording.HostBuffer`), grown in 4 MiB granules once the
-slot's last job is released (`SdfGpuWork.Granule`), and bound through the slot's
+slot's last job is released (`GpuBufferSizing.Granule`), and bound through the slot's
 own World set at the bake's point member, where the tables' World sets bind the
 unused-member buffer (`SdfWorldTables.BackgroundWorldSet`).
 `SdfMeshBakeBatch.InputRows` is the highest input prefix actually read: explicit

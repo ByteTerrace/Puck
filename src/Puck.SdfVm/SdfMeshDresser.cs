@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -319,7 +320,7 @@ public sealed class SdfMeshDresser : IDisposable {
     private void Bind(SdfMeshRows.Run run, int offset, DrawBinding binding, SdfFrame frame, ref int matrices) {
         var row = (run.Start + offset);
 
-        if (m_bindings.Length <= row) { Array.Resize(array: ref m_bindings, newSize: Math.Max(val1: (row + 1), val2: (m_bindings.Length * 2))); }
+        ArrayCapacity.EnsureLength(ref m_bindings, row + 1);
         m_bindings[row] = binding;
         binding.Run = run;
         IndexBinding(binding: binding, row: row);

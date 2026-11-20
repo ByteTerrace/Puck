@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using Puck.Commands;
 using Puck.World.Protocol;
 
@@ -169,7 +170,7 @@ internal sealed class WorldDeliveryRows {
         if (!passThrough) { AppendRun(span[run..]); }
         if (rows) {
             var changedCount = m_changed.Count;
-            if (m_changedRows.Length < changedCount) { m_changedRows = new int[System.Numerics.BitOperations.RoundUpToPowerOf2((uint)changedCount)]; }
+            ArrayCapacity.EnsureScratch(ref m_changedRows, changedCount);
             m_changed.Members.CopyTo(m_changedRows);
             var changedRows = m_changedRows.AsSpan(0, changedCount);
             changedRows.Sort();
@@ -193,14 +194,12 @@ internal sealed class WorldDeliveryRows {
         return delivered;
     }
     private void Append(in FieldCellDelta delta) {
-        if (m_count == m_cells.Length) { Array.Resize(ref m_cells, Math.Max(16, m_cells.Length * 2)); }
+        ArrayCapacity.EnsureLength(ref m_cells, m_count + 1);
         m_cells[m_count++] = delta;
     }
     private void AppendRun(ReadOnlySpan<FieldCellDelta> cells) {
         if (cells.IsEmpty) { return; }
-        if ((m_count + cells.Length) > m_cells.Length) {
-            Array.Resize(ref m_cells, (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)Math.Max(16, m_count + cells.Length)));
-        }
+        ArrayCapacity.EnsureLength(ref m_cells, checked(m_count + cells.Length));
         cells.CopyTo(m_cells.AsSpan(m_count));
         m_count += cells.Length;
     }
