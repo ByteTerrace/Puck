@@ -67,8 +67,11 @@ public sealed class WorldSessionFrameSource(SdfCompositionFrameSource inner, Act
             // already dressed under its own name.
             m_views.Add(item: ((index == 0) ? resolveResolution(frame.Views[index], ((uint)(resolution?.Width ?? ((int)width))), ((uint)(resolution?.Height ?? ((int)height)))) : frame.Views[index]));
         }
-        return frame with { Views = m_views };
+        // The composition's frame is borrowed until its next capture; this source answers with its own copy.
+        return m_frameWriter.CopyFrom(content: (frame.Content with { Views = m_views }), source: frame);
     }
+
+    private readonly SdfFrame.Writer m_frameWriter = new();
     /// <inheritdoc/>
     /// <remarks>The time a device loss takes to recover must not land as one giant smoothing delta on the next
     /// frame.</remarks>

@@ -404,8 +404,6 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// <param name="tier">The tier, from zero to <see cref="SdfMeshTier.Last"/>.</param>
     public void AppendTier(int tier) => Hash(fact: Fact.Tier, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in tier)));
 
-    // The bake kernel undoes the interpreter's program-wide scale. The two floating-point operations can still round.
-    internal void AppendStepScale(float scale) => Hash(fact: Fact.StepScale, source: MemoryMarshal.AsBytes(new ReadOnlySpan<float>(in scale)));
     /// <summary>Appends one instruction of a program as it stands, its material included, with the world-space pose of a
     /// slot it reads.</summary>
     /// <param name="program">The program.</param>
@@ -431,6 +429,9 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         // group by their content, and so is the stroke the bake's lettering stroke rule takes its glyphs to have.
         var resources = SdfFieldOps.ResourcesOf(instruction: instruction);
 
+        if ((instruction.Op == SdfOp.ShapeBlend) && (program.ShapeStepScaleAt(instructionIndex: index) is < 1f and var scale)) {
+            Hash(fact: Fact.ShapeStepScale, source: MemoryMarshal.AsBytes(new ReadOnlySpan<float>(in scale)));
+        }
         if (((resources & SdfFieldResource.GlyphAtlas) != 0) && !ContainsGlyph) {
             var atlas = program.GlyphAtlas;
             var stroke = program.GlyphStroke;
@@ -591,7 +592,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         OperandOffset,
         OperandPose,
         GlyphStroke,
-        StepScale,
+        ShapeStepScale,
     }
     // An operand's key as the bytes the geometry hashes: its slot's offset from the group's own, the steps its pose
     // rounds to, and that pose rounded.

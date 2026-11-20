@@ -140,11 +140,7 @@ public sealed partial class WorldRigidAssets {
             var previous = m_copies[copyIndex];
             var transform = new DynamicTransform(occurrence.Position, occurrence.Orientation);
             var scale = (occurrence.Placement.Scale / asset.BakeScale);
-            if (!previous.SamePose(-1, occurrence.Target, occurrence.MotionKey, transform, scale, false, null, null, 0, [], usesRootMaterialFrame: false, templateRange: asset.Range)) {
-                m_copies[copyIndex] = new SdfMeshInstance(-1, occurrence.Target, transform, scale, IsDynamic: false) {
-                    MotionIdentity = occurrence.MotionKey, UsesRootMaterialFrame = false, TemplateRange = asset.Range,
-                };
-            }
+            _ = previous.Update(-1, occurrence.Target, occurrence.MotionKey, transform, scale, false, null, null, 0, [], usesRootMaterialFrame: false, templateRange: asset.Range);
             if (asset.Range.InstanceCount > 0) {
                 var hidden = isolation?.HiddenFor(asset.Creation.Id, asset.Creation.EngineDocument);
                 StaticVisibleCopies++;

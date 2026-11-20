@@ -4,10 +4,29 @@ case SDF_OP_RESET_POINT:
     localPosition = worldPosition;
     distanceScale = 1.0;
     currentSlot = SDF_TRANSFORM_SLOT_NONE;
+#ifdef SDF_DYNAMIC_TRANSFORMS
+    rootDynamicIndex = index + 1u;
+#endif
     laneErodeSkipShape = false;
     laneErodeAmount = 0.0;
     if (trackMaterial) {
         parityMaterialDelta = 0;
+    }
+    uint frameLength = SDF_RESET_FRAME_LENGTH(instructionHeader);
+    if (frameLength != 0u) {
+        if (frameLength >= segmentMeta.w - index - 1u) { return sdfIsaErrorHit(); }
+        uint key = SDF_RESET_FRAME_KEY(instructionHeader);
+        if (key == 0u || key > index + 1u) { return sdfIsaErrorHit(); }
+
+        if (key == frameKey && framePending == SDF_SEGMENT_NONE) {
+            localPosition = framePosition;
+            distanceScale = frameScale;
+            currentSlot = frameSlot;
+            index += frameLength;
+        } else {
+            frameKey = key;
+            framePending = index + frameLength + 1u;
+        }
     }
     break;
 }
@@ -38,9 +57,11 @@ case SDF_OP_TRANSFORM_DYNAMIC:
     // inverse-rotate), exactly like an immediate Translate + Rotate would.
     SDF_VM_LOAD_DATA0;
     uint dynamicSlot = (uint)data0.x;
-    float4 dynamicPosition = sdfDynamicTransformRow((3u * dynamicSlot));
-    float4 dynamicOrientation = sdfDynamicTransformRow(((3u * dynamicSlot) + 1u));
-    localPosition = rotatePointByInverseQuaternion((localPosition - dynamicPosition.xyz), dynamicOrientation);
+    if (index == rootDynamicIndex) {
+        localPosition = sdfWorldPointInSlot(worldPosition, dynamicSlot, dynamicRoot);
+    } else {
+        localPosition = sdfPointInSlot(localPosition, dynamicSlot);
+    }
     currentSlot = (int)dynamicSlot;
     break;
 #else
@@ -116,7 +137,8 @@ case SDF_OP_SHAPE_BLEND:
     float candidate = ((evaluateShape(shapeType, localPosition, data0, data1) * distanceScale) + laneErosion);
 
     // Hand the DISTANCE-SCALED (plus any pending lane erosion) candidate to the shared blend tail below.
-    composeCandidate = candidate;
+    float shapeStepScale = asfloat(SDF_SHAPE_STEP_SCALE(shapeBoundMeta));
+    composeCandidate = shapeStepScale > 0.0 ? candidate * shapeStepScale : candidate;
     composeBlend = SDF_INSTRUCTION_BLEND(instructionHeader);
     composeSmooth = data1.x;
     composePending = true;

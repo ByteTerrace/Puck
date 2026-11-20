@@ -261,9 +261,8 @@ public sealed partial class WorldRigidAssets {
             var material = ((asset < m_materials.Count) ? m_materials[asset] : 0);
             var clip = WorldPortalStraddle.Clip(doors: doors, center: position, radius: (m_reaches[asset] * body.Scale), firstSlot: 0, slotCount: 1);
 
-            if (!previous.SamePose(firstSlot, target, motionIdentity, transform, body.Scale, true, clip, mesh, material, otherSlots)) {
-                m_copies[index] = new SdfMeshInstance(firstSlot, target, transform, body.Scale, IsDynamic: true) { Clip = clip, Material = material, Mesh = mesh, MotionIdentity = motionIdentity, OtherAssetSlots = otherSlots };
-            }
+            // The body's row is rewritten in place: a moving body allocates nothing, and its revision tells consumers it moved.
+            _ = previous.Update(firstSlot, target, motionIdentity, transform, body.Scale, true, clip, mesh, material, otherSlots);
             var volumeCount = (body.Creation.EngineDocument.Volumes?.Count ?? 0);
 
             for (var volumeIndex = 0; (volumeIndex < volumeCount); volumeIndex++) {

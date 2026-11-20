@@ -77,7 +77,6 @@ void sdfBakeSample(uint sample, uint count) {
     float3 gradient = 0.0;
     uint word = sample * 5u;
     sdfProgramLayout = sdfLoadProgramLayout();
-    float unscale = 1.0 / sdfProgramLayout.stepScale;
     [loop]
     for (uint tap = 0u; tap <= lastTap; tap++) {
         // Sample in the field's frame, but difference along the lattice's axes for the contour.
@@ -86,7 +85,7 @@ void sdfBakeSample(uint sample, uint count) {
         if (tap != 0u) { at += rotatePointByQuaternion(direction * spacing, orientation); }
         SdfHit hit = mapCore(at, maskBase, tap == 0u);
         if (tap == 0u) {
-            meshBakeSamplesRW[word] = asuint(hit.distance * unscale);
+            meshBakeSamplesRW[word] = asuint(hit.distance);
             meshBakeSamplesRW[word + 1u] = asuint(hit.material);
             if (mode == 2u) { meshBakeSamplesRW[word + 2u] = asuint(hit.frameSlot); }
         } else {
@@ -95,8 +94,8 @@ void sdfBakeSample(uint sample, uint count) {
         sdfWorkSteps++;
     }
 
-    // The four taps sum to four times their spacing times the gradient. Undo the program's step scale as for the centre.
-    if (mode == 3u) { gradient *= (0.25 / spacing) * unscale; }
+    // The four taps sum to four times their spacing times the gradient.
+    if (mode == 3u) { gradient *= (0.25 / spacing); }
     if (mode != 2u) { meshBakeSamplesRW[word + 2u] = asuint(gradient.x); }
     meshBakeSamplesRW[word + 3u] = asuint(gradient.y);
     meshBakeSamplesRW[word + 4u] = asuint(gradient.z);

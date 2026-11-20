@@ -46,20 +46,13 @@ public sealed partial class SdfFieldDeviceLawTests {
         foreach (var call in SdfEncodingProbe.Calls()) {
             var program = SdfEncodingProbe.Build(call: call);
 
-            if (Evaluator(program: program) is not { } evaluator) {
+            if (Evaluator(program: program) is null) {
                 continue;
             }
 
+            // Use the render reading so the scope scales apply at the pop on both readers.
+            var evaluator = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render);
             var (distances, materials) = Reference(evaluator: evaluator);
-            // A scope that holds the whole program and composes by union is deferred by the evaluator: it answers the
-            // scope's field unscaled and carries the scope's 1/L in its own step scale instead, where the kernel scales
-            // the scope's candidate. Over such a program the kernel answers the evaluator's distance times the ratio of
-            // the two step scales (one, to the evaluator's rounding, for a program with no deferred scope).
-            var deferred = ((float)(((double)evaluator.StepScale) / program.StepScale));
-
-            for (var point = 0; (point < distances.Length); point++) {
-                distances[point] *= deferred;
-            }
 
             yield return new SdfFieldLeg(
                 Distances: distances,
@@ -175,12 +168,15 @@ public sealed partial class SdfFieldDeviceLawTests {
     private static (float[] Distances, int[] Materials) Reference(SdfFieldOracle oracle) {
         var distances = new float[Points.Length];
         var materials = new int[Points.Length];
+        var program = Program(oracle: oracle);
+        var scale = program.Instructions.Select(selector: (_, index) => program.ShapeStepScaleAt(instructionIndex: index)).Min();
 
         for (var point = 0; (point < Points.Length); point++) {
             (distances[point], materials[point]) = Reference(
                 oracle: oracle,
                 point: Points[point]
             );
+            distances[point] *= scale;
         }
 
         return (distances, materials);

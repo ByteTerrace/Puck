@@ -35,7 +35,7 @@ public sealed partial class SdfProgram {
     // before it) stores the chain's pre-dynamic translation as its center and the entity slot: the shader adds the
     // slot's per-frame position — center = offset + dynPos, NO quaternion rotate — with the post-dynamic local
     // geometry folded into the radius, which is the whole win for far-away moving entities.
-    private (List<BoundRecord> ShapeBounds, List<BoundRecord> Segments) AnalyzeBounds(int[] instructionOwners) {
+    private (List<BoundRecord> ShapeBounds, List<BoundRecord> Segments) AnalyzeBounds(int[] instructionOwners, List<(int Start, int End)> ranges) {
         var segments = new List<BoundRecord>();
         var shapeBounds = new List<BoundRecord>();
 
@@ -47,7 +47,7 @@ public sealed partial class SdfProgram {
         // never straddles two instances (or an instance and the WORLD set), so the instance table below can express
         // "this instance owns segments [a, b)" as a plain contiguous directory range. The next segment's leading
         // ResetPoint rebuilds every piece of chain state a segment skip leaves stale.
-        foreach (var (segmentStart, segmentEnd) in SegmentRanges()) {
+        foreach (var (segmentStart, segmentEnd) in ranges) {
             segments.Add(item: AnalyzeSegment(
                 segmentStart: segmentStart,
                 segmentEnd: segmentEnd,
@@ -206,6 +206,7 @@ public sealed partial class SdfProgram {
                 case SdfSkipSphereAction.ShapeBlend: {
                         if (
                             chainBoundable &&
+                            (ShapeStepScaleAt(instructionIndex: index) == 1f) &&
                             (((uint)SdfBlendOp.Union) == instruction.Blend) &&
                             // Sweep and Path cap their local candidate at SDF_FAR_DISTANCE. The kernel's world-unit
                             // far guard only protects that cap when the accumulated scale does not shrink it.

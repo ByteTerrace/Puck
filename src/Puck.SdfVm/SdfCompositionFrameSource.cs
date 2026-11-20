@@ -33,7 +33,8 @@ public interface ISdfFrameDresser {
     /// <param name="meshDrawsRevision">The composed draws' revision, which the dressed frame carries as
     /// <see cref="SdfFrame.MeshDrawsRevision"/>.</param>
     /// <returns>The frame to render. The composition completes it in place (its pick map, slot clips, geometry assets
-    /// and sampled snapshots), so a dresser returns a frame it hands to no one else.</returns>
+    /// and sampled snapshots), so a dresser returns a frame it owns and hands to no one else to complete: a frame its
+    /// <see cref="SdfFrame.Writer"/> writes again at the next dress.</returns>
     SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha);
 
     /// <summary>Gets the font atlas the dressed world's text samples, which the composed frame source hands its host as
@@ -88,9 +89,11 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private int m_programSlots;
 
     // The copies and template slots every frame publishes, rewritten in place, and the journal of the copies each pack
-    // changed (another copy at an index, or the copy at an index on another root slot), which the dresser and the bake
+    // changed (another copy at an index, the copy at an index on another root slot or at another revision), which the dresser and the bake
     // read through their own cursors instead of comparing the whole list.
     private readonly List<SdfMeshInstance> m_meshInstances = [];
+    // Each published copy's revision as this pack read it, beside m_meshInstances.
+    private readonly List<long> m_meshInstanceRevisions = [];
     private readonly List<int> m_meshAssetSlots = [];
     private readonly Puck.Abstractions.Gpu.GpuChangedRows m_copyChanges = new();
     private readonly SdfMovedTransforms m_moved = new();
@@ -408,29 +411,36 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
         return moved;
     }
-    // Reads every emitter's straddling slot runs after packing: one emitter's list passes through as it is, several are
-    // copied into a new list, and none is the one empty list, so a frame no body straddles a portal in costs nothing.
+    // Reads every emitter's straddling slot runs after packing, then each straddling copy's run: one emitter's list with no
+    // straddling copy passes through as it is, anything more is written in order into the composition's one list, and none
+    // is the one empty list. A consumer copies the clips it keeps (SdfMeshRows.Writer.SetClips), so the list is rewritten
+    // in place each frame and composing allocates nothing.
     private IReadOnlyList<SdfSlotClip> ComposeSlotClips() {
-        IReadOnlyList<SdfSlotClip> composed = [];
+        IReadOnlyList<SdfSlotClip>? only = null;
+        var lists = 0;
+        var copies = 0;
 
+        for (var index = 0; (index < m_emitters.Count); index++) {
+            if (m_emitters[index].SlotClips is { Count: > 0 } clips) { only = clips; lists++; }
+        }
+        foreach (var copy in m_meshInstances) {
+            if (copy.Clip is not null) { copies++; }
+        }
+        if ((lists + copies) == 0) { return []; }
+        if ((lists == 1) && (copies == 0)) { return only!; }
+        m_composedClips.Clear();
         for (var index = 0; (index < m_emitters.Count); index++) {
             var clips = m_emitters[index].SlotClips;
 
-            if (clips.Count == 0) {
-                continue;
-            }
-
-            composed = ((composed.Count == 0)
-                ? clips
-                : [.. composed, .. clips]
-            );
+            for (var at = 0; (at < clips.Count); at++) { m_composedClips.Add(item: clips[at]); }
         }
-
         foreach (var copy in m_meshInstances) {
-            if (copy.Clip is { } clip) { composed = [.. composed, clip with { FirstSlot = copy.FrameSlot, SlotCount = 1 }]; }
+            if (copy.Clip is { } clip) { m_composedClips.Add(item: (clip with { FirstSlot = copy.FrameSlot, SlotCount = 1 })); }
         }
-        return composed;
+        return m_composedClips;
     }
+
+    private readonly List<SdfSlotClip> m_composedClips = [];
     // Reads every emitter's mesh draws after packing and recomposes them only when an emitter's list or revision moved:
     // one emitter's list passes through as it is, several are copied in list order into the host's own list. Either way
     // the composed revision moves, so an engine repacks even a list rewritten in place.
@@ -554,7 +564,10 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             }
         }
         if (slots < m_meshAssetSlots.Count) { m_meshAssetSlots.RemoveRange(index: slots, count: (m_meshAssetSlots.Count - slots)); slotsMoved = true; }
-        if (copyCount < m_meshInstances.Count) { m_meshInstances.RemoveRange(index: copyCount, count: (m_meshInstances.Count - copyCount)); }
+        if (copyCount < m_meshInstances.Count) {
+            m_meshInstances.RemoveRange(index: copyCount, count: (m_meshInstances.Count - copyCount));
+            m_meshInstanceRevisions.RemoveRange(index: copyCount, count: (m_meshInstanceRevisions.Count - copyCount));
+        }
         m_copyChanges.Begin(everything: slotsMoved, rows: copyCount);
         var root = m_programSlots;
         var position = 0;
@@ -564,14 +577,22 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
             for (var at = 0; (at < copies.Count); at++, position++) {
                 var copy = copies[at];
-                var held = ((position < m_meshInstances.Count) && ReferenceEquals(objA: m_meshInstances[position], objB: copy) && (copy.FrameSlot == root));
+                // A copy the producer rewrote in place (a moving body's pose) is the same row at another revision.
+                var held = ((position < m_meshInstances.Count) && ReferenceEquals(objA: m_meshInstances[position], objB: copy) &&
+                    (m_meshInstanceRevisions[position] == copy.Revision) && (copy.FrameSlot == root));
 
                 copy.FrameSlot = root;
                 var previous = m_transforms[root];
 
                 m_transforms[root] = copy.Transform;
                 if (previous != copy.Transform) { m_moved.Owe(count: 1, start: root); }
-                if (position == m_meshInstances.Count) { m_meshInstances.Add(item: copy); } else { m_meshInstances[position] = copy; }
+                if (position == m_meshInstances.Count) {
+                    m_meshInstances.Add(item: copy);
+                    m_meshInstanceRevisions.Add(item: copy.Revision);
+                } else {
+                    m_meshInstances[position] = copy;
+                    m_meshInstanceRevisions[position] = copy.Revision;
+                }
                 if (!held) { m_copyChanges.Owe(count: 1, start: position); }
                 root++;
             }
@@ -734,8 +755,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         // that moved makes a new set, and the program stands.
         m_sampled = SdfSampledSet.Capture(program: m_program!, previous: (m_sampled ?? m_program!.Sampled));
         dressed.PickMap = ComposePickMap();
-        dressed.SlotClips = ComposeSlotClips();
-        dressed.Compose(meshAssetSlots: m_meshAssetSlots, meshInstances: m_meshInstances, sampled: m_sampled,
+        dressed.Compose(meshAssetSlots: m_meshAssetSlots, meshInstances: m_meshInstances, sampled: m_sampled, slotClips: ComposeSlotClips(),
             copyChanges: m_copyChanges.Reader, copyChangesSerial: m_copyChanges.Serial);
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
         if (Frames == 0) { Console.Error.WriteLine(value: $"[world.render] envelope: {m_program!.Instances.Count} instances, {m_program.MaterialCount} materials, {m_program.Words.Length} program words, {m_transforms.Length} dynamic slots, {m_meshAssetSlots.Count} geometry assets, {m_meshInstances.Count} rigid copies"); }

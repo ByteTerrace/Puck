@@ -49,6 +49,8 @@ public sealed class SdfViewExposures {
     // The open frame (Stage) its views stage against on their first read, the presentation clock its seconds advance, and
     // whether reads may stage (false while a frame holds every exposure).
     private SdfFrame? m_frame;
+    // The open frame's exposure, kept apart from the frame, which its residency writes again at a later capture.
+    private SdfExposure m_exposure = SdfExposure.Default;
     private SdfMeshIrradiance? m_irradiance;
     private double m_clock;
     private long m_frameSerial;
@@ -188,6 +190,7 @@ public sealed class SdfViewExposures {
 
         m_count = count;
         m_frame = frame;
+        m_exposure = frame.Exposure;
         m_irradiance = irradiance;
         m_clock += Math.Max(val1: 0d, val2: seconds);
         m_open = true;
@@ -360,7 +363,7 @@ public sealed class SdfViewExposures {
     /// <returns>One line a view.</returns>
     public IReadOnlyList<string> Describe() {
         var lines = new List<string>(capacity: m_count);
-        var exposure = (m_frame?.Exposure ?? SdfExposure.Default);
+        var exposure = m_exposure;
 
         for (var index = 0; (index < m_count); index++) {
             var metered = float.IsFinite(f: m_heldEv[index]);

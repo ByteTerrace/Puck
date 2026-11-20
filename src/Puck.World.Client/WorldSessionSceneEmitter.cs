@@ -77,6 +77,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     // The frame's views: the session's own, then the destination's cameras Film adds.
     private readonly List<SdfViewSnapshot> m_views = [];
+    private readonly SdfFrame.Writer m_frameWriter = new();
     // The destination's own font catalog and its text screens' decals, followed from its delivered definition (FollowText):
     // the rows, its screens then its seated faces, a text screen's lines are read from.
     private readonly WorldTextCatalog m_text = new();
@@ -513,57 +514,63 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         FitSkyViews?.Invoke(m_views, environment.Sky, width, height);
 
-        var frame = new SdfFrame(
-            Program: program,
-            ProgramChanged: programChanged,
-            Time: 0f,
-            Views: m_views
-        ) {
-            // The destination's own presented tick, never the viewer's, so its sky and media show its authority's time.
-            Clock = m_mirror.FollowState().Presented,
-            WorldLanes = environment.Lanes,
-            DynamicTransforms = transforms,
-            MovedTransforms = moved,
-            // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
-            // authority renders.
-            FarDistance = m_dressedFarDistance,
-            ShadowCoverage = WorldRenderFarDistance.ResolveShadowCoverage(defaults: m_mirror.Definition.Render),
-            // The destination's own authored tier: its views read its own irradiance volume, which also meters its
-            // exposure and occludes its fixtures, as a seat presented there would.
-            IndirectTier = (m_mirror.Definition.Render.Indirect?.Tier ?? SdfIndirectTier.Medium),
-            // Whether the volume's rays take the ray hardware changes what the trace costs on this device, not what it
-            // answers, so it is the presenting session's lever (render.rayQueries at its boot, then `world.rays`, a quality
-            // preset or a device profile), never the destination document's: a painting world authors no device's cost.
-            RayQueries = (Session?.RayQueries ?? m_mirror.Definition.Render.RayQueries),
-            // The distant shadow map's reach, texels and tolerance are a device table's row, so the presenting session's
-            // lever too, as the rays are.
-            DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: ((Session is { } session) ? session.DistantShadows : m_mirror.Definition.Render.DistantShadows)),
-            FarShadows = WorldRenderFarDistance.ResolveFarShadows(authored: ((Session is { } presenting) ? presenting.FarShadows : m_mirror.Definition.Render.FarShadows)),
-            IndirectSources = environment.Indirect.Gains.Sources,
-            IndirectGains = environment.Indirect.Gains,
-            IndirectBounces = environment.Indirect.Bounces,
-            IndirectBudget = environment.Indirect.Budget,
-            // What the presenting session's nested-view table keeps of the volume at the glass's presented size, and the
-            // share of the display the glass covers, which weighs this world's background work against the others'.
-            IndirectLevels = (Session?.NestedIndirectLevels(view: ViewName) ?? 0),
-            DisplayShare = (Session?.NestedDisplayShare(view: ViewName) ?? 1f),
-            IndirectLightingGrid = environment.Indirect.LightingGrid,
-            IndirectApply = environment.Indirect.Apply,
-            Lights = environment.Lights,
-            Exposure = WorldRenderSettings.Pinned(exposure: environment.Exposure, pin: Session?.ExposurePin),
-            Toon = ToonStyleDocument.ResolveDefault(toon: m_mirror.Definition.Render.Toon, shown: Session?.ToonOverride),
-            Tone = WorldRenderSettings.ToneOf(render: m_mirror.Definition.Render),
-            ShadePrograms = Session?.ShadePrograms ?? true,
-            ShadeDefault = WorldRenderSettings.CompileShade(Session?.ShadeOverride ?? m_mirror.Definition.Render.Shade?.Definition),
-            ShadeDeclared = WorldRenderSettings.DeclaredShades(definition: m_mirror.Definition),
-            Sky = environment.Sky,
-            // The mirrored world's static placements' meshes, then its stamp pool's.
-            MeshDraws = meshDraws,
-            MeshDrawsRevision = meshDrawsRevision,
-            SlotClips = m_pool.SlotClips,
-        };
+        // The session's one frame, written again for each capture: a residency renders its own copy of it.
+        var frame = m_frameWriter.Write(
+            content: new SdfFrameContent(
+                Program: program,
+                ProgramChanged: programChanged,
+                Time: 0f,
+                Views: m_views
+            ) {
+                // The destination's own presented tick, never the viewer's, so its sky and media show its authority's time.
+                Clock = m_mirror.FollowState().Presented,
+                WorldLanes = environment.Lanes,
+                DynamicTransforms = transforms,
+                MovedTransforms = moved,
+                Lights = environment.Lights,
+                Exposure = WorldRenderSettings.Pinned(exposure: environment.Exposure, pin: Session?.ExposurePin),
+                Sky = environment.Sky,
+                // The mirrored world's static placements' meshes, then its stamp pool's.
+                MeshDraws = meshDraws,
+                MeshDrawsRevision = meshDrawsRevision,
+            },
+            settings: new SdfFrameSettings {
+                // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
+                // authority renders.
+                FarDistance = m_dressedFarDistance,
+                ShadowCoverage = WorldRenderFarDistance.ResolveShadowCoverage(defaults: m_mirror.Definition.Render),
+                // The destination's own authored tier: its views read its own irradiance volume, which also meters its
+                // exposure and occludes its fixtures, as a seat presented there would.
+                IndirectTier = (m_mirror.Definition.Render.Indirect?.Tier ?? SdfIndirectTier.Medium),
+                // Whether the volume's rays take the ray hardware changes what the trace costs on this device, not what
+                // it answers, so it is the presenting session's lever (render.rayQueries at its boot, then `world.rays`,
+                // a quality preset or a device profile), never the destination document's: a painting world authors no
+                // device's cost.
+                RayQueries = (Session?.RayQueries ?? m_mirror.Definition.Render.RayQueries),
+                // The distant shadow map's reach, texels and tolerance are a device table's row, so the presenting
+                // session's lever too, as the rays are.
+                DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: ((Session is { } session) ? session.DistantShadows : m_mirror.Definition.Render.DistantShadows)),
+                FarShadows = WorldRenderFarDistance.ResolveFarShadows(authored: ((Session is { } presenting) ? presenting.FarShadows : m_mirror.Definition.Render.FarShadows)),
+                IndirectSources = environment.Indirect.Gains.Sources,
+                IndirectGains = environment.Indirect.Gains,
+                IndirectBounces = environment.Indirect.Bounces,
+                IndirectBudget = environment.Indirect.Budget,
+                // What the presenting session's nested-view table keeps of the volume at the glass's presented size, and
+                // the share of the display the glass covers, which weighs this world's background work against the
+                // others'.
+                IndirectLevels = (Session?.NestedIndirectLevels(view: ViewName) ?? 0),
+                DisplayShare = (Session?.NestedDisplayShare(view: ViewName) ?? 1f),
+                IndirectLightingGrid = environment.Indirect.LightingGrid,
+                IndirectApply = environment.Indirect.Apply,
+                Toon = ToonStyleDocument.ResolveDefault(toon: m_mirror.Definition.Render.Toon, shown: Session?.ToonOverride),
+                Tone = WorldRenderSettings.ToneOf(render: m_mirror.Definition.Render),
+                ShadePrograms = Session?.ShadePrograms ?? true,
+                ShadeDefault = WorldRenderSettings.CompileShade(Session?.ShadeOverride ?? m_mirror.Definition.Render.Shade?.Definition),
+                ShadeDeclared = WorldRenderSettings.DeclaredShades(definition: m_mirror.Definition),
+            }
+        );
 
-        return ((HostFrame is { } host) ? TakeLevers(frame: frame, height: height, host: host(), views: m_views, width: width) : frame);
+        return ((HostFrame is { } host) ? TakeLevers(frame: m_frameWriter, height: height, host: host(), views: m_views, width: width) : frame);
     }
     /// <summary>Gets or sets the frame the presentation dressed this frame, whose levers the frames of a session rendered
     /// through a residency of its own take (<see cref="TakeLevers"/>), or <see langword="null"/> for an emitter whose scene
@@ -572,29 +579,33 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <summary>Gets or sets what hands the stamp pool this frame's presentation rate and update rates before it packs
     /// (<see cref="WorldFramePresenter.PresentStamps"/>), or <see langword="null"/> for an emitter whose scene does.</summary>
     public Action<WorldCreationInstances>? PresentStamps { get; set; }
-    /// <summary>Returns a frame under the presentation's levers (its cadence gate, cull and detail levels, update rates,
+    /// <summary>Puts a frame under the presentation's levers (its cadence gate, cull and detail levels, update rates,
     /// rate counters and intervals), and rates the stamp pool by the views and shadow cascades the frame renders its world
     /// through, so its next pack holds a body or animated placement none of them, nor a shadow of them, may show. Each
     /// view counts its region of the frame's height, as the presentation counts a view it has no display share for.</summary>
-    /// <param name="frame">The frame dressed for the session or scene, with its final views.</param>
+    /// <param name="frame">The writer of the frame dressed for the session or scene, which holds its final views.</param>
     /// <param name="host">The frame the presentation dressed this frame, or <see langword="null"/> before it has dressed
     /// one, when the frame keeps its own levers.</param>
     /// <param name="views">The frame's final views.</param>
     /// <param name="width">The frame's width, in pixels.</param>
     /// <param name="height">The frame's height, in pixels.</param>
     /// <returns>The frame under the presentation's levers.</returns>
-    public SdfFrame TakeLevers(SdfFrame frame, SdfFrame? host, IReadOnlyList<SdfViewSnapshot> views, uint width, uint height) {
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> or <paramref name="views"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="frame"/> has written no frame yet.</exception>
+    public SdfFrame TakeLevers(SdfFrame.Writer frame, SdfFrame? host, IReadOnlyList<SdfViewSnapshot> views, uint width, uint height) {
         ArgumentNullException.ThrowIfNull(argument: frame);
         ArgumentNullException.ThrowIfNull(argument: views);
 
-        var dressed = ((host is null) ? frame : (frame with {
+        var written = (frame.Frame ?? throw new InvalidOperationException(message: "A frame takes the presentation's levers only once it is written."));
+        var dressed = ((host is null) ? written : frame.Write(settings: (written.Settings with {
             EnableCadenceGate = host.EnableCadenceGate,
             MeshCull = host.MeshCull,
             MeshDetail = host.MeshDetail,
             UpdateRates = host.UpdateRates,
             RateCounts = host.RateCounts,
             RateIntervals = host.RateIntervals,
-        }));
+        })));
 
         m_pool.RateBy(counts: dressed.RateCounts, height: height, intervals: dressed.RateIntervals, views: views);
         m_pool.ShadowBy(frame: dressed, height: height, width: width);

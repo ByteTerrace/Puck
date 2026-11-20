@@ -82,9 +82,9 @@ public sealed class WorldInfinityViewScene : ISdfFrameDresser {
         }
         FitSkyViews?.Invoke(m_fittedViews, dressed.Sky, width, height);
 
-        return dressed with {
-            FarDistance = m_spec.FarDistance,
-            Views = m_fittedViews,
-        };
+        // The layer's one frame, written again for each capture from the inner dresser's.
+        return m_frameWriter.Write(content: (dressed.Content with { Views = m_fittedViews }), settings: (dressed.Settings with { FarDistance = m_spec.FarDistance }));
     }
+
+    private readonly SdfFrame.Writer m_frameWriter = new();
 }

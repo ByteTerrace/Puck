@@ -153,7 +153,10 @@ count still names the previous records.
 The frame rasterizes baked geometry. `SdfCompositionFrameSource` allocates the
 live transform table and reports an actual `[world.render] envelope`; it builds
 no worst-case probe. `WorldRigidAssets` emits local creation templates once and
-supplies `SdfMeshInstance` roots and identities. `SdfMeshDresser.Dress` expands
+supplies `SdfMeshInstance` roots and identities, one row per copy that it rewrites
+in place (`SdfMeshInstance.Update`), so a moving body allocates nothing; a consumer
+that compares a copy by reference compares its `Revision` too, as the composition's
+copy journal, the dresser and its bindings do. `SdfMeshDresser.Dress` expands
 the shared mesh into copies without program or palette duplication. Fixed placements
 reuse the ordinary static emitter in prototype-local ranges (`SdfMeshTemplateRange`),
 including its per-shape bounds, detail regions and separate groups. The largest
@@ -334,8 +337,10 @@ fence value). An owner that lets go of objects other nodes' submissions read, an
 released residency, a dropped portal's or routed view's tables), hands them to the device's one retirement
 (`GpuDeviceServices.Retirement`, a `GpuDeviceRetirement`) instead of waiting for idle: `RenderGraphRuntime` polls it
 after each frame's batch, which queues a timeline checkpoint behind it, and the hosts drain it at a loss
-(`DeviceLossRecovery`) and at teardown (`LauncherHostRun.DrainRetirement`). A released residency's release retires the
-builds it still leases into `SdfWorldPipelineCatalog.RetiredBuilds`, so `WorldRenderRoot` drains the device's retirement
+(`DeviceLossRecovery`) and at teardown (`LauncherHostRun.DrainRetirement`). A residency's one release
+(`SdfWorldResidency.ReleaseDeviceObjects`, final or on a loss) retires every build it still leases, a kernel reload's
+included, into `SdfWorldPipelineCatalog.RetiredBuilds` and waits for none; a loss alone then drains that table. So
+`WorldRenderRoot` drains the device's retirement
 itself before that table, in its holdings and in its loss. Never add a `TryWaitIdle` to a release
 path; `SdfWorldTables.Dispose` and `IGpuSurfaceUpload.DisposeCompleted` wait for nothing. A render node's build in
 flight retires into its runtime's `GpuImageLeases.RetiredBuilds`, which `DrainDisposals` waits out before the device
@@ -537,6 +542,7 @@ add the row you found.
 | Skip drawing what a view, a cascade or the previous frame hides | `SdfMeshBox` and `SdfMeshCull` (host boxes), `SdfMeshOcclusion` (the depth pyramid test) | `src/Puck.SdfVm`; [the dispatch bullets](#which-dispatch-owns-the-code) |
 | Put the world's placements into the program a frame draws | `WorldPlacementStamper` (static placements), `WorldCreationInstances` (animated, attached and inhabited creations), `CreationStampEmitter` (a creation's stamp); one shape's chain, field ops, panel, relief and trims are `ShapeEmission.Emit` for both, each path supplying only its `IShapeEmissionFrame` | `src/Puck.World.Client`, `src/Puck.World.Authoring/Authoring` |
 | Decide when a frame rebuilds and how it presents | `WorldSceneEmitter` (the composed revision), `WorldFramePresenter` (the `ISdfFrameSource` that delivers it) | `src/Puck.World.Client` |
+| Hand a residency a frame every frame without allocating, or keep one past its source's next capture | `SdfFrame.Writer`, the one door that changes a frame after construction: `Write` a frame of the producer's own from its `SdfFrameContent` (per frame) and `SdfFrameSettings` (per setting), or `CopyFrom` another frame. A source's frame is borrowed until its next capture; `SdfWorldResidency` renders its own copy, written into whichever of its two capture writers the tables do not hold. Never `with` a frame on a per-frame path | `src/Puck.SdfVm` |
 | Add a camera or another view of the world | the view types in `src/Puck.SdfVm/Views`, `WorldViewInstances` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork`. A client's per-slot buffers come from the recording (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`), never the buffer factory: that door reserves them (`SdfGpuWorkHold`). A client cuts each job to the allowance its take is handed (`SdfGpuWorkAllowance`: what the charged jobs in flight leave of `SdfGpuWorkBudget.FrameAllowanceSeconds`, the share the frame leaves free, which `WorldBackgroundAllowance` feeds from every node's timestamps) at its kind's `SdfGpuWorkRate`, and while work is queued takes no job priced past it, deciding before it takes anything; never a fixed share. An arrival's bake work (a group drawing nothing yet, or the first detail over its floor) owes the frame and takes the GPU the frame leaves idle between frames, from a quarter of the period up to one period, under its own allowance (`ISdfGpuWorkClient.TryTakeOwed`, `SdfGpuWorkBudget.OwedAllowance`), outside the credit, while ordinary background work keeps the frame allowance; so do the landing of a mesh a staged draw waits for and a seen irradiance volume's first light (`SdfMeshIrradiance.OwesFirstLight`), each a client whose every job is then owed (`ISdfGpuWorkClient.OwesAll`). The residencies' services divide the budget by their display share, never by pump order: each holds a turn (`SdfGpuWorkBudget.Join`, weighed by `SdfGpuWork.Weigh` from `SdfFrame.DisplayShare`) that every budgeted step, owed or not, asks first (`SdfGpuWorkBudget.Takes`, `work-turns` and `turn-holds` on `world.residency`). The budget counts frames background work may have cost (`FramesMissedBehind`, `frames-behind` on `world.residency`) | `src/Puck.SdfVm`, `src/Puck.World/WorldBackgroundAllowance.cs`; [the bake's dispatch](#which-dispatch-owns-the-code) |
 | Have the frame thread take work up while it waits between frames, or wake it for a GPU completion | `HostWaits.Serve` (a `WaitService`, served by `HostWaits.Pace`) and `IGpuSubmissionFence.SignalOnCompletion`; never a poll loop or a thread of your own that records. A wait inside the frame's open batch (a residency's staging, `SdfGpuWork.Drive`) hands its submissions off first (`IGpuSubmissionFence.HandOff`), or the completion it sleeps on never comes before the flush | `src/Puck.Abstractions/Waiting`, `src/Puck.Abstractions/Gpu/Device` |

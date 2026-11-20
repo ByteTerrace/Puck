@@ -170,9 +170,11 @@ public sealed partial class SdfWorldResidency {
             FinishShaderReload(failure: load.FailureOf());
         }
     }
-    // Waits out a reload in flight and reports its request failed; a device loss or disposal discards the pipelines.
+    // Cancels a reload in flight without waiting and reports its request failed: its pipeline build is retired into the
+    // catalog's table, which discards its pipelines as it finishes and which a device loss drains, and its kernel compiles
+    // stop on their own (SdfKernelTreeLoad.Dispose).
     private void CancelShaderReload(string reason) {
-        m_reloadBuild.CancelAndWait(discard: static reload => reload.Dispose());
+        m_reloadBuild.Retire(discard: static reload => reload.Dispose(), retired: m_pipelines.Catalog.RetiredBuilds);
         m_reloadLoad?.Dispose();
         m_reloadLoad = null;
 

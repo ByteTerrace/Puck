@@ -134,18 +134,22 @@ public sealed class SdfKernelTreeLoad : IDisposable {
             ? null
             : $"A kernel source does not compile: {string.Join(separator: "; ", values: m_errors)}");
     }
-    /// <summary>Cancels the compiles still running and waits for them to stop.</summary>
+    /// <summary>Cancels the compiles still running without waiting for them to stop. A second call does nothing.</summary>
     public void Dispose() {
+        if (m_disposed) { return; }
+        m_disposed = true;
         m_cancellation.Cancel();
-
-        try {
-            m_completion.Wait();
-        } catch (AggregateException) {
-            // A canceled or faulted load has nothing more to deliver.
-        }
-
-        m_cancellation.Dispose();
+        // The compiles hold no device object, so nothing waits for them: the token source goes once they stop.
+        _ = m_completion.ContinueWith(
+            cancellationToken: CancellationToken.None,
+            continuationAction: static (_, state) => ((CancellationTokenSource)state!).Dispose(),
+            continuationOptions: TaskContinuationOptions.ExecuteSynchronously,
+            scheduler: TaskScheduler.Default,
+            state: m_cancellation
+        );
     }
+
+    private bool m_disposed;
 
     private async Task CompileAsync(IReadOnlyList<(SdfKernel Kernel, string Path)> sources, ShaderTarget target, ShaderCompiler compiler, CancellationToken cancellationToken) {
         var plans = new List<(SdfKernel Kernel, ShaderOutputPlan Plan)>(capacity: sources.Count);
