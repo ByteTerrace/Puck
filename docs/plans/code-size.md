@@ -465,18 +465,12 @@ until both read `WorldRowKeys`. The map found these pairs. Apart from the
 recipient streams, each was sized and not read, so
 [step 11](#the-build-order) decides what each one is worth.
 
-- **Local and hosted.** The desktop reloads a world through `WorldReload` and
-  the silo through `WorldSiloHost`'s own reload, each with its own pending
-  state. `WorldRemoteAuthority` (1,300 lines), `WorldForwardedAuthority` and
-  `LoopbackTransport` are, by their names, three routes to an authority:
-  remote, forwarded and in-process.
+- **Local and hosted.** `WorldRemoteAuthority` (1,300 lines),
+  `WorldForwardedAuthority` and `LoopbackTransport` are, by their names, three
+  routes to an authority: remote, forwarded and in-process.
 - **File and storage.** `WorldDefinitionFileSource` composes a world from
   files in 2,200 lines, with `WorldFileNeighbourResolver` and
   `WorldStorageNeighbourResolver` beside it.
-- **Reload, mutation and undo.** `WorldDocument` applies a mutation (1,800
-  lines), installs a reload and rebuilds; `WorldHistory` (1,500) and
-  `ArenaUndo` (790) restore earlier states. Whether these are one install
-  path with three callers or three paths is the question.
 - **Direct3D 12 and Vulkan.** The bindings are
   [family 5](#5-vulkan-bindings). The two recorders and pipeline factories
   mirror their APIs.

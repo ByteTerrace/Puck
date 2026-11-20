@@ -1060,7 +1060,7 @@ validators and handlers. They are source findings, not executed reproductions.
 The read-door change's policy-only `WorldServer.WriteView` and caller-stamped
 `IServerLink.Query` remain useful; neither restricts what a later composer or
 validator reads. `WorldDocument.TryPrepareMutation` already separates refusable
-preparation from `InstallPrepared`, and `WorldPreparedMutation` already carries
+preparation from the install (`WorldDocument.CommitInstall`), and `WorldPreparedMutation` already carries
 prepared resources. Extend those mechanisms; do not add a parallel composer,
 transform interpreter, journal or commit protocol.
 

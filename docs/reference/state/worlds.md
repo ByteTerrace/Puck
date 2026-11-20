@@ -232,7 +232,7 @@ leave the arena come in two kinds:
   HUD panel upsert or removal, composes with the firing's other document rows
   into one `WorldMutation.Batch`. `WorldDocument.TryPrepareMutation` runs every
   gate that can refuse it while the firing can still rewind, and
-  `InstallPrepared` installs it after the commit and refuses nothing.
+  `WorldDocument.CommitInstall` installs it after the commit and refuses nothing.
 - A **delivered arm** (`EffectNeeds.Irreversible` alone), such as a cue, a pose,
   a body motion, a rigid impulse, a field paint, or a save, is preflighted before
   the commit and fired after it. A failed delivery is counted and undoes

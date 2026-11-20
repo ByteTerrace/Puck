@@ -61,7 +61,7 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
                     iterations.End(number: loop, reason: "the source is unchanged");
                 } else if (cut.Refusal is null) {
                     Console.Error.WriteLine(value: string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
-                        handler: $"[world.reload] source compile={phases.CompileMilliseconds:0} ms load={phases.LoadMilliseconds:0} ms text={phases.TextMilliseconds:0} ms patch={(cut.Delta?.Patch.Length ?? 0)} bytes"));
+                        handler: $"[world.reload] source compile={phases.CompileMilliseconds:0} ms load={phases.LoadMilliseconds:0} ms text={phases.TextMilliseconds:0} ms delta={cut.DeltaMilliseconds:0} ms patch={(cut.Delta?.Patch.Length ?? 0)} bytes"));
                 }
                 return null;
             },

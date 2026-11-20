@@ -22,6 +22,9 @@ public sealed record WorldSourceRead(WorldDefinition? Definition, string Content
 public sealed record WorldReloadCut(string ContentHash, WorldReloadDelta? Delta, string? Refusal) {
     /// <summary>Gets whether the source still composes to the revision the authority holds, so nothing is sent.</summary>
     public bool Unchanged => ((Refusal is null) && (Delta is null));
+    /// <summary>Gets how long cutting the delta took, in milliseconds, for a host's narration of where a reload's time
+    /// went.</summary>
+    public double DeltaMilliseconds { get; init; }
 }
 
 /// <summary>The one reload door: brings a running authority to its source's next revision. It captures the source
@@ -146,8 +149,12 @@ public sealed class WorldReloadDoor(WorldServer server, IServerLink link, WorldD
 
         if (source.Refusal is { } refusal) { return new WorldReloadCut(ContentHash: string.Empty, Delta: null, Refusal: refusal); }
         if (source.Definition is not { } next) { return new WorldReloadCut(ContentHash: source.ContentHash, Delta: null, Refusal: null); }
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+
         try {
-            return new WorldReloadCut(ContentHash: source.ContentHash, Delta: WorldReloadDelta.Between(previous: revision.Definition, next: next), Refusal: null);
+            return new WorldReloadCut(ContentHash: source.ContentHash, Delta: WorldReloadDelta.Between(previous: revision.Definition, next: next), Refusal: null) {
+                DeltaMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: started).TotalMilliseconds,
+            };
         } catch (InvalidDataException exception) {
             return new WorldReloadCut(ContentHash: source.ContentHash, Delta: null, Refusal: exception.Message);
         }

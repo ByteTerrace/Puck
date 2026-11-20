@@ -175,7 +175,7 @@ yet route them.
   and keeps a deferred checkpoint armed. One gap against the abstraction
   stands: an ordinary edit is answered as applied when the tick drains it
   (`WorldTick`'s pending-operation completion), before its segment lands, and
-  a failed segment only blocks later publication (`PersistenceBlocked`). The window is bounded but not zero. Scarce value is
+  a failed segment only blocks later publication (`RowPublicationQueue`). The window is bounded but not zero. Scarce value is
   meant to settle at the settlement door instead, which is not built, so
   whether an edit's acknowledgement must wait for durability is a question for
   the [settlement packet](open-items.md#settlement-trust-roles-and-revocation),

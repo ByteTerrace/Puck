@@ -246,9 +246,20 @@ checks that activation binding; moving an endpoint requires a fresh activation.
 checkpoint and the expected QUIC key, then replaces the container against the
 same store and repeats the checks. Linux requires `libmsquic` and UDP ingress.
 Unmanaged pinned activation waits for host startup, establishes its initial checkpoint,
-and reconciles changed published content through `WorldSiloHost.ReloadAsync` and
-the ordinary rebuild submission. A release marker advances only after its
-checkpoint; retrying failed persistence must not rebuild twice. Drain waits for
+and reconciles changed published content through `WorldSiloHost.ReloadAsync`, which
+runs the reload door the desktop's `world.reload` runs (`WorldReloadDoor`): the
+published bytes are read as an edit off the mailbox, the delta is cut on the thread
+pool from the revision the row holds, and the row's authority validates what it
+installs once. A row whose revision already carries the published pin sends nothing.
+A release marker holds that pin and advances only after its
+checkpoint; retrying failed persistence must not rebuild twice.
+
+Every write an activation publishes (a checkpoint, a journal batch, a crossing record,
+a definition) goes through its `RowPublicationQueue`: strictly in enqueue order, under
+the activation's fence, started on the thread pool, and never once the activation is
+blocked. A write of edits that are already live (a journal batch) blocks the
+activation on any failure; any other write blocks it only on a stale fence or an
+uncertain commit. A blocked activation's unsent write answers a failed outcome. Drain waits for
 accepted reloads before freezing the pump. `/healthz` includes persistence health;
 `/livez` checks simulation progress independently. `WorldSiloLifecycleLawTests`
 owns reload and drain failure controls. `WorldSiloDefinitionLawTests` checks
