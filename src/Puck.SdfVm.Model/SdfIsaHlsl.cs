@@ -28,7 +28,8 @@ namespace Puck.SdfVm;
 /// accessor, stride, word offset, mask and count the kernels read, the field's constants, and the scales the host
 /// quantizes or decodes data with, and the encoding the model's builder and packer produce
 /// (<see cref="SdfEncodingProbe.Describe()"/>: where every field, bitfield and table entry lands); the field's
-/// fingerprint (<see cref="DescribeFieldFingerprint"/>) names this include's layout and that encoding alone. A tuning
+/// fingerprint (<see cref="DescribeFieldFingerprint"/>) covers this include's layout, the field dispatch and operand
+/// includes, and the packed field words. A tuning
 /// declaration (<c>Tuning</c> below: a value only the shader reads, such as a bias, a share or a threshold) is in the
 /// generated text and in no fingerprint, so retuning one keeps every stamp and a running host accepts the reloaded
 /// kernels. <c>puck shaders generate</c> records both in <c>SdfIsaFingerprint</c> (<see cref="FingerprintSourcePath"/>),
@@ -60,18 +61,18 @@ public static class SdfIsaHlsl {
     public static uint DescribeFingerprint() =>
         FingerprintOf(
             encoding: SdfEncodingProbe.Describe(),
-            include: ((((GenerateLayout() + SdfRenderHlsl.GenerateLayout()) + SdfSkyKindsHlsl.Generate()) + SdfSkyKindsHlsl.GenerateTable()) + SdfShadeHlsl.Generate())
+            include: (((((GenerateLayout() + SdfFieldHlsl.FingerprintText()) + SdfRenderHlsl.GenerateLayout()) + SdfSkyKindsHlsl.Generate()) + SdfSkyKindsHlsl.GenerateTable()) + SdfShadeHlsl.Generate())
         );
     /// <summary>Returns the fingerprint of the field's instruction set, which the mesh bake's interface carries as its
-    /// stamp: <see cref="FingerprintOf"/> of this include's layout alone and the encoding described over each probe
-    /// program's <see cref="SdfProgram.FieldWords"/>. It moves with what the field interpreter reads from the model and
+    /// stamp: <see cref="FingerprintOf"/> of this include's layout, the generated field dispatch and operand includes,
+    /// and each probe program's <see cref="SdfProgram.FieldWords"/>. It moves with what the field interpreter reads from the model and
     /// with the field words' encoding, and with nothing the renderer alone reads: no material, paint or screen value,
     /// stride or packing.</summary>
     /// <returns>The fingerprint.</returns>
     public static uint DescribeFieldFingerprint() =>
         FingerprintOf(
             encoding: SdfEncodingProbe.Describe(calls: SdfEncodingProbe.Calls(), wordsOf: static program => program.FieldWords.ToArray()),
-            include: GenerateLayout()
+            include: (GenerateLayout() + SdfFieldHlsl.FingerprintText())
         );
     /// <summary>Generates the source that records the fingerprints as <c>SdfIsaFingerprint.Value</c> and
     /// <c>SdfIsaFingerprint.Field</c>.</summary>

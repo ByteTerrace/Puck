@@ -1080,49 +1080,27 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
 
 ## Changing the instruction set
 
-First ask whether the new op, shape or blend composes from existing vocabulary;
-if it does, ship it as a `SdfProgramBuilder` method emitting existing
-instructions. A real new instruction touches every partner in one change, and a
-GPU parity pass alone does not finish it:
+First check whether the new behavior composes from existing instructions. If it
+does, emit that program from a builder method.
 
-1. **C# model.** The enum, `SdfProgramBuilder` (its `RequireDefined` maximum),
-   `SdfProgram` validation and packing, its row in the lane contract
-   (`SdfProgram.LaneContract.cs`: every lane authored, derived through a
-   function in `SdfDerivedLanes` that the builder also calls, unit, zero or
-   written by the program; an op or shape with no row is refused), the
-   Lipschitz analysis (a relief is charged at its own instruction through
-   `AnalyzeReliefPointFactors`, which classifies every op), its row in
-   `SdfOpRoles.Of`, and the part-program key for a new parameter.
-2. **Cull margins.** `MaxSmoothBlendRadius` (blend halo), `MaxScopedFieldReach`
-   or `HasUnmaskableInfluence`.
-3. **Generated declarations.** `isa/sdf-isa.hlsli` is generated from the C#
-   model by `SdfIsaHlsl`; building `Puck.SdfVm` regenerates it, and
-   `puck shaders generate` writes it on demand. The define's name is the enum's
-   prefix plus the member in upper snake case (`SdfOp.CellDisplace` is
-   `SDF_OP_CELL_DISPLACE`), and its value is the member's: members are numbered
-   densely in declaration order. Never hand-write a `#define` for an ISA value;
-   add the enum member and regenerate. Give the instruction a call in
-   `SdfEncodingProbe` that passes every field it packs
-   (`SdfEncodingProbeLawTests` refuses one that is missing). Regenerating also
-   rewrites `SdfIsaFingerprint.cs`. `sdf-isa.hlsli` is the field's vocabulary
-   alone, and its fingerprint keys the bake: a constant only the renderer reads
-   (a light, the exposure, the visibility record, mesh records, the debug views)
-   is declared in `SdfIsaHlsl.DeclareRender`, which writes `isa/sdf-render.hlsli`.
-4. **Every GPU call site.** `mapCore` (rigid-leaf fast paths included) and the
-   compiled part walk in `sdf-parts.hlsli`; a blend also needs `blendShape` and
-   the material-winner rules in `sdfComposeCandidate`.
-5. **CPU interpreter.** `SdfFieldEvaluator` interprets it or refuses it by name.
-   Its blend switch falls through to union, so a missing arm silently turns a
-   new blend into a union in contact and queries. Add its bounds rule
-   (`SdfFieldEvaluator.Bounds.cs`) and cull rule (`SdfFieldEvaluator.Cull.cs`).
-6. **Document surface.** Carry the parameters through `CreationCanonicalizer`
-   and the stamp emitters or refuse the value there, then `puck schema`.
+For a new instruction, primitive, blend or relief row, add one entry to
+`SdfFieldOps`, `SdfFieldShapes`, `SdfFieldBlends` or `SdfFieldReliefRows`.
+Each abstract facet asks for an explicit choice, including an identity action
+or a refusal. The Roslyn generator emits the packed enums and static selectors.
+The CPU walks consume those selectors. Admission checks the lanes, and bake
+keys take the external dependencies through `SdfFieldOps.ResourcesOf`.
 
-When two lanes both add an instruction, the merge conflicts in generated files
-(`sdf-isa.hlsli`, `sdf-render.hlsli`, `SdfIsaFingerprint.cs`): resolve the C# model, then
-regenerate with `puck shaders generate` or a build of `Puck.SdfVm`. Never
-hand-merge a generated file; `puck shaders generate --check` (and CI) only
-compares and fails naming the file that drifted, it writes nothing.
+`ShaderDeclarations` regenerates the field switch includes and operand readers
+under `Assets/Shaders/Sdf/isa/`, and `SdfIsaHlsl` stamps both the field and whole
+interfaces. Resolve merges in the catalogues and regenerate with the shader
+generator build or `puck shaders generate`. Use `puck shaders generate --check`
+to check the resulting tree.
+
+Cover every packed lane in `SdfEncodingProbe` and check evaluator agreement on
+Direct3D 12 and Vulkan with `SdfFieldDeviceLawTests`. Keep the fixed-point and
+HLSL formulas in agreement until the shared formula emitter replaces the
+paired arithmetic. Carry author-facing parameters through
+`CreationCanonicalizer` and the stamp emitters, then regenerate the schema.
 
 ## Field contracts that bite
 

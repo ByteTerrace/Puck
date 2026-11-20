@@ -138,7 +138,7 @@ The guarantee and its limits are in the
 - `SdfSampledField`, `SdfSampledSnapshot`, `SdfSampledSet` and
   `SdfProgramBuilder.SampledValues` in
   [`src/Puck.SignedDistance`](../../../../src/Puck.SignedDistance/), and the
-  enum doc in [`SdfShapeType.cs`](../../../../src/Puck.SignedDistance/SdfShapeType.cs).
+  enum doc in [`SdfFieldShapes.cs`](../../../../src/Puck.SignedDistance/SdfFieldShapes.cs).
 - The `SampledRegion` lane layout and the bake's table: the sampled rows in
   [the sync pairs](../../../../.claude/skills/rendering/references/sync-pairs.md).
 - The frame's mesh bake: [the bake](frame-rendering.md#the-bake),

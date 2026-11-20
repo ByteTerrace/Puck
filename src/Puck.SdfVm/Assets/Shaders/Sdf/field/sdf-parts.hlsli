@@ -77,7 +77,7 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
     for (uint leaf = 0u; leaf < leafCount; leaf++) {
         uint4 code = sdfProgramWord(part.x + leaf);
         if (code.x >= sdfProgramLayout.instructionCount || code.y > sdfProgramLayout.instructionCount) { parent = sdfIsaErrorHit(); return; }
-        uint4 shape = sdfProgramWord(SDF_PROGRAM_HEADER_VECTORS + code.x);
+        uint4 shape = sdfFieldHeader(code.x);
         uint4 binding = sdfProgramWord(part.y + leaf);
         float3 localPosition = worldPosition;
         int slot = SDF_TRANSFORM_SLOT_NONE;
@@ -94,28 +94,18 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
         float distanceScale = 1.0;
         if (code.y != 0u) {
             uint domainIndex = code.y - 1u;
-            uint4 domain = sdfProgramWord(SDF_PROGRAM_HEADER_VECTORS + domainIndex);
-            float4 data0 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * domainIndex));
+            uint4 domain = sdfFieldHeader(domainIndex);
+            float4 data0 = sdfFieldData(dataOffset, domainIndex, 0u);
             // These operations retain the generic scalar walk's arithmetic order. The compiler admits at most one
             // domain op after the pose and before the primitive; arbitrary chains stay in the reference VM.
-            if (SDF_INSTRUCTION_OP(domain) == SDF_OP_SCALE) {
-                localPosition /= data0.xyz;
-                distanceScale *= data0.w;
-            }
-            else if (SDF_INSTRUCTION_OP(domain) == SDF_OP_AXIAL_PROFILE) {
-                float4 data1 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * domainIndex + 1u));
-                uint axis = SDF_INSTRUCTION_SHAPE(domain);
-                if (axis >= 3u) { parent = sdfIsaErrorHit(); return; }
-                distanceScale *= sdfAxialProfile(localPosition, axis, data0, data1);
-            } else if (SDF_INSTRUCTION_OP(domain) == SDF_OP_SHEAR) {
-                uint target = SDF_INSTRUCTION_SHAPE(domain), driver = SDF_INSTRUCTION_BLEND(domain);
-                if (target >= 3u || driver >= 3u) { parent = sdfIsaErrorHit(); return; }
-                sdfShear(localPosition, target, driver, data0.xyz);
+            switch (SDF_INSTRUCTION_OP(domain)) {
+#include "../isa/sdf-field-parts.hlsli"
+                default: parent = sdfIsaErrorHit(); return;
             }
         }
 
-        float4 shapeData0 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x));
-        float4 shapeData1 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x + 1u));
+        float4 shapeData0 = sdfFieldData(dataOffset, code.x, 0u);
+        float4 shapeData1 = sdfFieldData(dataOffset, code.x, 1u);
         float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shape), localPosition, shapeData0, shapeData1) * distanceScale;
         sdfComposeCandidate(child, candidate, SDF_INSTRUCTION_BLEND(shape), trackMaterial ? (int)binding.y : 0,
             instanceIndex, slot, shapeData1.x, trackMaterial);

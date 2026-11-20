@@ -158,7 +158,7 @@ lengths are in creation units before placement scale.
 | `bumps` | up to 4 × `{ center, radii, push }` | push magnitude ≤ 2; radii floored at 0.001 |
 | `warp` | `{ frequency, amplitude }` | `SdfOp.DomainWarp`: the point moves by amplitude × (sin(fx·y), sin(fy·z), sin(fz·x)); frequency ±64 per axis, amplitude ±0.2 |
 | `displace` | `{ frequency, amplitude }` | `SdfOp.Displace`: amplitude × sin(fx·x) sin(fy·y) sin(fz·z) added to the field on the shape's rigid frame, like `cells`; frequency ±64 per axis, amplitude ±0.2; refused on a Sweep. The product is centred on the shape, so a flat face at offset h carries amplitude × \|sin(f·h)\| of it: at f·h a whole number of π the face reads flat, at (n + ½)π it carries all of it (`shape-displace` uses f = 3.5π / h) |
-| `elongate` | `[x, y, z]` half-extents | `SdfOp.Elongate`: the cross-section swept over the box, exact and 1-Lipschitz, so no scope; each in [0, 2] |
+| `elongate` | `[x, y, z]` half-extents | [Elongate](../../../../src/Puck.SignedDistance/SdfFieldOps.cs) sweeps the cross-section over the box. The sweep is exact and 1-Lipschitz, so it needs no scope. Each half-extent is in [0, 2]. |
 | `erode` | `{ lane, from, to, noise }` | lane 0..3; from and to must differ; noise defaults to 1 cell per unit |
 | `cells` | `{ frequency, amplitude, seed, mode, randomness }` | frequency (0, 8]; amplitude [0, 4]; mode `F1` or `F2MinusF1`; randomness ≤ 0.46 (F1) or ≤ 0.2 (F2MinusF1); the relief slope amplitude × frequency (× 2 for F2MinusF1) must stay under 1, past which the surface pinches, folds over itself and sheds islands |
 

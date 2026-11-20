@@ -113,7 +113,7 @@ public static class SdfEncodingProbe {
         }
 
         // Field scopes, closing with each compose.
-        foreach (var compose in Enum.GetValues<SdfBlendOp>().Where(predicate: static compose => (compose is not (SdfBlendOp.Morph or SdfBlendOp.StairsUnion or SdfBlendOp.StairsSubtraction)))) {
+        foreach (var compose in Enum.GetValues<SdfBlendOp>().Where(predicate: static compose => !SdfFieldBlends.ScopeOnlyOf(value: compose))) {
             Call(name: $"field-scope {compose}", inputs: [0.26f], emit: (b, m, v) => Shape(b: b.ResetPoint().PushField(compose: compose, smooth: v[0]).ResetPoint(), material: m).PopField());
         }
         Call(name: "field-scope morph", inputs: [2f, 0.2f, 0.8f], emit: static (b, m, v) => Shape(b: b.ResetPoint().PushFieldMorph(from: v[1], laneIndex: ((int)v[0]), to: v[2]).ResetPoint(), material: m).PopField());
@@ -128,7 +128,7 @@ public static class SdfEncodingProbe {
         }
 
         // Every blend a shape takes, and the shape flags.
-        foreach (var blend in Enum.GetValues<SdfBlendOp>().Where(predicate: static blend => (blend is not (SdfBlendOp.Morph or SdfBlendOp.StairsUnion or SdfBlendOp.StairsSubtraction)))) {
+        foreach (var blend in Enum.GetValues<SdfBlendOp>().Where(predicate: static blend => !SdfFieldBlends.ScopeOnlyOf(value: blend))) {
             Call(name: $"blend {blend}", inputs: [0.33f, 0.22f], emit: (b, m, v) => b.ResetPoint().Sphere(blend: blend, material: m, radius: v[0], smooth: v[1]));
         }
 

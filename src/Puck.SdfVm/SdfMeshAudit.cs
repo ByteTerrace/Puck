@@ -415,9 +415,11 @@ public static class SdfMeshAudit {
         foreach (var index in indices) {
             var op = instructions[index].Op;
 
-            if (op == SdfOp.ResetPoint) { slot = group.Slot; }
-            if (op == SdfOp.TransformDynamic) { slot = ((int)instructions[index].Data0.X); }
-            if (op == SdfOp.ShapeBlend) { slotOf.Add(key: index, value: slot); }
+            var resources = SdfFieldOps.ResourcesOf(value: op);
+
+            if ((resources & SdfFieldResource.ResetSlot) != 0) { slot = group.Slot; }
+            if ((resources & SdfFieldResource.DynamicSlot) != 0) { slot = ((int)instructions[index].Data0.X); }
+            if ((resources & SdfFieldResource.Shapes) != 0) { slotOf.Add(key: index, value: slot); }
         }
 
         return slotOf;
@@ -712,8 +714,10 @@ public static class SdfMeshAudit {
 
     // A dynamic transform as the translation and rotation the group posed its slot at; a shape as itself, detail or not.
     private static IEnumerable<SdfInstruction> Posed(SdfMeshBakeGroup group, SdfInstruction instruction, IReadOnlyDictionary<int, DynamicTransform>? poses = null) {
-        if (instruction.Op == SdfOp.ShapeBlend) { return [instruction with { Detail = false }]; }
-        if (instruction.Op != SdfOp.TransformDynamic) { return [instruction]; }
+        var resources = SdfFieldOps.ResourcesOf(value: instruction.Op);
+
+        if ((resources & SdfFieldResource.Shapes) != 0) { return [instruction with { Detail = false }]; }
+        if ((resources & SdfFieldResource.DynamicSlot) == 0) { return [instruction]; }
         if (!group.Geometry.Poses.TryGetValue(key: ((int)instruction.Data0.X), value: out var pose)) { return []; }
         if ((poses is not null) && poses.TryGetValue(key: (((int)instruction.Data0.X) - group.Slot), value: out var current)) { pose = current; }
 

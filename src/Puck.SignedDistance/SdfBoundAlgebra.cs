@@ -32,16 +32,13 @@ public static class SdfBoundAlgebra {
     /// <param name="blend">The blend.</param>
     /// <returns><see langword="true"/> for <see cref="SdfBlendOp.Intersection"/>, <see cref="SdfBlendOp.SmoothIntersection"/>
     /// and <see cref="SdfBlendOp.ChamferIntersection"/>.</returns>
-    public static bool IsIntersection(SdfBlendOp blend) => (blend is (SdfBlendOp.Intersection or SdfBlendOp.SmoothIntersection or SdfBlendOp.ChamferIntersection));
+    public static bool IsIntersection(SdfBlendOp blend) => (SdfFieldBlends.Contains(value: blend) && SdfFieldBlends.IsIntersectionOf(value: blend));
     /// <summary>Whether <paramref name="blend"/> is a subtraction whose result is bounded by its accumulated operand: one
     /// that reads at least <c>max(a, -b)</c>. A pipe subtraction is not one, since its bead,
     /// <c>hypot(a, b) - radius</c>, lays solid outside its subject (<see cref="Growth"/>).</summary>
     /// <param name="blend">The blend.</param>
     /// <returns><see langword="true"/> for every subtraction family member but <see cref="SdfBlendOp.PipeSubtraction"/>.</returns>
-    public static bool IsSubtraction(SdfBlendOp blend) => (blend is (
-        SdfBlendOp.Subtraction or SdfBlendOp.SmoothSubtraction or SdfBlendOp.ChamferSubtraction or
-        SdfBlendOp.GrooveSubtraction or SdfBlendOp.StairsSubtraction
-    ));
+    public static bool IsSubtraction(SdfBlendOp blend) => (SdfFieldBlends.Contains(value: blend) && SdfFieldBlends.IsSubtractionOf(value: blend));
     /// <summary>Whether <paramref name="blend"/> only removes from what it blends into: an intersection or a subtraction
     /// (<see cref="IsIntersection"/>, <see cref="IsSubtraction"/>), so the shape it blends has no surface of its own and
     /// shapes only the surfaces accumulated before it.</summary>
@@ -62,14 +59,14 @@ public static class SdfBoundAlgebra {
     public static float Growth(SdfBlendOp blend, float radius) {
         var magnitude = MathF.Abs(x: radius);
 
-        return blend switch {
-            SdfBlendOp.Union or SdfBlendOp.Subtraction or SdfBlendOp.Intersection or SdfBlendOp.Xor or SdfBlendOp.Morph or
-            SdfBlendOp.SmoothIntersection or SdfBlendOp.SmoothSubtraction or SdfBlendOp.ChamferIntersection or
-            SdfBlendOp.ChamferSubtraction or SdfBlendOp.GrooveUnion or SdfBlendOp.GrooveSubtraction or
-            SdfBlendOp.StairsSubtraction => 0f,
-            SdfBlendOp.SmoothUnion => (MathF.Max(x: magnitude, y: SdfProgram.SmoothRadiusMin) / 4f),
-            SdfBlendOp.ChamferUnion => (magnitude / 2f),
-            _ => magnitude,
+        if (!SdfFieldBlends.Contains(value: blend)) { return magnitude; }
+
+        return SdfFieldBlends.BlendGrowthOf(value: blend) switch {
+            SdfBlendGrowthAction.None => 0f,
+            SdfBlendGrowthAction.QuarterRadiusFloor => (MathF.Max(x: magnitude, y: SdfProgram.SmoothRadiusMin) / 4f),
+            SdfBlendGrowthAction.HalfRadius => (magnitude / 2f),
+            SdfBlendGrowthAction.Radius => magnitude,
+            _ => throw new InvalidOperationException(message: "Invalid BlendGrowth action."),
         };
     }
     /// <summary>Composes a bound with the next operand's: the accumulated field <paramref name="blend"/> the operand.</summary>

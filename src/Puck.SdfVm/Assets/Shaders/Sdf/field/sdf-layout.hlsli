@@ -191,7 +191,6 @@ SdfProgramLayout sdfLoadProgramLayout() {
 // never owner-tested, never bound-tested. With the SDF_INSTANCE_MASK_ALL sentinel every instance enumerates as
 // visible (validity-masked to the real instance count), so the merge degenerates to the full ascending walk.
 // The validated payload span and the interpreter's index < instructionCount guard dominate these reads.
-#define SDF_VM_LOAD_DATA0 float4 data0 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index)])
-#define SDF_VM_LOAD_DATA1 float4 data1 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index) + 1u])
+#include "../isa/sdf-field-operands.hlsli"
 
 #endif

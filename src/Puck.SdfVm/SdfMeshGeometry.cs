@@ -429,7 +429,9 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     private void Append(SdfProgram program, int index, SdfInstruction instruction, int ownSlot, IReadOnlyList<DynamicTransform> transforms, SdfSampledSet sampled) {
         // A glyph's instruction holds its cell's UVs; the pixels under them are the program's one bound atlas, keyed once a
         // group by their content, and so is the stroke the bake's lettering stroke rule takes its glyphs to have.
-        if ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Glyph)) && !ContainsGlyph) {
+        var resources = SdfFieldOps.ResourcesOf(instruction: instruction);
+
+        if (((resources & SdfFieldResource.GlyphAtlas) != 0) && !ContainsGlyph) {
             var atlas = program.GlyphAtlas;
             var stroke = program.GlyphStroke;
 
@@ -438,49 +440,37 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
             Hash(fact: Fact.GlyphAtlas, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<ulong>(reference: in atlas)));
             Hash(fact: Fact.GlyphStroke, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in stroke)));
         }
-        switch (instruction.Op) {
-            case SdfOp.ResetPoint:
-                m_chainSlot = -1;
-                break;
-            case SdfOp.TransformDynamic: {
-                    var slot = ((int)instruction.Data0.X);
+        if ((resources & SdfFieldResource.ResetSlot) != 0) { m_chainSlot = -1; }
+        if ((resources & SdfFieldResource.DynamicSlot) != 0) {
+            var slot = ((int)instruction.Data0.X);
 
-                    m_chainSlot = slot;
-                    ReadsSlots = true;
-                    if (slot == ownSlot) {
-                        instruction = (instruction with { Data0 = (instruction.Data0 with { X = OwnSlot }) });
-                        Keep(orientationSteps: OrientationSteps, pose: Pose.Identity, positionSteps: PositionSteps, slot: slot, transforms: transforms);
-                    } else if ((m_instanceOperands is { } operands) && operands.TryGetValue(key: slot, value: out var reach)) {
-                        // An operand's pose waits for the group's tier, whose cell it snaps to (AppendOperands); a rest-pose
-                        // skin never freezes it.
-                        var offset = (slot - ownSlot);
+            m_chainSlot = slot;
+            ReadsSlots = true;
+            if (slot == ownSlot) {
+                instruction = (instruction with { Data0 = (instruction.Data0 with { X = OwnSlot }) });
+                Keep(orientationSteps: OrientationSteps, pose: Pose.Identity, positionSteps: PositionSteps, slot: slot, transforms: transforms);
+            } else if ((m_instanceOperands is { } operands) && operands.TryGetValue(key: slot, value: out var reach)) {
+                // An operand's pose waits for the group's tier, whose cell it snaps to (AppendOperands); a rest-pose
+                // skin never freezes it.
+                var offset = (slot - ownSlot);
 
-                        instruction = (instruction with { Data0 = (instruction.Data0 with { X = OperandSlot }) });
-                        Hash(fact: Fact.OperandOffset, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in offset)));
-                        m_operandReads ??= [];
-                        m_operandReads[slot] = MathF.Max(x: reach, y: m_operandReads.GetValueOrDefault(key: slot));
-                    } else {
-                        var pose = (m_restPoseSkin ? Pose.Identity : RelativePose(orientationSteps: OrientationSteps, ownSlot: ownSlot, positionSteps: PositionSteps, slot: slot, transforms: transforms));
-                        var offset = ((ownSlot >= 0) ? (slot - ownSlot) : 0);
+                instruction = (instruction with { Data0 = (instruction.Data0 with { X = OperandSlot }) });
+                Hash(fact: Fact.OperandOffset, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in offset)));
+                m_operandReads ??= [];
+                m_operandReads[slot] = MathF.Max(x: reach, y: m_operandReads.GetValueOrDefault(key: slot));
+            } else {
+                var pose = (m_restPoseSkin ? Pose.Identity : RelativePose(orientationSteps: OrientationSteps, ownSlot: ownSlot, positionSteps: PositionSteps, slot: slot, transforms: transforms));
+                var offset = ((ownSlot >= 0) ? (slot - ownSlot) : 0);
 
-                        instruction = (instruction with { Data0 = (instruction.Data0 with { X = OtherSlot }) });
-                        HashGeometry(fact: Fact.OtherPose, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Pose>(reference: in pose)));
-                        Hash(fact: Fact.MemberOffset, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in offset)));
-                        Keep(orientationSteps: OrientationSteps, pose: pose, positionSteps: PositionSteps, slot: slot, transforms: transforms);
-                    }
-                    break;
-                }
-            case SdfOp.LaneErode:
-                AppendLanes(transforms: transforms);
-                break;
-            case SdfOp.PopField when (instruction.Blend == ((uint)SdfBlendOp.Morph)):
-                AppendLanes(transforms: transforms);
-                break;
-            default:
-                break;
+                instruction = (instruction with { Data0 = (instruction.Data0 with { X = OtherSlot }) });
+                HashGeometry(fact: Fact.OtherPose, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Pose>(reference: in pose)));
+                Hash(fact: Fact.MemberOffset, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in offset)));
+                Keep(orientationSteps: OrientationSteps, pose: pose, positionSteps: PositionSteps, slot: slot, transforms: transforms);
+            }
         }
+        if ((resources & SdfFieldResource.SlotLanes) != 0) { AppendLanes(transforms: transforms); }
 
-        if ((instruction.Op == SdfOp.ShapeBlend) && (((SdfShapeType)instruction.Shape) == SdfShapeType.SampledRegion)) {
+        if ((resources & SdfFieldResource.SampledHandle) != 0) {
             var handle = ((int)BitConverter.SingleToUInt32Bits(value: instruction.Data1.Z));
             var snapshot = sampled[handle];
             var count = snapshot.Count;
@@ -491,7 +481,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
             Hash(fact: Fact.SampledValues, source: MemoryMarshal.AsBytes(span: snapshot.Values));
         }
 
-        var table = (((instruction.Op == SdfOp.ShapeBlend) && (((SdfShapeType)instruction.Shape) is SdfShapeType.ConvexPolygon or SdfShapeType.Sweep or SdfShapeType.Path))
+        var table = (((resources & SdfFieldResource.SideTable) != 0)
             ? program.SideTableValues(instructionIndex: index)
             : []);
 

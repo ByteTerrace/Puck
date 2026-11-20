@@ -50,7 +50,7 @@ public sealed partial class SdfProgram {
 
             var source = m_instructions[index];
 
-            if ((source.Op == SdfOp.NoiseDisplace) && (source.Material > 0u)) {
+            if ((SdfFieldOps.StreamOf(value: source.Op) == SdfReliefStreamRole.ReliefOwner) && (source.Material > 0u)) {
                 var rows = ((int)source.Material);
                 var carried = (sources.Count >= rows);
 

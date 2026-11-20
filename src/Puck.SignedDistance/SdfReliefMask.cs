@@ -3,15 +3,6 @@ using System.Numerics;
 
 namespace Puck.SignedDistance;
 
-/// <summary>The kind of a relief mask's data row (<see cref="SdfOp.ReliefRow"/>), which its Blend lane carries.</summary>
-public enum SdfReliefRowKind {
-    /// <summary>A mask's band: Data0 holds its start, width, inside weight and outside weight.</summary>
-    Band = 0,
-    /// <summary>A region's pose in the relief's frame: Data0.xyz holds its origin and Data1 its unit quaternion.</summary>
-    Pose = 1,
-    /// <summary>A region's primitive: its Shape lane and data vectors as a shape instruction packs them, Data1.x zero.</summary>
-    Primitive = 2,
-}
 /// <summary>
 /// A relief mask's band: the weight is <see cref="Inside"/> where the region's distance is at or below
 /// <see cref="Start"/>, <see cref="Outside"/> where it is at or beyond <see cref="End"/>, and
@@ -192,13 +183,7 @@ public sealed record SdfReliefRegion {
     /// and one in the kernel's region switch.</summary>
     /// <param name="shape">The packed shape type.</param>
     /// <returns><see langword="true"/> for a listed type.</returns>
-    public static bool IsListed(SdfShapeType shape) => shape switch {
-        SdfShapeType.Box => true,
-        SdfShapeType.Superellipsoid => true,
-        SdfShapeType.Capsule => true,
-        SdfShapeType.Plane => true,
-        _ => false,
-    };
+    public static bool IsListed(SdfShapeType shape) => (SdfFieldShapes.Contains(value: shape) && SdfFieldShapes.ReliefRegionOf(value: shape));
     /// <summary>Lowers what an author writes for a region into one: the primitive through its native-dimension arm
     /// (<see cref="SdfSolidGeometry.AppendNativePrimitive"/>) at every scale, never through a scale transform, and the
     /// pose normalized. A box packs its scaled half-extents, a sphere, an ellipsoid or a superellipsoid its radii, a

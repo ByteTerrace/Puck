@@ -23,34 +23,15 @@ float blendSmoothUnion(float a, float b, float k) {
     return (blended - ((k * h) * (1.0 - h)));
 }
 float blendShape(float current, float candidate, uint blendOp, float smoothRadius) {
-    float result = min(current, candidate);                     // SDF_BLEND_UNION (the default)
+    float result;
     float smoothK = max(smoothRadius, SDF_SMOOTH_RADIUS_MIN);   // the SMOOTH arms' shared radius floor
     // The CHAMFER arms clamp against 0.0, not SDF_SMOOTH_RADIUS_MIN: a zero bevel must be exactly a hard seam, and
     // folding the smooth floor in would shift the bevel plane. Do not merge the two clamps.
     float chamfer = max(smoothRadius, 0.0);
 
     switch (blendOp) {
-        case SDF_BLEND_SMOOTH_UNION:        result = blendSmoothUnion(current, candidate, smoothK); break;
-        case SDF_BLEND_SUBTRACTION:         result = max(current, -candidate); break;
-        case SDF_BLEND_INTERSECTION:        result = max(current, candidate); break;
-        case SDF_BLEND_XOR:                 result = max(min(current, candidate), -max(current, candidate)); break;
-        case SDF_BLEND_SMOOTH_INTERSECTION: result = -blendSmoothUnion(-current, -candidate, smoothK); break;
-        case SDF_BLEND_SMOOTH_SUBTRACTION:  result = -blendSmoothUnion(candidate, -current, smoothK); break;
-        // Chamfered (45-degree bevel) seams (hg_sdf fOp*Chamfer): the bevel plane is (a +- r + b) * sqrt(1/2). Union
-        // bevels the near corner, intersection/subtraction the far one; SUBTRACTION is the intersection of `current`
-        // with -candidate. The bevel plane's gradient reaches sqrt(2) at a FLAT/near-parallel seam (1 at a perpendicular
-        // one, 0 at an acute one), hence the per-composition chamfer step clamp in SdfProgram.AnalyzeLipschitz — see the
-        // SDF_BLEND_CHAMFER_* banner for the max(La, Lb, (La + Lb)/sqrt(2)) recurrence it folds.
-        case SDF_BLEND_GROOVE_UNION: result = max(min(current, candidate), chamfer - length(float2(current, candidate))); break;
-        case SDF_BLEND_PIPE_UNION: result = min(min(current, candidate), length(float2(current, candidate)) - chamfer); break;
-        case SDF_BLEND_GROOVE_SUBTRACTION: result = max(max(current, -candidate), chamfer - length(float2(current, candidate))); break;
-        case SDF_BLEND_PIPE_SUBTRACTION: result = min(max(current, -candidate), length(float2(current, candidate)) - chamfer); break;
-        case SDF_BLEND_CHAMFER_UNION:        result = min(min(current, candidate), ((current + candidate - chamfer) * SDF_SQRT_HALF)); break;
-        case SDF_BLEND_CHAMFER_INTERSECTION: result = max(max(current, candidate), ((current + candidate + chamfer) * SDF_SQRT_HALF)); break;
-        case SDF_BLEND_CHAMFER_SUBTRACTION:  result = max(max(current, -candidate), ((current - candidate + chamfer) * SDF_SQRT_HALF)); break;
-        case SDF_BLEND_MORPH:
-        case SDF_BLEND_STAIRS_UNION:        result = min(current, candidate); break;
-        case SDF_BLEND_STAIRS_SUBTRACTION:  result = max(current, -candidate); break;
+#include "../isa/sdf-field-blends.hlsli"
+        default: return asfloat(0x7fc00000u);
     }
 
     return result;
@@ -68,15 +49,8 @@ void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int m
         bool handsSlot = true;
 
         switch (blend) {
-            case SDF_BLEND_INTERSECTION:
-            case SDF_BLEND_SMOOTH_INTERSECTION:
-            case SDF_BLEND_CHAMFER_INTERSECTION: { candidateWins = (candidate > result.distance); handsSlot = false; break; }
-            case SDF_BLEND_SUBTRACTION:
-            case SDF_BLEND_SMOOTH_SUBTRACTION:
-            case SDF_BLEND_CHAMFER_SUBTRACTION:
-            case SDF_BLEND_GROOVE_SUBTRACTION:
-            case SDF_BLEND_PIPE_SUBTRACTION:     { candidateWins = (-candidate > result.distance); handsSlot = false; break; }
-            default:                             { candidateWins = (candidate < result.distance); break; }
+#include "../isa/sdf-field-material.hlsli"
+            default: result.distance = asfloat(0x7fc00000u); return;
         }
 
         if (candidateWins) {

@@ -5,21 +5,6 @@ using Puck.Maths;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgram {
-    // The operand lanes a shape carries as reinterpreted integer BITS rather than a float value, as a bit per lane over
-    // (Data0.xyzw, Data1.xyzw). A bit pattern there reads as NaN or an infinity as often as it reads as a number, so the
-    // finiteness sweep must skip exactly these and no others. KEEP IN SYNC with the asuint() reads in
-    // Assets/Shaders/Sdf/field/sdf-shapes.hlsli: sdfGlyphUnpackUv(data0.x)/sdfGlyphUnpackUv(data0.y), sdfSampledRegion's
-    // asuint(data1.y) packedDims / asuint(data1.z) handle, and sdfConvexPolygonSolid's asuint(data0.x)
-    // (table offset, vertex count) — patched from a finite 0f placeholder to its real packed value AFTER this sweep
-    // runs (see PatchConvexPolygonProfileOffsets), so registering the lane here is a defense against a future caller
-    // re-running this check post-patch, not a fix for today's ordering.
-    private const uint GlyphReinterpretedLanes = 0b0000_0011u;
-    private const uint SampledRegionReinterpretedLanes = 0b0110_0000u;
-    private const uint ConvexPolygonReinterpretedLanes = 0b0000_0001u;
-    // Sweep's Data0.x is ALSO a reinterpreted table offset (see SdfShapeType.Sweep), patched from a finite 0f
-    // placeholder after this sweep runs, exactly like ConvexPolygon's.
-    private const uint SweepReinterpretedLanes = 0b0000_0001u;
-
     private static readonly string[] OperandLaneNames = ["Data0.x", "Data0.y", "Data0.z", "Data0.w", "Data1.x", "Data1.y", "Data1.z", "Data1.w"];
 
     // Every lane a caller supplies reaches the GPU as a packed word bit-for-bit (WriteVector4 reinterprets, it never
@@ -40,17 +25,9 @@ public sealed partial class SdfProgram {
             return;
         }
 
-        var reinterpreted = ((instruction.Op == SdfOp.ShapeBlend)
-            ? (((SdfShapeType)instruction.Shape) switch {
-                SdfShapeType.Glyph => GlyphReinterpretedLanes,
-                SdfShapeType.SampledRegion => SampledRegionReinterpretedLanes,
-                SdfShapeType.ConvexPolygon => ConvexPolygonReinterpretedLanes,
-                SdfShapeType.Sweep => SweepReinterpretedLanes,
-                SdfShapeType.Path => SweepReinterpretedLanes,
-                _ => 0u,
-            })
-            : 0u
-        );
+        var shape = ((SdfShapeType)instruction.Shape);
+        var reinterpreted = ((instruction.Op == SdfOp.ShapeBlend) &&
+            SdfFieldShapes.Contains(value: shape)) ? SdfFieldShapes.ReinterpretedOf(value: shape) : SdfOperandLanes.None;
         ReadOnlySpan<float> lanes = [
             instruction.Data0.X,
             instruction.Data0.Y,
@@ -64,7 +41,7 @@ public sealed partial class SdfProgram {
 
         for (var lane = 0; (lane < lanes.Length); lane++) {
             if (
-                (0u != (reinterpreted & (1u << lane))) ||
+                ((reinterpreted & ((SdfOperandLanes)(((uint)SdfOperandLanes.Data0X) << lane))) != 0) ||
                 float.IsFinite(f: lanes[lane])
             ) {
                 continue;
@@ -450,7 +427,7 @@ public sealed partial class SdfProgram {
                 paramName: instructionsParamName
             );
 
-            if (instruction.Blend is ((uint)SdfBlendOp.Morph) or ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction)) {
+            if (SdfFieldBlends.ScopeOnlyOf(value: ((SdfBlendOp)instruction.Blend))) {
                 throw new ArgumentException(
                     message: $"Instruction {index} is a ShapeBlend carrying blend {((SdfBlendOp)instruction.Blend)}; Morph, StairsUnion, and StairsSubtraction are valid only on PopField instructions.",
                     paramName: instructionsParamName

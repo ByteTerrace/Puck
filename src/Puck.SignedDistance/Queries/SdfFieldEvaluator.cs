@@ -241,21 +241,21 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             y: FixedQ4816.Zero
         );
 
-        return blend switch {
-            ((uint)SdfBlendOp.SmoothUnion) => BlendSmoothUnion(
+        return SdfFieldBlends.PointBlendOf(value: ((SdfBlendOp)blend)) switch {
+            SdfPointBlendAction.SmoothUnion => BlendSmoothUnion(
             a: current,
             b: candidate,
             k: smoothK
         ),
-            ((uint)SdfBlendOp.Subtraction) => FixedQ4816.Max(
+            SdfPointBlendAction.Subtraction => FixedQ4816.Max(
             x: current,
             y: -candidate
         ),
-            ((uint)SdfBlendOp.Intersection) => FixedQ4816.Max(
+            SdfPointBlendAction.Intersection => FixedQ4816.Max(
             x: current,
             y: candidate
         ),
-            ((uint)SdfBlendOp.Xor) => FixedQ4816.Max(
+            SdfPointBlendAction.Xor => FixedQ4816.Max(
             x: FixedQ4816.Min(
                 x: current,
                 y: candidate
@@ -265,17 +265,17 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 y: candidate
             )
         ),
-            ((uint)SdfBlendOp.SmoothIntersection) => -BlendSmoothUnion(
+            SdfPointBlendAction.SmoothIntersection => -BlendSmoothUnion(
             a: -current,
             b: -candidate,
             k: smoothK
         ),
-            ((uint)SdfBlendOp.SmoothSubtraction) => -BlendSmoothUnion(
+            SdfPointBlendAction.SmoothSubtraction => -BlendSmoothUnion(
             a: candidate,
             b: -current,
             k: smoothK
         ),
-            ((uint)SdfBlendOp.GrooveUnion) => FixedQ4816.Max(
+            SdfPointBlendAction.GrooveUnion => FixedQ4816.Max(
             x: FixedQ4816.Min(
                 x: current,
                 y: candidate
@@ -285,7 +285,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 Y: candidate
             ).Length)
         ),
-            ((uint)SdfBlendOp.PipeUnion) => FixedQ4816.Min(
+            SdfPointBlendAction.PipeUnion => FixedQ4816.Min(
             x: FixedQ4816.Min(
                 x: current,
                 y: candidate
@@ -295,7 +295,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 Y: candidate
             ).Length - chamfer)
         ),
-            ((uint)SdfBlendOp.GrooveSubtraction) => FixedQ4816.Max(
+            SdfPointBlendAction.GrooveSubtraction => FixedQ4816.Max(
             x: FixedQ4816.Max(
                 x: current,
                 y: -candidate
@@ -305,7 +305,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 Y: candidate
             ).Length)
         ),
-            ((uint)SdfBlendOp.PipeSubtraction) => FixedQ4816.Min(
+            SdfPointBlendAction.PipeSubtraction => FixedQ4816.Min(
             x: FixedQ4816.Max(
                 x: current,
                 y: -candidate
@@ -315,31 +315,32 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 Y: candidate
             ).Length - chamfer)
         ),
-            ((uint)SdfBlendOp.ChamferUnion) => FixedQ4816.Min(
+            SdfPointBlendAction.ChamferUnion => FixedQ4816.Min(
             x: FixedQ4816.Min(
                 x: current,
                 y: candidate
             ),
             y: (((current + candidate) - chamfer) * SqrtHalf)
         ),
-            ((uint)SdfBlendOp.ChamferIntersection) => FixedQ4816.Max(
+            SdfPointBlendAction.ChamferIntersection => FixedQ4816.Max(
             x: FixedQ4816.Max(
                 x: current,
                 y: candidate
             ),
             y: (((current + candidate) + chamfer) * SqrtHalf)
         ),
-            ((uint)SdfBlendOp.ChamferSubtraction) => FixedQ4816.Max(
+            SdfPointBlendAction.ChamferSubtraction => FixedQ4816.Max(
             x: FixedQ4816.Max(
                 x: current,
                 y: -candidate
             ),
             y: (((current - candidate) + chamfer) * SqrtHalf)
         ),
-            _ => FixedQ4816.Min(
+            SdfPointBlendAction.Union => FixedQ4816.Min(
             x: current,
             y: candidate
         ), // SDF_BLEND_UNION, the default
+            _ => throw new InvalidOperationException(message: "Invalid PointBlend action."),
         };
     }
     // Both saturated endpoints return their input to the bit — see blendSmoothUnion's remarks in field/sdf-blend.hlsli for
@@ -469,7 +470,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                         paths: paths
                     )
                 : null),
-                ReliefMasks: ((instruction.Op == SdfOp.NoiseDisplace) && (program.ReliefMasksAt(instructionIndex: index) is { Count: > 0 } masks)
+                ReliefMasks: ((SdfFieldOps.StreamOf(value: instruction.Op) == SdfReliefStreamRole.ReliefOwner) && (program.ReliefMasksAt(instructionIndex: index) is { Count: > 0 } masks)
                     ? CompileReliefMasks(masks: masks)
                     : null),
                 ScopeScale: (((instruction.Op == SdfOp.PopField) && !deferred[index])
@@ -573,22 +574,24 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             depths[index] = depth;
             held[index] = -1;
 
-            switch (instructions[index].Op) {
-                case SdfOp.ShapeBlend: {
+            switch (SdfFieldOps.FieldStructureOf(value: instructions[index].Op)) {
+                case SdfFieldStructureAction.ShapeBlend: {
                         shapes++;
                         break;
                     }
-                case SdfOp.PushField: {
+                case SdfFieldStructureAction.PushField: {
                         shapesAtPush[depth++] = shapes;
                         break;
                     }
-                case SdfOp.PopField: {
+                case SdfFieldStructureAction.PopField: {
                         held[index] = (shapes - shapesAtPush[--depth]);
                         break;
                     }
-                default: {
+                case SdfFieldStructureAction.Other: {
                         break;
                     }
+                default:
+                    throw new InvalidOperationException(message: "Invalid FieldStructure action.");
             }
         }
 
@@ -600,8 +603,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             var instruction = instructions[index];
             var at = depths[index];
 
-            switch (instruction.Op) {
-                case SdfOp.PopField: {
+            switch (SdfFieldOps.DeferredScopeOf(value: instruction.Op)) {
+                case SdfDeferredScopeAction.PopField: {
                         var hard = HardCompose(blend: instruction.Blend);
 
                         deferred[index] = ((instruction.Blend == ((uint)SdfBlendOp.Union)) && (instruction.Data1.Y > 0f) && ok[(at - 1)] && (held[index] == shapes));
@@ -609,25 +612,22 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                         ok[(at - 1)] &= hard;
                         break;
                     }
-                case SdfOp.ShapeBlend: {
+                case SdfDeferredScopeAction.ShapeBlend: {
                         if (!instruction.Detail && !HardCompose(blend: instruction.Blend)) {
                             ok[at] = false;
                         }
 
                         break;
                     }
-                case SdfOp.Onion:
-                case SdfOp.Dilate:
-                case SdfOp.Displace:
-                case SdfOp.NoiseDisplace:
-                case SdfOp.CellDisplace:
-                case SdfOp.GaussianPush: {
+                case SdfDeferredScopeAction.DisruptsScope: {
                         ok[at] = false;
                         break;
                     }
-                default: {
+                case SdfDeferredScopeAction.Ignore: {
                         break;
                     }
+                default:
+                    throw new InvalidOperationException(message: "Invalid DeferredScope action.");
             }
         }
 
@@ -742,27 +742,27 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // ======================================================================================================================
 
     private static FixedQ4816 EvaluateShape(in CompiledInstruction instruction, FixedVector3 p, ref PowerWork powerWork) {
-        return ((SdfShapeType)instruction.Shape) switch {
-            SdfShapeType.Sphere => SdfSphere(
+        return instruction.ShapePointAction switch {
+            SdfShapePointAction.Sphere => SdfSphere(
             p: p,
             radius: instruction.Data0X
         ),
-            SdfShapeType.Box or SdfShapeType.ScreenSlab => SdfBox(
+            SdfShapePointAction.Box => SdfBox(
             p: p,
             halfExtents: Vector(instruction: instruction),
             cornerRadius: instruction.Data0W
         ),
-            SdfShapeType.Torus => SdfTorus(
+            SdfShapePointAction.Torus => SdfTorus(
             p: p,
             major: instruction.Data0X,
             minor: instruction.Data0Y
         ),
-            SdfShapeType.Plane => SdfPlane(
+            SdfShapePointAction.Plane => SdfPlane(
             p: p,
             normal: Vector(instruction: instruction),
             offset: instruction.Data0W
         ),
-            SdfShapeType.RoundCone => SdfRoundCone(
+            SdfShapePointAction.RoundCone => SdfRoundCone(
             p: p,
             lowerRadius: instruction.Data0X,
             upperRadius: instruction.Data0Y,
@@ -770,23 +770,23 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             b: instruction.Data0W,
             a: instruction.Data1Y
         ),
-            SdfShapeType.Capsule => SdfCapsule(
+            SdfShapePointAction.Capsule => SdfCapsule(
             p: p,
             endpoint: Vector(instruction: instruction),
             radius: instruction.Data0W
         ),
-            SdfShapeType.Cylinder => (SdfCylinder(
+            SdfShapePointAction.Cylinder => (SdfCylinder(
             p: p,
             radius: instruction.Data0X,
             halfHeight: instruction.Data0Y
         ) - instruction.Data1W),
-            SdfShapeType.Vesica => SdfVesica(
+            SdfShapePointAction.Vesica => SdfVesica(
             p: p,
             r: instruction.Data0X,
             d: instruction.Data0Y,
             b: instruction.Data0Z
         ),
-            SdfShapeType.Ellipse => (SdfEllipse(
+            SdfShapePointAction.Ellipse => (SdfEllipse(
             p: p,
             semiX: instruction.Data0X,
             semiY: instruction.Data0Y,
@@ -794,7 +794,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             lift: instruction.Data1Y,
             capChamfer: instruction.Data1Z
         ) - instruction.Data1W),
-            SdfShapeType.RoundedRectangle => (SdfRoundedRectangle(
+            SdfShapePointAction.RoundedRectangle => (SdfRoundedRectangle(
             p: p,
             halfWidth: instruction.Data0X,
             halfHeight: instruction.Data0Y,
@@ -805,7 +805,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         ) - instruction.Data1W),
             // Data1W is the edge-rounding radius: the packed Data0 lanes arrive inset by it and the offset back out is
             // this subtraction, exactly as evaluateShape's lifted wrappers do it (KEEP IN SYNC).
-            SdfShapeType.Trapezoid => (SdfTrapezoidSolid(
+            SdfShapePointAction.Trapezoid => (SdfTrapezoidSolid(
             p: p,
             bottomHalfWidth: instruction.Data0X,
             topHalfWidth: instruction.Data0Y,
@@ -814,7 +814,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             lift: instruction.Data1Y,
             capChamfer: instruction.Data1Z
         ) - instruction.Data1W),
-            SdfShapeType.ChamferedRectangle => (SdfChamferedRectangle(
+            SdfShapePointAction.ChamferedRectangle => (SdfChamferedRectangle(
             p: p,
             halfWidth: instruction.Data0X,
             halfHeight: instruction.Data0Y,
@@ -822,33 +822,34 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             liftAmount: instruction.Data0W,
             lift: instruction.Data1Y
         ) - instruction.Data1W),
-            SdfShapeType.Superellipsoid => SdfSuperellipsoid(
+            SdfShapePointAction.Superellipsoid => SdfSuperellipsoid(
             p: p,
             radii: Vector(instruction: instruction),
             work: ref powerWork,
             exponent: instruction.Data0W
         ),
-            SdfShapeType.ConvexPolygon => (SdfConvexPolygonSolid(
+            SdfShapePointAction.ConvexPolygon => (SdfConvexPolygonSolid(
             p: p,
             vertices: (instruction.ConvexPolygonVertices ?? []),
             liftAmount: instruction.Data0W,
             lift: instruction.Data1Y,
             capChamfer: instruction.Data1Z
         ) - instruction.Data1W),
-            SdfShapeType.Sweep => SdfSweep(
+            SdfShapePointAction.Sweep => SdfSweep(
             p: p,
             curve: (instruction.SweepCurve ?? throw new UnreachableException(message: "Compile always attaches a SweepCurve to a Sweep instruction.")),
             strands: Math.Clamp(value: ((int)((instruction.Data0Y + Half).Value >> FixedQ4816.FractionBitCount)), min: 1, max: SdfProgramBuilder.MaxSweepStrands),
             twist: instruction.Data0Z,
             strandOffset: instruction.Data0W
         ),
-            SdfShapeType.Path => SdfPathSolid(
+            SdfShapePointAction.Path => SdfPathSolid(
             p: p,
             edges: (instruction.PathEdges ?? throw new UnreachableException(message: "Compile always attaches the edge table to a Path instruction.")),
             stroke: (instruction.Data1Y > Half),
             halfDepth: instruction.Data0W
         ),
-            _ => throw new UnreachableException(message: $"The constructor validated every shape is supported; shape {((SdfShapeType)instruction.Shape)} reached EvaluateShape unvalidated."),
+            SdfShapePointAction.Unsupported => throw new UnreachableException(message: $"The constructor validated every shape is supported; shape {((SdfShapeType)instruction.Shape)} reached EvaluateShape unvalidated."),
+            _ => throw new InvalidOperationException(message: "Invalid ShapePoint action."),
         };
     }
 
@@ -877,10 +878,11 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             Y: z
         ).Length;
     private static bool ResolveWinner(FixedQ4816 current, FixedQ4816 candidate, uint blend) {
-        return blend switch {
-            ((uint)SdfBlendOp.Intersection) or ((uint)SdfBlendOp.SmoothIntersection) or ((uint)SdfBlendOp.ChamferIntersection) => (candidate > current),
-            ((uint)SdfBlendOp.Subtraction) or ((uint)SdfBlendOp.SmoothSubtraction) or ((uint)SdfBlendOp.ChamferSubtraction) or ((uint)SdfBlendOp.GrooveSubtraction) or ((uint)SdfBlendOp.PipeSubtraction) or ((uint)SdfBlendOp.StairsSubtraction) => (-candidate > current),
-            _ => (candidate < current),
+        return SdfFieldBlends.MaterialWinnerOf(value: ((SdfBlendOp)blend)) switch {
+            SdfMaterialWinnerAction.Farther => (candidate > current),
+            SdfMaterialWinnerAction.Cut => (-candidate > current),
+            SdfMaterialWinnerAction.Nearer => (candidate < current),
+            _ => throw new InvalidOperationException(message: "Invalid MaterialWinner action."),
         };
     }
     // === The rigid transform ops (KEEP IN SYNC with mapCore's SDF_OP_TRANSLATE/ROTATE/SCALE/REPEAT/REPEAT_LIMITED/
@@ -1821,7 +1823,14 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         long ScopeScale = 0L,
         // Only for a masked SdfOp.NoiseDisplace: its masks, decoded by the program's door from the rows before it.
         ReliefMaskFixed[]? ReliefMasks = null
-    );
+    ) {
+        public SdfPointAction PointAction { get; } = SdfFieldOps.PointOf(value: Op);
+        public SdfIntervalAction IntervalAction { get; } = SdfFieldOps.IntervalOf(value: Op);
+        public SdfShapePointAction ShapePointAction { get; } = SdfFieldShapes.Contains(value: ((SdfShapeType)Shape))
+            ? SdfFieldShapes.ShapePointOf(value: ((SdfShapeType)Shape)) : SdfShapePointAction.Unsupported;
+        public SdfShapeIntervalAction ShapeIntervalAction { get; } = SdfFieldShapes.Contains(value: ((SdfShapeType)Shape))
+            ? SdfFieldShapes.ShapeIntervalOf(value: ((SdfShapeType)Shape)) : SdfShapeIntervalAction.Entire;
+    }
     // A relief mask in fixed point: its band on the grids both carriers hold exactly (SdfReliefBand), and its regions.
     private sealed record ReliefMaskFixed(FixedQ4816 Start, FixedQ4816 End, FixedQ4816 Inside, FixedQ4816 Outside, ReliefRegionFixed[] Regions);
     // One region in fixed point: its pose (the turn's interval constants built once, for the box walk) and its primitive.

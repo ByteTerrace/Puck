@@ -149,8 +149,8 @@ public sealed partial class SdfProgram {
         for (var index = segment.Instruction; (index < segment.End); index++) {
             var instruction = m_instructions[index];
 
-            switch (instruction.Op) {
-                case SdfOp.ResetPoint: {
+            switch (SdfFieldOps.RigidPlanOf(value: instruction.Op)) {
+                case SdfRigidPlanAction.ResetPoint: {
                         chainDynamicSlot = NoDynamicTransformSlot;
                         position = Vector3.Zero;
                         rotation = Quaternion.Identity;
@@ -159,9 +159,7 @@ public sealed partial class SdfProgram {
                         shapeSinceFold = false;
                         break;
                     }
-                case SdfOp.SymmetryPlane:
-                case SdfOp.Repeat:
-                case SdfOp.RepeatLimited: {
+                case SdfRigidPlanAction.Fold: {
                         // A fold is a piecewise isometry: the plan applies the run between the two poses. One run per
                         // chain, on a static chain, fits the leaf extension slot; a shape inside it stays generic.
                         var runLength = ((foldFirst < 0)
@@ -191,7 +189,7 @@ public sealed partial class SdfProgram {
                         foldCount = runLength;
                         break;
                     }
-                case SdfOp.Translate: {
+                case SdfRigidPlanAction.Translate: {
                         var offset = new Vector3(
                             x: instruction.Data0.X,
                             y: instruction.Data0.Y,
@@ -204,7 +202,7 @@ public sealed partial class SdfProgram {
                         );
                         break;
                     }
-                case SdfOp.Rotate: {
+                case SdfRigidPlanAction.Rotate: {
                         var authored = new Quaternion(
                             w: instruction.Data0.W,
                             x: instruction.Data0.X,
@@ -218,7 +216,7 @@ public sealed partial class SdfProgram {
                         );
                         break;
                     }
-                case SdfOp.TransformDynamic: {
+                case SdfRigidPlanAction.TransformDynamic: {
                         // A prefix transform around a dynamic bone would require two static poses. It is legal VM input,
                         // just not this compact two-vector leaf format, so leave that uncommon chain on the fallback.
                         if (
@@ -235,11 +233,11 @@ public sealed partial class SdfProgram {
                         chainDynamicSlot = ((int)instruction.Data0.X);
                         break;
                     }
-                case SdfOp.Scale when (instruction.Data0 == Vector4.One):
+                case SdfRigidPlanAction.IdentityScale when (instruction.Data0 == Vector4.One):
                     // Placement emission can retain an identity scale between rigid poses. It changes neither the
                     // query point nor distance scale, so it does not require a generic segment.
                     break;
-                case SdfOp.ShapeBlend: {
+                case SdfRigidPlanAction.ShapeBlend: {
                         // Leaves retain their original shape header, as the generic walks read it.
                         if (int.MinValue == commonDynamicSlot) {
                             commonDynamicSlot = chainDynamicSlot;
@@ -304,6 +302,7 @@ public sealed partial class SdfProgram {
 
                         break;
                     }
+                case SdfRigidPlanAction.Refuse:
                 default: {
                         dynamicSlot = NoDynamicTransformSlot;
 

@@ -18,7 +18,7 @@ own dispatch, so one definition per opcode leaves a hole if the shapes and
 blends underneath it still have two definitions. A reset clears the point
 state while the accumulated distance survives. A scope saves that field,
 evaluates a child field and composes it back. Analyses that track either state
-need the same events in the same order. [Instruction set](../../../src/Puck.SignedDistance/SdfOp.cs),
+need the same events in the same order. [Instruction set](../../../src/Puck.SignedDistance/SdfFieldOps.cs),
 [point walk](../../../src/Puck.SignedDistance/Queries/SdfFieldEvaluator.PointWalk.cs),
 [GPU walk](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-map.hlsli).
 

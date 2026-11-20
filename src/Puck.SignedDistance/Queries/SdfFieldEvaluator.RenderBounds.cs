@@ -13,8 +13,8 @@ public sealed partial class SdfFieldEvaluator {
     // The render reading's point ops over a box (RenderWarpPoint's inclusion rules).
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static IntervalVector3 RenderWarpBounds(in CompiledInstruction instruction, IntervalVector3 local, ref FixedInterval distanceScale) {
-        switch (instruction.Op) {
-            case SdfOp.Shear: {
+        switch (SdfFieldOps.RenderWarpBoundsOf(value: instruction.Op)) {
+            case SdfRenderWarpBoundsAction.Shear: {
                     // The target moves by the cubic of the driver, taken over the driver's interval.
                     var target = (int)instruction.Shape;
                     var t = local[((int)instruction.Blend)];
@@ -22,17 +22,17 @@ public sealed partial class SdfFieldEvaluator {
 
                     return local.With(axis: target, value: (local[target] + offset));
                 }
-            case SdfOp.GaussianPush: {
+            case SdfRenderWarpBoundsAction.GaussianPush: {
                     // The weight lies in [0, 1], so each component moves by at most its push.
                     return Widen(box: local, reach: new FixedVector3(X: FixedQ4816.Abs(value: instruction.Data0W), Y: FixedQ4816.Abs(value: instruction.Data1W), Z: FixedQ4816.Abs(value: instruction.Aux)));
                 }
-            case SdfOp.DomainWarp: {
+            case SdfRenderWarpBoundsAction.DomainWarp: {
                     // Each sine lies in [-1, 1], so each component moves by at most the amplitude.
                     var amplitude = FixedQ4816.Abs(value: instruction.Data0W);
 
                     return Widen(box: local, reach: new FixedVector3(X: amplitude, Y: amplitude, Z: amplitude));
                 }
-            case SdfOp.RepeatPolar: {
+            case SdfRenderWarpBoundsAction.RepeatPolar: {
                     // A turn and a reflection in the fold plane keep the radius: both folded coordinates lie within the
                     // largest radius the box's (u, v) rectangle reaches.
                     var (u, v) = PolarAxes(axis: instruction.Shape);
@@ -40,13 +40,13 @@ public sealed partial class SdfFieldEvaluator {
 
                     return local.With(axis: u, value: turned).With(axis: v, value: turned);
                 }
-            case SdfOp.WallpaperFold: {
+            case SdfRenderWarpBoundsAction.WallpaperFold: {
                     return WallpaperBounds(instruction: in instruction, local: local);
                 }
-            case SdfOp.LogSphere: {
+            case SdfRenderWarpBoundsAction.LogSphere: {
                     return LogSphereBounds(distanceScale: ref distanceScale, instruction: in instruction, local: local);
                 }
-            default: {
+            case SdfRenderWarpBoundsAction.Unbounded: {
                     // The Repeat fold, then a displacement of at most half the jitter per axis, then a rotation, which
                     // keeps the length: every folded coordinate lies within the largest length the jittered box reaches.
                     var spacing = Vector(instruction: instruction);
@@ -66,6 +66,8 @@ public sealed partial class SdfFieldEvaluator {
 
                     return new IntervalVector3(X: tumbled, Y: tumbled, Z: tumbled);
                 }
+            default:
+                throw new InvalidOperationException(message: "Invalid RenderWarpBounds action.");
         }
     }
     // The in-plane point reduced to its cell, where the reduction leaves it within the cell's extents about the nearest

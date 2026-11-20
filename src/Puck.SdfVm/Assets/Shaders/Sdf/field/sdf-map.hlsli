@@ -13,23 +13,18 @@ float3 sdfRigidFoldPoint(float3 p, uint extensionOffset, uint dataOffset) {
     }
     uint first = (prefix.w & SDF_RIGID_LEAF_SHAPE_MASK);
     uint count = min(sdfProgramWord(extensionOffset + 2u).x, SDF_RIGID_LEAF_MAX_FOLD_RUN);
+    if ((first > sdfProgramLayout.instructionCount) || (count > (sdfProgramLayout.instructionCount - first))) {
+        return asfloat(0x7fc00000u).xxx;
+    }
     [loop]
     for (uint step = 0u; (step < count); step++) {
         uint index = (first + step);
-        uint op = SDF_INSTRUCTION_OP(sdfProgramWord(SDF_PROGRAM_HEADER_VECTORS + index));
-        float4 data0 = asfloat(sdfProgramWord(dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index)));
-        float4 data1 = asfloat(sdfProgramWord(dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index) + 1u));
-        if (op == SDF_OP_SYMMETRY_PLANE) {
-            float spT = (dot(p, data0.xyz) + data0.w);
-            p -= ((2.0 * min(spT, 0.0)) * data0.xyz);
-        } else if (op == SDF_OP_REPEAT) {
-            p -= (data0.xyz * round(p * data1.xyz));
-        } else if (op == SDF_OP_REPEAT_LIMITED) {
-            p -= (data0.xyz * clamp(round(p / data0.xyz), -data1.xyz, data1.xyz));
-        } else if (op == SDF_OP_TRANSLATE) {
-            p -= data0.xyz;
-        } else if (op == SDF_OP_ROTATE) {
-            p = rotatePointByInverseQuaternion(p, data0);
+        uint op = SDF_INSTRUCTION_OP(sdfFieldHeader(index));
+        float4 data0 = sdfFieldData(dataOffset, index, 0u);
+        float4 data1 = sdfFieldData(dataOffset, index, 1u);
+        switch (op) {
+#include "../isa/sdf-field-rigid.hlsli"
+            default: return asfloat(0x7fc00000u).xxx;
         }
     }
     return p;
@@ -43,17 +38,14 @@ precise float sdfReliefBandWeight(float4 band, float distance) {
     float t = clamp(((distance - band.x) / band.y), 0.0, 1.0);
     return (band.z + ((band.w - band.z) * ((t * t) * (3.0 - (2.0 * t)))));
 }
-// A region's primitive at its local point: the four listed types (SdfReliefRegion.IsListed), each through the primitive
-// function evaluateShape calls for it. A type off the list cannot pass the program's door; one reaching here reads as no
-// region.
+// Region admission and the primitive action both come from the shape catalogue.
 precise float sdfReliefRegionDistance(uint shapeType, float3 p, float4 data0, float4 data1) {
+    float result;
     switch (shapeType) {
-        case SDF_SHAPE_BOX:            return sdfBox(p, data0.xyz, data0.w);
-        case SDF_SHAPE_SUPERELLIPSOID: return sdfSuperellipsoid(p, data0.xyz, data1.yzw, data0.w);
-        case SDF_SHAPE_CAPSULE:        return sdfCapsule(p, data0.xyz, data0.w);
-        case SDF_SHAPE_PLANE:          return sdfPlane(p, data0.xyz, data0.w);
-        default:                       return SDF_FAR_DISTANCE;
+#include "../isa/sdf-field-relief-shapes.hlsli"
+        default: return asfloat(0x7fc00000u);
     }
+    return result;
 }
 // The product of a masked relief's weights at its point q, from the rowCount rows from firstRow (KEEP IN SYNC with
 // SdfFieldEvaluator.MaskProduct): each band row opens a mask, each pose row poses the next primitive row's region, and
@@ -71,24 +63,13 @@ float sdfMaskProduct(uint firstRow, uint rowCount, float3 q, uint dataOffset) {
     for (uint step = 0u; step < SDF_MAX_RELIEF_ROWS; step++) {
         if (step >= rowCount) { break; }
         uint row = (firstRow + step);
-        uint4 header = sdfWords[SDF_PROGRAM_HEADER_VECTORS + row];
-        float4 rowData0 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * row)]);
-        float4 rowData1 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * row) + 1u]);
+        uint4 header = sdfFieldHeader(row);
+        float4 rowData0 = sdfFieldData(dataOffset, row, 0u);
+        float4 rowData1 = sdfFieldData(dataOffset, row, 1u);
         uint kind = SDF_INSTRUCTION_BLEND(header);
-        if (kind == SDF_RELIEF_ROW_KIND_BAND) {
-            if (open) {
-                weight *= sdfReliefBandWeight(band, distance);
-                if (weight <= 0.0) { return 0.0; }
-            }
-            band = rowData0;
-            distance = SDF_FAR_DISTANCE;
-            open = true;
-        } else if (kind == SDF_RELIEF_ROW_KIND_POSE) {
-            origin = rowData0.xyz;
-            turn = rowData1;
-        } else if (distance > band.x) {
-            float3 u = rotatePointByInverseQuaternion((q - origin), turn);
-            distance = min(distance, sdfReliefRegionDistance(SDF_INSTRUCTION_SHAPE(header), u, rowData0, rowData1));
+        switch (kind) {
+#include "../isa/sdf-field-relief-rows.hlsli"
+            default: return asfloat(0x7fc00000u);
         }
     }
     if (open) {
@@ -347,8 +328,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         rigidPosition = rotatePointByInverseQuaternion(rigidPosition, asfloat(sdfProgramWord(leafOffset + 1u)));
                     }
 
-                    float4 shapeData0 = asfloat(sdfProgramWord(dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * shapeIndex)));
-                    float4 shapeData1 = asfloat(sdfProgramWord(dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * shapeIndex) + 1u));
+                    float4 shapeData0 = sdfFieldData(dataOffset, shapeIndex, 0u);
+                    float4 shapeData1 = sdfFieldData(dataOffset, shapeIndex, 1u);
                     float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shapeHeader), rigidPosition, shapeData0, shapeData1);
                     int material = (trackMaterial ? (int)SDF_INSTRUCTION_MATERIAL(shapeHeader) : 0);
 
@@ -362,7 +343,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
         [loop]
         for (uint index = segmentMeta.z; index < min(segmentMeta.w, sdfProgramLayout.instructionCount); index++) {
             // The validated layout spans and this loop's index bound admit direct header and payload reads.
-            uint4 instructionHeader = sdfWords[SDF_PROGRAM_HEADER_VECTORS + index];
+            uint4 instructionHeader = sdfFieldHeader(index);
             uint op = SDF_INSTRUCTION_OP(instructionHeader);
 
             // The SHARED BLEND TAIL's inputs. SHAPE and POP_FIELD both feed it a candidate (already in world units) plus
@@ -379,598 +360,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             float composeSmooth = 0.0;
 
             switch (op) {
-                case SDF_OP_RESET_POINT: {
-                    localPosition = worldPosition;
-                    distanceScale = 1.0;
-                    currentSlot = SDF_TRANSFORM_SLOT_NONE;
-                    laneErodeSkipShape = false;
-                    laneErodeAmount = 0.0;
-                    if (trackMaterial) {
-                        parityMaterialDelta = 0;
-                    }
-                    break;
-                }
-                case SDF_OP_TRANSLATE: {
-                    SDF_VM_LOAD_DATA0;
-                    localPosition -= data0.xyz;
-                    break;
-                }
-                case SDF_OP_ROTATE: {
-                    SDF_VM_LOAD_DATA0;
-                    localPosition = rotatePointByInverseQuaternion(localPosition, data0);
-                    break;
-                }
-                // data0.xyz = |scale|, pre-clamped away from 0; data0.w = its min axis. BOTH HOST-BAKED by
-                // SdfProgramBuilder.Scale (the abs/max/min were 8 dx.op per evaluation). The min-axis factor is the
-                // conservative correction for a NON-uniform scale: f(S^-1 p) * min(s) is 1-Lipschitz because
-                // |S^-1| <= 1/min(s), so it can only UNDERESTIMATE true distance — never overstep.
-                case SDF_OP_SCALE: {
-                    SDF_VM_LOAD_DATA0;
-                    localPosition /= data0.xyz;
-                    distanceScale *= data0.w;
-                    break;
-                }
-                // Log-spherical DOMAIN WARP: data0.x = w (= ln shellRatio, HOST-BAKED), data0.y = twist (radians/shell),
-                // data0.z = 1/w (HOST-BAKED). Fold the RADIAL log-coordinate to the NEAREST shell (round, exactly like
-                // SDF_OP_REPEAT): a translation along log(radius) becomes a uniform Cartesian SCALING, tiling space into
-                // self-similar "Droste" shells. The half-cell bound the nearest-shell round gives is what makes the
-                // exp(w/2) Lipschitz factor (SdfProgram.AnalyzeLipschitz) a sound step clamp.
-                case SDF_OP_LOG_SPHERE: {
-                    SDF_VM_LOAD_DATA0;
-                    float foldRadius = max(length(localPosition), SDF_LOGSPHERE_MIN_RADIUS);
-                    float logRadius = log(foldRadius);
-                    float shell = round(logRadius * data0.z);   // nearest shell index k
-                    float shellScale = exp(shell * data0.x);    // exp(k*w) = the shell's Cartesian scale = r / rFolded
-
-                    localPosition /= shellScale;                // fold every shell onto the prototype
-
-                    // Optional Droste spiral: rotate each shell about Z by k*twist. UNCONDITIONAL (twist == 0 -> cos 0 = 1,
-                    // sin 0 = 0, an exact identity on both backends) so no divergent branch re-rolls codegen. A rotation is
-                    // an ISOMETRY: it neither touches distanceScale nor contributes to the Lipschitz factor. No atan2, so
-                    // the Z axis is a plain rotation fixed line, NOT a polar-pinch singularity.
-                    float spinAngle = (shell * data0.y);
-                    float spinCos = cos(spinAngle);
-                    float spinSin = sin(spinAngle);
-
-                    localPosition.xy = float2(
-                        ((spinCos * localPosition.x) - (spinSin * localPosition.y)),
-                        ((spinSin * localPosition.x) + (spinCos * localPosition.y)));
-
-                    // The r/density metric correction: within a shell the fold is a similarity that shrank space by
-                    // 1/shellScale, so evaluateShape(localPosition) UNDERESTIMATES true distance by 1/shellScale — multiply
-                    // the candidate back by shellScale. This rides the SAME per-candidate distanceScale channel SDF_OP_SCALE
-                    // writes (applied per candidate below), composing multiplicatively when a Scale is also on the chain.
-                    // NEVER stepScale (that clamps the FINAL distance once, and cannot per-candidate-correct a mixed chain).
-                    distanceScale *= shellScale;
-                    break;
-                }
-#ifdef SDF_DYNAMIC_TRANSFORMS
-                case SDF_OP_TRANSFORM_DYNAMIC: {
-                    // A rigid transform sourced from a per-frame buffer slot (data0.x): place the shape at the slot's world
-                    // position + orientation by moving the sample point into the shape's local frame (translate then
-                    // inverse-rotate), exactly like an immediate Translate + Rotate would.
-                    SDF_VM_LOAD_DATA0;
-                    uint dynamicSlot = (uint)data0.x;
-                    float4 dynamicPosition = sdfDynamicTransformRow((3u * dynamicSlot));
-                    float4 dynamicOrientation = sdfDynamicTransformRow(((3u * dynamicSlot) + 1u));
-                    localPosition = rotatePointByInverseQuaternion((localPosition - dynamicPosition.xyz), dynamicOrientation);
-                    currentSlot = (int)dynamicSlot;
-                    break;
-                }
-#endif
-                case SDF_OP_REPEAT: {
-                    // data0 arrives pre-clamped and data1 = 1/spacing, both HOST-BAKED by SdfProgramBuilder.Repeat.
-                    SDF_VM_LOAD_DATA0;
-                    SDF_VM_LOAD_DATA1;
-                    localPosition -= (data0.xyz * round(localPosition * data1.xyz));
-                    break;
-                }
-                case SDF_OP_REPEAT_LIMITED: {
-                    // data0.xyz = spacing, pre-clamped away from 0 exactly as SDF_OP_REPEAT's is (HOST-BAKED by
-                    // SdfProgramBuilder.RepeatLimited); data1.xyz = the per-axis cell limit. Unlike Repeat there is no
-                    // free lane for 1/spacing, so the divide stays — a per-instruction-uniform divisor lowers to one
-                    // reciprocal anyway.
-                    SDF_VM_LOAD_DATA0;
-                    SDF_VM_LOAD_DATA1;
-                    localPosition -= (data0.xyz * clamp(round(localPosition / data0.xyz), -data1.xyz, data1.xyz));
-                    break;
-                }
-                // Stochastic domain-repeat fold (KEEP IN SYNC with SdfProgramBuilder.CellJitter): tile space like
-                // SDF_OP_REPEAT, then per cell displace by a hashed offset, optionally tumble (a hashed rotation), and
-                // optionally recolor by a hashed material variant. data0.xyz = spacing (pre-clamped), data0.w = jitter
-                // (peak-to-peak displacement), data1.xyz = 1/spacing (HOST-BAKED), data1.w = tumble in [0,1].
-                // header.y = seed, header.z = SDF_NOISE_* flavor (how the POSITION offset r0 is distributed; White = 0 is
-                // the byte-identical default), header.w = materialVariants (0 = geometric only). The hash is INTEGER-ONLY (sdfPcg3d
-                // on the two's-complement cell index xored with the seed), so cell decisions are bit-identical across
-                // both DXC targets. Displacement and tumble are BOTH isometries — distanceScale is untouched, and the
-                // only Lipschitz contribution is the jitter half-amplitude (SdfProgram.AnalyzeLipschitz).
-                case SDF_OP_CELL_JITTER: {
-                    SDF_VM_LOAD_DATA0;
-                    SDF_VM_LOAD_DATA1;
-                    float3 cell = round(localPosition * data1.xyz);   // data1.xyz = 1/spacing (host-baked)
-                    // asuint(int3(cell)) is well-defined two's-complement for a negative rounded index on both backends.
-                    uint3 seed = uint3(SDF_INSTRUCTION_SHAPE(instructionHeader), (SDF_INSTRUCTION_SHAPE(instructionHeader) * SDF_HASH_STREAM_A), (SDF_INSTRUCTION_SHAPE(instructionHeader) * SDF_HASH_STREAM_B));
-                    uint3 key = (asuint(int3(cell)) ^ seed);
-                    uint3 h0 = sdfPcg3d(key);   // still used by the material-variant apply below (every flavor)
-
-                    // The POSITION offset r0, shaped by the Blend-lane noise flavor (KEEP IN SYNC with
-                    // Puck.SignedDistance.SdfNoiseFlavor). Only r0 changes. Every flavor stays in [0, 1] per axis — CLOSED at 1,
-                    // because (float)0xFFFFFFFFu rounds up to 2^32 — so (r0 - 0.5) * jitter holds within +-jitter/2 per
-                    // axis (White's bound) and the AnalyzeLipschitz reach term is unchanged for all three.
-                    uint noiseFlavor = SDF_INSTRUCTION_BLEND(instructionHeader);
-                    float3 r0;
-                    if (noiseFlavor == SDF_NOISE_BLUE) {
-                        // The R3 low-discrepancy lattice: alpha_i = round(2^32 / phi3^i) for phi3 = 1.2207440846057596
-                        // (the real root of x^4 = x + 1), as a fixed-point rank-1 lattice on the integer cell index. The uint
-                        // mul-add wraps mod 2^32 = the fractional part, so it is BIT-IDENTICAL across DXC's SPIR-V and DXIL
-                        // (a float frac would diverge). The three alphas are ROTATED across the axes so the offset components
-                        // decorrelate. "Blue-ish" low-discrepancy (de-clumped), NOT true isotropic blue noise. The seed folds
-                        // in ADDITIVELY (a lattice translation preserves low-discrepancy, unlike an xor), so the field varies
-                        // with seed AND a non-zero seed breaks the circulant's (1,1,1) main-diagonal degeneracy.
-                        uint3 uc = (asuint(int3(cell)) + seed);
-                        uint bx = ((uc.x * SDF_R3_ALPHA1) + (uc.y * SDF_R3_ALPHA2) + (uc.z * SDF_R3_ALPHA3));
-                        uint by = ((uc.x * SDF_R3_ALPHA2) + (uc.y * SDF_R3_ALPHA3) + (uc.z * SDF_R3_ALPHA1));
-                        uint bz = ((uc.x * SDF_R3_ALPHA3) + (uc.y * SDF_R3_ALPHA1) + (uc.z * SDF_R3_ALPHA2));
-                        r0 = (float3(bx, by, bz) * SDF_INV_2POW32);
-                    } else if (noiseFlavor == SDF_NOISE_GAUSSIAN) {
-                        // Central-limit: the mean of 3 decorrelated hashed uniforms per axis — a Bates(3) distribution, i.e.
-                        // bell-SHAPED and clustered toward the cell centre, not a true Gaussian (it has compact support, which
-                        // is exactly what keeps the +-jitter/2 bound). FLOAT-averaged, not uint-summed, to avoid 32-bit overflow.
-                        uint3 g1 = sdfPcg3d(key ^ SDF_HASH_STREAM_A);
-                        uint3 g2 = sdfPcg3d(key ^ SDF_HASH_STREAM_B);
-                        r0 = (((float3)h0 + (float3)g1 + (float3)g2) * (SDF_INV_2POW32 / 3.0));
-                    } else {
-                        // SDF_NOISE_WHITE (0, the default): the plain independent PCG3D uniform.
-                        r0 = ((float3)h0 * SDF_INV_2POW32);
-                    }
-
-                    localPosition -= (data0.xyz * cell);               // the SDF_OP_REPEAT fold
-                    localPosition -= ((r0 - 0.5) * data0.w);           // per-cell position jitter (data0.w peak-to-peak)
-
-                    // Tumble (an isometry): guarded by amplitude so a zeroed op stays an EXACT identity (no rotate, no
-                    // divergent codegen). The hashed axis is uniform on the sphere; the angle is |r1.z| * tumble * pi.
-                    if (data1.w > 0.0) {
-                        uint3 h1 = sdfPcg3d(key ^ SDF_HASH_TUMBLE);
-                        float3 r1 = ((float3)h1 * SDF_INV_2POW32);
-                        float zz = ((2.0 * r1.x) - 1.0);
-                        float rr = sqrt(max(0.0, (1.0 - (zz * zz))));
-                        float phi = (SDF_TAU * r1.y);
-                        float3 axis = float3((rr * cos(phi)), (rr * sin(phi)), zz);   // uniform on the unit sphere
-                        float angle = ((r1.z * data1.w) * SDF_PI);
-                        float ha = (0.5 * angle);
-                        float sa = sin(ha);
-                        float4 q = float4((axis * sa), cos(ha));       // (x,y,z,w) matches SDF_OP_ROTATE's layout
-                        localPosition = rotatePointByInverseQuaternion(localPosition, q);
-                    }
-
-                    // Per-cell material variant (same channel WallpaperFold recolors through): a hashed palette row in
-                    // 0..variants-1, added to a later shape's material by the SDF_OP_SHAPE_BLEND parityMaterialDelta apply.
-                    if (trackMaterial && (SDF_INSTRUCTION_MATERIAL(instructionHeader) != 0u)) {
-                        parityMaterialDelta = (int)(h0.z % SDF_INSTRUCTION_MATERIAL(instructionHeader));
-                    }
-
-                    break;
-                }
-                // Angular domain-repeat fold (KEEP IN SYNC with SdfProgramBuilder.RepeatPolar): fold the plane
-                // perpendicular to the axis into `count` equal sectors so the prototype repeats ROTATIONALLY around it.
-                // data0.x = sector angle 2*pi/count (HOST-BAKED), data0.y = count/(2*pi) = 1/angle (HOST-BAKED),
-                // data0.z = count, data0.w = 1/count (HOST-BAKED). header.y = axis (SDF_AXIS_*), header.z = mirror
-                // flag (reflect each sector across its bisector — the kaleidoscope fold), header.w = materialStride
-                // (per-sector palette stride; 0 = geometric only). A rotation into the base sector (and, when mirrored, a
-                // reflection) about the axis — BOTH isometries, so distances are preserved (factor 1, no step clamp; like
-                // SDF_OP_REPEAT the prototype must stay clear of the sector walls). atan2/floor are floats, so a
-                // sector-seam pixel carries the usual +-1 LSB warp noise (geometry only; the per-sector material can flip
-                // at a seam exactly as SDF_OP_WALLPAPER_FOLD's can). At the axis (r == 0) atan2(0,0) = 0 keeps it a no-op.
-                case SDF_OP_REPEAT_POLAR: {
-                    SDF_VM_LOAD_DATA0;
-                    uint polarAxis = SDF_INSTRUCTION_SHAPE(instructionHeader);
-                    // The fold plane (u,v) perpendicular to the axis; the axial coordinate is untouched.
-                    float2 pv;
-                    if (polarAxis == SDF_AXIS_X) { pv = localPosition.yz; }
-                    else if (polarAxis == SDF_AXIS_Z) { pv = localPosition.xy; }
-                    else { pv = localPosition.xz; }   // SDF_AXIS_Y (default): the XZ ground plane
-
-                    float sectorAngle = data0.x;
-                    float a = (atan2(pv.y, pv.x) + (0.5 * sectorAngle));
-                    float r = length(pv);
-                    float sector = floor(a * data0.y);                         // data0.y = 1/angle
-                    a = ((a - (sectorAngle * sector)) - (0.5 * sectorAngle));  // a in [-angle/2, angle/2)
-                    if (SDF_INSTRUCTION_BLEND(instructionHeader) != 0u) { a = abs(a); }             // mirror: reflect across the sector bisector
-                    pv = (float2(cos(a), sin(a)) * r);
-
-                    if (polarAxis == SDF_AXIS_X) { localPosition.yz = pv; }
-                    else if (polarAxis == SDF_AXIS_Z) { localPosition.xy = pv; }
-                    else { localPosition.xz = pv; }
-
-                    // Per-sector material variant (the same channel SDF_OP_WALLPAPER_FOLD / SDF_OP_CELL_JITTER recolor
-                    // through): wrap the raw sector index into [0, count) and stride the palette.
-                    if (trackMaterial && (SDF_INSTRUCTION_MATERIAL(instructionHeader) != 0u)) {
-                        float wrapped = (sector - (data0.z * floor(sector * data0.w)));   // data0.z = count, data0.w = 1/count
-                        parityMaterialDelta = ((int)wrapped * (int)SDF_INSTRUCTION_MATERIAL(instructionHeader));
-                    }
-
-                    break;
-                }
-                // POINT op (KEEP IN SYNC with SdfProgramBuilder.DomainWarp): perturb the sample point by a bounded,
-                // cross-coupled sinusoidal field before the shapes evaluate — organic bulge/wobble/terrain. data0.xyz =
-                // per-axis frequency, data0.w = amplitude; each axis is driven by the NEXT axis's coordinate so the warp
-                // is non-separable. Deterministic float trig (±1 LSB). The Jacobian is I plus a perturbation of spectral
-                // norm <= amp*max|freq_i| (J - I is a scaled cyclic permutation, so its norm is its largest entry), so the metric
-                // stretches by up to (1 + amp*max|freq_i|); SdfProgram.AnalyzeLipschitz bakes
-                // that step clamp and folds the point's max travel (amp*sqrt(3)) into a downstream twist/bend's reach.
-                case SDF_OP_DOMAIN_WARP: {
-                    SDF_VM_LOAD_DATA0;
-                    localPosition += (data0.w * float3(
-                        sin(data0.x * localPosition.y),
-                        sin(data0.y * localPosition.z),
-                        sin(data0.z * localPosition.x)));
-                    break;
-                }
-                // Reflection fold across an ARBITRARY plane (KEEP IN SYNC with SdfProgramBuilder.SymmetryPlane): the
-                // general-normal superset of SDF_OP_SYMMETRY_X/Y/Z. data0.xyz = unit plane normal, data0.w = offset;
-                // points on the negative side (dot(p,n)+offset < 0) mirror onto the positive side. For n = (1,0,0),
-                // offset 0 this is abs(localPosition.x) to the bit. A reflection is an isometry, so distanceScale is
-                // untouched and the field stays 1-Lipschitz.
-                case SDF_OP_SYMMETRY_PLANE: {
-                    SDF_VM_LOAD_DATA0;
-                    float spT = (dot(localPosition, data0.xyz) + data0.w);
-                    localPosition -= ((2.0 * min(spT, 0.0)) * data0.xyz);
-                    break;
-                }
-                // The warps rotate a plane pair by an angle keyed on ONE coordinate (GLSL mat2(c,-s,s,c) * v, written as
-                // explicit components: x' = c*x + s*y, y' = -s*x + c*y). NOT isometries — space stretches tangentially —
-                // so authored rates stay moderate (the validator bounds them) and SdfProgram.AnalyzeLipschitz folds the
-                // exact Jacobian operator norm over the chain's reach into the program's step clamp.
-                //
-                // The three members are DISTINCT ops, not a symmetric family — each names the plane it rotates:
-                //   BEND_X: angle keyed on x, rotates the XY plane
-                //   BEND_Y: angle keyed on y, rotates the XY plane
-                //   BEND_Z: angle keyed on y, rotates the YZ plane
-                // TWIST_Y keys on y and rotates XZ (the axis-orthogonal plane) — the only one that twists about its axis.
-                // KEEP IN SYNC with SdfFieldEvaluator.WarpPoint, the render reading the mesh audit samples.
-                case SDF_OP_ROTATE_PLANE: {
-                    SDF_VM_LOAD_DATA0;
-                    uint u = (SDF_INSTRUCTION_SHAPE(instructionHeader) == SDF_PLANE_YZ) ? SDF_AXIS_Y : SDF_AXIS_X;
-                    uint v = (SDF_INSTRUCTION_SHAPE(instructionHeader) == SDF_PLANE_XY) ? SDF_AXIS_Y : SDF_AXIS_Z;
-                    uint driver = SDF_INSTRUCTION_BLEND(instructionHeader);
-                    if (driver >= 3u) { return sdfIsaErrorHit(); }
-                    float angle = data0.x * (sdfComponent(localPosition, driver) - data0.y);
-                    float c = cos(angle), sn = sin(angle);
-                    float pu = sdfComponent(localPosition, u), pv = sdfComponent(localPosition, v);
-                    sdfSetComponent(localPosition, u, c * pu + sn * pv);
-                    sdfSetComponent(localPosition, v, -sn * pu + c * pv);
-                    break;
-                }
-                // Radial flare warp (sdfAxialProfile): distanceScale takes the size correction, the same channel
-                // SDF_OP_SCALE/SDF_OP_LOG_SPHERE use.
-                case SDF_OP_AXIAL_PROFILE: {
-                    SDF_VM_LOAD_DATA0;
-                    SDF_VM_LOAD_DATA1;
-                    uint axis = SDF_INSTRUCTION_SHAPE(instructionHeader);
-                    if (axis >= 3u) { return sdfIsaErrorHit(); }
-                    distanceScale *= sdfAxialProfile(localPosition, axis, data0, data1);
-                    break;
-                }
-                // Polynomial shear (sdfShear).
-                case SDF_OP_SHEAR: {
-                    SDF_VM_LOAD_DATA0;
-                    uint target = SDF_INSTRUCTION_SHAPE(instructionHeader), driver = SDF_INSTRUCTION_BLEND(instructionHeader);
-                    if (target >= 3u || driver >= 3u) { return sdfIsaErrorHit(); }
-                    sdfShear(localPosition, target, driver, data0.xyz);
-                    break;
-                }
-                // Gaussian domain push (KEEP IN SYNC with SdfProgramBuilder.GaussianPush): always a HEAD+TAIL pair —
-                // this case reads its own data0 (Center)/data1 (Radii) plus the TAIL instruction's data0.xyz (Push)
-                // by indexing one instruction ahead in the packed word stream (SdfProgram guarantees the tail is
-                // adjacent and same-owner). The tail's own case is an inert no-op.
-                case SDF_OP_GAUSSIAN_PUSH: {
-                    SDF_VM_LOAD_DATA0;
-                    SDF_VM_LOAD_DATA1;
-                    float3 gaussianPush = float3(data0.w, data1.w, asfloat(SDF_INSTRUCTION_SHAPE(instructionHeader)));
-                    float3 gaussianOffset = ((localPosition - data0.xyz) / data1.xyz);
-                    float gaussianWeight = exp(-dot(gaussianOffset, gaussianOffset));
-                    localPosition -= (gaussianPush * gaussianWeight);
-                    break;
-                }
-                // Per-shape lane-driven erosion (KEEP IN SYNC with SdfProgramBuilder.LaneErode): data0 = (lane index
-                // 0..3, from, to, noiseScale), data1.x = the target shape's HOST-BAKED reach (its bound radius).
-                // t = saturate((lane - from) / (to - from)) (a reversed from > to range runs the fold the other way);
-                // t >= 1 sets the cheap early-out (SDF_OP_SHAPE_BLEND skips its own evaluation entirely — no field cost);
-                // otherwise a 3D noise sample ragged-fronts t before it scales the reach into a world-unit candidate
-                // erosion, consumed by the immediately-following SDF_OP_SHAPE_BLEND (whatever ordinary point ops the
-                // shape's own chain still applies in between) and cleared there.
-                case SDF_OP_LANE_ERODE: {
-                    SDF_VM_LOAD_DATA0;
-                    SDF_VM_LOAD_DATA1;
-                    float lane = sdfFieldLane(currentSlot, (uint)data0.x);
-                    float t = saturate((lane - data0.y) / (data0.z - data0.y));
-
-                    if (t >= 1.0) {
-                        laneErodeSkipShape = true;
-                        laneErodeAmount = 0.0;
-                    } else {
-                        float noiseSample = 0.5 + 0.5 * sdfValueNoise3((localPosition * data0.w), SDF_LANE_ERODE_SEED);
-                        float raggedT = saturate(t + ((noiseSample - 0.5) * SDF_LANE_ERODE_RAGGED_AMOUNT * (4.0 * t * (1.0 - t))));
-
-                        laneErodeSkipShape = false;
-                        laneErodeAmount = (raggedT * data1.x);
-                    }
-
-                    break;
-                }
-                case SDF_OP_ELONGATE: {
-                    SDF_VM_LOAD_DATA0;
-                    localPosition -= clamp(localPosition, -data0.xyz, data0.xyz);
-                    break;
-                }
-                // The FIELD ops act on the running result, not the point: Onion shells everything accumulated so far
-                // into a hollow skin; Dilate inflates it. Both operate in world units (candidates were distance-scaled
-                // before blending).
-                case SDF_OP_ONION: {
-                    SDF_VM_LOAD_DATA0;
-                    result.distance = (abs(result.distance) - data0.x);
-                    break;
-                }
-                case SDF_OP_DILATE: {
-                    SDF_VM_LOAD_DATA0;
-                    result.distance -= data0.x;
-                    break;
-                }
-                // FIELD op (KEEP IN SYNC with SdfProgramBuilder.Displace): add a bounded sinusoidal RELIEF to the
-                // accumulated field, evaluated at the current folded point — the SDF-native height/parallax map (the
-                // relief is real geometry). data0.xyz = per-axis frequency, data0.w = amplitude. The separable
-                // sin-product basis is deterministic (float trig, ±1 LSB like the twist/bend warps), so it stays
-                // cross-backend parity-safe without a hashed noise table. Its squared gradient norm is MULTILINEAR in the three
-                // squared sines, so it maximizes at a cube vertex and reaches exactly amp*max|freq_i| (the infinity norm,
-                // not the Euclidean length): the field can overestimate by (1 + amp*max|freq_i|), which
-                // SdfProgram.AnalyzeLipschitz bakes as the step clamp.
-                case SDF_OP_DISPLACE: {
-                    SDF_VM_LOAD_DATA0;
-                    // Evaluate the same continuous field at every distance. Switching to f-|amplitude| outside
-                    // a band introduces a jump that corrupts footprint hits and finite-difference curvature.
-                    float3 df = (data0.xyz * localPosition);
-                    result.distance += (data0.w * ((sin(df.x) * sin(df.y)) * sin(df.z)));
-                    break;
-                }
-                // fBm hash-lattice value-noise relief (KEEP IN SYNC with Puck.SignedDistance.SdfOp.NoiseDisplace /
-                // SdfProgramBuilder.NoiseDisplace / SdfProgram.NoiseDisplaceLipschitz). data0 = (frequency, amplitude,
-                // gain, lacunarity), data1.x = HOST-BAKED 1/sum(gain^k) normalization, header.y = seed, header.z =
-                // octave count. The corner hash is INTEGER-ONLY (sdfValueNoise3), so cell decisions are bit-identical
-                // across both DXC targets; the blend is float mul/add (+-1 LSB). AnalyzeLipschitz bakes the gradient
-                // bound as the step clamp; the normalized sum stays in [-1, 1], so the surface reach is bounded by
-                // |amplitude| (the scoped-reach / cull-margin channels read that).
-                case SDF_OP_CELL_DISPLACE: {
-                    SDF_VM_LOAD_DATA0;
-                    float3 ignoredGradient;
-                    float value = sdfCellDistanceGrad(localPosition * data0.x, SDF_INSTRUCTION_SHAPE(instructionHeader),
-                        SDF_INSTRUCTION_BLEND(instructionHeader), data0.z, ignoredGradient);
-                    result.distance += data0.y * (value - 0.5);
-                    break;
-                }
-                case SDF_OP_NOISE_DISPLACE: {
-                    SDF_VM_LOAD_DATA0;
-                    SDF_VM_LOAD_DATA1;
-                    // The relief's mask rows stand directly before it in its segment (the program's door, SdfProgram.
-                    // ReliefRows.cs); malformed words that count past the segment's start or the row cap are refused here.
-                    uint reliefRows = SDF_INSTRUCTION_MATERIAL(instructionHeader);
-                    if ((reliefRows > SDF_MAX_RELIEF_ROWS) || (reliefRows > (index - segmentMeta.z))) { return sdfIsaErrorHit(); }
-                    float maskProduct = ((reliefRows == 0u) ? 1.0 : sdfMaskProduct((index - reliefRows), reliefRows, localPosition, dataOffset));
-                    // A weight of exactly zero adds no relief, so the noise is not evaluated.
-                    if (maskProduct <= 0.0) { break; }
-                    // Keep the field continuous, including outside the zero-set neighborhood: the bake's lattice,
-                    // material points and gradient taps all consume these values (see SDF_OP_DISPLACE).
-                    float3 q = (localPosition * data0.x);
-                    float octaveAmplitude = 1.0;
-                    float noiseSum = 0.0;
-                    uint octaveCount = SDF_INSTRUCTION_BLEND(instructionHeader);
-                    for (uint octave = 0u; octave < SDF_MAX_NOISE_OCTAVES; octave++) {
-                        if (octave >= octaveCount) { break; }
-                        uint octaveSeed = (SDF_INSTRUCTION_SHAPE(instructionHeader) + octave);
-                        noiseSum += (octaveAmplitude * sdfValueNoise3(q, uint3(octaveSeed, (octaveSeed * SDF_HASH_STREAM_A), (octaveSeed * SDF_HASH_STREAM_B))));
-                        q *= data0.w;
-                        octaveAmplitude *= data0.z;
-                    }
-                    // A relief its masks left at weight one adds exactly what an unmasked one adds.
-                    result.distance += (((data0.y * data1.x) * noiseSum) * maskProduct);
-                    break;
-                }
-                // A relief mask's data row (KEEP IN SYNC with SdfOp.ReliefRow): the relief after its run reads it
-                // (sdfMaskProduct); it moves no point and writes no field.
-                case SDF_OP_RELIEF_ROW: {
-                    break;
-                }
-                case SDF_OP_WALLPAPER_FOLD: {
-                    SDF_VM_LOAD_DATA0;
-                    SDF_VM_LOAD_DATA1;
-                    // header lanes: y = the wallpaper group, z = the fold plane (0 = XZ, 1 = XY, 2 = YZ), w = the
-                    // parity-material stride. The fold is an isometry, so distanceScale is untouched.
-                    uint group = SDF_INSTRUCTION_SHAPE(instructionHeader);
-                    uint plane = SDF_INSTRUCTION_BLEND(instructionHeader);
-                    uint axisA = ((plane == SDF_PLANE_YZ) ? SDF_AXIS_Y : SDF_AXIS_X);
-                    uint axisB = ((plane == SDF_PLANE_XY) ? SDF_AXIS_Y : SDF_AXIS_Z);
-                    float2 cellIndex;
-                    float2 cellPoint = float2(sdfComponent(localPosition, axisA), sdfComponent(localPosition, axisB));
-                    float2 folded = sdfWallpaperFoldCell(cellPoint, group, data0.xy, data0.zw, data1.xy, cellIndex);
-
-                    sdfSetComponent(localPosition, axisA, folded.x);
-                    sdfSetComponent(localPosition, axisB, folded.y);
-
-                    // The stride recolors the shapes the fold repeats: the cell key strides their declared material, so
-                    // each lattice cell selects its own row of the palette. Distances never depend on it.
-                    if (trackMaterial && (SDF_INSTRUCTION_MATERIAL(instructionHeader) != 0u)) {
-                        parityMaterialDelta = (sdfWallpaperCellKey(group, cellIndex) * (int)SDF_INSTRUCTION_MATERIAL(instructionHeader));
-                    }
-
-                    break;
-                }
-                case SDF_OP_SHAPE_BLEND: {
-                    // Consume the pending SDF_OP_LANE_ERODE effect (if any) FIRST, before every other skip path below,
-                    // so it never leaks onto a later, unrelated shape (a bound-culled
-                    // shape still clears it here).
-                    bool laneEroded = laneErodeSkipShape;
-                    float laneErosion = laneErodeAmount;
-                    laneErodeSkipShape = false;
-                    laneErodeAmount = 0.0;
-
-                    if (laneEroded) {
-                        break;
-                    }
-
-                    SDF_VM_LOAD_DATA0;
-                    SDF_VM_LOAD_DATA1;
-                    // The per-shape flavour of the segment early-out above (same exactness argument): inside an
-                    // EVALUATED segment, a Union shape whose own (tighter) sphere cannot beat the running minimum
-                    // skips just its evaluation — always sound, because shape ops never mutate chain state.
-                    uint4 shapeBoundMeta = sdfProgramWord(boundsOffset + (SDF_BOUND_RECORD_VECTORS * index) + 1u);
-
-                    [branch]
-                    if (shapeBoundMeta.x != SDF_BOUND_NONE
-                    ) {
-                        float4 shapeBound = asfloat(sdfProgramWord(boundsOffset + (SDF_BOUND_RECORD_VECTORS * index)));
-                        float3 shapeBoundCenter = shapeBound.xyz;
-                        bool shapeBoundReady = (shapeBoundMeta.x == SDF_BOUND_STATIC);
-
-#ifdef SDF_DYNAMIC_TRANSFORMS
-                        if (shapeBoundMeta.x == SDF_BOUND_DYNAMIC) {
-                            shapeBoundCenter = sdfDynamicBoundCenter(shapeBoundCenter, shapeBoundMeta.y);
-                            shapeBoundReady = true;
-                        }
-#endif
-
-                        if (shapeBoundReady && (result.distance <= SDF_FAR_DISTANCE)) {
-                            float3 toShapeCenter = (worldPosition - shapeBoundCenter);
-                            float shapeClearance = max((result.distance + shapeBound.w), 0.0);
-
-                            if (dot(toShapeCenter, toShapeCenter) >= (shapeClearance * shapeClearance)) {
-                                break;
-                            }
-                        }
-                    }
-
-                    uint shapeType = SDF_INSTRUCTION_SHAPE(instructionHeader);
-                    float candidate = ((evaluateShape(shapeType, localPosition, data0, data1) * distanceScale) + laneErosion);
-
-                    // Hand the DISTANCE-SCALED (plus any pending lane erosion) candidate to the shared blend tail below.
-                    composeCandidate = candidate;
-                    composeBlend = SDF_INSTRUCTION_BLEND(instructionHeader);
-                    composeSmooth = data1.x;
-                    composePending = true;
-
-                    if (trackMaterial) {
-                        int material = (int)SDF_INSTRUCTION_MATERIAL(instructionHeader);
-
-                        // An active wallpaper stride recolors this shape by its cell key — never a screen sentinel (the whole
-                        // >= SDF_SCREEN_MATERIAL range, not just the exact value: a screen-instance id must survive intact).
-                        if ((material < SDF_SCREEN_MATERIAL) && (parityMaterialDelta != 0)) {
-                            material += parityMaterialDelta;
-                        }
-
-                        composeMaterial = material;
-                        composeInstance = segmentInstance;
-                        composeSlot = currentSlot;
-                    }
-                    break;
-                }
-                // Scoped field accumulator (KEEP IN SYNC with Puck.SignedDistance.SdfOp.PushField/PopField). A scope touches ONLY
-                // the FIELD — never localPosition / distanceScale / parityMaterialDelta — so the point chain is untouched
-                // and ResetPoint semantics are unchanged.
-                case SDF_OP_PUSH_FIELD: {
-                    switch (fieldDepth) {
-                        case 0u: parent0 = result; break;
-                        case 1u: parent1 = result; break;
-                        case 2u: parent2 = result; break;
-                        case 3u: parent3 = result; break;
-                        default: return sdfIsaErrorHit();
-                    }
-                    fieldDepth++;
-                    result.distance = SDF_FAR_DISTANCE;
-                    if (trackMaterial) {
-                        result.material = 0;
-                        result.instanceIndex = -1;
-                        result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
-                    }
-                    break;
-                }
-                case SDF_OP_POP_FIELD: {
-                    if (fieldDepth == 0u) { return sdfIsaErrorHit(); }
-                    fieldDepth--;
-                    SDF_VM_LOAD_DATA1;
-                    // The scope's accumulated field IS the candidate — ALREADY in world units (its shapes were
-                    // distance-scaled as they blended in), so it is NOT re-multiplied by distanceScale, and the point
-                    // parityMaterialDelta must NOT touch it (the fusion trap). Restore the parent accumulator as the
-                    // blend LHS, then fall into the SAME material-winner + blendShape tail a SHAPE uses. The compose blend
-                    // + smooth ride the POP instruction (header.z / data1.x, baked by SdfProgramBuilder.PushField).
-                    // data1.y is the scope's baked 1/L candidate scale on every pop; a stairs pop carries its step count
-                    // in data1.z (KEEP IN SYNC with AnalyzeLipschitz and the fixed-point mirror).
-                    composeBlend = SDF_INSTRUCTION_BLEND(instructionHeader);
-                    bool isStairs = (composeBlend == SDF_BLEND_STAIRS_UNION || composeBlend == SDF_BLEND_STAIRS_SUBTRACTION);
-                    float candidateScale = data1.y;
-                    composeCandidate = result.distance;
-                    if (candidateScale > 0.0) {
-                        composeCandidate *= candidateScale;
-                    }
-                    if (trackMaterial) {
-                        composeMaterial = result.material;
-                        composeInstance = result.instanceIndex;
-                        composeSlot = result.frameSlot;
-                    }
-                    composeSmooth = data1.x;
-                    switch (fieldDepth) {
-                        case 0u: result = parent0; break;
-                        case 1u: result = parent1; break;
-                        case 2u: result = parent2; break;
-                        default: result = parent3; break;
-                    }
-
-                    if (composeBlend == SDF_BLEND_MORPH) {
-                        SDF_VM_LOAD_DATA0;
-                        float lane = sdfFieldLane(currentSlot, (uint)data0.x);
-                        float t = saturate((lane - data0.y) / (data0.z - data0.y));
-                        result.distance = lerp(result.distance, composeCandidate, t);
-                        if (trackMaterial && t >= 0.5) {
-                            result.material = composeMaterial;
-                            result.instanceIndex = composeInstance;
-                            result.frameSlot = composeSlot;
-                        }
-                        break;
-                    }
-
-                    if (isStairs) {
-                        float r = composeSmooth;
-                        float n = data1.z;
-                        if (n >= 1.0 && r > 0.0) {
-                            float s = r / n;
-                            float period = 2.0 * s;
-                            bool isSub = (composeBlend == SDF_BLEND_STAIRS_SUBTRACTION);
-                            float a = result.distance;
-                            float b = composeCandidate;
-                            float u = isSub ? (-b - r) : (b - r);
-                            float arg = u - a + s;
-                            float m = arg - period * floor(arg / period);
-                            float w = m - s;
-                            float dStairs = 0.5 * (u + a + abs(w));
-                            if (isSub) {
-                                result.distance = max(max(a, -b), -dStairs);
-                                if (trackMaterial && -b > a) {
-                                    // A cut face keeps the parent's frame slot (sdfComposeCandidate).
-                                    result.material = composeMaterial;
-                                    result.instanceIndex = composeInstance;
-                                }
-                            } else {
-                                result.distance = min(min(a, b), dStairs);
-                                if (trackMaterial && b < a) {
-                                    result.material = composeMaterial;
-                                    result.instanceIndex = composeInstance;
-                                    result.frameSlot = composeSlot;
-                                }
-                            }
-                            break;
-                        }
-                    }
-
-                    composePending = true;
-                    break;
-                }
+#include "../isa/sdf-field-map.hlsli"
                 default: {
                     return sdfIsaErrorHit();
                 }

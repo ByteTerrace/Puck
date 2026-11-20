@@ -285,42 +285,41 @@ public sealed partial class SdfFieldEvaluator {
                 chain = ChainCertificate.Identity;
             }
 
-            switch (instruction.Op) {
-                case SdfOp.ResetPoint:
-                case SdfOp.PushField:
-                case SdfOp.PopField:
-                case SdfOp.ReliefRow: {
+            switch (SdfFieldOps.CertificateChainOf(value: instruction.Op)) {
+                case SdfCertificateChainAction.Identity: {
                         break;
                     }
-                case SdfOp.Translate: {
+                case SdfCertificateChainAction.Translate: {
                         chain.Translate(instruction: in instruction);
                         break;
                     }
-                case SdfOp.Rotate: {
+                case SdfCertificateChainAction.Rotate: {
                         if (!IsIdentityRotation(instruction: in instruction)) {
                             chain.Rotate(instruction: in instruction);
                         }
 
                         break;
                     }
-                case SdfOp.Scale: {
+                case SdfCertificateChainAction.Scale: {
                         if (!IsUnitScale(instruction: in instruction)) {
                             chain.ScaleBy(instruction: in instruction);
                         }
 
                         break;
                     }
-                case SdfOp.ShapeBlend: {
+                case SdfCertificateChainAction.ShapeBlend: {
                         if (!instruction.Detail) {
                             reaches[index] = chain.Certify(instruction: in instruction);
                         }
 
                         break;
                     }
-                default: {
+                case SdfCertificateChainAction.Unknown: {
                         chain = ChainCertificate.Unknown;
                         break;
                     }
+                default:
+                    throw new InvalidOperationException(message: "Invalid CertificateChain action.");
             }
         }
 
@@ -333,14 +332,13 @@ public sealed partial class SdfFieldEvaluator {
     private static LocalCertificate? TryLocalCertificate(in CompiledInstruction instruction) {
         const double Slack = (4.0 * RawUnit);
 
-        switch ((SdfShapeType)instruction.Shape) {
-            case SdfShapeType.Sphere: {
+        switch (SdfFieldShapes.CertificateOf(value: (SdfShapeType)instruction.Shape)) {
+            case SdfCertificateAction.Sphere: {
                     var radius = Math.Abs(value: ((double)instruction.Data0X));
 
                     return Separable(radius: radius);
                 }
-            case SdfShapeType.Box:
-            case SdfShapeType.ScreenSlab: {
+            case SdfCertificateAction.Box: {
                     var corner = instruction.Data0W;
 
                     if (
@@ -352,17 +350,17 @@ public sealed partial class SdfFieldEvaluator {
 
                     return Separable(radius: Length(x: ((double)instruction.Data0X), y: ((double)instruction.Data0Y), z: ((double)instruction.Data0Z)));
                 }
-            case SdfShapeType.Cylinder: {
+            case SdfCertificateAction.Cylinder: {
                     if ((instruction.Data0X < FixedQ4816.Zero) || (instruction.Data0Y < FixedQ4816.Zero)) {
                         return null;
                     }
 
                     return Separable(radius: (Length(x: ((double)instruction.Data0X), y: ((double)instruction.Data0Y), z: 0.0) + Math.Abs(value: ((double)instruction.Data1W))));
                 }
-            case SdfShapeType.Torus: {
+            case SdfCertificateAction.Torus: {
                     return Separable(radius: (Math.Abs(value: ((double)instruction.Data0X)) + Math.Abs(value: ((double)instruction.Data0Y))));
                 }
-            case SdfShapeType.Capsule: {
+            case SdfCertificateAction.Capsule: {
                     var (x, y, z) = (((double)instruction.Data0X), ((double)instruction.Data0Y), ((double)instruction.Data0Z));
 
                     // The rounded parameter is clamped into [0, 1], so the point it picks lies on the segment and the
@@ -378,15 +376,17 @@ public sealed partial class SdfFieldEvaluator {
                         Radius: ((0.5 * Length(x: x, y: y, z: z)) + Math.Abs(value: ((double)instruction.Data0W)))
                     );
                 }
-            case SdfShapeType.Superellipsoid: {
+            case SdfCertificateAction.Superellipsoid: {
                     return TrySuperellipsoidCertificate(instruction: in instruction);
                 }
-            case SdfShapeType.Trapezoid: {
+            case SdfCertificateAction.Trapezoid: {
                     return TryTrapezoidCertificate(instruction: in instruction);
                 }
-            default: {
+            case SdfCertificateAction.Unavailable: {
                     return null;
                 }
+            default:
+                throw new InvalidOperationException(message: "Invalid Certificate action.");
         }
 
         static LocalCertificate Separable(double radius) => new(

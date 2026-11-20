@@ -13,7 +13,7 @@ public sealed partial class SdfProgram {
     private static float[] AnalyzeReliefPointFactors(SdfInstruction[] instructions) {
         if (!Array.Exists(
             array: instructions,
-            match: static i => (i.Op is SdfOp.CellDisplace or SdfOp.NoiseDisplace or SdfOp.Displace)
+            match: static i => (SdfFieldOps.ReliefPointFactorOf(value: i.Op) == SdfReliefPointFactorAction.SampleRelief)
         )) { return []; }
         var factors = new float[instructions.Length];
         var factor = 1f;
@@ -22,18 +22,18 @@ public sealed partial class SdfProgram {
         for (var index = 0; (index < instructions.Length); index++) {
             var instruction = instructions[index];
 
-            switch (instruction.Op) {
-                case SdfOp.ResetPoint:
+            switch (SdfFieldOps.ReliefPointFactorOf(value: instruction.Op)) {
+                case SdfReliefPointFactorAction.ResetPoint:
                     factor = 1f;
                     unsupported = null;
                     break;
-                case SdfOp.Scale:
+                case SdfReliefPointFactorAction.Scale:
                     factor /= SdfDerivedLanes.ScaleCorrection(scale: new Vector3(x: instruction.Data0.X, y: instruction.Data0.Y, z: instruction.Data0.Z));
                     break;
-                case SdfOp.DomainWarp:
+                case SdfReliefPointFactorAction.DomainWarp:
                     factor *= DisplaceWarpLipschitz(instruction: instruction);
                     break;
-                case SdfOp.GaussianPush:
+                case SdfReliefPointFactorAction.GaussianPush:
                     factor *= GaussianPushLipschitz(
                         new(
                             x: instruction.Data0.W,
@@ -47,33 +47,12 @@ public sealed partial class SdfProgram {
                         )
                     );
                     break;
-                case SdfOp.Translate:
-                case SdfOp.Rotate:
-                case SdfOp.TransformDynamic:
-                case SdfOp.SymmetryPlane:
-                case SdfOp.Elongate:
-                case SdfOp.ShapeBlend:
-                case SdfOp.Onion:
-                case SdfOp.Dilate:
-                case SdfOp.ReliefRow:
-                case SdfOp.LaneErode:
-                case SdfOp.PushField:
-                case SdfOp.PopField:
+                case SdfReliefPointFactorAction.Identity:
                     break;
-                case SdfOp.RotatePlane:
-                case SdfOp.Repeat:
-                case SdfOp.RepeatLimited:
-                case SdfOp.WallpaperFold:
-                case SdfOp.LogSphere:
-                case SdfOp.CellJitter:
-                case SdfOp.RepeatPolar:
-                case SdfOp.AxialProfile:
-                case SdfOp.Shear:
+                case SdfReliefPointFactorAction.NoGlobalBound:
                     unsupported ??= (instruction.Op, index);
                     break;
-                case SdfOp.Displace:
-                case SdfOp.NoiseDisplace:
-                case SdfOp.CellDisplace:
+                case SdfReliefPointFactorAction.SampleRelief:
                     if (unsupported is { } op) {
                         throw new ArgumentException(message: $"{instruction.Op} at instruction {index} samples the point {op.Op} at instruction {op.Index} moved, which has no global continuous derivative bound, so no step bound covers the relief. ResetPoint and restore the shape's rigid frame before the relief.");
                     }
@@ -82,8 +61,10 @@ public sealed partial class SdfProgram {
                     }
                     factors[index] = factor;
                     break;
-                default:
+                case SdfReliefPointFactorAction.Unsupported:
                     throw new ArgumentException(message: $"Instruction {index} is {instruction.Op}, which the relief point-factor analysis does not classify.");
+                default:
+                    throw new InvalidOperationException(message: "Invalid ReliefPointFactor action.");
             }
         }
         return factors;

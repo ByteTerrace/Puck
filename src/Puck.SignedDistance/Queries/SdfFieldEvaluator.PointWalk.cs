@@ -193,8 +193,8 @@ public sealed partial class SdfFieldEvaluator {
             ref readonly var instruction = ref instructions[index];
 
             ++visited;
-            switch (instruction.Op) {
-                case SdfOp.ResetPoint: {
+            switch (instruction.PointAction) {
+                case SdfPointAction.ResetPoint: {
                         localPosition = worldPosition;
                         distanceScale = FixedQ4816.One;
                         materialDelta = 0;
@@ -209,7 +209,7 @@ public sealed partial class SdfFieldEvaluator {
 
                         break;
                     }
-                case SdfOp.Translate: {
+                case SdfPointAction.Translate: {
                         localPosition = new FixedVector3(
                             X: FixedQ4816.FromRawBits(value: unchecked((localPosition.X.Value - instruction.Data0X.Value))),
                             Y: FixedQ4816.FromRawBits(value: unchecked((localPosition.Y.Value - instruction.Data0Y.Value))),
@@ -217,7 +217,7 @@ public sealed partial class SdfFieldEvaluator {
                         );
                         break;
                     }
-                case SdfOp.Rotate: {
+                case SdfPointAction.Rotate: {
                         // The identity, either sign of it, rotates through the fused kernel to the point itself: t is
                         // ±w·v rounded from an exact multiple of one, and d is zero.
                         if (IsIdentityRotation(instruction: in instruction)) {
@@ -230,7 +230,7 @@ public sealed partial class SdfFieldEvaluator {
                         );
                         break;
                     }
-                case SdfOp.Scale: {
+                case SdfPointAction.Scale: {
                         // A unit scale divides and multiplies by one, which is exact: skipping it changes no bit.
                         if (IsUnitScale(instruction: in instruction)) {
                             break;
@@ -243,61 +243,49 @@ public sealed partial class SdfFieldEvaluator {
                         distanceScale *= instruction.Data0W;
                         break;
                     }
-                case SdfOp.Repeat:
-                case SdfOp.RepeatLimited:
-                case SdfOp.SymmetryPlane:
-                case SdfOp.Elongate: {
+                case SdfPointAction.Fold: {
                         localPosition = FoldPoint(instruction: in instruction, localPosition: localPosition);
                         break;
                     }
-                case SdfOp.AxialProfile:
-                case SdfOp.RotatePlane: {
+                case SdfPointAction.Warp: {
                         localPosition = WarpPoint(distanceScale: ref distanceScale, instruction: in instruction, localPosition: localPosition);
                         break;
                     }
-                case SdfOp.Shear:
-                case SdfOp.GaussianPush:
-                case SdfOp.DomainWarp:
-                case SdfOp.RepeatPolar:
-                case SdfOp.WallpaperFold:
-                case SdfOp.LogSphere:
-                case SdfOp.CellJitter: {
+                case SdfPointAction.RenderWarp: {
                         localPosition = RenderWarpPoint(distanceScale: ref distanceScale, instruction: in instruction, localPosition: localPosition, materialDelta: ref materialDelta);
                         break;
                     }
-                case SdfOp.LaneErode: {
+                case SdfPointAction.LaneErode: {
                         var amount = LaneErodeAmount(instruction: in instruction, localPosition: localPosition);
 
                         laneErodeSkip = (amount is null);
                         laneErodeAmount = (amount ?? FixedQ4816.Zero);
                         break;
                     }
-                case SdfOp.Onion:
-                case SdfOp.CellDisplace:
-                case SdfOp.Dilate: {
+                case SdfPointAction.EditField: {
                         resultDistance = EditField(instruction: in instruction, localPosition: localPosition, resultDistance: resultDistance);
                         break;
                     }
-                case SdfOp.NoiseDisplace: {
+                case SdfPointAction.WeightedRelief: {
                         resultDistance = WeightedRelief(instruction: in instruction, localPosition: localPosition, powerWork: ref powerWork, resultDistance: resultDistance);
                         break;
                     }
-                case SdfOp.ReliefRow: {
-                        // A relief's data row: its relief reads it (instruction.ReliefMasks); it does nothing here.
+                case SdfPointAction.Identity: {
+                        // Data for the following relief.
                         break;
                     }
-                case SdfOp.Displace: {
+                case SdfPointAction.RenderEditField: {
                         resultDistance = RenderEditField(instruction: in instruction, localPosition: localPosition, resultDistance: resultDistance);
                         break;
                     }
-                case SdfOp.PushField: {
+                case SdfPointAction.PushField: {
                         influence?.Push();
                         scopes[scopeDepth++] = (resultDistance, resultMaterial);
                         resultDistance = FarDistance;
                         resultMaterial = 0;
                         break;
                     }
-                case SdfOp.PopField: {
+                case SdfPointAction.PopField: {
                         var (savedFieldDistance, savedFieldMaterial) = scopes[--scopeDepth];
                         influence?.Pop(candidate: resultDistance, current: savedFieldDistance, instruction: instruction);
 
@@ -310,7 +298,7 @@ public sealed partial class SdfFieldEvaluator {
                         );
                         break;
                     }
-                case SdfOp.ShapeBlend: {
+                case SdfPointAction.ShapeBlend: {
                         var leaf = (influence?.NextLeaf() ?? -1);
                         // A pending LaneErode is consumed first, so it never reaches a later shape: a skipped shape is
                         // absent, and an eroded one's candidate grows by the erosion after its distance scale.
@@ -358,10 +346,12 @@ public sealed partial class SdfFieldEvaluator {
                         );
                         break;
                     }
-                default: {
+                case SdfPointAction.Unsupported: {
                         ThrowUnvalidated(op: instruction.Op);
                         break;
                     }
+                default:
+                    throw new InvalidOperationException(message: "Invalid Point action.");
             }
         }
 
@@ -373,8 +363,8 @@ public sealed partial class SdfFieldEvaluator {
     // inline their helpers.
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static FixedVector3 FoldPoint(in CompiledInstruction instruction, FixedVector3 localPosition) {
-        switch (instruction.Op) {
-            case SdfOp.Repeat: {
+        switch (SdfFieldOps.PointFoldOf(value: instruction.Op)) {
+            case SdfPointFoldAction.Repeat: {
                     var spacing = Vector(instruction: instruction);
                     var inverseSpacing = Vector1(instruction: instruction);
 
@@ -386,7 +376,7 @@ public sealed partial class SdfFieldEvaluator {
                         ))
                     ));
                 }
-            case SdfOp.RepeatLimited: {
+            case SdfPointFoldAction.RepeatLimited: {
                     var spacing = Vector(instruction: instruction);
                     var limit = Vector1(instruction: instruction);
                     var rounded = FixedVector3.Round(value: FixedVector3.Divide(
@@ -403,7 +393,7 @@ public sealed partial class SdfFieldEvaluator {
                         )
                     ));
                 }
-            case SdfOp.SymmetryPlane: {
+            case SdfPointFoldAction.SymmetryPlane: {
                     var normal = Vector(instruction: instruction);
                     var t = (FixedVector3.Dot(
                         left: localPosition,
@@ -416,7 +406,7 @@ public sealed partial class SdfFieldEvaluator {
 
                     return (localPosition - (normal * twiceMin));
                 }
-            default: {
+            case SdfPointFoldAction.Elongate: {
                     var extents = Vector(instruction: instruction);
 
                     return (localPosition - FixedVector3.Clamp(
@@ -425,6 +415,10 @@ public sealed partial class SdfFieldEvaluator {
                         value: localPosition
                     ));
                 }
+            case SdfPointFoldAction.Unsupported:
+                throw new InvalidOperationException(message: "Unsupported PointFold action.");
+            default:
+                throw new InvalidOperationException(message: "Invalid PointFold action.");
         }
     }
     // The render reading's warps (SdfFieldReading.Render), kept out of WalkPoints with the folds. KEEP IN SYNC with
@@ -466,15 +460,17 @@ public sealed partial class SdfFieldEvaluator {
     private static (int U, int V) PlaneAxes(uint plane) => (((plane == ((uint)Puck.SignedDistance.SdfPlane.YZ)) ? 1 : 0), ((plane == ((uint)Puck.SignedDistance.SdfPlane.XY)) ? 1 : 2));
     // The field edits (Onion, CellDisplace, Dilate), kept out of WalkPoints with the folds.
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static FixedQ4816 EditField(in CompiledInstruction instruction, FixedVector3 localPosition, FixedQ4816 resultDistance) => instruction.Op switch {
-        SdfOp.Onion => (FixedQ4816.Abs(value: resultDistance) - instruction.Data0X),
-        SdfOp.CellDisplace => (resultDistance + (instruction.Data0Y * (SampleCells(
+    private static FixedQ4816 EditField(in CompiledInstruction instruction, FixedVector3 localPosition, FixedQ4816 resultDistance) => SdfFieldOps.PointFieldEditOf(value: instruction.Op) switch {
+        SdfPointFieldEditAction.Onion => (FixedQ4816.Abs(value: resultDistance) - instruction.Data0X),
+        SdfPointFieldEditAction.CellDisplace => (resultDistance + (instruction.Data0Y * (SampleCells(
             (localPosition * instruction.Data0X),
             instruction.Shape,
             ((SdfCellMode)instruction.Blend),
             instruction.Data0Z
         ) - Half))),
-        _ => (resultDistance - instruction.Data0X),
+        SdfPointFieldEditAction.Dilate => (resultDistance - instruction.Data0X),
+        SdfPointFieldEditAction.Unsupported => throw new InvalidOperationException(message: "The point walk selected an unsupported field edit."),
+        _ => throw new InvalidOperationException(message: "Invalid PointFieldEdit action."),
     };
     // The fBm relief (sdfValueNoise3, field/sdf-noise.hlsli): amplitude times the host-baked 1/Σ gainᵏ times the sum,
     // times its masks' weight (MaskProduct): exactly one, and no product, for an unmasked relief or where every weight is

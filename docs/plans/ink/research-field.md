@@ -302,22 +302,10 @@ on coarser levels before paying for a per-vertex tensor.
 belongs to, which other shape is nearest to it and how far away, which blend
 joined them and with what radius.
 
-**What reaches a pixel.** The draw, the material and the slot. The bake tracks
-more than that and discards it. Its winner rule keeps the material, lanes,
-instance and slot of whichever shape wins each composition
-(`field/sdf-blend.hlsli:82`):
-
-```hlsl
-        if (candidateWins) {
-            result.material = material;
-            result.lanes = lanes;
-            result.instanceIndex = instanceIndex;
-            result.frameSlot = (handsSlot ? frameSlot : result.frameSlot);
-        }
-```
-
-The kernel then writes the value, the material and either the slot or the
-gradient.
+**What reaches a pixel.** The draw, the material and the slot. The winner rule
+in `sdfComposeCandidate` keeps the material and instance of the winning operand.
+A union winner carries its slot. Cuts and intersections keep the subject slot.
+The bake writes distance and material alongside the slot or gradient.
 
 **A draw is not an object.** An identity comparison is the obvious way to find
 object boundaries, and the record's identity is the draw's ordinal. Two rules
@@ -337,16 +325,9 @@ so a world that declares nothing gains no lines and no triangles. It rides the
 winner rule as the material does. The bake already samples the winner at every
 vertex and every quad's quarter centres to place material boundaries
 (`SdfMeshMaterialCut`), and it does so in the sample mode that leaves two of
-its five words empty. That mode takes one tap, so the gradient it writes is
-zero (`passes/sdf-mesh-bake.comp.hlsl:134`):
-
-```hlsl
-        meshBakeSamplesRW[word] = asuint(value);
-        meshBakeSamplesRW[word + 1u] = asuint(material);
-        meshBakeSamplesRW[word + 2u] = ((mode == 2u) ? asuint(frameSlot) : asuint(gradient.x));
-        meshBakeSamplesRW[word + 3u] = asuint(gradient.y);
-        meshBakeSamplesRW[word + 4u] = asuint(gradient.z);
-```
+its five words empty. The mesh-bake kernel takes one field sample in that mode
+and leaves both gradient words zero.
+[Mesh-bake kernel](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-mesh-bake.comp.hlsl).
 
 A part and one more value fit in words three and four with no new dispatch and
 no larger sample. The material cut can then place part boundaries on mesh edges
