@@ -85,7 +85,8 @@ public sealed class WorldReleaseFixtureBuilderTests {
         var failedLeg = await QualifyAsync(
             containers: new ScriptedContainers(
                 exercise: static _ => 1,
-                imageId: release.EngineImageDigest
+                imageId: release.EngineImageDigest,
+                stderr: "\nwarming up\npuck world release exercise: the leg's store refused a write\n"
             ),
             name: "failed-leg",
             targetManifest: targetPath
@@ -97,7 +98,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
         );
         Assert.Contains(
             actualString: failedLeg.Error,
-            expectedSubstring: "qualification leg 'source-import': the packaged engine exited with code 1"
+            expectedSubstring: "qualification leg 'source-import': the packaged engine exited with code 1; its standard error ends: warming up | puck world release exercise: the leg's store refused a write"
         );
         AssertNoReceipt(evidence: failedLeg.Evidence);
 
@@ -1013,10 +1014,15 @@ public sealed class WorldReleaseFixtureBuilderTests {
     }
 
     // A container engine that never starts Docker: every image resolves to imageId, or the engine cannot inspect it at
-    // all when imageId is null, and each exercise answers with the exit code exercise returns for its fixture.
-    private sealed class ScriptedContainers(Func<string, int> exercise, string? imageId) : IWorldReleaseQualificationContainers {
-        public Task<int> ExerciseAsync(string container, string image, string fixture, int steps, CancellationToken cancellationToken) =>
-            Task.FromResult(result: exercise(arg: fixture));
+    // all when imageId is null, and each exercise answers with the exit code exercise returns for its fixture and
+    // stderr as its packaged engine's diagnostics.
+    private sealed class ScriptedContainers(Func<string, int> exercise, string? imageId, string stderr = "") : IWorldReleaseQualificationContainers {
+        public Task<Puck.Abstractions.ChildProcessResult> ExerciseAsync(string container, string image, string fixture, int steps, CancellationToken cancellationToken) =>
+            Task.FromResult(result: new Puck.Abstractions.ChildProcessResult(
+                ExitCode: exercise(arg: fixture),
+                Stderr: stderr,
+                Stdout: string.Empty
+            ));
         public Task<WorldReleaseQualificationImage> InspectAsync(string reference, CancellationToken cancellationToken) =>
             ((imageId is null)
                 ? throw new InvalidOperationException(message: "the container engine cannot inspect images")

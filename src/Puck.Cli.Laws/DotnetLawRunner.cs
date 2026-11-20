@@ -78,7 +78,7 @@ public sealed class DotnetLawRunner(Func<IReadOnlyList<string>, TimeSpan, CliPro
     /// <returns>The executed tests, or a named refusal reason.</returns>
     public static LawRun ReadRun(CliProcessResult run, string? report) {
         if (run.TimedOut || (report is null)) {
-            return new LawRun(Error: $"dotnet test exited {run.ExitCode}{(run.TimedOut ? " after its deadline" : string.Empty)} without a completed run: {string.Join(separator: " | ", values: CliText.Lines(text: (run.Stdout + run.Stderr)).TakeLast(count: 5))}", Failures: [], Tests: []);
+            return new LawRun(Error: $"dotnet test exited {run.ExitCode}{(run.TimedOut ? " after its deadline" : string.Empty)} without a completed run: {CliText.Tail(count: 5, text: (run.Stdout + run.Stderr))}", Failures: [], Tests: []);
         }
         var parsed = LawProof.ReadReport(report: report);
 

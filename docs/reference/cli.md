@@ -549,10 +549,13 @@ continuation before both reverse imports. Evidence retains the original seed,
 both transformed copies and their hashes; the source fixture stays intact.
 The runner resolves each image against its manifest digest, uses that immutable
 image identity, disables container networking, and mounts only a fresh fixture
-copy. It retains the copied state and evidence under a unique output directory.
+copy. On a Linux host each leg runs as the runner's own user and group, which
+owns the fixture copy it mounts. It retains the copied state and evidence under
+a unique output directory.
 Equal contract labels or an operator-authored receipt cannot replace these runs.
 A pair that ran and failed a leg's claim exits 1 and names the claim: a packaged
-engine that exited nonzero or overran its five-minute limit, a missing or
+engine that exited nonzero (with the end of its standard error and output) or
+overran its five-minute limit, a missing or
 incomplete report, lost receipts, or two imports that disagree. A run that cannot
 exercise the pair exits 2: unreadable manifests, an unsupported pair, an unmarked
 or mismatched fixture, an image that is not the release's, or a container engine
