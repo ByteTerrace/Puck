@@ -141,7 +141,7 @@ public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRele
             });
         }
         var config = new JsonObject {
-            ["schema"] = "puck.silo.configuration.v1",
+            ["schema"] = Puck.World.WorldSiloDefinition.SchemaVersion,
             ["worlds"] = rows,
             ["doors"] = new JsonObject { ["budget"] = rows.Count },
             ["store"] = new JsonObject {

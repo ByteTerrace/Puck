@@ -62,9 +62,18 @@ public sealed record MachineFieldDescriptor(
 public sealed record MachineObjectDescriptor(string Id, IReadOnlyList<MachineFieldDescriptor> Fields);
 /// <summary>One named optional input or output.</summary>
 /// <param name="Name">The stable provider-owned port name.</param>
-/// <param name="Contract">The capability contract, such as puck.machine.video.v1 or puck.machine.pad.v1.</param>
+/// <param name="Contract">The capability contract, one of <see cref="MachinePortContracts"/>.</param>
 /// <param name="Description">What the port presents or controls.</param>
 public sealed record MachinePortDescriptor(string Name, string Contract, string Description);
+/// <summary>The capability contracts a machine port presents (<see cref="MachinePortDescriptor.Contract"/>).</summary>
+public static class MachinePortContracts {
+    /// <summary>The contract of a port that presents the machine's video.</summary>
+    public const string Video = "puck.machine.video.v1";
+    /// <summary>The contract of a port that presents the machine's audio.</summary>
+    public const string Audio = "puck.machine.audio.v1";
+    /// <summary>The contract of a port a controller drives.</summary>
+    public const string Pad = "puck.machine.pad.v1";
+}
 /// <summary>A provider-owned ordered operation and the exact payload it accepts.</summary>
 /// <param name="Id">The operation identifier used by commands and rule effects.</param>
 /// <param name="Description">The hardware and lifecycle effects visible to authors.</param>

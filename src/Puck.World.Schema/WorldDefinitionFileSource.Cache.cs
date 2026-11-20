@@ -27,7 +27,7 @@ public static partial class WorldDefinitionFileSource {
     // An image is held per document path, catalog fingerprint and source: two sources may resolve one path's graph
     // differently (the directory source refuses what the composer compiles), so neither answers for the other.
     private static string CacheKey(string path, string fingerprint, IWorldDocumentSource source) =>
-        $"{(PuckPaths.FoldsCase ? PuckPaths.Normalize(path: path).ToUpperInvariant() : PuckPaths.Normalize(path: path))}\0{fingerprint}\0{source.GetType().FullName}";
+        $"{PuckPaths.Key(path: path)}\0{fingerprint}\0{source.GetType().FullName}";
     // A chain link read through any IWorldDocumentSource decodes exactly like a load through File.ReadAllText would.
     private static string DecodeJson(byte[] bytes) => Puck.Confinement.FileContent.Text(content: bytes);
     // Every document a load or a composition reads comes through here, so the boot ledger counts each read once.

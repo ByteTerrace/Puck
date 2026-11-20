@@ -100,6 +100,9 @@ public sealed class InMemoryReleaseSequenceStore : IReleaseSequenceStore {
 /// <see cref="InstallTransaction"/> argument holds, and that transaction's lease is the only mutual exclusion: while
 /// it is held no other reader or writer of the file exists, in this process or another.</para></summary>
 public sealed class FileReleaseSequenceStore : IReleaseSequenceStore {
+    // The store file's first line, which the reader requires and the writer writes.
+    private const string Schema = "puck.release.sequence.v1";
+
     private static string MarkPath(InstallTransaction transaction) => Path.Combine(
         path1: transaction.Root.Path,
         path2: InstallLayout.StateDirectoryName,
@@ -114,7 +117,7 @@ public sealed class FileReleaseSequenceStore : IReleaseSequenceStore {
 
         var lines = File.ReadAllLines(path: filePath);
 
-        if ((lines.Length < 2) || (lines[0] != "puck.release.sequence.v1")) {
+        if ((lines.Length < 2) || (lines[0] != Schema)) {
             throw new InvalidDataException(message: "the release sequence store is malformed");
         }
 
@@ -188,7 +191,7 @@ public sealed class FileReleaseSequenceStore : IReleaseSequenceStore {
 
         marks[(requirement.Domain, requirement.Subject)] = (requirement.EpochStartUnixSeconds, requirement.Sequence, manifestPin);
 
-        var text = new StringBuilder(value: "puck.release.sequence.v1\n");
+        var text = new StringBuilder(value: (Schema + "\n"));
 
         foreach (var (identity, mark) in marks.OrderBy(keySelector: pair => pair.Key.Domain, comparer: StringComparer.Ordinal)
             .ThenBy(keySelector: pair => pair.Key.Subject, comparer: StringComparer.Ordinal)) {

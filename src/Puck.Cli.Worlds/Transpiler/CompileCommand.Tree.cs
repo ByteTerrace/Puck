@@ -167,13 +167,7 @@ public static partial class CompileCommand {
         }
 
         // One output-relative, forward-slashed path per line, in ordinal order: exactly the files the output holds.
-        var lines = written.Keys.Select(selector: file => (Path.GetRelativePath(
-            path: file,
-            relativeTo: directory
-        ).Replace(
-            newChar: '/',
-            oldChar: Path.DirectorySeparatorChar
-        ) + "\n")).Order(comparer: StringComparer.Ordinal);
+        var lines = written.Keys.Select(selector: file => (Puck.Abstractions.PuckPaths.Relative(path: file, relativeTo: directory) + "\n")).Order(comparer: StringComparer.Ordinal);
 
         try {
             AtomicFile.WriteAllText(

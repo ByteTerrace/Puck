@@ -53,17 +53,17 @@ public sealed partial class GamingBrickEngine {
         ]
         ),
         [new(
-                Contract: "puck.machine.video.v1",
+                Contract: MachinePortContracts.Video,
                 Description: "The native 160 by 144 display.",
                 Name: "video"
             )],
         [new(
-                Contract: "puck.machine.audio.v1",
+                Contract: MachinePortContracts.Audio,
                 Description: "The machine's stereo audio stream.",
                 Name: "audio"
             )],
         [new(
-                Contract: "puck.machine.pad.v1",
+                Contract: MachinePortContracts.Pad,
                 Description: "Buttons and supported cartridge sensors.",
                 Name: "controls"
             )],

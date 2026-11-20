@@ -67,13 +67,7 @@ public static class WorldReleaseCommand {
                 packageDirectory: packageRoot,
                 worldName: row.World.ToString()
             );
-            var relative = Path.GetRelativePath(
-                path: definitionPath,
-                relativeTo: packageRoot
-            ).Replace(
-                newChar: '/',
-                oldChar: Path.DirectorySeparatorChar
-            );
+            var relative = Puck.Abstractions.PuckPaths.Relative(path: definitionPath, relativeTo: packageRoot);
 
             if (!WorldDefinitionLoader.TryReadPublishable(
                 catalog: machines,
@@ -121,13 +115,7 @@ public static class WorldReleaseCommand {
             ) {
                 continue;
             }
-            var relative = Path.GetRelativePath(
-                path: path,
-                relativeTo: packageDirectory
-            ).Replace(
-                newChar: '/',
-                oldChar: Path.DirectorySeparatorChar
-            );
+            var relative = Puck.Abstractions.PuckPaths.Relative(path: path, relativeTo: packageDirectory);
 
             if (definitionPaths.Contains(item: fullPath)) {
                 continue;

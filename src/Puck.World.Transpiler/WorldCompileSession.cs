@@ -146,16 +146,6 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
         name.StartsWith(comparisonType: StringComparison.Ordinal, value: "Microsoft") ||
         (name is "netstandard" or "mscorlib" or "WindowsBase")
     );
-    // A key spells a full path with '/' as its only separator, on every platform, and folds case only where the file
-    // system ignores it, so every spelling of one file shares one entry.
-    private static string KeyOf(string fullPath) {
-        var key = Puck.Abstractions.PuckPaths.Normalize(path: fullPath);
-
-        return (Puck.Abstractions.PuckPaths.FoldsCase
-            ? key.ToUpperInvariant()
-            : key
-        );
-    }
     private static bool Stands(IReadOnlyList<CompileInput> inputs, int from = 0) {
         for (var index = from; (index < inputs.Count); index++) {
             if (!inputs[index].StillHolds()) {
@@ -199,8 +189,8 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
         lock (m_state.PersistLock) {
             if (m_state.Directory is { } named) {
                 if (!string.Equals(
-                    a: KeyOf(fullPath: named),
-                    b: KeyOf(fullPath: full),
+                    a: Puck.Abstractions.PuckPaths.Key(path: named),
+                    b: Puck.Abstractions.PuckPaths.Key(path: full),
                     comparisonType: StringComparison.Ordinal
                 )) {
                     throw new InvalidOperationException(message: $"The compile session already persists in '{named}'; it cannot also persist in '{full}'.");
@@ -327,7 +317,7 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
             return Compile(allowMultiple: true, cancellationToken: cancellationToken, source: source, vocabulary: vocabulary);
         }
 
-        var key = KeyOf(fullPath: Path.GetFullPath(path: sourcePath));
+        var key = Puck.Abstractions.PuckPaths.Key(path: Path.GetFullPath(path: sourcePath));
 
         // The buffer's own text is its first input (WorldCompiler.Compile notes it before anything is read), and it is
         // compared whole here, so only the facts after it are asked of the file system.
@@ -375,7 +365,7 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
         var fullPath = Path.GetFullPath(path: path);
         // A held compile is a product of the compiler, so the compiler's identity keys it in memory as on disk: a compile
         // held before an update to the compiler was applied is never served after it.
-        var key = (CompilerIdentity + "\0" + KeyOf(fullPath: fullPath) + (includeTests ? "\0tests" : "\0document"));
+        var key = (CompilerIdentity + "\0" + Puck.Abstractions.PuckPaths.Key(path: fullPath) + (includeTests ? "\0tests" : "\0document"));
 
         failure = null;
 

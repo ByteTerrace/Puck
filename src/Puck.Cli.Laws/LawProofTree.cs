@@ -42,9 +42,8 @@ public sealed class LawProofTree(string tree, string source, FileStream lease) :
     /// <summary>The stable directory for one repository, keyed by its common git directory, including its clone and
     /// exclusive lock.</summary>
     public static string DirectoryFor(string root, string source) {
-        var path = PuckPaths.Normalize(path: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: source)));
+        var path = PuckPaths.Key(path: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: source)));
 
-        if (OperatingSystem.IsWindows()) { path = path.ToUpperInvariant(); }
         return Path.Combine(path1: root, path2: Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: path)))[..KeyLength]);
     }
     /// <summary>Attempts an exclusive lease without waiting. An unavailable cache takes the cold scratch path.</summary>
