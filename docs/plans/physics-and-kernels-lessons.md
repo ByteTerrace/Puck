@@ -391,6 +391,17 @@ order from today's sweep order once. Worth building only when an active rigid
 scene shows in the frame; the job-system memo rightly keeps the pair pass
 serial until then.
 
+The [state-of-the-art audit](state-of-the-art/audit.md#13-physics-is-exact-but-single-threaded-and-has-no-joints)
+reached the same step from the other side. Puck's soft step is ahead of Box2D
+v3 on exactness, but it is single-threaded, and the plans' trigger (an active
+rigid scene in the frame) is the right one. When it fires, the colouring is
+deterministic and canonical: slot order fixes which colour a constraint takes,
+each colour then solves with SIMD under the job system, and joints, which no
+solver here has yet ([the rigid-bodies packet](open-items.md#rigid-bodies-and-physics)),
+join the same colouring. Check: the replay hash is identical at one, two and
+sixteen threads, and a scene of a few thousand resting bodies shows the solve
+split by colour in the job-system counters.
+
 ### 8. Contact recycling across steps
 
 **What the sources do.** Box2D 3.2 and Box3D cache a pair's one-shot manifold

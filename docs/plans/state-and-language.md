@@ -609,6 +609,20 @@ ticked; the [open items](open-items.md#next) rank the work packets drawn from it
   [S10 step 7](#s10--the-state-review).
 - [Remaining rule-fault work](rule-faults.md): queued body-target generations,
   proposal-owned host scratch, the source-read timing choice and measurements.
+- Per-key versions for keyed sweeps
+  ([the state-of-the-art audit](state-of-the-art/audit.md#14-rule-scheduling-re-judges-every-key)).
+  Rule scheduling cuts off early at row granularity, and the audit reads a
+  keyed sweep as re-judging every key whenever its row moves. DBSP's idea,
+  applied only to the delta and not to the evaluator
+  ([the register](../decisions/state-and-language.md#rule-evaluation-is-proportional-to-change)
+  still sets aside rules as a differential program), is per-key versions in
+  the moved feed (`IndexVersions`, the per-key latch), so the due set is the
+  changed keys. It reuses `RuleSchedule` and `RuleEvaluator.VersionsMatch`, so
+  no second dependency map appears. First step: count a keyed sweep's
+  evaluations a tick against the keys that moved, on a many-key world, since
+  the audit's reading of the current behaviour was not run. Check: judgements a
+  tick fall to the number of changed keys on that world, with identical state
+  hashes and `world.budget.rules --spent` agreeing with the count.
 
 - S7: [remote home adoption](records-and-pools.md#remote-home-adoption) across
   separate authorities, and the timed row traits still absent from records that

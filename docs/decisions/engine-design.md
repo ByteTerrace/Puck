@@ -488,6 +488,17 @@ such as an exact chamfered-box collider. The owner confirmed this.
 Why: the owner's ruling. Bodies floating at the round dais and at box corners
 were visible flaws.
 
+## Where the physics stands against the state of the art
+
+An audit of Puck's algorithms against published and shipped practice
+([the record](../plans/state-of-the-art/audit.md#13-physics-is-exact-but-single-threaded-and-has-no-joints))
+placed the rigid solver, a Box2D v3 soft step, and field contact ahead on
+exactness: contact against the exact field is fixed-point, so a result is the
+same on every machine and thread count. It found two gaps that are open work,
+neither a decision: the solve is single-threaded (the colouring that parallelises
+it is [lesson 7](../plans/physics-and-kernels-lessons.md#7-graph-colouring-for-a-parallel-rigid-solve)),
+and there is no joint constraint ([the rigid-bodies packet](../plans/open-items.md#rigid-bodies-and-physics)).
+
 ## A box is sharp unless its document rounds it
 
 A `Box` draws and collides with sharp edges; a fillet is the shape's authored
