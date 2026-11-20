@@ -101,6 +101,9 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     /// the dynamic-transform table lays a slot out, which the bake kernel reads in place of the frame's transforms; no
     /// rows for a group that reads no slot.</summary>
     public (int First, ReadOnlyMemory<Vector4> Rows)[] Poses { get; init; } = [];
+    // Each lattice's sample keys as the take that dispatched it decided them, null for a lattice whose samples are not
+    // kept: one an entry for every batch a bake takes (SdfMeshPathBake.TryTake), read by its completion alone.
+    internal SdfMeshPathBake.SampleKeys?[] Keeps { get; init; } = [];
     /// <summary>Gets the snapshots the batch's lattices sample, each at its field's handle in the program the batch samples:
     /// the ones its groups' geometries hashed (<see cref="SdfMeshBakeGroup.SampledSnapshots"/>), one snapshot a handle.</summary>
     public (int Handle, SdfSampledSnapshot Snapshot)[] Sampled { get; init; } = [];
@@ -801,6 +804,7 @@ public sealed partial class SdfMeshPathBake {
             lattices.Clear();
             tickets.Clear();
             m_takenPoses.Clear();
+            m_takenKeys.Clear();
             m_takenSampled.Clear();
             var samples = 0;
             var taps = 0;
@@ -818,6 +822,7 @@ public sealed partial class SdfMeshPathBake {
                 lattices.Add(item: next);
                 tickets.Add(item: new SliceTicket(Generation: slice.Generation, Lattice: lattice, Slice: slice));
                 m_takenPoses.Add(item: (0, ReadOnlyMemory<Vector4>.Empty));
+                m_takenKeys.Add(item: null);
                 // A slice samples any instance, so it reads every field at the bake's set.
                 for (var handle = 0; (handle < m_sampled.Count); handle++) { m_takenSampled[handle] = m_sampled[handle]; }
             }
@@ -918,7 +923,9 @@ public sealed partial class SdfMeshPathBake {
                     admitted++;
                     awaiting++;
                 }
-                if (ProbeSamples(group, in next)) { continue; }
+                var keys = SampleKeysOf(group: group);
+
+                if (ProbeSamples(group, in next, keys)) { continue; }
                 group.InFlight = true;
                 group.TakenSamples += next.Samples;
                 samples += next.Samples;
@@ -926,6 +933,7 @@ public sealed partial class SdfMeshPathBake {
                 lattices.Add(item: next);
                 tickets.Add(item: group);
                 m_takenPoses.Add(item: (group.PoseFirst, group.PoseRows));
+                m_takenKeys.Add(item: keys);
                 foreach (var (handle, snapshot) in group.SampledSnapshots) { m_takenSampled[handle] = snapshot; }
             }
             if (pending) {
@@ -946,6 +954,7 @@ public sealed partial class SdfMeshPathBake {
             batch = new SdfMeshBakeBatch(Lattices: [.. lattices], Tickets: [.. tickets]) {
                 Bake = this,
                 Poses = [.. m_takenPoses],
+                Keeps = [.. m_takenKeys],
                 Sampled = sampled,
                 SampledHandles = (m_program?.SampledFields.Count ?? 0),
             };
@@ -960,6 +969,7 @@ public sealed partial class SdfMeshPathBake {
     }
 
     private readonly List<(int First, ReadOnlyMemory<Vector4> Rows)> m_takenPoses = [];
+    private readonly List<SampleKeys?> m_takenKeys = [];
     // The snapshots the batch being taken samples, by handle.
     private readonly Dictionary<int, SdfSampledSnapshot> m_takenSampled = [];
 
@@ -1034,6 +1044,12 @@ public sealed partial class SdfMeshPathBake {
             // thread ahead of every other queued stage; the group stays in flight until then, so the bake takes no
             // lattice of it before its answer lands. The queued job keeps the group's storage owner open for the
             // decoded answer, which a retired group never takes.
+            // Invariant: a dispatched request and the group workspace its points lie in (a final lattice's point
+            // buffer, the group's crease and material points) belong to whoever holds its ticket: the take until
+            // dispatch, this reader while the ticket is Decoding, and the group's answer job once it is Answered. That
+            // job runs the group's next stage, which rewrites or frees those points (ChooseCrossings, Contour), so the
+            // reader reads the request and the group only inside Receive, before the ticket moves on; what the reader
+            // needs of the group beyond that the take fixed in the batch (Poses, Keeps).
             if (batch.Tickets[index] is Group group) {
                 using (EnterGate(site: BakeGate.Ticket)) {
                     if (batch.States[index] != SdfMeshBakeTicket.Taken) { continue; }
@@ -1045,7 +1061,7 @@ public sealed partial class SdfMeshPathBake {
                 }
                 Answer answer;
                 try {
-                    answer = Decode(group, in lattice, slice);
+                    answer = Receive(group, batch.Keeps[index], in lattice, slice);
                 } catch {
                     // No next lattice is published until AnswerGroup. Return the claimed request for retry.
                     using (EnterGate(site: BakeGate.Ticket)) {
@@ -1058,7 +1074,6 @@ public sealed partial class SdfMeshPathBake {
                 Enqueue(group: group, urgent: true, work: () => {
                     using (answer) { AnswerGroup(answer: answer, group: group, request: in lattice); }
                 });
-                KeepSamples(group: group, request: in lattice, samples: slice);
                 continue;
             }
             Complete(batch: batch, index: index, request: in lattice, samples: slice);
@@ -1108,6 +1123,20 @@ public sealed partial class SdfMeshPathBake {
         public readonly OwnedBuffer<float> Gradients = new(allocator: allocator, observer: owner);
 
         public void Dispose() { Values.Dispose(); Materials.Dispose(); Gradients.Dispose(); }
+    }
+
+    // Everything a reader does with a group's lattice while its ticket is Decoding (Complete's invariant): decodes its
+    // samples and keeps them under the keys its take recorded, whose key reads the request's points.
+    private Answer Receive(Group group, SampleKeys? keys, in SdfMeshBakeRequest request, ReadOnlySpan<byte> samples) {
+        var answer = Decode(group, in request, samples);
+
+        try {
+            if (keys is not null) { KeepSamples(keys: keys, request: in request, samples: samples); }
+            return answer;
+        } catch {
+            answer.Dispose();
+            throw;
+        }
     }
 
     // The ticket (or checkpoint worker) owns this group's slab until AnswerGroup publishes its successor.
@@ -1577,11 +1606,11 @@ public sealed partial class SdfMeshPathBake {
             group.Next = Lattice(gradients: false, group: group, longest: CoarseSamples, minimum: CoarseSamples);
         }
         group.Identity = Identity.Value;
-        if (Identity.HasParts && Library.Disk is not null) {
+        if (Identity.HasParts && Library.Disk is { } disk) {
             group.Checkpoints = Identity;
             group.CheckpointProgram = m_program;
             group.CheckpointGeometry = CheckpointInput(group, m_program!);
-            group.SampleGeometry = SampleFieldInput(group, m_program!);
+            group.SampleKeys = new SampleKeys(Store: disk, Sampling: Identity.Sampling, Geometry: SampleFieldInput(group, m_program!).Hash, PoseFirst: group.PoseFirst, PoseRowCount: group.PoseRows.Length);
         }
         if (!Library.Holds(geometry: group.Sealed, identity: group.Identity) && !HoldsCheckpoint(group)) { return false; }
         group.Deferred = group.Next;
@@ -2760,8 +2789,9 @@ public sealed partial class SdfMeshPathBake {
         public SdfProgram? CheckpointProgram { get; set; }
         public SdfMeshGeometry CheckpointGeometry { get; set; }
         public bool CheckedCheckpoints { get; set; }
-        // The key every sample set of the group is kept and probed under, beside each lattice's row (SampleFieldInput).
-        public SdfMeshGeometry SampleGeometry { get; set; }
+        // Where every sample set of the group is kept and what its key reads beside each lattice's row (SampleKeys), set
+        // once by Begin, before the group's first lattice.
+        public SampleKeys? SampleKeys { get; set; }
         // Whether the group's next lattice missed its probe, so the next take dispatches it unprobed (ProbeSamples).
         public bool ProbeMissed { get; set; }
         public SdfMeshBakeRequest? Deferred { get; set; }
