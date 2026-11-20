@@ -16,7 +16,7 @@ namespace Puck.Cli.Automation;
 /// baking once per <c>--target</c>. The driver's own pipeline cache is per adapter and driver, so it is never shipped.</remarks>
 public static class WorldPlayerCommand {
     private const string Verb = "world player";
-    // Written last, so a folder holding it is a whole player build; a rerun replaces only a folder that holds it.
+    // Written first as incomplete and last as complete; a rerun rebuilds only a folder that holds it.
     private const string MarkerName = "player.json";
     private const string CacheName = "cache";
     private const string LogsName = "player-logs";
@@ -55,7 +55,7 @@ public static class WorldPlayerCommand {
     /// <returns>The verb.</returns>
     public static Command Create() {
         var package = new Argument<string>(name: "package") { Description = "The world's asset package folder (worlds/debug). Its parent directory holds the packages it imports, and the whole directory is compiled into the folder." };
-        var output = CliOptions.Output(description: "The player folder, created if missing. A folder that already holds a player build is replaced; any other non-empty folder is refused.", required: true);
+        var output = CliOptions.Output(description: "The player folder, created if missing. A folder that already holds a player build (player.json) is rebuilt in place, keeping its cache/; any other non-empty folder is refused.", required: true);
         var extensions = new Option<string[]>(name: "--extension") { AllowMultipleArgumentsPerToken = true, Description = "An extension project to install beside the engine (extensions/<name>/), such as src/Puck.World.Azure for a hosted authority's sign-in. Repeatable." };
         var backends = new Option<string[]>(name: "--backend") { AllowMultipleArgumentsPerToken = true, Description = "The backends whose caches are prewarmed, each baked in its own windowed boot: directx and vulkan. Omitted bakes both on Windows and vulkan elsewhere." };
         var targets = new Option<string[]>(name: "--target") { AllowMultipleArgumentsPerToken = true, Description = "A baking boot's device profile and window size, [profile@]WIDTHxHEIGHT (rtx2060@1920x1080); a profile is a name of the world's render.devices, or auto for this adapter's own. Repeatable; omitted bakes once at auto@2560x1440." };
@@ -75,7 +75,7 @@ public static class WorldPlayerCommand {
             with --cache-dir cache, applying the target's device profile and waiting for its bakes to settle. Those boots
             fill cache/ (meshes, compiled-worlds, compilations, derived) with the identities a consumer's boot of the same
             folder derives. A consumer starts the folder with --world worlds/<package> --cache-dir cache.
-            Writes player.json last (the commit, runtime, backends and targets) and prints each part's size. Each boot's
+            Writes player.json first as incomplete and last with the commit, runtime, backends, targets and each boot's counts, and prints each part's size. Each boot's
             logs are in player-logs/. Exit 0 wrote a whole player build, 1 a step failed, 2 invalid arguments.
             """);
         command.SetAction(action: parse => Run(
@@ -130,9 +130,17 @@ public static class WorldPlayerCommand {
             if (!File.Exists(path: Path.Combine(path1: output, path2: MarkerName))) {
                 return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: output), why: $"is not empty and holds no {MarkerName}, so it is not a player build this verb may replace.");
             }
-            Directory.Delete(path: output, recursive: true);
+            // Everything but the device caches is rebuilt. Each cache entry is keyed by its inputs and the code that
+            // derives it, so the rebuilt engine reads only the entries its own identities name and a rerun bakes only
+            // what changed or was never baked.
+            foreach (var part in Directory.EnumerateFileSystemEntries(path: output)) {
+                if (string.Equals(a: Path.GetFileName(path: part), b: CacheName, comparisonType: StringComparison.Ordinal)) { continue; }
+                if (Directory.Exists(path: part)) { Directory.Delete(path: part, recursive: true); } else { File.Delete(path: part); }
+            }
         }
         _ = Directory.CreateDirectory(path: output);
+        // Marks the folder as this verb's from its first write, so a run that stops partway is rebuilt in place.
+        CliFiles.WriteJson(path: Path.Combine(path1: output, path2: MarkerName), value: new JsonObject { ["schema"] = "puck.player-build.v1", ["complete"] = false });
 
         var logs = Path.Combine(path1: output, path2: LogsName);
 
@@ -182,6 +190,7 @@ public static class WorldPlayerCommand {
             WriteReadme(commit: commit, extensions: extensions, output: output, targets: (bake ? targets : []), world: Puck.Abstractions.PuckPaths.Relative(path: world, relativeTo: output));
             CliFiles.WriteJson(path: Path.Combine(path1: output, path2: MarkerName), value: new JsonObject {
                 ["schema"] = "puck.player-build.v1",
+                ["complete"] = true,
                 ["commit"] = commit,
                 ["runtime"] = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
                 ["world"] = Puck.Abstractions.PuckPaths.Relative(path: world, relativeTo: output),

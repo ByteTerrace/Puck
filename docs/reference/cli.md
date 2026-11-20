@@ -383,9 +383,12 @@ mesh store keys by the bake's code and kernel bytecode, never the adapter, but t
 tiers a view demands follow its window size and its profile's memory bars, so each
 consumer device gets its own target. The driver's pipeline cache is per adapter
 and is not shipped. A consumer starts the folder with
-`--world worlds/<package> --cache-dir cache`. The verb writes `player.json` last
-and replaces only a folder that holds one; it prints each part's size, and keeps
-each boot's logs in `player-logs/`.
+`--world worlds/<package> --cache-dir cache`. The verb writes `player.json` at
+its first write (incomplete) and again at its end, and rebuilds only a folder
+that holds one: everything but `cache/` is replaced, and the caches stay, since
+each entry is keyed by its inputs and the code that derives it, so a rerun bakes
+only what changed or was never baked. It prints each part's size and keeps each
+boot's logs in `player-logs/`.
 
 `world release prepare` loads the validated silo inventory, requires one canonical
 composed `*.world.json` output for every owner/world row, and writes a
