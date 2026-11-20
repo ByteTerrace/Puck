@@ -5,7 +5,7 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
     /// <summary>Gets the arena host every state effect and resolved transform fires through.</summary>
-    public WorldArenaHost ArenaHost => m_arenaHost;
+    public WorldArenaHost ArenaHost { get { ThrowIfTickPending(); return m_arenaHost; } }
     /// <summary>Gets the raw authority gate this server serializes federation operations and the fixed-step fold
     /// against.</summary>
     /// <remarks>Unlike <see cref="ExecuteAuthorityOperation{T}"/>, taking this gate directly does not refuse once
@@ -20,7 +20,7 @@ public sealed partial class WorldServer {
     /// <summary>Gets the rule facade — the evaluator, the compiled rules, groups and tables, the edge latches, the
     /// decision, pattern and identity-fact runtimes, and the world facts and effect arms the evaluator reaches
     /// through.</summary>
-    public WorldRuleHost RuleHost => m_ruleHost;
+    public WorldRuleHost RuleHost { get { ThrowIfTickPending(); return m_ruleHost; } }
     /// <inheritdoc cref="WorldRuleHost.Time"/>
     public ArenaTime Time => m_ruleHost.Time;
 

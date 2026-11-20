@@ -104,11 +104,14 @@ public sealed partial class SdfMeshPathBake {
 
     private bool CodeCurrent(SdfMeshBakeIdentity identity) => ((identity.CodeRevision == CodeRevision.Current) && (identity.Value == Identity.Value));
 
-    private bool HoldsCheckpoint(Group group) {
+    // Whether the store may hold a checkpoint of the group: from its known entries, never a file read, since the start of a
+    // group runs on the frame's thread under the gate. A checkpoint the answer misses is baked again; one it names that is
+    // gone fails its load, which falls back to the bake.
+    private bool MayHoldCheckpoint(Group group) {
         if (CurrentCheckpoints(group) is not { } keys) { return false; }
         var store = keys.Samples.Store;
-        return store.ContainsCheckpoint(keys.Identity.Simplification, keys.Geometry)
-            || store.ContainsCheckpoint(keys.Identity.Contouring, keys.Geometry);
+        return store.MayHoldCheckpoint(keys.Identity.Simplification, keys.Geometry)
+            || store.MayHoldCheckpoint(keys.Identity.Contouring, keys.Geometry);
     }
 
     // The latest checkpoint that survives is the earliest work the group still owes.

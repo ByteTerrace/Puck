@@ -36,7 +36,7 @@ namespace Puck.World;
 /// entry, and never defaulted — a bare <c>instance:&lt;name&gt;</c> with no slot is refused), and <c>join</c>'s
 /// "next free slot"/either-order profile-then-slot convenience does not apply there.</para>
 /// </remarks>
-internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape, WorldCreationInstances stamps, WorldSeatViewInput? viewInput = null) : ICommandModule {
+internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScreenBinder screens, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape, WorldCreationInstances stamps, WorldSeatViewInput? viewInput = null) : ICommandModule {
     public const string AssignCommand = Puck.World.Client.PlayerCommandNames.AssignCommand;
     /// <summary>The keyboard-claim command (Keyboard F1..F4, press edge). The target slot rides the binding's Axis1D
     /// value as a 1-based player number, the clean scalar constant a binding carries.</summary>
@@ -98,7 +98,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     private const string WhereForm = OptionalBodyForm;
 
     private readonly PlayerRoster m_roster = roster;
-    private readonly WorldPopulation m_population = population;
+    private WorldPopulation Population => m_server.Population;
     private readonly WorldClient m_client = client;
     private readonly WorldScreenBinder m_screens = screens;
     private readonly IServerLink m_link = link;
@@ -117,7 +117,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // the boot world owns. It is the population's own table, so a world.load, world.reload or channels edit retargets
     // it at the same tick boundary the kit ordinals move. Never the source a bound channel verb dispatches against —
     // see m_seatBindings.
-    private WorldChannelTable Channels => m_population.Channels;
+    private WorldChannelTable Channels => Population.Channels;
 
     // The per-seat CURRENTLY ROUTED channel vocabulary (WorldSeatBindings.Channels, kept in sync with each seat's
     // WorldSeatAuthorityRouter claim by WorldSimulation's post-step sync). WorldSeatBindings lowers an authored
@@ -339,7 +339,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     }
     // Whether a drive verb's resolved target is a local seat — seats carry client-side device state (held keys/lanes,
     // the possession latch copy) that some commands must also touch.
-    private bool IsSeat(int index) => (((uint)index) < ((uint)m_population.LocalSeatCount));
+    private bool IsSeat(int index) => (((uint)index) < ((uint)Population.LocalSeatCount));
     // A pending local seat (1..3) is choosing a profile — its inputs drive the picker, not locomotion — so a tape
     // enqueued now would sit dormant and burst the instant the seat confirms. The tape verbs (run/fly) refuse it; the
     // teleport verbs (warp/face/pose/where/stop) stay allowed. Population entries (4..4095) are never pending. Returns
@@ -431,11 +431,11 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             at: requiredCount,
             count: count,
             min: 0,
-            max: (m_population.Capacity - 1),
+            max: (Population.Capacity - 1),
             fallback: 0,
             value: out var index
         )) {
-            return (Player: null, Index: 0, Error: $"[{verb}: body index must be an integer 0..{(m_population.Capacity - 1)}]");
+            return (Player: null, Index: 0, Error: $"[{verb}: body index must be an integer 0..{(Population.Capacity - 1)}]");
         }
 
         // Only the world's authored local-seat prefix is reserved. In a zero-seat world even body 0 is a peer;
@@ -447,7 +447,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             );
         }
 
-        return ((m_population.EntryBody(index: index) is { } entry)
+        return ((Population.EntryBody(index: index) is { } entry)
             ? (Player: entry, Index: index, Error: null)
             : (Player: null, Index: index, Error: $"[{verb}: body {index} is not an active population entry — see world.population]")
         );
@@ -475,7 +475,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             args: in args,
             at: 0,
             min: 0,
-            max: (m_population.Capacity - 1),
+            max: (Population.Capacity - 1),
             fallback: 0,
             value: out var index
         ) ||

@@ -119,11 +119,11 @@ internal sealed partial class PlayerCommandModule {
             args: in args,
             at: 7,
             min: 0,
-            max: (m_population.Capacity - 1),
+            max: (Population.Capacity - 1),
             fallback: 0,
             value: out var index
         )) {
-            return CommandResult.Error(output: $"[body.fly: body index must be an integer 0..{(m_population.Capacity - 1)}]");
+            return CommandResult.Error(output: $"[body.fly: body index must be an integer 0..{(Population.Capacity - 1)}]");
         }
 
         // A local seat's 0-based index IS its roster slot — no display-number conversion. Follow the
@@ -244,7 +244,7 @@ internal sealed partial class PlayerCommandModule {
             // reported in the read-back, not flagged IsError" shape body.designate's TargetsResult already uses
             // (the request itself was well-formed; the server-side switch was refused). Always echoes, unconditionally
             // (never gated by wire.ack quiet) — a refusal must never go silent.
-            if (m_population.MotionRefusal(bodyIndex: index) is { Length: > 0 } refusal) {
+            if (Population.MotionRefusal(bodyIndex: index) is { Length: > 0 } refusal) {
                 return new CommandResult(Output: $"[body.motion: body:{index} refused → {refusal}]");
             }
 
@@ -338,11 +338,11 @@ internal sealed partial class PlayerCommandModule {
                 args: in args,
                 at: 1,
                 min: 0,
-                max: (m_population.Capacity - 1),
+                max: (Population.Capacity - 1),
                 fallback: 0,
                 value: out var requestedSpawnIndex
             )) {
-                return CommandResult.Error(output: $"[body.pose: body index must be an integer 0..{(m_population.Capacity - 1)}]");
+                return CommandResult.Error(output: $"[body.pose: body index must be an integer 0..{(Population.Capacity - 1)}]");
             }
 
             if (IsSeat(index: requestedSpawnIndex)) {
@@ -456,7 +456,7 @@ internal sealed partial class PlayerCommandModule {
             args: in args,
             at: 6,
             min: 0,
-            max: (m_population.Capacity - 1),
+            max: (Population.Capacity - 1),
             fallback: 0,
             value: out var routedIndex
         ) &&
@@ -805,11 +805,11 @@ internal sealed partial class PlayerCommandModule {
             args: in args,
             at: 0,
             min: 0,
-            max: (m_population.Capacity - 1),
+            max: (Population.Capacity - 1),
             fallback: 0,
             value: out var requestedIndex
         )) {
-            return CommandResult.Error(output: $"[body.stop: body index must be an integer 0..{(m_population.Capacity - 1)}]");
+            return CommandResult.Error(output: $"[body.stop: body index must be an integer 0..{(Population.Capacity - 1)}]");
         }
 
         // A local seat's 0-based index is its roster slot directly — no display-number conversion. Stop through the
@@ -867,13 +867,13 @@ internal sealed partial class PlayerCommandModule {
         // writes it from EVERY early return a Stop command can take, so a non-empty refusal means the counts below
         // were never applied and must not be echoed as if they were (the read-back shape body.motion's
         // MotionRefusal uses, mirrored so a refused stop can never quote another attempt's stale numbers).
-        var refusal = m_population.StopRefusal(bodyIndex: index);
+        var refusal = Population.StopRefusal(bodyIndex: index);
 
         if (refusal is { Length: > 0 }) {
             return new CommandResult(Output: $"[body.stop: body:{index} refused → {refusal}]");
         }
 
-        var outcome = m_population.LastStopOutcome(bodyIndex: index);
+        var outcome = Population.LastStopOutcome(bodyIndex: index);
         var clearedLatches = 0;
 
         // A seat's held device state is client-side: free it here so the stop covers both halves. Only on an actual
@@ -1095,7 +1095,7 @@ internal sealed partial class PlayerCommandModule {
             args: in args,
             at: 0,
             min: 0,
-            max: (m_population.Capacity - 1),
+            max: (Population.Capacity - 1),
             fallback: 0,
             value: out var routedIndex
         ) &&

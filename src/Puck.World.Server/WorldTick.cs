@@ -157,13 +157,13 @@ public sealed partial class WorldTick {
     private readonly WorldServer m_host;
 
     /// <summary>Gets the exact engine-time boundary completed by the latest authoritative step.</summary>
-    internal ulong CompletedEngineTicks => m_lastCompletedEngineTicks;
+    internal ulong CompletedEngineTicks => (m_tickBlock is { } block && !ResumingOnOwner) ? block.PreviousEngineTicks : m_lastCompletedEngineTicks;
     /// <summary>Gets the tick the latest authoritative step completed, or zero before the first step.</summary>
     internal ulong CompletedTick => m_lastCompletedTick;
     /// <summary>Gets the authoritative tick whose engine tick <see cref="CompletedEngineTicks"/> is: the tick the step
     /// in progress produces while one runs, since a step settles its engine tick before it drains or delivers
     /// anything, and the completed tick between steps.</summary>
-    internal ulong DeliveryTick => m_deliveryTick;
+    internal ulong DeliveryTick => BlockedReason is null ? m_deliveryTick : m_lastCompletedTick;
 
     /// <summary>Gets the server whose document, arena, entity table, grants and narration this tick advances.</summary>
     private WorldServer Host => m_host;

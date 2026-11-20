@@ -117,7 +117,7 @@ correctness rests on an invariant is designed and reviewed before code
    a 16 GB machine, which no plan sets and which the 2060 ran out of; the
    2060's region refusals with its table applied; then the
    [streaming campaign](streaming-and-memory.md#the-build-order)'s next step.
-7. [high] [Engine job system](#engine-job-system): C0.5, then the pool's
+7. [high] [Engine job system](#engine-job-system): finish bounded waits, then the pool's
    design (J1), which folds in the bake's private worker pool; then rows as
    jobs (T4) for the silo. The frame thread still steps the authority and
    emits the whole program; the 2060 trace in item 3 sizes both.
@@ -424,7 +424,8 @@ a specialist builds · high · Next: the next step of
 [the memo's build order](engine-job-system.md#6-build-order), which states the
 order once: the scheduling stage's windowed reading, C0.3's and C0.4's, then
 [the control plane's](engine-job-system.md#the-control-planes-phase-and-bounded-waits)
-step C0.5 (C0.1 to C0.4 are built), then the pool's design (J1). The garbage-collection cuts
+device and present waits (C0.6), then the attach and live-request steps before
+the pool's design (J1). The garbage-collection cuts
 below and the replay burst's tick budget run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 Where the tick runs is an open design question this plan owns
@@ -443,10 +444,10 @@ costs.
   93 to 116 ms `simulate` is one step, and the Vulkan run stepped where
   Direct3D 12 held: its frames answered rendered between converging frames
   (inference, from the code; the reading has no per-iteration render
-  completion). C0.5 owns the step's joins and drains, which bound the control
-  gap once they run through the door; what the step does for 100 ms on Vulkan
-  is a measurement: `host.frames` with the tick lane and a `dotnet-trace` of the
-  pump over a stepping iteration during a convergence on Vulkan.
+  completion). Tick joins and drains now return to the control phase when
+  their wait slice expires. Use `host.frames` with the tick lane and a
+  `dotnet-trace` of a stepping iteration to identify the reported Vulkan
+  simulation work.
 - [medium] A rated item's phase is held by its own cadence, so a long frame
   that spans an interval for one item and not another (a hitch, a missed
   frame on a fixed signal) can land two items that took a tier half a period

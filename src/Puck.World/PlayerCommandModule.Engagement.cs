@@ -192,7 +192,7 @@ internal sealed partial class PlayerCommandModule {
                     ));
                 }
             }
-        } else if (m_population.EntryBody(index: target.Value) is null) {
+        } else if (Population.EntryBody(index: target.Value) is null) {
             return CommandResult.Error(output: $"[body.engage: no body {target.Value} — see world.population]");
         }
 
