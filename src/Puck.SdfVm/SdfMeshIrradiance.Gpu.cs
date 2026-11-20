@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
@@ -145,7 +144,7 @@ public sealed partial class SdfMeshIrradiance {
         var input = m_gpuInput;
         FitGpuHits(layout: layout);
         TrimGpuHits(layout: layout, lows: snapshot.Lows);
-        var now = Stopwatch.GetTimestamp();
+        var now = Time.GetTimestamp();
         candidates.Clear();
         // This is a snapshot pack, with no eligibility decision. The device evaluates changed-box/ray reach,
         // missing traces, rebase, sweep and lighting versions; the host keeps the existing stable priority order.
@@ -172,7 +171,7 @@ public sealed partial class SdfMeshIrradiance {
                         var token = m_hitOwners.TryGetValue((level, (x, y, z)), out var owner) && owner.Token == probe.GpuToken ? probe.GpuToken : 0;
                         row[9] = PackedIntPair.Low(value: token);
                         row[10] = PackedIntPair.High(value: token);
-                        var age = !present || probe.Lighting == snapshot.Lighting.Version ? 0 : (float)Stopwatch.GetElapsedTime(StaleSince(probe.Lighting, in snapshot), now).TotalSeconds;
+                        var age = !present || probe.Lighting == snapshot.Lighting.Version ? 0 : (float)Time.GetElapsedTime(StaleSince(probe.Lighting, in snapshot), now).TotalSeconds;
                         row[11] = BitConverter.SingleToUInt32Bits(age);
                         var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
                         var bound = SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget);

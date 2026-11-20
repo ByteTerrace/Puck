@@ -357,8 +357,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 // The scene's meshes normally land within an upload or two. A head that waits past AdmissionWait is
                 // cancelled like any obsolete job, so its coordinator and the camera sample behind it are never held without
                 // bound; the coordinator lists again on its next grant and asks for the scene as it then stands.
-                if (!ReferenceEquals(m_waiting, pending)) { m_waiting = pending; m_waitingSince = Stopwatch.GetTimestamp(); }
-                else if (Stopwatch.GetElapsedTime(m_waitingSince) > AdmissionWait) {
+                if (!ReferenceEquals(m_waiting, pending)) { m_waiting = pending; m_waitingSince = m_volume.Time.GetTimestamp(); }
+                else if (m_volume.Time.GetElapsedTime(m_waitingSince) > AdmissionWait) {
                     m_pending.Dequeue();
                     m_waiting = null;
                     Cancel(job: pending);

@@ -92,7 +92,16 @@ in landing, whether background work may bind, and the arena's relocations, or th
 required upload against those submitted and completed and its fence. Landing runs
 at `SdfGpuWork.UploadBytesPerSecond` of wall time, so a boot owes the debug
 world's whole mesh region for some seconds whatever the frame rate
-(`world.residency` prints the region's size).
+(`world.residency` prints the region's size). The rate, like every other that
+meters background work (the budget's credit, a deferred job's wait, the
+irradiance grants, the intervals between lighting captures and scene builds, a
+probe's light age), reads the device's clock (`IGpuDeviceContext.Time`, shared
+through `SdfResidencySelector.Time` and `SdfMeshIrradiance.Time`): the host's
+wall clock in a World, and in a device-free law a `VirtualClock` the rig steps one
+display period for each frame it drives (`VirtualClock.Frame`), so the frames the
+law drives decide when background work lands. A wait for work running on the
+thread pool (a build, a trace's worker) stays real time and is bounded by
+`TestLiveness`; never meter it with the device clock.
 Waiting on every allocated residency
 deadlocks on hidden routed scenes whose GPU work correctly never starts.
 

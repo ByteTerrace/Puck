@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using System.Globalization;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.SdfVm;
 
@@ -92,9 +92,9 @@ namespace Puck.SdfVm;
 /// </para>
 /// <para>Thread-safe.</para>
 /// </summary>
-/// <param name="clock">Reads the time, in <see cref="Stopwatch"/> ticks; <see langword="null"/> reads
-/// <see cref="Stopwatch.GetTimestamp"/>.</param>
-public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
+/// <param name="time">The clock the credit accrues by (<see cref="IGpuDeviceContext.Time"/>); <see langword="null"/> reads
+/// <see cref="TimeProvider.System"/>.</param>
+public sealed class SdfGpuWorkBudget(TimeProvider? time = null) {
     /// <summary>The longest gap between accruals whose GPU time is banked whole when a service waited on the budget: a
     /// tenth of a second, the slowest pump the budget holds its rate across.</summary>
     public const double MostBankSeconds = 0.1;
@@ -144,7 +144,7 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     private const int MostPendingFrames = 8;
 
     private readonly Lock m_gate = new();
-    private readonly Func<long> m_clock = (clock ?? Stopwatch.GetTimestamp);
+    private readonly TimeProvider m_time = (time ?? TimeProvider.System);
     private double m_credit = (SdfGpuWork.GpuShare * ReferencePeriodSeconds);
     private double m_uploadCredit = MostUploadCreditBytes;
 
@@ -361,11 +361,11 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     public void Observe(double periodSeconds, double frameSeconds, double queueStartSeconds = 0.0, double queueEndSeconds = 0.0) {
         if (!(periodSeconds > 0.0)) { throw new ArgumentOutOfRangeException(paramName: nameof(periodSeconds), actualValue: periodSeconds, message: "A display period is positive."); }
 
-        var now = m_clock();
+        var now = m_time.GetTimestamp();
 
         lock (m_gate) {
             if ((m_readingAt != 0) && (now > m_readingAt)) {
-                m_windowWall += ((now - m_readingAt) / ((double)Stopwatch.Frequency));
+                m_windowWall += ((now - m_readingAt) / ((double)m_time.TimestampFrequency));
                 m_windowIntervals++;
             }
             m_readingAt = now;
@@ -433,10 +433,10 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     }
     /// <summary>Banks the GPU time and the upload bytes their rates allow since the last accrual by any service.</summary>
     public void Accrue() {
-        var now = m_clock();
+        var now = m_time.GetTimestamp();
 
         lock (m_gate) {
-            var seconds = ((m_at != 0) ? Math.Max(val1: 0.0, val2: ((now - m_at) / ((double)Stopwatch.Frequency))) : 0.0);
+            var seconds = ((m_at != 0) ? Math.Max(val1: 0.0, val2: ((now - m_at) / ((double)m_time.TimestampFrequency))) : 0.0);
             // The cap bounds what an accrual adds, never what the budget already holds: several services accrue in one
             // frame, and all but the first find no time has passed.
             var cap = (m_wanted ? (MostBankSeconds * m_share) : (m_share * m_period));
@@ -497,8 +497,8 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     public bool Takes(SdfGpuWorkTurn turn) {
         ArgumentNullException.ThrowIfNull(argument: turn);
 
-        var now = m_clock();
-        var active = ((long)(ActiveSeconds * Stopwatch.Frequency));
+        var now = m_time.GetTimestamp();
+        var active = ((long)(ActiveSeconds * m_time.TimestampFrequency));
 
         lock (m_gate) {
             var least = double.PositiveInfinity;
@@ -538,7 +538,7 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     /// which its leaving takes out.</returns>
     public SdfGpuWorkCharge ChargeGpu(double seconds, bool owed = false, SdfGpuWorkTurn? turn = null) {
         var queued = ((double.IsFinite(d: seconds) && (seconds > 0.0)) ? seconds : 0.0);
-        var now = m_clock();
+        var now = m_time.GetTimestamp();
 
         lock (m_gate) {
             m_queued += queued;
@@ -740,7 +740,7 @@ public sealed class SdfGpuWorkTurn {
     /// <summary>Gets the name of the service that holds the turn.</summary>
     public string Name { get; }
     // The weight (SdfGpuWorkBudget.Weigh), the GPU seconds charged over the weight, the seconds charged, when the turn
-    // last took work (a Stopwatch timestamp, zero once it found nothing to take) and the takes it was held back from.
+    // last took work (a timestamp of the budget's clock, zero once it found nothing to take) and the takes it was held back from.
     internal double Weight { get; set; } = 1.0;
     internal double Virtual { get; set; }
     internal double Charged { get; set; }

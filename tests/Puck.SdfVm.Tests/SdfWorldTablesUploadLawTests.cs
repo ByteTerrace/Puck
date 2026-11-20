@@ -26,6 +26,8 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed partial class SdfWorldTablesUploadLawTests {
     // The packed width of a dynamic transform (isa/sdf-world.interface.hlsli sdfDynamicTransforms).
+    // The frames a landing may take at the upload budget's rate: ten seconds of the stepped clock.
+    private const int MostLandingFrames = 600;
     private const int DynamicTransformBytes = 48;
     private const uint Extent = 64;
     // A staged copy's header: count, run count, block base and destination word.
@@ -215,7 +217,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     public void ADeviceLossRebuildsTheResidencysTablesOwingEveryTable() {
         const int Slots = 24;
 
-        var gpu = new UploadModelGpu();
+        // The device's clock stands still, so no background work is metered in beyond the budget's first credit.
+        var gpu = new UploadModelGpu(clock: VirtualClock.ForDevice());
         var transforms = Transforms(slots: Slots);
         // One produced frame of a still producer: every later render owes nothing but what an engine rebuild owes.
         var moved = new SdfMovedTransforms();
@@ -873,7 +876,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     public void ARegionWhosePoolHasNoRoomKeepsItsBufferAndRefusesTheMeshesPastItWithoutThrowing() {
         const int BigVertices = ((40 << 20) / (SdfMeshRecord.VertexWords * sizeof(uint)));
         var account = new Puck.Hosting.Jobs.MemoryAccount(availablePhysicalBytes: static () => null, installedPhysicalBytes: (64L << 30));
-        var selector = new SdfResidencySelector(account: account, pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
+        var clock = VirtualClock.ForDevice();
+        var selector = new SdfResidencySelector(account: account, pool: Puck.Abstractions.Memory.PhysicalMemory.Device, time: clock);
         var quad = new SdfMesh(
             indices: new uint[] { 0, 1, 2, 0, 2, 3 },
             positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
@@ -884,7 +888,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         );
         var small = new SdfMeshDraw(Identity: "quad", Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity);
         var large = new SdfMeshDraw(Identity: "big", Material: 1, Mesh: big, ObjectToWorld: Matrix4x4.CreateTranslation(xPosition: 4f, yPosition: 0f, zPosition: 0f));
-        using var rig = new Rig(selector: selector, slots: 1);
+        using var rig = new Rig(clock: clock, selector: selector, slots: 1);
 
         rig.Warm();
         rig.Land(meshDraws: [small], time: 0f);
@@ -1198,8 +1202,14 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         private readonly SdfResidencySelector? m_selector;
 
-        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null, SdfResidencySelector? selector = null, GpuBufferPages? meshPages = null) {
-            Gpu = new UploadModelGpu() {
+        // The device's clock, which each frame the rig renders moves one display period, so the frames it renders, never the
+        // wall time they take, decide when the background work they meter lands. A law that hands the rig a selector
+        // builds the selector on this clock (the clock argument).
+        private readonly VirtualClock m_clock;
+
+        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null, SdfResidencySelector? selector = null, GpuBufferPages? meshPages = null, VirtualClock? clock = null) {
+            m_clock = (clock ?? VirtualClock.ForDevice());
+            Gpu = new UploadModelGpu(clock: m_clock) {
                 DescriptorHeap = heap,
                 MemoryProfile = profile,
                 DestinationPages = (part, _) => part == "mesh-region" ? meshPages : null,
@@ -1265,6 +1275,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                 Gpu.ResetTallies();
             }
 
+            m_clock.Advance(by: VirtualClock.Frame);
             m_moved.Begin(
                 everything: false,
                 tableRows: m_transforms.Length
@@ -1309,11 +1320,12 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // frames, and the staging after the last landing names every draw.
         public void Land(float time, IReadOnlyList<SdfMeshDraw> meshDraws) {
             Render(meshDraws: meshDraws, time: time);
-            // The upload budget is a rate of wall time (SdfGpuWork.UploadBytesPerSecond), so the bound is in seconds.
-            var deadline = System.Diagnostics.Stopwatch.StartNew();
+            // The upload budget is a rate of the device's clock (SdfGpuWork.UploadBytesPerSecond), which each frame steps, so
+            // the bound is in frames: ten seconds of them.
+            var frames = 0;
 
             while (Engine.MeshesLanding || Engine.DrawsAwaitMeshes) {
-                Assert.True(condition: (deadline.Elapsed < TimeSpan.FromSeconds(seconds: 10)), userMessage: "The mesh region never landed its meshes.");
+                Assert.True(condition: (frames++ < MostLandingFrames), userMessage: "The mesh region never landed its meshes.");
                 Render(meshDraws: meshDraws, time: time);
             }
         }

@@ -37,6 +37,11 @@ public interface IGpuDeviceContext {
     /// <see cref="RefreshMemoryReading"/>. A device not brought up reads <see cref="GpuMemoryReading.Absent"/>, and one
     /// lost or being recreated reads <see cref="GpuMemoryReadingState.Lost"/>. Safe to read from any thread.</summary>
     GpuMemoryReading MemoryReading { get; }
+    /// <summary>Gets the clock that meters the device's background work: what its credit accrues by, how long a deferred
+    /// job waits and how stale a probe's light is. A device runs on the host's own clock; a test device hands out a clock
+    /// it steps by frames (<c>VirtualClock</c>), so the frames a law drives, never the wall time they happen to take,
+    /// decide when background work lands. A wait on work that runs on the thread pool is never metered by it.</summary>
+    TimeProvider Time => TimeProvider.System;
 
     /// <summary>Refreshes <see cref="MemoryReading"/> when its device marked it stale: on Direct3D 12 when the budget-change
     /// event is set, tested without waiting; on Vulkan, whose budget has no signal, at a low fixed rate; and on both at

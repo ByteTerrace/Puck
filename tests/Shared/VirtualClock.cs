@@ -27,10 +27,26 @@ internal sealed class VirtualClock : TimeProvider {
     private readonly DateTimeOffset m_start;
 
     private readonly List<VirtualTimer> m_timers = [];
-    private TaskCompletionSource m_changed = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+    // Created when a law first waits for a change (WhenArmedAsync), so a clock nobody waits on allocates nothing as it
+    // advances.
+    private TaskCompletionSource? m_changed;
 
     private long m_now;
     private long m_sequence;
+
+    /// <summary>The span one presented frame stands for, at the 60 Hz frame bar: the step a rig whose frame counts decide
+    /// when background work lands advances the clock by each frame it drives.</summary>
+    public static readonly TimeSpan Frame = TimeSpan.FromSeconds(value: (1d / 60d));
+
+    /// <summary>Returns a clock a device hands its background work: already a second past its origin, since a service
+    /// reads a timestamp of zero as one never taken.</summary>
+    /// <returns>The clock.</returns>
+    public static VirtualClock ForDevice() {
+        var clock = new VirtualClock();
+
+        clock.Advance(by: TimeSpan.FromSeconds(value: 1d));
+        return clock;
+    }
 
     /// <summary>Initializes a new instance of the <see cref="VirtualClock"/> class reading midnight UTC on
     /// 1 January 2026.</summary>
@@ -95,8 +111,10 @@ internal sealed class VirtualClock : TimeProvider {
         }
     }
     private void PulseLocked() {
-        m_changed.TrySetResult();
-        m_changed = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        if (m_changed is { } changed) {
+            m_changed = null;
+            changed.TrySetResult();
+        }
     }
 
     /// <summary>Moves the clock forward by <paramref name="by"/>, firing every armed timer whose due instant falls
@@ -233,7 +251,7 @@ internal sealed class VirtualClock : TimeProvider {
                     return;
                 }
 
-                changed = m_changed.Task;
+                changed = (m_changed ??= new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously)).Task;
             }
 
             await changed.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);

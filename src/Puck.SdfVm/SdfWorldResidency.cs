@@ -1049,6 +1049,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         // the tables exist once its kernels are built, so it starts while the rest compile. The probes join once every
         // pipeline is (EnsureProbeWork).
         tables.Grant.Name = MeshPathBake.Residency;
+        MeshIrradiance.Time = tables.Grant.Selector.Time;
         tables.GpuWork.Add(client: new SdfMeshBakeGpuWork(bake: MeshPathBake, tables: tables));
         MeshPathBake.DispatchReport = tables.GpuWork.Describe;
         // A lattice a worker readies is taken when it is ready, not at the next frame.

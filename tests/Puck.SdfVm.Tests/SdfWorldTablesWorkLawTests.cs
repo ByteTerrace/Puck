@@ -318,7 +318,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     }
     private sealed class Rig : IDisposable {
         public Rig(GpuWorkLedger? ledger = null, bool holdFences = false, bool distinctBuffers = false, FakeGpuDevice? device = null, SdfShadeProgram? shadeDefault = null) {
-            var gpu = device ?? new FakeGpuDevice(holdFences: holdFences, trackObjects: distinctBuffers) { DistinctBuffers = distinctBuffers };
+            var gpu = device ?? new FakeGpuDevice(holdFences: holdFences, trackObjects: distinctBuffers, clock: VirtualClock.ForDevice()) { DistinctBuffers = distinctBuffers };
 
             Gpu = gpu;
 
@@ -392,6 +392,10 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         }
 
         public GpuPassPipelineCache Cache { get; } = new();
+        // The device's clock when it was made with a stepped one; a frame the law drives moves it one display period.
+        public VirtualClock? Clock => (Gpu.Clock as VirtualClock);
+        // Lets one display period pass, as the next frame a law drives would.
+        public void Step() => Clock?.Advance(by: VirtualClock.Frame);
         public SdfWorldTables Engine { get; }
         public SdfFrame Frame { get; }
         public FakeGpuDevice Gpu { get; }
