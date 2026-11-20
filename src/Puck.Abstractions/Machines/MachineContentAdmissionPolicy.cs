@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using System.Security.Cryptography;
 
 namespace Puck.Abstractions.Machines;
 
@@ -189,7 +188,7 @@ public sealed class MachineContentAdmissionPolicy : IMachineContentAdmissionPoli
         }
 
         if (m_executableSha256Exceptions.Count > 0) {
-            var executableHash = Convert.ToHexString(inArray: SHA256.HashData(source: request.ExecutableBytes.Span));
+            var executableHash = ContentDigest.HexOf(content: request.ExecutableBytes.Span, upperCase: true);
 
             if (m_executableSha256Exceptions.Contains(item: executableHash)) {
                 return Allow(

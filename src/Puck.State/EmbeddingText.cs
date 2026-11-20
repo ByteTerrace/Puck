@@ -1,4 +1,3 @@
-using System.Text;
 using Puck.Assets;
 
 namespace Puck.State;
@@ -14,6 +13,6 @@ public static class EmbeddingText {
     public static ContentPin Hash(string text) {
         ArgumentNullException.ThrowIfNull(argument: text);
 
-        return ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: text));
+        return ContentPin.OfText(text: text);
     }
 }

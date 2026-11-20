@@ -1,5 +1,5 @@
+using Puck.Abstractions;
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Puck.Commands;
@@ -152,7 +152,7 @@ public sealed class WorldDisclosureTranscript(Func<ulong> clock) {
                 writer.WriteString(propertyName: "door", value: entry.Door);
                 if (entry.Payload.Length >= BlobBytes) {
                     var reference = string.Create(provider: CultureInfo.InvariantCulture,
-                        handler: $"{Convert.ToHexStringLower(bytes: SHA256.HashData(source: entry.Payload).AsSpan(start: 0, length: 8))}-{entry.Payload.Length}");
+                        handler: $"{ContentDigest.HexOf(content: entry.Payload)[..16]}-{entry.Payload.Length}");
 
                     blobs.TryAdd(key: reference, value: entry);
                     writer.WriteString(propertyName: (entry.Text ? "textBlob" : "bytesBlob"), value: reference);

@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
+using Puck.Abstractions;
 
 namespace Puck.Assets;
 
@@ -31,24 +32,18 @@ public readonly record struct ContentPin {
     /// <summary>Computes the pin of <paramref name="content"/>.</summary>
     /// <param name="content">The bytes to hash.</param>
     /// <returns>The pin of <paramref name="content"/>.</returns>
-    public static ContentPin Compute(ReadOnlySpan<byte> content) {
-        Span<byte> digest = stackalloc byte[SHA256.HashSizeInBytes];
-
-        _ = SHA256.HashData(
-            destination: digest,
-            source: content
-        );
-        return FromDigest(digest: digest);
-    }
+    public static ContentPin Compute(ReadOnlySpan<byte> content) => new(hex: ContentDigest.HexOf(content: content));
+    /// <summary>Computes the pin of text's UTF-8 bytes.</summary>
+    /// <param name="text">The text to hash.</param>
+    /// <returns>The pin of the UTF-8 bytes of <paramref name="text"/>.</returns>
+    public static ContentPin OfText(ReadOnlySpan<char> text) => new(hex: ContentDigest.HexOfText(text: text));
     /// <summary>Computes the pin of everything remaining in <paramref name="content"/>, streamed so a large input
     /// costs no copy.</summary>
     /// <param name="content">The stream to hash, read from its current position to its end.</param>
     /// <returns>The pin of the streamed bytes.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="content"/> is <see langword="null"/>.</exception>
     public static ContentPin Compute(Stream content) {
-        ArgumentNullException.ThrowIfNull(argument: content);
-
-        return FromDigest(digest: SHA256.HashData(source: content));
+        return new ContentPin(hex: ContentDigest.HexOf(content: content));
     }
     /// <summary>Wraps a SHA-256 digest that a caller computed incrementally.</summary>
     /// <param name="digest">The 32-byte SHA-256 digest.</param>

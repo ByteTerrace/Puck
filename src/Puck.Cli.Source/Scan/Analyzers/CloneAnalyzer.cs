@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using Puck.Abstractions;
 using System.Text;
 
 using Microsoft.CodeAnalysis;
@@ -508,7 +508,7 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
         return (Hash(value: structural.ToString()), Hash(value: exact.ToString()), weight);
     }
     private static string Hash(string value) =>
-        Convert.ToHexString(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: value)));
+        ContentDigest.HexOfText(text: value, upperCase: true);
     // True when a member lives in a marshalling/ABI context, so triage can separate deliberate binding
     // mirrors from real copy-paste.
     private static bool IsAbi(string relative, string typeName) =>

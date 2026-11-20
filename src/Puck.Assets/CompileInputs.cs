@@ -226,7 +226,7 @@ public static class CompileInputs {
     }
     // A listing's digest covers each file's name as the file system spells it, so a rename that changes only letter
     // case moves it as surely as a file added or removed.
-    private static string ListingHash(string[] names) => ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: string.Join(separator: '\n', value: names))).Hex;
+    private static string ListingHash(string[] names) => ContentPin.OfText(text: string.Join(separator: '\n', value: names)).Hex;
 
     /// <summary>Returns the current answer to <paramref name="query"/>'s filesystem question, without recording it:
     /// whether a file exists, the digest of its bytes or of what it declares, or the names a directory holds. A digest
@@ -284,7 +284,7 @@ public static class CompileInputs {
                 : new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Present, Path: query.Path)));
     }
     // A declaration fact's hash: its declarer's name and slash, then the digest of what the file declares.
-    private static string DeclarationHash(string prefix, string declared) => (prefix + ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: declared)).Hex);
+    private static string DeclarationHash(string prefix, string declared) => (prefix + ContentPin.OfText(text: declared).Hex);
     // The declarer a declaration fact's hash names, with its trailing slash; empty when it names none.
     internal static string DeclarerPrefix(string contentHash) {
         var slash = contentHash.IndexOf(value: '/');

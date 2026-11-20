@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Reflection;
-using System.Text;
 using Puck.Abstractions;
 
 namespace Puck.Assets;
@@ -31,8 +30,7 @@ public static class ToolchainBuild {
     /// <summary>Identifies a source snapshot by names and contents, independent of its host directory.</summary>
     /// <param name="files">The source snapshot.</param>
     /// <returns>The full source content pin.</returns>
-    public static string Identity(IReadOnlyDictionary<string, byte[]> files) => ContentPin.Compute(Encoding.UTF8.GetBytes(
-        string.Join('\n', files.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{pair.Key}:{ContentPin.Compute(pair.Value)}")))).ToString();
+    public static string Identity(IReadOnlyDictionary<string, byte[]> files) => ContentPin.OfText(text: string.Join('\n', files.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{pair.Key}:{ContentPin.Compute(pair.Value)}"))).ToString();
 
     /// <summary>Runs a noninteractive compiler through the shared bounded child-process boundary.</summary>
     /// <param name="executable">The tool name on PATH, or an explicit executable path.</param>

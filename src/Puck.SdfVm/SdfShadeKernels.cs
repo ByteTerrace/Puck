@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using Puck.Abstractions;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -40,8 +38,8 @@ public sealed class SdfShadeKernels {
         m_sources = [.. Specialized.Select(selector: kernels.SourceOf)];
         m_sourceRefusals = [.. Specialized.Select(selector: kernels.SourceRefusalOf)];
         Interpreter = InterpreterOf(kernels: kernels);
-        Identity = Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(
-            s: $"{Interpreter}\n{SdfShadeOps.Fingerprint}\n{string.Join(separator: '\n', values: m_identities.Order(comparer: StringComparer.Ordinal))}")));
+        Identity = ContentDigest.HexOfText(
+            text: $"{Interpreter}\n{SdfShadeOps.Fingerprint}\n{string.Join(separator: '\n', values: m_identities.Order(comparer: StringComparer.Ordinal))}");
     }
 
     /// <summary>Gets the identity a publication must still match: the program identities, the op semantics and the
@@ -77,8 +75,8 @@ public sealed class SdfShadeKernels {
     public static string InterpreterOf(SdfKernelSet kernels) {
         ArgumentNullException.ThrowIfNull(kernels);
 
-        return Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(
-            s: $"{kernels.ContentKey()}\n{string.Join(separator: '\n', values: Specialized.Select(selector: kernel => (kernels.SourceOf(kernel: kernel)?.Key ?? "unknown")))}")));
+        return ContentDigest.HexOfText(
+            text: $"{kernels.ContentKey()}\n{string.Join(separator: '\n', values: Specialized.Select(selector: kernel => (kernels.SourceOf(kernel: kernel)?.Key ?? "unknown")))}");
     }
     /// <summary>Reads the source of each specialized kernel from a kernel tree, for a build that compiles the tree's
     /// kernels itself (<c>world prepare</c>) rather than replacing a running set's.</summary>

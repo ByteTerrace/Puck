@@ -1,3 +1,4 @@
+using Puck.Abstractions;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -183,7 +184,7 @@ public static partial class AzureCommand {
 
                 row["world"] = parts[1];
                 if (parts[1] != primaryWorld) {
-                    var identityHash = Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: identity)));
+                    var identityHash = ContentDigest.HexOfText(text: identity);
                     var filename = (("federation-" + identityHash) + ".pk8");
 
                     keyFiles[filename] = await LoadSigningKeyAsync(
@@ -205,7 +206,7 @@ public static partial class AzureCommand {
             var authentication = configuration["authentication"]!.DeepClone();
 
             foreach (var row in worlds) { row!["federation"]!["authentication"] = authentication.DeepClone(); }
-            authentication["settings"]!["remoteKeyHash"] = Convert.ToHexStringLower(inArray: SHA256.HashData(source: key.ExportSubjectPublicKeyInfo()));
+            authentication["settings"]!["remoteKeyHash"] = ContentDigest.HexOf(content: key.ExportSubjectPublicKeyInfo());
             CliFiles.WriteJson(
                 path: "artifacts/world-authentication.json",
                 value: authentication

@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Puck.Confinement;
 
 namespace Puck.Storage;
@@ -36,7 +35,7 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
 
         return (Path.GetDirectoryName(path: path)!, segments[^1]);
     }
-    private static string Token(ReadOnlySpan<byte> content) => Convert.ToHexStringLower(inArray: SHA256.HashData(source: content));
+    private static string Token(ReadOnlySpan<byte> content) => Puck.Abstractions.ContentDigest.HexOf(content: content);
     private static void Walk(ConfinedDirectory directory, string path, string prefix, List<string> keys, ref int remaining,
         CancellationToken cancellationToken) {
         foreach (var entry in directory.Entries()) {

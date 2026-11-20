@@ -79,7 +79,7 @@ public sealed class DerivedBytes {
     private byte[] GetCore(string inputs, Func<byte[]> derive, string? directory, Func<string>? toolchain,
         string? packageDirectory, bool prewarm = false) {
         var source = $"{m_name}\n{m_code.Hash:x32}\n{CodeRevision.AppliedTo(reads: m_code.Reads)}\n{inputs}";
-        var sourcePin = ContentPin.Compute(content: Encoding.UTF8.GetBytes(source));
+        var sourcePin = ContentPin.OfText(text: source);
         // Provenance is a content-addressed shipping input, never an expected output or a repository ledger.
         ContentAddressedStore? package = null;
         var packages = packageDirectory is not null ? [packageDirectory] : toolchain is not null ? ShippingDirectories() : [];
@@ -88,7 +88,7 @@ public sealed class DerivedBytes {
                 package = new ContentAddressedStore(candidate);
                 if (!prewarm && package.TryResolveDerived($"{m_name}-toolchain", sourcePin, out var compilerPin)
                     && package.TryGet(compilerPin, out var compiler)) {
-                    var packagedIdentity = ContentPin.Compute(Encoding.UTF8.GetBytes($"{source}\n{Encoding.UTF8.GetString(compiler)}"));
+                    var packagedIdentity = ContentPin.OfText(text: $"{source}\n{Encoding.UTF8.GetString(compiler)}");
                     if (package.TryResolveDerived(m_name, packagedIdentity, out var productPin) && package.TryGet(productPin, out var product)) {
                         Hit(inputs);
                         return product;
@@ -97,7 +97,7 @@ public sealed class DerivedBytes {
             } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
         }
         var compilerIdentity = toolchain?.Invoke();
-        var identity = ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: toolchain is null ? source : $"{source}\n{compilerIdentity}"));
+        var identity = ContentPin.OfText(text: toolchain is null ? source : $"{source}\n{compilerIdentity}");
         ContentAddressedStore? store = null;
         try {
             store = new ContentAddressedStore(root: directory ?? DefaultDirectory ?? PuckUserDirectory.Resolve(name: "derived"), retention: new CacheBound(MaxBytes: 64L << 20, MaxEntries: 1024));

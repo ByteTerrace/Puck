@@ -137,7 +137,7 @@ public sealed partial class ShaderSourceClosure {
     public static string HashOf(string text) {
         ArgumentNullException.ThrowIfNull(argument: text);
 
-        return ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: text)).Hex;
+        return ContentPin.OfText(text: text).Hex;
     }
     /// <summary>Collects the closure of <paramref name="sources"/>.</summary>
     /// <param name="sources">Each stage source's path and the text the compile reads for it. A source may name a
