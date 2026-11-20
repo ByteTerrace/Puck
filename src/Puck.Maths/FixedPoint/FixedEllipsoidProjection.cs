@@ -133,25 +133,38 @@ public readonly record struct FixedEllipsoidProjection(int Side, FixedQ4816 Lowe
 
     // The implicit test's sign, sum((p_i / e_i)²) - 1, rounded both ways: zero where the two roundings disagree.
     private static int SideOf(ReadOnlySpan<long> radii, ReadOnlySpan<long> point) {
-        var low = UInt128.Zero;
-        var high = UInt128.Zero;
+        var squares = new Squares();
 
-        for (var axis = 0; (axis < radii.Length); axis++) {
-            if (point[axis] == 0L) { continue; }
-            if (point[axis] > radii[axis]) { return 1; }
+        for (var axis = 0; (axis < radii.Length); axis++) { squares.Add(numerator: point[axis], denominator: radii[axis]); }
 
-            var (down, up) = Ratio(numerator: point[axis], denominator: radii[axis]);
-
-            low += (down * down);
-            high += (up * up);
-        }
-
-        return SignOf(low: low, high: high) ?? 0;
+        return squares.Sign ?? 0;
     }
-    // A sum of squared ratios against one: one above, minus one below, zero exactly at one, null where the roundings
-    // straddle it.
-    private static int? SignOf(UInt128 low, UInt128 high) =>
-        ((low > SquareOne) ? 1 : ((high < SquareOne) ? -1 : (((low == SquareOne) && (high == SquareOne)) ? 0 : null)));
+    // A sum of squared ratios n_i / d_i, each rounded down and up, against one: the one sum every sign of F and of the
+    // implicit test is read from. A ratio past one makes the sum exceed one without squaring it.
+    private struct Squares {
+        private UInt128 m_low;
+        private UInt128 m_high;
+        private bool m_beyond;
+
+        // The rounded-up sum, valid while no ratio passed one.
+        public readonly UInt128 High => m_high;
+        // One above one, minus one below, zero exactly at one, null where the roundings straddle it.
+        public readonly int? Sign => (m_beyond ? 1 : ((m_low > SquareOne) ? 1 : ((m_high < SquareOne) ? -1 : (((m_low == SquareOne) && (m_high == SquareOne)) ? 0 : null))));
+
+        // Adds numerator / denominator for 0 <= numerator and 0 < denominator < 2^96.
+        public void Add(Int128 numerator, Int128 denominator) {
+            if (m_beyond || (numerator == Int128.Zero)) { return; }
+            if (numerator > denominator) {
+                m_beyond = true;
+                return;
+            }
+
+            var (down, up) = Ratio(numerator: numerator, denominator: denominator);
+
+            m_low += (down * down);
+            m_high += (up * up);
+        }
+    }
     // numerator / denominator, for 0 <= numerator <= denominator < 2^96, at RatioBits fraction bits: the floor and the
     // ceiling, from two exact 31-bit quotient steps.
     private static (UInt128 Down, UInt128 Up) Ratio(Int128 numerator, Int128 denominator) {
@@ -201,10 +214,13 @@ public readonly record struct FixedEllipsoidProjection(int Side, FixedQ4816 Lowe
             if (start == Int128.Zero) {
                 // Every least axis's coordinate is zero: the root is the pole, u = 0, when the other terms' squares there
                 // sum to one or less (inside the evolute's cusp), and otherwise lies above it, where F is positive.
-                var (sum, beyond) = PoleSum(gaps: gaps, numerators: numerators);
+                var others = new Squares();
 
-                if (!beyond && ((SignOf(low: sum.Low, high: sum.High) ?? -1) <= 0)) {
-                    return PoleFoot(gaps: gaps, numerators: numerators, point: point, radii: radii, sum: sum.High);
+                for (var axis = 0; (axis < count); axis++) {
+                    if (gaps[axis] != Int128.Zero) { others.Add(numerator: numerators[axis], denominator: gaps[axis]); }
+                }
+                if ((others.Sign ?? -1) <= 0) {
+                    return PoleFoot(gaps: gaps, numerators: numerators, point: point, radii: radii, sum: others.High);
                 }
             }
             low = start;
@@ -255,43 +271,13 @@ public readonly record struct FixedEllipsoidProjection(int Side, FixedQ4816 Lowe
 
         return (low + ((high - low) / 2));
     }
-    // F's sign at u, taken only where every ratio rounded down and up agree; null otherwise. A ratio at or above one makes
-    // F positive without squaring it.
+    // F's sign at u, taken only where every ratio rounded down and up agree; null otherwise.
     private static int? SignAt(ReadOnlySpan<Int128> gaps, ReadOnlySpan<Int128> numerators, Int128 u) {
-        var low = UInt128.Zero;
-        var high = UInt128.Zero;
+        var squares = new Squares();
 
-        for (var axis = 0; (axis < gaps.Length); axis++) {
-            if (numerators[axis] == Int128.Zero) { continue; }
+        for (var axis = 0; (axis < gaps.Length); axis++) { squares.Add(numerator: numerators[axis], denominator: (u + gaps[axis])); }
 
-            var denominator = (u + gaps[axis]);
-
-            if (numerators[axis] > denominator) { return 1; }
-
-            var (down, up) = Ratio(numerator: numerators[axis], denominator: denominator);
-
-            low += (down * down);
-            high += (up * up);
-        }
-
-        return SignOf(low: low, high: high);
-    }
-    // The other axes' squared ratios at the pole, u = 0, rounded both ways, and whether one of them reaches past one.
-    private static ((UInt128 Low, UInt128 High) Sum, bool Beyond) PoleSum(ReadOnlySpan<Int128> gaps, ReadOnlySpan<Int128> numerators) {
-        var low = UInt128.Zero;
-        var high = UInt128.Zero;
-
-        for (var axis = 0; (axis < gaps.Length); axis++) {
-            if ((gaps[axis] == Int128.Zero) || (numerators[axis] == Int128.Zero)) { continue; }
-            if (numerators[axis] > gaps[axis]) { return ((low, high), true); }
-
-            var (down, up) = Ratio(numerator: numerators[axis], denominator: gaps[axis]);
-
-            low += (down * down);
-            high += (up * up);
-        }
-
-        return ((low, high), false);
+        return squares.Sign;
     }
     // The foot at the pole: the other axes' coordinates at u = 0, and the rest, e_m sqrt(1 - sum), on one least axis.
     private static (long Lower, long Upper, long Nearest) PoleFoot(ReadOnlySpan<Int128> gaps, ReadOnlySpan<Int128> numerators, ReadOnlySpan<long> point, ReadOnlySpan<long> radii, UInt128 sum) {
