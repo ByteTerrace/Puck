@@ -524,8 +524,8 @@ value and leaves the source file as saved
 **A saved file reaches the World as a reload.** A local operator's `.puck`
 source boot enables `world.watch` from the loader's file facts. The watch
 queues an ordinary `world.reload` after a quiet moment. `world.counters world.boot`
-reports watch pump calls, stamp queries, content reads, and delivered
-presentation rows and bytes. A value you only want to
+reports watch pump calls, stamp queries, content reads, and presentation
+deliveries (one per recipient) with the rows and bytes they carried. A value you only want to
 try goes through `world.row.set`, which installs by kind (`WorldDocument.InstallKindOf`)
 and survives a later reload that does not change the same row.
 [The authoring loop](../../../docs/plans/iteration/authoring-loop.md) holds the
