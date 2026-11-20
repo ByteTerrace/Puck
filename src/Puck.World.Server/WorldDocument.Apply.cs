@@ -596,12 +596,15 @@ public sealed partial class WorldDocument {
 
         // A reload that changes nothing the simulation reads, or only state values, installs as the edit it is and keeps
         // every compiled product; anything else takes the full install below.
+        var changedMembers = ((request.Kind == WorldRebuildKind.Reload) ? DescribeChanged(changed: ChangedMembers(candidate: candidate, live: priorDefinition)) : string.Empty);
+
         if ((request.Kind == WorldRebuildKind.Reload) && keepAuthority) {
-            var kind = ((prepared is not null) ? prepared.Kind : ReloadInstallKindOf(candidate: candidate, live: priorDefinition, rows: out _));
+            var kind =((prepared is not null) ? prepared.Kind : ReloadInstallKindOf(candidate: candidate, live: priorDefinition, rows: out _));
 
             if (kind != WorldInstallKind.Full) {
                 return ApplyReloadEdit(
                     candidate: candidate,
+                    changed: changedMembers,
                     conflicts: conflicts,
                     connectionId: connectionId,
                     contentHash: contentHash,
@@ -1009,7 +1012,7 @@ public sealed partial class WorldDocument {
             Host.PipelineSources = rebuildPipelineSources;
         }
 
-        var message = $"{verb} applied — base is {origin}, journal cleared{stateKept}{DescribeConflicts(conflicts: conflicts)}";
+        var message = $"{verb} applied — base is {origin}, journal cleared{stateKept}{changedMembers}{DescribeConflicts(conflicts: conflicts)}";
 
         if ((request.Delta is { } appliedDelta) &&
             WorldSubmissionCodec.TryEncodeRebuild(request with { Definition = null }, out var payload, out _)) {

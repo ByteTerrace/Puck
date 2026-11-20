@@ -130,14 +130,21 @@ public sealed class WorldDefinitionMembers {
                 : read);
         }
 
-        var replaced = Assemble(basis: basis, documentDirectory: documentDirectory, values: values);
+        var replaced = Assemble(basis: basis, documentDirectory: documentDirectory, values: new Dictionary<string, object?>(dictionary: values, comparer: StringComparer.Ordinal));
+        // Only the values read here are resolved, against the assembled document's shades and state: every other
+        // member is the basis's own, resolved (or bound live) as the basis holds it.
+        var rebound = new Dictionary<string, object?>(comparer: StringComparer.Ordinal);
 
-        if (!WorldStateDocumentValues.TryResolve(definition: replaced, reason: out var reason, resolved: out var resolved)) {
-            throw new InvalidDataException(message: reason);
+        foreach (var (name, value) in values) {
+            if ((value is null) || ReferenceEquals(objA: value, objB: WorldDocumentWalker.ReadMember(name: name, root: basis))) { continue; }
+            if (!WorldStateDocumentValues.TryResolveGraph(graph: value, reason: out var reason, resolved: out var resolved, source: replaced)) {
+                throw new InvalidDataException(message: reason);
+            }
+            if (!ReferenceEquals(objA: resolved, objB: value)) { rebound[name] = resolved; }
         }
-
-        if (held is not null) { Held.AddOrUpdate(key: resolved, value: new WorldDefinitionMembers(members: slices.Values)); }
-        return resolved;
+        if (rebound.Count > 0) { replaced = Assemble(basis: replaced, documentDirectory: documentDirectory, values: rebound); }
+        if (held is not null) { Held.AddOrUpdate(key: replaced, value: new WorldDefinitionMembers(members: slices.Values)); }
+        return replaced;
     }
     /// <summary>Returns <paramref name="basis"/> with each named member holding a typed value already resolved, held
     /// beside <paramref name="slices"/> when given: the slices the result serializes to, which the caller vouches for

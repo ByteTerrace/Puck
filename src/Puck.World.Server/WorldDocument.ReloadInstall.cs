@@ -21,14 +21,8 @@ public sealed partial class WorldDocument {
     internal static WorldInstallKind ReloadInstallKindOf(WorldDefinition candidate, WorldDefinition live, out IReadOnlyList<string> rows) {
         rows = [];
 
-        var changed = new List<string>();
+        var changed = ChangedMembers(candidate: candidate, live: live);
 
-        foreach (var name in RootMembers) {
-            var before = WorldDocumentWalker.ReadMember(name: name, root: live);
-            var after = WorldDocumentWalker.ReadMember(name: name, root: candidate);
-
-            if (!ReferenceEquals(objA: before, objB: after) && !((before is string or ValueType) && before.Equals(obj: after))) { changed.Add(item: name); }
-        }
         if (changed.Count == 0) { return WorldInstallKind.Nothing; }
         if (changed is [WorldDefinitionMembers.StateMemberName] && TryNameValueRows(candidate: candidate, live: live, rows: out var valueRows)) {
             rows = valueRows;
@@ -37,6 +31,23 @@ public sealed partial class WorldDocument {
         return (changed.TrueForAll(match: static name => name is PrototypesMemberName or WorldDocumentBasis.ShadesMemberName) && ChangesShadingAlone(candidate: candidate, live: live))
             ? WorldInstallKind.Presentation
             : WorldInstallKind.Full;
+    }
+
+    /// <summary>Returns the root members, by JSON name, that a candidate holds as another instance than the live
+    /// document it was merged over.</summary>
+    /// <param name="candidate">The candidate.</param>
+    /// <param name="live">The live document.</param>
+    /// <returns>The changed members' names, in the serializer's order.</returns>
+    internal static List<string> ChangedMembers(WorldDefinition candidate, WorldDefinition live) {
+        var changed = new List<string>();
+
+        foreach (var name in RootMembers) {
+            var before = WorldDocumentWalker.ReadMember(name: name, root: live);
+            var after = WorldDocumentWalker.ReadMember(name: name, root: candidate);
+
+            if (!ReferenceEquals(objA: before, objB: after) && !((before is string or ValueType) && before.Equals(obj: after))) { changed.Add(item: name); }
+        }
+        return changed;
     }
 
     private const string PrototypesMemberName = "prototypes";

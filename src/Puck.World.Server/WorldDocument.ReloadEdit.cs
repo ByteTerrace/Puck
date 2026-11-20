@@ -8,7 +8,7 @@ public sealed partial class WorldDocument {
     // arena, every compiled product, the solid field, the population and the authority as they stand. The source revision
     // moves to the next one and the base to the candidate, and the journal clears, as every reload does. The candidate
     // was validated off the tick as its kind needs when its preparation still stands; otherwise it is validated here.
-    private bool ApplyReloadEdit(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string verb, WorldInstallKind kind,
+    private bool ApplyReloadEdit(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string verb, WorldInstallKind kind, string changed,
         WorldDefinition candidate, WorldDefinition next, string contentHash, IReadOnlyList<string> conflicts, WorldReloadPreparation? prepared) {
         var previous = m_definition;
         string detail;
@@ -61,7 +61,7 @@ public sealed partial class WorldDocument {
         m_revision = new WorldSourceRevision(ContentHash: contentHash, Definition: next);
         m_baseOrigin = new WorldBaseOrigin(Kind: WorldBaseOriginKind.Reload, Source: request.Origin);
 
-        var message = $"{verb} applied — base is {m_baseOrigin}, journal cleared{detail}{DescribeConflicts(conflicts: conflicts)}";
+        var message = $"{verb} applied — base is {m_baseOrigin}, journal cleared{detail}{changed}{DescribeConflicts(conflicts: conflicts)}";
 
         if ((request.Delta is { } appliedDelta) &&
             WorldSubmissionCodec.TryEncodeRebuild(request with { Definition = null }, out var payload, out _)) {
@@ -81,6 +81,9 @@ public sealed partial class WorldDocument {
         return true;
     }
 
+    // The root members a reload changed, for its verdict.
+    private static string DescribeChanged(IReadOnlyList<string> changed) =>
+        ((changed.Count == 0) ? string.Empty : $", changed {string.Join(separator: " ", values: changed)}");
     // The rows and values a reload's source won from the session's own edits, for its verdict.
     private static string DescribeConflicts(IReadOnlyList<string> conflicts) =>
         ((conflicts.Count == 0) ? string.Empty : $", the source won over the session's edits at {string.Join(separator: ", ", values: conflicts)}");
