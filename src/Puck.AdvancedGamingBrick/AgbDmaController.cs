@@ -130,8 +130,8 @@ public sealed partial class AgbDmaController : IAgbDmaController {
     /// <inheritdoc/>
     public void OnFifo(int fifo, IAgbBus bus) {
         var fifoDestination = ((fifo == 0)
-            ? 0x040000A0u
-            : 0x040000A4u
+            ? AgbAddresses.SoundFifoA
+            : AgbAddresses.SoundFifoB
         );
 
         var stall = bus.BeginDmaStall();

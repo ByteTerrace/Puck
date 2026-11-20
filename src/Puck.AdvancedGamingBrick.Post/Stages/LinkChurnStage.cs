@@ -24,7 +24,6 @@ internal sealed class LinkChurnStage : IPostStage<PostContext> {
     private const long BudgetStep = 64L;
     private const uint ExpectedChildControl = 0x6013u;  // as the parent, with daisy-chain id 1 in bits 4-5
     private const uint ExpectedParentControl = 0x6003u; // multiplayer | 115200 bps | IRQ-enable, start clear, id 0
-    private const uint SioCntAddress = 0x04000128u;
     private const uint SioCntStartMask = 0x0080u;
     private const int StepCount = 700;
 
@@ -62,7 +61,7 @@ internal sealed class LinkChurnStage : IPostStage<PostContext> {
         return console;
     }
     private static ushort DebugReadSioCnt(AgbMachineInstance console) =>
-        ((AgbBus)console.Machine.Bus).DebugRead16(address: SioCntAddress);
+        ((AgbBus)console.Machine.Bus).DebugRead16(address: AgbAddresses.SerialControl);
     // Compares a later run against the reference: both protocol verdicts and both final snapshots must match.
     // Snapshot equality also checks Identity (free rigor). Probes are the schedule's own instrument, not compared.
     private static string? Difference(LinkChurnScenarioResult expected, LinkChurnScenarioResult actual, string leg) {

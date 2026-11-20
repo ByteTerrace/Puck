@@ -63,7 +63,7 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
             (0x13, [0x28, 4, 0, 0, 1, 0xC0, 65, 66, 0, 0, 0, 0x50], [65, 66, 65, 66], false),
         }) {
             var destination = (vram
-                ? 0x06000000u
+                ? AgbAddresses.VideoRam
                 : FirmwareSwiProbe.Destination
             );
             using var core = FirmwareSwiProbe.Run(
@@ -139,7 +139,7 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
                 // A native caller-owned IRQ callback acknowledges VBlank and ORs the BIOS wait flag, as required by
                 // IntrWait. The BIOS must preserve the interrupted context and return through its real IRQ vector.
                 uint[] handler = [0xE59F0018, 0xE3A01001, 0xE1C010B0, 0xE59F0010, 0xE1D010B0,
-                0xE3811001, 0xE1C010B0, 0xE12FFF1E, 0x04000202, 0x03007FF8];
+                0xE3811001, 0xE1C010B0, 0xE12FFF1E, AgbAddresses.InterruptFlags, 0x03007FF8];
 
                 for (var index = 0; (index < handler.Length); ++index) {
                     machine.Bus.Write32(
@@ -150,22 +150,22 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
                 }
                 machine.Bus.Write32(
                     access: BusAccessType.NonSequential,
-                    address: 0x03007FFC,
+                    address: AgbAddresses.BiosInterruptVector,
                     value: 0x03007000
                 );
                 machine.Bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000004,
+                    address: AgbAddresses.DisplayStatus,
                     value: 8
                 );
                 machine.Bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000200,
+                    address: AgbAddresses.InterruptEnable,
                     value: 1
                 );
                 machine.Bus.Write16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000208,
+                    address: AgbAddresses.InterruptMasterEnable,
                     value: 1
                 );
             }
@@ -275,13 +275,13 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
                     setup: machine =>
                     machine.Bus.Write16(
                         access: BusAccessType.NonSequential,
-                        address: 0x04000088,
+                        address: AgbAddresses.SoundBias,
                         value: initial
                     )
                 );
                 var actual = bias.Instance.Machine.Bus.Read16(
                     access: BusAccessType.NonSequential,
-                    address: 0x04000088
+                    address: AgbAddresses.SoundBias
                 );
                 // Up means raise to at least 0x200, never lower a caller-selected higher bias. Both directions retain the output-resolution bits.
                 var expected = (initial & ~0x3FF) | (enabled

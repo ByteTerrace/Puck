@@ -43,8 +43,6 @@ public static class AgbForgeCartridge {
     public const int MinimumRomSize = 0x10000;
     /// <summary>The bus address of the cartridge base.</summary>
     public const uint RomAddress = 0x08000000u;
-    /// <summary>The wait-state register's address.</summary>
-    public const uint WaitControlAddress = 0x04000204u;
     /// <summary>
     /// The wait-state register's value: cartridge prefetch on, the first wait state 3/1, and the save window held at
     /// its slowest 8 cycles.

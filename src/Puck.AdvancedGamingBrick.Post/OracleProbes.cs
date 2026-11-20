@@ -17,7 +17,6 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// </para>
 /// </summary>
 internal sealed class OracleProbes {
-    private const uint IoBase = 0x04000000u;
     private const uint ResultBase = 0x02000000u;
 
     private readonly ReadOnlyMemory<byte> m_bios;
@@ -33,7 +32,7 @@ internal sealed class OracleProbes {
 
         a.LdrConst(
             rd: 0,
-            value: IoBase
+            value: AgbAddresses.IoBase
         );
         a.LdrConst(
             rd: 1,
@@ -105,7 +104,7 @@ internal sealed class OracleProbes {
 
         a.LdrConst(
             rd: 0,
-            value: IoBase
+            value: AgbAddresses.IoBase
         );
         // Seed the channel-1 source word in EWRAM.
         a.LdrConst(
@@ -190,7 +189,7 @@ internal sealed class OracleProbes {
 
         a.LdrConst(
             rd: 0,
-            value: IoBase
+            value: AgbAddresses.IoBase
         );
         a.LdrConst(
             rd: 1,
@@ -254,7 +253,7 @@ internal sealed class OracleProbes {
 
         a.LdrConst(
             rd: 0,
-            value: IoBase
+            value: AgbAddresses.IoBase
         );
         a.LdrLabel(
             label: "handler",
@@ -262,7 +261,7 @@ internal sealed class OracleProbes {
         );
         a.LdrConst(
             rd: 2,
-            value: 0x03007FFCu
+            value: AgbAddresses.BiosInterruptVector
         );
         a.Str(
             imm12: 0,
@@ -324,7 +323,7 @@ internal sealed class OracleProbes {
         a.Label(name: "handler");
         a.LdrConst(
             rd: 3,
-            value: 0x04000000u
+            value: AgbAddresses.IoBase
         );
         a.LdrConst(
             rd: 1,
@@ -349,7 +348,7 @@ internal sealed class OracleProbes {
 
         a.LdrConst(
             rd: 0,
-            value: IoBase
+            value: AgbAddresses.IoBase
         );
         a.LdrLabel(
             label: "handler",
@@ -357,7 +356,7 @@ internal sealed class OracleProbes {
         );
         a.LdrConst(
             rd: 2,
-            value: 0x03007FFCu
+            value: AgbAddresses.BiosInterruptVector
         );
         a.Str(
             imm12: 0,
@@ -446,7 +445,7 @@ internal sealed class OracleProbes {
 
         a.LdrConst(
             rd: 0,
-            value: IoBase
+            value: AgbAddresses.IoBase
         );
         a.LdrConst(
             rd: 1,
@@ -503,7 +502,7 @@ internal sealed class OracleProbes {
 
         a.LdrConst(
             rd: 0,
-            value: IoBase
+            value: AgbAddresses.IoBase
         );
         a.LdrConst(
             rd: 1,

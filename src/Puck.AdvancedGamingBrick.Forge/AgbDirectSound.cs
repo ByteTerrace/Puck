@@ -26,14 +26,6 @@ namespace Puck.AdvancedGamingBrick.Forge;
 /// </para>
 /// </remarks>
 public sealed class AgbDirectSound {
-    private const uint ControlMixAddress = 0x04000082u;
-    /// <summary>The first transfer's control halfword. 0x040000C4 is its word count, which the queue mode ignores.</summary>
-    private const uint DmaControlAddress = 0x040000C6u;
-    private const uint DmaDestinationAddress = 0x040000C0u;
-    private const uint DmaSourceAddress = 0x040000BCu;
-    private const uint QueueAddress = 0x040000A0u;
-    private const uint TimerControlAddress = 0x04000102u;
-    private const uint TimerReloadAddress = 0x04000100u;
 
     /// <summary>Machine cycles between samples; the timer's reload is its two's complement.</summary>
     public const int CyclesPerSample = 1024;
@@ -310,28 +302,28 @@ public sealed class AgbDirectSound {
 
         // Route the digital path at full volume, reset its queue, and clock it from the first timer.
         StoreHalf(
-            address: ControlMixAddress,
+            address: AgbAddresses.SoundControlHigh,
             value: 0x0B04u
         );
         StoreWord(
-            address: DmaSourceAddress,
+            address: AgbAddresses.Dma1Source,
             value: BufferAddress
         );
         StoreWord(
-            address: DmaDestinationAddress,
-            value: QueueAddress
+            address: AgbAddresses.Dma1Destination,
+            value: AgbAddresses.SoundFifoA
         );
         // Enable, queue-request start, word width, repeating, destination fixed on the queue register.
         StoreHalf(
-            address: DmaControlAddress,
+            address: AgbAddresses.Dma1Control,
             value: 0xB640u
         );
         StoreHalf(
-            address: TimerReloadAddress,
+            address: AgbAddresses.Timer0Reload,
             value: ((uint)(65536 - CyclesPerSample))
         );
         StoreHalf(
-            address: TimerControlAddress,
+            address: AgbAddresses.Timer0Control,
             value: 0x0080u
         );
     }

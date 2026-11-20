@@ -11,7 +11,6 @@ internal sealed class SuiteDebugBus : IAgbBus {
     private const uint DebugEnable = 0x04FFF780u;
     private const uint DebugFlags = 0x04FFF700u;
     private const uint DebugString = 0x04FFF600u;
-    private const uint KeyInput = 0x04000130u;
 
     private readonly IAgbBus m_inner;
     private readonly Action<int, string> m_onLog;
@@ -60,7 +59,7 @@ internal sealed class SuiteDebugBus : IAgbBus {
         }
 
         // KEYINPUT is overridden so the harness can press menu buttons.
-        if ((address & ~1u) == KeyInput) {
+        if ((address & ~1u) == AgbAddresses.KeyInput) {
             var keys = ((uint)Keys);
 
             value = width switch {
