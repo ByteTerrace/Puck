@@ -1,5 +1,6 @@
 using System.Numerics;
 
+using Puck.Abstractions.Memory;
 using Puck.SignedDistance.Baking;
 
 namespace Puck.SdfVm;
@@ -184,8 +185,10 @@ public sealed partial class SdfMeshPathBake {
 
         var cut = new SdfMeshMaterialCut(contour: contour.Finished(cell: lattice.ContourCell));
 
-        for (var round = cut.Points(); (round.Length > 0); round = cut.Points()) {
-            var at = Xyz(points: round);
+        using var round = new OwnedBuffer<Vector4>(allocator: null);
+
+        while (cut.Points(into: round) > 0) {
+            var at = Xyz(points: round.GetSpan());
             var ignored = new float[at.Length];
             var found = new int[at.Length];
 

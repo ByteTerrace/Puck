@@ -548,11 +548,14 @@ costs.
     `BindableScalar.AuthoredValues`' iterator and `WorldMachineHost.State`'s
     strings.
   - Cold bake: `SdfMeshPathBake.ContourProjection`'s triangles,
-    `SdfContour.SplitAtCreases`, `SdfDualContouring.ExtractRefined`'s vertex
-    lists, `SdfMeshCollapse.Collapser`, `SdfMeshPlanarMerge.Merger`,
-    `SdfMeshMaterialCut`, the encode path (`SdfMeshStoreCodec`), the lattice's
-    gradient and crossing dictionaries and `CrossingRoot[]`, and the piece,
-    dictionary and plane bookkeeping inside `Merge`.
+    `SdfContour.SplitAtCreases`, `SdfMeshCollapse.Collapser`,
+    `SdfMeshPlanarMerge.Merger`, the lattice's gradient and crossing
+    dictionaries, and the piece, dictionary and plane bookkeeping inside
+    `Merge`. Large rented scratch (`ExtractRefined`'s lists, `Merge`'s
+    outputs, the weld and split tables) now comes from `RentedArrays`' bounded
+    large pool, so the next group reuses it; the encode path streams into the
+    entry's temporary file. The cold-bake allocated-bytes reading
+    (`[sdf.mesh-bake] done`'s `allocated:`) is owed from a windowed boot.
   - GPU side: `SdfMeshProbeGpuWork` recreates a slot's origins buffer
     whenever the batch size changes.
 

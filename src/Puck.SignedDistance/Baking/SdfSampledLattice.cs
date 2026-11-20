@@ -893,8 +893,13 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var cellsX = (m_samplesX - 1);
         var cellsY = (m_samplesY - 1);
         var cellsZ = (m_samplesZ - 1);
-        var measured = new bool[((cellsX * cellsY) * cellsZ)];
-        var thin = new bool[measured.Length];
+        var cellCount = ((cellsX * cellsY) * cellsZ);
+        // The per-cell masks are rented: a lattice's cells run to millions, and each mask a split tries is one more.
+        using var measuredLease = RentedArrays.Rent<bool>(array: out var measured, minimumLength: cellCount);
+        using var thinLease = RentedArrays.Rent<bool>(array: out var thin, minimumLength: cellCount);
+
+        measured.AsSpan(length: cellCount, start: 0).Clear();
+        thin.AsSpan(length: cellCount, start: 0).Clear();
         int[] samples = [m_samplesX, m_samplesY, m_samplesZ];
         int[] cells = [cellsX, cellsY, cellsZ];
         float[] spacing = [m_cell.X, m_cell.Y, m_cell.Z];
@@ -1052,7 +1057,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var regionCells = new List<int>[regions.Length];
         // Each region cell's own factor: the most any region over it asks for, each no more than its surface's turn needs
         // (CurvedSplit). Zero for a cell no region holds.
-        var wanted = new int[measured.Length];
+        using var wantedLease = RentedArrays.Rent<int>(array: out var wanted, minimumLength: cellCount);
+
+        wanted.AsSpan(length: cellCount, start: 0).Clear();
 
         if (!regions.IsEmpty) {
             var reach = (0.5f * m_cell.Length());
@@ -1203,25 +1210,30 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         }
         order.Sort(comparison: (a, b) => ((regionCells[a].Count != regionCells[b].Count) ? regionCells[a].Count.CompareTo(value: regionCells[b].Count) : a.CompareTo(value: b)));
 
-        bool[]? chosen = null;
+        // The mask each split tries and the best one so far: two rented masks that trade places when a split serves more
+        // regions, so no split's mask is a copy of its own.
+        using var trialLease = RentedArrays.Rent<bool>(array: out var trial, minimumLength: cellCount);
+        using var chosenLease = RentedArrays.Rent<bool>(array: out var chosen, minimumLength: cellCount);
+        var hasChosen = false;
         var chosenSplit = 0;
         var chosenServed = -1;
         // The cells whose fine samples the count holds, the samples each added that no cell counted before it held, and
         // their sum: the distinct fine samples of the counted cells.
-        var countedCells = new bool[essential.Length];
-        var countedSplits = new int[essential.Length];
-        var cellSamples = new int[essential.Length];
+        using var countedCellsLease = RentedArrays.Rent<bool>(array: out var countedCells, minimumLength: cellCount);
+        using var countedSplitsLease = RentedArrays.Rent<int>(array: out var countedSplits, minimumLength: cellCount);
+        using var cellSamplesLease = RentedArrays.Rent<int>(array: out var cellSamples, minimumLength: cellCount);
         var counted = 0L;
         var addedCells = new List<int>();
 
         for (var split = factor; (split >= 2); split--) {
-            var mask = ((bool[])essential.Clone());
+            essential.AsSpan(length: cellCount, start: 0).CopyTo(destination: trial);
+
             var fits = true;
 
-            Array.Clear(array: countedCells);
+            countedCells.AsSpan(length: cellCount, start: 0).Clear();
             counted = 0L;
-            for (var cell = 0; (fits && (cell < mask.Length)); cell++) {
-                if (mask[cell]) { fits = Count(cell: cell, refinement: split); }
+            for (var cell = 0; (fits && (cell < cellCount)); cell++) {
+                if (trial[cell]) { fits = Count(cell: cell, refinement: split); }
             }
             if (!fits) { continue; }
 
@@ -1233,8 +1245,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 var within = true;
 
                 foreach (var cell in regionCells[r]) {
-                    if (mask[cell]) { continue; }
-                    mask[cell] = true;
+                    if (trial[cell]) { continue; }
+                    trial[cell] = true;
                     addedCells.Add(item: cell);
                     if (!Count(cell: cell, refinement: split)) {
                         within = false;
@@ -1246,14 +1258,15 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                     continue;
                 }
                 foreach (var cell in addedCells) {
-                    mask[cell] = false;
+                    trial[cell] = false;
                     if (!countedCells[cell]) { continue; }
                     countedCells[cell] = false;
                     counted -= cellSamples[cell];
                 }
             }
             if (served > chosenServed) {
-                (chosen, chosenSplit, chosenServed) = (mask, split, served);
+                (trial, chosen) = (chosen, trial);
+                (hasChosen, chosenSplit, chosenServed) = (true, split, served);
             }
             if (served == order.Count) { break; }
         }
@@ -1324,7 +1337,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             return false;
         }
 
-        if (chosen is null) {
+        if (!hasChosen) {
             return ReadOnlyMemory<Vector4>.Empty;
         }
         measured = chosen;
@@ -1332,7 +1345,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         // Every cell touching a measured cell contours at the fine spacing too, from its coarse corners, so no cell that
         // contours whole meets a measured fine sample.
-        var refined = new bool[measured.Length];
+        using var refinedLease = RentedArrays.Rent<bool>(array: out var refined, minimumLength: cellCount);
+
+        refined.AsSpan(length: cellCount, start: 0).Clear();
         var measuredCount = 0;
         var refinedCount = 0;
 
@@ -1353,13 +1368,13 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 }
             }
         }
-        foreach (var cell in refined) {
+        foreach (var cell in refined.AsSpan(length: cellCount, start: 0)) {
             refinedCount += (cell ? 1 : 0);
         }
 
         // Each measured cell's stride: the fine cells of the finest split one of its own fine cells spans along each axis.
-        m_strides.Resize(length: measured.Length, clear: true, preserve: false);
-        for (var cell = 0; (cell < measured.Length); cell++) {
+        m_strides.Resize(length: cellCount, clear: true, preserve: false);
+        for (var cell = 0; (cell < cellCount); cell++) {
             if (measured[cell]) { m_strides[cell] = (factor / CellSplit(cell: cell, refinement: factor)); }
         }
 
@@ -1377,7 +1392,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             var side = (split + 1);
             var block = ((side * side) * side);
 
-            m_cellBlocks.Resize(length: measured.Length, clear: false, preserve: false);
+            m_cellBlocks.Resize(length: cellCount, clear: false, preserve: false);
             m_blockSlots.Resize(clear: false, length: checked((measuredCount * block)), preserve: false);
 
             var cellSpan = m_cellBlocks.GetSpan();
@@ -1479,9 +1494,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
         m_factor = factor;
         Divide(factor: factor);
-        m_measured.CopyFrom(source: measured);
-        m_thin.CopyFrom(source: thin);
-        m_refined.CopyFrom(source: refined);
+        m_measured.CopyFrom(source: measured.AsSpan(length: cellCount, start: 0));
+        m_thin.CopyFrom(source: thin.AsSpan(length: cellCount, start: 0));
+        m_refined.CopyFrom(source: refined.AsSpan(length: cellCount, start: 0));
         MeasuredCells = measuredCount;
         RefinedCells = refinedCount;
         var fineSamples = m_fineKeys.Length;
@@ -1909,9 +1924,14 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     public ReadOnlyMemory<Vector4> CrossingPoints() {
         PrepareCrossings();
         if (!m_rootsPrepared) {
-            using var roots = new RentedList<CrossingRoot>(capacity: m_crossingKeys.Length);
-            using var keys = new RentedList<long>(capacity: m_crossingKeys.Length);
+            // The roots and the pending keys are written where they stay, in the order of their edges, then cut to the edges
+            // searched: a closed edge's key has neither.
+            var roots = m_crossingRoots;
+            var keys = m_pendingCrossings;
+            var searched = 0;
 
+            roots.Resize(length: m_crossingKeys.Length, clear: false, preserve: false);
+            keys.Resize(length: m_crossingKeys.Length, clear: false, preserve: false);
             _ = m_crossingRootIndex.EnsureCapacity(capacity: m_crossingKeys.Length);
             foreach (var key in m_crossingKeys) {
                 var (start, axis, length) = CrossingEdge(key: key);
@@ -1925,14 +1945,15 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 var (x, y, z) = FineCoordinates(key: start);
                 var (ex, ey, ez) = FineCoordinates(key: end);
 
-                m_crossingRootIndex.Add(key: key, value: roots.Count);
-                roots.Add(item: new CrossingRoot(first: FineValue(x: x, y: y, z: z), second: FineValue(x: ex, y: ey, z: ez)));
-                keys.Add(item: key);
+                m_crossingRootIndex.Add(key: key, value: searched);
+                roots[searched] = new CrossingRoot(first: FineValue(x: x, y: y, z: z), second: FineValue(x: ex, y: ey, z: ez));
+                keys[searched] = key;
+                searched++;
             }
             m_rootsPrepared = true;
-            // The first round's roots, in the order of their edges; each later round keeps those still searching.
-            m_crossingRoots.CopyFrom(source: roots.AsSpan());
-            m_pendingCrossings.CopyFrom(source: keys.AsSpan());
+            // The first round's roots; each later round keeps those still searching.
+            roots.Resize(length: searched, clear: false);
+            keys.Resize(length: searched, clear: false);
             m_pendingRoots.Resize(m_crossingRoots.Length, clear: false, preserve: false);
             for (var index = 0; (index < m_pendingRoots.Length); index++) { m_pendingRoots[index] = index; }
         }
@@ -1997,10 +2018,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var fineY = ((cellsY * factor) + 1);
         var fineSamples = (((long)fineX) * fineY * ((cellsZ * factor) + 1));
         // The samples listed, in the order first listed, and a bit a fine sample marking those already listed.
-        using var keys = new RentedList<int>();
         using var seenLease = RentedArrays.Rent<ulong>(array: out var seen, minimumLength: ((int)((fineSamples + 63L) >> 6)));
 
         seen.AsSpan(start: 0, length: ((int)((fineSamples + 63L) >> 6))).Clear();
+        // The keys are listed where they stay, in the lattice's own buffer.
+        m_gradientKeys.Resize(length: 0, clear: false, preserve: false);
 
         void Add(int fx, int fy, int fz) {
             var key = (fx + (fineX * (fy + (fineY * fz))));
@@ -2009,7 +2031,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
             if ((word & bit) == 0UL) {
                 word |= bit;
-                keys.Add(item: key);
+                m_gradientKeys.Append(item: key);
             }
         }
 
@@ -2060,18 +2082,18 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             }
         }
 
-        m_gradientKeys.CopyFrom(source: keys.AsSpan());
+        var listed = m_gradientKeys.Length;
         // Every answer lands in one of the two: size both once rather than growing them answer by answer.
-        _ = m_fineGradients.EnsureCapacity(capacity: keys.Count);
+        _ = m_fineGradients.EnsureCapacity(capacity: listed);
         _ = m_crossingGradients.EnsureCapacity(capacity: m_crossingKeys.Length);
 
-        m_points.Resize(length: (keys.Count + m_crossingKeys.Length), clear: false, preserve: false);
+        m_points.Resize(length: (listed + m_crossingKeys.Length), clear: false, preserve: false);
 
         var points = m_points.GetSpan();
         var fine = ContourCell;
 
-        for (var index = 0; (index < keys.Count); index++) {
-            var (fx, fy, fz) = FineCoordinates(key: keys[index]);
+        for (var index = 0; (index < listed); index++) {
+            var (fx, fy, fz) = FineCoordinates(key: m_gradientKeys[index]);
 
             points[index] = new Vector4(value: (m_origin + (new Vector3(x: fx, y: fy, z: fz) * fine)), w: 1f);
         }
@@ -2081,7 +2103,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             var position = new Vector3(x: fx, y: fy, z: fz);
             var step = ((axis == 0) ? Vector3.UnitX : ((axis == 1) ? Vector3.UnitY : Vector3.UnitZ));
 
-            points[(keys.Count + index)] = new Vector4(value: (m_origin + ((position + (step * (Crossing(axis: axis, length: length, x: fx, y: fy, z: fz) * length))) * fine)), w: 1f);
+            points[(listed + index)] = new Vector4(value: (m_origin + ((position + (step * (Crossing(axis: axis, length: length, x: fx, y: fy, z: fz) * length))) * fine)), w: 1f);
         }
 
         return m_points.Memory;
@@ -2512,8 +2534,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // Fills the crossing keys and crossed fine cells.
     private void CrossingEdges() {
         // Every edge as each cell meets it, repeats included; the distinct ones are kept in the order first met.
-        using var edges = new RentedList<long>();
-        using var crossedFine = new RentedList<SdfCrossedCell>();
+        // Both are listed where they stay, in the lattice's own buffers.
+        m_crossingKeys.Resize(length: 0, clear: false, preserve: false);
+        m_crossedFineCells.Resize(length: 0, clear: false, preserve: false);
+
         var cellsX = (m_samplesX - 1);
         var cellsY = (m_samplesY - 1);
         var cellsZ = (m_samplesZ - 1);
@@ -2551,7 +2575,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                         var start = ((x + ((a & 1) * stride)) + (fineX * ((y + (((a >> 1) & 1) * stride)) + (fineY * (z + (((a >> 2) & 1) * stride))))));
                         var key = CrossingKey(axis: axis, length: stride, start: start);
 
-                        edges.Add(item: key);
+                        m_crossingKeys.Append(item: key);
                     }
                 }
             }
@@ -2581,15 +2605,14 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                                 left = right;
                                 AddCell(mask: mask, stride: 1, x: fx, y: fy, z: fz);
 
-                                if ((mask != 0) && (mask != 0xFF)) { crossedFine.Add(item: new SdfCrossedCell(Corner: (fx + (fineX * (fy + (fineY * fz)))), Mask: ((byte)mask))); }
+                                if ((mask != 0) && (mask != 0xFF)) { m_crossedFineCells.Append(item: new SdfCrossedCell(Corner: (fx + (fineX * (fy + (fineY * fz)))), Mask: ((byte)mask))); }
                             }
                         }
                     }
                 }
             }
         }
-        m_crossedFineCells.CopyFrom(source: crossedFine.AsSpan());
-        m_crossingKeys.CopyFrom(source: edges.AsSpan()[..SpanDistinct.InOrder(items: edges.AsSpan())]);
+        m_crossingKeys.Resize(length: SpanDistinct.InOrder(items: m_crossingKeys.GetSpan()), clear: false);
     }
     // A crossing edge's key: its start sample's fine key, its axis and whether it is a coarse cell long.
     private long CrossingKey(int start, int axis, int length) => ((((((long)start) * 3L) + axis) * 2L) + (((length > 1) && (m_factor > 1)) ? 1L : 0L));

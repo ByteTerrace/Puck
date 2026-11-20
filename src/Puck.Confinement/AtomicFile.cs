@@ -107,8 +107,6 @@ public static class AtomicFile {
         }
     }
 
-    private delegate void Fill<TState>(FileStream stream, TState state) where TState : allows ref struct;
-
     [UnsupportedOSPlatform(platformName: "windows")]
     private static void KeepUnixMode(FileStream stream, string destination) {
         UnixFileMode mode;
@@ -167,7 +165,7 @@ public static class AtomicFile {
             // An image still mapped cannot be deleted; its name ends in the temporary extension.
         }
     }
-    private static PendingWrite Stage<TState>(string path, UnixFileMode? unixCreateMode, TState state, Fill<TState> fill) where TState : allows ref struct {
+    private static PendingWrite Stage<TState>(string path, UnixFileMode? unixCreateMode, TState state, Action<FileStream, TState> fill) where TState : allows ref struct {
         ArgumentException.ThrowIfNullOrEmpty(argument: path);
 
         var destination = ExistingSpelling(path: Path.GetFullPath(path: path));
@@ -215,8 +213,8 @@ public static class AtomicFile {
                 }
 
                 fill(
-                    state: state,
-                    stream: stream
+                    arg1: stream,
+                    arg2: state
                 );
                 stream.Flush(flushToDisk: true);
             }
@@ -227,7 +225,7 @@ public static class AtomicFile {
             throw;
         }
     }
-    private static void Replace<TState>(string path, UnixFileMode? unixCreateMode, TState state, Fill<TState> fill) where TState : allows ref struct {
+    private static void Replace<TState>(string path, UnixFileMode? unixCreateMode, TState state, Action<FileStream, TState> fill) where TState : allows ref struct {
         using var pending = Stage(fill: fill, path: path, state: state, unixCreateMode: unixCreateMode);
 
         pending.Commit();
@@ -440,10 +438,38 @@ public static class AtomicFile {
     public static void Write(string path, Action<Stream> write, UnixFileMode? unixCreateMode = null) {
         ArgumentNullException.ThrowIfNull(argument: write);
 
-        Replace(
-            fill: static (stream, write) => write(obj: stream),
+        Write(
             path: path,
             state: write,
+            unixCreateMode: unixCreateMode,
+            write: static (stream, write) => write(obj: stream)
+        );
+    }
+    /// <summary>Atomically replaces <paramref name="path"/> with whatever <paramref name="write"/> writes to the
+    /// stream it is handed, passing it <paramref name="state"/>: the same replacement as
+    /// <see cref="Write(string, Action{Stream}, UnixFileMode?)"/> for a writer whose input is a span or another
+    /// <see langword="ref"/> <see langword="struct"/>, which a closure cannot capture.</summary>
+    /// <typeparam name="TState">The type of the state handed to the writer.</typeparam>
+    /// <param name="path">The destination file; an existing file there is replaced, and a missing parent directory is
+    /// created.</param>
+    /// <param name="state">The state handed to <paramref name="write"/>.</param>
+    /// <param name="write">Writes the complete new content to the temporary file; the destination is replaced only
+    /// after it returns, and an exception it throws leaves the destination unchanged and propagates.</param>
+    /// <param name="unixCreateMode">On Unix, the mode the replacement is created with (subject to the process umask);
+    /// <see langword="null"/> keeps an existing destination's mode. Ignored on Windows.</param>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="write"/> is <see langword="null"/>.</exception>
+    /// <exception cref="IOException">The temporary file could not be created, written, or moved over the
+    /// destination. The destination is unchanged and the temporary file is deleted.</exception>
+    /// <exception cref="UnauthorizedAccessException">The caller may not create the temporary file or replace the
+    /// destination. The destination is unchanged.</exception>
+    public static void Write<TState>(string path, TState state, Action<Stream, TState> write, UnixFileMode? unixCreateMode = null) where TState : allows ref struct {
+        ArgumentNullException.ThrowIfNull(argument: write);
+
+        Replace(
+            fill: write,
+            path: path,
+            state: state,
             unixCreateMode: unixCreateMode
         );
     }

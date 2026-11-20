@@ -21,9 +21,53 @@ public sealed class RentedArraysLawTests {
         using var smallLease = RentedArrays.Rent<Pixel>(minimumLength: PooledLength, array: out var reused);
         Assert.Same(expected: small, actual: reused);
         Assert.Equal(expected: 786_432, actual: reused.Length * Unsafe.SizeOf<Pixel>());
-        Assert.Equal(expected: 786_435, actual: grown.Length * Unsafe.SizeOf<Pixel>());
+        Assert.True(condition: (grown.Length >= GrownLength));
         Assert.Equal(expected: pixel, actual: grown[0]);
         RentedArrays.Return(array: grown);
+    }
+
+    private readonly record struct Cell(long A, long B);
+
+    [Fact]
+    public void ALargeArrayReturnedIsRentedAgainUntilTheLargePoolIsTrimmed() {
+        // Sixteen-byte elements put the shared pool's limit at 65,536 elements.
+        const int Length = (1 << 20);
+        var first = RentedArrays.Rent<Cell>(minimumLength: Length);
+
+        Assert.True(condition: (first.Length >= Length));
+        RentedArrays.Return(array: first);
+
+        var second = RentedArrays.Rent<Cell>(minimumLength: Length);
+
+        try {
+            Assert.Same(expected: first, actual: second);
+            RentedArrays.Return(array: second);
+            RentedArrays.TrimLarge();
+
+            var third = RentedArrays.Rent<Cell>(minimumLength: Length);
+
+            Assert.NotSame(expected: second, actual: third);
+            RentedArrays.Return(array: third);
+        } finally {
+            RentedArrays.TrimLarge();
+        }
+    }
+
+    [Fact]
+    public void AGrownLargeArrayLeavesItsPredecessorForTheNextRental() {
+        const int Length = (1 << 20);
+        var small = RentedArrays.Rent<Cell>(minimumLength: Length);
+        var grown = RentedArrays.Grow(array: small, keep: 0, minimumLength: (2 * Length));
+        var again = RentedArrays.Rent<Cell>(minimumLength: Length);
+
+        try {
+            Assert.NotSame(expected: small, actual: grown);
+            Assert.Same(expected: small, actual: again);
+        } finally {
+            RentedArrays.Return(array: grown);
+            RentedArrays.Return(array: again);
+            RentedArrays.TrimLarge();
+        }
     }
 
     [Fact]

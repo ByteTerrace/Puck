@@ -161,7 +161,7 @@ All paths are under `src/` unless stated.
   `StartSceneBuild` snapshots every static draw (:1363-1374) **[opened]**. While the bake is pending, a scene is built
   from what landed at most every `PendingSceneInterval = 4 s` (:270, `ScenePendingDue` :1267-1269) **[opened]**.
 - **Bound:** `SdfMeshIrradianceScene.RetainedTriangles` caps the geometry kept for later builds. `Content.Release` hands
-  back its arrays through `RentedArrays`, which returns only eligible buckets to the shared pool.
+  back its arrays through `RentedArrays`, which returns them to the shared pool or, past 1 MiB, to its bounded large pool.
   `SdfMeshIrradiance` reports the active hierarchy to `MemoryAccount` through its sampled scene owner. GPU side:
   `GpuArena` over a `GpuRangeAllocator` that throws "The probe scene exceeds its packed
   node address space." (src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:187-201) **[opened]**, in a region from `CreateProbeRegion`

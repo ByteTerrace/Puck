@@ -714,13 +714,13 @@ internal static class SdfDualContouring {
     // and its fine cells a side) it lies, in blocks (zero within it); null where the planes do not meet at one point.
     // Where the point is a convex crease up to FeatureReach past the block, `Inside` is the point the piece's vertex takes instead: the mean-biased point, which a straight crease's planes
     // meet too, as Place keeps it; else the point inside the block (CellSolve.Inside), the crease handed to the neighbour
-    // (`HandOff`). Null otherwise. The planes are solved in the block's unit coordinates, as Place solves a cell's.
-    private static (double X, double Y, double Z, double Past, (double X, double Y, double Z)? Inside, bool HandOff, bool Beside)? MergedFeature<TLattice>(TLattice grid, (double X, double Y, double Z) mean, (int X, int Y, int Z, int Size) block, ReadOnlySpan<double> planes) where TLattice : ISdfRefinedContourLattice {
+    // (`HandOff`). Null otherwise. The planes are solved in the block's unit coordinates, as Place solves a cell's; `local`
+    // is the caller's scratch for them there, exactly as long as `planes`.
+    private static (double X, double Y, double Z, double Past, (double X, double Y, double Z)? Inside, bool HandOff, bool Beside)? MergedFeature<TLattice>(TLattice grid, (double X, double Y, double Z) mean, (int X, int Y, int Z, int Size) block, ReadOnlySpan<double> planes, Span<double> local) where TLattice : ISdfRefinedContourLattice {
         var factor = block.Size;
         var low = grid.World(x: block.X, y: block.Y, z: block.Z);
         var high = grid.World(x: (block.X + factor), y: (block.Y + factor), z: (block.Z + factor));
         var (ex, ey, ez) = ((high.X - low.X), (high.Y - low.Y), (high.Z - low.Z));
-        var local = new double[planes.Length];
         double a00 = 0, a01 = 0, a02 = 0, a11 = 0, a12 = 0, a22 = 0, b0 = 0, b1 = 0, b2 = 0;
         var (mx, my, mz) = (((mean.X - low.X) / ex), ((mean.Y - low.Y) / ey), ((mean.Z - low.Z) / ez));
 
@@ -887,6 +887,11 @@ internal static class SdfDualContouring {
             piece.PlaneEnd += planes.Length;
         }
 
+        // One scratch for every piece's planes in its block's unit coordinates (MergedFeature), as long as the longest run.
+        var longestRun = 0;
+
+        for (var index = 0; (index < merged); index++) { longestRun = Math.Max(val1: longestRun, val2: (pieces[index].PlaneEnd - pieces[index].PlaneStart)); }
+        using var localPlaneLease = RentedArrays.Rent<double>(array: out var localPlanes, minimumLength: longestRun);
         using var mergedHandoffs = new RentedList<(int Vertex, double X, double Y, double Z)>(capacity: handoffs.Count);
         var origin = grid.World(x: 0.0, y: 0.0, z: 0.0);
         var (unitX, unitY, unitZ) = grid.World(x: 1.0, y: 1.0, z: 1.0);
@@ -909,7 +914,7 @@ internal static class SdfDualContouring {
             // coarse cell, and the vertices' mean otherwise.
             // A convex crease past the coarse cell, up to FeatureReach of it, is the neighbour's to hold (HandOff), and the
             // piece's vertex stays inside the cell, as Place keeps a cell's.
-            var meeting = (((piece.Count > 1) && piece.HasPlanes) ? MergedFeature(grid: grid, mean: (x, y, z), block: block(owners[root]), planes: piecePlanes.AsSpan(start: piece.PlaneStart, length: (piece.PlaneEnd - piece.PlaneStart))) : null);
+            var meeting = (((piece.Count > 1) && piece.HasPlanes) ? MergedFeature(grid: grid, mean: (x, y, z), block: block(owners[root]), planes: piecePlanes.AsSpan(start: piece.PlaneStart, length: (piece.PlaneEnd - piece.PlaneStart)), local: localPlanes.AsSpan(start: 0, length: (piece.PlaneEnd - piece.PlaneStart))) : null);
             var feature = ((meeting is var (fx, fy, fz, past, _, _, _) && (past <= 0.0)) ? (fx, fy, fz) : ((double X, double Y, double Z)?)null);
 
             if ((feature is null) && (meeting is (var bx, var by, var bz, _, { } inside, var handOff, var besideCrease)) && piece.Feature) {

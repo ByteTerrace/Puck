@@ -438,8 +438,11 @@ laws exercise that boundary.
   never a search of the list.
 - **A stage's scratch is rented, its result exact.** A CPU stage grows its
   per-vertex and per-quad workspace in `RentedList<T>` and leases its tables
-  (`RentedArrays.Rent(minimumLength, out array)`). Both reuse eligible shared
-  pool buckets and release larger arrays to the collector. The stage copies
+  (`RentedArrays.Rent(minimumLength, out array)`). Arrays up to 1 MiB reuse the
+  shared pool's buckets, and larger arrays of reference-free elements a bounded
+  large pool (`RentedArrays`, trimmed when a bake's last group finishes and on
+  `MemoryAccount.TrimCaches`), so a group's workspace is reused by the next
+  group instead of left on the large object heap. The stage copies
   out only the arrays its result keeps. A group's lattices and point tables
   stay in owned native storage. A rental can be longer than requested and its
   contents are unspecified. Fill the range before reading it and track the

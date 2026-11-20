@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Memory;
 using Puck.SignedDistance.Baking;
 
 namespace Puck.SdfVm;
@@ -74,13 +75,18 @@ internal sealed class SdfMeshMaterialCut {
     /// <summary>Gets the mesh edges the cut searches for a boundary.</summary>
     public int Edges => m_edges.Count;
 
-    /// <summary>Returns the points the next round samples, in the frame the contour is in, or none once every round is
-    /// answered.</summary>
-    /// <returns>The points, each a little outside the surface.</returns>
-    public Vector4[] Points() {
+    /// <summary>Writes the points the next round samples into a buffer, in the frame the contour is in; none once every
+    /// round is answered.</summary>
+    /// <param name="into">The buffer the round replaces: it ends as long as the round, each point a little outside the
+    /// surface, and empty once every round is answered.</param>
+    /// <returns>The round's point count, the buffer's length.</returns>
+    public int Points(OwnedBuffer<Vector4> into) {
         if (m_round < 0) {
             var contour = m_contour;
-            var points = new Vector4[((4 * contour.QuadCount) + contour.VertexCount)];
+
+            into.Resize(length: ((4 * contour.QuadCount) + contour.VertexCount), clear: false, preserve: false);
+
+            var points = into.GetSpan();
 
             for (var quad = 0; (quad < contour.QuadCount); quad++) {
                 var corners = contour.Quads.AsSpan(length: 4, start: (4 * quad));
@@ -97,13 +103,17 @@ internal sealed class SdfMeshMaterialCut {
                 points[((4 * contour.QuadCount) + vertex)] = Lifted(normal: Normal(vertex: m_site[vertex]), position: Position(vertex: vertex));
             }
 
-            return points;
+            return points.Length;
         }
         if ((m_round >= Rounds) || (m_edges.Count == 0)) {
-            return [];
+            into.Resize(length: 0, clear: false, preserve: false);
+
+            return 0;
         }
 
-        var middles = new Vector4[m_edges.Count];
+        into.Resize(length: m_edges.Count, clear: false, preserve: false);
+
+        var middles = into.GetSpan();
 
         for (var edge = 0; (edge < m_edges.Count); edge++) {
             var (position, normal) = Along(edge: edge, t: (0.5f * (m_from[edge] + m_to[edge])));
@@ -111,7 +121,7 @@ internal sealed class SdfMeshMaterialCut {
             middles[edge] = Lifted(normal: normal, position: position);
         }
 
-        return middles;
+        return middles.Length;
     }
     /// <summary>Answers the round <see cref="Points"/> last returned.</summary>
     /// <param name="materials">One material per point, in the points' order.</param>

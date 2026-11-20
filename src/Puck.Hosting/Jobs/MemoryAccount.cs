@@ -157,7 +157,10 @@ public sealed class MemoryAccount {
     /// <summary>Asks participating caches to release their claims, outside the account lock. A cache whose claims belong
     /// to another thread defers the release to that thread (<see cref="DeferTrim"/>), so some storage can outlive the
     /// call; <see cref="DeferredTrims"/> counts those still waiting.</summary>
-    public void TrimCaches() => TrimRequested?.Invoke();
+    public void TrimCaches() {
+        TrimRequested?.Invoke();
+        Puck.Abstractions.Memory.RentedArrays.TrimLarge();
+    }
 
     private int m_deferredTrims;
 

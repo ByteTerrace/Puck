@@ -918,10 +918,15 @@ public sealed partial class SdfMeshPathBake {
                 }
             }
             if (lattices.Count == 0) { return false; }
+
+            var sampled = new (int Handle, SdfSampledSnapshot Snapshot)[m_takenSampled.Count];
+            var sampledAt = 0;
+
+            foreach (var (handle, snapshot) in m_takenSampled) { sampled[sampledAt++] = (handle, snapshot); }
             batch = new SdfMeshBakeBatch(Lattices: [.. lattices], Tickets: [.. tickets]) {
                 Bake = this,
                 Poses = [.. m_takenPoses],
-                Sampled = [.. m_takenSampled.Select(selector: static entry => (entry.Key, entry.Value))],
+                Sampled = sampled,
                 SampledHandles = (m_program?.SampledFields.Count ?? 0),
             };
             m_accounts.Batches++;
@@ -1569,7 +1574,7 @@ public sealed partial class SdfMeshPathBake {
         group.Deferred = group.Next;
         group.Next = null;
         group.Contouring = true;
-        Schedule(group: group, work: () => Load(group: group));
+        ScheduleLoad(group: group);
         return true;
     }
     // The lattice over a group's box: `longest` samples along its longest axis and the same spacing along the others,
@@ -1892,7 +1897,7 @@ public sealed partial class SdfMeshPathBake {
             } else {
                 group.Next = null;
                 group.Contouring = true;
-                Schedule(group: group, work: () => Prepare(final: final, group: group));
+                SchedulePrepare(final: final, group: group);
             }
         }
         emptied?.Dispose();
@@ -2027,11 +2032,11 @@ public sealed partial class SdfMeshPathBake {
             group.Next = null;
             group.Contouring = true;
             if (final.Stage != FinalStage.Gradients) {
-                Schedule(group: group, work: () => ChooseCrossings(final: final, group: group));
+                ScheduleChooseCrossings(final: final, group: group);
                 return;
             }
 
-            Schedule(group: group, work: () => Contour(group: group, lattice: sampled));
+            ScheduleContour(group: group, lattice: sampled);
         }
     }
     // Locates zeroes along the lattice edges before measuring their tangent planes. An off-edge normal projection of a
@@ -2110,7 +2115,7 @@ public sealed partial class SdfMeshPathBake {
             group.Contour = contour;
             if (creases.Length == 0) {
                 group.Contouring = true;
-                Schedule(group: group, work: () => Split(group: group));
+                ScheduleSplit(group: group);
                 return;
             }
             group.Creases = creases;
@@ -2186,9 +2191,17 @@ public sealed partial class SdfMeshPathBake {
             }
             group.Next = null;
             group.Contouring = true;
-            Schedule(group: group, work: () => Split(group: group));
+            ScheduleSplit(group: group);
         }
     }
+    // A stage's scheduling is a method of its own: a lambda that captures a parameter makes its method allocate the
+    // closure on entry, before any early return, and the answer methods return early on every chunk but a round's last.
+    private void ScheduleLoad(Group group) => Schedule(group: group, work: () => Load(group: group));
+    private void SchedulePrepare(Group group, FinalLattice final) => Schedule(group: group, work: () => Prepare(final: final, group: group));
+    private void ScheduleChooseCrossings(Group group, FinalLattice final) => Schedule(group: group, work: () => ChooseCrossings(final: final, group: group));
+    private void ScheduleContour(Group group, SdfSampledLattice lattice) => Schedule(group: group, work: () => Contour(group: group, lattice: lattice));
+    private void ScheduleSplit(Group group) => Schedule(group: group, work: () => Split(group: group));
+    private void ScheduleAdvance(Group group) => Schedule(group: group, work: () => Advance(group: group));
     // Moves one vertex no crossing pins onto the field's surface by its value and gradient there, as AnswerCreases
     // describes; whether it moved.
     private static bool ProjectCrease(SdfContour contour, ContourProjection projection, int vertex, float value, Vector3 gradient, float tolerance, float slope) {
@@ -2224,12 +2237,12 @@ public sealed partial class SdfMeshPathBake {
 
         var contour = group.Contour!.Finished(cell: group.DiagnosticCell);
         var cut = new SdfMeshMaterialCut(contour: contour);
-        var points = cut.Points();
+        var points = cut.Points(into: group.Points);
 
         Account(group: group, since: started, stage: BakeStage.Split);
         group.Contour = contour;
         group.Cut = cut;
-        StagePoints(group: group, points: points);
+        StagePoints(group: group, count: points);
         using (EnterGate(site: BakeGate.Split)) {
             group.Contouring = false;
             if (!GroupList.Holds(group: group)) { return; }
@@ -2238,9 +2251,8 @@ public sealed partial class SdfMeshPathBake {
     }
     // Fills a group's point round and the storage its answers land in, on the worker running the group's stage: no
     // request names the group's points until the gate publishes the round's first chunk.
-    private static void StagePoints(Group group, ReadOnlySpan<Vector4> points) {
-        group.Points.CopyFrom(source: points);
-        group.PointMaterials.Resize(points.Length, clear: false, preserve: false);
+    private static void StagePoints(Group group, int count) {
+        group.PointMaterials.Resize(count, clear: false, preserve: false);
         group.PointsAnswered = 0;
     }
     // Answers a chunk of a group's material points; once a round's every point is answered, its material cut takes them
@@ -2259,7 +2271,7 @@ public sealed partial class SdfMeshPathBake {
 
             group.Next = null;
             group.Contouring = true;
-            Schedule(group: group, work: () => Advance(group: group));
+            ScheduleAdvance(group: group);
         }
     }
     // Hands a round's materials to the group's cut, then queues its next round, or meshes the group once none is left.
@@ -2269,16 +2281,16 @@ public sealed partial class SdfMeshPathBake {
 
         cut.Answer(materials: group.PointMaterials.GetSpan());
 
-        var points = cut.Points();
+        var points = cut.Points(into: group.Points);
 
         Account(group: group, since: started, stage: BakeStage.Cut);
 
-        if (points.Length == 0) {
+        if (points == 0) {
             Build(group: group);
             return;
         }
 
-        StagePoints(group: group, points: points);
+        StagePoints(group: group, count: points);
         using (EnterGate(site: BakeGate.Advance)) {
             group.Contouring = false;
             if (!GroupList.Holds(group: group)) { return; }
@@ -2405,6 +2417,8 @@ public sealed partial class SdfMeshPathBake {
         if (m_reported) { return; }
         m_seconds = m_clock.Elapsed.TotalSeconds;
         m_reported = true;
+        // The bake's workers have no more large scratch to reuse; the pool's arrays go back to the collector.
+        RentedArrays.TrimLarge();
         SdfMeshBakeReport.Done(accounts: m_accounts, dispatches: DispatchReport, groups: [.. m_groups.Select(selector: static group => new SdfMeshBakeReport.Finished(Mesh: group.Mesh, Outcome: group.Outcome, Selector: group.Selector))], residency: Residency, residencyId: ResidencyId, seconds: m_seconds);
     }
 

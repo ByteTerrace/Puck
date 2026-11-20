@@ -358,13 +358,18 @@ public sealed class SdfMeshStore {
 
         var key = KeyOf(geometry: geometry, identity: identity);
         var path = PathOf(identity: identity, key: key);
-        return WriteEntry(path, Encode(key: key, materials: materials, mesh: mesh));
+        return WriteEntry(path, (key, mesh, materials), static (output, entry) => SdfMeshStoreCodec.Encode(output, entry.key, entry.mesh, entry.materials));
     }
 
     // A finished mesh and an intermediate are bounded apart, each in its own directory: PathOf puts every entry under the
-    // root its extension names, and this is the one place either bound is enforced.
-    private bool WriteEntry(string path, byte[] bytes) {
-        if (!Quietly(action: () => Puck.Confinement.AtomicFile.WriteAllBytes(bytes: bytes, path: path))) { return false; }
+    // root its extension names, and this is the one place either bound is enforced. The entry is encoded straight into
+    // the temporary file.
+    private bool WriteEntry<TState>(string path, TState state, Action<Stream, TState> encode) where TState : allows ref struct {
+        try {
+            Puck.Confinement.AtomicFile.Write(path: path, state: state, write: encode);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return false;
+        }
         var finished = IsMeshEntry(name: path);
 
         _ = Puck.Abstractions.CacheRetention.EnforceSetsOnWrite(
@@ -395,7 +400,7 @@ public sealed class SdfMeshStore {
     internal void WriteCheckpoint(UInt128 identity, SdfMeshGeometry geometry, SdfMesh? mesh) {
         var key = KeyOf(identity, geometry);
         try {
-            _ = WriteEntry(PathOf(identity, key, CheckpointExtension), SdfMeshStoreCodec.EncodeExact(key, mesh));
+            _ = WriteEntry(PathOf(identity, key, CheckpointExtension), (key, mesh), static (output, entry) => SdfMeshStoreCodec.EncodeExact(output, entry.key, entry.mesh));
         } catch (Exception exception) when (exception is OutOfMemoryException or OverflowException) {
             // The surface is still available to the next stage.
         }
@@ -429,7 +434,7 @@ public sealed class SdfMeshStore {
     internal void WriteSamples(UInt128 identity, UInt128 key, ReadOnlySpan<byte> samples) {
         key = KeyOf(identity, new SdfMeshGeometry(Dynamic: false, Hash: key));
         try {
-            _ = WriteEntry(PathOf(identity, key, SampleExtension), SdfMeshStoreCodec.EncodePayload(key, samples));
+            _ = WriteEntry(PathOf(identity, key, SampleExtension), new SamplePayload(key, samples), static (output, entry) => SdfMeshStoreCodec.EncodePayload(output, entry.Key, entry.Samples));
         } catch (OutOfMemoryException) {
             // The sample answer is already available to the contour.
         }
@@ -596,12 +601,25 @@ public sealed class SdfMeshStore {
     }
     // A finished mesh lives in its identity's set under Directory, an intermediate in its stage identity's set under
     // IntermediateDirectory.
-    private string PathOf(UInt128 identity, UInt128 key, string extension = Extension) => Path.Combine(
-        path1: (string.Equals(a: extension, b: Extension, comparisonType: StringComparison.Ordinal)
-            ? SetDirectoryOf(identity: identity)
-            : Path.Combine(path1: IntermediateDirectory, path2: identity.ToString(format: "x32", provider: null))),
-        path2: (key.ToString(format: "x32", provider: null) + extension));
-    private static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) => SdfMeshStoreCodec.Encode(key: key, materials: materials, mesh: mesh);
+    private string PathOf(UInt128 identity, UInt128 key, string extension = Extension) {
+        Span<char> set = stackalloc char[32];
+        Span<char> name = stackalloc char[32 + MaxExtensionLength];
+
+        _ = identity.TryFormat(destination: set, charsWritten: out _, format: "x32", provider: null);
+        _ = key.TryFormat(destination: name, charsWritten: out _, format: "x32", provider: null);
+        extension.CopyTo(destination: name[32..]);
+
+        return Path.Join(
+            path1: (string.Equals(a: extension, b: Extension, comparisonType: StringComparison.Ordinal) ? Directory : IntermediateDirectory),
+            path2: set,
+            path3: name[..(32 + extension.Length)]);
+    }
+    // The longest extension an entry carries, which PathOf formats into a stack buffer.
+    private const int MaxExtensionLength = 32;
+    private readonly ref struct SamplePayload(UInt128 key, ReadOnlySpan<byte> samples) {
+        public UInt128 Key { get; } = key;
+        public ReadOnlySpan<byte> Samples { get; } = samples;
+    }
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));
     // Runs a file-system action, answering whether the file system allowed it.
