@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Commands;
 using Puck.Maths;
@@ -54,74 +53,26 @@ public sealed partial class WorldScreenBinder : IWorldViewScenes {
 
         return outcome;
     }
-    // Compiles the camera axes and wires their reference-frame source. A ranked anchor list or a seat-relative anchor
-    // resolves every frame through RankedAnchorSource for the registration's seat; the bare kinds keep their
-    // configure-time sources.
+    // Compiles the camera axes and wires their reference-frame source. Every anchored camera, bare or ranked, resolves
+    // its anchor every frame through RankedAnchorSource for the registration's seat, so a filmed view and the main
+    // window read one anchor's pose alike.
     private void ConfigureCameraView(CameraRegistration registration, WorldCamera camera, int seat) {
         registration.CutRevision++;
-        if (
-            (camera.Anchors is not null) ||
-            WorldSeatAnchors.IsSeatRelative(anchor: camera.Anchor)
-        ) {
-            registration.AnchorSource = new RankedAnchorSource(
+        registration.AnchorSource = (((camera.Anchor is null) && (camera.Anchors is null))
+            ? null
+            : new RankedAnchorSource(
                 owner: this,
                 camera: camera,
                 slot: PlayerRoster.SlotFromDisplay(number: seat)
-            );
-            registration.AnchorIdSource = static () => 0;
-            CompileCameraRig(
-                camera: camera,
-                registration: registration
-            );
-
-            return;
-        }
-
-        switch (camera.Anchor) {
-            case null:
-                registration.AnchorSource = null;
-                registration.AnchorIdSource = null;
-
-                break;
-            case WorldAnchor.Entity entity:
-                registration.AnchorSource = m_anchors;
-                registration.AnchorIdSource = () => entity.Index;
-
-                break;
-            case WorldAnchor.EntityPart part:
-                registration.AnchorSource = new EntityPartAnchorSource(
-                    owner: this,
-                    part: part
-                );
-                registration.AnchorIdSource = static () => 0;
-
-                break;
-            case WorldAnchor.Placement placement:
-                registration.AnchorSource = new FixedAnchorSource(anchor: new SdfAnchor(
-                    Position: StaticAnchorPosition(placement: placement),
-                    Orientation: Quaternion.Identity
-                ));
-                registration.AnchorIdSource = static () => 0;
-
-                break;
-            case WorldAnchor.Group group:
-                registration.AnchorSource = new FixedAnchorSource(anchor: new SdfAnchor(
-                    Position: GroupCentroid(group: group),
-                    Orientation: Quaternion.Identity
-                ));
-                registration.AnchorIdSource = static () => 0;
-
-                break;
-        }
-
+            ));
         CompileCameraRig(
             camera: camera,
             registration: registration
         );
     }
     // A camera program's state bindings, placement subjects, and blend names all resolve against the live document,
-    // which only the client anchor source carries (the same seam StaticAnchorPosition/GroupCentroid read). Without
-    // one there is no document to compile against and the view frames the world origin.
+    // which only the client anchor source carries. Without one there is no document to compile against and the view
+    // frames the world origin.
     private void CompileCameraRig(CameraRegistration registration, WorldCamera camera) {
         if (m_anchors is WorldClient client) {
             registration.Rig = WorldCameraRigCompiler.Compile(
@@ -131,19 +82,7 @@ public sealed partial class WorldScreenBinder : IWorldViewScenes {
                 program: camera.Rig
             );
         }
-    }    // The one-shot centroid of a group anchor. A filmed/offscreen view bakes only this raw centroid: it DROPS the group
-    // Chase.SpreadPullback widening entirely (not merely its per-frame smoothing), so an establishing shot filmed onto a
-    // diegetic screen frames the centroid without widening for the group's spread. The main-window composer applies and
-    // smooths the spread; documented so authors don't expect spread-widening on a filmed establishing shot.
-    private Vector3 GroupCentroid(WorldAnchor.Group group) =>
-        ((m_anchors is WorldClient client)
-            ? WorldGroupAnchors.ComputeRaw(
-                client: client,
-                group: group,
-                maxPopulation: WorldClient.EntityCapacity
-            ).Centroid
-            : Vector3.Zero
-        );
+    }
     // Registers (or finds, idempotent per name) one camera view: fixed cameras carry their own world-space look-at;
     // anchored cameras resolve their WorldAnchor each frame and pose their rig at the resolved anchor. The render graph
     // runs it as an instance of the registration's name from its next reconciliation. A camera FILMS an already-lit
@@ -259,17 +198,6 @@ public sealed partial class WorldScreenBinder : IWorldViewScenes {
 
         return null;
     }
-    // The stamped world position of a placement anchor (the same WorldAnchorGeometry math speakers read) — needs the live
-    // definition, which the anchor source carries in practice (the client).
-    private Vector3 StaticAnchorPosition(WorldAnchor.Placement placement) =>
-        ((m_anchors is WorldClient client)
-            ? WorldAnchorGeometry.StaticPlacementPosition(
-                definition: client.Definition,
-                placementId: placement.PlacementId,
-                shapeId: placement.ShapeId
-            )
-            : Vector3.Zero
-        );
     // The set of screen indices currently wired to a camera name.
     private HashSet<int> WiredScreensFor(string name) {
         var indices = new HashSet<int>();
@@ -520,7 +448,6 @@ public sealed partial class WorldScreenBinder : IWorldViewScenes {
     // ReconcileCameras works against — the 1-based seat a seat-relative registration resolves for (1 for a shared
     // registration), the rig and anchor that pose it, and the probe export its view's node renders into.
     private sealed class CameraRegistration {
-        public Func<int>? AnchorIdSource { get; set; }
         public ISdfAnchorSource? AnchorSource { get; set; }
         public long CutRevision { get; set; }
         public IShaderPipelineOutputExport? Export { get; set; }

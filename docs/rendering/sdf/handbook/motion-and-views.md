@@ -35,9 +35,11 @@ bool TryResolveAnchor(int anchorId, out SdfAnchor anchor);
 
 `Puck.World.Client`'s `WorldClient` is the main source: an anchor id is an
 entity slot, and it resolves to that entity's interpolated render pose.
-`FixedAnchorSource` (in `WorldCameraRigCompiler.cs`) always returns one pose,
-and `WorldScreenBinder.Device.CameraViews.cs` adds sources for an entity part and a
-ranked camera candidate.
+`WorldScreenBinder.Device.CameraViews.cs` adds one source per anchored camera,
+which resolves its anchor (or winning ranked candidate) every frame through
+`WorldAnchorPoses`, the resolver lights, speakers, overlays and the main
+window's cameras read too: an anchor resolves to the pose the frame draws the
+anchored thing at, position and facing both.
 
 The rule this produces is simple and central: **an id whose subject is gone
 simply stops resolving.** `TryResolveAnchor` returns `false`, and the

@@ -99,7 +99,7 @@ public sealed partial class WorldDocument {
         WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults or WorldMutation.SetPopulationDistribution or WorldMutation.SetPopulationCensus or WorldMutation.SetHostDefaults));
     // Drop the first row whose key matches — reports whether a row was actually removed. The key is the section's
     // WorldRowKeys entry, which the write door reads to find the same row.
-    private static bool Remove<T, TKey>(IReadOnlyList<T> list, TKey key, WorldRowKey<T, TKey> keys, out IReadOnlyList<T> result) {
+    private static bool Remove<T, TKey>(IReadOnlyList<T> list, TKey key, WorldRowKey<T, TKey> keys, out IReadOnlyList<T> result) where TKey : notnull {
         var kept = new List<T>(capacity: list.Count);
         var removed = false;
 
@@ -1884,7 +1884,7 @@ public sealed partial class WorldDocument {
     }
     // Replace the row whose key matches the item's, or append it — the coarse whole-row upsert, keyed by the section's
     // WorldRowKeys entry.
-    private static IReadOnlyList<T> Upsert<T, TKey>(IReadOnlyList<T> list, T item, WorldRowKey<T, TKey> keys) {
+    private static IReadOnlyList<T> Upsert<T, TKey>(IReadOnlyList<T> list, T item, WorldRowKey<T, TKey> keys) where TKey : notnull {
         var key = keys.Of(row: item);
         var result = list.ToImmutableList();
 
