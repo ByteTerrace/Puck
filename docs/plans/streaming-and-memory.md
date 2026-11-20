@@ -354,7 +354,7 @@ only name a part of one.
 | Device blocks | Every block the backends hold from the device, per segment, each once: used ranges, the room inside a block, a kept empty block and a retired resource whose fence has not passed | The ledger (`GpuDeviceMemoryWork`) |
 | Native committed | What the native allocator has committed: every native payload and the allocator's slack | `IAllocatorStatistics` |
 | Native outside the allocator | Direct native allocations, such as `GpuRegion`'s host copies today | Each such owner; the row goes to nothing as they move onto the allocator |
-| Managed committed | What the collector has committed: every managed object, a managed-backed `OwnedBuffer`, and every array rented from the shared pool, in use or kept by the pool after its return (`RentedArrays`) | The collector's last reading, with its age |
+| Managed committed | What the collector has committed, including managed objects, managed-backed `OwnedBuffer` storage, and rented arrays in use or kept by the shared pool | The collector's last reading, with its age |
 | Runtime and driver private | Code and loader heaps, stacks and the driver's host-side memory | The residual of a page walk of the process |
 
 On a discrete adapter the device pool is the device blocks in the adapter's
@@ -401,7 +401,7 @@ means measured and printed with no bound: it is what the envelope still holds.
 | The probe cache's blocks | A cached owner in bytes, trimmed first | 9 |
 | The composed-document store | Released after boot where nothing reads it | 6 |
 | Speculative work: bakes, loads and decodes for a predicted demand | A share of the workspace class, cancelled when the demand leaves or pressure asks | 3, 10 |
-| Rented arrays the shared pool keeps | Large rents move to owned storage under an owner | 2, 11 |
+| Rented arrays the shared pool keeps | `RentedArrays` limits shared buckets by payload size. Larger rentals are eligible for collection when released | 2, 11 |
 | Native allocator slack | Collected when an arrival settles and on pressure (`IAllocatorStatistics`); named | 2 |
 | The managed heap's other tenants | Named by a heap walk; each one past a stated size becomes an owner with a capacity. No hard limit on the heap: it would turn pressure into an exception where everything else turns it into a coarser picture | 2, then per tenant |
 | Runtime code and loader heaps | Named; not controllable at run time | 2 |

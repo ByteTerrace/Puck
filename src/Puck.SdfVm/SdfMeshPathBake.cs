@@ -2342,7 +2342,7 @@ public sealed partial class SdfMeshPathBake {
             var started = Stopwatch.GetTimestamp();
             mesh = StageCodeCurrent(group)
                 ? Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh)
-                : mesh.NativeCopy(Library.Allocator, Library.Account);
+                : Library.CopyUnstored(mesh);
             Account(since: started, stage: BakeStage.Store);
         } else if ((group.Outcome is not null) && StageCodeCurrent(group)) {
             Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true);

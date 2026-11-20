@@ -15,7 +15,7 @@ public sealed class SdfAppliedCodeUpdateLawTests {
     private static readonly (string Assembly, string Type, string? Method)[] FixtureRoot = [("Puck.SdfVm.Tests", "Puck.SdfVm.Tests.SdfMeshBakeClosureFixture", "Run")];
 
     [Fact]
-    public void AnAppliedUpdateRebuildsTheProgramWhoseEmittersStoodStill() {
+    public void AnAppliedUpdateEmitsAgainAndReusesTheUnchangedProgram() {
         var emitter = new CountingEmitter();
         var source = new SdfCompositionFrameSource(dresser: emitter, emitters: [emitter]);
         var first = Capture(source: source);
@@ -28,7 +28,7 @@ public sealed class SdfAppliedCodeUpdateLawTests {
         var rebuilt = Capture(source: source);
 
         // The emission is code the update may have changed, so the program is emitted again although no emitter moved.
-        Assert.NotSame(expected: first, actual: rebuilt);
+        Assert.Same(expected: first, actual: rebuilt);
         Assert.Equal(expected: 2, actual: emitter.Emissions);
         Assert.Same(expected: rebuilt, actual: Capture(source: source));
     }
@@ -91,7 +91,8 @@ public sealed class SdfAppliedCodeUpdateLawTests {
 
         Assert.False(condition: closure.Reads(type: typeof(SdfGpuWork)));
         Assert.True(condition: closure.Reads(type: typeof(SdfMeshBakeBatch)));
-        AppliedCodeUpdate.Apply(typeof(SdfGpuWork));
+        var decoder = typeof(SdfMeshStore).Assembly.GetType(name: "Puck.SdfVm.SdfMeshStoreDecoder", throwOnError: true)!;
+        AppliedCodeUpdate.Apply(typeof(SdfGpuWork), decoder);
         var reallocated = built.UnderRunningCode(code: closure);
 
         // Compare with the current identity, including any earlier process update: test ordering must not require

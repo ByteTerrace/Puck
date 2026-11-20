@@ -49,14 +49,11 @@ public sealed class SdfWorldResidencyViewsRefusalLawTests {
 
         rig.ProduceFrames();
         Assert.False(condition: rig.Residency.IsReady);
-        Assert.Contains(
-            actualString: rig.Residency.NotReadyReason,
-            expectedSubstring: "the views kernel, 'sdf-world-views', was refused and is built again on a kernel reload or a device loss: injected failure creating sdf-world-views"
-        );
-        Assert.Contains(
-            actualString: rig.Residency.Refusal,
-            expectedSubstring: "the views kernel, 'sdf-world-views', was refused and is built again on a kernel reload or a device loss: injected failure creating sdf-world-views"
-        );
+        foreach (var reason in new[] { rig.Residency.NotReadyReason, rig.Residency.Refusal }) {
+            Assert.Contains(expectedSubstring: "'sdf-world-views' pipeline was refused", actualString: reason);
+            Assert.Contains(expectedSubstring: "a kernel reload or a device loss", actualString: reason);
+            Assert.Contains(expectedSubstring: "injected failure creating sdf-world-views", actualString: reason);
+        }
     }
     [Fact]
     public void ARefusedViewsKernelIsNeverBuiltAgainByAFrame() {

@@ -17,6 +17,11 @@
              first-use JIT work out of world startup; ordinary builds retain their portable IL output. -->
         <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
         <PublishReadyToRun Condition="'$(PublishReadyToRun)' == '' and '$(PublishAot)' != 'true'">true</PublishReadyToRun>
+        <!-- A player build (`puck world player`) publishes the World with its own runtime. The switch is this project's
+             alone: a global SelfContained or RuntimeIdentifier would flow into every referenced project's locked restore,
+             whose graphs are portable, while here the current runtime identifier follows from SelfContained and the
+             referenced libraries build portable as they always do. -->
+        <SelfContained Condition="'$(PuckSelfContained)' == 'true'">true</SelfContained>
     </PropertyGroup>
     <!-- Presentation builds and replaces large managed workspaces (irradiance hierarchies, probe caches and decoded
          mesh arrays). ConserveMemory reduces retention of freed LOH regions after these bursts. Published mesh

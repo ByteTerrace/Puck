@@ -285,7 +285,7 @@ origins, answer words, saved hits, update words) is grow-only managed storage
 that only the worker task touches; a GPU job reads it before its submit
 returns, and a job given a reusable answer array returns it for the next job. A caller that overwrites every
 entry grows a buffer with `Resize(..., preserve: false)`, which copies nothing.
-Mesh-store decode scratch follows the same scope (`SdfMeshStoreCodec.TryDecode`):
+Mesh-store decode scratch follows the same scope (`SdfMeshStoreDecoder.TryDecode`):
 the entry's bytes and the expanded bytes live in accounted `OwnedBuffer<byte>`s
 until parsing ends, and each plane is decoded into the storage the mesh keeps
 (`SdfMeshStorage`: a host's native blocks, or arrays offline), so a load allocates

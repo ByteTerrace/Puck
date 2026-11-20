@@ -1,8 +1,8 @@
-using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 
 namespace Puck.SdfVm;
 
@@ -283,7 +283,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
                 var instanceBytes = (ulong)Math.Max(val1: 1, val2: bottoms.Length) * (ulong)RecordBytes;
                 var instances = recording.HostBuffer(part: "structure-instances", bytes: instanceBytes, sizing: SdfGpuWorkSizing.Fit, usage: (GpuBufferUsage.Storage | GpuBufferUsage.AccelerationStructureInput));
                 var inputs = GpuAccelerationStructureInputs.Instances(instanceCount: 0U, instanceOffsetBytes: 0UL, source: instances);
-                var records = ArrayPool<byte>.Shared.Rent(minimumLength: (int)instanceBytes);
+                var records = RentedArrays.Rent<byte>(minimumLength: (int)instanceBytes);
                 var written = 0U;
 
                 try {
@@ -296,7 +296,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
                     }
                     instances.Write<byte>(data: records.AsSpan(start: 0, length: (int)(written * (uint)RecordBytes)));
                 } finally {
-                    ArrayPool<byte>.Shared.Return(array: records);
+                    RentedArrays.Return(array: records);
                 }
 
                 inputs = inputs with { Count = written };

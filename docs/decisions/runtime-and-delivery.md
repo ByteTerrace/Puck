@@ -47,11 +47,19 @@ to a package. Test fixtures live with the tests that read them.
 **Existing pipelines take a package; none is added.** `puck compile --tree`,
 `puck world prepare`, `puck official build --worlds` and the silo image each
 take the package folder, and the release publish compiles the package beside
-the published engine.
+the published engine. `puck world player` composes those same steps into the
+folder a consumer machine runs (the owner's ruling: the RTX 2060 machine runs a
+prepared release build with its caches prewarmed and never builds, compiles a
+cartridge or cold-bakes). The published engine fills that folder's caches
+itself, so each identity it ships is the one the consumer's boot derives; a
+consumer device whose window size or memory bars demand other mesh tiers is a
+baking target of its own.
 
 **Planned, not implemented.** A package's manifest supplying the window title
 and icon, which a world may not override; channels; the release manifest
-pinning package content; and the desktop artifact carrying no content. A
+pinning package content; and the desktop artifact carrying no content, which
+replaces the content-bearing player folder once content arrives through the
+release manifest. A
 compiled world stays a cache with a strong key inside a package, never the
 packaged unit, because its bytes change with every engine build.
 

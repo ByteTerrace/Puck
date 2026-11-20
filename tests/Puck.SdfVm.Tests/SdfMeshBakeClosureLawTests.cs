@@ -68,7 +68,7 @@ public sealed class SdfMeshBakeClosureLawTests {
         // storage are not, and the entry format's version owns what an entry's bytes mean.
         var codec = typeof(SdfMeshStore).Assembly.GetType(name: "Puck.SdfVm.SdfMeshStoreCodec", throwOnError: true)!;
         Requires(codec, "Encode");
-        Assert.DoesNotContain(collection: closure.Members.Keys, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMeshStoreCodec.TryDecode`", comparisonType: StringComparison.Ordinal));
+        Assert.DoesNotContain(collection: closure.Members.Keys, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMeshStoreDecoder.TryDecode`", comparisonType: StringComparison.Ordinal));
         Assert.DoesNotContain(collection: closure.Members.Keys, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMesh.NativeCopy`", comparisonType: StringComparison.Ordinal));
         Assert.DoesNotContain(collection: closure.Members.Keys, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMesh/NativeStorage", comparisonType: StringComparison.Ordinal));
 
@@ -76,7 +76,7 @@ public sealed class SdfMeshBakeClosureLawTests {
         // the device and back, may enter derivation; nor may memory accounting and storage, which pace admission and hold
         // the words the bake's own code writes.
         Type[] transports = [
-            typeof(SdfGpuWork), typeof(SdfGpuWork).Assembly.GetType(name: "Puck.SdfVm.SdfMeshBakeGpuWork", throwOnError: true)!,
+            typeof(SdfMeshBakeBacklog), typeof(SdfGpuWork), typeof(SdfGpuWork).Assembly.GetType(name: "Puck.SdfVm.SdfMeshBakeGpuWork", throwOnError: true)!,
             typeof(Puck.Hosting.Jobs.MemoryAccount), typeof(Puck.Hosting.Jobs.MemoryAccount.Owner), typeof(Puck.Hosting.HostMemory),
             typeof(Puck.Abstractions.Memory.OwnedBuffer<>), typeof(Puck.Abstractions.Memory.GuardedAllocator),
         ];
@@ -117,12 +117,12 @@ public sealed class SdfMeshBakeClosureLawTests {
         // identity nor the kernels. Each member is safe for its own reason: the material count and declared screens only
         // validate material lanes (and fill a header lane no field kernel reads), the vectors only size the stream's tail,
         // and glass enters every glass group's geometry (SdfMeshGeometryBuilder.AppendGlass). A member added here must be
-        // one of those kinds, or hashed into the geometry, before this list grows.
+        // one of those kinds, or hashed into the geometry, before this list grows. Matches compares the same inputs for reuse.
         var outline = typeof(Puck.SignedDistance.SdfAppearanceOutline);
         const System.Reflection.BindingFlags Declared = (System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly);
 
         Assert.Equal(
-            expected: ["DeclaresScreen", "IsGlass", "Materials", "Screens", "Vectors"],
+            expected: ["DeclaresScreen", "IsGlass", "Matches", "Materials", "Screens", "Vectors"],
             actual: outline.GetMembers(bindingAttr: (System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.DeclaredOnly))
                 .Where(predicate: static member => member.MemberType is (System.Reflection.MemberTypes.Property or System.Reflection.MemberTypes.Method))
                 .Where(predicate: static member => !member.Name.StartsWith(value: "get_", comparisonType: StringComparison.Ordinal))

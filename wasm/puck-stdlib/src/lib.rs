@@ -141,14 +141,15 @@ impl InCell {
     /// Decodes one cell from exactly [`abi::IN_CELL_BYTES`] bytes at the frozen offsets.
     fn decode(bytes: &[u8]) -> Self {
         Self {
-            kind: decode_in_cell_kind(bytes[IN_CELL_OFFSET_KIND]),
+            kind: InCellKind::from_u8(bytes[IN_CELL_OFFSET_KIND]),
             channel: bytes[IN_CELL_OFFSET_CHANNEL],
             ordinal: read_u16(bytes, IN_CELL_OFFSET_ORDINAL),
             handle: Handle {
                 index: read_u16(bytes, IN_CELL_OFFSET_HANDLE_INDEX),
                 generation: read_u16(bytes, IN_CELL_OFFSET_HANDLE_GENERATION),
             },
-            verdict: decode_verdict(bytes[IN_CELL_OFFSET_VERDICT]),
+            // An unknown verdict byte decodes to `None`: a cell to skip, never one read as allowed.
+            verdict: Verdict::from_u8(bytes[IN_CELL_OFFSET_VERDICT]),
             verb: bytes[IN_CELL_OFFSET_VERB],
             a: read_i64(bytes, IN_CELL_OFFSET_A),
             b: read_i64(bytes, IN_CELL_OFFSET_B),
@@ -482,41 +483,6 @@ impl<'a> Outputs<'a> {
         self.count += 1;
 
         ordinal
-    }
-}
-
-/// Maps a raw kind byte onto a known [`InCellKind`], or `None` when this build has no name for it.
-/// Written against the generated variants rather than literals so the wire values live in exactly
-/// one place.
-fn decode_in_cell_kind(value: u8) -> Option<InCellKind> {
-    match value {
-        v if v == InCellKind::Tick as u8 => Some(InCellKind::Tick),
-        v if v == InCellKind::Answer as u8 => Some(InCellKind::Answer),
-        v if v == InCellKind::Observation as u8 => Some(InCellKind::Observation),
-        _ => None,
-    }
-}
-
-/// Maps a raw verdict byte onto a known [`Verdict`], or `None` when this build has no name for it.
-/// The verdict set grows as data — a new denial reason is not a break — so an unknown byte is a
-/// cell to skip, never one to read optimistically as allowed.
-fn decode_verdict(value: u8) -> Option<Verdict> {
-    match value {
-        v if v == Verdict::None as u8 => Some(Verdict::None),
-        v if v == Verdict::HeldConcrete as u8 => Some(Verdict::HeldConcrete),
-        v if v == Verdict::HeldWildcard as u8 => Some(Verdict::HeldWildcard),
-        v if v == Verdict::HeldAsReserver as u8 => Some(Verdict::HeldAsReserver),
-        v if v == Verdict::NoHold as u8 => Some(Verdict::NoHold),
-        v if v == Verdict::BeatenByReserver as u8 => Some(Verdict::BeatenByReserver),
-        v if v == Verdict::AttenuatedToEmpty as u8 => Some(Verdict::AttenuatedToEmpty),
-        v if v == Verdict::NoSuchSubject as u8 => Some(Verdict::NoSuchSubject),
-        v if v == Verdict::QuotaExhausted as u8 => Some(Verdict::QuotaExhausted),
-        v if v == Verdict::StaleHandle as u8 => Some(Verdict::StaleHandle),
-        v if v == Verdict::Applied as u8 => Some(Verdict::Applied),
-        v if v == Verdict::MalformedPayload as u8 => Some(Verdict::MalformedPayload),
-        v if v == Verdict::PayloadTooLarge as u8 => Some(Verdict::PayloadTooLarge),
-        v if v == Verdict::Rejected as u8 => Some(Verdict::Rejected),
-        _ => None,
     }
 }
 

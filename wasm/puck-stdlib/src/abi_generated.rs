@@ -40,6 +40,17 @@ pub enum OutCellKind {
     Ask = 2,
 }
 
+impl OutCellKind {
+    /// Maps a wire byte onto its member, or `None` for a byte this build has no name for.
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            1 => Some(Self::Act),
+            2 => Some(Self::Ask),
+            _ => None,
+        }
+    }
+}
+
 /// Mirrors `Puck.Scripting.AddonInCellKind` (`src/Puck.Scripting/AddonInCellKind.cs`).
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -52,6 +63,18 @@ pub enum InCellKind {
     Observation = 3,
 }
 
+impl InCellKind {
+    /// Maps a wire byte onto its member, or `None` for a byte this build has no name for.
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            1 => Some(Self::Tick),
+            2 => Some(Self::Answer),
+            3 => Some(Self::Observation),
+            _ => None,
+        }
+    }
+}
+
 /// Mirrors `Puck.Scripting.AddonChannelKind` (`src/Puck.Scripting/AddonChannelKind.cs`).
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -62,6 +85,18 @@ pub enum ChannelKind {
     Request = 2,
     /// `Puck.Scripting.AddonChannelKind.Response` (`3`).
     Response = 3,
+}
+
+impl ChannelKind {
+    /// Maps a wire byte onto its member, or `None` for a byte this build has no name for.
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            1 => Some(Self::Input),
+            2 => Some(Self::Request),
+            3 => Some(Self::Response),
+            _ => None,
+        }
+    }
 }
 
 /// Mirrors `Puck.Scripting.AddonSubjectKind` (`src/Puck.Scripting/AddonSubjectKind.cs`).
@@ -78,6 +113,20 @@ pub enum SubjectKind {
     Profile = 4,
     /// `Puck.Scripting.AddonSubjectKind.State` (`5`).
     State = 5,
+}
+
+impl SubjectKind {
+    /// Maps a wire byte onto its member, or `None` for a byte this build has no name for.
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            1 => Some(Self::Body),
+            2 => Some(Self::Screen),
+            3 => Some(Self::Section),
+            4 => Some(Self::Profile),
+            5 => Some(Self::State),
+            _ => None,
+        }
+    }
 }
 
 /// Mirrors `Puck.Scripting.AddonVerdict` (`src/Puck.Scripting/AddonVerdict.cs`).
@@ -114,6 +163,30 @@ pub enum Verdict {
     Rejected = 13,
     /// `Puck.Scripting.AddonVerdict.NotDisclosed` (`14`).
     NotDisclosed = 14,
+}
+
+impl Verdict {
+    /// Maps a wire byte onto its member, or `None` for a byte this build has no name for.
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::None),
+            1 => Some(Self::HeldConcrete),
+            2 => Some(Self::HeldWildcard),
+            3 => Some(Self::HeldAsReserver),
+            4 => Some(Self::NoHold),
+            5 => Some(Self::BeatenByReserver),
+            6 => Some(Self::AttenuatedToEmpty),
+            7 => Some(Self::NoSuchSubject),
+            8 => Some(Self::QuotaExhausted),
+            9 => Some(Self::StaleHandle),
+            10 => Some(Self::Applied),
+            11 => Some(Self::MalformedPayload),
+            12 => Some(Self::PayloadTooLarge),
+            13 => Some(Self::Rejected),
+            14 => Some(Self::NotDisclosed),
+            _ => None,
+        }
+    }
 }
 
 impl Verdict {
