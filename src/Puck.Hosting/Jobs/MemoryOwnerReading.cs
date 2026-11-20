@@ -84,6 +84,10 @@ public readonly record struct MemoryRowReading(string Name, PhysicalMemory Pool,
 /// <param name="ClassPromised">The promised bytes by <see cref="MemoryClass"/>, which add to
 /// <paramref name="Promised"/>: grants in flight are fixed.</param>
 public sealed record MemoryAdmissionReading(PhysicalMemory Pool, long? Limit, long Held, long Peak, long Promised, long Retired, long Forced, long ForcedJobs, long OverLimitBytes, long OverLimitGrants, long Refusals, long DeviceRefusals, long PressureTrims, long Floor, IReadOnlyList<long> ClassHeld, IReadOnlyList<long> ClassPromised) {
+    /// <summary>Gets the owner of the most recent refusal in this pool.</summary>
+    public string? LastRefusedOwner { get; init; }
+    /// <summary>Gets sampled private bytes beyond the held charges used to reduce host admission room.</summary>
+    public long PrivateBeyondHeld { get; init; }
     /// <summary>Gets the room left for a new promise, at least zero, or <see langword="null"/> where nothing bounds the
     /// pool.</summary>
     public long? Room => ((Limit is { } limit) ? Math.Max(val1: 0L, val2: ((limit - Held) - Promised)) : null);

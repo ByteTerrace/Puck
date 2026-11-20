@@ -455,7 +455,22 @@ laws exercise that boundary.
   gate far longer than the workers' own sections do, so the
   workers' waits are the frame thread's holds. Whether a group still stands in
   the bake is its `Listed` flag, which only `GroupList.Set` and `Clear` move,
-  never a search of the list.
+  never a search of the list. No entry walks the list for counts either:
+  the take reads how many groups fly, run a stage, hold an admission, wait for
+  their first stage or hold a lattice from `GroupTally`, which every setter of
+  those states settles (`Group.Settle`, the one place a group's contribution
+  moves a count), and `ObserveResidency` walks only the groups that landed or
+  were drawn again and have not stood in the mesh region
+  (`Group.AwaitResidency`, the one door a group joins that set by, queued from
+  any thread and taken in under the gate). A start decides whether the store
+  may hold a mesh or checkpoint from its known entries
+  (`SdfMeshStore.MayHold`, `MayHoldCheckpoint`, the same per-identity sets as the
+  sample probe below), never a file read. A report line written while the
+  thread holds a gate waits for the gate's release
+  (`SdfMeshBakeReport.GateLeft`): a write to a piped standard error can block
+  on its reader, and a frame thread blocked there holds every worker.
+  `Prioritize` still walks and measures every group still baking on each
+  prepared frame, outside the gate but on the frame thread.
 - **A stage's scratch is rented, its result exact.** A CPU stage grows its
   per-vertex and per-quad workspace in `RentedList<T>` and leases its tables
   (`RentedArrays.Rent(minimumLength, out array)`). Arrays up to 1 MiB reuse the

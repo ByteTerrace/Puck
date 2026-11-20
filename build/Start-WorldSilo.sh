@@ -1,7 +1,11 @@
 #!/bin/bash
-# Installed by the VM extension; configuration and signing material are protected settings.
+# Run by build/Boot-WorldSilo.py once it has verified this script against the pin in the VM extension's protected
+# command. The script is a retained deployment input and holds no secret; the signing keys arrive only in
+# PUCK_FEDERATION_KEYS, from that protected command.
 set -euo pipefail
 umask 077
+federation_keys="${PUCK_FEDERATION_KEYS:?the launcher passes the federation signing keys}"
+unset PUCK_FEDERATION_KEYS
 if ! command -v docker >/dev/null || ! command -v curl >/dev/null || ! command -v python3 >/dev/null || ! command -v flock >/dev/null; then
     . /etc/os-release
     case "$ID" in
@@ -69,9 +73,9 @@ if docker inspect puck-world >/dev/null 2>&1; then
     fi
 fi
 printf '%s' '__SILO_DOCUMENT__' | base64 -d >/etc/puck/silo.json
-python3 - <<'KEYS'
+PUCK_FEDERATION_KEYS="$federation_keys" python3 - <<'KEYS'
 import base64, json, os, pathlib
-for name, encoded in json.loads(base64.b64decode('__FEDERATION_KEYS__')).items():
+for name, encoded in json.loads(os.environ['PUCK_FEDERATION_KEYS']).items():
     if '/' in name or '\\' in name or not name.startswith('federation') or not name.endswith('.pk8'):
         raise ValueError('invalid retained signing-key filename')
     path = pathlib.Path('/etc/puck') / name
@@ -142,7 +146,9 @@ TLSUNIT
 else
     systemctl disable --now puck-tls.service 2>/dev/null || true
 fi
-for attempt in $(seq 1 180); do
+# The silo activates its rows one after another, so the deadline grows with the row count (rendered by the deploy).
+ready_deadline=$(( $(date +%s) + __READY_SECONDS__ ))
+while [ "$(date +%s)" -lt "$ready_deadline" ]; do
     if curl --fail --silent --max-time 30 http://127.0.0.1:__HEALTH_PORT__/private-healthz; then
         if [ '__MCP_ENABLED__' = 1 ] && ! curl --fail --silent --max-time 10 --connect-to '__MCP_HOST__:443:127.0.0.1:8443' 'https://__MCP_HOST__/.well-known/oauth-protected-resource/mcp' >/dev/null; then
             sleep 2

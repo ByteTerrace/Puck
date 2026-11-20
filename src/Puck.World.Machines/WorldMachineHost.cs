@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Waiting;
 using Puck.World.Machines;
 
 namespace Puck.World.Server;
@@ -168,52 +169,41 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         return true;
     }
-    private void StepLiveLinks(ulong stepTicks, ReadOnlySpan<ScreenPadSnapshot> pads) {
-        if (m_links.Count == 0) {
-            return;
-        }
+    private WaitReason? StepLiveLink(LinkEntry entry, ulong stepTicks, ReadOnlySpan<ScreenPadSnapshot> pads, WaitDeadline deadline) {
+        if ((entry.Link is not { } link) || !LinkCanAdvance(entry)) { return null; }
 
-        foreach (var entry in m_links.Values) {
-            if (
-                (entry.Link is not { } link) ||
-                !LinkCanAdvance(entry: entry)
-            ) {
-                continue;
-            }
+        AnyEverPumped = true;
 
-            AnyEverPumped = true;
+        var inputs = new MachinePadState[entry.Members.Length];
 
-            var inputs = new MachinePadState[entry.Members.Length];
-
-            for (var index = 0; (index < entry.Members.Length); index++) {
-                inputs[index] = EngagedPad(
-                    pads: pads,
-                    screenIndex: entry.Members[index]
-                );
-            }
-
-            link.Step(
-                deltaTicks: stepTicks,
-                inputs: inputs
+        for (var index = 0; (index < entry.Members.Length); index++) {
+            inputs[index] = EngagedPad(
+                pads: pads,
+                screenIndex: entry.Members[index]
             );
+        }
 
-            foreach (var member in entry.Members) {
-                if (
-                    m_slots.TryGetValue(
-                    key: member,
-                    value: out var namedSlot
-                ) &&
-                    (namedSlot.DeclaredSource is WorldScreenSource.Machine source) &&
-                    m_instances.TryGetValue(
-                    key: source.Instance,
-                    value: out var instance
-                ) &&
-                    (instance.Lease is MachineLease.Running running)
-                ) {
-                    running.CompletedSteps++;
-                }
+        var submitted = link.StepSegment(stepTicks, inputs, ref m_stepBarrier, deadline);
+        if (PendingMachineStep(submitted) is { } pending) { return pending; }
+        if (submitted == QueuedMachineSubmission.Rejected) { return null; }
+
+        foreach (var member in entry.Members) {
+            if (
+                m_slots.TryGetValue(
+                key: member,
+                value: out var namedSlot
+            ) &&
+                (namedSlot.DeclaredSource is WorldScreenSource.Machine source) &&
+                m_instances.TryGetValue(
+                key: source.Instance,
+                value: out var instance
+            ) &&
+                (instance.Lease is MachineLease.Running running)
+            ) {
+                running.CompletedSteps++;
             }
         }
+        return null;
     }
     private void TeardownLink(string name) {
         if (!m_links.Remove(
@@ -485,21 +475,57 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         }
     }
 
+    private Dictionary<string, LinkEntry>.ValueCollection.Enumerator m_stepLinks;
+    private Dictionary<string, MachineInstance>.ValueCollection.Enumerator m_stepInstances;
+    private ulong m_stepBarrier;
+    private ulong m_stepWidth;
+    private bool m_stepsLinks;
+    private bool m_drainsMachines;
+
+    private static WaitReason? PendingMachineStep(QueuedMachineSubmission submission) => submission switch {
+        QueuedMachineSubmission.PendingCapacity => new("machines", "worker queue capacity"),
+        QueuedMachineSubmission.PendingDrain => new("machines", "worker drain"),
+        _ => null,
+    };
+
     /// <inheritdoc/>
     public void Advance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads) {
-        if (m_disposed) {
-            return;
+        if (TryAdvance(stepTicks, pads, WaitDeadline.In(TimeSpan.FromSeconds(30))) is { } pending) {
+            throw new TimeoutException(pending.ToString());
         }
+    }
 
-        StepLiveLinks(
-            stepTicks: stepTicks,
-            pads: pads.Span
-        );
-        AdvanceInstances(
-            stepTicks,
-            pads.Span,
-            LinkedInstances()
-        );
+    /// <inheritdoc/>
+    public WaitReason? TryAdvance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads, WaitDeadline deadline) {
+        if (m_disposed || (stepTicks == 0)) { return null; }
+        if (m_stepWidth == 0) {
+            m_stepWidth = stepTicks;
+            m_stepLinks = m_links.Values.GetEnumerator();
+            m_stepsLinks = m_stepLinks.MoveNext();
+            m_drainsMachines = SynchronousSteps?.Invoke() ?? false;
+            if (!m_stepsLinks) { BeginInstanceSteps(); }
+        } else if (m_stepWidth != stepTicks) {
+            throw new InvalidOperationException("The pending machine step must resume with its original width.");
+        }
+        while (m_stepsLinks) {
+            if (StepLiveLink(m_stepLinks.Current, stepTicks, pads.Span, deadline) is { } pending) { return pending; }
+            m_stepsLinks = m_stepLinks.MoveNext();
+            if (!m_stepsLinks) { BeginInstanceSteps(); }
+        }
+        while (m_stepInstances.Current is { } instance) {
+            if (AdvanceInstance(instance, stepTicks, pads.Span, deadline) is { } pending) { return pending; }
+            _ = m_stepInstances.MoveNext();
+        }
+        m_stepLinks = default;
+        m_stepInstances = default;
+        m_stepWidth = 0;
+        return null;
+    }
+
+    private void BeginInstanceSteps() {
+        _ = LinkedInstances();
+        m_stepInstances = m_instances.Values.GetEnumerator();
+        _ = m_stepInstances.MoveNext();
     }
     /// <inheritdoc/>
     public IAudioMachine? AudioMachine(int index) =>
@@ -537,6 +563,10 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         }
 
         m_disposed = true;
+        if (m_stepWidth != 0) {
+            Console.Error.WriteLine("[machines: leaving the pending tick’s machines and links owned by their workers]");
+            return;
+        }
 
         foreach (var entry in m_links.Values) {
             entry.Link?.Dispose();

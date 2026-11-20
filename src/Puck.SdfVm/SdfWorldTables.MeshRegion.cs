@@ -62,7 +62,7 @@ public sealed partial class SdfWorldTables {
     internal GpuRegion CreateProbeRegion(string part, int bytes, int slots = 1, bool mapped = false) => new(
         policy: GpuResidencyPolicy.Staged, memory: GpuResidency.RingMemory(profile: m_deviceContext.MemoryProfile),
         byteCount: bytes, slotCount: slots, buffers: m_gpu.BufferFactory, bindings: m_gpu.Bindings,
-        recorder: m_gpu.Recorder, copyPipeline: m_regionCopyPipeline, name: NameOf(part), mapped: mapped);
+        recorder: m_gpu.Recorder, copyPipeline: m_regionCopyPipeline, name: NameOf(part), mapped: mapped, hostCopies: m_regionHostCopies);
 
     private SdfMeshClaims? m_meshClaims;
     private bool m_meshTrimListening;

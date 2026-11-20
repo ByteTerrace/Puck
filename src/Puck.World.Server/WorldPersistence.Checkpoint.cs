@@ -625,6 +625,11 @@ public sealed partial class WorldPersistence {
         ArgumentNullException.ThrowIfNull(argument: hostRow);
 
         lock (Host.AuthorityGate) {
+            if (Host.Tick.BlockedDetail is { } pending) {
+                checkpoint = null;
+                reason = $"authority tick is incomplete while waiting for {pending}";
+                return false;
+            }
             if (Host.Arena.Journal.Scopes != 0) {
                 checkpoint = null;
                 reason = "a checkpoint cannot capture while an arena transaction is open — retry at the next master boundary";
@@ -810,14 +815,17 @@ public sealed partial class WorldPersistence {
     /// boot image keeps its pinned identities detached and leaves the live catalog alone.</param>
     [Replaces(root: typeof(StateArena))]
     public void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true) {
-        ArgumentNullException.ThrowIfNull(argument: checkpoint);
-        var keys = Host.DrawKeys;
-        var admission = WorldDefinitionSerialization.DeserializeForAdmission(
-            drawKeys: keys, positions: checkpoint.Server.DrawPositions,
-            documentDirectory: Host.Document.Definition.DocumentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog);
+        lock (Host.AuthorityGate) {
+            Host.ThrowIfTickPending();
+            ArgumentNullException.ThrowIfNull(argument: checkpoint);
+            var keys = Host.DrawKeys;
+            var admission = WorldDefinitionSerialization.DeserializeForAdmission(
+                drawKeys: keys, positions: checkpoint.Server.DrawPositions,
+                documentDirectory: Host.Document.Definition.DocumentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog);
 
-        RestoreCheckpointCore(keys: keys, admission: admission, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
-        keys.AdvanceGeneration();
+            RestoreCheckpointCore(keys: keys, admission: admission, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
+            keys.AdvanceGeneration();
+        }
     }
 
     // A base loaded from a file names that file relative to the base's own document directory, which the loader set to

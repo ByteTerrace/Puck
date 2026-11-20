@@ -377,6 +377,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             Height: height,
             Temporal: temporal,
             Unread: unread,
+            ViewsRate: (temporal && view.Residency.Frame?.Settings.ViewsRate is { MaxRate: > 1 } rate) ? rate : null,
             Width: width
         );
     }

@@ -24,6 +24,7 @@ public static partial class WorldDefinitionValidator {
         ValidateSkyFieldScale(definition.Render.SkyFieldScale, "render.skyFieldScale", errors);
         RequireRange(definition.Render.RenderScale, 0.125f, 1f, "render.renderScale", errors);
         if (definition.Render.DistantShadows?.Refusal(path: "render.distantShadows") is { } distant) { errors.Add(item: distant); }
+        if (definition.Render.ViewsRate?.Refusal(path: "render.viewsRate") is { } rate) { errors.Add(item: rate); }
         if (definition.Render.FarShadows?.Refusal(path: "render.farShadows") is { } far) { errors.Add(item: far); }
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 

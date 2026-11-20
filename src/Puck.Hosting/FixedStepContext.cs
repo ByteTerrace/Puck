@@ -50,4 +50,11 @@ public interface IFixedStepSimulation {
     /// <param name="commands">The canonical command snapshot already applied to the live command registry.</param>
     [Replaces(root: typeof(object))]
     void Step(in FixedStepContext context, in CommandSnapshot commands);
+
+    /// <summary>Begins or resumes the same step. A false result retains the command snapshot and clock position.</summary>
+    [Replaces(root: typeof(object))]
+    bool TryStep(in FixedStepContext context, in CommandSnapshot commands) {
+        Step(in context, in commands);
+        return true;
+    }
 }

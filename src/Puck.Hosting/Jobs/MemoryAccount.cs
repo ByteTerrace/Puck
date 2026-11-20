@@ -56,7 +56,13 @@ public readonly record struct MemoryReading(long Live, long Reserved, long Cache
 /// </summary>
 public sealed class MemoryAccount {
     /// <summary>Gets the process account shared by mesh libraries, residencies and jobs.</summary>
-    public static MemoryAccount Shared { get; } = new();
+    public static MemoryAccount Shared { get; } = CreateShared();
+
+    private static MemoryAccount CreateShared() {
+        var account = new MemoryAccount();
+        RentedArrays.ObserveLargeCache(account.CreateOwner(name: "large-rented-array-cache", category: MemoryCategory.Cached));
+        return account;
+    }
 
     private const int Backings = 4;
     private const int Pools = 2;
@@ -80,6 +86,7 @@ public sealed class MemoryAccount {
     private readonly PoolState[] m_pools = [new(), new()];
     // Serializes Measure, so each sampled owner's delta is taken from the value it last recorded.
     private readonly Lock m_sampleGate = new();
+    private readonly Lock m_availableGate = new();
     private readonly List<SampledOwner> m_sampled = [];
 
     private readonly Func<long?> m_readAvailable;
@@ -93,6 +100,11 @@ public sealed class MemoryAccount {
     private int m_roomWaiters;
     private long m_reserved;
     private long? m_budget;
+    private long? m_hostBar;
+    // Sampled private bytes beyond the host charges at the sample. They reduce admission room and are never added
+    // to the physical rows (which already name parts of the same memory).
+    private long m_privateBeyondHeld;
+    private long HostBudget => Math.Min(m_hostBar ?? DefaultBudget, m_budget ?? DefaultBudget);
     private long m_negativeResiduals;
 
     private GpuMemoryReading m_device = GpuMemoryReading.Absent;
@@ -193,6 +205,25 @@ public sealed class MemoryAccount {
     /// machine-derived budget.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative.</exception>
     public void SetBudget(long? bytes) => SetBudget(bytes: bytes, pool: PhysicalMemory.Host);
+    /// <summary>Selects the profile's host bar. Forced work and fixed host allocations also obey it.
+    /// Selecting a profile restores its budget after an operator override.</summary>
+    /// <param name="bytes">The authored bar in bytes, or null to return to machine-derived admission.</param>
+    public void SetHostBar(long? bytes) {
+        if (bytes is < 0) { throw new ArgumentOutOfRangeException(nameof(bytes)); }
+        bool lowered;
+        lock (m_availableGate) {
+            lock (m_gate) {
+                var before = HostBudget;
+                m_hostBar = bytes;
+                m_budget = null;
+                Volatile.Write(ref m_availableAt, 0);
+                if (bytes is null) { m_privateBeyondHeld = 0; }
+                lowered = HostBudget < before;
+            }
+            RefreshAvailable();
+        }
+        if (lowered) { TrimCaches(); }
+    }
     /// <summary>Lowers a pool's budget, or restores the value it derives. The budget is a cap, never a raise: the host
     /// pool's is at most <see cref="DefaultBudget"/>, and a discrete adapter's pool limit is the smaller of the value and
     /// the sum of its segments' spend limits (the value alone where no reading names a segment). A device profile's
@@ -207,10 +238,10 @@ public sealed class MemoryAccount {
 
         lock (m_gate) {
             if (pool == PhysicalMemory.Host) {
-                var before = (m_budget ?? DefaultBudget);
+                var before = HostBudget;
 
                 m_budget = ((bytes is { } value) ? Math.Min(val1: value, val2: DefaultBudget) : null);
-                lowered = ((m_budget ?? DefaultBudget) < before);
+                lowered = HostBudget < before;
             } else {
                 var before = LimitOf(pool: pool);
 
@@ -223,7 +254,7 @@ public sealed class MemoryAccount {
     /// <summary>Reads all categories atomically.</summary>
     /// <returns>The reading.</returns>
     public MemoryReading Read() {
-        lock (m_gate) { return new(m_bytes[0], m_reserved, m_bytes[1], m_bytes[2], m_bytes[3], (m_budget ?? DefaultBudget), Headroom); }
+        lock (m_gate) { return new(m_bytes[0], m_reserved, m_bytes[1], m_bytes[2], m_bytes[3], HostBudget, Headroom); }
     }
     /// <summary>Reads the account and every owner holding charged bytes or a reservation under the same lock.
     /// Empty idle owners are absent; disposed owners remain until their storage releases its last byte.</summary>
@@ -425,7 +456,7 @@ public sealed class MemoryAccount {
     public MemoryPoolsReading ReadPools() {
         RefreshAvailable();
         lock (m_gate) {
-            var budget = (m_budget ?? DefaultBudget);
+            var budget = HostBudget;
             var deviceLimits = m_segmentLimits.Where(predicate: static limit => (limit.Segment.Pool == PhysicalMemory.Device)).ToArray();
             var sample = m_sample;
             var age = ((sample is null) ? (TimeSpan?)null : Stopwatch.GetElapsedTime(startingTimestamp: m_sampledAt));
@@ -487,15 +518,26 @@ public sealed class MemoryAccount {
 
         if ((last != 0) && ((now - last) < AvailableInterval)) { return; }
 
-        var available = m_readAvailable();
-
-        lock (m_gate) {
-            m_available = available;
-            // The free memory is what was free beside what the pool held then: what the pool has taken since comes out
-            // of it, so the reading is spent once however long it stands.
-            m_availableHeld = HeldOf(pool: PhysicalMemory.Host);
-            Volatile.Write(location: ref m_availableAt, value: Math.Max(val1: 1L, val2: now));
-            NotePressure(pool: PhysicalMemory.Host);
+        lock (m_availableGate) {
+            if ((m_availableAt != 0) && ((now - m_availableAt) < AvailableInterval)) { return; }
+            long heldBefore;
+            long hostOwnersBefore;
+            lock (m_gate) {
+                heldBefore = HeldOf(PhysicalMemory.Host);
+                hostOwnersBefore = m_bytes.Sum();
+            }
+            var available = m_readAvailable();
+            var process = m_hostBar is null ? null : HostMemory.ProcessPrivateBytes();
+            lock (m_gate) {
+                m_available = available;
+                // Do not credit an allocation that raced the sample as if it were already in that reading.
+                m_availableHeld = Math.Min(heldBefore, HeldOf(PhysicalMemory.Host));
+                // Host-placed GPU blocks may live outside private commit. Only the non-device owners are known
+                // to occupy process storage. The diagnostic page walk separates overlapping driver views.
+                if (process is { } bytes) { m_privateBeyondHeld = Math.Max(0L, bytes - Math.Min(hostOwnersBefore, m_bytes.Sum())); }
+                Volatile.Write(location: ref m_availableAt, value: Math.Max(val1: 1L, val2: now));
+                NotePressure(pool: PhysicalMemory.Host);
+            }
         }
     }
     // Under m_gate.
@@ -521,7 +563,7 @@ public sealed class MemoryAccount {
     // Under m_gate: a pool's spend limit, or null where nothing bounds it (a device pool no reading names).
     private long? LimitOf(PhysicalMemory pool) {
         if (pool == PhysicalMemory.Host) {
-            var budget = (m_budget ?? DefaultBudget);
+            var budget = HostBudget - m_privateBeyondHeld;
 
             if (m_available is { } available) { budget = Math.Min(val1: budget, val2: available.AddSaturating(right: m_availableHeld)); }
 
@@ -548,6 +590,12 @@ public sealed class MemoryAccount {
     private long? RoomOf(PhysicalMemory pool) => ((LimitOf(pool: pool) is { } limit) ? ((limit - HeldOf(pool: pool)) - PromisedOf(pool: pool)) : null);
     // Under m_gate: whether a pool has room for extra bytes of promise.
     private bool Fits(PhysicalMemory pool, long extra) => ((extra <= 0L) || (RoomOf(pool: pool) is not { } room) || (extra <= room));
+
+    // Ordinary admission leaves headroom. Fixed storage and the one forced job may spend that reserve,
+    // but no new promise or unreserved acquisition can pass an explicit host bar.
+    private bool FitsHostBar(PhysicalMemory pool, long extra) =>
+        pool != PhysicalMemory.Host || extra <= 0 || m_hostBar is null ||
+        extra <= Math.Min(m_hostBar.Value, DefaultBudget) - m_privateBeyondHeld - HeldOf(pool) - PromisedOf(pool);
     // Under m_gate.
     private MemorySegmentLimit? RecordedLimit(GpuMemorySegment segment) {
         foreach (var recorded in m_segmentLimits) {
@@ -648,11 +696,21 @@ public sealed class MemoryAccount {
             Promised: PromisedOf(pool: pool),
             Refusals: state.Refusals,
             Retired: (state.Retiring + ((pool == PhysicalMemory.Host) ? m_bytes[((int)MemoryCategory.Retirement)] : 0L))
-        );
+        ) {
+            LastRefusedOwner = state.LastRefusedOwner,
+            PrivateBeyondHeld = pool == PhysicalMemory.Host ? m_privateBeyondHeld : 0L,
+        };
     }
     // Under m_gate: counts a refused admission. A refusal is admission working, not pressure: pressure is a limit that
     // fell under what its pool holds, a device that refused, or storage admitted past a limit.
-    private void Refused(PhysicalMemory pool) => m_pools[((int)pool)].Refusals++;
+    private void Refused(PhysicalMemory pool, string owner, bool trim = true) {
+        var state = m_pools[(int)pool];
+        state.Refusals++;
+        state.LastRefusedOwner = owner;
+        if (trim && pool == PhysicalMemory.Host && m_hostBar is not null && m_ownerHeld[(int)MemoryClass.Cached] > 0L) {
+            m_pressure = 1;
+        }
+    }
     // Under m_gate: marks pressure when what a pool holds and has promised past its limit, beyond the forced job, has
     // grown since it was last read. A pool that stands over a limit it cannot get back under asks for one trim, not one
     // at every reading; one that falls back and passes it again asks again.
@@ -696,8 +754,8 @@ public sealed class MemoryAccount {
                 // admitted like fixed storage. The floor is measured in the owner's own bytes, so it covers a resource
                 // within it whatever the block the device allocates to place it: a small resource's shared block is
                 // many times the resource, and judged by the block no floor would ever admit one.
-                if (givesWay || ((entry is { Classified: true }) && MemoryClasses.GivesWay(memoryClass: entry.Class) && ((entry.Held + Math.Min(val1: payerBytes, val2: bytes)) > entry.Floor))) {
-                    Refused(pool: pool);
+                if (!FitsHostBar(pool, net) || givesWay || ((entry is { Classified: true }) && MemoryClasses.GivesWay(memoryClass: entry.Class) && ((entry.Held + Math.Min(val1: payerBytes, val2: bytes)) > entry.Floor))) {
+                    Refused(pool: pool, owner: payer ?? segment.Name);
 
                     return new(Bytes: bytes, Net: net, Payer: null, Verdict: GpuMemoryVerdict.Refused);
                 }
@@ -766,6 +824,7 @@ public sealed class MemoryAccount {
         // What the pool held and had promised past its limit when pressure last read it.
         public long PressureOver;
         public long Refusals;
+        public string? LastRefusedOwner;
         public long Retiring;
     }
     // One ledger segment's admission state: its row's owner, the grants in flight in it, and the limit a device refusal
@@ -892,34 +951,39 @@ public sealed class MemoryAccount {
                 ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
                 ThrowIfNotAdmitted();
                 if (!m_account.Fits(extra: (Math.Max(val1: 0, val2: (peak - m_bytes)) - Promise), pool: PhysicalMemory.Host)) {
-                    // An owner that asks again for the peak it was just refused is one wait, counted once.
-                    if (m_refusedPeak != peak) {
-                        m_account.Refused(pool: PhysicalMemory.Host);
-                        m_refusedPeak = peak;
-                    }
-                    return false;
+                    return RefusePeak(peak);
                 }
                 m_refusedPeak = -1L;
                 SetPeak(peak: peak);
                 return true;
             }
         }
-        /// <summary>Reserves the owner's simultaneous peak whatever the pool holds, as the process's one forced job: the
-        /// job a caller with nothing admitted must run so that its work settles. One owner in the process holds the
+        // Under the account lock. Repeat requests for the same refused peak are a single wait.
+        private bool RefusePeak(long peak) {
+            if (m_refusedPeak != peak) {
+                m_account.Refused(pool: PhysicalMemory.Host, owner: Name);
+                m_refusedPeak = peak;
+            }
+            return false;
+        }
+        /// <summary>Reserves the owner's peak as the process's one forced job when the authored host bar permits it.
+        /// One owner in the process holds the
         /// allowance at a time, from this call until its reservation is released (<see cref="ReleaseReservation"/>) or
         /// it is disposed; the bytes forced are counted (<see cref="MemoryAdmissionReading.Forced"/>).</summary>
         /// <param name="peak">The most bytes the owner's storage holds at once while the work runs.</param>
         /// <returns><see langword="true"/> when the reservation is held; <see langword="false"/> when another owner holds
-        /// the forced allowance, and nothing was reserved.</returns>
+        /// the forced allowance or the requested peak exceeds the host bar.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
         /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
         /// <exception cref="InvalidOperationException">The owner is a device family or a segment's row.</exception>
         public bool TryReserveForced(long peak) {
             ArgumentOutOfRangeException.ThrowIfNegative(peak);
+            m_account.RefreshAvailable();
             lock (m_account.m_gate) {
                 ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
                 ThrowIfNotAdmitted();
                 if ((m_account.m_forced is { } holder) && !ReferenceEquals(objA: holder, objB: this)) { return false; }
+                if (!m_account.FitsHostBar(PhysicalMemory.Host, Math.Max(0L, peak - m_bytes) - Promise)) { return RefusePeak(peak); }
                 if (m_account.m_forced is null) { m_account.m_forcedJobs++; }
                 m_account.m_forced = this;
                 m_account.m_forcedBytes = peak;
@@ -983,12 +1047,49 @@ public sealed class MemoryAccount {
             }
         }
         /// <inheritdoc/>
+        public bool TryAcquire(long bytes, MemoryBacking backing) {
+            ArgumentOutOfRangeException.ThrowIfNegative(bytes);
+            m_account.RefreshAvailable();
+            lock (m_account.m_gate) {
+                ThrowIfNotAdmitted();
+                var extra = bytes - Promise;
+                if (!m_account.FitsHostBar(PhysicalMemory.Host, extra) ||
+                    (EffectiveClass == MemoryClass.Cached && !m_account.Fits(PhysicalMemory.Host, extra))) {
+                    m_account.Refused(PhysicalMemory.Host, Name, trim: EffectiveClass != MemoryClass.Cached);
+                    return false;
+                }
+                RecordChange(bytes, backing);
+                return true;
+            }
+        }
+        /// <summary>Allocates a managed array after charging its payload. The owner releases the charge when its
+        /// claim on the array ends.</summary>
+        /// <typeparam name="T">The array element.</typeparam>
+        /// <param name="length">The number of elements.</param>
+        /// <returns>The new array.</returns>
+        public T[] AllocateArray<T>(int length) {
+            ArgumentOutOfRangeException.ThrowIfNegative(length);
+            var bytes = (long)length * System.Runtime.CompilerServices.Unsafe.SizeOf<T>();
+            ((IAllocationObserver)this).Acquire(bytes, MemoryBacking.Managed);
+            try { return new T[length]; }
+            catch { Change(-bytes, MemoryBacking.Managed); throw; }
+        }
+        /// <inheritdoc/>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="backing"/> is a row this owner cannot hold:
         /// device blocks charged to a host owner, or a host row charged to a device family or a segment.</exception>
         /// <exception cref="InvalidOperationException">The change would release more bytes than the owner holds, overall
         /// or in <paramref name="backing"/>.</exception>
         /// <exception cref="ObjectDisposedException">The owner is disposed and the change acquires bytes.</exception>
         public void Change(long bytes, MemoryBacking backing) {
+            if (m_kind == OwnerKind.Admitted && bytes > 0) {
+                ((IAllocationObserver)this).Acquire(bytes, backing);
+                return;
+            }
+            RecordChange(bytes, backing);
+        }
+
+        // Physical accounting after a grant, or an observation of storage that already exists.
+        internal void RecordChange(long bytes, MemoryBacking backing) {
             var deviceBlocks = (backing == MemoryBacking.DeviceBlocks);
 
             if (!Enum.IsDefined(value: backing) || (deviceBlocks == (m_kind == OwnerKind.Admitted))) {
@@ -1126,8 +1227,8 @@ public sealed class MemoryAccount {
 
                 var extra = (Math.Max(val1: 0L, val2: ((m_entry.Peak + (peak - m_peak)) - m_entry.Held)) - m_entry.Promise);
 
-                if ((peak > floor) && !m_account.Fits(extra: extra, pool: m_entry.Pool)) {
-                    m_account.Refused(pool: m_entry.Pool);
+                if (!m_account.FitsHostBar(m_entry.Pool, extra) || ((peak > floor) && !m_account.Fits(extra: extra, pool: m_entry.Pool))) {
+                    m_account.Refused(pool: m_entry.Pool, owner: Owner);
                     return false;
                 }
                 if ((extra > 0L) && !m_account.Fits(extra: extra, pool: m_entry.Pool)) { m_account.m_pressure = 1; }
@@ -1174,7 +1275,7 @@ public sealed class MemoryAccount {
         public void Sample() {
             var bytes = Math.Max(val1: 0L, val2: read());
 
-            owner.Change(backing: backing, bytes: (bytes - m_recorded));
+            owner.RecordChange(backing: backing, bytes: (bytes - m_recorded));
             m_recorded = bytes;
         }
         public void Dispose() {

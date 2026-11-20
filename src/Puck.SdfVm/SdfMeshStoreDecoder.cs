@@ -113,6 +113,10 @@ internal static unsafe class SdfMeshStoreDecoder {
             materials = ((remap is null) ? palette : taking!);
             refusal = null;
             return true;
+        } catch (HostMemoryRefusedException exception) {
+            refusal = exception.Message;
+            declined = true;
+            return false;
         } catch (Exception exception) when ((exception is IOException or InvalidDataException or ArgumentException or OverflowException)) {
             refusal = $"is no mesh: {exception.Message}";
             return false;

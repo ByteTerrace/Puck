@@ -17,6 +17,9 @@ public sealed partial class WorldRenderSettings {
     private bool m_ambientOcclusion;
     private bool m_rayQueries;
     private WorldDistantShadows? m_distantShadows;
+    private SdfViewsRate? m_viewsRate;
+    /// <summary>The view shading rate selected by the active quality table.</summary>
+    public SdfViewsRate? ViewsRate { get => m_viewsRate; set { m_viewsRate = value; m_revision++; } }
     private WorldFarShadows? m_farShadows;
     private bool m_cadenceGate;
     private SdfMeshCullLevel m_cull;
@@ -57,6 +60,7 @@ public sealed partial class WorldRenderSettings {
         IndirectTier = (defaults.Indirect?.Tier ?? SdfIndirectTier.Medium);
         RayQueries = defaults.RayQueries;
         DistantShadows = defaults.DistantShadows;
+        ViewsRate = defaults.ViewsRate;
         FarShadows = defaults.FarShadows;
         DynamicResolution = defaults.DynamicResolution;
         CadenceGate = true;

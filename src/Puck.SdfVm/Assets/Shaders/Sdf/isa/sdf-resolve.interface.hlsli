@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/30f925ec03cfef54a0a7bf45af58925220e8bb67da44c4c039cbd45fb937a03e). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/137a2797a37feb65db47eb93fcc9cae44efffd809c89146f9589d8c2bd628db0). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -242,11 +242,12 @@ struct SdfResolvePass {
     [[vk::offset(1356)]] uint _pad1356;
     [[vk::offset(1360)]] float3 viewUp;
     [[vk::offset(1372)]] uint viewportCount;
-    [[vk::offset(1376)]] uint workCounterRow;
-    [[vk::offset(1380)]] uint workCounterRowDetail;
-    [[vk::offset(1384)]] uint _pad1384;
-    [[vk::offset(1388)]] uint _pad1388;
-    [[vk::offset(1392)]] float4 worldLanes;
+    [[vk::offset(1376)]] uint4 viewsRate;
+    [[vk::offset(1392)]] uint workCounterRow;
+    [[vk::offset(1396)]] uint workCounterRowDetail;
+    [[vk::offset(1400)]] uint _pad1400;
+    [[vk::offset(1404)]] uint _pad1404;
+    [[vk::offset(1408)]] float4 worldLanes;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsaE29704FA : register(b0, space3);
 #define passGroup passGroupIsaE29704FA

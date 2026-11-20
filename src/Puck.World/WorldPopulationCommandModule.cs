@@ -21,13 +21,14 @@ namespace Puck.World;
 /// while headless composition still reports every authoritative cost and names the absent renderer.
 /// </summary>
 /// <param name="roster">The participants and their current device and seat bindings.</param>
-/// <param name="population">The authority's body population and bounded work census.</param>
 /// <param name="server">The authority whose current definition and cost report are read.</param>
 /// <param name="link">The existing query route to that authority.</param>
 /// <param name="renderProbe">The optional live presentation inventory; absent in a headless host.</param>
 /// <param name="gamepads">The optional hardware manager <c>world.devices</c> reads each gamepad's battery and
 /// accessories from; absent in a headless host or off Windows.</param>
-public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopulation population, WorldServer server, IServerLink link, WorldRenderProbe? renderProbe = null, GamepadManager? gamepads = null) : ICommandModule {
+public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServer server, IServerLink link, WorldRenderProbe? renderProbe = null, GamepadManager? gamepads = null) : ICommandModule {
+    private WorldPopulation Population => server.Population;
+
     private static readonly CommandForms WorldPopulationForms = CommandForms.Of(verb: "world.population", "[count] [idle|producer:<name>]");
     private static readonly CommandForms WorldNavigationForms = CommandForms.Of(verb: "world.navigation", "[route <from> <to> [path]]", "map <domain> [<column> <row> <columns> <rows>]");
 
@@ -38,7 +39,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         Func<CommandResult> answer;
 
         if (args.Count == 0) {
-            answer = () => new CommandResult(Output: population.DescribeNavigation());
+            answer = () => new CommandResult(Output: Population.DescribeNavigation());
         } else if (args[0].ToString() == "map") {
             if ((args.Count is not (2 or 6)) ||
                 ((args.Count == 6) && !(args.TryInt(index: 2, value: out _) && args.TryInt(index: 3, value: out _) && args.TryInt(index: 4, value: out _) && args.TryInt(index: 5, value: out _)))) {
@@ -57,7 +58,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 _ = args.TryInt(index: 4, value: out columns);
                 _ = args.TryInt(index: 5, value: out rows);
             }
-            answer = () => new CommandResult(Output: population.DescribeNavigationMap(depth: rows, name: name, width: columns, x0: x0, z0: z0));
+            answer = () => new CommandResult(Output: Population.DescribeNavigationMap(depth: rows, name: name, width: columns, x0: x0, z0: z0));
         } else if ((args.Count is < 3 or > 4) || (args[0].ToString() != "route") || ((args.Count == 4) && (args[3].ToString() != "path"))) {
             return WorldNavigationForms.Refuse();
         } else {
@@ -67,20 +68,20 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
 
             answer = () => Route(context: context, from: from, path: path, to: to);
         }
-        if (population.NavigationBaked) {
+        if (Population.NavigationBaked) {
             return answer();
         }
-        population.BeginNavigationBakes();
+        Population.BeginNavigationBakes();
         if (context.TextSession is not { } session) {
             return answer();
         }
         session.HoldWhile(
-            hold: () => !population.NavigationBaked,
+            hold: () => !Population.NavigationBaked,
             released: deadlinePassed => (deadlinePassed
-                ? CommandResult.Error(output: $"[world.navigation: {population.NavigationBakedDomainCount}/{population.NavigationDomainCount} domains baked at the answer deadline; the rest bake on, ask again]")
+                ? CommandResult.Error(output: $"[world.navigation: {Population.NavigationBakedDomainCount}/{Population.NavigationDomainCount} domains baked at the answer deadline; the rest bake on, ask again]")
                 : answer()),
             publishResult: true);
-        return new CommandResult(Output: $"[world.navigation: baking {population.NavigationDomainCount - population.NavigationBakedDomainCount} domain(s) off the tick]");
+        return new CommandResult(Output: $"[world.navigation: baking {Population.NavigationDomainCount - Population.NavigationBakedDomainCount} domain(s) off the tick]");
     }
     private CommandResult Route(CommandContext context, string from, string to, bool path) {
         var definition = server.ReadView(context).Definition;
@@ -89,22 +90,22 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             !TryEndpoint(token: to, definition: definition, point: out var toPoint, within: out var toShape, reason: out reason)) {
             return CommandResult.Error(output: $"[world.navigation route: {reason}]");
         }
-        if (!population.TryRouteEndpoint(cell: out var fromCell, domain: out var fromDomain, point: fromPoint, within: fromShape)) {
+        if (!Population.TryRouteEndpoint(cell: out var fromCell, domain: out var fromDomain, point: fromPoint, within: fromShape)) {
             return CommandResult.Error(output: $"[world.navigation route: no domain holds a walkable cell at '{from}']");
         }
         INavigationRouteGoal goal;
 
         if (toShape is { } place) {
             goal = new WorldNavigationPlaceGoal(Shape: place);
-        } else if (population.TryRouteEndpoint(cell: out var toCell, domain: out var toDomain, point: toPoint, within: null)) {
-            goal = new NavigationCellGoal(Cell: toCell, Domain: toDomain, Position: population.NavigationFoot(node: new NavigationRouteNode(Cell: toCell, Domain: toDomain, Position: default)));
+        } else if (Population.TryRouteEndpoint(cell: out var toCell, domain: out var toDomain, point: toPoint, within: null)) {
+            goal = new NavigationCellGoal(Cell: toCell, Domain: toDomain, Position: Population.NavigationFoot(node: new NavigationRouteNode(Cell: toCell, Domain: toDomain, Position: default)));
         } else {
             return CommandResult.Error(output: $"[world.navigation route: no domain holds a walkable cell at '{to}']");
         }
 
         var route = new List<NavigationRouteNode>();
         var walls = new List<FixedVector3>();
-        var status = population.FindCheckedRoute(fromCell: fromCell, fromDomain: fromDomain, goal: goal, route: route, samples: out var samples, walls: walls, work: out var work);
+        var status = Population.FindCheckedRoute(fromCell: fromCell, fromDomain: fromDomain, goal: goal, route: route, samples: out var samples, walls: walls, work: out var work);
 
         return new CommandResult(Output: DescribeRoute(from: from, to: to, status: status, route: route, work: work, samples: samples, walls: walls, path: path)) {
             IsError = ((route.Count == 0) || (walls.Count != 0)),
@@ -127,7 +128,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             return false;
         }
         if (token.StartsWith(value: "body:", comparisonType: StringComparison.Ordinal)) {
-            if (int.TryParse(s: token.AsSpan(start: "body:".Length), style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var index) && (population.EntryBody(index: index) is { } body)) {
+            if (int.TryParse(s: token.AsSpan(start: "body:".Length), style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var index) && (Population.EntryBody(index: index) is { } body)) {
                 point = body.FixedPosition;
                 return true;
             }
@@ -170,7 +171,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
 
         for (var index = 0; (index < route.Count); index++) {
             var node = route[index];
-            var name = population.NavigationDomainName(index: node.Domain);
+            var name = Population.NavigationDomainName(index: node.Domain);
 
             if ((domains.Count == 0) || (domains[^1] != name)) {
                 domains.Add(item: name);
@@ -181,7 +182,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 length += Math.Sqrt(d: ((((double)step.X) * ((double)step.X)) + (((double)step.Z) * ((double)step.Z))));
             }
 
-            var places = server.Events.PlacesAt(point: population.NavigationFoot(node: node));
+            var places = server.Events.PlacesAt(point: Population.NavigationFoot(node: node));
             var at = ((places.Count == 0) ? "none" : places[0]);
 
             if ((passes.Count == 0) || (passes[^1] != at)) {
@@ -200,7 +201,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         }
         if (path) {
             foreach (var node in route) {
-                _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"\n  {population.NavigationDomainName(index: node.Domain)}:{node.Cell} ({((double)node.Position.X):0.00},{((double)node.Position.Y):0.00},{((double)node.Position.Z):0.00})");
+                _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"\n  {Population.NavigationDomainName(index: node.Domain)}:{node.Cell} ({((double)node.Position.X):0.00},{((double)node.Position.Y):0.00},{((double)node.Position.Z):0.00})");
             }
         }
 
@@ -406,16 +407,16 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             tanHalfFieldOfView: MathF.Tan(x: (MathF.PI / 6f)),
             texels: Puck.SdfVm.SdfShadowResolutions.Texels(resolution: Puck.SdfVm.SdfShadowResolution.Full)
         ) + " for a 60-degree 16:9 view");
-        var lattice = ((population.FieldRegions.Count > 0)
-            ? string.Join(separator: Environment.NewLine, values: population.FieldRegions.Select(selector: region => ($"region {region.Name}: " + region.Lattice.DescribeCost(
-                activeBodyCount: population.ActiveCount(),
-                bodyCapacity: population.Capacity
+        var lattice = ((Population.FieldRegions.Count > 0)
+            ? string.Join(separator: Environment.NewLine, values: Population.FieldRegions.Select(selector: region => ($"region {region.Name}: " + region.Lattice.DescribeCost(
+                activeBodyCount: Population.ActiveCount(),
+                bodyCapacity: Population.Capacity
             ))))
             : "lattice none"
         );
-        var gravityCompiled = population.CompiledGravity;
-        var gravityStatistics = population.GravityStatistics;
-        var gravityAreaStatistics = population.GravityAreaStatistics;
+        var gravityCompiled = Population.CompiledGravity;
+        var gravityStatistics = Population.GravityStatistics;
+        var gravityAreaStatistics = Population.GravityAreaStatistics;
         var gravity = $"gravity {gravityCompiled.Attractors.Length} static source(s), {gravityCompiled.Areas.Length} local area(s) / target declared, last global targets {Math.Max(
             val1: 0,
             val2: (gravityStatistics.BodyCount - gravityCompiled.Attractors.Length)
@@ -438,13 +439,13 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         }
 
         var placements = $"placements {placementInstances} static instance(s) ({server.Definition.Placements.Count} row(s), {dealtInstances} dealt offset(s) over {dealtTemplates} template(s))";
-        var curves = $"curves {population.CountCurveFollowers()} follower(s)";
-        var navigationWork = population.NavigationWork();
-        var navigation = $"navigation {population.NavigationCellCount} compiled cell(s), {population.NavigationWorkspaceBytes} workspace byte(s), declared search {population.NavigationDeclaredSearchWork} expansion(s), live {navigationWork.Followers} follower(s) / last {navigationWork.LastExpanded} expansion(s) / simultaneous-replan ceiling {navigationWork.WorstExpanded} expansion(s)";
+        var curves = $"curves {Population.CountCurveFollowers()} follower(s)";
+        var navigationWork = Population.NavigationWork();
+        var navigation = $"navigation {Population.NavigationCellCount} compiled cell(s), {Population.NavigationWorkspaceBytes} workspace byte(s), declared search {Population.NavigationDeclaredSearchWork} expansion(s), live {navigationWork.Followers} follower(s) / last {navigationWork.LastExpanded} expansion(s) / simultaneous-replan ceiling {navigationWork.WorstExpanded} expansion(s)";
         var ruleBudget = server.CostReport.WorkBudget;
         var rules = $"rules {ruleBudget.RuleRows}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{RuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick (including {ruleBudget.FlockAffinityWorkUnitsPerTick} flock-affinity units); decision perception {ruleBudget.DecisionImagePointsPerTick} pose(s), {ruleBudget.DecisionGridBuildsPerTick} shared grid rebuild(s)/{ruleBudget.DecisionGridPointsPerTick} point(s) sorted per tick ceiling";
 
-        rules += $" | {population.InputCatalog.DescribeBudget(history: server.Definition.InputHistory)}";
+        rules += $" | {Population.InputCatalog.DescribeBudget(history: server.Definition.InputHistory)}";
 
         // One line per section, and per region, live instance and infinity root, so puck_exec's match and lines filters
         // can narrow the answer; the render section stays first.
@@ -461,8 +462,8 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             rules,
             curves,
             navigation,
-            population.DescribeFlockWork(),
-            population.DescribeRigidWork(),
+            Population.DescribeFlockWork(),
+            Population.DescribeRigidWork(),
             server.DescribePatternBudget(),
             server.CostReport.Presentation.Describe(),
             DescribeLiveBudget(),
@@ -500,9 +501,9 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             return string.Create(CultureInfo.InvariantCulture,
                 $"[world.gravity: solver {authored.Solver} uniform=({acceleration.X:0.#####},{acceleration.Y:0.#####},{acceleration.Z:0.#####}) G={authored.GravitationalConstant:0.#####} softening={authored.SofteningLength:0.#####} sources={authored.Attractors.Count} points={(authored.Points?.Count ?? 0)} areas={(authored.Areas?.Count ?? 0)}]");
         }
-        var compiled = population.CompiledGravity;
-        var statistics = population.GravityStatistics;
-        var areaStatistics = population.GravityAreaStatistics;
+        var compiled = Population.CompiledGravity;
+        var statistics = Population.GravityStatistics;
+        var areaStatistics = Population.GravityAreaStatistics;
         var uniform = authored.UniformAcceleration;
         var sources = new List<string>();
 
@@ -588,19 +589,19 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         var tick = server.NextInputTick;
         var rows = new List<string>();
 
-        for (var index = 0; (index < population.Capacity); index++) {
-            if (!population.IsParked(index: index)) {
+        for (var index = 0; (index < Population.Capacity); index++) {
+            if (!Population.IsParked(index: index)) {
                 continue;
             }
 
-            var window = ((population.ParkedRemainingTicks(
+            var window = ((Population.ParkedRemainingTicks(
                 index: index,
                 tick: tick
             ) is { } remaining)
                 ? $"remaining={remaining} deadline={(tick + ((ulong)remaining))}"
                 : "remaining=never deadline=never"
             );
-            var body = population.EntryBody(index: index);
+            var body = Population.EntryBody(index: index);
             var profile = body?.Profile?.Name;
             var pose = (body?.DescribePose() ?? "pos=(?, ?) yaw=?°");
 
@@ -619,36 +620,36 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
     private string DescribePlayers(Principal caller) {
         var players = roster.Describe(caller: caller);
         var local = roster.Count;
-        var simulated = population.SimulatedCount;
+        var simulated = Population.SimulatedCount;
 
-        return $"{players[..^1]} | population: {local} local + {simulated} network = {(local + simulated)}/{population.Capacity}]";
+        return $"{players[..^1]} | population: {local} local + {simulated} network = {(local + simulated)}/{Population.Capacity}]";
     }
     // The world.population readout: the active simulated count, the between-tapes behavior, and the total avatar load on
     // the renderer. LOOPBACK-ONLY: the population reads here are in-process; a socket transport replaces them with a
     // link query the server composes.
     private string DescribePopulation(CommandContext context) {
         var local = roster.Count;
-        var simulated = population.SimulatedCount;
-        var behavior = (population.DefaultPeerSource.IsIdle
+        var simulated = Population.SimulatedCount;
+        var behavior = (Population.DefaultPeerSource.IsIdle
             ? "idle"
-            : ((population.DefaultPeerSource.ProducerName is { } producer)
+            : ((Population.DefaultPeerSource.ProducerName is { } producer)
                 ? $"producer:{producer}"
                 : "live"
         ));
         var looks = server.ReadView(context: context).Definition.Looks;
         var workload = WorldRigCatalog.ActiveWorkload(
-            isActive: index => (population.IsActive(index: index) && (WorldDefinitionRows.ResolveLook(looks, population.LookIndex(index: index)).Source is WorldLookSource.Catalog)),
-            capacity: population.Capacity,
+            isActive: index => (Population.IsActive(index: index) && (WorldDefinitionRows.ResolveLook(looks, Population.LookIndex(index: index)).Source is WorldLookSource.Catalog)),
+            capacity: Population.Capacity,
             rigFor: index => WorldRigCatalog.RigFor(
                 WorldDefinitionRows.ResolveLook(
                     looks,
-                    population.LookIndex(index: index)
+                    Population.LookIndex(index: index)
                 ),
-                population.CatalogRig(index: index)
+                Population.CatalogRig(index: index)
             )
         );
         // The per-kit census derives its names and counts from the definition rows, in row order.
-        var counts = population.ActiveKitCounts();
+        var counts = Population.ActiveKitCounts();
         var kits = string.Join(
             separator: " ",
             values: server.ReadView(context: context).Definition.Kits.Select(selector: (kit, row) => $"{kit.Name}={counts[row]}")
@@ -657,7 +658,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         var kitAssignment = DescribeAssignment(assignment: server.ReadView(context: context).Definition.Assignment);
         var lookAssignment = DescribeAssignment(assignment: server.ReadView(context: context).Definition.LookAssignment);
 
-        return $"[world.population: {simulated} network-human stand-ins active (0..{population.PeerCapacity}), behavior {behavior} | distribution {DescribeDistribution(distribution: defaults.Distribution)} | peerVariation {DescribeVariation(variation: defaults.PeerVariation)} seatVariation {DescribeVariation(variation: defaults.SeatVariation)} peerColors {DescribeSequence(sequence: defaults.PeerColors)} | assignments kit={kitAssignment} look={lookAssignment} | {local} local + {simulated} = {(local + simulated)}/{population.Capacity} inhabitants | archetypes {kits} | {WorldRigCatalog.RigCount} catalog looks, {WorldRigCatalog.MinInstructionCount}..{WorldRigCatalog.MaxInstructionCount} instructions/avatar; catalog workload {workload.Leaves} leaves in {workload.Instances} leaf cull instances, {workload.Instructions} authored VM instructions (creation stamps accounted separately)]";
+        return $"[world.population: {simulated} network-human stand-ins active (0..{Population.PeerCapacity}), behavior {behavior} | distribution {DescribeDistribution(distribution: defaults.Distribution)} | peerVariation {DescribeVariation(variation: defaults.PeerVariation)} seatVariation {DescribeVariation(variation: defaults.SeatVariation)} peerColors {DescribeSequence(sequence: defaults.PeerColors)} | assignments kit={kitAssignment} look={lookAssignment} | {local} local + {simulated} = {(local + simulated)}/{Population.Capacity} inhabitants | archetypes {kits} | {WorldRigCatalog.RigCount} catalog looks, {WorldRigCatalog.MinInstructionCount}..{WorldRigCatalog.MaxInstructionCount} instructions/avatar; catalog workload {workload.Leaves} leaves in {workload.Instances} leaf cull instances, {workload.Instructions} authored VM instructions (creation stamps accounted separately)]";
     }
     private static string DescribeSequence(WorldSequence sequence) =>
         $"{sequence.Name}(offset={sequence.Offset},step={sequence.Step:0.########})";
@@ -689,7 +690,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 verb: "world.flock"
             ) is { } refusal)
             ? refusal
-            : new CommandResult(Output: population.DescribeFlocks())),
+            : new CommandResult(Output: Population.DescribeFlocks())),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
@@ -803,13 +804,13 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                         value: out var parsed
                     ) ||
                         (parsed < 0) ||
-                        (parsed > population.PeerCapacity)
+                        (parsed > Population.PeerCapacity)
                     ) {
-                        return CommandResult.Error(output: $"[world.population: unknown token '{args[index]}' — a count 0..{population.PeerCapacity} and/or idle|producer:<name>]");
+                        return CommandResult.Error(output: $"[world.population: unknown token '{args[index]}' — a count 0..{Population.PeerCapacity} and/or idle|producer:<name>]");
                     }
 
                     if (count is not null) {
-                        return CommandResult.Error(output: $"[world.population: count given twice — one integer 0..{population.PeerCapacity}]");
+                        return CommandResult.Error(output: $"[world.population: count given twice — one integer 0..{Population.PeerCapacity}]");
                     }
 
                     count = parsed;
@@ -838,7 +839,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                             if (!reply.Accepted) {
                                 notice += $"[world.population: {actingPrincipal.Describe()} cannot set the census ({reply.Reason}) — see world.why]\n";
                             } else if (reply.AssignedIndex != resolvedCount) {
-                                notice += $"[world.population: requested {resolvedCount}, GRANTED {reply.AssignedIndex} — clamped to the live ceiling ({population.SimulatedCeiling}: the free peer slots)]\n";
+                                notice += $"[world.population: requested {resolvedCount}, GRANTED {reply.AssignedIndex} — clamped to the live ceiling ({Population.SimulatedCeiling}: the free peer slots)]\n";
                             }
                         }
                     );

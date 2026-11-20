@@ -62,7 +62,7 @@ public sealed partial class SdfWorldTables {
         SdfWorldPackage.ToonOutline, SdfWorldPackage.ToonInk,
         SdfWorldPackage.LightCount, SdfWorldPackage.LightMask, SdfWorldPackage.Exposure, SdfWorldPackage.ExposeShare, SdfWorldPackage.AirLight, SdfWorldPackage.MeterLuminance, SdfWorldPackage.MeterLight, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance, SdfWorldPackage.FlowClock, SdfWorldPackage.WorldLanes, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectSources,
         SdfWorldPackage.IndirectSourceGains, SdfWorldPackage.IndirectApply, SdfWorldPackage.IndirectContact,
-        SdfWorldPackage.GridFlags, SdfWorldPackage.GridLineWidth, SdfWorldPackage.GridPlaneY,
+        SdfWorldPackage.ViewsRate, SdfWorldPackage.GridFlags, SdfWorldPackage.GridLineWidth, SdfWorldPackage.GridPlaneY,
         SdfWorldPackage.GridWorldPitch, SdfWorldPackage.GridWorldOrigin, SdfWorldPackage.GridWorldFrame,
         SdfWorldPackage.GridObjectOrigin, SdfWorldPackage.GridObjectPitch, SdfWorldPackage.GridObjectFrame,
         SdfWorldPackage.GridObjectPatchRadius,

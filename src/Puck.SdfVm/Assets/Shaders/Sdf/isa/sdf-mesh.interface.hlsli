@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/3ff1aed69f3db13c021ac08938473edf9e3663545a14bdaf2ce353d00daedca5). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/21cbf9a163d1c1291238e818bf38e626e5a0092a1dc4039603051b5583ec1729). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -120,11 +120,12 @@ struct SdfMeshPass {
     [[vk::offset(1356)]] uint _pad1356;
     [[vk::offset(1360)]] float3 viewUp;
     [[vk::offset(1372)]] uint viewportCount;
-    [[vk::offset(1376)]] uint workCounterRow;
-    [[vk::offset(1380)]] uint workCounterRowDetail;
-    [[vk::offset(1384)]] uint _pad1384;
-    [[vk::offset(1388)]] uint _pad1388;
-    [[vk::offset(1392)]] float4 worldLanes;
+    [[vk::offset(1376)]] uint4 viewsRate;
+    [[vk::offset(1392)]] uint workCounterRow;
+    [[vk::offset(1396)]] uint workCounterRowDetail;
+    [[vk::offset(1400)]] uint _pad1400;
+    [[vk::offset(1404)]] uint _pad1404;
+    [[vk::offset(1408)]] float4 worldLanes;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfMeshPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfMeshRegion : register(t1, space3);

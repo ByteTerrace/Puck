@@ -390,10 +390,16 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             pending.Meshes = meshes;
             if (pending.Lighting is not null && !pending.Selection && !pending.CameraSample) {
                 if (m_feedbackWords != pending.VolumeWords) {
-                    if (m_feedback is not null) { tables.RetireBackgroundResource(m_feedback); }
                     // A slot of the service is the region's slot its job flushes through (Record), so a staging buffer
                     // is rewritten only once the job that last staged through it completed.
-                    m_feedback = tables.CreateProbeRegion("probe-feedback", pending.VolumeWords * 4, SdfGpuWork.SlotCount);
+                    GpuRegion replacement;
+                    try {
+                        replacement = tables.CreateProbeRegion("probe-feedback", pending.VolumeWords * 4, SdfGpuWork.SlotCount);
+                    } catch (GpuMemoryRefusedException) {
+                        return false;
+                    }
+                    if (m_feedback is not null) { tables.RetireBackgroundResource(m_feedback); }
+                    m_feedback = replacement;
                     m_feedbackWords = pending.VolumeWords;
                 }
                 var updates = pending.Updates;
@@ -709,7 +715,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         query.Answer.SetResult(result);
     }
     public void Abandon(object job) {
-        if (job is SceneChunk chunk) { lock (m_gate) { m_sceneInFlight--; chunk.Dispose(); } return; }
+        if (job is SceneChunk chunk) { lock (m_gate) { m_sceneInFlight--; m_sceneUpload!.Deferred.Enqueue(chunk); } return; }
         if (job is StructureJob structures) { lock (m_gate) { AbandonStructures(job: structures); } return; }
         var query = (Job)job;
         lock (m_gate) {

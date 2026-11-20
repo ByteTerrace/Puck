@@ -17,5 +17,10 @@ internal sealed class WorldSimulation(WorldHostStep step, Action afterInstances)
     public uint RatePerSecond => step.RatePerSecond;
 
     /// <inheritdoc/>
-    public void Step(in FixedStepContext context, in CommandSnapshot commands) => step.Step(afterInstances: afterInstances, context: in context);
+    public void Step(in FixedStepContext context, in CommandSnapshot commands) {
+        if (!TryStep(in context, in commands)) { throw new InvalidOperationException("The host must resume the pending step."); }
+    }
+
+    /// <inheritdoc/>
+    public bool TryStep(in FixedStepContext context, in CommandSnapshot commands) => step.TryStep(in context, afterInstances);
 }

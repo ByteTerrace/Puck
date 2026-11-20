@@ -7,7 +7,8 @@ using Puck.World.Silo;
 namespace Puck.Cli.Azure;
 
 public static partial class AzureCommand {
-    private sealed record AzureWorldReleaseDeployment(WorldReleaseManifest Manifest, WorldReleaseDeploymentConfiguration Configuration) {
+    private sealed record AzureWorldReleaseDeployment(WorldReleaseManifest Manifest, WorldReleaseRetainedDeployment Retained) {
+        public WorldReleaseDeploymentConfiguration Configuration => Retained.Configuration;
         public int HealthPort => Parameters["configuration"]!["lifecycle"]!["healthPort"]!.GetValue<int>();
         public string Image => Text(value: Parameters["release"]);
         public JsonObject Parameters => Configuration.Parameters;
@@ -82,9 +83,12 @@ public static partial class AzureCommand {
                 path2: "release-compute.json"
             );
 
+            var parameters = deployment.Parameters.DeepClone().AsObject();
+
+            parameters["bootstrapCommand"] = WorldReleaseBootstrapCommand(deployment: deployment.Retained);
             WriteParameters(
                 path: path,
-                values: deployment.Parameters
+                values: parameters
             );
             var template = Path.Combine(
                 path1: temporary,

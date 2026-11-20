@@ -122,6 +122,27 @@
       "additionalProperties": false,
       "title": "WorldFarShadows"
     },
+    "SdfViewsRate": {
+      "description": "The maximum square shading footprint and the tile classified together, in render pixels.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "maxRate": {
+          "description": "Shading samples are at most this many pixels apart along each axis.",
+          "type": "integer",
+          "default": 1
+        },
+        "tileSize": {
+          "description": "Edge length of the region that must qualify together.",
+          "type": "integer",
+          "default": 8
+        }
+      },
+      "additionalProperties": false,
+      "title": "SdfViewsRate"
+    },
     "WorldQualityPreset": {
       "type": [
         "object",
@@ -222,6 +243,11 @@
         "farShadows": {
           "$ref": "#/$defs/WorldFarShadows",
           "description": "How often the device refreshes the far shadow cascade and the light turn a held cascade tolerates (WorldFarShadows). Absent refreshes it every frame.",
+          "default": null
+        },
+        "viewsRate": {
+          "$ref": "#/$defs/SdfViewsRate",
+          "description": "The maximum shared shading footprint and classification tile size. Absent shades every pixel.",
           "default": null
         }
       },

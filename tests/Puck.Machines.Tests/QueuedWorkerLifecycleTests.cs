@@ -1,4 +1,6 @@
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Counting;
+using Puck.Abstractions.Waiting;
 
 namespace Puck.Machines.Tests;
 
@@ -10,6 +12,40 @@ public sealed class QueuedWorkerLifecycleTests {
     private const int DrainCount = 64;
     private const int PendingWindow = 4;
     private const int SegmentCount = 512;
+
+    [Fact]
+    public void AFullQueueAndAnOrderedDrainResumeWithoutReacceptingTheSegment() {
+        using var release = new ManualResetEventSlim();
+        using var worker = new QueuedMachineWorker(width: 1, height: 1, maximumPendingSteps: 1, workerName: "sliced-machine-test");
+        var core = new CountingCore { FirstStepRelease = release };
+        worker.Load(core: core);
+        var generation = 0UL;
+        try {
+            Assert.Equal(QueuedMachineSubmission.PendingDrain, worker.StepSegment(1, default, true, ref generation, default));
+            var issued = generation;
+            Assert.NotEqual(0UL, issued);
+            Assert.Equal(QueuedMachineSubmission.PendingDrain, worker.StepSegment(1, default, true, ref generation, default));
+            Assert.Equal(issued, generation);
+            var next = 0UL;
+            Assert.Equal(QueuedMachineSubmission.PendingCapacity, worker.StepSegment(1, default, false, ref next, default));
+            Assert.Equal(0UL, next);
+            Assert.Equal(1L, worker.PendingSteps);
+            Assert.Equal(0L, worker.CompletedSteps);
+        } finally {
+            release.Set();
+        }
+        Assert.Equal(QueuedMachineSubmission.Accepted, worker.StepSegment(1, default, true, ref generation, WaitDeadline.In(TimeSpan.FromSeconds(10))));
+        Assert.Equal(0UL, generation);
+        Assert.Equal(1L, worker.CompletedSteps);
+        Assert.Equal(0L, worker.PendingSteps);
+        Assert.Equal(1L, core.RunCycleCalls);
+
+        void Drain() {
+            if (!worker.Step(1, default)) { throw new InvalidOperationException("The warmed step was rejected."); }
+        }
+        Drain();
+        Assert.Equal(0L, AllocationWindow.Least(Drain));
+    }
 
     [Fact]
     public void GroupFaultReleasesTheDrainAndReportsTheFault() {

@@ -894,6 +894,11 @@
       "$ref": "./common.schema.json#/$defs/WorldFarShadows",
       "description": "How often the world boots refreshing the far shadow cascade (WorldFarShadows); a quality preset\u0027s row replaces it. Absent refreshes it every frame.",
       "default": null
+    },
+    "viewsRate": {
+      "$ref": "./common.schema.json#/$defs/SdfViewsRate",
+      "description": "The maximum shared shading footprint and classification tile size. Absent shades every pixel.",
+      "default": null
     }
   },
   "additionalProperties": false,
