@@ -154,7 +154,7 @@ public static partial class NpmDependencies {
 
         if (run.ExitCode != 0) { throw new InvalidOperationException(message: $"npm update in {directory} exited {run.ExitCode}: {run.Stderr.Trim()}"); }
         var after = Installed(lockPath: lockPath);
-        var project = Path.GetRelativePath(relativeTo: context.RepositoryRoot, path: directory).Replace(oldChar: '\\', newChar: '/');
+        var project = Puck.Abstractions.PuckPaths.Relative(path: directory, relativeTo: context.RepositoryRoot);
 
         context.Report.AddDifferences(after: after, before: before, ecosystem: Ecosystem, scope: project);
     }

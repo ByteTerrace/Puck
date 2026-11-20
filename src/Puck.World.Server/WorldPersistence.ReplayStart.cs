@@ -1,12 +1,11 @@
 using Puck.Commands;
 using System.Text.Json;
 using System.Security.Cryptography;
-using System.Runtime.CompilerServices;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldPersistence {
-    private readonly ConditionalWeakTable<byte[], WorldDefinitionAdmission> m_checkpointAdmissions = new();
+    private readonly Puck.Abstractions.CodeDerivedTable<byte[], WorldDefinitionAdmission> m_checkpointAdmissions = new();
 
     private WorldDefinitionAdmission CheckpointAdmission(byte[] json) => m_checkpointAdmissions.GetValue(json,
         bytes => WorldDefinitionSerialization.DeserializeForAdmission(documentDirectory: Host.Configuration.DocumentDirectory,

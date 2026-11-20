@@ -78,6 +78,7 @@ to meet them here than to discover them later.
 | `DigitalNetSampler` | `static` | Even coverage by theorem. Digital `(0, m, 2)`-nets over the two-element field—the number system whose only values are 0 and 1, where addition is exclusive-or—in which a point is the exclusive-or of the direction vectors its index's set bits select. It offers only those randomizations that provably preserve stratification (the guarantee that every equal-sized box receives its exact share of the points): a digital shift of the coordinate, and a net-safe re-indexing. |
 | `StratifiedShuffle` | `static` | The index permutation a net may be re-indexed by: it carries every aligned dyadic block—a run of indices whose length is a power of two, beginning at a multiple of that length—onto an aligned dyadic block of the same size. |
 | `InvertibleBitMix` | `static` | The key mix beneath the types above, bijective (one input to one output, nothing lost, so it can be undone) by theorem rather than by tuning, with both directions in closed form. It derives keys and shifts; it is never used as a net's re-indexing. |
+| `MultisetDigest` | `readonly record struct` | An order-independent 64-bit digest of a multiset: the wrapping sum of each element's `Mix64`, updated as elements join and leave. |
 | `ConeDirectionTable` | `static` | The baked net-point-to-cap-direction table: one flat `uint` buffer that removes every square root, reciprocal, normalization, and trigonometric call from the point of use. |
 | `SecureRandom` | `static` | Cryptographically secure, exactly uniform unsigned draws at any binary integer width. Deliberately non-reproducible. |
 | `ProbabilityFunctions` | `static` ext. methods | The normal-distribution quantile function in `double`, by minimax rational approximation over three regions. |
@@ -546,6 +547,25 @@ around the multipliers `0xBF58476D1CE4E5B9` and `0x94D049BB133111EB`—with
 `Unmix64` its closed-form inverse by the same argument over `2⁶⁴`; its nine
 constants are public too. It is the mix a replay fingerprint or a gear table
 keys with when it wants a vetted 64-bit finalizer rather than a hand-rolled one.
+
+---
+
+## `MultisetDigest`
+
+An order-independent 64-bit digest of a multiset of 64-bit element words: the
+wrapping sum, modulo `2⁶⁴`, of each element's `Mix64`. Addition commutes and
+`Remove` is its inverse, so a digest kept as elements join and leave equals the
+digest built from scratch over the same multiset in any order, at one mix an
+update; `Union` adds two digests. Because `Mix64` is a bijection, distinct
+element words never mix to one word, and two distinct multisets share a digest
+only when their mixed sums agree. A composite element (a cell's ordinal and
+value, a mesh with its transform and material) is folded to one word first. A
+board's symmetry fingerprint, the irradiance volume's static-scene key and a
+cell-key table's ledger are digests of this kind.
+
+**Determinism tier.** Cross-machine bit-identical: pure integer arithmetic.
+
+**Allocation.** None.
 
 ---
 

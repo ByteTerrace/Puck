@@ -26,9 +26,7 @@ public sealed partial class SdfShadeProgram {
     private sealed record Admission(SdfShadeProgram? Program, string? Code, string? Message);
 
     private static readonly CodeDerivedTable<SdfShadeDefinition, Admission> AdmittedSources = new();
-    private static readonly Lock HeldGate = new();
-    private static readonly ContentAddressedLruCache<ContentPin, Lazy<Admission>> HeldContent = new(capacity: HeldSources);
-    private static int HeldRevision = CodeRevision.Current;
+    private static readonly CodeDerivedCache<ContentPin, Admission> HeldContent = new(capacity: HeldSources);
 
     /// <summary>Compiles expressions to canonical typed SSA, eliminates dead expressions, folds exact constants,
     /// interns common expressions and prices every live instruction before exposing a program. A source equal in
@@ -51,18 +49,15 @@ public sealed partial class SdfShadeProgram {
     // would produce.
     private static Admission Held(SdfShadeDefinition definition) {
         if (SourceKey.Of(definition: definition) is not { } key) { return Admit(definition: definition); }
-        Lazy<Admission>? held;
+        var compiled = false;
+        var admission = HeldContent.GetOrAdd(key: key, derive: _ => {
+            compiled = true;
+            return Admit(definition: definition);
+        });
 
-        lock (HeldGate) {
-            if (HeldRevision != CodeRevision.Current) { HeldContent.Clear(); HeldRevision = CodeRevision.Current; }
-            if (HeldContent.TryGet(hash: key, value: out held)) {
-                CompileWork.Count(kind: CompileReuses);
-            } else {
-                held = new(valueFactory: () => Admit(definition: definition), mode: LazyThreadSafetyMode.ExecutionAndPublication);
-                HeldContent.Set(hash: key, value: held);
-            }
-        }
-        return held.Value;
+        // A request that found the compile held or in flight reused it.
+        if (!compiled) { CompileWork.Count(kind: CompileReuses); }
+        return admission;
     }
     private static Admission Admit(SdfShadeDefinition definition) {
         CompileWork.Count(kind: CompileRuns);

@@ -1,5 +1,4 @@
 using Puck.Maths;
-using System.Runtime.CompilerServices;
 
 namespace Puck.World.Server;
 
@@ -19,7 +18,7 @@ namespace Puck.World.Server;
 public static class WorldPlacementAttachment {
     private sealed record LocalFrame(FixedVector3 Offset, FixedQ4816 Yaw);
 
-    private static readonly ConditionalWeakTable<WorldPlacementAttach, LocalFrame> LocalFrames = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldPlacementAttach, LocalFrame> LocalFrames = new();
 
     /// <summary>Attempts to resolve an attached placement's world transform for the CURRENT tick.</summary>
     /// <param name="attach">The placement's attach facet.</param>

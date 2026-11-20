@@ -5,6 +5,7 @@ namespace Puck.Shaders;
 
 // The capture of the published output: a surface format read back as it is, any other image through the display encode.
 public sealed partial class ShaderPipelineRenderNode {
+    [SideTable(reason: "attaches the capture companion a readback was issued with to its buffer")]
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<byte[], Action<string>> m_captureCompanions = new();
     /// <summary>Captures immutable companion data on the render thread and returns its file writer. Invoked while
     /// the exact source frame is retained; presented encodes run later and receive only the captured closure.</summary>

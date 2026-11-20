@@ -95,7 +95,7 @@ public sealed record WorldCurveRow(
     // invalidation of its own — the DynamicsRow.Compiled precedent, exactly. Kept off the record's own
     // equality-compared surface for the same reason that precedent gives: a lazily-populated field would make two
     // otherwise-identical rows compare unequal purely because one had been read from and the other had not.
-    private static readonly ConditionalWeakTable<WorldCurveRow, StrongBox<CompiledCurvatureSpline>> CompiledCache = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldCurveRow, StrongBox<CompiledCurvatureSpline>> CompiledCache = new();
     // The derivation is exact (rational root isolation) and costs whole seconds per document, and every instance
     // that loads the same document parses its own row instances, so the compile itself is shared by SHAPE — the
     // knots' fixed-point values and closure — across rows and instances; a compiled spline is immutable, so one
@@ -111,7 +111,7 @@ public sealed record WorldCurveRow(
     [JsonIgnore]
     public CompiledCurvatureSpline Compiled => CompiledCache.GetValue(
         key: this,
-        createValueCallback: static row => new StrongBox<CompiledCurvatureSpline>(value: CompiledByShape.GetOrAdd(
+        derive: static row => new StrongBox<CompiledCurvatureSpline>(value: CompiledByShape.GetOrAdd(
             key: new CurveShape(
                 closed: row.Closed,
                 knots: row.ToSplineKnots()

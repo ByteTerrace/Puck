@@ -1,6 +1,5 @@
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
 using System.Text;
 using Puck.Abstractions.Machines;
 using System.Text.Json.Nodes;
@@ -26,7 +25,7 @@ namespace Puck.World;
 public static class WorldModuleNamespace {
     // The model's shape never changes. Resolve each type's property registrations once, without retaining document
     // nodes: every walk still observes the current values and lets its visitor rewrite them.
-    private static readonly ConditionalWeakTable<WorldModelType, VisitMemberPlan[]> VisitMembers = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldModelType, VisitMemberPlan[]> VisitMembers = new();
 
     private readonly record struct VisitMemberPlan(string Name, Type Type, WorldNameField? Field);
 
@@ -756,7 +755,7 @@ public static class WorldModuleNamespace {
             typeof(StateRow).IsAssignableFrom(c: type) &&
             (node is JsonObject rowObject)
         ) {
-            foreach (var member in VisitMembers.GetValue(createValueCallback: BuildVisitMembers, key: shape)) {
+            foreach (var member in VisitMembers.GetValue(derive: BuildVisitMembers, key: shape)) {
                 if (
                     !rowObject.TryGetPropertyValue(
                     jsonNode: out var value,
@@ -819,7 +818,7 @@ public static class WorldModuleNamespace {
                     }
                 }
 
-                foreach (var member in VisitMembers.GetValue(createValueCallback: BuildVisitMembers, key: shape)) {
+                foreach (var member in VisitMembers.GetValue(derive: BuildVisitMembers, key: shape)) {
                     if (
                         !obj.TryGetPropertyValue(
                         propertyName: member.Name,

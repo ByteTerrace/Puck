@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 
 namespace Puck.World.Authoring;
 
@@ -96,7 +95,7 @@ public sealed class AuthoredPartTable {
 /// slot and the set of shapes it covers. This is the one place a part becomes shapes, so a mask that names a part means
 /// one thing everywhere.</summary>
 public static class CreationPartCompiler {
-    private static readonly ConditionalWeakTable<CreationDocument, AuthoredPartTable> Compiled = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<CreationDocument, AuthoredPartTable> Compiled = new();
 
     /// <summary>Publishes each part id as the zero-based dynamic shape slot its referenced shape occupies, with the shapes
     /// it covers. Compiled once per document instance.</summary>
@@ -106,7 +105,7 @@ public static class CreationPartCompiler {
     public static AuthoredPartTable Compile(CreationDocument document) {
         ArgumentNullException.ThrowIfNull(document);
 
-        return Compiled.GetValue(key: document, createValueCallback: static document => Resolve(document: document, refuse: static (path, message) => throw new ArgumentException(message: $"{path}: {message}", paramName: nameof(document))));
+        return Compiled.GetValue(key: document, derive: static document => Resolve(document: document, refuse: static (path, message) => throw new ArgumentException(message: $"{path}: {message}", paramName: nameof(document))));
     }
     /// <summary>Resolves a creation's parts, reporting each malformed one and leaving it out: an empty or duplicated id,
     /// an anchor naming no shape id, a <see cref="CreationPartDocument.Shapes"/> entry naming no shape, and an

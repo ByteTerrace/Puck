@@ -13,40 +13,40 @@ public static class BoardQueries {
 
         for (var element = 0; (element < topology.ElementCount); element++) {
             // The image board holds value[c] at image(c).
-            var hash = 0UL;
+            var digest = MultisetDigest.Empty;
 
             for (var cell = 0; (cell < topology.CellCount); cell++) {
-                hash += Mix(
+                digest = digest.Add(element: Pair(
                     ordinal: topology.Image(
                         cell: cell,
                         element: element
                     ),
                     value: values[cell]
-                );
+                ));
             }
             least = Math.Min(
                 val1: least,
-                val2: hash
+                val2: digest.Value
             );
         }
         return ((long)least);
     }
     // The board as it stands, through the identity: the canonical fold's identity term.
     private static long Fingerprint(CompiledTopology topology, ReadOnlySpan<long> values) {
-        var hash = 0UL;
+        var digest = MultisetDigest.Empty;
 
         for (var cell = 0; (cell < topology.CellCount); cell++) {
-            hash += Mix(
+            digest = digest.Add(element: Pair(
                 ordinal: cell,
                 value: values[cell]
-            );
+            ));
         }
-        return ((long)hash);
+        return ((long)digest.Value);
     }
-    // One (ordinal, value) pair's mix. A fingerprint is the wrapping sum of its cells' mixes, so it depends only on the
-    // set of pairs and not on the order cells are walked.
-    private static ulong Mix(int ordinal, long value) =>
-        InvertibleBitMix.Mix64(value: ((((ulong)ordinal) * 0x9E3779B97F4A7C15UL) ^ ((ulong)value)));
+    // One (ordinal, value) pair as one element word. A fingerprint is the multiset digest of its cells' pairs, so it
+    // depends only on the set of pairs and not on the order cells are walked.
+    private static ulong Pair(int ordinal, long value) =>
+        ((((ulong)ordinal) * 0x9E3779B97F4A7C15UL) ^ ((ulong)value));
     // A flood along the topology's directions from the key cell over in-range cells; every settled member is one
     // visit against the budget. Boundary are counted once each through a second mark, so a cell touching the group
     // twice is one boundary cell.

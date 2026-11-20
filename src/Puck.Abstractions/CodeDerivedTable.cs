@@ -8,6 +8,14 @@ namespace Puck.Abstractions;
 /// its key, and every entry is forgotten once <see cref="CodeRevision.Current"/> moves, so a hot-reloaded process never
 /// serves a value an earlier version of its code derived. Safe for concurrent use; an operation begun before an
 /// update can finish in its detached generation, but cannot publish into the generation later operations read.
+/// <para>
+/// This is the one door for a weak table of products of code: <c>Puck.Analyzers</c> refuses a raw
+/// <see cref="ConditionalWeakTable{TKey, TValue}"/> field anywhere else (CACHE001) unless the field carries
+/// <c>[SideTable(reason)]</c>, which names a table whose values are not derived by code from their key: an attachment a
+/// writer records (a source origin, a refusal noted while lowering), per-object state a code update must not drop (a
+/// pool, a guard's last valid values), or a value whose identity live state was built from (the state catalog an arena
+/// was created against).
+/// </para>
 /// </summary>
 /// <typeparam name="TKey">The type of the objects values are derived from.</typeparam>
 /// <typeparam name="TValue">The type of the derived values.</typeparam>
@@ -67,6 +75,8 @@ public sealed class CodeDerivedTable<TKey, [DynamicallyAccessedMembers(memberTyp
 
         CurrentGeneration().Values.AddOrUpdate(key: key, value: value);
     }
+    /// <summary>Forgets every value held, as a code update does.</summary>
+    public void Clear() => Volatile.Write(location: ref m_generation, value: new Generation(revision: CodeRevision.Current));
 
     private Generation CurrentGeneration() {
         while (true) {

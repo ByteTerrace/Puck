@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Numerics;
 
 namespace Puck.Maths;
 
@@ -69,6 +70,37 @@ public struct Fnv1aHash {
     /// <param name="value">The value to fold.</param>
     public void Add(long value) =>
         Add(value: unchecked((ulong)value));
+    /// <summary>Folds a single-precision value's bit pattern into the hash as its 32-bit word, so every distinct bit
+    /// pattern folds distinctly: zero and negative zero differ, and so do distinct NaNs. A change key over presentation
+    /// floats folds them this way; a value that feeds simulation state is never a float.</summary>
+    /// <param name="value">The value to fold.</param>
+    public void AddBits(float value) =>
+        Add(value: BitConverter.SingleToUInt32Bits(value: value));
+    /// <summary>Folds a vector's component bit patterns (<see cref="AddBits(float)"/>), X, Y, then Z.</summary>
+    /// <param name="value">The vector to fold.</param>
+    public void AddBits(Vector3 value) {
+        AddBits(value: value.X); AddBits(value: value.Y); AddBits(value: value.Z);
+    }
+    /// <summary>Folds a vector's component bit patterns (<see cref="AddBits(float)"/>), X, Y, Z, then W.</summary>
+    /// <param name="value">The vector to fold.</param>
+    public void AddBits(Vector4 value) {
+        AddBits(value: value.X); AddBits(value: value.Y); AddBits(value: value.Z); AddBits(value: value.W);
+    }
+    /// <summary>Folds a quaternion's component bit patterns (<see cref="AddBits(float)"/>), X, Y, Z, then W.</summary>
+    /// <param name="value">The quaternion to fold.</param>
+    public void AddBits(Quaternion value) {
+        AddBits(value: value.X); AddBits(value: value.Y); AddBits(value: value.Z); AddBits(value: value.W);
+    }
+    /// <summary>Folds a matrix's element bit patterns (<see cref="AddBits(float)"/>) in row-major order, M11 through
+    /// M44.</summary>
+    /// <param name="value">The matrix to fold.</param>
+    public void AddBits(in Matrix4x4 value) {
+        for (var row = 0; (row < 4); row++) {
+            for (var column = 0; (column < 4); column++) {
+                AddBits(value: value[row, column]);
+            }
+        }
+    }
     /// <summary>Folds a nullable string into the hash, prefixing with its length or <see cref="uint.MaxValue"/> for null.</summary>
     /// <param name="value">The string to fold, or <see langword="null"/>.</param>
     public void Add(string? value) {

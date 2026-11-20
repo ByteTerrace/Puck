@@ -48,7 +48,7 @@ public sealed record StateRowDeclaration(
     bool HostOwned = false,
     bool CellVisibility = false
 ) : StateRowShape(Name, Kind, Min, Max, Capacity, Overflow, Evicts, Advance, Dynamics, Cycle, Domain, ValuesFrom, Inverse, Visibility, Knowledge, PhaseOf, Space, Enum, HostOwned, CellVisibility) {
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<StateRow, StateRowDeclaration> Declarations = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<StateRow, StateRowDeclaration> Declarations = new();
     /// <inheritdoc/>
     public override bool IsDraw => Draw is not null;
     /// <inheritdoc/>
@@ -60,7 +60,7 @@ public sealed record StateRowDeclaration(
         ArgumentNullException.ThrowIfNull(row);
         return Declarations.GetValue(row, static source => Create(source));
     }
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<StateRow>, IReadOnlyList<StateRowDeclaration>> RowLists = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<StateRow>, IReadOnlyList<StateRowDeclaration>> RowLists = new();
     /// <summary>Projects an immutable expanded row list in catalog order.</summary>
     public static IReadOnlyList<StateRowDeclaration> FromRows(IReadOnlyList<StateRow> rows) =>
         RowLists.GetValue(rows, static source => Array.AsReadOnly(source.Select(From).ToArray()));

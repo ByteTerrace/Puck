@@ -46,6 +46,7 @@ public readonly record struct WorldValueSite(string Section, int Index = -1, str
 /// </para>
 /// </summary>
 public sealed class WorldValueDomainGuard {
+    [SideTable(reason: "each world's binding state: the last valid values and the transitions reported")]
     private readonly ConditionalWeakTable<WorldStateMirror, World> m_worlds = [];
 
     private long m_checks;

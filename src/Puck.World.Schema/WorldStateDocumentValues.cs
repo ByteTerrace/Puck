@@ -44,7 +44,7 @@ public static class WorldStateDocumentValues {
     private static readonly WorldDocumentWalker Walker = new(isSurface: static type => typeof(IDocumentStateValue).IsAssignableFrom(c: type));
     // The rows each definition's document values name, collected once per definition. A rewrite can drop a reference
     // (a flattening) but never add one, so a set collected earlier is never missing a row the definition names.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldDefinition, HashSet<string>> ReferencedRowSets = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, HashSet<string>> ReferencedRowSets = new();
 
     /// <summary>Returns the server's own projection of a definition, whose state-bound values read the live arena
     /// through <paramref name="live"/>. Seed rows remain declarations.</summary>
@@ -366,7 +366,7 @@ public static class WorldStateDocumentValues {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         return ReferencedRowSets.GetValue(
-            createValueCallback: static candidate => {
+            derive: static candidate => {
                 var rows = new HashSet<string>(comparer: StringComparer.Ordinal);
 
                 CollectReferencedRows(

@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Puck.Networking;
 
@@ -17,8 +16,8 @@ public static class WorldIdentityProjectionWire {
     // the first time it is written; a later write of the same instance writes what that first write produced, so the
     // steady fold allocates nothing and every leaf still writes the one encoding below. A write or an adoption that
     // changes a row or a pool builds a new instance, which misses here.
-    private static readonly ConditionalWeakTable<WorldStateSection, byte[]> RecordBytes = new();
-    private static readonly ConditionalWeakTable<WorldStateRow, object> ValidatedFacts = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldStateSection, byte[]> RecordBytes = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldStateRow, object> ValidatedFacts = new();
     private static readonly object Validated = new();
 
     /// <summary>Writes a projection.</summary>

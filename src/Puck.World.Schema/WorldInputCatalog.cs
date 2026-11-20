@@ -133,7 +133,7 @@ public sealed class WorldInputCatalog {
             other: System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(jsonTypeInfo: info, value: right));
     }
 
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldDefinition, WorldInputCatalog> Catalogs = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, WorldInputCatalog> Catalogs = new();
 
     /// <summary>Admission bound independent of active storage.</summary>
     public const int MaximumLogicalChannels = 4096;

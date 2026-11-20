@@ -8,6 +8,7 @@ public sealed partial class WorldServer {
     private readonly ArenaChangedKeys m_snapshotKeys = new();
     private readonly Dictionary<Principal, List<WorldDeliveryCursor>> m_deliveryCursors = [];
     private readonly Dictionary<Principal, WorldRecipientView> m_readViews = [];
+    [SideTable(reason: "one capability view per mounted addon, carrying its own write scratch")]
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldAddonRow, WorldRecipientView> m_addonReadViews = new();
 
     /// <summary>The operator's disclosure work and shared storage measurement.</summary>

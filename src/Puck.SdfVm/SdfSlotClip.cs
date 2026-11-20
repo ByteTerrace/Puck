@@ -86,5 +86,6 @@ public readonly record struct SdfSlotClip(int FirstSlot, int SlotCount, Vector4 
     // The identity of a draw's carried copy: one object for the life of the draw's, and never equal to the draw's.
     private sealed record Copy(object Of);
 
+    [SideTable(reason: "gives each draw identity one carried copy for the life of the draw's, which motion history follows")]
     private static readonly ConditionalWeakTable<object, Copy> Copies = new();
 }

@@ -15,9 +15,27 @@ namespace Puck.Assets;
 /// <param name="capacity">The most entries the table holds.</param>
 /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is not greater than zero.</exception>
 public sealed class CodeDerivedCache<TKey, TValue>(int capacity) where TKey : notnull {
-    private readonly ContentAddressedLruCache<TKey, TValue> m_values = new(capacity: capacity);
+    private readonly ContentAddressedLruCache<TKey, Slot> m_values = new(capacity: capacity);
     private readonly Lock m_lock = new();
     private int m_revision = CodeRevision.Current;
+
+    // One entry: a value held, or a derivation every caller that finds it shares. A derivation that throws leaves its
+    // slot unheld, and the caller that saw it fail removes it so the next request derives again.
+    private sealed class Slot {
+        private readonly Lazy<TValue>? m_derivation;
+        private readonly TValue m_value;
+
+        public Slot(TValue value) {
+            m_value = value;
+        }
+        public Slot(TKey key, Func<TKey, TValue> derive) {
+            m_value = default!;
+            m_derivation = new(valueFactory: () => derive(arg: key), mode: LazyThreadSafetyMode.ExecutionAndPublication);
+        }
+
+        public bool IsHeld => (m_derivation?.IsValueCreated ?? true);
+        public TValue Value => ((m_derivation is null) ? m_value : m_derivation.Value);
+    }
 
     /// <summary>Gets the most entries the table holds.</summary>
     public int Capacity => m_values.Capacity;
@@ -33,7 +51,7 @@ public sealed class CodeDerivedCache<TKey, TValue>(int capacity) where TKey : no
     }
 
     /// <summary>Reads the value held for <paramref name="key"/> under the running code, marking it most recently
-    /// used.</summary>
+    /// used. A derivation still in flight holds no value yet.</summary>
     /// <param name="key">The key.</param>
     /// <param name="value">The held value, or the default when none is held.</param>
     /// <returns><see langword="true"/> when a value is held.</returns>
@@ -41,8 +59,14 @@ public sealed class CodeDerivedCache<TKey, TValue>(int capacity) where TKey : no
         lock (m_lock) {
             Forget();
 
-            return m_values.TryGet(hash: key, value: out value!);
+            if (m_values.TryGet(hash: key, value: out var slot) && slot.IsHeld) {
+                value = slot.Value;
+                return true;
+            }
         }
+
+        value = default;
+        return false;
     }
     /// <summary>Holds <paramref name="value"/> for <paramref name="key"/>, replacing any value held and evicting the
     /// least recently used entry past <see cref="Capacity"/>.</summary>
@@ -51,12 +75,14 @@ public sealed class CodeDerivedCache<TKey, TValue>(int capacity) where TKey : no
     public void Set(TKey key, TValue value) {
         lock (m_lock) {
             Forget();
-            m_values.Set(hash: key, value: value);
+            m_values.Set(hash: key, value: new Slot(value: value));
         }
     }
     /// <summary>Gets the value held for <paramref name="key"/>, deriving and holding it when none is held under the
-    /// running code. The derivation runs outside the table's lock, so two callers racing on one key may both derive;
-    /// the value held last wins the table, and each caller returns its own.</summary>
+    /// running code. Callers that ask for one key while its derivation runs wait for that derivation and share its
+    /// value, so each key and code revision is derived once; the derivation runs outside the table's lock. A derivation
+    /// that throws is held by no one: every caller sharing it sees the exception, and the next request derives
+    /// again.</summary>
     /// <param name="key">The key.</param>
     /// <param name="derive">The derivation.</param>
     /// <returns>The value.</returns>
@@ -64,14 +90,28 @@ public sealed class CodeDerivedCache<TKey, TValue>(int capacity) where TKey : no
     public TValue GetOrAdd(TKey key, Func<TKey, TValue> derive) {
         ArgumentNullException.ThrowIfNull(argument: derive);
 
-        if (TryGetValue(key: key, value: out var held)) {
-            return held;
+        Slot slot;
+
+        lock (m_lock) {
+            Forget();
+
+            if (!m_values.TryGet(hash: key, value: out slot!)) {
+                slot = new Slot(derive: derive, key: key);
+                m_values.Set(hash: key, value: slot);
+            }
         }
 
-        var derived = derive(arg: key);
+        try {
+            return slot.Value;
+        } catch {
+            lock (m_lock) {
+                if (m_values.TryPeek(hash: key, value: out var held) && ReferenceEquals(objA: held, objB: slot)) {
+                    _ = m_values.Remove(hash: key);
+                }
+            }
 
-        Set(key: key, value: derived);
-        return derived;
+            throw;
+        }
     }
     /// <summary>Forgets every entry.</summary>
     public void Clear() {

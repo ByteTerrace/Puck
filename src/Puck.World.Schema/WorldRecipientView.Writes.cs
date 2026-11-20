@@ -13,6 +13,7 @@ public sealed partial class WorldRecipientView {
     }
     // Read-only capabilities are minted during delivery. Writing scratch belongs only to capabilities that write;
     // weak keys keep both its allocation and its lifetime off the ordinary read path.
+    [SideTable(reason: "per-view scratch reused across admissions")]
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldRecipientView, WriteScratch> Writes = new();
 
     /// <summary>Whether this capability belongs to the operator or the world's authored program.</summary>

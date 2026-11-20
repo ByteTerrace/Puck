@@ -202,7 +202,7 @@ public static class WorldDefinitionRows {
 
     // Each creations list's first position for every id, built once per list. A definition's sections are immutable
     // once composed; the count recorded beside the index rebuilds it should a list grow after it was indexed.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<WorldPrototype>, CreationIndex> CreationIndices = [];
+    private static readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldPrototype>, CreationIndex> CreationIndices = new();
 
     private static CreationIndex CreationIndexOf(IReadOnlyList<WorldPrototype> creations) {
         if (

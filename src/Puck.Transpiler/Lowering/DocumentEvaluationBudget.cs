@@ -19,6 +19,7 @@ public sealed class DocumentEvaluationBudget {
     private int m_work;
     // Each string node a vocabulary recorded as written beside a directory, keyed weakly by reference, so a record
     // follows the node through every copy this budget makes and never keeps a discarded node alive.
+    [SideTable(reason: "records the directory each node was written beside, carried through copies")]
     private System.Runtime.CompilerServices.ConditionalWeakTable<JsonNode, string>? m_writtenBeside;
 
     /// <summary>Gets the cancellation signal shared by all evaluations in this compilation.</summary>

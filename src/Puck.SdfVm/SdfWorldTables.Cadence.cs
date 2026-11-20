@@ -137,8 +137,8 @@ public sealed partial class SdfWorldTables {
                     hash.Add(value: m_wrapSignature);
                     hash.Add(value: frame.ShadePrograms ? 1u : 0u);
                     if (frame.ShadePrograms && frame.ShadeDefault is { } shade) {
-                        hash.Add(value: BitConverter.SingleToUInt32Bits(shade.Demand.MaxWrap));
-                        hash.Add(value: BitConverter.SingleToUInt32Bits(shade.Demand.MaxTiltRadians));
+                        hash.AddBits(value: shade.Demand.MaxWrap);
+                        hash.AddBits(value: shade.Demand.MaxTiltRadians);
                         hash.Add(value: shade.Demand.EverySide ? 1u : 0u);
                     }
                 }
@@ -155,7 +155,7 @@ public sealed partial class SdfWorldTables {
             case SdfWorldPackage.Resolve:
                 hash.Add(value: lighting.Value);
                 if (part == SdfWorldPackage.Resolve) {
-                    hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Views[view].UpscaleSharpness));
+                    hash.AddBits(value: frame.Views[view].UpscaleSharpness);
                 }
                 break;
             case SdfWorldPackage.Parts.Sky:
@@ -171,17 +171,17 @@ public sealed partial class SdfWorldTables {
             var snapshot = frame.Views[view];
             var bloom = (snapshot.Bloom ?? default);
 
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: bloom.Scatter));
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: bloom.Radius));
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: bloom.Cutoff));
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: snapshot.ScreenFidelity));
+            hash.AddBits(value: bloom.Scatter);
+            hash.AddBits(value: bloom.Radius);
+            hash.AddBits(value: bloom.Cutoff);
+            hash.AddBits(value: snapshot.ScreenFidelity);
             if (part == SdfWorldPackage.Display) {
                 hash.Add(value: (snapshot.Quality.Temporal ? BitConverter.SingleToUInt32Bits(value: snapshot.UpscaleSharpness) : 0u));
-                hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Tone.Peak));
-                hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Tone.Contrast));
-                hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Tone.LinearStart));
-                hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Tone.LinearLength));
-                hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Tone.Toe));
+                hash.AddBits(value: frame.Tone.Peak);
+                hash.AddBits(value: frame.Tone.Contrast);
+                hash.AddBits(value: frame.Tone.LinearStart);
+                hash.AddBits(value: frame.Tone.LinearLength);
+                hash.AddBits(value: frame.Tone.Toe);
             }
         }
         return hash.Value;
@@ -267,12 +267,12 @@ public sealed partial class SdfWorldTables {
         hash.Add(value: unchecked((ulong)m_skyEnvironment.Publication.Renders));
         hash.Add(value: unchecked((ulong)m_screenEmission.Publication.Renders));
         hash.Add(values: block);
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Views[view].Quality.SkyFieldFraction));
+        hash.AddBits(value: frame.Views[view].Quality.SkyFieldFraction);
         var bloom = frame.Views[view].Bloom;
 
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: (bloom?.Scatter ?? 0f)));
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: (bloom?.Radius ?? 0f)));
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: (bloom?.Cutoff ?? 0f)));
+        hash.AddBits(value: (bloom?.Scatter ?? 0f));
+        hash.AddBits(value: (bloom?.Radius ?? 0f));
+        hash.AddBits(value: (bloom?.Cutoff ?? 0f));
         hash.Add(value: ((uint)frame.Views[view].BloomQuality));
         hash.Add(value: ((ulong)frame.MeshCull));
         hash.Add(value: ((ulong)frame.MeshDetail));

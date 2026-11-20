@@ -242,7 +242,11 @@ form and replaces every platform separator with `/`. Compare two file-system
 paths for equality, containment, or distinctness with `PuckPaths.Comparer` (a
 `StringComparer`) or `PuckPaths.Comparison` (its `StringComparison`
 equivalent): case-insensitive on Windows, where the file system itself ignores
-case, and ordinal everywhere else. This is a file-system rule, not a text
+case, and ordinal everywhere else. Where a comparer cannot reach (a key
+composed with other parts, or an identity hashed into a persisted name), key the
+path by `PuckPaths.Key`, the one spelling every name of a file shares; spell a
+relative path with `PuckPaths.Relative`, never `Path.GetRelativePath` and a
+separator replacement. This is a file-system rule, not a text
 rule — a document NAME (`Puck.Assets.WorldDocumentName.NameComparer`) is
 case-insensitive on every platform, on purpose, and never shares this
 comparer. Keep resolution semantics explicit: `Path.Combine` can replace an
@@ -432,7 +436,13 @@ two things, and the watch output says which:
   `CodeRevision` (`src/Puck.Abstractions/CodeRevision.cs`, the process's
   `MetadataUpdateHandler`) is the one invalidation contract for products of
   code. A cache held in memory compares `CodeRevision.Current`, or holds its
-  entries in a `CodeDerivedTable`, and derives again when it moved: every
+  entries in a `CodeDerivedTable` (keyed by an object) or a `CodeDerivedCache`
+  (keyed by a content digest, where concurrent callers share one derivation),
+  and derives again when it moved. `Puck.Analyzers` refuses a raw
+  `ConditionalWeakTable` field outside `CodeDerivedTable` (CACHE001) unless it
+  carries `[SideTable(reason)]`, which names a table whose values no code
+  derives: an attachment, per-object state, or a value whose identity live state
+  was built from, such as the state catalog an arena was created against. Every
   compiled camera rig (`WorldCameraRigCompiler.Cache`), everything the frame
   presenter derives from a delivered definition (cameras and faces, screens,
   speakers, text, decals, the static field), the composed scene program (the

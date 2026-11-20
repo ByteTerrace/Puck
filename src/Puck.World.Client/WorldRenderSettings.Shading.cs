@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Puck.SdfVm;
 using Puck.SignedDistance;
@@ -6,7 +5,7 @@ using Puck.SignedDistance;
 namespace Puck.World;
 
 public sealed partial class WorldRenderSettings {
-    private static readonly ConditionalWeakTable<WorldDefinition, IReadOnlyList<SdfShadeProgram>> DeclaredShadeSets = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, IReadOnlyList<SdfShadeProgram>> DeclaredShadeSets = new();
     private SdfShadeProgram? m_shadeOverride;
     private SdfProgram? m_shadeScene;
     private readonly Dictionary<string, SdfShadeProgram> m_namedShades = new(StringComparer.Ordinal);
@@ -60,7 +59,7 @@ public sealed partial class WorldRenderSettings {
     public static IReadOnlyList<SdfShadeProgram> DeclaredShades(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(definition);
 
-        return DeclaredShadeSets.GetValue(key: definition, createValueCallback: static definition => SdfShadeHlsl.Canonical(
+        return DeclaredShadeSets.GetValue(key: definition, derive: static definition => SdfShadeHlsl.Canonical(
             programs: DeclaredShadeMaterials(definition: definition).Select(selector: static material => material.Program)
                 .Concat(second: ((CompileShade(definition.Render.Shade) is { } fallback) ? [fallback] : []))));
     }

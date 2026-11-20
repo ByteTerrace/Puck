@@ -119,7 +119,7 @@ public static partial class WorldDocumentEmitter {
             new JsonObject {
                 ["id"] = prototypeId,
                 ["document"] = new JsonObject {
-                    ["schema"] = "puck.creation.v1",
+                    ["schema"] = Puck.World.Authoring.CreationDocument.CurrentSchema,
                     ["name"] = prototypeId,
                     ["palette"] = new JsonArray(new JsonObject { ["color"] = "#808080" }),
                     ["shapes"] = new JsonArray(new JsonObject {

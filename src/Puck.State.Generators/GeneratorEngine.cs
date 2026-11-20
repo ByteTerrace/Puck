@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Puck.Maths;
 
 namespace Puck.State;
@@ -49,7 +48,7 @@ public static partial class GeneratorEngine {
     /// <summary>The largest <c>Pcg32XshRr</c> stream id a site descriptor maps onto — see this type's remarks.</summary>
     private const ulong SiteStreamIdMask = 0xFFFFUL;
 
-    private static readonly ConditionalWeakTable<StateGenerator, CompiledSource> CompiledValue = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<StateGenerator, CompiledSource> CompiledValue = new();
 
     /// <summary>One emission's result — exactly one of <see cref="Text"/>/<see cref="Numeric"/> is set, matching the
     /// firing <see cref="StateGenerator.Source"/>.</summary>
@@ -248,7 +247,7 @@ public static partial class GeneratorEngine {
     private static CompiledSource Compiled(StateGenerator generator) =>
         CompiledValue.GetValue(
             key: generator,
-            createValueCallback: static (StateGenerator source) => new CompiledSource(generator: source)
+            derive: static (StateGenerator source) => new CompiledSource(generator: source)
         );
     // One draw from a unit set under a mode: the full table when nothing is drawn (or the mode never exhausts), else
     // a table over the undrawn units. An exhausted mask refuses under WithoutReplacement and clears under

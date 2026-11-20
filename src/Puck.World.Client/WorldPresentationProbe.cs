@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Maths;
@@ -139,14 +138,14 @@ public sealed class WorldPresentationProbe(TimeProvider? time = null) {
         foreach (var view in frame.Views) {
             var camera = view.Camera;
 
-            Add(hash: ref hash, value: camera.Position); Add(hash: ref hash, value: camera.Right); Add(hash: ref hash, value: camera.Up); Add(hash: ref hash, value: camera.Forward);
-            Add(hash: ref hash, value: camera.TanHalfFieldOfView); Add(hash: ref hash, value: camera.AspectRatio); Add(hash: ref hash, value: camera.Near); Add(hash: ref hash, value: camera.FrustumOffset.X); Add(hash: ref hash, value: camera.FrustumOffset.Y);
-            Add(hash: ref hash, value: view.Region.X); Add(hash: ref hash, value: view.Region.Y); Add(hash: ref hash, value: view.Region.Width); Add(hash: ref hash, value: view.Region.Height);
-            Add(hash: ref hash, value: view.RenderScale); Add(hash: ref hash, value: view.ResolvedRenderScale); Add(hash: ref hash, value: view.UpscaleSharpness); Add(hash: ref hash, value: view.ScreenFidelity);
-            Add(hash: ref hash, value: view.DemandHeight); hash.Add(value: view.CutRevision); hash.Add(value: ((byte)(view.Elsewhere ? 1 : 0))); hash.Add(value: ((byte)(view.Unexposed ? 1 : 0))); hash.Add(value: ((byte)(view.DemandWithinView ? 1 : 0)));
-            Add(hash: ref hash, value: view.Quality.SkyFieldScale); hash.Add(value: ((uint)view.Quality.ShadowResolution));
+            hash.AddBits(value: camera.Position); hash.AddBits(value: camera.Right); hash.AddBits(value: camera.Up); hash.AddBits(value: camera.Forward);
+            hash.AddBits(value: camera.TanHalfFieldOfView); hash.AddBits(value: camera.AspectRatio); hash.AddBits(value: camera.Near); hash.AddBits(value: camera.FrustumOffset.X); hash.AddBits(value: camera.FrustumOffset.Y);
+            hash.AddBits(value: view.Region.X); hash.AddBits(value: view.Region.Y); hash.AddBits(value: view.Region.Width); hash.AddBits(value: view.Region.Height);
+            hash.AddBits(value: view.RenderScale); hash.AddBits(value: view.ResolvedRenderScale); hash.AddBits(value: view.UpscaleSharpness); hash.AddBits(value: view.ScreenFidelity);
+            hash.AddBits(value: view.DemandHeight); hash.Add(value: view.CutRevision); hash.Add(value: ((byte)(view.Elsewhere ? 1 : 0))); hash.Add(value: ((byte)(view.Unexposed ? 1 : 0))); hash.Add(value: ((byte)(view.DemandWithinView ? 1 : 0)));
+            hash.AddBits(value: view.Quality.SkyFieldScale); hash.Add(value: ((uint)view.Quality.ShadowResolution));
             hash.Add(value: ((byte)(view.Quality.GeometryOnly ? 1 : 0))); hash.Add(value: ((byte)(view.Quality.DisableAmbientOcclusion ? 1 : 0))); hash.Add(value: ((byte)(view.Quality.DisableSoftShadows ? 1 : 0))); hash.Add(value: ((byte)(view.Quality.Temporal ? 1 : 0)));
-            hash.Add(value: ((uint)view.StampFade.FirstSlot)); hash.Add(value: ((uint)view.StampFade.SlotCount)); Add(hash: ref hash, value: view.StampFade.Opacity);
+            hash.Add(value: ((uint)view.StampFade.FirstSlot)); hash.Add(value: ((uint)view.StampFade.SlotCount)); hash.AddBits(value: view.StampFade.Opacity);
             hash.Add(value: ((uint)view.PoseOverlay.FirstSlot)); hash.Add(value: ((uint)view.PoseOverlay.SlotCount)); hash.Add(value: ((uint)view.PoseOverlay.OverlaySlot));
         }
         return hash.Value;
@@ -156,19 +155,19 @@ public sealed class WorldPresentationProbe(TimeProvider? time = null) {
 
         unsupportedCount = 0;
         hash.Add(value: ((uint)frame.DynamicTransforms.Count));
-        foreach (var transform in frame.DynamicTransforms) { Add(hash: ref hash, value: transform); }
+        foreach (var transform in frame.DynamicTransforms) { AddTransform(hash: ref hash, value: transform); }
         hash.Add(value: ((uint)frame.MeshInstances.Count));
         foreach (var copy in frame.MeshInstances) {
             AddIdentity(ref hash, copy.Identity, unsupportedTypes, ref unsupportedCount);
             AddIdentity(ref hash, (copy.MotionIdentity ?? copy.Identity), unsupportedTypes, ref unsupportedCount);
-            hash.Add(value: unchecked((uint)copy.AssetSlot)); hash.Add(value: unchecked((uint)copy.FrameSlot)); Add(hash: ref hash, value: copy.Transform); Add(hash: ref hash, value: copy.Scale);
+            hash.Add(value: unchecked((uint)copy.AssetSlot)); hash.Add(value: unchecked((uint)copy.FrameSlot)); AddTransform(hash: ref hash, value: copy.Transform); hash.AddBits(value: copy.Scale);
             hash.Add(value: ((byte)(copy.IsDynamic ? 1 : 0))); hash.Add(value: ((byte)(copy.UsesRootMaterialFrame ? 1 : 0))); hash.Add(value: ((uint)copy.Material));
             hash.Add(value: ((byte)(copy.TemplateRange.HasValue ? 1 : 0)));
             if (copy.TemplateRange is { } range) { hash.Add(value: ((uint)range.FirstInstance)); hash.Add(value: ((uint)range.InstanceCount)); }
             hash.Add(value: ((uint)copy.OtherAssetSlots.Count)); foreach (var slot in copy.OtherAssetSlots) { hash.Add(value: unchecked((uint)slot)); }
             AddMesh(hash: ref hash, mesh: copy.Mesh);
             hash.Add(value: ((byte)(copy.Clip.HasValue ? 1 : 0)));
-            if (copy.Clip is { } clip) { Add(hash: ref hash, value: clip.Plane); Add(hash: ref hash, value: clip.CopyRotation); Add(hash: ref hash, value: clip.CopyTranslation); Add(hash: ref hash, value: clip.CopyPlane); Add(hash: ref hash, value: clip.CopyScale); }
+            if (copy.Clip is { } clip) { hash.AddBits(value: clip.Plane); hash.AddBits(value: clip.CopyRotation); hash.AddBits(value: clip.CopyTranslation); hash.AddBits(value: clip.CopyPlane); hash.AddBits(value: clip.CopyScale); }
         }
         hash.Add(value: ((uint)frame.MeshAssetSlots.Count));
         foreach (var slot in frame.MeshAssetSlots) { hash.Add(value: unchecked((uint)slot)); }
@@ -177,14 +176,14 @@ public sealed class WorldPresentationProbe(TimeProvider? time = null) {
             AddIdentity(ref hash, draw.Identity, unsupportedTypes, ref unsupportedCount);
             AddIdentity(ref hash, (draw.MotionIdentity ?? draw.Identity), unsupportedTypes, ref unsupportedCount);
             AddMesh(hash: ref hash, mesh: draw.Mesh);
-            Add(hash: ref hash, value: draw.ObjectToWorld); hash.Add(value: unchecked((uint)(draw.FrameSlot ?? -1))); hash.Add(value: ((uint)draw.Material));
-            Add(hash: ref hash, value: draw.CarryRotation); Add(hash: ref hash, value: draw.CarryTranslation); Add(hash: ref hash, value: draw.CarryScale); Add(hash: ref hash, value: draw.ClipPlane);
+            hash.AddBits(value: draw.ObjectToWorld); hash.Add(value: unchecked((uint)(draw.FrameSlot ?? -1))); hash.Add(value: ((uint)draw.Material));
+            hash.AddBits(value: draw.CarryRotation); hash.AddBits(value: draw.CarryTranslation); hash.AddBits(value: draw.CarryScale); hash.AddBits(value: draw.ClipPlane);
             hash.Add(value: ((byte)(draw.IsDynamic ? 1 : 0))); hash.Add(value: ((byte)(draw.Glass ? 1 : 0))); hash.Add(value: ((byte)(draw.UsesRootMaterialFrame ? 1 : 0)));
         }
         hash.Add(value: ((uint)frame.SlotClips.Count));
         foreach (var clip in frame.SlotClips) {
-            hash.Add(value: ((uint)clip.FirstSlot)); hash.Add(value: ((uint)clip.SlotCount)); Add(hash: ref hash, value: clip.Plane); Add(hash: ref hash, value: clip.CopyRotation);
-            Add(hash: ref hash, value: clip.CopyTranslation); Add(hash: ref hash, value: clip.CopyPlane); Add(hash: ref hash, value: clip.CopyScale);
+            hash.Add(value: ((uint)clip.FirstSlot)); hash.Add(value: ((uint)clip.SlotCount)); hash.AddBits(value: clip.Plane); hash.AddBits(value: clip.CopyRotation);
+            hash.AddBits(value: clip.CopyTranslation); hash.AddBits(value: clip.CopyPlane); hash.AddBits(value: clip.CopyScale);
         }
         return hash.Value;
     }
@@ -193,23 +192,22 @@ public sealed class WorldPresentationProbe(TimeProvider? time = null) {
         if (mesh is null) { return; }
         // Mesh memories are borrowed, unlike SdfProgram's private immutable words. Read live contents rather than
         // caching a signature by object reference and missing an in-place authoring change.
-        hash.Add(value: ((uint)mesh.Positions.Length)); foreach (var value in mesh.Positions.Span) { Add(hash: ref hash, value: value); }
+        hash.Add(value: ((uint)mesh.Positions.Length)); foreach (var value in mesh.Positions.Span) { hash.AddBits(value: value); }
         hash.Add(value: ((uint)mesh.Indices.Length)); foreach (var value in mesh.Indices.Span) { hash.Add(value: value); }
-        hash.Add(value: ((uint)mesh.Normals.Length)); foreach (var value in mesh.Normals.Span) { Add(hash: ref hash, value: value); }
+        hash.Add(value: ((uint)mesh.Normals.Length)); foreach (var value in mesh.Normals.Span) { hash.AddBits(value: value); }
         hash.Add(value: ((uint)mesh.TriangleMaterials.Length)); foreach (var value in mesh.TriangleMaterials.Span) { hash.Add(value: value); }
-        hash.Add(value: ((uint)mesh.Members.Length)); foreach (var member in mesh.Members.Span) { hash.Add(value: ((long)member.SlotOffset)); Add(hash: ref hash, value: member.Position); Add(hash: ref hash, value: member.Orientation); }
+        hash.Add(value: ((uint)mesh.Members.Length)); foreach (var member in mesh.Members.Span) { hash.Add(value: ((long)member.SlotOffset)); hash.AddBits(value: member.Position); hash.AddBits(value: member.Orientation); }
         hash.Add(value: ((uint)mesh.VertexMembers.Length)); hash.Add(values: mesh.VertexMembers.Span);
         hash.Add(value: ((uint)mesh.Influences.Length));
         foreach (var influence in mesh.Influences.Span) { hash.Add(value: influence.Blend); hash.Add(value: influence.GradientXY); hash.Add(value: influence.GradientZ); }
-        Add(hash: ref hash, value: mesh.BakeCell); hash.Add(value: ((byte)(mesh.Encloses ? 1 : 0)));
+        hash.AddBits(value: mesh.BakeCell); hash.Add(value: ((byte)(mesh.Encloses ? 1 : 0)));
         hash.Add(value: ((uint)mesh.Levels.Count));
         foreach (var level in mesh.Levels) {
-            Add(hash: ref hash, value: level.Error); hash.Add(value: ((uint)level.Indices.Length)); foreach (var value in level.Indices.Span) { hash.Add(value: value); }
+            hash.AddBits(value: level.Error); hash.Add(value: ((uint)level.Indices.Length)); foreach (var value in level.Indices.Span) { hash.Add(value: value); }
             hash.Add(value: ((uint)level.TriangleMaterials.Length)); foreach (var value in level.TriangleMaterials.Span) { hash.Add(value: value); }
         }
         hash.Add(value: ((uint)mesh.Chunks.Count)); foreach (var chunk in mesh.Chunks) { AddMesh(hash: ref hash, mesh: chunk); }
     }
-    private static void Add(ref Fnv1aHash hash, float value) => hash.Add(value: BitConverter.SingleToUInt32Bits(value: value));
     private static void AddIdentity(ref Fnv1aHash hash, object identity, HashSet<string> unsupportedTypes, ref int unsupportedCount) {
         // Logical authored names are comparable across fresh processes; opaque host identities are not.
         if (identity is WorldPickTarget target) { hash.Add(value: "world"); hash.Add(value: target.Placement); hash.Add(value: ((long)(target.BodyIndex ?? -1))); hash.Add(value: target.Prototype); hash.Add(value: ((long)(target.Occurrence ?? -1))); hash.Add(value: ((long)target.CreationSlots)); } else if (identity is ValueTuple<WorldPickTarget, WorldEntityAddress, int> motion) {
@@ -217,16 +215,7 @@ public sealed class WorldPresentationProbe(TimeProvider? time = null) {
             hash.Add(value: motion.Item2.Authority); hash.Add(value: ((long)motion.Item2.Index)); hash.Add(value: ((long)motion.Item2.Generation)); hash.Add(value: ((byte)(motion.Item2.Titled ? 1 : 0))); hash.Add(value: ((long)motion.Item3));
         } else if (identity is ValueTuple<string, string, int> occurrence) { hash.Add(value: "placement-motion"); hash.Add(value: occurrence.Item1); hash.Add(value: occurrence.Item2); hash.Add(value: ((long)occurrence.Item3)); } else if (identity is WorldPlacementStamper.StaticMeshIdentity mesh) { hash.Add(value: "placement-mesh"); hash.Add(value: mesh.Scope); hash.Add(value: mesh.Placement); hash.Add(value: ((long)mesh.Ordinal)); } else if (identity is string name) { hash.Add(value: "name"); hash.Add(value: name); } else if (identity is int ordinal) { hash.Add(value: "ordinal"); hash.Add(value: ((long)ordinal)); } else { hash.Add(value: "unsupported"); var typeName = (identity.GetType().FullName ?? identity.GetType().Name); hash.Add(value: typeName); unsupportedTypes.Add(item: typeName); unsupportedCount++; }
     }
-    private static void Add(ref Fnv1aHash hash, Vector3 value) { Add(hash: ref hash, value: value.X); Add(hash: ref hash, value: value.Y); Add(hash: ref hash, value: value.Z); }
-    private static void Add(ref Fnv1aHash hash, Vector4 value) { Add(hash: ref hash, value: value.X); Add(hash: ref hash, value: value.Y); Add(hash: ref hash, value: value.Z); Add(hash: ref hash, value: value.W); }
-    private static void Add(ref Fnv1aHash hash, Quaternion value) { Add(hash: ref hash, value: value.X); Add(hash: ref hash, value: value.Y); Add(hash: ref hash, value: value.Z); Add(hash: ref hash, value: value.W); }
-    private static void Add(ref Fnv1aHash hash, DynamicTransform value) { Add(hash: ref hash, value: value.Position); Add(hash: ref hash, value: value.Orientation); Add(hash: ref hash, value: value.Lanes); Add(hash: ref hash, value: value.Scale); Add(hash: ref hash, value: value.MaterialScale); }
-    private static void Add(ref Fnv1aHash hash, Matrix4x4 value) {
-        Add(hash: ref hash, value: value.M11); Add(hash: ref hash, value: value.M12); Add(hash: ref hash, value: value.M13); Add(hash: ref hash, value: value.M14);
-        Add(hash: ref hash, value: value.M21); Add(hash: ref hash, value: value.M22); Add(hash: ref hash, value: value.M23); Add(hash: ref hash, value: value.M24);
-        Add(hash: ref hash, value: value.M31); Add(hash: ref hash, value: value.M32); Add(hash: ref hash, value: value.M33); Add(hash: ref hash, value: value.M34);
-        Add(hash: ref hash, value: value.M41); Add(hash: ref hash, value: value.M42); Add(hash: ref hash, value: value.M43); Add(hash: ref hash, value: value.M44);
-    }
+    private static void AddTransform(ref Fnv1aHash hash, DynamicTransform value) { hash.AddBits(value: value.Position); hash.AddBits(value: value.Orientation); hash.AddBits(value: value.Lanes); hash.AddBits(value: value.Scale); hash.AddBits(value: value.MaterialScale); }
 
     private sealed class Recording(ulong first, ulong last, ulong measureFirst) {
         public readonly ulong First = first, Last = last, MeasureFirst = measureFirst;

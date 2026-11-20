@@ -52,7 +52,7 @@ public sealed record VolumeDocument([property: JsonRequired] string Kind, [prope
 
     // Each document's resolved ramp, made once: an animated volume resolves every frame, and the ramp depends on the
     // document alone. Keyed by reference, so a record equal by value does not share another's.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VolumeDocument, SdfDensityStop[]> Ramps = [];
+    private static readonly Puck.Abstractions.CodeDerivedTable<VolumeDocument, SdfDensityStop[]> Ramps = new();
 
     /// <summary>Resolves the volume in the supplied parent frame and uniform scale.</summary>
     public SdfVolume ToVolume(int dynamicSlot, Vector3 origin, Quaternion rotation, float scale) => new(
@@ -71,7 +71,7 @@ public sealed record VolumeDocument([property: JsonRequired] string Kind, [prope
         ((Speed ?? DefaultSpeed) * scale),
         (Seed ?? 0u),
         (Steps ?? DefaultSteps),
-        Ramps.GetValue(key: this, createValueCallback: static volume => [.. volume.Ramp.Select(selector: s => new SdfDensityStop(
+        Ramps.GetValue(key: this, derive: static volume => [.. volume.Ramp.Select(selector: s => new SdfDensityStop(
             s.Density,
             (HexColor.TryParse(color: out var color, value: s.Color) ? color.ToScene().Linear : Vector3.One)
         ))]),

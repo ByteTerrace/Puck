@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
 
@@ -20,7 +19,7 @@ public sealed class WorldShapeIsolation {
     /// <summary>The suffix that makes a shape name a prefix pattern (<c>thigh-*</c>).</summary>
     public const char Wildcard = '*';
 
-    private readonly ConditionalWeakTable<CreationDocument, Resolved> m_resolved = new();
+    private readonly Puck.Abstractions.CodeDerivedTable<CreationDocument, Resolved> m_resolved = new();
     private Selection? m_selection;
     private int m_revision;
 

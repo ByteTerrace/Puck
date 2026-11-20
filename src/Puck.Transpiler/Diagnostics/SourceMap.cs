@@ -16,7 +16,7 @@ public sealed record SourceOrigin(SourceSpan Span, string? SourcePath, string? M
 }
 /// <summary>Maintains bidirectional mapping between canonical JSON pointers and source AST origins.</summary>
 public sealed class SourceMap {
-    private Dictionary<string, SourceOrigin> m_pathToOrigin = new(comparer: StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, SourceOrigin> m_pathToOrigin = new(comparer: StringComparer.Ordinal);
     private string? m_sourcePath;
     private string? m_moduleInstancePath;
 
@@ -31,7 +31,7 @@ public sealed class SourceMap {
     }
 
     /// <summary>Captures the current pointer map so a speculative lowering can be rolled back.</summary>
-    public IReadOnlyDictionary<string, SourceOrigin> Snapshot() => new Dictionary<string, SourceOrigin>(m_pathToOrigin, StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyDictionary<string, SourceOrigin> Snapshot() => new Dictionary<string, SourceOrigin>(m_pathToOrigin, StringComparer.Ordinal);
     /// <summary>Restores a previously captured pointer map.</summary>
     public void Restore(IReadOnlyDictionary<string, SourceOrigin> snapshot) {
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -44,7 +44,7 @@ public sealed class SourceMap {
     public IDisposable PushIsolatedEntries() {
         var previous = m_pathToOrigin;
 
-        m_pathToOrigin = new(comparer: StringComparer.OrdinalIgnoreCase);
+        m_pathToOrigin = new(comparer: StringComparer.Ordinal);
         return new EntryScope(owner: this, previous: previous);
     }
     /// <summary>Temporarily supplies source provenance for registrations made inside a lowering scope.</summary>

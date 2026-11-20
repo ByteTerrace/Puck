@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
@@ -483,6 +484,13 @@ public sealed partial class WorldCreationInstances {
         );
         live.WakeRevision = live.View.Revision;
 
+        // The pack's other inputs as one 64-bit digest: an unchanged version stands for unchanged inputs.
+        var version = Fnv1aHash.Create();
+
+        version.Add(value: unchecked((uint)live.EffectiveCursor));
+        version.Add(value: unchecked((uint)facts));
+        version.Add(value: live.WakeRevision);
+
         var wake = m_owners.Wake(
             deltaSeconds: deltaSeconds,
             discontinuity: discontinuity,
@@ -490,11 +498,7 @@ public sealed partial class WorldCreationInstances {
             orientation: rootRotation,
             owner: index,
             position: rootPosition,
-            version: HashCode.Combine(
-            value1: live.EffectiveCursor,
-            value2: facts,
-            value3: live.WakeRevision
-        )
+            version: version.Value
         );
 
         // Owner output equality cannot cancel an authored clock or a follower's remaining motion.

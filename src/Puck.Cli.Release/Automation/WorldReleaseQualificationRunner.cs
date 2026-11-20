@@ -194,13 +194,7 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
             searchOption: SearchOption.AllDirectories,
             searchPattern: "*"
         )) {
-            var relative = Path.GetRelativePath(
-                path: file,
-                relativeTo: directory
-            ).Replace(
-                newChar: '/',
-                oldChar: Path.DirectorySeparatorChar
-            );
+            var relative = Puck.Abstractions.PuckPaths.Relative(path: file, relativeTo: directory);
             // Match CopyTree: locks and staging files are not published fixture objects.
             if (relative.Split('/').Any(predicate: segment => segment.StartsWith(
                 comparisonType: StringComparison.OrdinalIgnoreCase,

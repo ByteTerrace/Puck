@@ -1,7 +1,6 @@
 using System.Buffers.Binary;
 using System.IO.Hashing;
 using System.Runtime.InteropServices;
-using System.Runtime.CompilerServices;
 
 using Puck.Abstractions;
 using Puck.Abstractions.Memory;
@@ -12,7 +11,7 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfMeshPathBake {
     private sealed record PackedField(UInt128 Hash);
-    private static readonly ConditionalWeakTable<SdfProgram, PackedField> PackedFields = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<SdfProgram, PackedField> PackedFields = new();
 
     // Checkpoints keep the numeric palette and poses. The drawn product can use the group's canonical geometry.
     private static SdfMeshGeometry CheckpointInput(Group group, SdfProgram program) {

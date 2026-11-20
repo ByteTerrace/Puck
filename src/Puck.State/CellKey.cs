@@ -53,7 +53,7 @@ public sealed class CellKeyTable {
 
     private Func<long>? m_byteBudget;
     private long m_bytes;
-    private ulong m_ledgerSum;
+    private MultisetDigest m_ledger;
 
     // The local keys whose names spell an index below StateCapacity.MaxCellsPerRow in canonical decimal, by index,
     // the invalid default where no local key does. A derived view of local membership, kept by the only doors that
@@ -81,7 +81,7 @@ public sealed class CellKeyTable {
         for (var index = 0; (index < m_initialCount); index++) {
             m_byName.Add(key: m_names[index].Value, value: m_keys[index]);
             m_bytes += EntryBytes(name: m_names[index]);
-            m_ledgerSum = unchecked((m_ledgerSum + m_nameDigests[index]));
+            m_ledger = m_ledger.Add(element: m_nameDigests[index]);
             NoteIndex(key: m_keys[index], name: m_names[index].Value);
         }
         m_readOnlyNames = m_names.AsReadOnly();
@@ -146,7 +146,7 @@ public sealed class CellKeyTable {
         }
         for (var index = count; (index < m_names.Count); index++) {
             m_bytes -= EntryBytes(name: m_names[index]);
-            m_ledgerSum = unchecked((m_ledgerSum - m_nameDigests[index]));
+            m_ledger = m_ledger.Remove(element: m_nameDigests[index]);
             m_byName.Remove(key: m_names[index].Value);
             if (TryParseIndex(index: out var released, name: m_names[index].Value) && (released < m_indexKeys.Length)) {
                 m_indexKeys[released] = default;
@@ -237,7 +237,7 @@ public sealed class CellKeyTable {
 
         m_nameDigests.Add(item: digest);
         m_bytes += EntryBytes(name: name);
-        m_ledgerSum = unchecked((m_ledgerSum + digest));
+        m_ledger = m_ledger.Add(element: digest);
         NoteIndex(key: key, name: name.Value);
 
         reason = string.Empty;
@@ -320,10 +320,10 @@ public sealed class CellKeyTable {
     }
 
     internal void AddLedgerTo(ref Fnv1aHash hash) {
-        // Commutative addition makes the resource identity independent of allocation order. Unlike XOR,
+        // A multiset digest makes the resource identity independent of allocation order. Unlike XOR,
         // repeated contributions cannot cancel in pairs. Mint/release update only the affected name digest.
         hash.Add(value: ((ulong)m_names.Count));
-        hash.Add(value: m_ledgerSum);
+        hash.Add(value: m_ledger.Value);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal bool TryGetAddress(CellKey key, out CellName name, out int ordinal) {

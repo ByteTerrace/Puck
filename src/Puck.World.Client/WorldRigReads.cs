@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.SdfVm;
 using Puck.SignedDistance.Queries;
@@ -72,23 +73,29 @@ public sealed class WorldRigReads {
     /// <summary>Gets a revision of everything the view answers that can change between frames: the latest change of a
     /// state cell the lease holds (a cell that selects a body among them), and for each other body the rig reads, its
     /// identity, its root pose and the serial its own registration moves each time its pose changes. Equal revisions mean
-    /// the reads answer what they answered.</summary>
-    public int Revision {
+    /// the reads answer what they answered: the revision is a 64-bit digest of every bit it names.</summary>
+    public ulong Revision {
         get {
-            var hash = new HashCode();
+            var hash = Fnv1aHash.Create();
 
-            hash.Add(value: m_lease.Changed);
+            hash.Add(value: unchecked((uint)m_lease.Changed));
             foreach (var read in m_bodies) {
                 if ((m_client is not { } client) || !TryBodyIndex(index: out var body, read: read)) {
-                    hash.Add(value: -1);
+                    hash.Add(value: 0U);
 
                     continue;
                 }
 
-                hash.Add(value: client.EntityAddress(index: body));
-                hash.Add(value: client.Position(index: body));
-                hash.Add(value: client.Orientation(index: body));
-                hash.Add(value: (m_poses?.PoseSerial(body: body) ?? 0));
+                var address = client.EntityAddress(index: body);
+
+                hash.Add(value: 1U);
+                hash.Add(value: address.Authority);
+                hash.Add(value: unchecked((uint)address.Index));
+                hash.Add(value: unchecked((uint)address.Generation));
+                hash.Add(value: (address.Titled ? 1U : 0U));
+                hash.AddBits(value: client.Position(index: body));
+                hash.AddBits(value: client.Orientation(index: body));
+                hash.Add(value: unchecked((uint)(m_poses?.PoseSerial(body: body) ?? 0)));
             }
 
             // A guess moves the revision when it starts, changes level or ends.
@@ -99,13 +106,13 @@ public sealed class WorldRigReads {
                     var guessed = TryLead(level: out var level, read: driver.Lead!, seconds: driver.LeadSeconds);
 
                     guessing |= guessed;
-                    hash.Add(value: guessed);
-                    hash.Add(value: level);
+                    hash.Add(value: (guessed ? 1U : 0U));
+                    hash.AddBits(value: level);
                 }
             }
             Guessing = guessing;
 
-            return hash.ToHashCode();
+            return hash.Value;
         }
     }
 

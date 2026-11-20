@@ -47,6 +47,17 @@ public static class PuckPaths {
         newChar: '/',
         oldChar: Path.DirectorySeparatorChar
     );
+    /// <summary>Returns the one spelling every name of a file shares: <see cref="Normalize"/>'s full path, upper-cased
+    /// where <see cref="FoldsCase"/>. Two paths have equal keys exactly when <see cref="Comparer"/> finds their
+    /// normalized forms equal, so the key serves where a comparer cannot reach: a string compared ordinally, a key
+    /// composed with other parts, or an identity hashed into a persisted name.</summary>
+    /// <param name="path">A relative or full path, spelled with either separator.</param>
+    /// <returns>The path's key.</returns>
+    public static string Key(string path) {
+        var normalized = Normalize(path: path);
+
+        return (FoldsCase ? normalized.ToUpperInvariant() : normalized);
+    }
     /// <summary>Returns <paramref name="path"/> with every backslash spelled as <c>/</c>, without resolving it: the form
     /// for a path that is already as relative or as full as the caller wants it (a relative path under a root, a path
     /// printed in output, a resource name, a path a report on another platform spelled with its own separator).

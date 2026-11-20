@@ -1,11 +1,10 @@
-using System.Runtime.CompilerServices;
 
 namespace Puck.World;
 
 /// <summary>The document-anchored entrance to <see cref="TopologyCompilation"/>: a Grid topology a placement's
 /// <c>board</c> facet names takes its world origin from that placement's resolved frame.</summary>
 public static class WorldTopologyCompilation {
-    private static readonly ConditionalWeakTable<LatticeTopology, AnchoredCompile> Cache = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<LatticeTopology, AnchoredCompile> Cache = new();
 
     // Anchor is the resolving placement instance, not merely its id — see Find's remarks on why identity (not name)
     // is the correct staleness test.
@@ -16,12 +15,12 @@ public static class WorldTopologyCompilation {
 
     // Each placement list's board anchors by topology name. Rows are replaced wholesale, never mutated in place, so a
     // list instance's anchors never change and are indexed once rather than scanned on every topology read.
-    private static readonly ConditionalWeakTable<IReadOnlyList<WorldPlacement>, Dictionary<string, WorldPlacement>> Anchors = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldPlacement>, Dictionary<string, WorldPlacement>> Anchors = new();
 
     // Every real placement carries at most one board facet naming this topology (validated: WorldDefinitionValidator.
     // Board.cs refuses a second placement claiming the same topology) — the first match is the only one there can be.
     private static WorldPlacement? FindAnchor(WorldDefinition definition, string topologyName) =>
-        Anchors.GetValue(key: definition.Placements, createValueCallback: static placements => {
+        Anchors.GetValue(key: definition.Placements, derive: static placements => {
             var anchors = new Dictionary<string, WorldPlacement>(comparer: StringComparer.Ordinal);
 
             for (var index = 0; (index < placements.Count); index++) {

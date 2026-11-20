@@ -43,6 +43,36 @@ internal static partial class Subjects {
         return null;
     }
 
+    public static string? MultisetDigestBoundaries() {
+        if (MultisetDigest.Empty.Value != 0UL) { return "the empty digest is not zero"; }
+        ulong[] elements = [0UL, 1UL, 1UL, ulong.MaxValue, 0x9E3779B97F4A7C15UL, 42UL];
+        var forward = MultisetDigest.Empty;
+        var backward = MultisetDigest.Empty;
+
+        for (var index = 0; (index < elements.Length); index++) {
+            forward = forward.Add(element: elements[index]);
+            backward = backward.Add(element: elements[elements.Length - 1 - index]);
+        }
+        if (forward != backward) { return "two orders of one multiset digest differently"; }
+        if (forward.Remove(element: 42UL).Add(element: 42UL) != forward) { return "Remove does not undo Add"; }
+        var first = MultisetDigest.Empty.Add(element: elements[0]).Add(element: elements[1]);
+        var second = MultisetDigest.Empty.Add(element: elements[2]).Add(element: elements[3]).Add(element: elements[4]).Add(element: elements[5]);
+
+        return ((first.Union(other: second) == forward) ? null : "Union differs from adding both multisets");
+    }
+    public static string? MultisetDigestSample(long[] left, long[] right) {
+        var digest = MultisetDigest.Empty;
+
+        foreach (var element in left) { digest = digest.Add(element: unchecked((ulong)element)); }
+        foreach (var element in right) { digest = digest.Add(element: unchecked((ulong)element)); }
+        foreach (var element in left) { digest = digest.Add(element: unchecked((ulong)element)); }
+        var expected = Oracles.MultisetDigest(elements: [.. left, .. right, .. left]);
+
+        if (digest.Value != expected) { return $"digest {digest.Value:x16} != {expected:x16}"; }
+        foreach (var element in right) { digest = digest.Remove(element: unchecked((ulong)element)); }
+        expected = Oracles.MultisetDigest(elements: [.. left, .. left]);
+        return ((digest.Value == expected) ? null : $"after removal {digest.Value:x16} != {expected:x16}");
+    }
     public static string? PackedPairHash(long[] left, long[] right) {
         var comparer = PackedIntPairComparer.Instance;
         var x = left[0];

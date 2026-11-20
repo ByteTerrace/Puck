@@ -15,7 +15,7 @@ public static class ModuleResolver {
         private readonly Dictionary<(string Directory, string Name), string?> m_libraries = [];
         // Each library this walk read, by full path: a walk reads one file's bytes once, so an edit made while it runs
         // cannot hand two of its steps different trees.
-        private readonly Dictionary<string, PuckSourceTable.Parsed> m_read = new(comparer: StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, PuckSourceTable.Parsed> m_read = new(comparer: Puck.Abstractions.PuckPaths.Comparer);
 
         public IDocumentVocabulary? Vocabulary { get; } = vocabulary;
         public CancellationToken CancellationToken { get; } = cancellationToken;
@@ -69,9 +69,9 @@ public static class ModuleResolver {
         public static ModuleImportIdentityComparer Instance { get; } = new();
 
         public bool Equals(ModuleImportIdentity x, ModuleImportIdentity y) =>
-            (StringComparer.OrdinalIgnoreCase.Equals(x: x.Path, y: y.Path) && StringComparer.Ordinal.Equals(x: x.Namespace, y: y.Namespace));
+            (Puck.Abstractions.PuckPaths.Comparer.Equals(x: x.Path, y: y.Path) && StringComparer.Ordinal.Equals(x: x.Namespace, y: y.Namespace));
         public int GetHashCode(ModuleImportIdentity obj) => HashCode.Combine(
-            value1: StringComparer.OrdinalIgnoreCase.GetHashCode(obj: obj.Path),
+            value1: Puck.Abstractions.PuckPaths.Comparer.GetHashCode(obj: obj.Path),
             value2: StringComparer.Ordinal.GetHashCode(obj: obj.Namespace)
         );
     }
@@ -187,7 +187,7 @@ public static class ModuleResolver {
 
         if (activeChain.Contains(
             fullPath,
-            StringComparer.OrdinalIgnoreCase
+            Puck.Abstractions.PuckPaths.Comparer
         )) {
             var cycle = string.Join(
                 separator: " -> ",
@@ -324,7 +324,7 @@ public static class ModuleResolver {
                 context: context,
                 currentDir: rootDir,
                 document: rootDoc,
-                memo: new(comparer: StringComparer.OrdinalIgnoreCase)
+                memo: new(comparer: Puck.Abstractions.PuckPaths.Comparer)
             );
 
             budget.Spend(
@@ -447,7 +447,7 @@ public static class ModuleResolver {
     }
 
     private static bool ValidateImportGraph(DocumentNode rootDoc, string rootPath, DiagnosticBag diagnostics, ImportContext context) {
-        var visited = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+        var visited = new HashSet<string>(comparer: Puck.Abstractions.PuckPaths.Comparer);
         var activeChain = new List<string>();
 
         return TraverseImports(

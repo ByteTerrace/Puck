@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -20,7 +19,7 @@ namespace Puck.World.Authoring;
 [JsonConverter(typeof(ShadeReferenceJsonConverter))]
 public sealed class ShadeReference : IEquatable<ShadeReference> {
     // A definition is immutable, so its key is computed once however many uses share it.
-    private static readonly ConditionalWeakTable<SdfShadeDefinition, string> Keys = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<SdfShadeDefinition, string> Keys = new();
 
     private readonly SdfShadeDefinition? m_definition;
 
@@ -67,7 +66,7 @@ public sealed class ShadeReference : IEquatable<ShadeReference> {
     public static string KeyOf(SdfShadeDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return Keys.GetValue(key: definition, createValueCallback: static definition => $"{definition.Name}/{ContentPin.Compute(
+        return Keys.GetValue(key: definition, derive: static definition => $"{definition.Name}/{ContentPin.Compute(
             content: CanonicalJsonDocument.SerializeCompact(value: definition, jsonTypeInfo: CreationJsonContext.Document.SdfShadeDefinition)).Hex}");
     }
     /// <summary>Returns this reference holding <paramref name="definition"/>, which must be the program its key names.</summary>

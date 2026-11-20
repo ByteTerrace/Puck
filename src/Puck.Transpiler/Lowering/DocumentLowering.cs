@@ -13,6 +13,7 @@ namespace Puck.Transpiler.Lowering;
 /// emitter; what <c>1.5m</c>, <c>-spread</c> or <c>2 * 3</c> mean is here.</summary>
 public static partial class DocumentLowering {
     // The placeholders refused reads lowered to (DocumentScope.TryRefuseRead), each its own node.
+    [SideTable(reason: "marks the placeholder nodes refused reads lowered to")]
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<JsonNode, object> RefusedReads = new();
 
     /// <summary>Returns whether <paramref name="value"/> is the placeholder a refused read lowered to: a name whose

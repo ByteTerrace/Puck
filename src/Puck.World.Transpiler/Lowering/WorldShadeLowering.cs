@@ -44,6 +44,7 @@ internal sealed class WorldShadeLowering {
         public Dictionary<string, string> Lowered { get; } = new(comparer: StringComparer.Ordinal);
         public Dictionary<TemplateNode, int> Templates { get; } = new(comparer: ReferenceEqualityComparer.Instance);
     }
+    [SideTable(reason: "collects the shade programs one compilation lowers, keyed by its budget")]
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<DocumentEvaluationBudget, Compilation> Compilations = new();
 
     /// <summary>Returns the programs a compilation's <c>shade</c> values lowered, each under its key, in the order they

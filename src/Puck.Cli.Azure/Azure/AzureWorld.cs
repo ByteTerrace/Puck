@@ -29,7 +29,7 @@ public static partial class AzureCommand {
 
     private static JsonObject SiloDocument(string keyFile, string owner, JsonObject store, string world, JsonNode? lifecycle = null, string? documentDirectory = null) {
         var result = new JsonObject {
-            ["schema"] = "puck.silo.configuration.v1",
+            ["schema"] = Puck.World.WorldSiloDefinition.SchemaVersion,
             ["worlds"] = new JsonArray(new JsonObject { ["owner"] = owner, ["world"] = world, ["pinned"] = true, ["federation"] = new JsonObject { ["keyFile"] = keyFile } }),
             ["doors"] = new JsonObject { ["budget"] = 1 },
             ["store"] = store,

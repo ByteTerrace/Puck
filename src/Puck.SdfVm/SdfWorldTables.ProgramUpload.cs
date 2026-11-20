@@ -78,8 +78,8 @@ public sealed partial class SdfWorldTables {
         var hash = Fnv1aHash.Create();
 
         foreach (var material in program.Appearance.Materials) {
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: material.Wrap));
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: material.Shade?.Demand.Cosine(material.Wrap) ?? -material.Wrap));
+            hash.AddBits(value: material.Wrap);
+            hash.AddBits(value: (material.Shade?.Demand.Cosine(material.Wrap) ?? -material.Wrap));
         }
 
         return hash.Value;
@@ -88,7 +88,7 @@ public sealed partial class SdfWorldTables {
     private static ulong ShadowDensitySignatureOf(SdfProgram program) {
         var hash = Fnv1aHash.Create();
         foreach (var material in program.Appearance.Materials) {
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: material.Glass?.ShadowDensity ?? 0f));
+            hash.AddBits(value: material.Glass?.ShadowDensity ?? 0f);
         }
         return hash.Value;
     }

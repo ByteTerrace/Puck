@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using Puck.Abstractions.Collections;
 using System.Runtime.ExceptionServices;
 
@@ -43,7 +42,7 @@ public sealed record SdfPathProfile(IReadOnlyList<SdfPathContour> Contours, floa
     public SdfPathEdge[] Compile() {
         var compiled = Compilations.GetValue(
             key: this,
-            createValueCallback: static profile => {
+            derive: static profile => {
                 try {
                     return SdfPathCompiler.Compile(path: profile);
                 } catch (ArgumentException refusal) {
@@ -61,7 +60,7 @@ public sealed record SdfPathProfile(IReadOnlyList<SdfPathContour> Contours, floa
 
     // Each profile's edges, or its refusal, compiled once: a profile is immutable, and every program that draws it (a
     // rebuild composes each placement's shapes again) asks for them.
-    private static readonly ConditionalWeakTable<SdfPathProfile, object> Compilations = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<SdfPathProfile, object> Compilations = new();
 }
 /// <summary>One compiled boundary edge or the convex hull of two endpoint disks. Radius values are zero for fill.</summary>
 public readonly record struct SdfPathEdge(Vector2 A, Vector2 B, float RadiusA = 0f, float RadiusB = 0f);

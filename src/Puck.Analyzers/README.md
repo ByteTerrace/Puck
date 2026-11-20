@@ -4,7 +4,8 @@ Puck.Analyzers provides the Roslyn analyzers used when building the repository.
 It checks strict-enum usage, unmanaged function-pointer calls, environment
 reads, any-address listeners, the GPU trait on test classes, references read
 after their replacement, dropped rule outcomes, blocking waits outside the
-wait door, and `InternalsVisibleTo` grants. It is a
+wait door, weak-table caches outside the code-derived door, and
+`InternalsVisibleTo` grants. It is a
 compiler extension, not an engine runtime dependency or a published package.
 
 ## Usage
@@ -127,6 +128,19 @@ zero timeout polls and passes; a task's `Result` or `GetResult` passes inside a
 branch whose condition tests the same expression's completion. To list a
 project's sites without failing it, build it with `-p:PuckWaitRule=true
 -p:TreatWarningsAsErrors=false -p:CodeAnalysisTreatWarningsAsErrors=false`.
+
+CACHE001 refuses a field or auto-property whose type holds a raw
+`ConditionalWeakTable`, anywhere in its type arguments, outside
+`Puck.Abstractions.CodeDerivedTable`. A weak table of values derived by code
+keeps serving the old code's values after a hot-reload update, and
+`CodeDerivedTable` forgets them when `CodeRevision` moves
+([edit to running](../../docs/development/contributing.md#edit-to-running)).
+A table whose values no code derives (an attachment a writer records,
+per-object state a code update must not drop, a value whose identity live
+state was built from) carries `[SideTable(reason)]`, from
+`build/SideTableAttribute.cs`, linked into every project like the GPU mark. The
+rule reads declarations, so a weak table held in a local is outside what it
+sees, and a test assembly is not held to it.
 
 IVT001 refuses every `InternalsVisibleTo` grant, a test assembly included. It
 reads the compiled assembly's attributes, so it sees an

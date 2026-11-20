@@ -211,13 +211,7 @@ internal static class SuiteCatalog {
         ];
     }
     private static string Rel(string root, string fullPath) =>
-        Path.GetRelativePath(
-            path: fullPath,
-            relativeTo: root
-        ).Replace(
-            newChar: '/',
-            oldChar: Path.DirectorySeparatorChar
-        );
+        Puck.Abstractions.PuckPaths.Relative(path: fullPath, relativeTo: root);
     private static SuiteCase[] SingleCgbAcidCase(string? root, string suite, string suiteRelativeDirectory, string fileStem) {
         if (root is null) {
             return [];

@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Puck.Commands;
 using Puck.Maths;
 
@@ -29,7 +28,7 @@ public static class WorldTabletopFrame {
     // that names no cell; it also bounds the fixed-point product the hit point takes.
     private static readonly FixedQ4816 MaximumRayParameter = FixedQ4816.FromInteger(value: 4096L);
     private static readonly FixedQ4816 Half = FixedQ4816.FromDouble(value: 0.5);
-    private static readonly ConditionalWeakTable<CompiledTopology, Footprint> Footprints = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<CompiledTopology, Footprint> Footprints = new();
 
     // A class, so the weak table can hold it against its topology.
     private sealed record Footprint(FixedAabb Box);
@@ -84,7 +83,7 @@ public static class WorldTabletopFrame {
 
         return Footprints.GetValue(
             key: topology,
-            createValueCallback: static compiled => Measure(topology: compiled)
+            derive: static compiled => Measure(topology: compiled)
         ).Box;
     }
     /// <summary>Returns the centre of the board's footprint (<see cref="Bounds"/>), at the topology origin's height.</summary>

@@ -59,23 +59,23 @@ public sealed class HumbleGamingDeckEngine : IMachineEngine, IMachineImageRecogn
             ]
         ),
         [new(
-            Contract: "puck.machine.video.v1",
+            Contract: MachinePortContracts.Video,
             Description: "The native 256 by 240 picture.",
             Name: "video"
         )],
         [new(
-            Contract: "puck.machine.audio.v1",
+            Contract: MachinePortContracts.Audio,
             Description: "The machine's stereo audio stream.",
             Name: "audio"
         )],
         [
             new(
-                Contract: "puck.machine.pad.v1",
+                Contract: MachinePortContracts.Pad,
                 Description: "The standard controller in port one ($4016).",
                 Name: "controls"
             ),
             new(
-                Contract: "puck.machine.pad.v1",
+                Contract: MachinePortContracts.Pad,
                 Description: "The standard controller in port two ($4017).",
                 Name: "controls-2"
             ),

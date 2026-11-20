@@ -5,17 +5,17 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldPasses {
     // Each fragment without its shadow cascades, made once, so a view's fragment keeps its identity from frame to frame.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> ShadowlessFragments = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment> ShadowlessFragments = new();
     // Each fragment with its cascades shaped, one per shadow resolution and second-slot choice, made once each for the
     // same reason.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment?[]> ShadowedFragments = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment?[]> ShadowedFragments = new();
     // Each fragment with the glass passes added (SdfWorldPackage.WithGlass), made once for the same reason.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> GlassFragments = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment> GlassFragments = new();
 
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> GlassShadowFragments = new();
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> BoxCasterFragments = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment> GlassShadowFragments = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment> BoxCasterFragments = new();
     // Each fragment with its views pass shading in bins (SdfWorldPackage.WithBins), made once for the same reason.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> BinnedFragments = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment> BinnedFragments = new();
 
     // The sizes a distant map takes, each a power of two from the least through the most (SdfWorldPackage), and none.
     private static readonly int DistantShapes = ((System.Numerics.BitOperations.Log2(value: (uint)SdfWorldPackage.MeshDistantShadowMaxResolution) -
@@ -26,7 +26,7 @@ public sealed partial class SdfWorldPasses {
 
     // Each fragment with its display stage (SdfWorldPackage.WithDisplay), one per bloom quality in BloomQuality's order,
     // made once for the same reason.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment[]> DisplayFragments = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment[]> DisplayFragments = new();
 
     /// <inheritdoc/>
     public IShaderPipelineRenderExtent? RenderExtentOf(string instance) => Refresh(instance: instance);
@@ -130,19 +130,19 @@ public sealed partial class SdfWorldPasses {
             (RequestsGlassShadows ? 64L : 0L) | (RequestsGlass ? 32L : 0L) | (RequestsSecondShadow ? 16L : 0L) | (((long)ShadowResolution) << 2) | (RequestsShadows ? 2L : 0L) | (RequestsTemporal ? 1L : 0L);
 
         private RenderGraphPackageFragment Binned(RenderGraphPackageFragment fragment) =>
-            (RequestsBins ? BinnedFragments.GetValue(createValueCallback: SdfWorldPackage.WithBins, key: fragment) : fragment);
+            (RequestsBins ? BinnedFragments.GetValue(derive: SdfWorldPackage.WithBins, key: fragment) : fragment);
         private RenderGraphPackageFragment Glassed(RenderGraphPackageFragment fragment) =>
-            (RequestsGlass ? GlassFragments.GetValue(createValueCallback: SdfWorldPackage.WithGlass, key: fragment) : fragment);
+            (RequestsGlass ? GlassFragments.GetValue(derive: SdfWorldPackage.WithGlass, key: fragment) : fragment);
         private RenderGraphPackageFragment Shadowed(RenderGraphPackageFragment fragment) {
             if (!RequestsShadows) {
-                return ShadowlessFragments.GetValue(createValueCallback: SdfWorldPackage.WithoutShadows, key: fragment);
+                return ShadowlessFragments.GetValue(derive: SdfWorldPackage.WithoutShadows, key: fragment);
             }
 
             if (RequestsGlassShadows) { fragment = GlassShadowFragments.GetValue(fragment, SdfWorldPackage.WithGlassShadows); }
             var resolution = ShadowResolution;
             var second = RequestsSecondShadow;
             var distantTexels = RequestsDistantTexels;
-            var shaped = ShadowedFragments.GetValue(createValueCallback: static _ => new RenderGraphPackageFragment[ShadowShapes], key: fragment);
+            var shaped = ShadowedFragments.GetValue(derive: static _ => new RenderGraphPackageFragment[ShadowShapes], key: fragment);
             var index = ((((((int)resolution) * 2) + (second ? 1 : 0)) * DistantShapes) + DistantShape);
 
             // The first fragment made for a shape is the one every later frame takes, whichever thread made it.

@@ -22,7 +22,7 @@ internal static class WorldDocumentMembers {
     // one sign, a convex profile's one start vertex, a shape member whose zero is the member omitted), and, given
     // diagnostics, refuses a member no document member consumes.
     internal static void Canonicalize(JsonObject? document, SourceMap sourceMap, DiagnosticBag? diagnostics) {
-        if ((document is null) || ((document["schema"]?.ToString() is { } schema) && (schema != "puck.world.definition.v1"))) { return; }
+        if ((document is null) || ((document["schema"]?.ToString() is { } schema) && (schema != Puck.World.WorldDefinition.SchemaVersion))) { return; }
         // A document that names a basis or imports is a delta over documents not yet composed: a shape row of it that
         // omits a member refines the row of that name, so such a row keeps exactly what the author wrote. Only a
         // document that composes nothing is whole, and takes the one canonical form.
@@ -194,7 +194,7 @@ internal static class WorldDocumentMembers {
     // came. A dictionary's keys are data and keep their order.
     private static void OrderMembers(JsonObject obj, IReadOnlyList<WorldModelMember> members) {
         if (obj.Count < 2) { return; }
-        var rank = Ranks.GetValue(key: members, createValueCallback: static list => {
+        var rank = Ranks.GetValue(key: members, derive: static list => {
             var ranks = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
             for (var index = 0; (index < list.Count); index++) { _ = ranks.TryAdd(key: list[index].Name, value: index); }
@@ -212,5 +212,5 @@ internal static class WorldDocumentMembers {
         }
     }
 
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<WorldModelMember>, Dictionary<string, int>> Ranks = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldModelMember>, Dictionary<string, int>> Ranks = new();
 }
