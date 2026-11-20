@@ -138,7 +138,7 @@ public sealed partial class SdfFieldEvaluator {
                         scoped = true;
                         scopeStart = lowering.Count;
                         (quarterRaws, radiusRaws, roundingRaws) = (0L, 0L, 0L);
-                        steps.Add(item: new ScopeStep(Blend: SdfBlendOp.Union, Op: SdfOp.PushField, Scale: 0.0, Shape: default, Smooth: 0.0));
+                        steps.Add(item: new ScopeStep(Blend: SdfBlendOp.Union, Structure: SdfFieldStructureAction.PushField, Scale: 0.0, Shape: default, Smooth: 0.0));
                         continue;
                     }
                 case SdfCullChainAction.PopField: {
@@ -158,7 +158,7 @@ public sealed partial class SdfFieldEvaluator {
                         }
 
                         depth = 0;
-                        steps.Add(item: new ScopeStep(Blend: SdfBlendOp.Union, Op: SdfOp.PopField, Scale: scale, Shape: default, Smooth: 0.0));
+                        steps.Add(item: new ScopeStep(Blend: SdfBlendOp.Union, Structure: SdfFieldStructureAction.PopField, Scale: scale, Shape: default, Smooth: 0.0));
                         continue;
                     }
                 case SdfCullChainAction.ShapeBlend: {
@@ -211,7 +211,7 @@ public sealed partial class SdfFieldEvaluator {
                         }
 
                         boxed &= shape.Boxed;
-                        steps.Add(item: new ScopeStep(Blend: ((SdfBlendOp)instruction.Blend), Op: SdfOp.ShapeBlend, Scale: 0.0, Shape: shape, Smooth: ((double)FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin))));
+                        steps.Add(item: new ScopeStep(Blend: ((SdfBlendOp)instruction.Blend), Structure: SdfFieldStructureAction.ShapeBlend, Scale: 0.0, Shape: shape, Smooth: ((double)FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin))));
                         continue;
                     }
                 case SdfCullChainAction.Relief: {
@@ -260,7 +260,7 @@ public sealed partial class SdfFieldEvaluator {
         var (x, y, z, count) = (0.0, 0.0, 0.0, 0);
 
         foreach (var step in steps) {
-            if (step.Op == SdfOp.ShapeBlend) {
+            if (step.Structure == SdfFieldStructureAction.ShapeBlend) {
                 (x, y, z, count) = ((x + step.Shape.CenterX), (y + step.Shape.CenterY), (z + step.Shape.CenterZ), (count + 1));
             }
         }
@@ -280,7 +280,7 @@ public sealed partial class SdfFieldEvaluator {
         var shapes = new List<ShapeReach>();
 
         foreach (var step in steps) {
-            if (step.Op == SdfOp.ShapeBlend) {
+            if (step.Structure == SdfFieldStructureAction.ShapeBlend) {
                 shapes.Add(item: step.Shape);
             }
         }
@@ -292,12 +292,12 @@ public sealed partial class SdfFieldEvaluator {
         seedFloor = long.MaxValue;
 
         foreach (var step in steps) {
-            switch (step.Op) {
-                case SdfOp.PushField: {
+            switch (step.Structure) {
+                case SdfFieldStructureAction.PushField: {
                         (quarters, widest, roundings) = (0.0, 0.0, 0.0);
                         break;
                     }
-                case SdfOp.PopField: {
+                case SdfFieldStructureAction.PopField: {
                         var scale = ((step.Scale > 0.0) ? step.Scale : 1.0);
                         var rounding = ((step.Scale > 0.0) ? RawUnit : 0.0);
                         var drop = (Math.Min(val1: quarters, val2: widest) + roundings);
@@ -309,7 +309,7 @@ public sealed partial class SdfFieldEvaluator {
                         spread = Math.Max(val1: spread, val2: (all.BoxSpread * scale));
                         break;
                     }
-                default: {
+                case SdfFieldStructureAction.ShapeBlend: {
                         var k = step.Smooth;
                         // The blend's rounding allowance (SmoothBlendRoundingRaws), and k/4 rounded up to a raw, each a
                         // raw past the double's own rounding.
@@ -320,7 +320,7 @@ public sealed partial class SdfFieldEvaluator {
                             widest = Math.Max(val1: widest, val2: (k + RawUnit));
                         }
 
-                        if (step.Blend is SdfBlendOp.SmoothUnion or SdfBlendOp.SmoothIntersection or SdfBlendOp.SmoothSubtraction) {
+                        if (SdfFieldBlends.CullBoundOf(value: step.Blend) is SdfCullBoundAction.SmoothUnion or SdfCullBoundAction.LocalWithRadius) {
                             roundings += (3.0 * allowance);
                         }
 
@@ -424,13 +424,13 @@ public sealed partial class SdfFieldEvaluator {
             while ((end < count) && !boundary[end] && (compiled[end].Op != SdfOp.ResetPoint)) {
                 ref readonly var instruction = ref compiled[end];
 
-                if (instruction.Op is SdfOp.Translate or SdfOp.Rotate or SdfOp.Scale) {
+                if (SdfFieldOps.CertificateChainOf(value: instruction.Op) is SdfCertificateChainAction.Translate or SdfCertificateChainAction.Rotate or SdfCertificateChainAction.Scale) {
                     end++;
                     continue;
                 }
 
                 // Scope edges end the chain, but must not expose its moved point before the next segment.
-                if (instruction.Op is SdfOp.PushField or SdfOp.PopField) {
+                if (SdfFieldOps.FieldStructureOf(value: instruction.Op) is SdfFieldStructureAction.PushField or SdfFieldStructureAction.PopField) {
                     qualifies = ClosesAtScopeEdge(boundary: boundary, compiled: compiled, edge: end);
                     break;
                 }
@@ -597,7 +597,7 @@ public sealed partial class SdfFieldEvaluator {
     // guarantees that no segment inherits a moved point, including across instance boundaries.
     private static bool ClosesAtScopeEdge(CompiledInstruction[] compiled, bool[] boundary, int edge) {
         for (var index = edge; ((index < compiled.Length) && !boundary[index] && (compiled[index].Op != SdfOp.ResetPoint)); index++) {
-            if (compiled[index].Op is not (SdfOp.PushField or SdfOp.PopField)) {
+            if (SdfFieldOps.FieldStructureOf(value: compiled[index].Op) is not (SdfFieldStructureAction.PushField or SdfFieldStructureAction.PopField)) {
                 return false;
             }
         }
@@ -620,7 +620,7 @@ public sealed partial class SdfFieldEvaluator {
     }
     // One step of a cullable instance in stream order: a scope's push, a shape with its blend, smooth radius in units and
     // certificate, or a pop with its candidate scale (zero for none).
-    private readonly record struct ScopeStep(SdfOp Op, SdfBlendOp Blend, double Smooth, double Scale, ShapeReach Shape);
+    private readonly record struct ScopeStep(SdfFieldStructureAction Structure, SdfBlendOp Blend, double Smooth, double Scale, ShapeReach Shape);
     // One skippable chain: the instruction after its last, its certificate, the margin a smooth union in it needs above
     // the running answer to leave it bitwise, and whether a subtraction in it also needs its candidates past the answer's
     // negation.

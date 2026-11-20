@@ -1447,8 +1447,10 @@ package declares the push with `RenderGraphPackage.PushesIndex`, which
 
 A kernel compiled at build never declares what the C# model owns. The model
 generates it: `sdf-isa.hlsli`, the SDF instruction set's enums, lane accessors
-and packed-layout constants, all the field interpreter and the mesh bake read
-(`SdfIsaHlsl`); `sdf-render.hlsli`, which includes it and adds the constants the
+and packed-layout constants for the field interpreter and mesh bake
+(`SdfIsaHlsl`), and the field's switch arms and operand readers under
+`isa/sdf-field-*.hlsli` (`SdfFieldHlsl`). The renderer reads
+`sdf-render.hlsli`, which includes the ISA and adds the constants the
 renderer alone reads, lights, exposure, the visibility record, mesh records and
 the debug views among them (`SdfRenderHlsl`); the R2 dither's two 32-bit increments
 (`ShaderLowDiscrepancyHlsl`, `Puck.Shaders/Assets/Shaders/Shared/low-discrepancy.hlsli`,

@@ -9,7 +9,8 @@ namespace Puck.SdfVm;
 public sealed record ShaderDeclaration(string Path, Func<string> Generate);
 /// <summary>
 /// The one list of every HLSL declaration the C# model owns, and the generator the kernel builds and
-/// <c>puck shaders generate</c> both run: <c>sdf-isa.hlsli</c> (<see cref="SdfIsaHlsl"/>) and <c>sdf-render.hlsli</c>
+/// <c>puck shaders generate</c> both run: <c>sdf-isa.hlsli</c> (<see cref="SdfIsaHlsl"/>), the field's dispatch and operand
+/// includes (<see cref="SdfFieldHlsl"/>) and <c>sdf-render.hlsli</c>
 /// (<see cref="SdfRenderHlsl"/>), the sky's kind table
 /// (<c>sdf-sky-kinds.hlsli</c> and <c>sky/sdf-sky-kind-table.hlsli</c>, <see cref="SdfSkyKindsHlsl"/>), the R2 dither's
 /// increments (<see cref="ShaderLowDiscrepancyHlsl"/>), the Y'CbCr and Rec. 709 luma weights (<see cref="ShaderLumaHlsl"/>), the instruction

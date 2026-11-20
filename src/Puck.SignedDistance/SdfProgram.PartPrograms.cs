@@ -140,7 +140,9 @@ public sealed partial class SdfProgram {
 
             var shape = m_instructions[cursor];
             // Side-table content needs its own shared-part key. Retain instruction-local ownership until then.
-            if (((SdfShapeType)shape.Shape) is SdfShapeType.Sweep or SdfShapeType.SampledRegion) {
+            var sharing = SdfFieldShapes.PartShapeOf(value: ((SdfShapeType)shape.Shape));
+
+            if (sharing == SdfPartShapeAction.Unshared) {
                 return false;
             }
             // The authored Detail flag stays part of the shape's identity, in a bit no shape-type id reaches.
@@ -150,10 +152,7 @@ public sealed partial class SdfProgram {
             signature.Add(item: shape.Blend);
             var data0 = shape.Data0;
 
-            // Path tables are not part of the shared leaf key yet. Keep their instruction-local table ownership.
-            if (((SdfShapeType)shape.Shape) == SdfShapeType.Path) { return false; }
-
-            if (((SdfShapeType)shape.Shape) == SdfShapeType.ConvexPolygon) {
+            if (sharing == SdfPartShapeAction.Polygon) {
                 // A profile's packed pointer differs between otherwise identical placements. Key the actual
                 // vertices, then let every shared leaf read the first occurrence's correctly patched pointer.
                 if (!polygons.TryGetValue(

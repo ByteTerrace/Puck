@@ -457,3 +457,5 @@ internal enum SdfBlendGrowthAction {
 
 internal enum SdfBlendLipschitzAction { Maximum, RoundSeam, Chamfer }
 internal enum SdfBlendHaloAction { None, Radius, Pipe, ChamferUnion }
+
+internal enum SdfPartShapeAction { Inline, Polygon, Unshared }
