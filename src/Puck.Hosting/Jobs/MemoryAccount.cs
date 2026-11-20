@@ -134,14 +134,16 @@ public sealed class MemoryAccount {
     private long? m_budget;
     private long? m_hostBar;
     // Sampled private bytes beyond the host pool's holdings at the sample. They reduce admission room and are never added
-    // to the physical rows (which already name parts of the same memory). Play's part is the whole while no authoring
-    // work holds or promises anything; while it does, it is no more than the last reading taken with authoring idle
-    // (m_idleBeyond), and the rest is authoring's: the garbage and slack a bake leaves name no owner, and no admission can
-    // tell whose they are, so the growth while authoring runs is counted as authoring's. Only the machine's limit, which
-    // counts the whole, holds that part.
+    // to the physical rows (which already name parts of the same memory). Play's part is the whole until authoring work
+    // first holds or promises anything in the process, as in every player's process; from then on it is no more than the
+    // last reading taken before (m_preAuthoringBeyond), and the rest is authoring's. The garbage and slack a bake leaves
+    // name no owner and outlive the bake (the collector keeps its committed heap, the allocator its slack), so no
+    // admission can tell whose they are, and counting them as play's would degrade a developer's play below what a
+    // player's process, which never bakes, would show. Only the machine's limit, which counts the whole, holds that part.
     private long m_privateBeyondHeld;
     private long m_playBeyondHeld;
-    private long? m_idleBeyond;
+    private long? m_preAuthoringBeyond;
+    private bool m_authoringRan;
     private long HostBudget => Math.Min(m_hostBar ?? DefaultBudget, m_budget ?? DefaultBudget);
     // Whether a player's build counts authoring owners (MemoryAllowance.Authoring) as play.
     private bool m_authoringOnPlayBar;
@@ -262,7 +264,7 @@ public sealed class MemoryAccount {
                 if (bytes is null) {
                     m_privateBeyondHeld = 0L;
                     m_playBeyondHeld = 0L;
-                    m_idleBeyond = null;
+                    m_preAuthoringBeyond = null;
                 }
                 lowered = HostBudget < before;
             }
@@ -623,12 +625,13 @@ public sealed class MemoryAccount {
     // Under m_gate: records the private bytes beyond the pool's holdings and play's part of them (m_playBeyondHeld).
     private void RecordBeyond(long beyond) {
         m_privateBeyondHeld = beyond;
-        if (m_authoringOnPlayBar || ((AuthoringSum(bytes: m_ownerHeld) + AuthoringSum(bytes: m_ownerPromised)) == 0L)) {
-            m_idleBeyond = beyond;
+        m_authoringRan |= ((AuthoringSum(bytes: m_ownerHeld) + AuthoringSum(bytes: m_ownerPromised)) != 0L);
+        if (m_authoringOnPlayBar || !m_authoringRan) {
+            m_preAuthoringBeyond = beyond;
             m_playBeyondHeld = beyond;
             return;
         }
-        m_playBeyondHeld = ((m_idleBeyond is { } idle) ? Math.Min(val1: beyond, val2: idle) : beyond);
+        m_playBeyondHeld = ((m_preAuthoringBeyond is { } before) ? Math.Min(val1: beyond, val2: before) : beyond);
     }
     // Under m_gate.
     private long Named(PhysicalMemory pool, MemoryBacking backing) => m_named[((((int)pool) * Backings) + ((int)backing))];

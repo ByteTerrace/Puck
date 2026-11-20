@@ -545,10 +545,21 @@ held, promised and room.
 | Driver memory and swapchain images | Beyond the owners | Named, as the API's usage less the ledger | 1 |
 | Capture and media buffers, and a pagefile-backed section no Puck code creates | Beyond the owners | Named by step 2's page walk before anything is cut | 2 |
 
-The bytes beyond the owners count against play: no admission can tell which
-work left them, and a player's process holds the same kinds. While a bake
-runs, the garbage and slack it leaves therefore press on play's room, and the
-cold bake's play figures read higher than a prewarmed boot's.
+Authoring draws only on the machine's room past play's entitlement: the larger
+of what play holds and has promised and the bar's limit, so a bake never
+crowds play out of its budget, and on a busy machine the bake is what waits.
+
+The private bytes beyond the owners have no owner to say whose they are. In a
+process that has never run authoring work, which every player's process is,
+all of them count against play. Once authoring has run, play's part is held at
+the last reading taken before it (`play-beyond-held`), and the rest counts
+against the machine alone: the garbage and slack a bake leaves outlive it (the
+collector keeps its committed heap, the allocator its slack), and charging them
+to play starves a developer's play during and after a bake, below what a
+player's process would show. The guarantee
+stops there: in a developer's process that has baked, play's own growth in
+unnamed bytes is held by the machine's limit, not the bar, so the bar's verdict
+on a device comes from a prewarmed boot, where nothing bakes.
 
 ## The decisions
 
