@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text;
 
 namespace Puck.Storage;
@@ -49,7 +48,7 @@ public sealed class ObjectBlobNamespace : IDisposable {
         }
         var nameBytes = encoding.GetBytes(s: name);
         // Fixed-depth opaque names cannot overlap through path nesting, case folding, or filesystem aliases.
-        m_prefix = (("namespaces/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: nameBytes))) + "/");
+        m_prefix = (("namespaces/" + Puck.Abstractions.ContentDigest.HexOf(content: nameBytes)) + "/");
         m_maximumBlobBytes = maximumBlobBytes;
         m_writable = writable;
     }

@@ -104,7 +104,7 @@ public static class PngDecoder {
         // packed to whole bytes per the PNG spec (ceil(width * bitDepth * channels / 8)); the per-filter reference
         // offset ("bpp") is at least one byte even when a pixel is packed several-to-a-byte.
         var bitsPerPixel = (bitDepth * channels);
-        var stride = checked((((width * bitsPerPixel) + 7) / 8));
+        var stride = checked((width * bitsPerPixel).CeilingDivide(divisor: 8));
         var filterBpp = Math.Max(
             val1: 1,
             val2: (bitsPerPixel / 8)

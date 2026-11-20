@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -171,11 +170,7 @@ public static class ImageSourceSettings {
     /// <param name="settings">The settings object, or <see langword="null"/> for none.</param>
     /// <returns>The digest.</returns>
     /// <exception cref="ArgumentException">A member holds an undefined value.</exception>
-    public static string Digest(IReadOnlyDictionary<string, JsonElement>? settings) => Convert.ToHexStringLower(
-        inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: Canonical(settings: settings))),
-        length: (DigestLength / 2),
-        offset: 0
-    );
+    public static string Digest(IReadOnlyDictionary<string, JsonElement>? settings) => ContentDigest.HexOfText(text: Canonical(settings: settings))[..DigestLength];
     /// <summary>Returns whether two settings objects have one canonical form (<see cref="Canonical"/>): the same members
     /// with equal values, whatever their order and spelling, an absent object equal to an empty one.</summary>
     /// <param name="left">The first settings object, or <see langword="null"/> for none.</param>

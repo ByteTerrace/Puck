@@ -33,7 +33,7 @@ public static class ReleasePayloadIdentity {
             text.Append(value: "file:").Append(value: file.Path).Append(value: '\t').Append(value: file.Hash).Append(value: '\t')
                 .Append(value: file.Size.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '\n');
         }
-        return ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: text.ToString())).ToString();
+        return ContentPin.OfText(text: text.ToString()).ToString();
     }
     /// <summary>Computes the identity of every payload a manifest carries.</summary>
     /// <param name="manifest">The manifest.</param>

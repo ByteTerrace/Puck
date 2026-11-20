@@ -11,7 +11,7 @@ namespace Puck.World;
 
 public static partial class WorldPlacementStamp {
     private sealed partial class CompilationContext {
-        private readonly Dictionary<string, WorldPlacement> m_rows = new(comparer: StringComparer.Ordinal);
+        private readonly IReadOnlyDictionary<string, WorldPlacement> m_rows;
         private readonly Dictionary<string, WorldPrototype> m_creations = new(comparer: StringComparer.Ordinal);
 
         private readonly IReadOnlyDictionary<string, CompiledPlacementFrame> m_authored;
@@ -34,10 +34,8 @@ public static partial class WorldPlacementStamp {
             m_authored = WorldPlacementFrameCompilation.Resolve(section: section, worldSeed: seed);
             var projected = false;
 
-            foreach (var row in (section.Rows ?? [])) {
-                if (row is null) { continue; }
-                _ = m_rows.TryAdd(key: row.Id, value: row); projected |= (row.Surface is not null);
-            }
+            m_rows = WorldPlacementIndex.ById(placements: (section.Rows ?? []));
+            foreach (var row in m_rows.Values) { projected |= (row.Surface is not null); }
             foreach (var creation in creations) { _ = m_creations.TryAdd(key: creation.Id, value: creation); }
             FrameTable = (projected ? new LazyFrames(owner: this) : m_authored);
         }

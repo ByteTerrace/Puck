@@ -265,7 +265,7 @@ public sealed partial class ShaderPackager {
             _ = text.Append(value: "pass ").Append(value: pass).Append(value: ' ').Append(value: shaderInterface).Append(value: ' ').Append(value: declarations).Append(value: '\n');
         }
 
-        return ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: text.ToString())).Hex;
+        return ContentPin.OfText(text: text.ToString()).Hex;
     }
     private static ShaderPackageResult Refusal(Exception exception) => new(
         Code: ((exception as ShaderClosureRefusedException)?.Code),

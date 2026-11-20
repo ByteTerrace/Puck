@@ -84,7 +84,7 @@ public sealed class TextSpeechSource : IAudioBlockSource {
             m_sample = m_samples[index];
             m_sampleFrame = 0;
             m_sampleDuration = ((int)Math.Min(val1: ((syllable.Frames * 3L) / 4),
-                val2: ((((m_sample.Length * 1_000_000L) + m_sampleStep) - 1) / m_sampleStep)));
+                val2: (m_sample.Length * 1_000_000L).CeilingDivide(divisor: m_sampleStep)));
             return;
         }
 

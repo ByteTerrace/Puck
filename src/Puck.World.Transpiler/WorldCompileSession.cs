@@ -111,7 +111,7 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
             var (built, modules) = Identity.Value;
             var applied = Puck.Abstractions.CodeRevision.AppliedToAssemblies(assemblies: modules);
 
-            return ((applied.Length == 0) ? built : ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: $"{built}\n{applied}")).Hex);
+            return ((applied.Length == 0) ? built : ContentPin.OfText(text: $"{built}\n{applied}").Hex);
         }
     }
 
@@ -138,7 +138,7 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
             _ = text.Append(value: name).Append(value: '=').Append(value: version.ToString(format: "N")).Append(value: ';');
         }
 
-        return (ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: text.ToString())).Hex, modules.Keys.ToHashSet(comparer: StringComparer.Ordinal));
+        return (ContentPin.OfText(text: text.ToString()).Hex, modules.Keys.ToHashSet(comparer: StringComparer.Ordinal));
     }
     private static bool IsFramework(string? name) => (
         (name is null) ||
@@ -449,7 +449,7 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
     private string? EntryPath(string key) => ((Directory is { } directory)
         ? Path.Combine(
             path1: directory,
-            path2: (ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: $"{CompilerIdentity}\n{key}")).Hex[..32] + EntryExtension)
+            path2: (ContentPin.OfText(text: $"{CompilerIdentity}\n{key}").Hex[..32] + EntryExtension)
         )
         : null
     );

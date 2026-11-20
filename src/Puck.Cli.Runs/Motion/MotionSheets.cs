@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Globalization;
 using Puck.Assets;
 
@@ -40,7 +41,7 @@ public sealed record MotionSheetLayout(int Width, int Height, int CellWidth, int
         ArgumentOutOfRangeException.ThrowIfLessThan(value: labelHeight, other: 1);
 
         var across = Math.Min(val1: frames, val2: columns);
-        var bands = (((frames + columns) - 1) / columns);
+        var bands = frames.CeilingDivide(divisor: columns);
         var rowHeight = (labelHeight + cellHeight);
         var bandHeight = ((cameras * rowHeight) + Gutter);
         var cells = new List<MotionSheetCell>(capacity: (frames * cameras));

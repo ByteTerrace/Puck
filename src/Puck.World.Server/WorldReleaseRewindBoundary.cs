@@ -1,4 +1,3 @@
-using System.Text;
 using Puck.Assets;
 
 namespace Puck.World.Server;
@@ -21,10 +20,10 @@ public static class WorldReleaseRewindBoundary {
         }
         _ = SafeName.Parse(candidate: group);
         foreach (var name in names) { _ = SafeName.Parse(candidate: name); }
-        return ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: $"{Contract}\n{owner:D}\n{group}\n{string.Join(
+        return ContentPin.OfText(text: $"{Contract}\n{owner:D}\n{group}\n{string.Join(
             '\n',
             names
-        )}")).ToString();
+        )}").ToString();
     }
     /// <summary>Rejects obligations that predate enforcement and cannot be restored with this group.</summary>
     public static void RequireContained(WorldAuthorityCheckpoint checkpoint, Func<string, bool> containsAuthority) {

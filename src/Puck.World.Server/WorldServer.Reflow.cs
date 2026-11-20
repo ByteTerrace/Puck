@@ -274,10 +274,7 @@ public sealed partial class WorldServer {
             template: template,
             worldSeed: worldSeed
         );
-        var placementsById = definition.Placements.ToDictionary(
-            p => p.Id,
-            StringComparer.Ordinal
-        );
+        var placementsById = WorldPlacementIndex.ById(placements: definition.Placements);
         var options = new WorldPlacement[children.Length][];
 
         for (var index = 0; (index < children.Length); index++) {

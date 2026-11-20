@@ -1,5 +1,6 @@
 using Azure.Storage.Blobs;
 using Microsoft.AspNetCore.DataProtection;
+using Puck.Abstractions;
 using System.Security.Cryptography;
 
 namespace Puck.Actors.Services;
@@ -96,7 +97,7 @@ public sealed class DefaultKeyPairService(IDataProtectionProvider dataProtection
         using var algorithm = CreateAlgorithm(algorithmType: type);
 
         var publicKey = algorithm.ExportSubjectPublicKeyInfo();
-        var fingerprint = Convert.ToHexStringLower(bytes: SHA256.HashData(source: publicKey));
+        var fingerprint = ContentDigest.HexOf(content: publicKey);
         var dataProtector = dataProtectionProvider.CreateProtector(
             purpose: "users.keys.fingerprints",
             subPurposes: [

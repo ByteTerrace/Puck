@@ -206,7 +206,7 @@ public static partial class WorldSchema {
                 m_targetPaths[index] ??= path;
             }
 
-            m_presence = new ulong[(((m_targetNodes.Length + m_typeBits.Count) + 63) / 64)];
+            m_presence = new ulong[(m_targetNodes.Length + m_typeBits.Count).CeilingDivide(divisor: 64)];
         }
 
         public JsonObject CommonDefs { get; } = new();

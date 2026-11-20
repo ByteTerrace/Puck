@@ -670,10 +670,7 @@ public static class WorldSpatialQueryCompilation {
             return new WorldSpatialQueryIndex([]);
         }
 
-        var byId = placements.ToDictionary(
-            p => p.Id,
-            StringComparer.Ordinal
-        );
+        var byId = WorldPlacementIndex.ById(placements: placements);
         var frames = new Dictionary<string, CompiledPlacementFrame>(comparer: StringComparer.Ordinal);
         var visiting = new HashSet<string>(comparer: StringComparer.Ordinal);
         var volumes = new List<CompiledSpatialVolume>();

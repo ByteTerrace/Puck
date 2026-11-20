@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State;
 
 /// <summary>
@@ -93,7 +95,7 @@ public sealed class SlotNotes {
     public string? StaleDigest { get; private set; }
 
     private static List<(SlotBinding? Binding, int Slot)>[] NewPartitions(int count, int partitionSlots) {
-        var partitions = new List<(SlotBinding? Binding, int Slot)>[((count + partitionSlots) - 1) / partitionSlots];
+        var partitions = new List<(SlotBinding? Binding, int Slot)>[count.CeilingDivide(divisor: partitionSlots)];
 
         for (var partition = 0; (partition < partitions.Length); partition++) { partitions[partition] = []; }
         return partitions;

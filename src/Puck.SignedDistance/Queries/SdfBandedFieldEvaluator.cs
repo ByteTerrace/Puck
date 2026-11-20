@@ -89,7 +89,7 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator, ISdf
     // The number of bound samples a march of the given reach can spend: one per bound-step floor, plus one for the
     // sample at the reach itself.
     private int BoundBudget(FixedQ4816 maxDistance) {
-        var steps = (((maxDistance.Value + m_boundStepFloor.Value) - 1L) / m_boundStepFloor.Value);
+        var steps = maxDistance.Value.CeilingDivide(divisor: m_boundStepFloor.Value);
 
         return ((steps >= int.MaxValue)
             ? int.MaxValue
@@ -107,7 +107,7 @@ public sealed class SdfBandedFieldEvaluator : IWorldQuery, IFieldEvaluator, ISdf
         // coordinates are monotone, hence a ray crosses this convex box once and spends at most its L1 span inside.
         var counts = ((((ulong)m_grid.CornerCountX) + ((ulong)m_grid.CornerCountY)) + ((ulong)m_grid.CornerCountZ));
         var span = (((UInt128)counts) * ((ulong)m_grid.CellSize.Value));
-        var steps = (((span + minimumCoordinateProgress) - 1U) / minimumCoordinateProgress);
+        var steps = span.CeilingDivide(divisor: minimumCoordinateProgress);
 
         return ((steps >= (((UInt128)int.MaxValue) - 1U))
             ? int.MaxValue

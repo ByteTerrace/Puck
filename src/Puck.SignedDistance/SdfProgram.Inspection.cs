@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Numerics;
 
 namespace Puck.SignedDistance;
@@ -86,7 +87,7 @@ public sealed partial class SdfProgram {
             vectors += (3 * ((int)m_words[((rigid + (segment * WordsPerVector)) + 1)]));
         }
         foreach (var profile in m_convexPolygonProfiles) {
-            if (Owns(instruction: profile.InstructionIndex)) { vectors += ((profile.Vertices.Length + 1) / 2); }
+            if (Owns(instruction: profile.InstructionIndex)) { vectors += profile.Vertices.Length.CeilingDivide(divisor: 2); }
         }
         foreach (var curve in m_sweepCurves) {
             if (Owns(instruction: curve.InstructionIndex)) { vectors += SweepCurveVectorsPerEntry; }

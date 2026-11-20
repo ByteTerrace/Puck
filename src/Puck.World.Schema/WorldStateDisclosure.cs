@@ -563,13 +563,12 @@ public static class WorldStateDisclosure {
             return !observer.Discloses(rowOrdinal: row.Ordinal, key: key);
         }
         Dictionary<string, Dictionary<string, WorldPlacement>>? children = null;
-        Dictionary<string, WorldPlacement>? byId = null;
+        IReadOnlyDictionary<string, WorldPlacement>? byId = null;
 
         if (restricted is not null) {
+            byId = WorldPlacementIndex.ById(placements: placements);
             children = new(comparer: StringComparer.Ordinal);
-            byId = new(capacity: placements.Count, comparer: StringComparer.Ordinal);
             foreach (var placement in placements) {
-                byId.TryAdd(key: placement.Id, value: placement);
                 if (DealtKey(placement: placement, restricted: restricted, key: out var key)) {
                     if (!children.TryGetValue(key: placement.Parent!, value: out var keyed)) { children[placement.Parent!] = keyed = new(comparer: StringComparer.Ordinal); }
                     keyed.TryAdd(key: key, value: placement);
@@ -649,7 +648,7 @@ public static class WorldStateDisclosure {
     // Whether a placement authored under a dealt child stands under one the recipient is not shown: the first dealt child
     // on its parent chain belongs to a re-dealt template and is absent from the re-deal. The walk is bounded by the row
     // count against a parent cycle, which frame validation refuses.
-    private static bool Unshown(WorldPlacement placement, Dictionary<string, WorldPlacement> byId, Dictionary<string, int> restricted, HashSet<string>? shown) {
+    private static bool Unshown(WorldPlacement placement, IReadOnlyDictionary<string, WorldPlacement> byId, Dictionary<string, int> restricted, HashSet<string>? shown) {
         var current = placement;
 
         for (var steps = 0; (steps <= byId.Count) && (current.Parent is { } parentId) && byId.TryGetValue(key: parentId, value: out var parent); steps++) {

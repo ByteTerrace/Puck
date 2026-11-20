@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using Puck.Abstractions;
 
 namespace Puck.Machines.Post;
 
@@ -47,7 +47,7 @@ public sealed partial class CorpusManifest {
     }
     private static void VerifyFile(Corpus corpus, FileEntry file, string path) {
         using var stream = File.OpenRead(path: path);
-        var actual = Convert.ToHexStringLower(inArray: SHA256.HashData(source: stream));
+        var actual = ContentDigest.HexOf(content: stream);
 
         if (!string.Equals(a: actual, b: file.Sha256, comparisonType: StringComparison.OrdinalIgnoreCase)) {
             throw new InvalidDataException(message: $"{corpus.Name} {corpus.Version}: {file.Path} SHA-256 is {actual}, manifest declares {file.Sha256}; file refused.");

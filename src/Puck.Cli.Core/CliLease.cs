@@ -1,7 +1,5 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 using Puck.Abstractions;
 using Puck.Confinement;
 
@@ -490,7 +488,7 @@ public sealed class CliLease : IDisposable {
             if (queues[turn].Count == 0) { queues.Remove(key: turn); }
         }
     }
-    private static string LanePath(string lane, string rotation) => Path.Combine(path1: rotation, path2: Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: lane))));
+    private static string LanePath(string lane, string rotation) => Path.Combine(path1: rotation, path2: ContentDigest.HexOfText(text: lane));
     /// <summary>Reads a lane's serial: the order in which it last held the lease; zero when it never has.</summary>
     private static long Served(string path) {
         try { return (long.TryParse(s: ReadLines(path: path)?.FirstOrDefault(), provider: CultureInfo.InvariantCulture, result: out var serial) ? serial : 0); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { return 0; }
