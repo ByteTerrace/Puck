@@ -1,4 +1,6 @@
+using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -844,21 +846,12 @@ public sealed partial class SdfWorldTables {
 
         var end = (((long)word) + count);
         var cursor = ((long)word);
-        var low = 0;
-        var high = m_meshOrder.Count;
-
         // The first placed mesh that ends past word.
-        while (low < high) {
-            var middle = ((low + high) >>> 1);
-
-            var (start, mesh) = m_meshOrder[middle];
-
-            if ((((long)start) + SdfMeshRegion.WordsOf(mesh: mesh)) <= word) {
-                low = (middle + 1);
-            } else {
-                high = middle;
-            }
-        }
+        var low = PartitionPoint.Of(
+            isBefore: static (past, placed) => ((((long)placed.Word) + SdfMeshRegion.WordsOf(mesh: placed.Mesh)) <= past),
+            span: CollectionsMarshal.AsSpan(list: m_meshOrder),
+            state: ((long)word)
+        );
         for (var index = low; ((index < m_meshOrder.Count) && (m_meshOrder[index].Word < end)); index++) {
             var (start, mesh) = m_meshOrder[index];
             var words = MeshWordsOf(mesh: mesh, placement: m_meshArena.Placements[mesh]);
