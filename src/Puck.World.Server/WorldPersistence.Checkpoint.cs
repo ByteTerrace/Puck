@@ -1,5 +1,6 @@
 using Puck.Commands;
 using Puck.World.Protocol;
+using Puck.SignedDistance;
 
 namespace Puck.World.Server;
 
@@ -144,6 +145,20 @@ public sealed partial class WorldPersistence {
 
             candidate = Host.Tick.ProjectDealsForEdit(next, previous: candidate);
             kept.Add(item: entry);
+        }
+
+        // An undo whose dropped entries changed only what presentation reads installs as that edit, the way a reload of
+        // the same change does, and keeps the session's state, deals and draws.
+        var undone = DroppedPresentation(candidate: candidate, keep: keep, restored: out var restored);
+        var changed = WorldDocument.DescribeChanged(changed: undone);
+
+        if (restored is not null) {
+            var restoredKind = WorldDocument.ReloadInstallKindOf(candidate: restored, live: Host.Document.Definition, rows: out _);
+
+            if (!Host.Document.TryInstallEdit(candidate: restored, detail: out var detail, kind: restoredKind, principal: principal, reason: out var editReason, rows: [], validated: true)) {
+                return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: $"undo refused: {editReason}");
+            }
+            return AcceptUndo(connectionId: connectionId, correlationId: correlationId, detail: (detail + changed), drop: drop, kept: kept);
         }
 
         Host.DrawKeys.AdvanceGeneration();
@@ -294,19 +309,87 @@ public sealed partial class WorldPersistence {
             }
         }
 
-        Host.Document.Journal.Clear();
-        Host.Document.Journal.AddRange(collection: kept);
-
-        var applied = $"dropped {drop}, {Host.Document.Journal.Count} remaining";
-
         if (addonPlanCommitted) {
             Host.Addons!.Finish(plan: addonPlan!);
         }
+        return AcceptUndo(connectionId: connectionId, correlationId: correlationId, detail: (", full install" + changed), drop: drop, kept: kept);
+    }
 
-        // The acceptance answers the submitting line the way a refusal does (RefuseUndo), through the same tap; that
-        // answer is the undo's one report, so nothing narrates it beside.
+    // What the dropped tail of the journal changed, read by composing it again over the restored document (every entry
+    // passed its gates when it applied) and naming the parts the two hold as different instances. When the tail changed
+    // only creations in what shading reads and shade programs, `restored` is the live document with exactly those rows
+    // set back: every other row stays the live instance, so the session's state, deals and draws carry over and the
+    // presentation install delivers only the rows the undo moved. Otherwise `restored` is null and the undo installs
+    // the replayed document whole.
+    private WorldDocumentInputs DroppedPresentation(WorldDefinition candidate, int keep, out WorldDefinition? restored) {
+        restored = null;
+
+        var journal = Host.Document.Journal;
+        var undone = candidate;
+
+        for (var index = keep; (index < journal.Count); index++) {
+            if (!journal[index].TryCompose(Host, undone, out var next, out _)) { return WorldDocumentInputs.All; }
+            undone = Host.Tick.ProjectDealsForEdit(next, previous: undone);
+        }
+
+        var changed = WorldDocumentInputs.Changed(after: candidate, before: undone);
+
+        if (WorldDocument.ReloadInstallKindOf(candidate: candidate, live: undone, rows: out _) is not (WorldInstallKind.Nothing or WorldInstallKind.Presentation)) {
+            return changed;
+        }
+
+        var live = Host.Document.Definition;
+        var creations = live.CreationsRaw;
+
+        if (!ReferenceEquals(objA: candidate.CreationsRaw, objB: undone.CreationsRaw)) {
+            if (live.Creations.Count != undone.Creations.Count) { return changed; }
+
+            WorldPrototype[]? rows = null;
+
+            for (var index = 0; (index < candidate.Creations.Count); index++) {
+                var row = candidate.Creations[index];
+
+                if (ReferenceEquals(objA: row, objB: undone.Creations[index])) { continue; }
+                if (!live.Creations[index].Id.Equals(row.Id)) { return changed; }
+                rows ??= [.. live.Creations];
+                rows[index] = row;
+            }
+            creations = (rows ?? creations);
+        }
+
+        // ShadesRaw reads the table the definition's uses derive, so it is set only when a program moved: setting it
+        // back would replace the stored table the live document carries with another instance.
+        restored = (ReferenceEquals(objA: creations, objB: live.CreationsRaw) ? live : (live with { CreationsRaw = creations }));
+
+        var restoring = candidate.ShadesRaw;
+        var dropping = undone.ShadesRaw;
+
+        if (!ReferenceEquals(objA: restoring, objB: dropping)) {
+            var held = live.ShadesRaw;
+            Dictionary<string, SdfShadeDefinition>? table = null;
+
+            Dictionary<string, SdfShadeDefinition> Table() => (table ??= ((held is null)
+                ? new Dictionary<string, SdfShadeDefinition>(StringComparer.Ordinal)
+                : new Dictionary<string, SdfShadeDefinition>(held, StringComparer.Ordinal)));
+
+            foreach (var (name, program) in (restoring ?? new Dictionary<string, SdfShadeDefinition>())) {
+                if ((dropping?.TryGetValue(key: name, value: out var dropped) != true) || !ReferenceEquals(objA: dropped, objB: program)) { Table()[name] = program; }
+            }
+            foreach (var name in (dropping?.Keys ?? [])) {
+                if ((restoring?.ContainsKey(key: name) != true) && (held?.ContainsKey(key: name) == true)) { _ = Table().Remove(key: name); }
+            }
+            if (table is not null) { restored = (restored with { ShadesRaw = (((restoring is null) && (table.Count == 0)) ? null : table) }); }
+        }
+        return changed;
+    }
+
+    // Keeps the journal's replayed prefix and answers the submitting line the way a refusal does (RefuseUndo), through
+    // the same tap; that answer is the undo's one report, so nothing narrates it beside.
+    private bool AcceptUndo(int drop, List<WorldJournalEntry> kept, string detail, int connectionId, long correlationId) {
+        Host.Document.Journal.Clear();
+        Host.Document.Journal.AddRange(collection: kept);
         Host.EchoTap?.Invoke(obj: new WorldEditEcho(
-            Message: applied,
+            Message: $"dropped {drop}, {Host.Document.Journal.Count} remaining{detail}",
             Rejected: false,
             Kind: WorldEditEchoKind.Mutation,
             ConnectionId: connectionId,

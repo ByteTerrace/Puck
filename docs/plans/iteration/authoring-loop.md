@@ -789,26 +789,41 @@ stage order is in [the duplicates](#duplicates-to-remove).
    by the reload's sender from two composed revisions rather than emitted by
    the session from the rows that moved, so the sender still reads the whole
    next revision into the typed model and draws it
-   (`WorldDefinitionLoader.TryLoadFileForEdit`). *Check:* for a one-value
+   (`WorldDefinitionLoader.TryLoadFileForEdit`). The authority also merges a
+   whole member three ways whenever the live document holds any of its rows
+   bound to live state: `WorldReloadDelta.TryMergeOver` takes the next
+   revision's member only when the live member is the revision's own instance,
+   and binding gives each row that reads state a new one. In the debug world 27
+   of the creations are bound, so a one-colour save writes, merges and reads
+   again the whole creation roster; a merge by row, taking the next revision's
+   row wherever the live row is the revision's row or its binding, removes it.
+   *Check:* for a one-value
    edit, the first after a boot included, the session's counters read one
    source lowered, a handful of rows merged and no whole-document
    serialization, and the incremental-equals-clean law passes over an edit
    corpus drawn from the debug world.
-4. **Join the door.** The local file edit path is built. `WorldSourceWatch`
-   submits a saved edit through the reload boundary. The authority merges the
-   change over the live document, names conflicts where the source wins and
-   records the accepted overlay as one undo entry. Presentation delivery
-   carries changed creation and shade rows, and value delivery uses changed
-   snapshot rows. The [live edit path](../iteration.md#the-live-edit-path-step-3)
-   describes the mechanisms and counters. Section-scoped admission for remote
-   authors stays with the [published-world decision](#what-the-owner-settled).
-   Left: in the debug world a one-colour save still delivers every creation in
-   the roster, because `WorldPresentationRows.Between` finds moved rows by
-   instance and the reloaded roster arrives with new instances for rows the
-   edit left alone; and `world.undo` of a reload replays the journal as a full
-   install that delivers the whole definition. *Check:* a one-colour save in
-   the debug world reads one row in `world.boot.presentation-rows-delivered`
-   per primed sink, and undoing it is a presentation install.
+4. **Join the door.** Built. `WorldSourceWatch` submits a saved edit through
+   the reload boundary. The authority merges the change over the live
+   document, names conflicts where the source wins and records the accepted
+   overlay as one undo entry. The merged document holds the live document's
+   own instance of every row the edit left alone, because
+   `WorldDefinitionMembers.Replace` resolves the value it read before sharing it
+   with the basis, so a row bound to live state keeps its instance. Presentation
+   delivery therefore carries only the changed creation and shade rows, and
+   value delivery uses changed snapshot rows. `world.undo` of a presentation
+   edit is a presentation install too: the dropped journal tail is composed
+   again over the restored document, and when it changed only creations in
+   what shading reads and shade programs, exactly those rows are set back on
+   the live document (`WorldPersistence.DroppedPresentation`) and installed
+   through the narrow install a reload uses (`WorldDocument.TryInstallEdit`).
+   The session's state, deals and draws carry over. The
+   [live edit path](../iteration.md#the-live-edit-path-step-3) describes the
+   mechanisms and counters. Section-scoped admission for remote authors stays
+   with the [published-world decision](#what-the-owner-settled). *Check:* a
+   one-colour save in the debug world reads one row per delivery
+   (`world.boot.presentation-rows-delivered` over
+   `world.boot.presentation-deliveries`), and undoing it adds one
+   presentation install and no full install.
 5. **Narrow validation**, for the delta and for `world.row.set` alike:
    sections first, then rows by digest. Not started: only a state-value
    install validates part of the document

@@ -44,38 +44,15 @@ public sealed record WorldReloadDelta(string BaseHash, string TargetHash, byte[]
         ArgumentNullException.ThrowIfNull(argument: previous);
         ArgumentNullException.ThrowIfNull(argument: next);
 
-        var before = WorldDefinitionMembers.Of(definition: previous);
-        var after = WorldDefinitionMembers.Of(definition: next);
         var patch = new JsonObject();
         // The next revision as the authority reconstructs it: every member and keyed row its change leaves equal is the
         // previous revision's own instance, so what the authority keeps by identity carries over.
-        var shared = new Dictionary<string, object?>(comparer: StringComparer.Ordinal);
+        var reconstructed = WorldDefinitionMembers.ShareUnchanged(basis: previous, next: next, patch: patch, patchOf: MemberDelta);
+        var basePin = WorldDefinitionMembers.Of(definition: previous).Pin;
+        var targetPin = WorldDefinitionMembers.Of(definition: next).Pin;
 
-        foreach (var member in after.Members) {
-            if (before.TryGet(name: member.Name, member: out var held) && string.Equals(a: held.Digest, b: member.Digest, comparisonType: StringComparison.Ordinal)) { continue; }
-
-            var basis = (before.TryGet(name: member.Name, member: out held) ? held.Tree() : null);
-            var target = member.Tree();
-            var delta = MemberDelta(name: member.Name, basis: basis, target: target);
-            var value = WorldDefinitionMembers.Value(definition: next, name: member.Name);
-            var basisValue = WorldDefinitionMembers.Value(definition: previous, name: member.Name);
-
-            patch[member.Name] = delta;
-            shared[member.Name] = (((basis is not null) && (target is not null) && (delta is not null) && (value is not null) && (basisValue is not null) && WorldDefinitionMembers.IsModelMember(name: member.Name))
-                ? WorldDocumentWalker.Share(basis: basisValue, basisTree: basis, patch: delta, value: value, valueTree: target)
-                : value);
-        }
-        foreach (var member in before.Members) {
-            if (!after.TryGet(name: member.Name, member: out _)) {
-                patch[member.Name] = null;
-                shared[member.Name] = null;
-            }
-        }
-
-        var reconstructed = WorldDefinitionMembers.With(basis: previous, documentDirectory: next.DocumentDirectory, slices: after, values: shared);
-
-        Reconstructions.AddOrUpdate(key: previous, value: new Reconstruction(BaseHash: before.Pin, Next: reconstructed, TargetHash: after.Pin));
-        return new(before.Pin, after.Pin, CanonicalJsonDocument.SerializeCompact(patch), next.DocumentDirectory);
+        Reconstructions.AddOrUpdate(key: previous, value: new Reconstruction(BaseHash: basePin, Next: reconstructed, TargetHash: targetPin));
+        return new(basePin, targetPin, CanonicalJsonDocument.SerializeCompact(patch), next.DocumentDirectory);
     }
 
     // One member's delta, proved to merge into the target under the root merge's rules (the shades member's included); a
@@ -260,8 +237,7 @@ public sealed record WorldReloadDelta(string BaseHash, string TargetHash, byte[]
 
             var result = WorldDefinitionMembers.With(basis: live, documentDirectory: next.DocumentDirectory, values: taken);
 
-            candidate = WorldDefinitionMembers.Replace(basis: result, basisTrees: liveTrees, documentDirectory: next.DocumentDirectory, replacements: merged);
-            conflicts = found;
+            candidate = WorldDefinitionMembers.Replace(basis: result, basisTrees: liveTrees, documentDirectory: next.DocumentDirectory, replacements: merged);            conflicts = found;
             reason = string.Empty;
             return true;
         } catch (Exception exception) when (exception is ArgumentException or InvalidDataException or JsonException or NotSupportedException) {

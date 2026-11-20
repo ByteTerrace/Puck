@@ -257,8 +257,16 @@ table — a row added there grants nothing until relaunch.
   every-section hold already re-proves). ALL-OR-NOTHING: any entry failing any
   gate refuses the whole undo, names the failing entry's index and reason on
   stderr, and installs NOTHING. Either outcome echoes through `EchoTap`
-  (an acceptance as `dropped <n>, <m> remaining`), so `world.undo` answers
-  its own line like every registered verb. There is no per-mutation inverse. Proven
+  (an acceptance as `dropped <n>, <m> remaining`, then the install it took and
+  the parts it changed), so `world.undo` answers its own line like every
+  registered verb. There is no per-mutation inverse. When the dropped tail,
+  composed again over the restored document, changed only creations in what
+  shading reads and shade programs, the undo sets exactly those rows back on
+  the live document and takes the reload's presentation install
+  (`WorldPersistence.DroppedPresentation`, `WorldDocument.TryInstallEdit`):
+  state, deals, draws and every compiled product but the envelope's fit stay,
+  and only the changed rows are delivered. Any other undo installs the replayed
+  document whole, which also restores the state and deals the document holds. Proven
   in-process by `tests/Puck.World.Server.Tests/MutationAllOrNothingLawTests.cs`
   against the shared apply gate; the replay loop's own early-return on a
   genuine mid-replay failure is unproven (see that law's own remarks).
