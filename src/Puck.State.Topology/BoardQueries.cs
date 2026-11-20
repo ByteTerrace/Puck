@@ -46,7 +46,7 @@ public static class BoardQueries {
     // One (ordinal, value) pair as one element word. A fingerprint is the multiset digest of its cells' pairs, so it
     // depends only on the set of pairs and not on the order cells are walked.
     private static ulong Pair(int ordinal, long value) =>
-        ((((ulong)ordinal) * 0x9E3779B97F4A7C15UL) ^ ((ulong)value));
+        ((((ulong)ordinal) * SplitMix64.GoldenGamma) ^ ((ulong)value));
     // A flood along the topology's directions from the key cell over in-range cells; every settled member is one
     // visit against the budget. Boundary are counted once each through a second mark, so a cell touching the group
     // twice is one boundary cell.

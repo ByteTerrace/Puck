@@ -10,7 +10,7 @@ public sealed partial class SdfMeshIrradiance {
         public float ChordSquared { get; } = MathF.Pow(2f * MathF.Sin(float.DegreesToRadians(Grid.DirectionDegrees) * .5f), 2);
     }
     // Three adjacent octahedral texels share a bit. A collision can schedule extra work only.
-    private static ulong SkyGroup(int ray) => 1UL << (ray / ((SdfMeshProbeDepth.HitCount + 63) / 64));
+    private static ulong SkyGroup(int ray) => 1UL << (ray / SdfMeshProbeDepth.HitCount.CeilingDivide(divisor: 64));
 
     private enum InputChange { None, WithinBound, Due }
 

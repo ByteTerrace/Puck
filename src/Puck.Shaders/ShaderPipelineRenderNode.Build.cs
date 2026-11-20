@@ -1,6 +1,7 @@
 using System.Runtime.ExceptionServices;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.Shaders;
 
@@ -191,7 +192,7 @@ public sealed partial class ShaderPipelineRenderNode {
             !key.Matches(other: desired)
         ) {
             if (m_buildResizes) {
-                m_resizeBackoff = Math.Clamp(max: MaxResizeBackoff, min: 1, value: (2 * m_resizeBackoff));
+                m_resizeBackoff = ExponentialBackoff.Next(ceiling: MaxResizeBackoff, current: m_resizeBackoff, first: 1);
             }
 
             built?.Discard(later: DisposeLater);

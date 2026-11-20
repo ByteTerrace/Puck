@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State.Rules;
 
 /// <summary>One compiled family's due list: which rules (and, for a body sweep, which bodies) must be visited this
@@ -60,7 +62,7 @@ internal sealed class RuleDueList {
         Latch = latch;
         States = latch.States(rules: rules);
         m_kinds = new Kind[rules.Length];
-        m_due = new ulong[((rules.Length + 63) >> 6)];
+        m_due = new ulong[rules.Length.CeilingDivide(divisor: 64)];
         m_visited = new ulong[m_due.Length];
         m_full = new bool[rules.Length];
         m_wake = new ulong[rules.Length];

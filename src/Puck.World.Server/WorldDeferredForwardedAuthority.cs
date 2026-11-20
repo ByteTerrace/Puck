@@ -17,23 +17,14 @@ internal sealed class WorldDeferredForwardedAuthority(WorldForwardingDestination
     public bool IsBound => (Volatile.Read(location: ref m_current) is not null);
 
     public WorldForwardingDestination DescribeForCheckpoint() => m_destination;
-    public void Dispose() {
+    public void Dispose() => Retire(final: true);
+    public void Invalidate() => Retire(final: false);
+    // Unbinds the current arm and disposes it outside the gate; a final retirement also refuses every later bind.
+    private void Retire(bool final) {
         IWorldForwardedAuthority? retired;
 
         lock (m_gate) {
-            m_disposed = true;
-            retired = m_current;
-            Volatile.Write(
-                location: ref m_current,
-                value: null
-            );
-        }
-        (retired as IDisposable)?.Dispose();
-    }
-    public void Invalidate() {
-        IWorldForwardedAuthority? retired;
-
-        lock (m_gate) {
+            m_disposed |= final;
             retired = m_current;
             Volatile.Write(
                 location: ref m_current,

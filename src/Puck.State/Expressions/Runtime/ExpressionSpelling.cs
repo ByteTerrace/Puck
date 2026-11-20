@@ -1511,7 +1511,7 @@ public static partial class ExpressionSpelling {
     private enum Lexeme : byte { End, Number, Name, Punctuation, String, Atom }
     // A recursive-descent parser over a one-token lookahead lexer; the grammar is small enough that the two live in
     // one class and the token stream is never materialized.
-    private sealed partial class Parser(string text, IReadOnlySet<string>? locals = null, IReadOnlyList<SourceAtomSpan>? atoms = null, bool sourceSyntax = false) {
+    private sealed partial class Parser(string text, IReadOnlySet<string>? locals = null, SourceAtomSpan[]? atoms = null, bool sourceSyntax = false) {
         // Longest first, so ">>>" wins over ">>" over ">".
         private static readonly string[] Punctuations = [">>>", "<<", ">>", "==", "!=", "<=", ">=", "<", ">", "+", "->", "=>", "-", "*", "/", "%", "&", "|", "^", "~", "??", "?", ":", "(", ")", "[", "]", ",", "."];
 

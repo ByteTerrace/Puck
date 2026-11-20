@@ -2090,9 +2090,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var fineY = ((cellsY * factor) + 1);
         var fineSamples = (((long)fineX) * fineY * ((cellsZ * factor) + 1));
         // The samples listed, in the order first listed, and a bit a fine sample marking those already listed.
-        using var seenLease = RentedArrays.Rent<ulong>(array: out var seen, minimumLength: ((int)((fineSamples + 63L) >> 6)), owner: m_observer);
+        var seenWords = ((int)fineSamples.CeilingDivide(divisor: 64L));
+        using var seenLease = RentedArrays.Rent<ulong>(array: out var seen, minimumLength: seenWords, owner: m_observer);
 
-        seen.AsSpan(start: 0, length: ((int)((fineSamples + 63L) >> 6))).Clear();
+        seen.AsSpan(start: 0, length: seenWords).Clear();
         // The keys are listed where they stay, in the lattice's own buffer.
         m_gradientKeys.Resize(length: 0, clear: false, preserve: false);
 
@@ -2158,7 +2159,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // A fine answer lands at its sample's slot and a crossing's in its edge's row (CrossingEdges sized those): size the
         // slots once rather than growing them answer by answer.
         m_fineGradients.Resize(m_fineValues.Length, clear: false, preserve: false);
-        m_gradientAnswered.Resize((m_fineValues.Length + 63) >> 6);
+        m_gradientAnswered.Resize(m_fineValues.Length.CeilingDivide(divisor: 64));
 
         m_points.Resize(length: (listed + m_crossingKeys.Length), clear: false, preserve: false);
 
@@ -3193,7 +3194,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         if (m_factor == 1) { return (Values[key] < 0f); }
         if (m_signKnown.Length == 0) {
             var count = ((((long)(((m_samplesX - 1) * m_factor) + 1)) * (((m_samplesY - 1) * m_factor) + 1)) * (((m_samplesZ - 1) * m_factor) + 1));
-            var words = ((int)((count + 63L) >> 6));
+            var words = ((int)count.CeilingDivide(divisor: 64L));
 
             m_signKnown.Resize(words);
             m_signInside.Resize(words);

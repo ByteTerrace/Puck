@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Runtime.CompilerServices;
 using Puck.Abstractions.Machines;
 using Puck.Networking;
@@ -611,7 +612,7 @@ public sealed partial class WorldHistory {
         });
         Reserve(
             intentsPerTick: (((previous is { Count: > 0 } last)
-                ? ((last.IntentCount + (last.Count - 1)) / last.Count)
+                ? last.IntentCount.CeilingDivide(divisor: last.Count)
                 : 1)),
             segment: segment,
             ticks: (Interval + 1)

@@ -1,3 +1,4 @@
+using Puck.Maths;
 namespace Puck.Platform.Windows.Recording;
 
 // A single-producer/single-consumer float ring with drop-oldest overflow — the device capture thread writes, the
@@ -17,11 +18,10 @@ internal sealed class AudioSampleRing {
 
     public AudioSampleRing(int capacity) {
         // Round up to a power of two so index wrapping is a mask.
-        var rounded = 1;
-
-        while (rounded < capacity) {
-            rounded <<= 1;
-        }
+        var rounded = Math.Max(
+            val1: 1,
+            val2: ((int)((uint)capacity).NextPowerOfTwo())
+        );
 
         m_capacity = rounded;
         m_mask = (rounded - 1);

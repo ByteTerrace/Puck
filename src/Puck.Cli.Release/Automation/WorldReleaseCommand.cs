@@ -93,7 +93,7 @@ public static class WorldReleaseCommand {
             if (!canonical.AsSpan().SequenceEqual(other: File.ReadAllBytes(path: definitionPath))) {
                 throw new InvalidDataException(message: $"definition '{relative}' is not a canonical composed world output; run 'puck world prepare' first");
             }
-            var identity = $"{row.Owner:D}/{row.World}";
+            var identity = row.RootKey;
 
             if (!definitions.TryAdd(
                 key: identity,
