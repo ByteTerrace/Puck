@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Diagnostics;
 using System.Globalization;
 using Puck.Confinement;
@@ -161,7 +162,7 @@ public static class MotionRun {
     /// past the arming margin, so Worlds that boot within a grid step of each other pin to the same ticks.</summary>
     /// <param name="bootTick">The tick the World had reached when its bakes settled and lockstep was on.</param>
     /// <returns>The start tick.</returns>
-    public static ulong StartFor(ulong bootTick) => ((((bootTick + ((ulong)ArmingMargin)) + (StartGrid - 1UL)) / StartGrid) * StartGrid);
+    public static ulong StartFor(ulong bootTick) => ((bootTick + ((ulong)ArmingMargin)).CeilingDivide(divisor: StartGrid) * StartGrid);
 
     private static MotionRunResult Fail(MotionRunRequest request, Stopwatch clock, string error, List<string> notes) => new(
         BootTick: 0UL,

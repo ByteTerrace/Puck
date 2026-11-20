@@ -33,7 +33,7 @@ public static class WorldReleaseExerciseCommand {
             )) {
                 throw new InvalidDataException(message: $"qualification capture refused for '{row.World}': {reason}");
             }
-            state[$"{row.Owner:D}/{row.World}"] = ContentPin.Compute(content: WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!)).ToString();
+            state[row.RootKey] = ContentPin.Compute(content: WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!)).ToString();
         }
         return state;
     }

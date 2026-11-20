@@ -334,14 +334,10 @@ public sealed partial class CompiledCurvatureSpline {
         );
     }
     private static long InvertArcTable(long[] table, long withinSegment) {
-        var lo = 0;
-        var hi = (table.Length - 1);
-
-        while (lo < hi) {
-            var mid = (((lo + hi) + 1) / 2);
-
-            if (table[mid] <= withinSegment) { lo = mid; } else { hi = (mid - 1); }
-        }
+        var lo = Math.Max(
+            val1: 0,
+            val2: (PartitionPoint.Of(span: table, state: withinSegment, isBefore: static (within, entry) => (entry <= within)) - 1)
+        );
 
         if (lo >= (table.Length - 1)) { return (1L << 32); }
 
@@ -392,15 +388,10 @@ public sealed partial class CompiledCurvatureSpline {
     private CurvatureSplineSample LookupAndSample(long local) {
         // Stations ascend strictly, so the last segment whose station is at or below the local arc length is found by
         // bisection over the same ascending table Compile wrote.
-        var lo = 0;
-        var hi = (m_segments.Length - 1);
-
-        while (lo < hi) {
-            var mid = (lo + (((hi - lo) + 1) >> 1));
-
-            if (local >= m_segments[mid].StationRaw) { lo = mid; } else { hi = (mid - 1); }
-        }
-
+        var lo = Math.Max(
+            val1: 0,
+            val2: (PartitionPoint.Of(span: m_segments, state: local, isBefore: static (at, entry) => (entry.StationRaw <= at)) - 1)
+        );
         var segment = m_segments[lo];
         var withinSegment = (local - segment.StationRaw);
         var t = InvertArcTable(

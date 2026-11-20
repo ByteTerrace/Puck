@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 
 namespace Puck.SdfVm;
@@ -50,8 +51,9 @@ public static class SdfMeshCollapse {
     /// <returns>The mesh with <see cref="SdfMesh.Levels"/> set; <paramref name="mesh"/> itself when it carries no vertex
     /// normals, no contour cell, members (whose draws no host box bounds, so none chooses a level), or no level saves
     /// enough (<see cref="KeptShare"/>).</returns>
+    /// <param name="owner">The workspace owner charged for the collapse's tables, or <see langword="null"/> for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
-    public static SdfMesh Levels(SdfMesh mesh, bool preserveFeatures = false) {
+    public static SdfMesh Levels(SdfMesh mesh, bool preserveFeatures = false, IAllocationObserver? owner = null) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
 
         var cell = MathF.Max(x: mesh.BakeCell.X, y: MathF.Max(x: mesh.BakeCell.Y, y: mesh.BakeCell.Z));
@@ -60,7 +62,8 @@ public static class SdfMeshCollapse {
             return mesh;
         }
 
-        var collapser = new Collapser(mesh: mesh, preserveFeatures: preserveFeatures);
+        using var scope = new RentedScope(owner: owner);
+        var collapser = new Collapser(mesh: mesh, preserveFeatures: preserveFeatures, scope: scope);
 
         if (preserveFeatures && !collapser.HasFeatures) { return mesh; }
         var levels = new List<SdfMeshLevel>(capacity: CellShares.Length);
@@ -113,6 +116,7 @@ public static class SdfMeshCollapse {
         // The samples: each one's vertex, material, distance and normal cosine at the triangle it is tracked to, and the
         // next sample tracked to the same triangle.
         private readonly int[] m_sampleVertex;
+        private readonly int m_sampleCount;
         private readonly uint[] m_sampleMaterial;
         private readonly double[] m_sampleDistance;
         private readonly int[] m_sampleNext;
@@ -121,11 +125,11 @@ public static class SdfMeshCollapse {
         // The line samples: each crease or material edge vertex and each such edge's midpoint, tracked to the edge of the
         // line it lies nearest now, keyed by the edge's places; and each one's distance there. A surface sample can sit
         // inside a triangle that fills a notch in a face's outline at no distance, so the line itself is measured.
-        private readonly List<double> m_lineX = [];
-        private readonly List<double> m_lineY = [];
-        private readonly List<double> m_lineZ = [];
-        private readonly List<double> m_lineDistance = [];
-        private readonly List<int> m_lineNext = [];
+        private readonly RentedList<double> m_lineX;
+        private readonly RentedList<double> m_lineY;
+        private readonly RentedList<double> m_lineZ;
+        private readonly RentedList<double> m_lineDistance;
+        private readonly RentedList<int> m_lineNext;
         private readonly Dictionary<long, (int First, int Last)> m_lines = new(comparer: PackedIntPairComparer.Instance);
 
         // Each triangle's bound on how far it strays from the mesh's own surface (zero for the mesh's own triangles).
@@ -171,7 +175,7 @@ public static class SdfMeshCollapse {
         private readonly List<int> m_seams = [];
         // Sorted targets in independent runs. A commit invalidates the old source fan and
         // the old target fan: every edge whose topology or endpoint quadric changed touches one of them.
-        private readonly List<(double Cost, int Place)> m_prices;
+        private readonly RentedList<(double Cost, int Place)> m_prices;
         private readonly (int Start, int Capacity, int Count, bool Ready)[] m_priceRuns;
         private readonly List<int> m_samples = [];
         private readonly List<(int Triangle, double Distance)> m_choices = [];
@@ -206,32 +210,35 @@ public static class SdfMeshCollapse {
         private OriginalTriangle[] m_previous = new OriginalTriangle[16];
         private int[] m_laid = new int[16];
 
-        public bool HasFeatures => (m_kind.Contains(value: Locked) || m_kind.Contains(value: Slides));
+        public bool HasFeatures => (m_kind.AsSpan(start: 0, length: m_places).Contains(value: Locked) || m_kind.AsSpan(start: 0, length: m_places).Contains(value: Slides));
 
-        public Collapser(SdfMesh mesh, bool preserveFeatures) {
+        // Every table is rented through the scope, which the caller disposes: a rented array can be longer than asked for, so
+        // each read is bounded by the place, triangle or sample count, never the array's length.
+        public Collapser(SdfMesh mesh, bool preserveFeatures, RentedScope scope) {
             m_lineLimit = (preserveFeatures ? (Math.Max(val1: mesh.BakeCell.X, val2: Math.Max(val1: mesh.BakeCell.Y, val2: mesh.BakeCell.Z)) / 8.0) : double.PositiveInfinity);
             var positions = mesh.Positions.Span;
             var indices = mesh.Indices.Span;
             var materials = mesh.TriangleMaterials.Span;
             var vertices = positions.Length;
             var sites = mesh.Sites();
-            m_placeOf = new int[vertices];
+            m_placeOf = scope.Rent<int>(minimumLength: vertices);
             for (var vertex = 0; vertex < vertices; vertex++) {
                 m_placeOf[vertex] = sites[vertex] == vertex ? m_places++ : m_placeOf[sites[vertex]];
             }
-            m_point = new Point[m_places];
+            m_point = scope.Rent<Point>(minimumLength: m_places);
             for (var vertex = 0; (vertex < vertices); vertex++) {
                 m_point[m_placeOf[vertex]] = new Point { X = positions[vertex].X, Y = positions[vertex].Y, Z = positions[vertex].Z };
             }
 
-            m_normals = mesh.Normals.ToArray();
+            m_normals = scope.Rent<Vector3>(minimumLength: mesh.Normals.Length);
+            mesh.Normals.Span.CopyTo(destination: m_normals);
             m_carriesMaterials = !materials.IsEmpty;
             m_triangles = mesh.TriangleCount;
-            m_corners = new int[(3 * m_triangles)];
-            m_cornerPlace = new int[(3 * m_triangles)];
-            m_materials = new uint[m_triangles];
-            m_alive = new bool[m_triangles];
-            for (var corner = 0; (corner < m_corners.Length); corner++) {
+            m_corners = scope.Rent<int>(minimumLength: (3 * m_triangles));
+            m_cornerPlace = scope.Rent<int>(minimumLength: (3 * m_triangles));
+            m_materials = scope.Rent<uint>(minimumLength: m_triangles);
+            m_alive = scope.Rent<bool>(minimumLength: m_triangles);
+            for (var corner = 0; (corner < (3 * m_triangles)); corner++) {
                 m_corners[corner] = ((int)indices[corner]);
                 m_cornerPlace[corner] = m_placeOf[m_corners[corner]];
             }
@@ -241,35 +248,40 @@ public static class SdfMeshCollapse {
                 m_aliveTriangles += (m_alive[triangle] ? 1 : 0);
             }
 
-            m_fanStart = new int[(m_places + 1)];
-            m_fan = new int[(3 * m_triangles)];
-            m_filled = new int[m_places];
-            m_touched = new int[m_places];
-            m_changed = new int[m_places];
-            m_revisions = new int[m_places];
-            m_stamp = new int[m_places];
-            m_fanEdges = new (int, int)[m_places];
-            m_afterFirst = new int[m_places];
-            m_afterCount = new int[m_places];
-            m_kind = new byte[m_places];
-            m_slideTargets = new int[(SlideTargets * m_places)];
-            m_slideCounts = new int[m_places];
-            m_prices = new(3 * m_triangles);
-            m_priceRuns = new (int, int, int, bool)[m_places];
-            m_candidateCosts = new double[m_places];
-            m_candidatePlaces = new int[m_places];
-            m_quadrics = new double[(10 * m_places)];
-            m_tracked = new int[m_triangles];
-            m_stray = new double[m_triangles];
-            Array.Fill(array: m_tracked, value: -1);
+            m_fanStart = scope.Rent<int>(minimumLength: (m_places + 1));
+            m_fan = scope.Rent<int>(minimumLength: (3 * m_triangles));
+            m_filled = scope.Rent<int>(minimumLength: m_places);
+            m_touched = scope.Rent<int>(minimumLength: m_places, clear: true);
+            m_changed = scope.Rent<int>(minimumLength: m_places, clear: true);
+            m_revisions = scope.Rent<int>(minimumLength: m_places, clear: true);
+            m_stamp = scope.Rent<int>(minimumLength: m_places, clear: true);
+            m_fanEdges = scope.Rent<(int, int)>(minimumLength: m_places);
+            m_afterFirst = scope.Rent<int>(minimumLength: m_places, clear: true);
+            m_afterCount = scope.Rent<int>(minimumLength: m_places, clear: true);
+            m_kind = scope.Rent<byte>(minimumLength: m_places, clear: true);
+            m_slideTargets = scope.Rent<int>(minimumLength: (SlideTargets * m_places), clear: true);
+            m_slideCounts = scope.Rent<int>(minimumLength: m_places, clear: true);
+            m_prices = scope.RentList<(double Cost, int Place)>(capacity: (3 * m_triangles));
+            m_priceRuns = scope.Rent<(int, int, int, bool)>(minimumLength: m_places, clear: true);
+            m_candidateCosts = scope.Rent<double>(minimumLength: m_places);
+            m_candidatePlaces = scope.Rent<int>(minimumLength: m_places);
+            m_quadrics = scope.Rent<double>(minimumLength: (10 * m_places), clear: true);
+            m_tracked = scope.Rent<int>(minimumLength: m_triangles);
+            m_stray = scope.Rent<double>(minimumLength: m_triangles, clear: true);
+            m_tracked.AsSpan(start: 0, length: m_triangles).Fill(value: -1);
+            m_lineX = scope.RentList<double>(capacity: ((m_places / 4) + 16));
+            m_lineY = scope.RentList<double>(capacity: ((m_places / 4) + 16));
+            m_lineZ = scope.RentList<double>(capacity: ((m_places / 4) + 16));
+            m_lineDistance = scope.RentList<double>(capacity: ((m_places / 4) + 16));
+            m_lineNext = scope.RentList<int>(capacity: ((m_places / 4) + 16));
 
             // A vertex's first material is a sample at once; only a vertex whose triangles carry a second material asks the
             // set, so the samples keep their first-corner order.
-            var firstMaterial = new uint[vertices];
-            var hasMaterial = new bool[vertices];
+            var firstMaterial = scope.Rent<uint>(minimumLength: vertices);
+            var hasMaterial = scope.Rent<bool>(minimumLength: vertices, clear: true);
             var sampleOf = new HashSet<(int Vertex, uint Material)>();
-            var sampleTriangles = new List<int>();
-            var sampleVertices = new List<int>();
+            var sampleTriangles = scope.RentList<int>(capacity: vertices);
+            var sampleVertices = scope.RentList<int>(capacity: vertices);
 
             for (var triangle = 0; (triangle < m_triangles); triangle++) {
                 if (!m_alive[triangle]) { continue; }
@@ -295,10 +307,12 @@ public static class SdfMeshCollapse {
 
             var samples = sampleTriangles.Count;
 
-            m_sampleVertex = [.. sampleVertices];
-            m_sampleMaterial = new uint[samples];
-            m_sampleDistance = new double[samples];
-            m_sampleNext = new int[samples];
+            m_sampleCount = samples;
+            m_sampleVertex = scope.Rent<int>(minimumLength: samples);
+            sampleVertices.AsSpan().CopyTo(destination: m_sampleVertex);
+            m_sampleMaterial = scope.Rent<uint>(minimumLength: samples);
+            m_sampleDistance = scope.Rent<double>(minimumLength: samples, clear: true);
+            m_sampleNext = scope.Rent<int>(minimumLength: samples);
             for (var sample = 0; (sample < samples); sample++) {
                 m_sampleMaterial[sample] = m_materials[sampleTriangles[sample]];
                 Track(sample: sample, triangle: sampleTriangles[sample]);
@@ -356,10 +370,10 @@ public static class SdfMeshCollapse {
 
             var largest = 0.0;
 
-            foreach (var distance in m_sampleDistance) {
+            foreach (var distance in m_sampleDistance.AsSpan(start: 0, length: m_sampleCount)) {
                 largest = Math.Max(val1: largest, val2: distance);
             }
-            foreach (var distance in m_lineDistance) {
+            foreach (var distance in m_lineDistance.AsSpan()) {
                 largest = Math.Max(val1: largest, val2: distance);
             }
             for (var triangle = 0; (triangle < m_triangles); triangle++) {
@@ -424,9 +438,9 @@ public static class SdfMeshCollapse {
                 if (count > run.Capacity) {
                     run.Start = m_prices.Count;
                     run.Capacity = Math.Max(count, 2 * run.Capacity);
-                    CollectionsMarshal.SetCount(m_prices, checked(run.Start + run.Capacity));
+                    _ = m_prices.Extend(count: run.Capacity);
                 }
-                var prices = CollectionsMarshal.AsSpan(m_prices).Slice(run.Start, count);
+                var prices = m_prices.AsSpan().Slice(run.Start, count);
                 for (var index = 0; index < count; index++) {
                     var target = m_targetPlaces[index];
                     prices[index] = (Cost(place, target), target);
@@ -435,7 +449,7 @@ public static class SdfMeshCollapse {
                 run.Count = count;
                 run.Ready = true;
             }
-            return CollectionsMarshal.AsSpan(m_prices).Slice(run.Start, run.Count);
+            return m_prices.AsSpan().Slice(run.Start, run.Count);
         }
 
         private bool Refused(int from, int to) {

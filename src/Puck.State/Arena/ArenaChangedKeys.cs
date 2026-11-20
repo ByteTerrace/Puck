@@ -1,4 +1,5 @@
 using Puck.Abstractions.Collections;
+using Puck.Maths;
 
 namespace Puck.State;
 
@@ -18,7 +19,7 @@ public sealed class ArenaChangedKeys {
     public void Mark(int row, int key = -1) {
         if (key < 0) { m_whole.Add(index: row); return; }
         if (row >= m_keys.Length) {
-            Array.Resize(array: ref m_keys, newSize: Math.Max(val1: 16, val2: (int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: (uint)(row + 1))));
+            Array.Resize(array: ref m_keys, newSize: Math.Max(val1: 16, val2: (int)((uint)(row + 1)).NextPowerOfTwo()));
         }
         (m_keys[row] ??= new MarkedIndexSet()).Add(index: key);
         m_keyedRows.Add(index: row);

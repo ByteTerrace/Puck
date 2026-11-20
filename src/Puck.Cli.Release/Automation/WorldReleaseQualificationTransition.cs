@@ -33,7 +33,7 @@ public sealed class WorldReleaseQualificationTransition(IObjectBlobStore blobs, 
         }
         var owner = definition.Worlds.Select(selector: row => row.Owner).Distinct().Single();
 
-        if (!definition.Worlds.Select(selector: row => $"{row.Owner:D}/{row.World}").ToHashSet(comparer: StringComparer.Ordinal).SetEquals(other: source.Definitions.Keys)) {
+        if (!definition.Worlds.Select(selector: row => row.RootKey).ToHashSet(comparer: StringComparer.Ordinal).SetEquals(other: source.Definitions.Keys)) {
             throw new InvalidDataException(message: "metadata qualification requires the complete release inventory");
         }
         await archive.VerifyAsync(
@@ -87,7 +87,7 @@ public sealed class WorldReleaseQualificationTransition(IObjectBlobStore blobs, 
                 throw new InvalidDataException(message: $"metadata qualification requires a drained checkpoint for '{row.World}'");
             }
             roots.Add(
-                key: $"{row.Owner:D}/{row.World}",
+                key: row.RootKey,
                 value: root.Pin
             );
         }
@@ -104,7 +104,7 @@ public sealed class WorldReleaseQualificationTransition(IObjectBlobStore blobs, 
         var machines = CliWorldVocabulary.EnsureInstalled();
 
         foreach (var row in definition.Worlds) {
-            var key = $"{row.Owner:D}/{row.World}";
+            var key = row.RootKey;
 
             if (source.Definitions[key] == target.Definitions[key]) { continue; }
             var applied = await authority.PrepareReleaseMetadataAsync(

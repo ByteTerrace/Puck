@@ -300,27 +300,30 @@ internal static class SdfDualContouring {
         var crossed = grid.CrossedFineCells;
         // Per crossed fine cell, by its fine key, its corner-sign mask and its first vertex.
         var fineCells = new Dictionary<long, (byte Mask, int Vertex)>(capacity: crossed.Length);
-        using var positions = new RentedList<double>(owner: grid.Workspace);
-        using var normals = new RentedList<double>(owner: grid.Workspace);
+        // Every crossed fine cell places at least one vertex, and few place more, so the lists start near their final size
+        // rather than growing by doubling from empty, which rents and returns an array at each step.
+        var vertexEstimate = (crossed.Length + (crossed.Length / 4) + 64);
+        using var positions = new RentedList<double>(capacity: (3 * vertexEstimate), owner: grid.Workspace);
+        using var normals = new RentedList<double>(capacity: (3 * vertexEstimate), owner: grid.Workspace);
         // Per vertex, the block whose fine vertices it merges with (OwnerOf, Block), or -1.
-        using var owners = new RentedList<int>(owner: grid.Workspace);
+        using var owners = new RentedList<int>(capacity: vertexEstimate, owner: grid.Workspace);
         // Per merging block, its low corner in fine lattice coordinates and its fine cells along each axis: an unmeasured
         // refined coarse cell, numbered by its coarse index, then the stride cells of measured cells of a stride past one,
         // numbered after the coarse cells as they are first met.
         var strideBlocks = new Dictionary<long, int>();
         var blocks = new List<(int X, int Y, int Z, int Size)>();
-        using var features = new RentedList<bool>(owner: grid.Workspace);
-        using var solveds = new RentedList<bool>(owner: grid.Workspace);
-        using var besides = new RentedList<bool>(owner: grid.Workspace);
+        using var features = new RentedList<bool>(capacity: vertexEstimate, owner: grid.Workspace);
+        using var solveds = new RentedList<bool>(capacity: vertexEstimate, owner: grid.Workspace);
+        using var besides = new RentedList<bool>(capacity: vertexEstimate, owner: grid.Workspace);
         // Per vertex, its crossings' mean in world space (Settle).
-        using var anchors = new RentedList<double>(owner: grid.Workspace);
+        using var anchors = new RentedList<double>(capacity: (3 * vertexEstimate), owner: grid.Workspace);
         // Per vertex, the way the lattice says its patch faces (SdfContourFacing.Patch).
-        using var patches = new RentedList<double>(owner: grid.Workspace);
+        using var patches = new RentedList<double>(capacity: (3 * vertexEstimate), owner: grid.Workspace);
         // Every merged fine vertex's crossings' tangent planes in world space (Place's worldPlanes), back to back in vertex
         // order, and per vertex where its planes start and end there: -1 for a vertex that records none.
-        using var planeData = new RentedList<double>(owner: grid.Workspace);
-        using var planeStarts = new RentedList<int>(owner: grid.Workspace);
-        using var planeEnds = new RentedList<int>(owner: grid.Workspace);
+        using var planeData = new RentedList<double>(capacity: (grid.CrossingNormals ? (8 * vertexEstimate) : 0), owner: grid.Workspace);
+        using var planeStarts = new RentedList<int>(capacity: vertexEstimate, owner: grid.Workspace);
+        using var planeEnds = new RentedList<int>(capacity: vertexEstimate, owner: grid.Workspace);
         // Per vertex whose crease lies past its cell, the crease's point in fine lattice coordinates (HandOff).
         using var handoffs = new RentedList<(int Vertex, double X, double Y, double Z)>(owner: grid.Workspace);
 

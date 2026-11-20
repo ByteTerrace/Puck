@@ -800,6 +800,10 @@
       },
       {
         "Type": "Puck.Maths.Fnv1aHash",
+        "Name": "Resume"
+      },
+      {
+        "Type": "Puck.Maths.Fnv1aHash",
         "Name": "Value"
       },
       {

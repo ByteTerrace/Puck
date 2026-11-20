@@ -162,6 +162,10 @@ internal static partial class LawRegistry {
             id: "integer.partition-point-vs-linear-scan"
         ),
         ClaimCase(
+            claim: Subjects.ExponentialBackoffSchedule,
+            id: "integer.exponential-backoff-schedule"
+        ),
+        ClaimCase(
             claim: Subjects.SequenceEqualityKeys,
             id: "sampling.sequence-equality-comparer"
         ),

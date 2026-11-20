@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Text;
 using Puck.State;
 using Puck.Transpiler.Ast;
@@ -20,7 +21,7 @@ public static partial class PuckPrinter {
         private int m_flat;
         // Each group's decision at the column it was decided at, so a group measured inside an enclosing group's
         // measure is laid out once.
-        private readonly Dictionary<(object Node, int Column), bool> m_fits = new(comparer: NodeAtColumn.Instance);
+        private readonly Dictionary<(ByReference<object> Node, int Column), bool> m_fits = new();
         // Whether each call's argument list keeps the layout its author broke (KeepsAuthoredLayout), by list.
         private readonly Dictionary<object, bool> m_keepsLayout = new(comparer: ReferenceEqualityComparer.Instance);
 
@@ -66,7 +67,7 @@ public static partial class PuckPrinter {
                 return true;
             }
 
-            var key = (node, Column());
+            (ByReference<object>, int) key = (node, Column());
 
             if (m_fits.TryGetValue(key: key, value: out var known)) {
                 return known;
@@ -348,12 +349,6 @@ public static partial class PuckPrinter {
         }
     }
 
-    private sealed class NodeAtColumn : IEqualityComparer<(object Node, int Column)> {
-        public static NodeAtColumn Instance { get; } = new();
-
-        public bool Equals((object Node, int Column) x, (object Node, int Column) y) => (ReferenceEquals(objA: x.Node, objB: y.Node) && (x.Column == y.Column));
-        public int GetHashCode((object Node, int Column) obj) => HashCode.Combine(value1: System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o: obj.Node), value2: obj.Column);
-    }
     // An operand's text on one line: a run of white space holding a line break becomes one space, or nothing just
     // inside a parenthesis or bracket, which is the text the printer's own breaks were taken from.
     private static string JoinedOperand(string text) {

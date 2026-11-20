@@ -145,6 +145,14 @@ public struct Fnv1aHash {
     public static Fnv1aHash Create() =>
         new() { m_hash = OffsetBasis, };
 
+    /// <summary>Creates an accumulator that continues from a digest an earlier accumulator produced, so its next fold
+    /// extends that sequence.</summary>
+    /// <param name="value">The digest to continue from: a <see cref="Value"/> read earlier, or the offset basis's own
+    /// digest of the empty sequence from <see cref="Create"/>.</param>
+    /// <returns>An accumulator whose <see cref="Value"/> is <paramref name="value"/>.</returns>
+    public static Fnv1aHash Resume(ulong value) =>
+        new() { m_hash = value, };
+
     /// <summary>Gets the current 64-bit hash value.</summary>
     public readonly ulong Value => m_hash;
 }

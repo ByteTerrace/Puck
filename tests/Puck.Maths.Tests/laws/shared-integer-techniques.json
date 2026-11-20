@@ -122,5 +122,21 @@
         "Shared": "", "Citation": "", "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "integer.exponential-backoff-schedule",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.ExponentialBackoff", "Name": "Next" },
+      { "Type": "Puck.Maths.ExponentialBackoff", "Name": "After" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical", "Flavor": "None",
+        "Subject": "ExponentialBackoff.Next and After: the capped doubling schedule from a first wait to a ceiling",
+        "Against": "The schedule 250, 500, 1000, 1000 written out by hand from the definition (twice the last wait, capped), a first wait above the ceiling, a doubling that would pass the carrier's top, and a failure count of int.MaxValue",
+        "Shared": "", "Citation": "", "Absolute": ""
+      }
+    ]
   }
 ]

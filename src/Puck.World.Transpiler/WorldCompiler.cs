@@ -280,12 +280,13 @@ internal static class WorldCompiler {
         using var rootOrigin = sourceMap.PushOrigin(sourcePath: sourcePath);
         var worlds = new List<WorldOutput>();
         var assets = ((sourcePath is null) ? null : new AssetCompilationContext(rootSourcePath: sourcePath, updateLock: updateAssets));
+        var documentDirectory = (basePath ?? ((sourcePath is null)
+            ? null
+            : Path.GetDirectoryName(path: sourcePath)));
         var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
             budget: budget,
             includeTests: includeTests,
-            basePath: (basePath ?? ((sourcePath is null)
-                ? null
-                : Path.GetDirectoryName(path: sourcePath))),
+            basePath: documentDirectory,
             cancellationToken: cancellationToken,
             diagnostics: diagnostics,
             discoveredEmbeddings: out var discovered,
@@ -309,16 +310,16 @@ internal static class WorldCompiler {
         assets?.Validate(diagnostics: diagnostics);
 
         if (worlds.Count == 0) {
-            WorldDocumentMembers.Canonicalize(document: loweringResult.Value, sourceMap: sourceMap, diagnostics: diagnostics);
+            WorldDocumentMembers.Canonicalize(document: loweringResult.Value, sourceMap: sourceMap, diagnostics: diagnostics, basePath: documentDirectory);
         } else {
             foreach (var world in worlds) {
-                WorldDocumentMembers.Canonicalize(document: world.Json, sourceMap: world.SourceMap, diagnostics: diagnostics);
+                WorldDocumentMembers.Canonicalize(document: world.Json, sourceMap: world.SourceMap, diagnostics: diagnostics, basePath: documentDirectory);
             }
         }
         // A generated test world composes the documents above; it takes their canonical form, and their refusals
         // were already reported against them.
         foreach (var test in testWorlds.Concat(second: worlds.SelectMany(selector: static world => world.TestWorlds)).Distinct()) {
-            WorldDocumentMembers.Canonicalize(document: test.Json, sourceMap: sourceMap, diagnostics: null);
+            WorldDocumentMembers.Canonicalize(document: test.Json, sourceMap: sourceMap, diagnostics: null, basePath: documentDirectory);
         }
 
         return new WorldCompilation(

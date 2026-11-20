@@ -121,11 +121,8 @@ public sealed partial class WorldInputRuntime {
         var slots = new int[catalog.Selectors.Length];
         var rows = new List<int>();
 
-        void Read(string? register, out int counterSlot) {
-            counterSlot = -1;
-            if ((register is null) || !WorldBodyStateReads.TryResolveSlot(definition: definition, kind: out var kind, name: register, slot: out var slot)) { return; }
-            if (kind == ActionStateKind.Counter) { counterSlot = slot; }
-            var row = lane.RowOrdinal(slot: slot);
+        void Watch(int slot) {
+            var row = ((slot >= 0) ? lane.RowOrdinal(slot: slot) : -1);
 
             if ((row >= 0) && !rows.Contains(item: row)) { rows.Add(item: row); }
         }
@@ -133,9 +130,13 @@ public sealed partial class WorldInputRuntime {
             var selector = catalog.Selectors[family];
 
             slots[family] = -1;
-            if (selector.Kind == WorldInputModeSelectorKind.BodyState) { Read(register: selector.Name, counterSlot: out slots[family]); }
+            if ((selector.Kind == WorldInputModeSelectorKind.BodyState) && (selector.Name is { } name) &&
+                WorldBodyStateReads.TryResolveSlot(definition: definition, kind: out var kind, name: name, slot: out var slot)) {
+                Watch(slot: slot);
+                if (kind == ActionStateKind.Counter) { slots[family] = slot; }
+            }
         }
-        Read(register: definition.Assignment.Select?.BodyState, counterSlot: out _);
+        Watch(slot: WorldBodyStateReads.PlanFor(definition: definition).KitSelect);
         m_selectorSlots = slots;
         m_selectionRows = [.. rows];
         m_planDefinition = definition;

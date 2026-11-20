@@ -390,11 +390,9 @@ Each is a rule above that Puck breaks today; the packet holds the work.
 - **Eager cold capture.** `WorldBody.CaptureMotion` zero-fills and fills the
   refusal snapshot on every rigid advance
   ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
-- **Linear scans per body.** `WorldBodyStateReads.TryResolveSlot` searches the
-  declared state by name ([source](../../../../src/Puck.World.Schema/WorldBodyStateReads.cs))
-  for every body on a one-body register change, and
-  `SdfMeshPathBake.IrradiancePending` walks every group each frame once the bake
-  has settled ([frame time](../../../../docs/plans/open-items.md#engine-job-system)).
+- **Linear scans per body.** `SdfMeshPathBake.IrradiancePending` walks every
+  group each frame once the bake has settled
+  ([frame time](../../../../docs/plans/open-items.md#engine-job-system)).
 
 ## Sources
 

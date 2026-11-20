@@ -86,128 +86,65 @@ public sealed class LoopbackTransport : IServerLink {
     /// entry count and its actor. <see langword="null"/> (the default) is a free pass-through.</summary>
     public Action<int, Principal>? UndoTap { get; set; }
 
-    // Mints the next envelope for the LOCAL connection (id 0, generation 0) — Sequence/CorrelationId both simple
-    // monotonic counters (see their own field remarks).
-    private long Submit(Principal principal, WorldSubmissionPayload payload, Guid operationId = default, Action<WorldSubmissionResult>? completion = null, WorldDeferredVerbRow? console = null) {
-        if (
-            (payload is WorldSubmissionPayload.Mutation) &&
-            (operationId == Guid.Empty)
-        ) {
+    // Only canonical payloads reach replay taps and the ordered submission domain.
+    private long Mint(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion, WorldDeferredVerbRow? console) {
+        if ((payload is WorldSubmissionPayload.Command) && InputMasked) { return 0; }
+        if ((payload is WorldSubmissionPayload.Mutation) && (operationId == Guid.Empty)) {
             completion?.Invoke(new WorldSubmissionResult.Refusal(
                 Code: "world.mutation.operation-id-missing",
                 Detail: "mutation operation id is required"
             ));
             return 0;
         }
-        if (TryNextEnvelope(
-            envelope: out var envelope,
-            failure: out var failure,
-            operationId: operationId,
-            payload: payload,
-            principal: principal
-        )) {
-            console?.Minted(correlationId: envelope.CorrelationId, payload: envelope.Payload);
-            try {
-                m_server.Submit(
-                    completion: completion,
-                    envelope: envelope
-                );
-            } finally {
-                console?.Submitted(correlationId: envelope.CorrelationId, payload: envelope.Payload);
+        if (!WorldFrameCodec.TryEncode(payload, operationId, out var frame, out var failure) ||
+            !WorldFrameCodec.TryDecode(frame, out var canonical, out var decodedId, out failure) ||
+            (canonical is null)) {
+            if (completion is null) {
+                Console.Error.WriteLine($"[world.codec refused: {failure}]");
+                console?.RefusedCodec();
+            } else {
+                completion(new WorldSubmissionResult.Refusal(
+                    Code: "world.transport.codec-refused",
+                    Detail: $"the submission could not be encoded or decoded: {failure}"
+                ));
             }
-
-            return envelope.CorrelationId;
+            return 0;
         }
 
-        RefuseCodec(
-            completion: completion,
-            console: console,
-            failure: failure
-        );
-        return 0;
-    }
-    // Reports a payload the canonical frame refused exactly once, naming the codec's own reason: as the submission's
-    // verdict when its caller takes one, which answers the submitting line, and on stderr only when nothing else
-    // would ever report it, where a console link's submission also counts it.
-    private static void RefuseCodec(WorldCodecFailure failure, Action<WorldSubmissionResult>? completion, WorldDeferredVerbRow? console) {
-        if (completion is null) {
-            Console.Error.WriteLine(value: $"[world.codec refused: {failure}]");
-            console?.RefusedCodec();
-
-            return;
-        }
-
-        completion(new WorldSubmissionResult.Refusal(
-            Code: "world.transport.codec-refused",
-            Detail: $"the submission could not be encoded or decoded: {failure}"
-        ));
-    }
-    // Encodes and decodes a typed payload, taps its canonical value with the envelope's principal, then submits it.
-    // The payload's concrete leaf type proves that decoding returned the expected union case.
-    private long SubmitTapped<TPayload, TValue>(TPayload payload, Principal principal, Func<TPayload, TValue> selectValue, Action<TValue, Principal>? tap, WorldDeferredVerbRow? console, Action<WorldSubmissionResult>? completion = null) where TPayload : WorldSubmissionPayload {
-        if (
-            TryNextEnvelope(
-            envelope: out var envelope,
-            failure: out var failure,
-            payload: payload,
-            principal: principal
-        ) &&
-            (envelope.Payload is TPayload canonical)
-        ) {
-            tap?.Invoke(
-                arg1: selectValue(arg: canonical),
-                arg2: envelope.Principal
-            );
-            console?.Minted(correlationId: envelope.CorrelationId, payload: envelope.Payload);
-            try {
-                m_server.Submit(completion: completion, envelope: envelope);
-            } finally {
-                console?.Submitted(correlationId: envelope.CorrelationId, payload: envelope.Payload);
-            }
-
-            return envelope.CorrelationId;
-        }
-
-        RefuseCodec(
-            completion: completion,
-            console: console,
-            failure: failure
-        );
-        return 0;
-    }
-    // The ALWAYS-BYTES rule: even the in-process link is defined by the same canonical frame a future socket carries.
-    // A refusal is a transport verdict printed by name; invalid caller state never escapes as an invariant exception.
-    private bool TryNextEnvelope(Principal principal, WorldSubmissionPayload payload, out SubmissionEnvelope envelope, out WorldCodecFailure failure, Guid operationId = default) {
-        if (
-            !WorldFrameCodec.TryEncode(
-            failure: out failure,
-            frame: out var frame,
-            operationId: operationId,
-            payload: payload
-        ) ||
-            !WorldFrameCodec.TryDecode(
-            failure: out failure,
-            frame: frame,
-            operationId: out var decodedOperationId,
-            payload: out var decoded
-        ) ||
-            (decoded is null)
-        ) {
-            envelope = default;
-            return false;
-        }
-
-        envelope = new SubmissionEnvelope(
+        var envelope = new SubmissionEnvelope(
             ConnectionId: SubmissionEnvelope.LocalConnectionId,
             SessionGeneration: 0,
             Sequence: ++m_sequence,
             CorrelationId: ++m_correlationId,
             Principal: principal,
-            Payload: decoded,
-            OperationId: decodedOperationId
+            Payload: canonical,
+            OperationId: decodedId
         );
 
-        return true;
+        Tap(envelope);
+        console?.Minted(correlationId: envelope.CorrelationId, payload: canonical);
+        try {
+            m_server.Submit(completion: completion, envelope: envelope);
+        } finally {
+            console?.Submitted(correlationId: envelope.CorrelationId, payload: canonical);
+        }
+
+        return envelope.CorrelationId;
+    }
+
+    // Record the submitted values before the authority decides their verdict. Mutation and screen op taps run
+    // on the server, which also sees those submissions from socket peers and forwarded travelers.
+    private void Tap(in SubmissionEnvelope envelope) {
+        switch (envelope.Payload) {
+            case WorldSubmissionPayload.Command command: CommandTap?.Invoke(command.Value); break;
+            case WorldSubmissionPayload.Composition composition: CompositionTap?.Invoke(composition.Value, envelope.Principal); break;
+            case WorldSubmissionPayload.Designation designation: DesignationTap?.Invoke(designation.Value, envelope.Principal); break;
+            case WorldSubmissionPayload.Grant grant: GrantTap?.Invoke(grant.Value, envelope.Principal); break;
+            case WorldSubmissionPayload.Revoke revoke: RevokeTap?.Invoke(revoke.Value, envelope.Principal); break;
+            case WorldSubmissionPayload.Undo undo: UndoTap?.Invoke(undo.Count, envelope.Principal); break;
+            case WorldSubmissionPayload.Query query: QueryTap?.Invoke(query.Value, envelope.Principal); break;
+            case WorldSubmissionPayload.Session session: SessionTap?.Invoke(session.Value); break;
+        }
     }
 
     /// <inheritdoc/>
@@ -223,40 +160,13 @@ public sealed class LoopbackTransport : IServerLink {
     public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) {
         ArgumentNullException.ThrowIfNull(argument: completion);
 
-        // Queries carry no principal of their own; the envelope is the identity coordinate, so a local query crosses
-        // the same Observe check and session admission as a wire peer's.
-        if (TryNextEnvelope(
-            principal: principal,
-            payload: new WorldSubmissionPayload.Query(Value: query),
-            envelope: out var envelope,
-            failure: out var failure
-        )) {
-            if (envelope.Payload is WorldSubmissionPayload.Query canonical) {
-                QueryTap?.Invoke(
-                    arg1: canonical.Value,
-                    arg2: envelope.Principal
-                );
-            }
-
-            m_server.Submit(
-                envelope: envelope,
-                completion: result => completion(((WorldSubmissionResult.Query)result).Answer)
-            );
-        } else {
-            completion(new QueryAnswer(
-                Refused: true,
-                Text: $"loopback codec refused the query payload: {failure}"
-            ));
-        }
+        // The envelope stamps the identity used for Observe and session admission.
+        _ = Mint(new WorldSubmissionPayload.Query(query), principal, Guid.Empty, result => completion(result switch {
+            WorldSubmissionResult.Query queryResult => queryResult.Answer,
+            WorldSubmissionResult.Refusal refusal => new QueryAnswer(Text: refusal.Detail, Refused: true),
+            _ => throw new InvalidOperationException("unexpected loopback query completion"),
+        }), console: null);
     }
-    // The one abstract member every fire-and-forget Submit* interface default forwards to — a switch over the
-    // payload's own leaf type recovers the per-kind tap dispatch SubmitTapped's generic signature needs (the payload
-    // arriving here is already the leaf IServerLink's own default methods constructed, so the type test always
-    // matches its case). Rebuild and Lever carry no capture point at all (not replay-relevant simulation input).
-    // A ScreenOp is taped with its authority outcome, which is known only at apply time, so WorldServer.ScreenOpTap
-    // (fired from inside its own apply method) is the tape's capture point instead. Mutation is likewise tapped at the server's own envelope dispatch
-    // (WorldServer.MutationTap), the one ingress the loopback, an admitted socket peer, and a forwarded traveller's
-    // submission all share.
     /// <inheritdoc/>
     public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => SubmitEnvelope(
         completion: null,
@@ -293,97 +203,8 @@ public sealed class LoopbackTransport : IServerLink {
         );
     }
 
-    internal long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion, WorldDeferredVerbRow? console) {
-        switch (payload) {
-            // CommandTap is single-arg (Action<WorldCommand>, no principal), unlike the two-arg taps below —
-            // inlined rather than forced through SubmitTapped's Action<TValue, Principal> shape.
-            case WorldSubmissionPayload.Command command:
-                if (InputMasked) {
-                    return 0;
-                }
-
-                if (
-                    TryNextEnvelope(
-                    envelope: out var commandEnvelope,
-                    failure: out var commandFailure,
-                    operationId: operationId,
-                    payload: command,
-                    principal: principal
-                ) &&
-                    (commandEnvelope.Payload is WorldSubmissionPayload.Command canonicalCommand)
-                ) {
-                    CommandTap?.Invoke(obj: canonicalCommand.Value);
-                    console?.Minted(correlationId: commandEnvelope.CorrelationId, payload: commandEnvelope.Payload);
-                    try {
-                        m_server.Submit(envelope: commandEnvelope);
-                    } finally {
-                        console?.Submitted(correlationId: commandEnvelope.CorrelationId, payload: commandEnvelope.Payload);
-                    }
-
-                    return commandEnvelope.CorrelationId;
-                }
-                RefuseCodec(
-                    completion: completion,
-                    console: console,
-                    failure: commandFailure
-                );
-                return 0;
-            case WorldSubmissionPayload.Composition composition:
-                return SubmitTapped<WorldSubmissionPayload.Composition, WorldComposition>(
-                    payload: composition,
-                    principal: principal,
-                    console: console,
-                    selectValue: static p => p.Value,
-                    tap: CompositionTap
-                );
-            case WorldSubmissionPayload.Designation designation:
-                return SubmitTapped<WorldSubmissionPayload.Designation, WorldDesignation>(
-                    payload: designation,
-                    principal: principal,
-                    console: console,
-                    selectValue: static p => p.Value,
-                    tap: DesignationTap
-                );
-            // The tap fires before the envelope reaches the server, which is where WorldGrants.Conflicts actually
-            // rules — so the tape records the submitted grant, including one the door goes on to refuse. That is
-            // deliberate: replay re-applies a Grant entry through this identical door (WorldReplaySnapshot.Replay
-            // calls server.Grant, never a bypass), so a refusal on tape reproduces as the identical refusal on
-            // replay rather than silently vanishing or silently becoming accepted.
-            case WorldSubmissionPayload.Grant grant:
-                return SubmitTapped<WorldSubmissionPayload.Grant, WorldGrant>(
-                    payload: grant,
-                    principal: principal,
-                    console: console,
-                    selectValue: static p => p.Value,
-                    tap: GrantTap
-                );
-            case WorldSubmissionPayload.Revoke revoke:
-                return SubmitTapped<WorldSubmissionPayload.Revoke, WorldGrant>(
-                    payload: revoke,
-                    principal: principal,
-                    console: console,
-                    selectValue: static p => p.Value,
-                    tap: RevokeTap
-                );
-            case WorldSubmissionPayload.Undo undo:
-                return SubmitTapped<WorldSubmissionPayload.Undo, int>(
-                    payload: undo,
-                    principal: principal,
-                    selectValue: static p => p.Count,
-                    completion: completion,
-                    console: console,
-                    tap: UndoTap
-                );
-            default:
-                return Submit(
-                    completion: completion,
-                    console: console,
-                    operationId: operationId,
-                    payload: payload,
-                    principal: principal
-                );
-        }
-    }
+    internal long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion, WorldDeferredVerbRow? console) =>
+        Mint(payload, principal, operationId, completion, console);
 
     /// <inheritdoc/>
     public void SubmitIntent(in IntentSubmission submission) {
@@ -398,27 +219,10 @@ public sealed class LoopbackTransport : IServerLink {
     public void SubmitSession(SessionRequest request, Action<SessionReply> completion) {
         ArgumentNullException.ThrowIfNull(argument: completion);
 
-        if (
-            TryNextEnvelope(
-            principal: request.Principal,
-            payload: new WorldSubmissionPayload.Session(Value: request),
-            envelope: out var envelope,
-            failure: out var failure
-        ) &&
-            (envelope.Payload is WorldSubmissionPayload.Session canonical)
-        ) {
-            SessionTap?.Invoke(obj: canonical.Value);
-            m_server.Submit(
-                envelope: envelope,
-                completion: result => completion(((WorldSubmissionResult.Session)result).Reply)
-            );
-        } else {
-            completion(new SessionReply(
-                Accepted: false,
-                AssignedIndex: -1,
-                Reason: $"loopback codec refused the session payload: {failure}",
-                RosterEcho: string.Empty
-            ));
-        }
+        _ = Mint(new WorldSubmissionPayload.Session(request), request.Principal, Guid.Empty, result => completion(result switch {
+            WorldSubmissionResult.Session session => session.Reply,
+            WorldSubmissionResult.Refusal refusal => new SessionReply(Accepted: false, AssignedIndex: -1, Reason: refusal.Detail, RosterEcho: string.Empty),
+            _ => throw new InvalidOperationException("unexpected loopback session completion"),
+        }), console: null);
     }
 }

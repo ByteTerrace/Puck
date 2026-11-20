@@ -693,10 +693,6 @@ public class EmitterSugarTests {
     }
     [Fact]
     public void SecondsFieldConvertsMillisecondsToSeconds() {
-        // `schedule ... in` itself requires the 's' suffix (PUCK010) — ms only reaches the ordinary
-        // property/call-argument layer the unit-dimension table governs, so this exercises the conversion through
-        // `periodSeconds` instead (§5's own worked example: `schedule respawnAt in 500ms` -> `delaySeconds: 0.5`
-        // describes the *value*, not `schedule`'s own required-unit grammar).
         var (json, diagnostics) = WorldSources.Lower(body: """
             rule "r" {
                 claimTicks = 0

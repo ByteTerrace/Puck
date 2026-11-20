@@ -179,21 +179,24 @@ internal sealed class SdfMeshMaterialCut {
 
     /// <summary>Builds the mesh once every round is answered: each quad by the quarter rule, or cut along its boundary
     /// where its vertices disagree.</summary>
+    /// <param name="owner">The workspace owner charged for the mesh's working lists, or <see langword="null"/> for none.</param>
     /// <returns>The mesh, in the frame the contour is in; <see langword="null"/> for a contour with no quad.</returns>
     /// <exception cref="InvalidOperationException">The mesh grows past <see cref="MaxTrianglesPerQuad"/> triangles or
     /// <see cref="MaxVerticesPerQuad"/> added vertices for each contour quad. The contour bounds the lists, so a cut that
     /// does not end fails its group by name instead of taking the process.</exception>
-    public SdfMesh? Build() {
+    public SdfMesh? Build(IAllocationObserver? owner = null) {
         var contour = m_contour;
 
         if (contour.QuadCount == 0) { return null; }
 
-        var positions = new List<Vector3>(capacity: (contour.VertexCount + m_edges.Count));
-        var sites = new List<int>(positions.Capacity);
+        // The lists are working storage the output arrays are copied from, rented so the next group's cut reuses them.
+        using var scope = new RentedScope(owner: owner);
+        var positions = scope.RentList<Vector3>(capacity: (contour.VertexCount + m_edges.Count));
+        var sites = scope.RentList<int>(capacity: (contour.VertexCount + m_edges.Count));
         var addedSites = new SdfMeshWeld(m_edges.Count);
-        var normals = new List<Vector3>(capacity: (contour.VertexCount + m_edges.Count));
-        var indices = new List<uint>(capacity: (6 * contour.QuadCount));
-        var triangleMaterials = new List<uint>(capacity: (2 * contour.QuadCount));
+        var normals = scope.RentList<Vector3>(capacity: (contour.VertexCount + m_edges.Count));
+        var indices = scope.RentList<uint>(capacity: (6 * contour.QuadCount));
+        var triangleMaterials = scope.RentList<uint>(capacity: (2 * contour.QuadCount));
         var triangleLimit = (((long)MaxTrianglesPerQuad) * contour.QuadCount);
         var vertexLimit = (contour.VertexCount + (((long)MaxVerticesPerQuad) * contour.QuadCount));
 

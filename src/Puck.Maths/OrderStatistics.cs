@@ -51,35 +51,51 @@ public static class OrderStatistics {
         return ascending[((int)Math.Max(val1: 1L, val2: rank) - 1)];
     }
 
-    /// <summary>Selects the median in place. Equal values occupy a single partition.</summary>
-    public static float SelectMedian(Span<float> samples) {
-        if (samples.IsEmpty) { throw new ArgumentException("A median needs at least one sample.", nameof(samples)); }
-        var middle = samples.Length / 2;
+    /// <summary>Selects the value of a rank in place: the value that would sit at <paramref name="rank"/> were
+    /// <paramref name="values"/> sorted ascending. Introselect: a three-way partition about a middle pivot keeps the side
+    /// holding the rank, so equal values occupy a single partition, and a depth bound of twice the base-2 logarithm of the
+    /// length falls back to a sort, so no input is quadratic.</summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="values">The values; on return every value before <paramref name="rank"/> is no greater than the result
+    /// and every value after it is no smaller.</param>
+    /// <param name="rank">The zero-based rank, below the length.</param>
+    /// <returns>The value at <paramref name="rank"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rank"/> is negative or not below the length.</exception>
+    public static T Select<T>(Span<T> values, int rank) where T : IComparable<T> {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: rank);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: rank, other: values.Length);
+
         var low = 0;
-        var high = samples.Length;
-        var depth = 2 * BitOperations.Log2((uint)samples.Length);
+        var high = values.Length;
+        var depth = 2 * BitOperations.Log2((uint)values.Length);
         while (high - low > 1) {
-            if (depth-- == 0) { samples[low..high].Sort(); break; }
-            var pivot = samples[low + ((high - low) / 2)];
+            if (depth-- == 0) { values[low..high].Sort(); break; }
+            var pivot = values[low + ((high - low) / 2)];
             var left = low;
             var right = high;
             var cursor = low;
             while (cursor < right) {
-                var order = samples[cursor].CompareTo(pivot);
+                var order = values[cursor].CompareTo(pivot);
                 if (order < 0) {
-                    (samples[left], samples[cursor]) = (samples[cursor], samples[left]);
+                    (values[left], values[cursor]) = (values[cursor], values[left]);
                     left++;
                     cursor++;
                 } else if (order > 0) {
                     right--;
-                    (samples[right], samples[cursor]) = (samples[cursor], samples[right]);
+                    (values[right], values[cursor]) = (values[cursor], values[right]);
                 } else { cursor++; }
             }
-            if (middle < left) { high = left; }
-            else if (middle >= right) { low = right; }
+            if (rank < left) { high = left; }
+            else if (rank >= right) { low = right; }
             else { break; }
         }
-        var upper = samples[middle];
+        return values[rank];
+    }
+    /// <summary>Selects the median in place. Equal values occupy a single partition.</summary>
+    public static float SelectMedian(Span<float> samples) {
+        if (samples.IsEmpty) { throw new ArgumentException("A median needs at least one sample.", nameof(samples)); }
+        var middle = samples.Length / 2;
+        var upper = Select(values: samples, rank: middle);
         if ((samples.Length & 1) != 0) { return upper; }
         var lower = samples[0];
         foreach (var value in samples[1..middle]) { if (value.CompareTo(lower) > 0) { lower = value; } }

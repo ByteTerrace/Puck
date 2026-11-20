@@ -730,8 +730,6 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // Each searched crossing edge's root, in m_crossingKeys' order (its edge's CrossingData.RootPlusOne names it).
     private readonly OwnedBuffer<CrossingRoot> m_crossingRoots;
 
-    // Each crossing edge's row in m_crossingKeys and m_crossingData, by its CrossingKey.
-    private readonly Dictionary<long, int> m_crossingIndex = [];
     private readonly OwnedBuffer<long> m_pendingCrossings;
 
     // The indices in m_crossingRoots of m_pendingCrossings' edges, in its order.
@@ -2090,9 +2088,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var fineY = ((cellsY * factor) + 1);
         var fineSamples = (((long)fineX) * fineY * ((cellsZ * factor) + 1));
         // The samples listed, in the order first listed, and a bit a fine sample marking those already listed.
-        using var seenLease = RentedArrays.Rent<ulong>(array: out var seen, minimumLength: ((int)((fineSamples + 63L) >> 6)), owner: m_observer);
+        var seenWords = ((int)fineSamples.CeilingDivide(divisor: 64L));
+        using var seenLease = RentedArrays.Rent<ulong>(array: out var seen, minimumLength: seenWords, owner: m_observer);
 
-        seen.AsSpan(start: 0, length: ((int)((fineSamples + 63L) >> 6))).Clear();
+        seen.AsSpan(start: 0, length: seenWords).Clear();
         // The keys are listed where they stay, in the lattice's own buffer.
         m_gradientKeys.Resize(length: 0, clear: false, preserve: false);
 
@@ -2158,7 +2157,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // A fine answer lands at its sample's slot and a crossing's in its edge's row (CrossingEdges sized those): size the
         // slots once rather than growing them answer by answer.
         m_fineGradients.Resize(m_fineValues.Length, clear: false, preserve: false);
-        m_gradientAnswered.Resize((m_fineValues.Length + 63) >> 6);
+        m_gradientAnswered.Resize(m_fineValues.Length.CeilingDivide(divisor: 64));
 
         m_points.Resize(length: (listed + m_crossingKeys.Length), clear: false, preserve: false);
 
@@ -2689,11 +2688,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         sorted.Sort();
         m_crossingKeys.Resize(length: SpanDistinct.Sorted(sorted), clear: false);
         m_crossingData.Resize(m_crossingKeys.Length);
-        m_crossingIndex.EnsureCapacity(m_crossingKeys.Length);
         for (var index = 0; index < m_crossingKeys.Length; index++) {
             var key = m_crossingKeys[index];
             var (start, axis, length) = CrossingEdge(key);
-            m_crossingIndex.Add(key, index);
             m_crossingData[index] = new CrossingData { Closed = Closed(start) || Closed(EdgeEnd(start: start, axis: axis, length: length)) };
         }
     }
@@ -2707,7 +2704,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var fineY = (((m_samplesY - 1) * m_factor) + 1);
         var start = (x + (fineX * (y + (fineY * z))));
 
-        index = m_crossingIndex.GetValueOrDefault(CrossingKey(start, axis, length), -1);
+        // A crossing edge's row is its key's place in the sorted distinct keys, which also order m_crossingData.
+        index = m_crossingKeys.GetSpan().BinarySearch(CrossingKey(start, axis, length));
+        if (index < 0) { index = -1; }
         if (index >= 0 && m_crossingData[index].RootPlusOne is > 0 and var root) { return m_crossingRoots[root - 1].Position; }
         var va = FineValue(x: x, y: y, z: z);
         var vb = FineValue(x: (x + ((axis == 0) ? length : 0)), y: (y + ((axis == 1) ? length : 0)), z: (z + ((axis == 2) ? length : 0)));
@@ -2816,13 +2815,21 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // such a corner.
         var solved = contour.Solved;
         HashSet<long>? taken = null;
+        var claimants = 0;
 
+        // The set holds at most one entry per quad that can claim a diagonal, so it is sized once, not grown by doubling.
+        for (var quad = 0; (quad < contour.QuadCount); quad++) {
+            var at = (4 * quad);
+            var (a, c, d) = (quads[at], quads[(at + 2)], quads[(at + 3)]);
+
+            if ((c != d) && (((a < solved.Length) && solved[a]) || ((c < solved.Length) && solved[c]))) { claimants++; }
+        }
         for (var quad = 0; (quad < contour.QuadCount); quad++) {
             var at = (4 * quad);
             var (a, b, c, d) = (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]);
 
             if ((c == d) || !(((a < solved.Length) && solved[a]) || ((c < solved.Length) && solved[c]))) { continue; }
-            taken ??= new HashSet<long>(comparer: PackedIntPairComparer.Instance);
+            taken ??= new HashSet<long>(capacity: (claimants + (claimants >> 2)), comparer: PackedIntPairComparer.Instance);
             if (taken.Add(item: PackedIntPair.Pack(high: Math.Min(val1: a, val2: c), low: Math.Max(val1: a, val2: c)))) { continue; }
             if ((quad < contour.QuadAxes.Length) && !SdfContourFacing.Splits(axis: contour.QuadAxes[quad], patches: contour.Patches, positions: contour.Positions, quad: quads.AsSpan(length: 4, start: at)).Second) { continue; }
             if (taken.Add(item: PackedIntPair.Pack(high: Math.Min(val1: b, val2: d), low: Math.Max(val1: b, val2: d)))) {
@@ -3193,7 +3200,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         if (m_factor == 1) { return (Values[key] < 0f); }
         if (m_signKnown.Length == 0) {
             var count = ((((long)(((m_samplesX - 1) * m_factor) + 1)) * (((m_samplesY - 1) * m_factor) + 1)) * (((m_samplesZ - 1) * m_factor) + 1));
-            var words = ((int)((count + 63L) >> 6));
+            var words = ((int)count.CeilingDivide(divisor: 64L));
 
             m_signKnown.Resize(words);
             m_signInside.Resize(words);

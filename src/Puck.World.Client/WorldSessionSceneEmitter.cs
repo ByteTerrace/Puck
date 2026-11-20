@@ -105,15 +105,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private WorldStateMirror? m_bakedColorsMirror;
     private int m_bakedColorRevision;
     // A counter moved when a stamped body's live scale moves, so the stamps bake it (WorldBodyStampCensus.TryTakeMove).
-    private int m_articulatedRevision;
+    private readonly WorldCatalogBand m_catalog;
 
-    private (int Body, string Hash, float Scale, WorldLook Look)[] m_articulated = [];
-
-    private int m_catalogRevision;
-
-    private (int Body, int Rig, WorldLook Look, Vector3 Color)[] m_catalogImage = [];
-    // The destination's stamp pool, packed past the avatar catalog's slots, the source it roots on, its creation-stamp
-    // census, and the mesh draws: the static placements' the last live Emit fixed, then the pool's.
     private readonly WorldBodyStampCensus m_census = new();
 
     private readonly WorldSceneMeshDraws m_meshDraws;
@@ -195,6 +188,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_fieldOfViewRadians = fieldOfViewRadians;
         m_meshDraws = new WorldSceneMeshDraws(pool: m_pool);
         m_source = new WorldSessionStampSource(mirror: mirror);
+        m_catalog = new WorldCatalogBand(HoldsAvatar, index => (mirror.CatalogRig(index), m_source.Look(index), m_bodyColor(index)));
         m_deliveredShadows.SetSettings(settings: (shadowSettings?.Invoke() ?? WorldShadowSettings.From(render: mirror.Definition.Render)));
         m_shadowObservation = mirror.ObserveDeliveredState(observer: (definition, revision, state) => {
             if (m_shadowSettings is null) { m_deliveredShadows.SetSettings(settings: WorldShadowSettings.From(render: definition.Render)); }
@@ -316,7 +310,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         WorldRigCatalog.Emit(
             builder: builder,
             isActive: HoldsAvatar,
-            slotFor: index => m_catalogSlots[index],
+            slotFor: index => m_catalog.Slots[index],
             bodyMaterials: bodyMaterials,
             accentMaterials: accentMaterials,
             slotBase: slotBase,
@@ -624,7 +618,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_pool.Emit(
             builder: builder,
             colors: colors,
-            slotBase: (context.SlotBase + m_catalogSlotCount),
+            slotBase: (context.SlotBase + m_catalog.SlotCount),
             picks: m_picks
         );
 
@@ -661,22 +655,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var alpha = m_mirror.InterpolationAlpha;
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (m_catalogSlots[index] < 0) { continue; }
+            if (m_catalog.Slots[index] < 0) { continue; }
             if (!HoldsAvatar(index: index)) {
-                m_avatarGaits[index].Seeded = false;
-
-                if (m_avatarOwners.Vacate(
-                    moved: moved,
-                    owner: index
-                )) {
-                    WorldTransformOwners.Park(
-                        count: WorldRigCatalog.TransformSlotsPerBody,
-                        start: (context.SlotBase + m_catalogSlots[index]),
-                        moved: moved,
-                        parkPosition: context.ParkPosition,
-                        table: slots
-                    );
-                }
+                WorldMirroredAvatarBand.Park(
+                    m_avatarOwners, index, ref m_avatarGaits[index], moved, slots,
+                    (context.SlotBase + m_catalog.Slots[index]), context.ParkPosition
+                );
 
                 continue;
             }
@@ -709,7 +693,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             WorldMirroredAvatarBand.Pack(
                 avatar: index,
                 catalogBase: context.SlotBase,
-                firstSlot: m_catalogSlots[index],
+                firstSlot: m_catalog.Slots[index],
                 gait: in m_avatarGaits[index],
                 gaitAmplitude: m_emittedGaitAmplitudes[index],
                 moved: moved,
@@ -732,7 +716,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             client: m_source,
             moved: moved,
             parkPosition: context.ParkPosition,
-            slotBase: (context.SlotBase + m_catalogSlotCount),
+            slotBase: (context.SlotBase + m_catalog.SlotCount),
             transforms: slots
         );
     }
@@ -850,31 +834,6 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         return true;
     }
 
-    /// <summary>Writes five components, never their sum: the definition-delivery revision, the mirrored snapshot's
-    /// declared-set/palette revision (<see cref="WorldSessionMirror.SnapshotRevision"/>, assigned from the wire and
-    /// able to move down), a counter that moves when a bound color the live build baked moves in the session's state
-    /// mirror (<see cref="WorldBakedColors.TryTakeMove"/>, as <c>WorldSceneEmitter.WriteRevision</c> does for the local
-    /// world), and a counter that moves when a stamped body's live scale moves
-    /// (<see cref="WorldBodyStampCensus.TryTakeMove"/>), and the host's avatar colors — the same non-summing rule <see cref="WorldClient.WriteRevision"/> documents for the
-    /// identical reason: a rebuild must never be maskable by two counters moving in opposite directions.</summary>
-    private readonly int[] m_catalogSlots = new int[WorldBodiesLimits.CapacityCeiling];
-
-    private int m_catalogSlotCount;
-
-    private void PrepareCatalog() {
-        m_catalogSlotCount = 0;
-        Array.Fill(m_catalogSlots, -1);
-        for (var body = 0; (body < m_catalogSlots.Length); body++) {
-            if (!HoldsAvatar(body)) { continue; }
-            m_catalogSlots[body] = m_catalogSlotCount;
-            m_catalogSlotCount += WorldRigCatalog.TransformSlotsPerBody;
-        }
-        var image = Enumerable.Range(0, m_catalogSlots.Length).Where(index => (m_catalogSlots[index] >= 0))
-            .Select(index => (index, ((int)m_mirror.CatalogRig(index)), m_mirror.Look(index), m_bodyColor(index))).ToArray();
-
-        if (!m_catalogImage.AsSpan().SequenceEqual(image)) { m_catalogImage = image; m_catalogRevision++; }
-    }
-
     private int m_preparedDefinition = int.MinValue;
     private int m_preparedSnapshot = int.MinValue;
 
@@ -897,20 +856,20 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var definition = Scoped(m_mirror.Definition);
 
         m_census.Refresh(m_source);
-        var articulated = ((m_onlyPrototypes is null) ? m_census.Stamps : []).Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).Select(stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
-
-        if (!m_articulated.AsSpan().SequenceEqual(articulated)) { m_articulated = articulated; m_articulatedRevision++; }
+        var stamps = (m_onlyPrototypes is null) ? m_census.Stamps : [];
+        m_catalog.ObserveArticulation(stamps);
         m_pool.Rigid.ReconcileStatic(definition, definition.Placements);
-        m_pool.Reconcile(definition.PlacementFrames, definition.Placements, definition.Creations, definition.Dynamics, ((m_onlyPrototypes is null) ? m_census.Stamps : []), definition.Looks);
-        PrepareCatalog();
+        m_pool.Reconcile(definition.PlacementFrames, definition.Placements, definition.Creations, definition.Dynamics, stamps, definition.Looks);
+        m_catalog.Prepare();
     }
 
     public IReadOnlyList<int> MeshAssetSlots => m_pool.Rigid.Slots;
     public IReadOnlyList<SdfMeshInstance> MeshInstances => m_pool.Rigid.Copies;
 
+    /// <summary>Writes each rebuild revision independently so opposing moves cannot mask a change.</summary>
     public void WriteRevision(Span<int> destination) {
         destination[0] = m_mirror.DefinitionRevision;
-        destination[1] = m_articulatedRevision;
+        destination[1] = m_catalog.ArticulatedRevision;
 
         if (BakedColors().TryTakeMove()) {
             m_bakedColorRevision++;
@@ -918,7 +877,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         destination[2] = m_bakedColorRevision;
 
-        destination[3] = m_catalogRevision;
+        destination[3] = m_catalog.Revision;
         if (m_bodyColors is { } colors) {
             for (var index = 0; (index < colors.Length); index++) {
                 if (!m_mirror.IsActive(index: index)) {
@@ -956,7 +915,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     }
 
     /// <summary>Gets the actual catalog, articulation and local-template transform count.</summary>
-    public int DynamicSlotCount => (m_catalogSlotCount + m_pool.DynamicSlotCount);
+    public int DynamicSlotCount => (m_catalog.SlotCount + m_pool.DynamicSlotCount);
     /// <inheritdoc/>
     public int RevisionComponentCount => 5;
     /// <inheritdoc/>

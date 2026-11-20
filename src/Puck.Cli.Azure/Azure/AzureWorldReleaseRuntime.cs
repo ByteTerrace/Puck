@@ -210,7 +210,7 @@ public static partial class AzureCommand {
         private void ValidateRoots(IReadOnlyDictionary<string, string> roots) {
             if (
                 (roots.Count != m_identities.Length) ||
-                !roots.Keys.ToHashSet(comparer: StringComparer.Ordinal).SetEquals(other: m_identities.Select(selector: identity => $"{identity.Owner:D}/{identity.World}"))
+                !roots.Keys.ToHashSet(comparer: StringComparer.Ordinal).SetEquals(other: m_identities.Select(selector: identity => identity.RootKey))
             ) {
                 throw new InvalidDataException(message: "protected source roots do not match the release inventory");
             }
@@ -255,7 +255,7 @@ public static partial class AzureCommand {
                         ?? throw new InvalidDataException(message: "bootstrap recovery root is missing"));
 
                     if (saved.Root.FenceToken != Guid.Empty) { throw new InvalidDataException(message: "bootstrap cannot capture an owned world"); }
-                    captured[$"{identity.Owner:D}/{identity.World}"] = saved.Pin;
+                    captured[identity.RootKey] = saved.Pin;
                 }
                 roots = captured;
             } else {
@@ -268,7 +268,7 @@ public static partial class AzureCommand {
                         cancellationToken
                     ).ConfigureAwait(continueOnCapturedContext: false);
 
-                    if (saved is { } root) { retained[$"{identity.Owner:D}/{identity.World}"] = root.Pin; }
+                    if (saved is { } root) { retained[identity.RootKey] = root.Pin; }
                 }
                 var workers = await WorkersAsync(
                     group: resourceGroup,
@@ -391,7 +391,7 @@ public static partial class AzureCommand {
             foreach (var identity in m_identities) {
                 _ = (await authority.LoadRecoveryRootAsync(
                     identity,
-                    operation.RecoveryRoots[$"{identity.Owner:D}/{identity.World}"],
+                    operation.RecoveryRoots[identity.RootKey],
                     operation.PendingOperationId!.Value,
                     cancellationToken
                 ).ConfigureAwait(continueOnCapturedContext: false)
@@ -410,7 +410,7 @@ public static partial class AzureCommand {
                     ?? throw new IOException(message: "source recovery could not acquire maintenance ownership"));
                 var restored = await authority.RestoreRecoveryRootAsync(
                     identity,
-                    operation.RecoveryRoots[$"{identity.Owner:D}/{identity.World}"],
+                    operation.RecoveryRoots[identity.RootKey],
                     operation.PendingOperationId!.Value,
                     fence,
                     cancellationToken
@@ -440,7 +440,7 @@ public static partial class AzureCommand {
                     ).ConfigureAwait(continueOnCapturedContext: false);
                 } else {
                     foreach (var identity in m_identities) {
-                        var key = $"{identity.Owner:D}/{identity.World}";
+                        var key = identity.RootKey;
 
                         if (!operation.ReturnsToPreviousRelease && source.Manifest.Definitions[key] == target.Manifest.Definitions[key]) { continue; }
                         var publication = await authority.PrepareReleaseMetadataAsync(

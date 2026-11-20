@@ -2497,7 +2497,7 @@ public sealed partial class SdfMeshPathBake {
         var started = Stopwatch.GetTimestamp();
 
         try {
-            mesh = group.Cut!.Build();
+            mesh = group.Cut!.Build(group.Memory);
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
             SdfMeshBakeReport.Refused(refusal: exception.Message, selector: group.Selector);
         }
@@ -2535,7 +2535,7 @@ public sealed partial class SdfMeshPathBake {
             var contoured = mesh.TriangleCount;
             var started = Stopwatch.GetTimestamp();
 
-            mesh = SimplificationStage.Run(mesh, group.Dynamic, group.Glass, group.Instances, group.Geometry.ContainsGlyph);
+            mesh = SimplificationStage.Run(mesh, group.Dynamic, group.Glass, group.Instances, group.Geometry.ContainsGlyph, group.Memory);
             merged = (contoured - mesh.TriangleCount);
             Account(detail: new(Count: contoured, Kept: mesh.TriangleCount), group: group, since: started, stage: BakeStage.Land);
             KeepCheckpoint(group, mesh, simplified: true);
