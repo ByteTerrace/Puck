@@ -18,6 +18,11 @@ public interface IRenderGraphSourceUpload : IDisposable {
     ImageSourceDescriptor? Descriptor { get; }
     /// <summary>Gets why the source has no image, naming its producer, or <see langword="null"/> while it has one.</summary>
     string? Fault { get; }
+    /// <summary>Gets whether the source has no image because its producer is not running, which is a defined outcome
+    /// rather than a fault: the instance is current with no output, and every reader draws its own stand-in, so the
+    /// source holds no frame incomplete and no reader inherits a refusal from it. <see cref="Fault"/> still names the
+    /// state for a read-back. The default is <see langword="false"/>, a source with no image is faulted.</summary>
+    bool IsAbsent => false;
 
     /// <summary>Writes the source's image for one render into its region's planes, after the header the runtime wrote
     /// (<see cref="ImageSourceUploadLayout.HeaderOf"/> of <see cref="Descriptor"/>). The region owes only the words that

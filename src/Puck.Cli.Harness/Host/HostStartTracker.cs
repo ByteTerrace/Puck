@@ -107,17 +107,22 @@ public sealed class HostStartTracker {
     // The one expected-peak door: the recent observations' high percentile once the kind has any, else its fallbacks (the
     // kind's default commit peak, a fixed share of it as the private working set, and no whole working set, which is
     // reported only and has nothing to stand in for it).
-    private HostPeaks Expected(HostStartKind kind) => ((m_windows.TryGetValue(kind, out var window) && (window.Count > 0))
+    // The fallbacks are held to the machine's size (installedRamGb, the judging thresholds' InstalledRamGb).
+    private HostPeaks Expected(HostStartKind kind, double? installedRamGb) => ((m_windows.TryGetValue(kind, out var window) && (window.Count > 0))
         ? new HostPeaks(PrivateGb: window.PrivateGb, ResidentGb: window.ResidentGb, WorkingSetGb: window.WorkingSetGb)
-        : Fallback(kind: kind));
-    private static HostPeaks Fallback(HostStartKind kind) => new(PrivateGb: HostLoadThresholds.DefaultPeakGb(kind: kind), ResidentGb: (HostLoadThresholds.ResidentFraction * HostLoadThresholds.DefaultPeakGb(kind: kind)), WorkingSetGb: double.NaN);
+        : Fallback(installedRamGb: installedRamGb, kind: kind));
+    private static HostPeaks Fallback(HostStartKind kind, double? installedRamGb) {
+        var peak = HostLoadThresholds.DefaultPeakGb(installedRamGb: installedRamGb, kind: kind);
+
+        return new(PrivateGb: peak, ResidentGb: (HostLoadThresholds.ResidentFraction * peak), WorkingSetGb: double.NaN);
+    }
     // What a start is judged by when its learned expectation exceeds what the machine could hold with no admitted start
     // running: the lesser of that expectation and the fallback an unmeasured kind gets. Such an expectation could otherwise
     // refuse every start of its kind however long it waits, and a refused kind runs nothing that could teach the window a
     // lower figure.
-    private HostPeaks Lone(HostStartKind kind) {
-        var learned = Expected(kind: kind);
-        var fallback = Fallback(kind: kind);
+    private HostPeaks Lone(HostStartKind kind, double? installedRamGb) {
+        var learned = Expected(installedRamGb: installedRamGb, kind: kind);
+        var fallback = Fallback(installedRamGb: installedRamGb, kind: kind);
 
         return new HostPeaks(PrivateGb: Math.Min(learned.PrivateGb, fallback.PrivateGb), ResidentGb: Math.Min(learned.ResidentGb, fallback.ResidentGb), WorkingSetGb: learned.WorkingSetGb);
     }
@@ -131,7 +136,7 @@ public sealed class HostStartTracker {
         var window = Window(kind: kind);
 
         // Only the judged quantities raise a kind early: a reported working set alone never brings a short run in.
-        if (window.Contains(id: id.Id, startTicks: id.StartTicks) || settled || ((window.Count > 0) && (Expected(kind: kind) is var expected) && ((peaks.PrivateGb > expected.PrivateGb) || (peaks.ResidentGb > expected.ResidentGb)))) {
+        if (window.Contains(id: id.Id, startTicks: id.StartTicks) || settled || ((window.Count > 0) && (Expected(installedRamGb: null, kind: kind) is var expected) && ((peaks.PrivateGb > expected.PrivateGb) || (peaks.ResidentGb > expected.ResidentGb)))) {
             window.Observe(id: id.Id, startTicks: id.StartTicks, peaks: peaks);
         }
     }
@@ -162,11 +167,13 @@ public sealed class HostStartTracker {
     /// the private working set <see cref="HostLoadThresholds.ResidentFraction"/> of that, and the whole working set, which
     /// admission reports and never judges, NaN.</summary>
     /// <param name="kind">The start's kind.</param>
+    /// <param name="thresholds">The thresholds of the machine the start runs on, whose installed memory holds the fallbacks
+    /// (<see cref="HostLoadThresholds.DefaultPeakGb"/>); <see langword="null"/> judges by the kinds' figures alone.</param>
     /// <returns>The expected peaks, in gigabytes.</returns>
-    public HostPeaks ExpectedPeaks(HostStartKind kind) {
+    public HostPeaks ExpectedPeaks(HostStartKind kind, HostLoadThresholds? thresholds = null) {
         lock (m_gate) {
             Measurements();
-            return Expected(kind: kind);
+            return Expected(installedRamGb: thresholds?.InstalledRamGb, kind: kind);
         }
     }
     /// <summary>Reads what a start of <paramref name="kind"/> needs of the headroom <paramref name="reading"/> shows,
@@ -231,7 +238,7 @@ public sealed class HostStartTracker {
             foreach (var start in live) {
                 var seen = m_seen[(start.Id, start.StartTicks)];
                 var remaining = Math.Max(0, 1 - clock.GetElapsedTime(seen.GrewAt).TotalSeconds / Plateau.TotalSeconds);
-                var expected = Expected(kind: start.Kind);
+                var expected = Expected(installedRamGb: thresholds.InstalledRamGb, kind: start.Kind);
                 var left = start.Ready ? 0 : (Math.Max(expected.PrivateGb, seen.Peaks.PrivateGb) - start.PrivateGb) * remaining;
                 var residentLeft = start.Ready ? 0 : (Math.Max(expected.ResidentGb, seen.Peaks.ResidentGb) - start.ResidentGb) * remaining;
 
@@ -251,8 +258,8 @@ public sealed class HostStartTracker {
 
             // Each quantity is judged by the learned estimate unless the machine with every admitted start gone could not hold
             // it either: then no wait for an admitted start changes the answer, and the lone figure judges instead.
-            var learned = Expected(kind: kind);
-            var lone = Lone(kind: kind);
+            var learned = Expected(installedRamGb: thresholds.InstalledRamGb, kind: kind);
+            var lone = Lone(installedRamGb: thresholds.InstalledRamGb, kind: kind);
             var idle = reading with {
                 CommitChargeGb = (reading.CommitChargeGb - live.Sum(selector: static start => start.PrivateGb)),
                 FreeRamGb = (reading.FreeRamGb + live.Sum(selector: static start => start.ResidentGb)),

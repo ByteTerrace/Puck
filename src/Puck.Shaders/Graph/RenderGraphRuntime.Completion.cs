@@ -150,6 +150,10 @@ public sealed partial class RenderGraphRuntime {
     // A paused node presents its exact previous image on purpose. Its readers consume that standing publication, not
     // an absent render at the latest scheduled frame.
     private bool Stands(int index) => (m_nodes[index] is { Paused: true });
+    // An uploaded source whose producer is not running (IRenderGraphSourceUpload.IsAbsent). Its absence is a defined
+    // outcome, not a refusal or a wait: the instance is current, it has no output, and a reader draws its stand-in, so
+    // neither the source nor any reader holds the frame incomplete.
+    private bool IsAbsent(int index) => (m_sources[index] is { IsAbsent: true });
     // A scheduled graph instance whose node produced nothing this frame. A paused node presents its last image on purpose.
     // This is the one place a graph instance's refusal becomes Refused: a package's refusal of the instance
     // (IRenderGraphPackageFactory.RefusalOf, such as an SDF residency's refused tables), the node's refused build or a
@@ -296,6 +300,7 @@ public sealed partial class RenderGraphRuntime {
             }
             if (
                 (m_producers[producer] is null) &&
+                !IsAbsent(index: producer) &&
                 !Stands(index: producer) &&
                 (read.Frame >= 0) &&
                 (RecordedAt(
