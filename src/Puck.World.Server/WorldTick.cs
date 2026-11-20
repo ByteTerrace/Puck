@@ -136,7 +136,6 @@ public sealed partial class WorldTick {
     // The stream lease id is server-minted; an older socket's finally block can therefore never clear a replacement
     // socket's state after a reconnect.
     private readonly WorldFederatedIntentState[] m_federatedIntents;
-    private readonly EntitySnapshot[] m_snapshotEntries;
 
     // Reentrancy guard, guarded by m_authorityGate with m_ordered: DrainOrdered dequeues and applies until empty, so
     // a re-entrant enqueue from inside an apply is a defined no-op (re-enqueue, return to the outer drain) instead
@@ -206,8 +205,6 @@ public sealed partial class WorldTick {
     internal bool[] ChannelReadContributorTrusted => m_channelReadContributorTrusted;
     /// <summary>Gets what the intent submission received per seat, after the fold.</summary>
     internal PlayerIntent[] ChannelReadFolded => m_channelReadFolded;
-    /// <summary>Gets the per-entity snapshot scratch each completed tick's delivery fills.</summary>
-    internal EntitySnapshot[] SnapshotEntries => m_snapshotEntries;
     /// <summary>Gets whether each tracked slot saw a second, different-principal write this tick.</summary>
     internal bool[] TickCollided => m_tickCollided;
     /// <summary>Gets the entity indices an allowed intent has already written this tick.</summary>
@@ -248,7 +245,6 @@ public sealed partial class WorldTick {
         m_driveDenied = new bool[capacity];
         m_federatedIntents = new WorldFederatedIntentState[capacity];
         m_host = host;
-        m_snapshotEntries = new EntitySnapshot[capacity];
 
         if (
             (definition.Music is { Count: > 0 } music) &&

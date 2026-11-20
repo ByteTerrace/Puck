@@ -15,10 +15,6 @@ public sealed partial class WorldDocument {
 
     internal string LastMutationFailureCode => m_lastMutationFailureCode;
 
-    // The presented action-state register file of every entity index, the borrowed scratch each snapshot entry's
-    // State slices; overwritten by the next snapshot, like the entry array itself.
-    private long[] m_snapshotState = [];
-
     internal bool ApplyDesignationCore(WorldDesignation designation, Principal principal, bool knownSubject, int connectionId, long correlationId) {
         var sourceIndex = designation.EntityIndex;
 
@@ -1044,34 +1040,33 @@ public sealed partial class WorldDocument {
 
         return true;
     }
-    // The non-consuming primer path for AttachSink: PEEKS every body's continuity hint instead of consuming it, so a
-    // newly attached sink's boot-state primer can never steal the flag an already-attached sink is still due to
-    // observe via the next ordinary EmitSnapshot broadcast (the bug this repairs — see docs/architecture/worlds.md's
-    // "Observation and display" section). Stamped with the server's actual current tick/step width
-    // (Host.CompletedTick/Host.LastStepTicks), which are still their default 0/0 before the very first Step has ever
-    // run — the one case where 0/0 is the honest answer, preserved exactly.
+    // The non-consuming primer for one sink. It PEEKS every body's continuity hint instead of consuming it, so a
+    // primer never steals the hint an attached sink is still due in the next EmitSnapshot broadcast (see
+    // docs/architecture/worlds.md's "Observation and display" section). It is built into the primer carrier, never the
+    // tick's, because a delivery can prime a sink (a session observer whose frame a deal moved is primed by the state
+    // delivery that precedes the tick's snapshot) after the tick's snapshot is built and before it is fanned out.
+    // Stamped with Host.CompletedTick/Host.LastStepTicks, which are 0/0 before the first Step has run.
     internal WorldSnapshot BuildPrimerSnapshot() {
         using (Host.EnterAtTickBoundary()) {
             Host.ThrowIfTickPending();
-            return BuildSnapshotCore(Host.CompletedTick, Host.LastStepTicks, consumeContinuity: false);
+            return BuildSnapshotCore(Host.CompletedTick, Host.LastStepTicks, m_primerCarrier);
         }
     }
     // Every live body's authoritative sim pose, color, archetype, and this tick's continuity hint, written into the
-    // reused Host.SnapshotEntries array — the SAME borrowed-scratch shape as before the output hub: a typed subscriber
-    // must fully consume (or copy) the returned WorldSnapshot before returning from DeliverSnapshot, because the next
-    // tick's BuildSnapshot call overwrites this same backing array. Consumes (TakeContinuity) every body's one-shot
+    // tick carrier: a typed subscriber must fully consume (or copy) the returned WorldSnapshot before returning from
+    // DeliverSnapshot, because the next tick's snapshot overwrites it. Consumes (TakeContinuity) every body's one-shot
     // continuity hint — the ORDINARY per-tick broadcast path (EmitSnapshot). A late AttachSink must NOT call this
     // overload: see BuildPrimerSnapshot.
     internal WorldSnapshot BuildSnapshot(ulong tick, ulong stepTicks) => BuildSnapshotCore(
-        consumeContinuity: true,
+        carrier: m_tickCarrier,
         stepTicks: stepTicks,
         tick: tick
     );
 
-    private WorldSnapshot BuildSnapshotCore(ulong tick, ulong stepTicks, bool consumeContinuity) {
+    private WorldSnapshot BuildSnapshotCore(ulong tick, ulong stepTicks, SnapshotCarrier carrier) {
         var capacity = Host.Population.Capacity;
-        EnsureSnapshotStateCapacity(capacity);
-        return FinishSnapshot(tick, stepTicks, consumeContinuity, WriteSnapshotRows(Host.Population, consumeContinuity, end: capacity, first: 0, offset: 0));
+        carrier.Reserve(capacity: capacity, stateSlots: Host.Population.ActionStateLane.Definitions.Count);
+        return FinishSnapshot(tick, stepTicks, carrier, WriteSnapshotRows(Host.Population, carrier, end: capacity, first: 0, offset: 0));
     }
 
     internal struct SnapshotOperation {
@@ -1083,7 +1078,7 @@ public sealed partial class WorldDocument {
     internal WaitOutcome TryBuildTickSnapshot(ulong tick, ulong stepTicks, ref SnapshotOperation operation, WaitDeadline deadline, out WorldSnapshot snapshot) {
         var capacity = Host.Population.Capacity;
         if (operation.Partitions == 0) {
-            EnsureSnapshotStateCapacity(capacity);
+            m_tickCarrier.Reserve(capacity: capacity, stateSlots: Host.Population.ActionStateLane.Definitions.Count);
             var partitions = capacity.CeilingDivide(divisor: SnapshotPartitionRows);
             if ((partitions > 1) && (Host.Jobs is { Serial: false }) &&
                 ((operation.Count = CountSnapshotPartitions(capacity, partitions)) >= SnapshotForkRows)) {
@@ -1091,7 +1086,7 @@ public sealed partial class WorldDocument {
                 m_snapshotRows.Population = Host.Population;
                 operation.Partitions = partitions;
             } else {
-                operation.Count = WriteSnapshotRows(Host.Population, consumeContinuity: true, end: capacity, first: 0, offset: 0);
+                operation.Count = WriteSnapshotRows(Host.Population, m_tickCarrier, end: capacity, first: 0, offset: 0);
             }
         }
         if ((operation.Partitions > 0) &&
@@ -1100,16 +1095,12 @@ public sealed partial class WorldDocument {
             return WaitOutcome.DeadlinePassed;
         }
         if (operation.Partitions > 0) { m_snapshotRows!.Population = null!; }
-        snapshot = FinishSnapshot(tick, stepTicks, consumeContinuity: true, operation.Count);
+        snapshot = FinishSnapshot(tick, stepTicks, m_tickCarrier, operation.Count);
         return WaitOutcome.Completed;
     }
 
-    private void EnsureSnapshotStateCapacity(int capacity) {
-        var stateWidth = (capacity * Host.Population.ActionStateLane.Definitions.Count);
-        if (m_snapshotState.Length < stateWidth) { m_snapshotState = new long[stateWidth]; }
-    }
-
-    private WorldSnapshot FinishSnapshot(ulong tick, ulong stepTicks, bool consumeContinuity, int count) {
+    private WorldSnapshot FinishSnapshot(ulong tick, ulong stepTicks, SnapshotCarrier carrier, int count) {
+        var consumeContinuity = carrier.ConsumesContinuity;
         var fieldsFull = !consumeContinuity;
         var latticeDeltas = m_latticeSnapshotDeltas;
 
@@ -1144,8 +1135,7 @@ public sealed partial class WorldDocument {
         var stateCells = Host.PublishedCellCount(full: !consumeContinuity);
         var cellCount = (latticeDeltas.Count + stateCells);
 
-        if (m_snapshotCells.Length < cellCount) { Array.Resize(array: ref m_snapshotCells, newSize: ((int)(((uint)cellCount)).NextPowerOfTwo())); }
-        var fieldCells = m_snapshotCells.AsMemory(length: cellCount, start: 0);
+        var fieldCells = carrier.ReserveCells(count: cellCount);
 
         for (var index = 0; (index < latticeDeltas.Count); index++) {
             fieldCells.Span[index] = latticeDeltas[index];
@@ -1157,7 +1147,7 @@ public sealed partial class WorldDocument {
             Tick: tick,
             Revision: Host.Population.Revision,
             StepTicks: stepTicks,
-            Entries: Host.SnapshotEntries.AsMemory(
+            Entries: carrier.Entries.AsMemory(
                 length: count,
                 start: 0
             ),
@@ -1206,15 +1196,18 @@ public sealed partial class WorldDocument {
     private static WorldBody? SnapshotBody(WorldPopulation population, int index) => (population.IsActive(index: index)
         ? population.EntryBody(index: index)
         : null);
-    // Writes the delivered rows of entity indices [first, end) into Host.SnapshotEntries from position offset, in
+    // Writes the delivered rows of entity indices [first, end) into the carrier's entries from position offset, in
     // index order, and returns the position after the last. Partitions call it concurrently over disjoint ranges: it
-    // writes only those rows' entries, their bodies' continuity and their register-file ranges of m_snapshotState,
-    // and reads the arena only through participant lane slots (StateArena.TryReadSlot), which build no lazy read
-    // cache. A read added here that can build one (a linked row's positions) needs the arena prepared before the fork.
-    private int WriteSnapshotRows(WorldPopulation population, bool consumeContinuity, int first, int end, int offset) {
+    // writes only those rows' entries, their bodies' continuity and their ranges of the carrier's register file, and
+    // reads the arena only through participant lane slots (StateArena.TryReadSlot), which build no lazy read cache. A
+    // read added here that can build one (a linked row's positions) needs the arena prepared before the fork.
+    private int WriteSnapshotRows(WorldPopulation population, SnapshotCarrier carrier, int first, int end, int offset) {
         var count = offset;
         var stateLane = population.ActionStateLane;
         var stateSlots = stateLane.Definitions;
+        var consumeContinuity = carrier.ConsumesContinuity;
+        var entries = carrier.Entries;
+        var state = carrier.State;
 
         for (var index = first; (index < end); index++) {
             if (SnapshotBody(population, index) is not { } body) {
@@ -1224,7 +1217,7 @@ public sealed partial class WorldDocument {
             var stateStart = (index * stateSlots.Count);
 
             for (var slot = 0; (slot < stateSlots.Count); slot++) {
-                m_snapshotState[(stateStart + slot)] = WorldBodyStateReads.Presented(
+                state[(stateStart + slot)] = WorldBodyStateReads.Presented(
                     kind: stateSlots[slot].Kind,
                     raw: stateLane.Read(
                     ordinal: index,
@@ -1233,7 +1226,7 @@ public sealed partial class WorldDocument {
                 );
             }
 
-            Host.SnapshotEntries[count++] = new EntitySnapshot(
+            entries[count++] = new EntitySnapshot(
                 Index: index,
                 Position: body.Position,
                 Orientation: body.Orientation,
@@ -1249,7 +1242,7 @@ public sealed partial class WorldDocument {
                 PlacementId: population.InhabitantPlacementId(index: index),
                 Heading: body.Yaw,
                 Facts: body.Facts,
-                State: m_snapshotState.AsMemory(
+                State: state.AsMemory(
                     length: stateSlots.Count,
                     start: stateStart
                 )
@@ -1259,7 +1252,8 @@ public sealed partial class WorldDocument {
         return count;
     }
 
-    private FieldCellDelta[] m_snapshotCells = [];
+    private readonly SnapshotCarrier m_tickCarrier = new(consumesContinuity: true);
+    private readonly SnapshotCarrier m_primerCarrier = new(consumesContinuity: false);
     private readonly List<FieldCellDelta> m_latticeSnapshotDeltas = [];
     private int[] m_snapshotOffsets = [];
 
@@ -1272,11 +1266,36 @@ public sealed partial class WorldDocument {
 
         public void Run(int partition) => _ = document.WriteSnapshotRows(
             population: Population,
-            consumeContinuity: true,
+            carrier: document.m_tickCarrier,
             end: Math.Min(val1: Population.Capacity, val2: ((partition + 1) * SnapshotPartitionRows)),
             first: (partition * SnapshotPartitionRows),
             offset: document.m_snapshotOffsets[partition]
         );
+    }
+
+    // The storage a built snapshot lends its subscribers until the next snapshot built into the same carrier: its
+    // entries, the action-state register file their State slices, and its cell writes. The tick broadcast and the
+    // per-sink primer each own one, so building a primer, which a delivery may do between the tick's snapshot being
+    // built and being fanned out, never rewrites what that snapshot lends.
+    private sealed class SnapshotCarrier(bool consumesContinuity) {
+        // Whether this carrier's snapshots take each body's one-shot continuity hint (the tick broadcast) or only peek
+        // at it (a primer), and so whether they carry only the cells written since the last tick or every cell.
+        public bool ConsumesContinuity { get; } = consumesContinuity;
+        public EntitySnapshot[] Entries { get; private set; } = [];
+        public long[] State { get; private set; } = [];
+
+        private FieldCellDelta[] m_cells = [];
+
+        // Sizes the entries and register file for a population, keeping storage already large enough.
+        public void Reserve(int capacity, int stateSlots) {
+            if (Entries.Length < capacity) { Entries = new EntitySnapshot[capacity]; }
+            if (State.Length < (capacity * stateSlots)) { State = new long[(capacity * stateSlots)]; }
+        }
+        // Returns the first count cells of this carrier's cell storage, growing it to the next power of two when short.
+        public Memory<FieldCellDelta> ReserveCells(int count) {
+            if (m_cells.Length < count) { m_cells = new FieldCellDelta[((int)((uint)count).NextPowerOfTwo())]; }
+            return m_cells.AsMemory(length: count, start: 0);
+        }
     }
 
     // The ONE grant-table DENIAL emission — the loud stderr line plus the submitter-routed denied echo (Rejected,
