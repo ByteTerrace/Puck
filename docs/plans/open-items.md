@@ -776,7 +776,7 @@ The frame thread's CPU work, largest first:
   the pool, as `StartBuild` already snapshots its inputs, then emit per
   changed row.
 - [low] A residency builds its `SdfWorldTables` on the frame thread
-  (`SdfWorldResidency`, through `SdfWorldPipelines.TryBuild`). Unmeasured; read
+  (`SdfWorldResidency.EnsureTables`). Unmeasured; read
   it on an arrival before moving it.
 - [low] View placement (`WorldViewGraphHost.CompleteFootprints`) and screen
   binding (`SdfWorldResidency.PrepareOnce`: `WorldScreenDecals.Resolve`,
