@@ -739,13 +739,13 @@ Printed back as `remove` when its target round-trips through `ExpressionSpelling
 ### `schedule`
 
 ```puck
-schedule row[key] in Ns
+schedule row[key] in delay
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
 | `target` (required) | header | reference | — | `state`, `key` | — | The cell the effect writes, read as one state token. |
-| `in` (required) | header | seconds | — | `delaySeconds` | — | How far ahead the write lands; the time unit is required. |
+| `in` (required) | header | seconds | — | `delaySeconds` | — | How far ahead the write lands, in seconds: a number with an optional time unit, or any compile-time value such as a template parameter. |
 
 Printed back as `schedule` when the node carries `delaySeconds`, and its target round-trips through `ExpressionSpelling` unchanged; otherwise the call-form escape hatch, `type(k: v, …)`. Every field of the node the description does not name prints as an ordinary property.
 

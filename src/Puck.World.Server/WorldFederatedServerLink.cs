@@ -19,11 +19,17 @@ public interface IWorldRoutedRequests {
     /// <returns>The answer, completed on whatever thread the lane answers on.</returns>
     Task<WorldFederationAnswer> AnswerAsync(string sourceAuthority, WorldFederationRequest kind, byte[] body);
     /// <summary>Returns the committed credential a body's submissions travel under.</summary>
-    /// <param name="bodyIndex">The body index, or -1 for a body-agnostic submission.</param>
-    /// <param name="sourceAuthority">The source namespace, on success.</param>
-    /// <param name="mobility">The traveler credential, on success.</param>
-    /// <returns><see langword="true"/> when a committed credential exists.</returns>
-    bool TryCredential(int bodyIndex, out string sourceAuthority, out WorldMobilityIdentity mobility);
+    bool TryRouteCredential(int bodyIndex, out WorldRemoteRouteCredential credential);
+
+    /// <summary>Sends a submission whose destination verdict arrives asynchronously through the completion.</summary>
+    bool TryForwardSubmission(int bodyIndex, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason) {
+        if (!TryRouteCredential(bodyIndex, out var credential)) {
+            reason = $"forwarded body:{bodyIndex} has no committed destination credential";
+            return false;
+        }
+
+        return WorldRemoteAuthority.TrySendSubmission(this, in credential, payload, operationId, completion, out reason);
+    }
     /// <summary>Forwards one intent over the intent lane.</summary>
     /// <param name="bodyIndex">The body index.</param>
     /// <param name="submission">The intent image.</param>
@@ -63,120 +69,20 @@ public sealed class WorldFederatedServerLink(IWorldRoutedRequests authority) : I
             }
         }
     }
-    // Encodes one submission under a body's committed credential: the request to send, or null when the credential or
-    // the encoding is missing (narrated).
-    private (string SourceAuthority, byte[] Body)? Request(int bodyIndex, WorldSubmissionPayload payload, Guid operationId) {
-        if (!m_authority.TryCredential(
-            bodyIndex: bodyIndex,
-            mobility: out var mobility,
-            sourceAuthority: out var sourceAuthority
-        )) {
-            NoteUnavailable(
-                bodyIndex: bodyIndex,
-                reason: "committed transfer credential is unavailable"
-            );
-            return null;
-        }
-        if (!WorldFrameCodec.TryEncode(
-            failure: out var failure,
-            frame: out var canonical,
-            operationId: operationId,
-            payload: payload
-        )) {
-            NoteUnavailable(
-                bodyIndex: bodyIndex,
-                reason: $"submission could not be encoded — {failure.Detail}"
-            );
-            return null;
-        }
-
-        return (sourceAuthority, WorldFederationCodec.EncodeSubmission(
-            frame: canonical,
-            mobility: in mobility,
-            sourceAuthority: sourceAuthority
-        ));
-    }
-    // Reads one routed answer as a downstream frame: a Completion's own frame, else a refusal naming what went wrong.
-    private (WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? Read(int bodyIndex, WorldFederationAnswer response) {
-        if (response.Kind != WorldFederationResponse.Completion) {
-            var narration = response.Describe();
-
-            NoteUnavailable(
-                bodyIndex: bodyIndex,
-                reason: narration
-            );
-            return (WorldPeerWireFormat.DownstreamKind.Refusal, System.Text.Encoding.UTF8.GetBytes(s: narration));
-        }
-
-        NoteAvailable(bodyIndex: bodyIndex);
-
-        // A Completion body is one whole downstream frame, decoded in place over the response's own buffer.
-        return (WorldPeerWireFormat.TryDecodeDownstream(
-            body: out var completionBody,
-            frame: response.Body,
-            kind: out var completionKind
-        )
-            ? (completionKind, completionBody)
-            : null
-        );
-    }
-    // Turns a downstream frame into the typed result a completion receives, naming the failure when there is none.
-    private static WorldSubmissionResult Result((WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? reply) {
-        var reason = "remote authority did not return a completion";
-
-        if ((reply is { } completed) && WorldPeerWireFormat.TryReadResult(
-            body: completed.Body.Span,
-            kind: completed.Kind,
-            result: out var result,
-            reason: out reason
-        )) {
-            return result!;
-        }
-
-        return new WorldSubmissionResult.Refusal(
-            Code: CompletionUnavailableCode,
-            Detail: reason
-        );
-    }
-    // Sends one submission without waiting: its answer reaches the completion when the lane delivers it, or the named
-    // refusal when there is none. The routed lane is ordered, so submissions keep their order.
     private void SubmitWithoutWaiting(int bodyIndex, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion) {
-        if (Request(
-            bodyIndex: bodyIndex,
-            operationId: operationId,
-            payload: payload
-        ) is not { } request) {
-            completion(obj: Result(reply: null));
-
-            return;
+        if (!m_authority.TryForwardSubmission(bodyIndex, payload, operationId, Complete, out var reason)) {
+            Complete(new WorldSubmissionResult.Refusal(CompletionUnavailableCode, reason));
         }
 
-        _ = CompleteAsync(
-            answer: m_authority.AnswerAsync(
-                body: request.Body,
-                kind: WorldFederationRequest.Submission,
-                sourceAuthority: request.SourceAuthority
-            ),
-            bodyIndex: bodyIndex,
-            completion: completion
-        );
-    }
-    private async Task CompleteAsync(Task<WorldFederationAnswer> answer, int bodyIndex, Action<WorldSubmissionResult> completion) {
-        WorldSubmissionResult result;
+        void Complete(WorldSubmissionResult result) {
+            if (result is WorldSubmissionResult.Refusal { Code: CompletionUnavailableCode } unavailable) {
+                NoteUnavailable(bodyIndex, unavailable.Detail);
+            } else {
+                NoteAvailable(bodyIndex);
+            }
 
-        try {
-            result = Result(reply: Read(
-                bodyIndex: bodyIndex,
-                response: await answer.ConfigureAwait(continueOnCapturedContext: false)
-            ));
-        } catch (Exception exception) {
-            result = new WorldSubmissionResult.Refusal(
-                Code: CompletionUnavailableCode,
-                Detail: exception.Message
-            );
+            completion(result);
         }
-
-        completion(obj: result);
     }
 
     // Routes by body like every forwarded submission: the remote authority answers the traveler whose credential the
@@ -201,7 +107,7 @@ public sealed class WorldFederatedServerLink(IWorldRoutedRequests authority) : I
                 new QueryAnswer((result as WorldSubmissionResult.Refusal)?.Detail ?? "unexpected remote query completion", Refused: true)));
     }
     // The one abstract member every fire-and-forget Submit* interface default forwards to. A forwarded submission
-    // routes by BODY, never by principal (the credential IS the authority — see TryCredential); Command/Designation
+    // routes by BODY, never by principal (the credential IS the authority — see TryRouteCredential); Command/Designation
     // carry their own entity index, so route on it directly, everything else goes out under the traveler's own
     // committed body ("any"). principal is unused here — it never rode this transport; the interface parameter
     // exists for the loopback side, which routes on it for real. Returns 0: the remote authority mints the envelope,

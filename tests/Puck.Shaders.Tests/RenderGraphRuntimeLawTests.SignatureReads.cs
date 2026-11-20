@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
 using Puck.Testing;
@@ -31,16 +32,16 @@ public sealed partial class RenderGraphRuntimeLawTests {
         });
         Assert.Equal(actual: viewing.Signatures, expected: viewing.Recorded);
         Assert.All(collection: viewing.Recorded, action: publication => {
-            Assert.True(condition: publication.IsKnown);
-            Assert.Same(expected: source, actual: publication.Owner);
+            Assert.True(condition: publication.IsPublished());
+            Assert.Same(expected: source, actual: publication.Owner.Value);
         });
         Assert.Equal(expected: viewing.Recorded.Count, actual: viewing.Recorded.Distinct().Count());
         Assert.Equal(expected: source.Acquired, actual: source.Released);
     }
 
     private sealed class SignatureReadingPackage : IRenderGraphPackageFactory {
-        public readonly List<GpuImagePublication> Signatures = [];
-        public readonly List<GpuImagePublication> Recorded = [];
+        public readonly List<ReferenceRevision> Signatures = [];
+        public readonly List<ReferenceRevision> Recorded = [];
 
         public bool SamplesReads => true;
 

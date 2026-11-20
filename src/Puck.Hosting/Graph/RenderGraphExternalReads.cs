@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 
@@ -15,7 +16,7 @@ namespace Puck.Hosting;
 /// (<see cref="RenderGraphExternalOutput.Tainted"/>).</param>
 public readonly record struct RenderGraphExternalInput(string Producer, Surface Image, GpuImageLayout Layout, GpuImageLease Lease, bool Tainted) {
     /// <summary>Gets the bound image's actual publication, under the same lease that protects its pixels.</summary>
-    public GpuImagePublication Publication => Lease.Publication;
+    public ReferenceRevision Publication => Lease.Publication;
 }
 /// <summary>The images one external producer reads in one produced frame, in the order its instance declares the reads.
 /// The render-graph runtime binds each read's latest completed output and hands the list to

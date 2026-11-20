@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Hosting;
 using Puck.Abstractions.Presentation;
 
@@ -93,15 +94,16 @@ public sealed partial class RenderGraphRuntime {
         SettleWithdrawal(index: index);
         var publication = (((node.PublishedBinding is { } binding) && node.TryGetBoundImage(image: out var input, name: binding))
             ? input.Publication
-            : new GpuImagePublication(Owner: node, Sequence: node.SubmissionCount));
+            : new ReferenceRevision(Owner: node, Revision: node.SubmissionCount));
 
+        var buffer = node.LatestOutputBuffer();
         var buffers = node.LatestOutputBuffers(reuse: m_previous[index].Buffers);
 
         m_previous[index] = m_current[index];
         m_current[index] = new Output(
-            Buffer: node.LatestOutputBuffer(), Frame: schedule.Frame, Image: surface, Layout: node.PublishedLayout,
+            Buffer: buffer.Buffer, Frame: schedule.Frame, Image: surface, Layout: node.PublishedLayout,
             Buffers: buffers,
-            BufferPublication: node.LatestOutputBufferPublication(),
+            BufferPublication: buffer.Publication,
             StateTick: node.PublishedStateTick,
             Publication: publication,
             StandsFor: StandingOf(index: index, node: node, schedule: schedule, surface: in surface),

@@ -23,19 +23,17 @@ Every non-intent submission crosses the client/server boundary as ONE
 
 ## The envelope
 
-`SubmissionEnvelope(int ConnectionId, int SessionGeneration, long Sequence,
-long CorrelationId, Principal Principal, WorldSubmissionPayload Payload)`.
+`SubmissionEnvelope` carries the ordered payload, the identity of the submitting
+connection and principal, and the operation ID for a mutation.
 
 - `SubmissionEnvelope.LocalConnectionId = 0` — the local stdin/loopback
   connection. `WorldPeerHost` assigns positive connection ids to admitted
   remote peers.
-- `Sequence` is a per-connection monotonic counter minted by the transport;
-  `CorrelationId` is the completion-correlation token (independent of
-  `Sequence`). `LoopbackTransport.TryNextEnvelope` mints both as plain counters.
-- `Principal` is the acting identity — stamped by the transport from what its
-  ingress door resolved, validated against the connection's admitted set once
-  a wire exists. `LoopbackTransport.Query` stamps `Principal.Console`;
-  `WorldPeerHost` stamps its admitted peer on the envelope.
+- `Sequence` advances for each submission on a connection. `CorrelationId`
+  associates a completion with its submission. `LoopbackTransport.Mint`
+  advances both counters.
+- The transport stamps the acting `Principal`. `LoopbackTransport.Query`
+  passes its caller's principal. `WorldPeerHost` stamps the peer it admitted.
 
 ## The payload union: exactly 13 kinds
 

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
@@ -1499,7 +1500,7 @@ public sealed partial class WorldScreenBinder : IWorldSeatCameras {
             // on the GPU. Zero means the write finished before publication.
             frame = new GpuImageLease(
                 ImageViewHandle: handle,
-                Publication: new GpuImagePublication(Owner: m_stream, Sequence: version),
+                Publication: new ReferenceRevision(Owner: new ByReference<object>(m_stream), Revision: version),
                 Release: m_release,
                 ReleaseToken: slot,
                 Wait: ((0UL != fenceValue)
