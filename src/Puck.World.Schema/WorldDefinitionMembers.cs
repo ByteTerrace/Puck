@@ -43,7 +43,7 @@ public sealed class WorldDefinitionMembers {
         Pin = PinOf(members: m_members.Values);
     }
 
-    /// <summary>Gets the revision pin: a chain content pin (<see cref="WorldDefinitionFileSource.ComputeChainContentHash"/>) over every present member's name and digest, in ordinal name order, so
+    /// <summary>Gets the revision pin over every present member's name and digest, in ordinal name order, so
     /// it depends on what the document holds and never on the order its members were sliced in.</summary>
     public string Pin { get; }
     /// <summary>Gets the present members, in no particular order.</summary>
@@ -383,7 +383,7 @@ public sealed class WorldDefinitionMembers {
     }
     // The digest over every member's name and digest, in ordinal name order, through the length-delimited chain pin a
     // composed source's content pin folds its files with.
-    private static string PinOf(IEnumerable<Member> members) => WorldDefinitionFileSource.ComputeChainContentHash(chain: [.. members
+    private static string PinOf(IEnumerable<Member> members) => WorldDefinitionFileSource.HashLengthPrefixedParts(parts: members
         .OrderBy(keySelector: static member => member.Name, comparer: StringComparer.Ordinal)
-        .SelectMany(selector: static member => new[] { Encoding.UTF8.GetBytes(s: member.Name), Encoding.UTF8.GetBytes(s: member.Digest) })]);
+        .SelectMany(selector: static member => new[] { Encoding.UTF8.GetBytes(s: member.Name), Encoding.UTF8.GetBytes(s: member.Digest) }));
 }
