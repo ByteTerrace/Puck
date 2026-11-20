@@ -2201,19 +2201,39 @@ they submit). What makes it structural is where the names come from:
   read through the name registry's grammar (`WorldSpelledNames.Collect`, over
   `WorldModuleNamespace.Respell`, the same reader the import rewrite uses), and
   the vocabulary's own string members are entries of its `Fields` or
-  `Exclusions`. `WorldMutationNames.Uncovered` names any string member that is
-  neither, and `puck registry --check` names any name-shaped model member the
-  registry does not hold.
+  `Exclusions`. `WorldMutationNames.Uncovered` names any member that is neither
+  and could hold a name: text, and any value the walk cannot read member by
+  member (a struct holding text, a dictionary, raw JSON). A machine's
+  configuration is read through the host's catalog
+  (`WorldModuleNamespace.RespellMachineReferences`, the provider's
+  `MachineFieldRole` reference fields), which the server hands every write
+  capability it mints (`WorldRecipientView.MachineCatalog`). `puck registry
+  --check` names any name-shaped model member the registry does not hold.
 - A row's declared relations are `WorldRowDeclarationNames`: every state name
-  each row's declaration spells (cells removed), and the reverse. It extends
+  each row's declaration spells, its cells' own audience policies included
+  (values and keys removed), and the reverse. It extends
   `StateCatalog.DependentRows` from token domains to every registered position:
   a live audience, a derived board's token and code rows, a knowledge row's
   source, mask and positions, a phase protocol, a witness.
+  `WorldRecipientView.Admits` closes it transitively over the rows that depend
+  on the written one (a row spelling or keyed over a dependent is reached as the
+  dependent is), and a declared set is reached as a row is.
 - A replacement or removal admits every state name the installed value spells
-  (`WorldRecipientView.AdmitsInstalled`), found through one resolver table in
-  `WorldRecipientMutations`; a placement adds its parent chain and dealt
-  template. A transform that does not resolve is refused, since resolution may
-  already have read the row it stopped at.
+  (`WorldRecipientView.AdmitsInstalled`). A keyed section's installed row is
+  found under the key composition matches it by, read from the same table
+  composition keys every upsert and removal through (`WorldRowKeys`), so the two
+  cannot drift; a row whose key is bound to a state cell is a footprint of every
+  write to its section, since the door never reads the cell. A section a write
+  replaces whole (`Set*`) is its footprint too. Every other kind names where its
+  footprint is judged (`WorldRecipientMutations.JudgedElsewhere`): a placement
+  adds its parent chain and dealt template, and a transform that does not
+  resolve is refused, since resolution may already have read the row it stopped
+  at.
+- A refusal over a derived footprint, at the door or in a state transaction's
+  binding validation, names the submission's own subject
+  (`WorldRecipientMutations.RefusalSubject`), and a typed cell write or an
+  addon's answers it as not disclosed, so every door answers it as it answers a
+  write into a withheld row.
 - A guard over the document (an expected definition, an empty state-row
   selection included, named inputs, a spatial read) is answered only for a
   recipient whose read door hands it a replica document; a session below
@@ -2222,13 +2242,19 @@ they submit). What makes it structural is where the names come from:
 This closes W1 (including `SetProperty`'s same-name row and the knowledge
 row's `positions`, which the registry did not hold), W2's named indirections,
 W3, W4's declared reverse relations, W5 and W6's row-verb pre-read at the
-declared level. `WriteDoorNoninterferenceLawTests` holds it from the code: it
-respells every state name position the registry reads in each value a writer
-submits, one at a time, plus every vocabulary entry, and requires the same
-answer from a world where the probe row is withheld, one where it holds other
-cells and one where it is absent, with a public control that is not refused;
-it also refuses an uncovered mutation member and a replacing kind the resolver
-table lacks.
+declared level. `WriteDoorFootprintLawTests` holds it from the code: for every
+model value a mutation outside a program section submits, it enumerates every
+state name position the registry reaches in that type
+(`WorldNameRegistry.SitesUnder`, over a thousand positions), builds a value
+spelling the probe there alone, and requires the same refusal naming the probe
+from a world where the probe row is withheld, one where it holds other cells and
+one where it is absent, with the row public as the control. It also requires
+every kind to be classified (resolved or judged elsewhere), and every kind that
+resolves an installed value to be refused alike when that value binds the probe:
+a keyed row behind a decoy at the first list position, so a lookup by position
+fails it, and a section replaced whole. `WriteDoorNoninterferenceLawTests` runs
+a small world's values and every vocabulary entry end to end through a live
+server, and refuses an uncovered mutation member.
 
 Where it stops: the footprint is the declared relation. A check that reads past
 it stays a review obligation until the restricted transaction (D0b1 to D0c)
@@ -2259,8 +2285,8 @@ and `WorldPreparedMutation` publishes the neutral refusal);
 `WorldStateDocumentValues.TryCheckBound` checks every value bound to that row
 reads the cell the write left, reading no other row; and every unit whose
 values bind it is validated whole, with every check its partition makes of it:
-every row its values bind is admitted first, from declarations alone
-(`StateReadAccess.Refuse` faults the access otherwise), then the unit is
+every row its values bind is acquired through the access first, which admits
+it from declarations alone and faults otherwise, then the unit is
 resolved to literals at `DeliveryTime`, the one clock every read of the
 validation takes, and judged. A placement is judged with its parent chain by
 `WorldDefinitionValidator.TryValidatePlacementUnit` (every check the whole
@@ -2269,9 +2295,15 @@ creation by `TryValidateCreationUnit`. A value bound in any other section (a
 screen's basis, a curve's knot, a sky panel, a probe range) has no unit
 validator yet, so a write reaching one validates the whole document at the same
 clock: correct, but a hidden unit can refuse it there. A dealt child is judged
-by its template, since children exist only for members. The refusal names only
-the written row, never a document path, whose indices can count hidden
-placements. The authority's whole validation reads the same clock.
+by its template, since children exist only for members, and
+`WorldStateDocumentValues.TryCheckBound` reads only the written row's holders:
+it never enters the state section or a dealt child, and a malformed reference on
+another unit, which cannot name the row, is not its business. The refusal names
+only the written row, never a document path, whose indices can count hidden
+placements; a fault answers as the door does for a withheld row, through a
+mutation, a typed cell write and an addon's cell write alike
+(`BoundWriteValidationNoninterferenceLawTests.AWriteReachingAUnitThatReadsAWithheldRowIsRefusedAsAWithheldRowIs`).
+The authority's whole validation reads the same clock.
 
 This closes H2 for state writes: a hidden unit an authority path leaves unable
 to read its row (a rule firing or a clock that skips binding validation)

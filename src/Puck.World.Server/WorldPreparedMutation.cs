@@ -86,7 +86,7 @@ public sealed partial class WorldDocument {
                 }
             }
             document.m_lastMutationFailureCode = WorldRecipientMutations.NotDisclosedCode;
-            reason = view.Refusal("mutation", WorldMutationKindCatalog.SectionOf(mutation).ToString());
+            reason = view.Refusal("mutation", WorldRecipientMutations.RefusalSubject(mutation));
             denied = true;
             return false;
         }

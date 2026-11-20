@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Abstractions.Machines;
 
 namespace Puck.World;
 
@@ -24,54 +25,66 @@ public static class WorldSpelledNames {
     /// <param name="value">The value; a <see langword="null"/> value spells nothing.</param>
     /// <param name="type">The model type of <paramref name="value"/>.</param>
     /// <param name="found">Receives each name position's registration, namespace and name.</param>
-    public static void Collect(object? value, Type type, Action<WorldNameField, WorldNameKind?, string> found) {
+    /// <param name="machines">The host's machine vocabulary, which reads a machine row's configuration
+    /// (<see cref="WorldModuleNamespace.RespellMachineReferences"/>), or <see langword="null"/> when the host carries
+    /// none and a configuration holds no name the host reads.</param>
+    public static void Collect(object? value, Type type, Action<WorldNameField, WorldNameKind?, string> found, IMachineValidationCatalog? machines = null) {
         ArgumentNullException.ThrowIfNull(argument: type);
         ArgumentNullException.ThrowIfNull(argument: found);
 
         if (value is null) { return; }
-        WorldModuleNamespace.Respell(
-            node: JsonSerializer.SerializeToNode(value: value, jsonTypeInfo: WorldJsonContext.Default.Options.GetTypeInfo(type: type)),
-            type: type,
-            respell: (site, kind, name, _) => {
-                found(site, kind, name);
-                return null;
-            }
-        );
+        var node = JsonSerializer.SerializeToNode(value: value, jsonTypeInfo: WorldJsonContext.Default.Options.GetTypeInfo(type: type));
+        string? Report(WorldNameField site, WorldNameKind? kind, string name, JsonObject? holder) {
+            found(site, kind, name);
+            return null;
+        }
+        WorldModuleNamespace.Respell(node: node, type: type, respell: Report);
+        if ((machines is not null) && (type == typeof(WorldMachine)) && (node is JsonObject machine)) {
+            WorldModuleNamespace.RespellMachineReferences(machine: machine, catalog: machines, respell: Report);
+        }
     }
     /// <summary>Returns the distinct state names an installed document value spells (<see cref="NamesState"/>), read
     /// once per value object: an installed placement, machine or kit keeps its reading while the document keeps the
     /// object.</summary>
     /// <param name="value">The installed value, which the caller does not mutate.</param>
     /// <param name="type">The model type of <paramref name="value"/>.</param>
+    /// <param name="machines">The host's machine vocabulary, which reads an installed machine's configuration, or
+    /// <see langword="null"/>; that reading depends on the host, so it is never kept with the value.</param>
     /// <returns>The names, in ordinal order.</returns>
-    public static IReadOnlyList<string> StateNames(object value, Type type) {
+    public static IReadOnlyList<string> StateNames(object value, Type type, IMachineValidationCatalog? machines = null) {
         ArgumentNullException.ThrowIfNull(argument: value);
 
-        return Installed.GetValue(key: value, derive: installed => {
+        static string[] Read(object installed, Type type, IMachineValidationCatalog? machines) {
             var names = new SortedSet<string>(comparer: StringComparer.Ordinal);
 
-            CollectState(value: installed, type: type, names: names);
+            CollectState(value: installed, type: type, names: names, machines: machines);
             return [.. names];
-        });
+        }
+        // A machine's reading depends on the host's catalog, and a boxed section is a fresh object per read: neither is kept.
+        return (((machines is not null) && (value is WorldMachine)) || value.GetType().IsValueType)
+            ? Read(installed: value, type: type, machines: machines)
+            : Installed.GetValue(key: value, derive: installed => Read(installed: installed, type: type, machines: null));
     }
     private static readonly Puck.Abstractions.CodeDerivedTable<object, string[]> Installed = new();
     /// <summary>Collects the state names a typed document value spells (<see cref="NamesState"/>).</summary>
     /// <param name="value">The value; a <see langword="null"/> value spells nothing.</param>
     /// <param name="type">The model type of <paramref name="value"/>.</param>
     /// <param name="names">Receives each distinct state name.</param>
-    public static void CollectState(object? value, Type type, ISet<string> names) {
+    /// <param name="machines">The host's machine vocabulary, or <see langword="null"/> (see <see cref="Collect"/>).</param>
+    public static void CollectState(object? value, Type type, ISet<string> names, IMachineValidationCatalog? machines = null) {
         ArgumentNullException.ThrowIfNull(argument: names);
 
-        Collect(value: value, type: type, found: (site, kind, name) => {
+        Collect(value: value, type: type, machines: machines, found: (site, kind, name) => {
             if (NamesStateRow(kind: kind, name: name)) { _ = names.Add(item: name); }
         });
     }
 }
 
 /// <summary>The state names each state row's declaration spells, and the reverse: which declarations spell a name.
-/// A declaration is the row without its cells, so nothing a row holds enters either relation: the relation is the
-/// rows' declared structure, delivered to every replica reader, and two worlds that differ only in withheld cells
-/// read the same one.</summary>
+/// A declaration is the row without its cells' keys and values, so no value a row holds enters either relation: the
+/// relation is the rows' declared structure, delivered to every replica reader. A cell's own audience policy
+/// (<see cref="StateCell.Visibility"/>) is a declaration the row carries, so the names it spells enter the relation:
+/// a write into a cell's audience row widens who reads that cell.</summary>
 /// <remarks>Built once per state section and kept while the section is; each row's reading is kept while the row
 /// object is. It extends <see cref="StateCatalog.DependentRows"/>, the token-domain relation the arena's commit check
 /// reads, to every name position a declaration holds (a live audience, a derived board's token and code rows, a
@@ -119,6 +132,9 @@ public sealed class WorldRowDeclarationNames {
         var names = new SortedSet<string>(comparer: StringComparer.Ordinal);
 
         WorldSpelledNames.CollectState(value: row with { Cells = null }, type: typeof(WorldStateRow), names: names);
+        foreach (var cell in row.Cells ?? []) {
+            WorldSpelledNames.CollectState(value: cell?.Visibility, type: typeof(StateVisibility), names: names);
+        }
         return [.. names];
     }
 }

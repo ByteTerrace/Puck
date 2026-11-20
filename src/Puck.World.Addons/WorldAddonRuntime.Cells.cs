@@ -71,13 +71,16 @@ public sealed partial class WorldAddonRuntime {
                 m_cellReplies[replies++] = (query.Ordinal, verdict);
             }
         }
+        var undisclosed = false;
         if (hasWrites) {
             if (!accepted) { m_server.RewindStateTransaction(mark: mark); }
-            else { accepted = m_server.TryCommitStateTransaction(mark: mark, principal: addon.Principal, reason: out _); }
+            else { accepted = m_server.TryCommitStateTransaction(mark: mark, principal: addon.Principal, reason: out _, undisclosed: out undisclosed); }
         }
+        // A batch whose validation reads a row the addon cannot read whole answers as the door does for a withheld row.
+        var refused = undisclosed ? AddonVerdict.NotDisclosed : AddonVerdict.Rejected;
         for (var i = 0; i < replies; i++) {
             var reply = m_cellReplies[i];
-            QueueAnswer(addon, reply.Ordinal, !accepted && reply.Verdict == AddonVerdict.Applied ? AddonVerdict.Rejected : reply.Verdict);
+            QueueAnswer(addon, reply.Ordinal, !accepted && reply.Verdict == AddonVerdict.Applied ? refused : reply.Verdict);
         }
     }
     private (ushort Ordinal, AddonVerdict Verdict)[] m_cellReplies = [];

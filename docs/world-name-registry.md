@@ -15,6 +15,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 
 | Path | Kind | Role | Facet | Member |
 |---|---|---|---|---|
+| `spawnPoints[].position` | State | Binding | Binding | `WorldSpawnPoint.Position` |
 | `render.lighting.lights[].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
 | `render.lighting.lights[][directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
 | `render.lighting.lights[][directional].illuminance` | State | Binding | Binding | `WorldRenderLight.Directional.Illuminance` |
@@ -85,12 +86,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.keys[].curvature.inkHigh` | State | Binding | Binding | `WorldRenderCurvature.InkHigh` |
 | `render.lighting.keys[].curvature.inkColor` | State | Binding | Binding | `WorldRenderCurvature.InkColor` |
 | `render.sky.layers[].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.layers[].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][gradient].stops[].elevation` | State | Binding | Binding | `WorldRenderSkyStop.Elevation` |
 | `render.sky.layers[][gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
 | `render.sky.layers[][gradient].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][gradient].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.layers[][gradient].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][gradient].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][gradient].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
@@ -98,6 +101,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][sunDisc].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Intensity` |
 | `render.sky.layers[][sunDisc].color` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Color` |
 | `render.sky.layers[][sunDisc].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][sunDisc].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.layers[][sunDisc].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][sunDisc].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][sunDisc].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
@@ -106,6 +110,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][stars].twinkle.depth` | State | Binding | Binding | `WorldRenderSkyTwinkle.Depth` |
 | `render.sky.layers[][stars].twinkle.rate` | State | Binding | Binding | `WorldRenderSkyTwinkle.Rate` |
 | `render.sky.layers[][stars].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][stars].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.layers[][stars].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][stars].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][stars].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
@@ -116,6 +121,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][clouds].spin` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Spin` |
 | `render.sky.layers[][clouds].curl` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Curl` |
 | `render.sky.layers[][clouds].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][clouds].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.layers[][clouds].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][clouds].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][clouds].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
@@ -126,6 +132,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][aurora].height` | State | Binding | Binding | `WorldRenderSkyLayer.Aurora.Height` |
 | `render.sky.layers[][aurora].fold` | State | Binding | Binding | `WorldRenderSkyLayer.Aurora.Fold` |
 | `render.sky.layers[][aurora].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][aurora].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.layers[][aurora].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][aurora].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][aurora].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
@@ -133,44 +140,56 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][noise].high` | State | Binding | Binding | `WorldRenderSkyLayer.Noise.High` |
 | `render.sky.layers[][noise].coverage` | State | Binding | Binding | `WorldRenderSkyLayer.Noise.Coverage` |
 | `render.sky.layers[][noise].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][noise].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.layers[][noise].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][noise].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][noise].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][pattern].colors` | State | Binding | Binding | `WorldRenderSkyLayer.Pattern.Colors` |
 | `render.sky.layers[][pattern].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][pattern].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.layers[][pattern].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][pattern].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][pattern].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.layers[][panorama].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.Panorama.Intensity` |
 | `render.sky.layers[][panorama].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][panorama].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.layers[][panorama].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][panorama].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][panorama].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
+| `render.sky.layers[][panel].direction` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Direction` |
+| `render.sky.layers[][panel].size` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Size` |
 | `render.sky.layers[][panel].color` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Color` |
 | `render.sky.layers[][panel].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Intensity` |
 | `render.sky.layers[][panel].blur` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Blur` |
 | `render.sky.layers[][panel].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][panel].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.layers[][panel].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][panel].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][panel].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
+| `render.sky.layers[][view].anchor` | State | Binding | Binding | `WorldRenderSkyLayer.View.Anchor` |
 | `render.sky.layers[][view].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.View.Fallback` |
 | `render.sky.layers[][view].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][view].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.layers[][view].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][view].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][view].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
+| `render.sky.layers[][far].anchor` | State | Binding | Binding | `WorldRenderSkyLayer.Far.Anchor` |
 | `render.sky.layers[][far].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.Far.Fallback` |
 | `render.sky.layers[][far].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.layers[][far].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.layers[][far].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.layers[][far].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.layers[][far].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.clock` | Clock | Names | Read | `WorldRenderSky.Clock` |
 | `render.sky.keys[].layers{*}.opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}.mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.keys[].layers{*}.luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}.transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}.transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[gradient].stops[].elevation` | State | Binding | Binding | `WorldRenderSkyStop.Elevation` |
 | `render.sky.keys[].layers{*}[gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
 | `render.sky.keys[].layers{*}[gradient].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[gradient].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.keys[].layers{*}[gradient].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[gradient].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[gradient].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
@@ -178,6 +197,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[sunDisc].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Intensity` |
 | `render.sky.keys[].layers{*}[sunDisc].color` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Color` |
 | `render.sky.keys[].layers{*}[sunDisc].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[sunDisc].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.keys[].layers{*}[sunDisc].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[sunDisc].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[sunDisc].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
@@ -186,6 +206,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[stars].twinkle.depth` | State | Binding | Binding | `WorldRenderSkyTwinkle.Depth` |
 | `render.sky.keys[].layers{*}[stars].twinkle.rate` | State | Binding | Binding | `WorldRenderSkyTwinkle.Rate` |
 | `render.sky.keys[].layers{*}[stars].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[stars].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.keys[].layers{*}[stars].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[stars].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[stars].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
@@ -196,6 +217,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[clouds].spin` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Spin` |
 | `render.sky.keys[].layers{*}[clouds].curl` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Curl` |
 | `render.sky.keys[].layers{*}[clouds].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[clouds].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.keys[].layers{*}[clouds].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[clouds].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[clouds].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
@@ -206,6 +228,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[aurora].height` | State | Binding | Binding | `WorldRenderSkyLayer.Aurora.Height` |
 | `render.sky.keys[].layers{*}[aurora].fold` | State | Binding | Binding | `WorldRenderSkyLayer.Aurora.Fold` |
 | `render.sky.keys[].layers{*}[aurora].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[aurora].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.keys[].layers{*}[aurora].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[aurora].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[aurora].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
@@ -213,36 +236,47 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[noise].high` | State | Binding | Binding | `WorldRenderSkyLayer.Noise.High` |
 | `render.sky.keys[].layers{*}[noise].coverage` | State | Binding | Binding | `WorldRenderSkyLayer.Noise.Coverage` |
 | `render.sky.keys[].layers{*}[noise].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[noise].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.keys[].layers{*}[noise].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[noise].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[noise].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[pattern].colors` | State | Binding | Binding | `WorldRenderSkyLayer.Pattern.Colors` |
 | `render.sky.keys[].layers{*}[pattern].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[pattern].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.keys[].layers{*}[pattern].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[pattern].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[pattern].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
 | `render.sky.keys[].layers{*}[panorama].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.Panorama.Intensity` |
 | `render.sky.keys[].layers{*}[panorama].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[panorama].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.keys[].layers{*}[panorama].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[panorama].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[panorama].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
+| `render.sky.keys[].layers{*}[panel].direction` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Direction` |
+| `render.sky.keys[].layers{*}[panel].size` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Size` |
 | `render.sky.keys[].layers{*}[panel].color` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Color` |
 | `render.sky.keys[].layers{*}[panel].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Intensity` |
 | `render.sky.keys[].layers{*}[panel].blur` | State | Binding | Binding | `WorldRenderSkyLayer.Panel.Blur` |
 | `render.sky.keys[].layers{*}[panel].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[panel].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.keys[].layers{*}[panel].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[panel].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[panel].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
+| `render.sky.keys[].layers{*}[view].anchor` | State | Binding | Binding | `WorldRenderSkyLayer.View.Anchor` |
 | `render.sky.keys[].layers{*}[view].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.View.Fallback` |
 | `render.sky.keys[].layers{*}[view].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[view].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.keys[].layers{*}[view].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[view].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[view].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
+| `render.sky.keys[].layers{*}[far].anchor` | State | Binding | Binding | `WorldRenderSkyLayer.Far.Anchor` |
 | `render.sky.keys[].layers{*}[far].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.Far.Fallback` |
 | `render.sky.keys[].layers{*}[far].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
+| `render.sky.keys[].layers{*}[far].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
 | `render.sky.keys[].layers{*}[far].luminance` | State | Binding | Binding | `WorldRenderSkyLayer.Luminance` |
 | `render.sky.keys[].layers{*}[far].transform.turn` | State | Binding | Binding | `WorldRenderSkyTransform.Turn` |
 | `render.sky.keys[].layers{*}[far].transform.tilt` | State | Binding | Binding | `WorldRenderSkyTransform.Tilt` |
+| `render.sky.frame.up` | State | Binding | Binding | `WorldRenderSkyFrame.Up` |
 | `render.environment.ambient` | State | Binding | Binding | `WorldRenderEnvironment.Ambient` |
 | `render.environment.reflection` | State | Binding | Binding | `WorldRenderEnvironment.Reflection` |
 | `render.atmosphere.fog.density` | State | Binding | Binding | `WorldRenderFog.Density` |
@@ -271,20 +305,30 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.exposure.maximum` | State | Binding | Binding | `WorldRenderExposure.Maximum` |
 | `render.exposure.compensation` | State | Binding | Binding | `WorldRenderExposure.Compensation` |
 | `render.exposure.hold` | State | Binding | Binding | `WorldRenderExposure.Hold` |
+| `render.toon.outlineTint` | State | Binding | Binding | `ToonStyleDocument.OutlineTint` |
 | `render.lanes` | State | Binding | Binding | `WorldRenderDefaults.Lanes` |
+| `screens[].origin` | State | Binding | Binding | `WorldScreen.Origin` |
+| `screens[].right` | State | Binding | Binding | `WorldScreen.Right` |
+| `screens[].up` | State | Binding | Binding | `WorldScreen.Up` |
 | `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].material` | ScreenMaterial | Names | Binding | `WorldScreen.Material` |
 | `screenMaterials[].id` | ScreenMaterial | Declares |  | `WorldScreenMaterial.Id` |
 | `cameras[].rig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
+| `cameras[].rig.operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `cameras[].rig.operations[][offset].value` | State | Binding | Binding | `WorldCameraProgramOp.Offset.Value` |
 | `cameras[].rig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
+| `cameras[].rig.operations[][lookAt].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `cameras[].rig.operations[][lookAt].targetOffset` | State | Binding | Binding | `WorldCameraProgramOp.LookAt.TargetOffset` |
 | `cameras[].rig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `cameras[].rig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
+| `cameras[].rig.operations[][orbit].pivotOffset` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.PivotOffset` |
 | `cameras[].rig.operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
 | `cameras[].rig.operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
 | `cameras[].rig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
 | `cameras[].rig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
 | `cameras[].rig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
+| `cameras[].rig.operations[][firstPerson].eyePoint` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.EyePoint` |
 | `cameras[].rig.operations[][firstPerson].active` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.Active` |
 | `cameras[].rig.operations[][clearance].cutaway` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.Cutaway` |
 | `cameras[].rig.operations[][clearance].eyeRadius` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.EyeRadius` |
@@ -298,6 +342,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].rig.operations[][clearance].nearMargin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.NearMargin` |
 | `cameras[].rig.operations[][clearance].retractionSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.RetractionSkin` |
 | `cameras[].rig.operations[][clearance].obstructedTargetSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.ObstructedTargetSkin` |
+| `cameras[].rig.operations[][clearance].closeTargetOffset` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetOffset` |
 | `cameras[].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `cameras[].anchors[].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `cameras[].anchors[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
@@ -307,7 +352,12 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].anchors[].when[near].subject[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
 | `cameras[].anchors[].when[near].of[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
 | `cameras[].anchors[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `bodies.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `bodies.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `bodies.capacityRow` | State | Names | Read | `WorldBodiesDefaults.CapacityRow` |
+| `seatDefaults.seatCameraFeel.gyro.deadZone` | State | Binding | Binding | `WorldSeatGyro.DeadZoneRaw` |
+| `seatDefaults.seatCameraFeel.gyro.yaw` | State | Binding | Binding | `WorldSeatGyro.YawRaw` |
+| `seatDefaults.seatCameraFeel.gyro.pitch` | State | Binding | Binding | `WorldSeatGyro.PitchRaw` |
 | `targetRegisters[].rangeState` | State | Names | Read | `WorldTargetRegister.RangeState` |
 | `targetRegisters[].halfAngleState` | State | Names | Read | `WorldTargetRegister.HalfAngleState` |
 | `kits.rows[].motion.shaping[].when[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
@@ -351,6 +401,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].motion.shaping[].when[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].motion.shaping[].when[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].motion.shaping[].when[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].motion.holds[].cone` | State | Binding | Binding | `WorldHold.Cone` |
 | `kits.rows[].producers{*}.flock.cohesionAffinity` | State | Expression | Read | `WorldFlockProfile.CohesionAffinity` |
 | `kits.rows[].producers{*}.flock.cohesionAffinity{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `kits.rows[].producers{*}.flock.cohesionAffinity{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -547,6 +598,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][rewindGroup].group` | RuleGroup | Names | Action | `ActionEffect.RewindGroup.Group` |
 | `kits.rows[].actions{*}.onPress.effects[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `kits.rows[].actions{*}.onPress.effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
@@ -593,8 +645,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -613,7 +672,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].shape.center` | State | Binding | Binding | `WorldSpatialShape.Center` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].shape.halfExtents` | State | Binding | Binding | `WorldSpatialShape.HalfExtents` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
 | `kits.rows[].actions{*}.onPress.effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -634,7 +697,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `kits.rows[].actions{*}.onPress.effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -874,6 +939,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][rewindGroup].group` | RuleGroup | Names | Action | `ActionEffect.RewindGroup.Group` |
 | `kits.rows[].actions{*}.onRelease.effects[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `kits.rows[].actions{*}.onRelease.effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
@@ -920,8 +986,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -940,7 +1013,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].shape.center` | State | Binding | Binding | `WorldSpatialShape.Center` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].shape.halfExtents` | State | Binding | Binding | `WorldSpatialShape.HalfExtents` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
 | `kits.rows[].actions{*}.onRelease.effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -961,7 +1038,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `kits.rows[].actions{*}.onRelease.effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -1201,6 +1280,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][rewindGroup].group` | RuleGroup | Names | Action | `ActionEffect.RewindGroup.Group` |
 | `kits.rows[].actions{*}.onFact[].effects[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `kits.rows[].actions{*}.onFact[].effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
@@ -1247,8 +1327,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -1267,7 +1354,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].shape.center` | State | Binding | Binding | `WorldSpatialShape.Center` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].shape.halfExtents` | State | Binding | Binding | `WorldSpatialShape.HalfExtents` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
 | `kits.rows[].actions{*}.onFact[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -1288,7 +1379,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `kits.rows[].actions{*}.onFact[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -1366,7 +1459,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].gate[all].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onFact[].gate[any].predicates[]…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].actions{*}.onFact[].gate[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].collider[capsule].endpoint` | State | Binding | Binding | `WorldCollider.Capsule.Endpoint` |
+| `kits.rows[].collider[box].halfExtents` | State | Binding | Binding | `WorldCollider.Box.HalfExtents` |
+| `kits.rows[].collider[box].rotation` | State | Binding | Binding | `WorldCollider.Box.Rotation` |
 | `kits.rows[].collider[fromCreation].prototypeId` | Prototype | Names | Read | `WorldCollider.FromCreation.PrototypeId` |
+| `kits.rows[].carry.offset` | State | Binding | Binding | `WorldCarry.Offset` |
+| `kits.assignment.rows` | State | Binding | Binding | `WorldRowAssignment.Rows` |
+| `bindingOverlays[].document.chords[].group` | State | Binding | Binding | `BindingChordDefinition.Group` |
+| `bindingOverlays[].document.contexts[].group` | State | Binding | Binding | `BindingContextDefinition.Group` |
+| `bindingOverlays[].document.wheels[].group` | State | Binding | Binding | `BindingWheelDefinition.Group` |
 | `bindingOverlays[].document.wheels[].labelRow` | State | Binding | Binding | `BindingWheelDefinition.LabelRow` |
 | `bindingOverlays[].document.wheels[].iconRow` | State | Binding | Binding | `BindingWheelDefinition.IconRow` |
 | `bindingOverlays[].bindingBar.iconRow` | State | Binding | Binding | `WorldBindingBarAuthoring.IconRow` |
@@ -1382,10 +1483,18 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `bindingOverlays[].when.comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
 | `bindingOverlays[].when.comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `prototypes[].id` | Prototype | Declares |  | `WorldPrototype.Id` |
+| `prototypes[].document{state}` | State | Binding | Binding | `CreationDocument.state binding` |
 | `placements.rows[].id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `placements.rows[].prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
+| `placements.rows[].position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `placements.rows[].distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `placements.rows[].distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
+| `placements.rows[].mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `placements.rows[].inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `placements.rows[].inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `placements.rows[].faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `placements.rows[].faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `placements.rows[].attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `placements.rows[].respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `placements.rows[].respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `placements.rows[].respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -1404,29 +1513,45 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `placements.rows[].deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `placements.rows[].deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `placements.rows[].spatial[].shape.center` | State | Binding | Binding | `WorldSpatialShape.Center` |
+| `placements.rows[].spatial[].shape.halfExtents` | State | Binding | Binding | `WorldSpatialShape.HalfExtents` |
 | `placements.rows[].surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
+| `placements.rows[].surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
+| `placements.rows[].surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
 | `speakers[].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
 | `speakers[].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
+| `speakers[][fixed].position` | State | Binding | Binding | `WorldSpeaker.Fixed.Position` |
 | `speakers[][fixed].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
 | `speakers[][fixed].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
 | `speakers[][anchored].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `speakers[][anchored].offset` | State | Binding | Binding | `WorldSpeaker.Anchored.Offset` |
 | `speakers[][anchored].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
 | `speakers[][anchored].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
+| `speakers[][bed].center` | State | Binding | Binding | `WorldSpeaker.Bed.Center` |
 | `speakers[][bed].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
 | `speakers[][bed].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
 | `gravity.attractors[].placementId` | Placement | Names | Read | `WorldGravityAttractor.PlacementId` |
+| `gravity.uniform` | State | Binding | Binding | `WorldGravity.Uniform` |
 | `gravity.points[].placementId` | Placement | Names | Read | `WorldGravityPoint.PlacementId` |
 | `gravity.areas[].placementId` | Placement | Names | Read | `WorldGravityArea.PlacementId` |
+| `gravity.areas[].bounds[box].halfExtents` | State | Binding | Binding | `WorldGravityAreaBounds.BoxBounds.HalfExtents` |
+| `gravity.areas[].acceleration[directional].value` | State | Binding | Binding | `WorldGravityAreaAcceleration.Directional.Value` |
 | `host.backendRow` | State | Names | Read | `WorldHostDefaults.BackendRow` |
 | `views.seatRig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
+| `views.seatRig.operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.seatRig.operations[][offset].value` | State | Binding | Binding | `WorldCameraProgramOp.Offset.Value` |
 | `views.seatRig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
+| `views.seatRig.operations[][lookAt].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.seatRig.operations[][lookAt].targetOffset` | State | Binding | Binding | `WorldCameraProgramOp.LookAt.TargetOffset` |
 | `views.seatRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.seatRig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
+| `views.seatRig.operations[][orbit].pivotOffset` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.PivotOffset` |
 | `views.seatRig.operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
 | `views.seatRig.operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
 | `views.seatRig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
 | `views.seatRig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
 | `views.seatRig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
+| `views.seatRig.operations[][firstPerson].eyePoint` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.EyePoint` |
 | `views.seatRig.operations[][firstPerson].active` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.Active` |
 | `views.seatRig.operations[][clearance].cutaway` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.Cutaway` |
 | `views.seatRig.operations[][clearance].eyeRadius` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.EyeRadius` |
@@ -1440,15 +1565,22 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.seatRig.operations[][clearance].nearMargin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.NearMargin` |
 | `views.seatRig.operations[][clearance].retractionSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.RetractionSkin` |
 | `views.seatRig.operations[][clearance].obstructedTargetSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.ObstructedTargetSkin` |
+| `views.seatRig.operations[][clearance].closeTargetOffset` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetOffset` |
 | `views.cameraRig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
+| `views.cameraRig.operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.cameraRig.operations[][offset].value` | State | Binding | Binding | `WorldCameraProgramOp.Offset.Value` |
 | `views.cameraRig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
+| `views.cameraRig.operations[][lookAt].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.cameraRig.operations[][lookAt].targetOffset` | State | Binding | Binding | `WorldCameraProgramOp.LookAt.TargetOffset` |
 | `views.cameraRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.cameraRig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
+| `views.cameraRig.operations[][orbit].pivotOffset` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.PivotOffset` |
 | `views.cameraRig.operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
 | `views.cameraRig.operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
 | `views.cameraRig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
 | `views.cameraRig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
 | `views.cameraRig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
+| `views.cameraRig.operations[][firstPerson].eyePoint` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.EyePoint` |
 | `views.cameraRig.operations[][firstPerson].active` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.Active` |
 | `views.cameraRig.operations[][clearance].cutaway` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.Cutaway` |
 | `views.cameraRig.operations[][clearance].eyeRadius` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.EyeRadius` |
@@ -1462,15 +1594,22 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.cameraRig.operations[][clearance].nearMargin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.NearMargin` |
 | `views.cameraRig.operations[][clearance].retractionSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.RetractionSkin` |
 | `views.cameraRig.operations[][clearance].obstructedTargetSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.ObstructedTargetSkin` |
+| `views.cameraRig.operations[][clearance].closeTargetOffset` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetOffset` |
 | `views.programs[].operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
+| `views.programs[].operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.programs[].operations[][offset].value` | State | Binding | Binding | `WorldCameraProgramOp.Offset.Value` |
 | `views.programs[].operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
+| `views.programs[].operations[][lookAt].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
+| `views.programs[].operations[][lookAt].targetOffset` | State | Binding | Binding | `WorldCameraProgramOp.LookAt.TargetOffset` |
 | `views.programs[].operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.programs[].operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
+| `views.programs[].operations[][orbit].pivotOffset` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.PivotOffset` |
 | `views.programs[].operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
 | `views.programs[].operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
 | `views.programs[].operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
 | `views.programs[].operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
 | `views.programs[].operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
+| `views.programs[].operations[][firstPerson].eyePoint` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.EyePoint` |
 | `views.programs[].operations[][firstPerson].active` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.Active` |
 | `views.programs[].operations[][clearance].cutaway` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.Cutaway` |
 | `views.programs[].operations[][clearance].eyeRadius` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.EyeRadius` |
@@ -1484,6 +1623,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.programs[].operations[][clearance].nearMargin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.NearMargin` |
 | `views.programs[].operations[][clearance].retractionSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.RetractionSkin` |
 | `views.programs[].operations[][clearance].obstructedTargetSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.ObstructedTargetSkin` |
+| `views.programs[].operations[][clearance].closeTargetOffset` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetOffset` |
+| `looks.rows[].name` | State | Binding | Binding | `WorldLook.Name` |
 | `looks.rows[].source[creation].prototypeId` | Prototype | Names | Read | `WorldLookSource.Creation.PrototypeId` |
 | `looks.rows[].motion.lanes` | State | Expression | Read | `WorldLookMotion.Lanes` |
 | `looks.rows[].motion.lanes[]{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -1502,6 +1643,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `looks.rows[].motion.lanes[]{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `looks.assignment.rows` | State | Binding | Binding | `WorldRowAssignment.Rows` |
 | `dynamics[].name` | Dynamics | Declares |  | `DynamicsRow.Name` |
 | `hud.defaults.cursor.visible[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `hud.defaults.cursor.visible[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
@@ -1533,7 +1675,22 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `hud.panels[].elements[].sources[].when[near].subject[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
 | `hud.panels[].elements[].sources[].when[near].of[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
 | `hud.panels[].elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `state.world[].field.material.weathering.patternScale` | State | Binding | Binding | `PaletteWeatheringDocument.PatternScale` |
+| `state.world[].field.material.weathering.turn` | State | Binding | Binding | `PaletteWeatheringDocument.Turn` |
+| `state.world[].field.material.inset.origin` | State | Binding | Binding | `PaletteInsetDocument.Origin` |
+| `state.world[].field.material.inset.rotation` | State | Binding | Binding | `PaletteInsetDocument.Rotation` |
+| `state.world[].field.material.toon.outlineTint` | State | Binding | Binding | `ToonStyleDocument.OutlineTint` |
 | `state.world[].field.material.toonSelect.state` | State | Binding | Binding | `PaletteToonSelectDocument.State` |
+| `state.world[].field.material.toonSelect.cases[].toon.outlineTint` | State | Binding | Binding | `ToonStyleDocument.OutlineTint` |
+| `state.world[].field.material.flow.velocity` | State | Binding | Binding | `PaletteFlowDocument.Velocity` |
+| `state.world[].field.material.flow.region.center` | State | Binding | Binding | `PaletteFlowRegionDocument.Center` |
+| `state.world[].field.material.flow.region.velocity` | State | Binding | Binding | `PaletteFlowRegionDocument.Velocity` |
+| `state.world[].field.material.paints[].position` | State | Binding | Binding | `PalettePaintDocument.Position` |
+| `state.world[].field.material.paints[].rotation` | State | Binding | Binding | `PalettePaintDocument.Rotation` |
+| `state.world[].field.material.paints[].scale` | State | Binding | Binding | `PalettePaintDocument.Scale` |
+| `state.world[].field.material.paints[].curve.a` | State | Binding | Binding | `ShapeCurveDocument.A` |
+| `state.world[].field.material.paints[].curve.b` | State | Binding | Binding | `ShapeCurveDocument.B` |
+| `state.world[].field.material.paints[].curve.c` | State | Binding | Binding | `ShapeCurveDocument.C` |
 | `state.world[].field.paint[][draw].source` | Generator | Names | Read | `WorldLatticeFill.Draw.Source` |
 | `state.world[].witness` | State | Names | Read | `WorldStateRow.Witness` |
 | `state.world[].draw.source` | Generator | Names | Read | `Draw.Source` |
@@ -1552,12 +1709,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].knowledge.positions` | State | Names | Read | `StateKnowledge.Positions` |
 | `state.world[].phaseOf` | State | Names | Read | `StateRowShape.PhaseOf` |
 | `state.lattices[].name` | Topology | Declares |  | `LatticeTopology.Name` |
+| `state.lattices[].origin` | State | Binding | Binding | `LatticeTopology.Origin` |
 | `state.lattices[][grid].name` | Topology | Declares |  | `LatticeTopology.Name` |
+| `state.lattices[][grid].origin` | State | Binding | Binding | `LatticeTopology.Origin` |
 | `state.lattices[][ring].name` | Topology | Declares |  | `LatticeTopology.Name` |
+| `state.lattices[][ring].origin` | State | Binding | Binding | `LatticeTopology.Origin` |
 | `state.lattices[][hex].name` | Topology | Declares |  | `LatticeTopology.Name` |
+| `state.lattices[][hex].origin` | State | Binding | Binding | `LatticeTopology.Origin` |
 | `state.lattices[][box].name` | Topology | Declares |  | `LatticeTopology.Name` |
+| `state.lattices[][box].origin` | State | Binding | Binding | `LatticeTopology.Origin` |
+| `state.lattices[][graph].cells[].centre` | State | Binding | Binding | `GraphCell.Centre` |
 | `state.lattices[][graph].name` | Topology | Declares |  | `LatticeTopology.Name` |
+| `state.lattices[][graph].origin` | State | Binding | Binding | `LatticeTopology.Origin` |
 | `state.lattices[][tiling].name` | Topology | Declares |  | `LatticeTopology.Name` |
+| `state.lattices[][tiling].origin` | State | Binding | Binding | `LatticeTopology.Origin` |
 | `state.lattices[][field].reactions[][diffuse].field` | Field | Names | Action | `WorldReaction.Diffuse.Field` |
 | `state.lattices[][field].reactions[][diffuse].rate{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `state.lattices[][field].reactions[][decay].field` | Field | Names | Action | `WorldReaction.Decay.Field` |
@@ -1579,6 +1744,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.lattices[][field].reactions[][flow].spillRow` | State | Names | Action | `WorldReaction.Flow.SpillRow` |
 | `state.lattices[][field].travelResistance{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `state.lattices[][field].name` | Topology | Declares |  | `LatticeTopology.Name` |
+| `state.lattices[][field].origin` | State | Binding | Binding | `LatticeTopology.Origin` |
 | `state.families[].members` | State | Names | Read | `StateFamily.Members` |
 | `state.records[].name` | Record | Declares |  | `StateRecord.Name` |
 | `state.pools[].name` | Pool | Declares |  | `StatePool.Name` |
@@ -1614,6 +1780,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `theme.styles.keycap.badge.color` | State | Binding | Binding | `WorldThemeStyleColor.Color` |
 | `theme.styles.keycap.badgeInk.color` | State | Binding | Binding | `WorldThemeStyleColor.Color` |
 | `theme.styles.console.echo.color` | State | Binding | Binding | `WorldThemeStyleColor.Color` |
+| `markers[].source[point].position` | State | Binding | Binding | `WorldMarkerSource.Point.Position` |
 | `markers[].style.chipAlpha` | State | Binding | Binding | `WorldMarkerStyle.ChipAlpha` |
 | `markers[].style.ringColor` | State | Binding | Binding | `WorldMarkerStyle.RingColor` |
 | `markers[].style.ringAlpha` | State | Binding | Binding | `WorldMarkerStyle.RingAlpha` |
@@ -1784,6 +1951,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][rewindGroup].group` | RuleGroup | Names | Action | `ActionEffect.RewindGroup.Group` |
 | `rules[].effects[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `rules[].effects[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
+| `rules[].effects[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `rules[].effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `rules[].effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `rules[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
@@ -1830,8 +1998,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `rules[].effects[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `rules[].effects[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
+| `rules[].effects[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `rules[].effects[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `rules[].effects[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
+| `rules[].effects[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `rules[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `rules[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `rules[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `rules[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `rules[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `rules[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -1850,7 +2025,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `rules[].effects[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `rules[].effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `rules[].effects[][upsertPlacement].placement.spatial[].shape.center` | State | Binding | Binding | `WorldSpatialShape.Center` |
+| `rules[].effects[][upsertPlacement].placement.spatial[].shape.halfExtents` | State | Binding | Binding | `WorldSpatialShape.HalfExtents` |
 | `rules[].effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
+| `rules[].effects[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
+| `rules[].effects[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
 | `rules[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `rules[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `rules[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -1871,7 +2050,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `rules[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `rules[].effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `rules[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `rules[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
 | `rules[].effects[][setIdentityFact].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2129,6 +2310,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][rewindGroup].group` | RuleGroup | Names | Action | `ActionEffect.RewindGroup.Group` |
 | `rules[].decision.options[].effects[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `rules[].decision.options[].effects[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
+| `rules[].decision.options[].effects[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `rules[].decision.options[].effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `rules[].decision.options[].effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `rules[].decision.options[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
@@ -2175,8 +2357,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -2195,7 +2384,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].shape.center` | State | Binding | Binding | `WorldSpatialShape.Center` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].shape.halfExtents` | State | Binding | Binding | `WorldSpatialShape.HalfExtents` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
 | `rules[].decision.options[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `rules[].decision.options[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `rules[].decision.options[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -2216,7 +2409,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `rules[].decision.options[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `rules[].decision.options[].effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `rules[].decision.options[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `rules[].decision.options[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2497,6 +2692,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][rewindGroup].group` | RuleGroup | Names | Action | `ActionEffect.RewindGroup.Group` |
 | `rules[].decision.onNoChoice[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `rules[].decision.onNoChoice[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
+| `rules[].decision.onNoChoice[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `rules[].decision.onNoChoice[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `rules[].decision.onNoChoice[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `rules[].decision.onNoChoice[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
@@ -2543,8 +2739,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -2563,7 +2766,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].shape.center` | State | Binding | Binding | `WorldSpatialShape.Center` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].shape.halfExtents` | State | Binding | Binding | `WorldSpatialShape.HalfExtents` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
 | `rules[].decision.onNoChoice[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `rules[].decision.onNoChoice[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `rules[].decision.onNoChoice[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -2584,7 +2791,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `rules[].decision.onNoChoice[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `rules[].decision.onNoChoice[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `rules[].decision.onNoChoice[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2807,6 +3016,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][rewindGroup].group` | RuleGroup | Names | Action | `ActionEffect.RewindGroup.Group` |
 | `interactions.interactions[].effects[][setVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetVerticalVelocity.Key` |
 | `interactions.interactions[].effects[][scaleVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleVerticalVelocity.Key` |
+| `interactions.interactions[].effects[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `interactions.interactions[].effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `interactions.interactions[].effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
 | `interactions.interactions[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
@@ -2853,8 +3063,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -2873,7 +3090,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].shape.center` | State | Binding | Binding | `WorldSpatialShape.Center` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].shape.halfExtents` | State | Binding | Binding | `WorldSpatialShape.HalfExtents` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
 | `interactions.interactions[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `interactions.interactions[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `interactions.interactions[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -2894,7 +3115,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `interactions.interactions[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `interactions.interactions[].effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `interactions.interactions[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `interactions.interactions[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
 | `interactions.interactions[].effects[][setIdentityFact].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2932,6 +3155,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `generators[].name` | Generator | Declares |  | `GeneratorRow.Name` |
+| `adjacencies[].boundary.center` | State | Binding | Binding | `WorldAdjacencyBoundary.Center` |
+| `probes[].bindings[][parameter].range` | State | Binding | Binding | `WorldProbeBinding.Parameter.Range` |
+| `curves[].knots[].position` | State | Binding | Binding | `WorldCurveKnot.Position` |
 | `navigation.domains[].medium` | Field | Names | Read | `WorldNavigationDomain.Medium` |
 | `navigation.domains[].parent` | Placement | Names | Read | `WorldNavigationDomain.Parent` |
 | `patterns[].name` | Pattern | Declares |  | `PatternRow.Name` |
@@ -3049,6 +3275,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `sets[].set[any].items[]…` | | | | re-enters `CellSetExpression` |
 | `sets[].set[both].items[]…` | | | | re-enters `CellSetExpression` |
 | `sets[].set[not].item…` | | | | re-enters `CellSetExpression` |
+| `editor.grid.pitch` | State | Binding | Binding | `WorldEditorGrid.Pitch` |
 | `editor.bar.iconRow` | State | Binding | Binding | `WorldBindingBarAuthoring.IconRow` |
 | `editor.bar.visible[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `editor.bar.visible[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
@@ -3063,6 +3290,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `replays[].control` | State | Names | Action | `WorldScopedReplay.Control` |
 | `replays[].inputs[].cells[].row` | State | Names | Action | `WorldScopedReplayCell.Row` |
 | `replays[].inputs[].cells[].key` | State | Key | Read | `WorldScopedReplayCell.Key` |
+| `routes[].chapters[].steps[][pose].point` | State | Binding | Binding | `WorldRouteStep.PoseBody.Point` |
+| `routes[].chapters[].steps[][go].point` | State | Binding | Binding | `WorldRouteStep.Go.Point` |
+| `routes[].chapters[].steps[][rest].lookAt` | State | Binding | Binding | `WorldRouteStep.Rest.LookAt` |
 | `shades{*}.outputs[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
 | `shades{*}.values[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
 | `exports.reads` | Any | Names | Read | `WorldExports.Reads` |
