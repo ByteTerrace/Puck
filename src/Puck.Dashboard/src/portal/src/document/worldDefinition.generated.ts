@@ -7094,7 +7094,7 @@ export type WorldDeviceProfile = {
    */
   match: string;
   /**
-   * The quality table the profile runs: the tier of the world's render preset it applies (Names).
+   * The quality tier the profile runs as (Names): the world's render preset of that tier is its table unless Table authors the device's own, and the tier's indirect default applies where the table names none.
    */
   quality: QualityTier;
   /**
@@ -7105,6 +7105,10 @@ export type WorldDeviceProfile = {
    * The most host memory the process admits, in mebibytes, where that is below the machine's budget; absent leaves it. A unified-memory device states its one bar here, since its device segments lie in the host pool.
    */
   hostMemoryMiB?: number | null;
+  /**
+   * The device's own quality table: the levers it runs in place of the world's render preset of Quality, so each device meets its bar by the path it enables (its render scale, its distant shadow map's texels, its indirect tier, which sizes the irradiance volume and its caches). Absent runs the tier's preset.
+   */
+  table?: WorldQualityPreset | null;
 };
 
 export type WorldDisclosureTier = "Frames" | "Presentation" | "Replica";

@@ -4,7 +4,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
 using Puck.Abstractions.Memory;
-using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Hosting.Jobs;
@@ -29,7 +28,7 @@ public sealed partial class WorldBenchmarkCommandModule {
             ["profile"] = selection.Profile,
             ["source"] = selection.Source,
             ["adapter"] = selection.Adapter,
-            ["table"] = ((selection.Table is { } tier) ? QualityTiers.Name(tier: tier) : null),
+            ["table"] = selection.Table,
             ["deviceMemoryCapBytes"] = selection.DeviceMemoryBytes,
             ["hostMemoryCapBytes"] = selection.HostMemoryBytes,
             ["deviceMemoryLimitBytes"] = device.Limit,

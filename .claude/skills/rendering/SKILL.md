@@ -1391,10 +1391,14 @@ quality table enables. A path that needs a capability is a second
 implementation: it reads the same data as the path it replaces, gives the same
 result within the still tolerance, is measured to pay on that hardware, and
 falls back automatically where the capability is missing, so every device keeps
-a working path. No code reads a per-device quality table yet, so the benchmark
-boots with the debug world's own render settings;
-[the rendering plan](../../../docs/plans/rendering-research.md#the-bars-and-the-budget)
-owns building it.
+a working path. A device's table is its `render.devices` row's own `table`, or
+its tier's preset (`WorldDeviceProfile.TableIn`); a windowed boot applies it once
+the device names its adapter, and the benchmark applies it again before its first
+chapter (`--profile`). A table sizes storage through the levers it sets: its
+indirect tier sizes the irradiance volume, its hit cache and its published and
+feedback tables (`SdfMeshIrradiance.LevelsOf`), and its distant map's texels size
+that map. The output-sized temporal history (`SdfWorldPackage.HistoryWindowWords`)
+follows the display, not the table.
 
 For a frame-time bar,
 `host.frames` on the windowed host gives produce, simulate and their sum per
