@@ -446,7 +446,7 @@ public static class WorldPlayerCommand {
         var stub = (OperatingSystem.IsWindows() ? "Puck.Launcher.Stub.exe" : "./Puck.Launcher.Stub");
         var rid = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier;
         var baked = ((targets.Count == 0)
-            ? "the targets of the cache set its release carries (the release notes name it, or say that none matched this engine, in which case a boot bakes what the store lacks)"
+            ? "the targets of the cache set its release carries (the release notes name it; a release ships only with a set that covers the world, and `puck world caches fetch` holds the publish otherwise)"
             : string.Join(separator: ", ", values: targets.Select(selector: static target => $"profile `{target.Profile}` at {target.Width} by {target.Height}")));
         var install = (channel is { } named)
             ? (OperatingSystem.IsWindows()

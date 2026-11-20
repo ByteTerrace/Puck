@@ -260,7 +260,7 @@ The table below records the earlier audit.
 | `world.state.cell.set`, `world.state.cell.remove`, `world.state.transform`, `world.state.act`, `world.generate`, `world.row.set`, `world.row.add`, `world.row.remove`, `world.row.step`, `world.assign`, `world.kit.default`, `world.population.defaults`, `world.population.spawn`, `world.place`, `world.snap`, `world.nudge`, `world.turn`, `world.grid`, `player.row.set`, `player.state.cell.set`, `player.state.cell.toggle`, `creation.sculpt`, `creation.shape`, `pipeline.load`, `pipeline.commit` | Anyone | Answer the write door's verdict (step 3). An absent key answers one text whatever any row interns (`StateArena.MissingCellReason`) | Built |
 | `world.grant`, `world.grants`, `world.revoke`, `world.why`, `world.grant.set`, `world.grant.remove`, `world.group.*`, `world.groups`, `world.ownership.*`, `world.instance.seats`, `world.transfer`, `world.links` | Anyone | Grant and instance tables, no state rows; equal across every pair | None |
 | `world.peers` | Operator | Live population membership (which bodies arrived, from which authority, and when they leave), other connections' endpoints and identities, and the door's refusal counts: the host's, with no recipient view to derive them from | Operator verb, off the silo's remote surface |
-| `body.*`, `player.*` controls and read-backs (`body.where`, `body.state`, `body.targets`), `world.players`, `world.population`, `world.parked`, `world.gravity` | Anyone | Bodies, not rows: body disclosure is the open item below (`WorldOutputHub.Redact`, A16); no state row reaches them. Their server queries ask as the caller: `IServerLink.Query` takes the principal and the trusted composer (`WorldServer.Answer`) is internal, so a session the query door refuses is refused here too | Body disclosure step |
+| `body.*`, `player.*` controls and read-backs (`body.where`, `body.state`, `body.targets`), `world.players`, `world.population`, `world.parked`, `world.gravity` | Anyone | Bodies, not rows: body disclosure is the open item below (`WorldInterestFrame.Project`, A16); no state row reaches them. Their server queries ask as the caller: `IServerLink.Query` takes the principal and the trusted composer (`WorldServer.Answer`) is internal, so a session the query door refuses is refused here too | Body disclosure step |
 | `identity.*`, `chat.*` | Anyone | The caller's own identity documents, authorized per seat (`TryAuthorizedIdentity`); a whisper's inbox rows are what the deduction fixture exercises | None |
 | `help`, `console`, `run`, `world.affordances`, `world.refusals`, `world.extensions`, `world.extensions.catalog`, `world.devices`, `world.device-profiles`, `world.input-holds`, `world.watch`, `world.flag`, `forge.*`, `machine.default`, `update.*`, `storage.*`, `probe.*`, `backend` | Anyone or Local | Registry, catalogue, host configuration or the caller's own session; no state rows. `run` submits an authored command's lines under the caller's principal, so each line meets its own verb's audience | None |
 | `world.fps`, `world.target`, `world.cadence`, `world.residency`, `world.host`, `world.shaders.status`, `world.shaders.reload` | Anyone | Wall time or machine resources, outside the guarantee | None |
@@ -1815,7 +1815,7 @@ games and its fuzzer, not when a review runs out of findings.
 | The assembly-level denied-API gate | Reject as the guard | Sees assembly references, not members | Nothing; it stays for `System.Console` and Azure |
 | Making `world.identify` operator-only | Watch | Hashing the recipient's view gives a per-recipient identity, which is what the recipient was handed; operator-only is simpler | The owner wanting one QR for every seat |
 | Refusing `search` jobs whose outputs are wider than their inputs | Adopt | The owner requires the transform boundary for search too; explicit rule writes remain authored reveals | Nothing |
-| A separate body-disclosure view (`WorldOutputHub.Redact`, `WorldSinkDisclosure`) folded into the recipient view | Adopt as its own step | Body redaction is the same shape (a per-sink policy applied at the hub) and the natural second occupant of the view; out of scope here so the state fix lands alone. Both conditions have arrived: the view landed with step 1, and the MMO round's A16 is the body-disclosure finding ([open items](#open-items)) | Nothing |
+| A separate body-disclosure view (`WorldInterestFrame.Project`, `WorldSinkDisclosure`) folded into the recipient view | Adopt as its own step | Body redaction is the same shape (a per-sink policy applied at the hub) and the natural second occupant of the view; out of scope here so the state fix lands alone. Both conditions have arrived: the view landed with step 1, and the MMO round's A16 is the body-disclosure finding ([open items](#open-items)) | Nothing |
 | Isolating the arena byte ceiling per row or per audience | Watch | A resource channel outside the guarantee; the per-row `capacity` already bounds cells | An authored world where the shared ceiling is reached with hidden rows |
 
 ## The build order
@@ -2406,23 +2406,14 @@ invariant and land beside the rendering work that uses them:
   authority's; check first whether a replica can predict a draw today.
 - Whether `world.identify` hashes the recipient's view or becomes operator-only
   (decided here: the view; the owner may prefer one QR per world).
-- Body disclosure (`WorldOutputHub.Redact`) joins the recipient view: the MMO
-  round's I1 (its step 16; [the seams decision](../decisions/worlds-and-federation.md#seams)).
-  Its finding is the attack catalogue's
-  [A16](mmo-foundations/attacks.md#a16-watching-without-a-body): under the
-  default `All` an unembodied spectator receives every body, and under `Radius`
-  an observer anchored to a window or a camera receives none, because `Redact`
-  anchors only to the observer's own body (`WorldObserverDisclosure`'s
-  `Radius` mode: "An observer with no body of its own is delivered nothing").
-  Fold a spatial grid, hysteresis, an unembodied-observer policy with a window
-  or camera anchor, and distance-tiered cadence into the view and its cursor,
-  replacing `Redact`. Check 5 (I1) in
-  [the memo's checks](mmo-foundations/synthesis.md#5-how-the-debug-world-proves-each-favoured-option):
-  at `Radius 15` with 64 autonomous bodies crossing the radius, a spectator
-  anchored to a window grant receives the bodies within 15 m of its window, an
-  unanchored one receives none under `All` as well as `Radius`, a body
-  oscillating 0.1 m at 15.0 m does not flicker, and `world.budget` shows
-  redaction cost scaling with nearby bodies. Needs step 1 (landed) alone.
+- The recipient view now owns body interest. `WorldInterestFrame` supplies its
+  shared spatial grid and `WorldBodyHistory` supplies acknowledged federation
+  baselines. [Body interest and acknowledgements](../decisions/worlds-and-federation.md#body-interest-and-acknowledgements).
+  I1 still needs the authority-granted window or camera anchor, hysteresis and
+  distance-tiered cadence. Under `All` an unembodied spectator currently
+  receives every body. Under `Radius` it receives none. Check 5 in
+  [the MMO memo](mmo-foundations/synthesis.md#5-how-the-debug-world-proves-each-favoured-option)
+  exercises those cases and a body oscillating at the radius.
 - The resource channels named as best effort are measured, not assumed: step
   1's spectator check records the per-tick disclosure work a hidden write
   costs, so the width of the timing channel is a number in `world.budget`.

@@ -415,7 +415,16 @@ laws exercise that boundary.
   worker busy contouring holds the GPU's next batch back; the reader decodes
   each group's answer buffers and queues each answer on the pool ahead of every
   queued stage, then advances `Progress` (`SdfMeshPathBake.Progressed`), since a
-  field slice's answer queues no work item. A group's lead, which paces
+  field slice's answer queues no work item. A request's points are its group's
+  workspace (a final lattice's one point buffer, reused round to round; the
+  group's crease and material points, cut to nothing by the answer that
+  finishes them), so the reader reads a lattice's request and group only while
+  its ticket is `Decoding` (`SdfMeshPathBake.Receive`: the decode and the
+  sample key), before the queued answer can move the group on; whatever else
+  it needs of the group the take fixed in the batch (`SdfMeshBakeBatch.Poses`,
+  `Keeps`). Hashing the points after the answer is queued reads a later
+  round's points, or throws `ArgumentOutOfRangeException` on a buffer already
+  cut. A group's lead, which paces
   admission (`SdfMeshBakeBacklog.ObserveLead`), runs from its admission to its
   first `Schedule`d stage: a sample probe and an answer are queued urgent
   (`Enqueue`), never through `Schedule`: a probe ended in the admitting take
@@ -1264,7 +1273,10 @@ laws exercise that boundary.
   contouring normally, and it may reuse individual samples for any unchanged
   lattice or point request. The sample key (`SdfMeshPathBake.SampleInput`, the
   one derivation a probe and a write share) is the dispatch's packed lattice row
-  and points over the group's sample input (`SampleFieldInput`): its `Shape`,
+  and points over the group's `SampleKeys`, which the group fixes when it
+  begins and the take records beside each lattice it dispatches, so the reader
+  that keeps the samples never reads the live group. The keys hold the group's
+  sample input (`SampleFieldInput`): its `Shape`,
   which the geometry hashes before the tier and the operands' poses, the
   program's packed field and step scale, its palette and its pose rows. A tier
   changes what a lattice samples only through those rows or the lattice's own

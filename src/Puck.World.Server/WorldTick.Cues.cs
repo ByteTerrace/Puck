@@ -12,20 +12,20 @@ public sealed partial class WorldTick {
 
     // The authority image never contains cues. A delivery creates them from the live recipient's capability and
     // its already-redacted body table. A nested primer or restored timeline has no event window.
-    internal WorldSnapshot PresentCues(in WorldSnapshot snapshot, WorldRecipientView view, bool fullBodies) {
+    internal WorldSnapshot PresentCues(in WorldSnapshot snapshot, WorldRecipientView view, bool fullBodies, WorldBodyView? bodies = null) {
         if (!m_deliveringCues || !view.Observes) { return snapshot; }
 
         List<WorldGameplayCue>? disclosed = null;
         var admission = new CueAdmission(view, fullBodies);
         foreach (var (cue, reads, arena) in m_cues) {
             if (!IsCurrent(snapshot, cue, arena) || !admission.Admits(reads, Host.RuleHost) ||
-                ((cue.Body is { } body) && !snapshot.TryFindEntity(body, cue.Generation, out _))) { continue; }
+                ((cue.Body is { } body) && !(bodies?.Contains(body, cue.Generation) ?? snapshot.TryFindEntity(body, cue.Generation, out _)))) { continue; }
 
             (disclosed ??= []).Add(cue);
             if (disclosed.Count == WorldRuleCapacity.MaxDeliveredCues) { break; }
         }
         return snapshot with { Cues = disclosed?.ToArray() ?? [], MusicBoundary = m_cueMusicBoundary,
-            MusicSenses = m_musicDirector is null ? (byte)0 : DisclosedMusicSenses(snapshot, view) };
+            MusicSenses = m_musicDirector is null ? (byte)0 : DisclosedMusicSenses(snapshot, view, bodies) };
     }
 
     // The in-process presentation serves every local seat from one delivery, so each cue carries the seats whose own
@@ -97,12 +97,14 @@ public sealed partial class WorldTick {
         }
     }
 
-    private byte DisclosedMusicSenses(in WorldSnapshot snapshot, WorldRecipientView view) {
+    private byte DisclosedMusicSenses(in WorldSnapshot snapshot, WorldRecipientView view, WorldBodyView? bodies = null) {
         byte senses = 0;
         IReadOnlyList<WorldPlacement>? placements = null;
         foreach (var edge in Host.Events.Edges) {
             if (edge.Family is not (WorldEventFamily.RegionEnter or WorldEventFamily.RegionExit or WorldEventFamily.SeatJoin)) { continue; }
-            if (!snapshot.TryFindEntity((int)edge.A, Host.Population.Generation((int)edge.A), out _)) { continue; }
+            var body = (int)edge.A;
+            var generation = Host.Population.Generation(body);
+            if (!(bodies?.Contains(body, generation) ?? snapshot.TryFindEntity(body, generation, out _))) { continue; }
             if (edge.Family is WorldEventFamily.RegionEnter or WorldEventFamily.RegionExit &&
                 !(placements ??= view.Placements).Any(placement => placement.Id == edge.GateA.Id)) { continue; }
             senses |= (byte)(1 << (int)edge.Family);

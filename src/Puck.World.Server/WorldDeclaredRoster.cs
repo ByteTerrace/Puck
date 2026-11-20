@@ -10,40 +10,32 @@ namespace Puck.World.Server;
 /// what it draws from the roster only when the roster it sees changed, never on an ordinary tick.</summary>
 internal sealed class WorldDeclaredRoster {
     // The declared fields of one delivered body, in delivery order.
-    private readonly record struct Declared(int Index, bool Active, int Generation, Vector3 BodyColor, byte Kit, byte Look, byte CatalogRig, string? PlacementId) {
+    internal readonly record struct Declared(int Index, bool Active, int Generation, Vector3 BodyColor, byte Kit, byte Look, byte CatalogRig, string? PlacementId) {
         public static Declared Of(in EntitySnapshot entry) => new(Active: entry.Active, BodyColor: entry.BodyColor, CatalogRig: entry.CatalogRig, Generation: entry.Generation, Index: entry.Index, Kit: entry.Kit, Look: entry.Look, PlacementId: entry.PlacementId);
     }
 
-    private Declared[] m_held = [];
-    private int m_count;
+    private Declared[]? m_held;
     private int m_revision;
-    private bool m_seeded;
 
-    /// <summary>Returns the revision a delivery of these bodies carries, moving it when their declared fields differ from
-    /// the last delivery's.</summary>
-    /// <param name="entries">The bodies the delivery carries, as redacted for the stream.</param>
-    /// <returns>The stream's declared-set revision, one or more once any delivery was observed.</returns>
-    public int Observe(ReadOnlySpan<EntitySnapshot> entries) {
-        var same = (m_seeded && (entries.Length == m_count));
+    public static Declared[] Describe(ReadOnlySpan<EntitySnapshot> entries, Declared[]? previous) {
+        if (previous is not null && entries.Length == previous.Length) {
+            var same = true;
+            for (var i = 0; same && i < entries.Length; i++) { same = previous[i] == Declared.Of(entries[i]); }
+            if (same) { return previous; }
+        }
+        var rows = new Declared[entries.Length];
+        for (var i = 0; i < entries.Length; i++) { rows[i] = Declared.Of(entries[i]); }
+        return rows;
+    }
 
-        for (var index = 0; (same && (index < entries.Length)); index++) {
-            same = (m_held[index] == Declared.Of(entry: in entries[index]));
+    public int Observe(Declared[] current) {
+        if (!ReferenceEquals(current, m_held)) {
+            if (m_held is null || !current.AsSpan().SequenceEqual(m_held)) { m_revision = checked(m_revision + 1); }
+            m_held = current;
         }
-        if (same) {
-            return m_revision;
-        }
-        if (m_held.Length < entries.Length) {
-            m_held = new Declared[entries.Length];
-        }
-        for (var index = 0; (index < entries.Length); index++) {
-            m_held[index] = Declared.Of(entry: in entries[index]);
-        }
-        m_count = entries.Length;
-        m_seeded = true;
-
-        return (m_revision = checked(m_revision + 1));
+        return m_revision;
     }
     /// <summary>Forgets the roster the stream was last delivered: the stream stopped observing, so its next delivery
     /// moves the revision whatever it carries.</summary>
-    public void Forget() => m_seeded = false;
+    public void Forget() => m_held = null;
 }

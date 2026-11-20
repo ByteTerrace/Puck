@@ -1,23 +1,7 @@
-using System.Numerics;
-
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>What one output-hub sink's observer is delivered of each tick's snapshot.</summary>
-/// <param name="Policy">The world's authored per-observer disclosure policy.</param>
-/// <param name="ObserverBodyIndex">The observer's own 0-based body index, or a negative value when the observer has
-/// no body in this world.</param>
-public readonly record struct WorldSinkDisclosure(WorldObserverDisclosure Policy, int ObserverBodyIndex) {
-    /// <summary>Gets the unfiltered delivery — every active body, with no per-sink copy taken at all. Local and
-    /// colocated sinks attach with this: colocated trust is home trust.</summary>
-    public static WorldSinkDisclosure Full { get; } = new(
-        Policy: WorldObserverDisclosure.Default,
-        ObserverBodyIndex: -1
-    );
-    /// <summary>Gets a value indicating whether this sink receives every active body unfiltered.</summary>
-    public bool IsFull => (Policy.Mode == WorldObserverDisclosureMode.All);
-}
 /// <summary>
 /// The server's multi-subscriber output publication point. It fans a
 /// tick's output out to every attached <see cref="IClientSink"/> synchronously on the tick thread: each subscriber
@@ -67,12 +51,9 @@ public sealed partial class WorldOutputHub {
         public readonly IWorldDetachableSink? Detachable = (sink as IWorldDetachableSink);
         public WorldSinkDisclosure Disclosure = disclosure;
         public Func<WorldSnapshot, WorldSnapshot>? Present;
-        // Per-sink redaction scratch, grown once to the widest snapshot this sink ever saw. Never shared with the
-        // server's own borrowed backing array, which the redacted delivery must not write into.
-        public EntitySnapshot[] Redacted = [];
         public bool Active = true;
 
-        public ref WorldSinkDisclosure DisclosureRef => ref Disclosure;
+
 
         public void Dispose() {
             if (!Active) {
@@ -84,6 +65,10 @@ public sealed partial class WorldOutputHub {
         }
     }
 
+    /// <summary>Body records and their bytes encoded during the last snapshot publication, before sharing.</summary>
+    public (long Bodies, long Bytes) EncodedBodies => m_interest.Encoded;
+
+    private readonly WorldInterestFrame m_interest = new();
     private readonly List<Subscription> m_typed = new();
 
     // Count of subscriptions with Active == true — maintained incrementally (Subscribe increments, a lease's Dispose
@@ -156,23 +141,6 @@ public sealed partial class WorldOutputHub {
 
         return true;
     }
-    private static WorldSnapshot Redact(Subscription subscription, in WorldSnapshot snapshot) =>
-        Observed(
-            disclosure: in subscription.DisclosureRef,
-            snapshot: in snapshot,
-            scratch: ref subscription.Redacted
-        );
-    /// <summary>Builds a body-disclosure observer's view of a tick: the snapshot redacted by its body policy
-    /// (<see cref="Redact(in WorldSinkDisclosure, in WorldSnapshot, ref EntitySnapshot[])"/>) with no owner's input publications or answers, since such an observer is no input owner. A
-    /// sink that delivers to a recipient redacts and then keeps that recipient's own records
-    /// (<see cref="WorldOwnedRecords.ForOwner"/>) instead.</summary>
-    /// <param name="disclosure">What the observer is delivered.</param>
-    /// <param name="snapshot">The tick's full snapshot.</param>
-    /// <param name="scratch">The caller-owned destination array, grown as needed.</param>
-    /// <returns>The observer's snapshot, wrapping <paramref name="scratch"/>.</returns>
-    public static WorldSnapshot Observed(in WorldSinkDisclosure disclosure, in WorldSnapshot snapshot, ref EntitySnapshot[] scratch) =>
-        (Redact(disclosure: in disclosure, scratch: ref scratch, snapshot: in snapshot) with { Inputs = default, InputAnswers = default });
-
     /// <summary>Fans a composed query answer out to every typed subscriber. A faulting sink is isolated and
     /// detached — see the class remarks.</summary>
     /// <param name="answer">The answer.</param>
@@ -328,6 +296,7 @@ public sealed partial class WorldOutputHub {
             return;
         }
 
+        m_interest.Begin(snapshot.Entries);
         m_deliveryDepth++;
 
         try {
@@ -341,9 +310,15 @@ public sealed partial class WorldOutputHub {
                 }
 
                 try {
-                    var delivered = subscription.Disclosure.IsFull ? snapshot : Redact(snapshot: in snapshot, subscription: subscription);
+                    var delivered = subscription.Disclosure.IsFull ? snapshot : snapshot with {
+                        Entries = m_interest.Project(subscription.Disclosure), Inputs = default, InputAnswers = default,
+                    };
                     if (subscription.Present is { } present) { delivered = present(delivered); }
-                    subscription.Sink.DeliverSnapshot(snapshot: in delivered, stream: WorldStreamStamp.Unspanned);
+                    if (subscription.Sink is IWorldInterestSink observer && subscription.Disclosure.IsFull && subscription.Present is null) {
+                        observer.DeliverSnapshot(delivered, m_interest);
+                    } else {
+                        subscription.Sink.DeliverSnapshot(delivered, WorldStreamStamp.Unspanned);
+                    }
                 } catch (Exception exception) {
                     Detach(
                         subscription: subscription,
@@ -365,49 +340,6 @@ public sealed partial class WorldOutputHub {
         } finally {
             m_deliveryDepth--;
         }
-    }
-    /// <summary>Builds one observer's own view of a tick. The observer's position is read from the same snapshot, so
-    /// a radius test answers against the tick being delivered rather than a pose the hub kept.</summary>
-    /// <param name="disclosure">What the observer is delivered.</param>
-    /// <param name="snapshot">The tick's full snapshot.</param>
-    /// <param name="scratch">The caller-owned destination array, grown as needed. Never the server's own borrowed
-    /// backing array — the redacted delivery writes into this.</param>
-    /// <returns>The redacted snapshot, wrapping <paramref name="scratch"/>.</returns>
-    public static WorldSnapshot Redact(in WorldSinkDisclosure disclosure, in WorldSnapshot snapshot, ref EntitySnapshot[] scratch) {
-        var entries = snapshot.Entries.Span;
-        var observerIndex = disclosure.ObserverBodyIndex;
-        var observerPosition = Vector3.Zero;
-
-        for (var index = 0; (index < entries.Length); index++) {
-            if (entries[index].Index == observerIndex) {
-                observerPosition = entries[index].Position;
-
-                break;
-            }
-        }
-
-        if (scratch.Length < entries.Length) {
-            scratch = new EntitySnapshot[entries.Length];
-        }
-
-        var count = 0;
-
-        for (var index = 0; (index < entries.Length); index++) {
-            if (disclosure.Policy.Discloses(
-                entry: in entries[index],
-                observerIndex: observerIndex,
-                observerPosition: observerPosition
-            )) {
-                scratch[count++] = entries[index];
-            }
-        }
-
-        return (snapshot with {
-            Entries = scratch.AsMemory(
-            length: count,
-            start: 0
-        ),
-        });
     }
     /// <summary>Adds a typed-lane subscriber, delivered every subsequent tick's output synchronously, on the tick
     /// thread, until either the process ends or the returned lease is disposed.</summary>

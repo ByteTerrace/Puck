@@ -13,12 +13,15 @@ namespace Puck.Cli.Automation;
 /// produce, to the release pipeline that has none. <c>produce</c> packs a baked player folder's mesh sets, one cache set
 /// per backend named by the build's mesh bake identity, and with <c>--push</c> uploads each as the asset of a GitHub
 /// prerelease tagged <c>caches/&lt;backend&gt;-&lt;identity&gt;</c>; <c>fetch</c>, in the release job, finds the cache set
-/// whose identity matches the release's own build, verifies every file's content pin and unpacks it into the folder, or
-/// names the miss so the release says it ships no meshes for that backend.</summary>
+/// whose identity matches the release's own build, verifies every file's content pin and unpacks it into the folder, then
+/// checks, with no device, that the set was produced for the groups the release's own world plans
+/// (<see cref="WorldCachePlan"/>). A backend with no matching set, or whose set was produced for another world, holds the
+/// channel's publish: the verb names it and exits non-zero, since a player never bakes.</summary>
 /// <remarks>A cache set is a cache: its entries are keyed by the bake identity and each group's geometry, so a set baked
 /// from an older world document only misses the groups that changed. The identity, never a commit, decides whether a set
 /// fits: it is the hash of the bake's code and kernel bytecode the store keys sets by (<see cref="MeshBuildIdentity"/>),
-/// equal on every machine that built the same bake from the same sources.</remarks>
+/// equal on every machine that built the same bake from the same sources. The plan the set records is what decides whether
+/// a matching set is whole.</remarks>
 public static class WorldCachesCommand {
     private const string Verb = "world caches";
     /// <summary>The cache set's record inside its archive.</summary>
@@ -56,9 +59,9 @@ public static class WorldCachesCommand {
     }
     private static Command FetchCommand() {
         var folder = new Argument<string>(name: "folder") { Description = "A player folder assembled without baking (`puck world player --no-bake`)." };
-        var notes = new Option<string?>(name: "--notes") { Description = "A file to write the release-notes line into: each backend's cache set, or the miss." };
+        var notes = new Option<string?>(name: "--notes") { Description = "A file to write the release-notes line into: each backend's cache set, or, when the publish is held, why and what to run." };
         var from = new Option<string?>(name: "--from") { Description = "Read the cache sets from a directory `produce` wrote (<from>/<backend>-<identity>/cache-set.zip) instead of downloading them with gh: a producer in the same job, or a local check." };
-        var command = new Command(name: "fetch", description: "Find the cache set whose mesh bake identity matches the folder's build for each backend, verify its content pins and unpack it into cache/meshes, or name the miss.") { folder, notes, from };
+        var command = new Command(name: "fetch", description: "Find the cache set whose mesh bake identity matches the folder's build for each backend, verify its content pins, unpack it into cache/meshes and check it was produced for the world's bake groups; a backend with no whole set holds the publish (exit 1) and the verb names it.") { folder, notes, from };
 
         command.SetAction(action: async (parse, cancellationToken) =>
             await FetchAsync(cancellationToken: cancellationToken, folder: Path.GetFullPath(path: parse.GetRequiredValue(argument: folder)), from: ((parse.GetValue(option: from) is { } directory) ? Path.GetFullPath(path: directory) : null),
@@ -97,6 +100,11 @@ public static class WorldCachesCommand {
     private static async Task<int> ProduceAsync(string folder, string output, bool push, CancellationToken cancellationToken) {
         if (!TryRecord(folder: folder, record: out var record, why: out var refusal)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: refusal!); }
 
+        // The groups the folder's world plans, recorded so a release can tell whether it plans the same ones.
+        if (!WorldCachePlan.TryRead(folder: folder, world: ((string?)record["world"] ?? string.Empty), keys: out var plan, why: out var unplanned)) {
+            return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: $"cannot name the groups its world plans, because {unplanned}.");
+        }
+
         var produced = new List<(string Tag, string Archive, int Files)>();
 
         foreach (var backend in Backends(record: record)) {
@@ -133,6 +141,7 @@ public static class WorldCachesCommand {
                     ["commit"] = record["commit"]?.DeepClone(),
                     ["runtime"] = record["runtime"]?.DeepClone(),
                     ["targets"] = record["targets"]?.DeepClone(),
+                    ["plan"] = WorldCachePlan.ToJson(keys: plan),
                     ["files"] = files,
                 };
 
@@ -167,7 +176,9 @@ public static class WorldCachesCommand {
         if (!TryRecord(folder: folder, record: out var record, why: out var refusal)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: refusal!); }
 
         var lines = new List<string>();
+        var held = new List<string>();
         var outcomes = new JsonObject();
+        IReadOnlyList<RestGroupKey>? planned = null;
 
         foreach (var backend in Backends(record: record)) {
             if (!TryIdentity(backend: backend, folder: folder, identity: out var identity, why: out var why)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: why!); }
@@ -187,38 +198,79 @@ public static class WorldCachesCommand {
                 archive = Path.Combine(path1: from, path2: $"{backend}-{identity:x32}", path3: AssetName);
             }
             if (!File.Exists(path: archive)) {
-                var miss = $"{backend}: no mesh cache set matches this build's identity {identity:x32}, so a first boot on {backend} bakes its meshes";
-
-                Console.Out.WriteLine(value: $"{Verb}: {miss}.");
-                lines.Add(item: miss);
-                outcomes[backend] = new JsonObject { ["identity"] = identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture), ["meshes"] = 0 };
+                held.Add(item: $"{backend}: no mesh cache set matches this build's identity {identity:x32} (looked for {tag})");
+                outcomes[backend] = new JsonObject { ["identity"] = identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture), ["meshes"] = 0, ["held"] = "no set matches the identity" };
                 continue;
             }
 
-            var (count, targets, error) = Unpack(archive: archive, backend: backend, folder: folder, identity: identity);
+            var (count, targets, error) = Unpack(archive: archive, backend: backend, folder: folder, identity: identity, plan: out var recorded);
 
             if (error is not null) {
                 Console.Error.WriteLine(value: $"{Verb}: {tag}: {error}; nothing of it was kept.");
                 return 1;
             }
-            var hit = $"{backend}: {count} meshes from {tag} (baked for {(string.IsNullOrEmpty(value: targets) ? "the producer's targets" : targets)})";
+            if ((planned is null) && !WorldCachePlan.TryRead(folder: folder, world: ((string?)record["world"] ?? string.Empty), keys: out planned, why: out var unplanned)) {
+                Console.Error.WriteLine(value: $"{Verb}: {tag}: cannot tell whether the set was produced for this build's world, because {unplanned}; a set that is not known to be whole does not ship.");
+                return 1;
+            }
+
+            var lacking = WorldCachePlan.Lacking(recorded: recorded, release: planned);
+            var identityText = identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture);
+
+            if (lacking is null) {
+                held.Add(item: $"{backend}: {tag} matches this build's identity but records no plan of the world's groups, so it cannot be known to cover this world; produce it again");
+                outcomes[backend] = new JsonObject { ["identity"] = identityText, ["meshes"] = count, ["tag"] = tag, ["held"] = "the set records no world plan" };
+                continue;
+            }
+            if (lacking.Count > 0) {
+                held.Add(item: $"{backend}: {tag} matches this build's identity but was produced for another world, so it lacks {WorldCachePlan.Describe(lacking: lacking, total: planned.Count)}");
+                outcomes[backend] = new JsonObject { ["identity"] = identityText, ["meshes"] = count, ["tag"] = tag, ["groups"] = planned.Count, ["missing"] = lacking.Count, ["held"] = "the set was produced for another world" };
+                continue;
+            }
+
+            var hit = $"{backend}: {count} meshes from {tag}, produced for this world's {planned.Count} bake groups (baked for {(string.IsNullOrEmpty(value: targets) ? "the producer's targets" : targets)})";
 
             Console.Out.WriteLine(value: $"{Verb}: {hit}.");
             lines.Add(item: hit);
-            outcomes[backend] = new JsonObject { ["identity"] = identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture), ["meshes"] = count, ["tag"] = tag, ["targets"] = targets };
+            outcomes[backend] = new JsonObject { ["identity"] = identityText, ["meshes"] = count, ["tag"] = tag, ["targets"] = targets, ["groups"] = planned.Count, ["missing"] = 0 };
         }
 
         record["caches"] = outcomes;
         CliFiles.WriteJson(path: Path.Combine(path1: folder, path2: PlayerBuildLayout.RecordName), value: record);
-        if (notes is not null) {
-            await File.WriteAllTextAsync(cancellationToken: cancellationToken, contents: ("Mesh caches: " + string.Join(separator: "; ", values: lines) + "."), path: notes).ConfigureAwait(continueOnCapturedContext: false);
+        if (held.Count == 0) {
+            if (notes is not null) {
+                await File.WriteAllTextAsync(cancellationToken: cancellationToken, contents: ("Mesh caches: " + string.Join(separator: "; ", values: lines) + "."), path: notes).ConfigureAwait(continueOnCapturedContext: false);
+            }
+            return 0;
         }
-        return 0;
+
+        var hold = HoldText(held: held);
+
+        if (notes is not null) { await File.WriteAllTextAsync(cancellationToken: cancellationToken, contents: hold, path: notes).ConfigureAwait(continueOnCapturedContext: false); }
+        if (File.Exists(path: Path.Combine(path1: folder, path2: "README.md"))) {
+            await File.AppendAllTextAsync(cancellationToken: cancellationToken, contents: ("\n" + hold), path: Path.Combine(path1: folder, path2: "README.md")).ConfigureAwait(continueOnCapturedContext: false);
+        }
+        CliGitHub.Summarize(message: hold);
+        Console.Error.WriteLine(value: $"{Verb}: held, so the player channel publishes nothing for this build ({held.Count} of {outcomes.Count} backend(s) lack a complete cache set).");
+        return 1;
     }
+    // The text a held build carries in its README, its notes file, the job's summary and the verb's error: what is missing
+    // and what the lead runs, since a player never cold-bakes and a consumer release therefore waits for a complete set.
+    private static string HoldText(IReadOnlyList<string> held) =>
+        "## The player channel's publish is held for this build\n\n" +
+        "A player never bakes meshes, so a release ships only with a mesh cache set produced for this build's bake identity and for the groups its world plans, for each backend it ships. This build has none for:\n\n" +
+        string.Concat(values: held.Select(selector: static line => $"- {line}\n")) +
+        "\nThe channel keeps its last complete release. To release this build, produce its sets on the GPU machine, then run the release again:\n\n" +
+        "```text\n" +
+        "puck world player worlds/debug --output <folder> --target rtx2060@1920x1080 --target rtx4070@2560x1440\n" +
+        "puck world caches produce <folder> --push\n" +
+        "```\n";
     // Every entry the archive holds must be the record or a file the record lists under the identity's own set, and every
     // listed file must match its content pin and size; the set lands only once the whole archive verified, so a damaged or
     // foreign archive leaves the folder as it was.
-    private static (int Count, string Targets, string? Error) Unpack(string archive, string backend, string folder, UInt128 identity) {
+    // The plan is the record's list of the world's groups the set was produced for, null when the record holds none.
+    private static (int Count, string Targets, string? Error) Unpack(string archive, string backend, string folder, UInt128 identity, out JsonNode? plan) {
+        plan = null;
         using var zip = ZipFile.OpenRead(archiveFileName: archive);
         var recordEntry = zip.GetEntry(entryName: RecordName);
 
@@ -236,10 +288,11 @@ public static class WorldCachesCommand {
             ((string?)record?["identity"] != identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture))) {
             return (0, string.Empty, $"its {RecordName} is not a {Schema} for {backend} identity {identity:x32}");
         }
+        plan = record!["plan"];
         var prefix = SetPrefix(identity: identity);
         var listed = new Dictionary<string, (ContentPin Pin, long Size)>(comparer: StringComparer.Ordinal);
 
-        foreach (var file in record!["files"]?.AsArray() ?? []) {
+        foreach (var file in record["files"]?.AsArray() ?? []) {
             var path = (string?)file?["path"];
             var name = (path?.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal) == true) ? path[prefix.Length..] : null;
 
