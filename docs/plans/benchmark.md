@@ -460,8 +460,12 @@ point is not one: the authority's hash includes the tick, and machines, rule
 latches, random streams and other seats are not reset by a pose.
 
 - **A fresh run** boots paused before the first tick, waits for the renderer
-  with authority held, and prepares the boot world's navigation on workers if
-  a selected chapter plans a route. It then arms the route at a named tick (`at <tick>`) and
+  with authority held (`world.wait ready`), and prepares the boot world's
+  navigation on workers if a selected chapter plans a route. The renderer is
+  ready once every source that can run has rendered: a machine that cannot run
+  (refused at boot for a missing toolchain) is an absent source whose readers
+  draw their stand-in (`IRenderGraphSourceUpload.IsAbsent`), so it no longer
+  holds the wait on a machine without that toolchain. It then arms the route at a named tick (`at <tick>`) and
   resumes. Every line then lands on the same absolute tick in every run, from
   the boot image, so the state at each chapter's end is comparable between
   runs of one build. This is the only start whose hashes are compared.
@@ -551,7 +555,7 @@ there.
 | The hitch list | Each iteration over budget with its tick, the body's position and its phases. The count is of every one; the list is the longest 32 (`frames.csv` holds all). The position is the body's last pose sample, taken every 30 ticks (`SampleTicks`), and names the tick it was sampled at | Built |
 | GPU passes | Each pass's mean and maximum, from `world.gpu-timing`: the rolling window mean sampled every 30 ticks, so the maximum is of those samples. Absent on a host with no render graph | Built |
 | Streaming and counters | The change across the chapter of each `world.residency` degradation count and of the `render.record`, `gpu.queue` and `sdf` counters, and `host.memory`'s working set, private bytes and ledger peaks. The World keeps the raw answers at both ends and the CLI takes the change (`ConsoleReadings`, shared with `puck bench frames --window`) | Built |
-| The boot span | The statistics of the host's first iterations through the first chapter's start (`HostFrameTimeline.Boot`, its first 16384 iterations; `truncated` when the host ran longer), from the host loop's first iteration. A headless host reports it without a renderer | Built |
+| The boot span | The statistics of the host's first iterations through the first chapter's start (`HostFrameTimeline.Boot`, its first `HostFrameTimeline.BootCapacity` iterations; `truncated` when the host ran longer), from the host loop's first iteration. A headless host reports it without a renderer. Time to the first frame is `world.iteration`'s `first` stage, and that line's worst frame never counts the wait before the first produced frame (`WorldIterationClock`), so neither figure reads a boot as a held frame | Built |
 | Motion steps | Every presented step of the body and the camera's eye over the chapter | Stage 6 |
 
 **Motion.** `WorldSeatMotionTrace` keeps 240 frames and calls a step a stall
@@ -618,31 +622,51 @@ What makes a chapter the same workload:
   frames a tick and ticks with none are both ordinary, and its samples are
   numeric poses, not hashes.
 
-**Conditions.** Each run records what must be alike for two runs' numbers to
-mean the same: the world, the backend, headless or windowed, the window's size,
-the device's authored quality table, the memory cap, the topology (in-process or
-remote authority, with the endpoint named when remote), whether it ran uncapped,
+**Conditions.** What must be alike for two runs' numbers to mean the same is
+recorded in two places. `puck benchmark` writes the conditions the comparer
+reads into each run of its report: the world, the backend, headless or
+windowed, the window's size, the profile it asked for, whether it ran uncapped,
 the budget an iteration is judged against, the start tick, the loops, the
-operating system and the logical processor count. Any difference refuses the
-comparison. The overlay joins them when stage 2 lands. Device profiles
-(`render.devices` rows, chosen by adapter and named by `world.device-profile`)
-select the quality table and memory bars, and `puck benchmark --profile`
-writes the profile and the topology into the run report.
+operating system and the logical processor count. Any difference among them
+refuses the comparison. The World's own `run.json` records the rest: the device
+profile it played under (the profile, how it was chosen, the adapter, the table
+it ran and the memory caps and limits it admitted against), the topology (with
+the endpoint and the body witness when remote) and the overlay at entry and
+whether it changed. A device profile is a `render.devices` row chosen by
+adapter, and it runs its own `table` or its tier's preset
+(`WorldDeviceProfile.TableIn`). The comparer does not yet read the second set:
+two runs on different tables, devices, memory caps, topologies or overlay
+states are refused today only when a condition of the first set happens to
+differ (stage 3 closes this).
 
 **How the frame-rate bar is read.** Every benchmark check that claims the frame
 bar uses one reading:
 
 - *What is read.* The slowest frame's work: the loop iteration less the time the
   pacer waited (`HostFrameRecording` keeps both). Where the device reports
-  display outcomes, no present is skipped or dropped.
-- *Quality and size.* The benchmark applies the device's authored quality table
-  before the first chapter, outside the timed span (`world.quality high` on the
-  RTX 4070, with render scale at native and dynamic resolution off). Size is
-  2560 by 1440 on the RTX 4070, 1920 by 1080 on the RTX 2060, and the Steam
-  Deck's own panel in its native configuration. Readings on the RTX 2060 and
-  Steam Deck wait until the RTX 4070 meets both bars; until then each device's
-  authored table runs on the RTX 4070 to verify what it selects and submits, not
-  its frame time.
+  display outcomes, no present is skipped or dropped. `world.iteration`'s
+  worst frame times an edit loop until its shading settles and is never the
+  frame bar.
+- *Quality and size.* A windowed boot applies the device's authored table on
+  the frame thread once the device names its adapter, and `puck benchmark`
+  applies it again before the first chapter, outside the timed span
+  (`--profile`, `auto` by default). Size is 2560 by 1440 on the RTX 4070, 1920
+  by 1080 on the RTX 2060, and the Steam Deck's own panel in its native
+  configuration. Steam Deck readings wait until the RTX 4070 meets both bars;
+  until then the Deck's table runs on the RTX 4070 to verify what it selects
+  and submits, not its frame time.
+- *The RTX 2060 runs it as a consumer does.* The 2060 machine is a release
+  target ([AGENTS.md](../../AGENTS.md#the-bars)): it plays the player build of
+  a release, installed through the player channel with the caches the lead
+  machine prewarmed, and never a source build or a cold bake. `puck benchmark`
+  is a developer tool and no part of the player build, so it does not run
+  there. The run is
+  `world.benchmark run debug` typed into the player build's console, an
+  attached run whose frame statistics are as valid as any and whose hashes are
+  informational. Its `run.json` names the table it ran (`rtx2060`). Nothing
+  yet folds a `run.json` written outside `puck benchmark` into a report that
+  `puck benchmark compare` and `puck measure` read, and such a run carries no
+  conditions of the comparer's set; stage 3 owes both.
 - *Backends and topologies.* Direct3D 12 and a windowed Vulkan boot on Windows
   (Vulkan alone where Direct3D 12 is absent), both with the authority in the
   same process and against a remote authority on the Azure deployment.
@@ -731,11 +755,12 @@ different ways and keep different numbers of frames in flight.
    loop misses its rate (a steady whole divisor of the refresh rate, or frames
    as they arrive) is an authored setting (`PresentPacingPolicy`), never baked
    into the admission mechanism.
-4. **Linux and Steam Deck display timing.** On Linux, display timing and a
-   precision waiter are absent today (`HostWaits.Until` uses ordinary waits).
-   When a Steam Deck is on hand, measure its current cadence, wait lateness, and
-   input/shutdown response under load first, then add display timing, a
-   precision waiter and a display request only where those readings show an
+4. **Linux and Steam Deck display timing.** On Linux the host loop's pacer
+   waits on a precision waiter (`LinuxPrecisionWaiter`), which has never run
+   on a Linux host; whether the Vulkan presenter's present wait gives the Deck
+   a display time is unread. When a Steam Deck is on hand, measure its cadence,
+   wait lateness, and input/shutdown response under load first, then add
+   display timing and a display request only where those readings show an
    improvement.
 
 **Why, and the limits.** An even loop interval can hide judder on the display,
@@ -828,8 +853,9 @@ rolling GPU window, with the window length, pass names, counts and explicit
 absent/unmeasured states. That window includes the overlay pass; it is not
 a whole-run or per-chapter distribution. Stage 3 adds the latter. The report
 also records whether the overlay was requested at entry and changed during
-the run. A run with the overlay on is compared only with another that had it
-on throughout; stage 3's comparer enforces this.
+the run. A run with the overlay on is to be compared only with another that
+had it on throughout; the comparer does not check it yet, and stage 3 owes
+the check.
 
 ### Artifacts in motion
 
@@ -1005,7 +1031,7 @@ closes it:
 
 | Stage | Lane | Builds | Done when |
 |---|---|---|---|
-| 3. The command, windowed | Lead's GPU window | Nothing new for the command (`puck benchmark`, `puck benchmark compare`, `puck measure` admitting it, the hitch list, GPU passes, counters and `boot` span are built headless); what remains is the pacer's lift of the presentation target for `--uncapped` (`PresentPacingPolicy.Resolve` caps an explicit target at the display) | A windowed `puck benchmark` of one seam chapter on each backend finishes complete with GPU passes per chapter and a `boot` span from the renderer's first iteration, and `--against` its own report compares clean on each; an `--uncapped` run presents past the display's rate, or the open item that records why not is closed |
+| 3. The command, windowed | Lead's GPU window; CLI | `puck benchmark`, `puck benchmark compare`, `puck measure` admitting it, the hitch list, GPU passes, counters and `boot` span are built headless. What remains: the pacer's lift of the presentation target for `--uncapped` (`PresentPacingPolicy.Resolve` caps an explicit target at the display); the comparer reading the World's own conditions (the table, adapter and memory caps under `profile`, the topology and the overlay) beside the verb's; and a fold of a `run.json` written outside the verb (the consumer machine's) into a `puck.bench.v1` report, with the conditions the World can state for itself (backend, window size, operating system, processors) | A windowed `puck benchmark` of one seam chapter on each backend finishes complete with GPU passes per chapter and a `boot` span from the renderer's first iteration, and `--against` its own report compares clean on each; an `--uncapped` run presents past the display's rate, or the open item that records why not is closed; two reports differing only in table, topology or overlay are refused as `unlike-conditions` naming it; a `run.json` from the player build on the RTX 2060 folds into a report that `puck benchmark compare` reads |
 | 4. The route in the document | World and language; headless | [Places, navigation, goal chapters played by an authored seat program, and their failures](#the-route-is-places-played-by-an-authored-seat-program-stage-4), in that order; then the `routes` section's chapter and capture identity, waypoint coverage and the numeric pose samples, the per-tick accepted-input and state hash sequence, the seat-started bindable run, and a recorded walkthrough reduced to goals | Each step's check in that section; a denied seat action, a seat 2 chapter and a step at a portal boundary each give the same accepted input sequence headless and live; a chapter that arrives after a shortcut or after looking away is a changed workload, and an intentional content edit that keeps its waypoints is comparable |
 | 5. The results panel | UI | The published table and retained series on the UI overhaul's runtime collections | An imported panel shows a newly authored route's chapter names and a variable number of rows with no C# change |
 | 6. Motion and presentation samples | World client | A recording sink on `WorldSeatMotionTrace`; `WorldPresentationProbe` under display pacing with numeric samples | A hitch older than 240 frames is in the report; a smooth authored dash and a rest are not called stalls or jumps; a run at twice and at half the tick rate both read complete coverage |

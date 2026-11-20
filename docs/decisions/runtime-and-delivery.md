@@ -278,9 +278,12 @@ so a release asset carries it, never a branch. A GPU runner later runs the same
 
 **A cache set fits by identity, never by commit.** The mesh bake identity
 hashes the bake's code and kernel bytecode, so every machine that built the
-same bake from the same sources computes it. A set baked from an older world
-document only misses the groups whose geometry changed, and those are derived
-on the consumer like any other miss.
+same bake from the same sources computes it. A consumer build never derives a
+mesh (the owner's ruling: the consumer machine runs what a player runs and
+never cold-bakes), so a set that misses any group the release's world needs,
+whether its identity moved or its world documents changed, does not ship: the
+`player` job holds the channel's publish for that build and names the miss,
+and the lead produces the set before the release is retried.
 
 ## Vendor binaries
 

@@ -24,9 +24,15 @@ transferred, and released.
 ## Status and scope
 
 Memory ownership for the desktop runtime is the job system's work and lands
-first, with the fundamentals (frame time, the bake, state storage). What this
-page owns is later: Puck's own runtime with no garbage collector, started only
-after the fundamentals. Its memory subsystem is not implemented or measured.
+first, with the fundamentals (frame time, the bake, state storage). Its first
+parts are in: one byte account per process (`MemoryAccount`), published mesh
+payloads in native storage, a bake group's working buffers as `OwnedBuffer`
+storage through the group's allocator, and shared workspace arrays
+(`RentedArrays`, `RentedList`) for the bake's CPU stages
+([the job system's native-storage list](engine-job-system.md#the-native-storage-list)
+holds the rest). What this page owns is later: Puck's own runtime with no
+garbage collector, started only after the fundamentals. Its memory subsystem
+is not implemented or measured.
 Only the custom-host and no-GC direction is an owner ruling. Existing desktop
 CLR builds remain useful while Puck's own runtime is developed; they do not
 imply hosting stock .NET on BareMetal.
@@ -50,6 +56,9 @@ or run the archived tree.
 | Existing home | Evidence and design consequence |
 |---|---|
 | [Allocator contract](../../src/Puck.Abstractions/Memory/IAllocator.cs) and [mimalloc adapter](../../src/Puck.Platform/Memory/MimallocAllocator.cs) | Allocation already has failure and resize contracts. Relocate and extend this boundary with its consumers rather than creating a competing abstraction. |
+| [Owned native buffers](../../src/Puck.Abstractions/Memory/OwnedBuffer.cs) | Reference-free storage from an `IAllocator`, charged to its owner's byte observer, growing by allocate, copy, publish and then free, with no finalizer recovery. This is already the native-buffer row of the typed-array contract below; the port compiles it against the custom system module rather than writing another. |
+| [Shared workspace arrays](../../src/Puck.Abstractions/Memory/RentedArrays.cs) and [their growable list](../../src/Puck.Abstractions/Memory/RentedList.cs) | Rentals of up to 1 MiB of payload come from `ArrayPool<T>.Shared`; a larger rental is a fresh array the caller drops for the collector to reclaim, so no idle pool bucket keeps a large array alive. That oversize path depends on a garbage collector: on Puck's own runtime it has nothing to reclaim it, so the port gives oversize workspace an owner (a job slot's retained workspace or `OwnedBuffer` storage) before it gives anything a pool. |
+| [The byte account](../../src/Puck.Hosting/Jobs/MemoryAccount.cs) | One account per process, read as disjoint physical rows (device blocks, the native allocator's committed bytes, native storage outside it, the collector's committed bytes, the runtime's and driver's private memory), with admission by reservation. The custom runtime keeps the account and loses the collector's row. |
 | [State scratch](../../src/Puck.State/Arena/ArenaScratch.cs) | Buffers are retained by type and nesting depth. Preserve local reuse; add ownership of backing buffers and metadata. |
 | [State columns](../../src/Puck.State/Arena/ArenaColumnBuffer.cs) and [journal](../../src/Puck.State/Arena/ArenaJournal.cs) | Rows allocate on demand and journal storage grows. Declared capacity is not an already committed working set. |
 | [State relayout](../../src/Puck.State/Arena/StateArena.Relayout.cs) | A candidate precedes adoption, but `Adopt` aliases its fields. Ownership requires a move that empties the source and cleanup on every refused path. |
@@ -119,18 +128,21 @@ no arbitrary simulation ceiling.
 
 ## Dependency placement and bootstrap
 
-Introduce a small foundational `Puck.Memory` project with the first shared
-owned-storage consumer. It contains relocated allocator contracts, checked
-storage operations, and reusable buffer/cache logic. It depends on no other
-Puck project, DI, engine diagnostics, or platform services. Move contracts and
-callers together, without aliases. Keep DI registration and native binding
-adapters in Platform or host composition; the contract exposes no mimalloc types.
+The desktop's shared owned-storage types landed in `Puck.Abstractions.Memory`
+(the allocator contract, `OwnedBuffer`, `RentedArrays` and `RentedList`). The
+port moves them into a small foundational `Puck.Memory` project. It contains
+the allocator contracts, checked storage operations, and reusable buffer/cache
+logic. It depends on no other Puck project, DI, engine diagnostics, or
+platform services. Move contracts and callers together, without aliases. Keep
+DI registration and native binding adapters in Platform or host composition;
+the contract exposes no mimalloc types.
 
-Maths uses temporary `ArrayPool<T>` storage in addition to static aligned tables.
-Abstractions depends on Maths, so putting reusable memory below both prevents
-a cycle when those allocating Maths paths adopt it. The static tables alone
-would not justify a pool project. Pure numeric kernels accept spans without
-consulting a service.
+Maths uses temporary `ArrayPool<T>` storage directly (`MonogenicAlgebra`) in
+addition to static aligned tables. Abstractions depends on Maths, so putting
+reusable memory below both prevents a cycle when those allocating Maths paths
+adopt it; until they do, the types stay where they are. The static tables
+alone would not justify a pool project. Pure numeric kernels accept spans
+without consulting a service.
 
 ```text
 Puck.Maths --------------------------> Puck.Memory

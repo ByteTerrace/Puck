@@ -55,9 +55,18 @@ clocks. So:
 - **The memory bar is physical bytes.** The resident-byte target is set on the
   RTX 4070, and the Steam Deck is a second qualification on the same
   mechanism: the debug world's process plus GPU memory at or under 10 GB on
-  the Deck tier at every settled checkpoint. Both are read from the disjoint
-  physical rows of [the account](#what-adds-and-what-only-names), never by
-  adding observations that overlap.
+  the Deck tier at every settled checkpoint. The RTX 2060 machine, a 6 GB
+  card in a 16 GB host, is the third, and the first whose host memory has
+  bound in practice ([what it showed](#what-the-rtx-2060-showed)); its figure
+  is not yet written ([open questions](#open-questions-and-their-owners)).
+  Each is read from the disjoint physical rows of
+  [the account](#what-adds-and-what-only-names), never by adding observations
+  that overlap.
+- **Cold readings come from the lead machine.** The RTX 2060 machine is a
+  consumer target: it never builds and never bakes from an empty store, and
+  runs only the prewarmed player build the launcher installs from the player
+  channel. Every cold or empty-store reading in this plan is the lead
+  machine's; every 2060 reading is a warm one from that build.
 - **The seam bar is the seam walk.** A crossing in normal play shows nothing
   ([below](#the-seam-walk)).
 - **A regression is a design problem, never a reason to drop quality.** When a
@@ -68,8 +77,9 @@ clocks. So:
   bake and memory, read through `world.budget` and `host.memory`. A change that
   needs more finds it within its system or makes its case; a regression has an
   owner instead of blocking every lane.
-- **Bars are judged; trends explain.** The four bars above are each judged on
-  its own reading. A tour's whole bake, peak memory along a tour and the
+- **Bars are judged; trends explain.** The four bars here are each judged on
+  its own reading. A tour's whole bake, peak memory along a tour, a cold
+  bake's managed allocation (the bake's done line, `managed=`) and the
   per-unit rates (bake time per million samples, bytes per entity) drift with
   content and machine state: they are watched as trends and say why a bar
   moved, and none replaces a bar.
@@ -94,11 +104,13 @@ input, audio cut, lighting snap or late surface". Two things follow.
 
 ### What it walks
 
-Three crossings, each a route segment in
-[`worlds/debug/walkthrough-tests.puck`](../../worlds/debug/walkthrough-tests.puck),
-the [walkthrough](walkthrough.md)'s mechanism: a controller program drives the
-body from before the crossing's first demand to well past it, back again, and
-through an abrupt turn at the threshold.
+Three crossings, each a chapter of the debug world's `seams` route
+([`worlds/debug/benchmark-route.puck`](../../worlds/debug/benchmark-route.puck)),
+played by the standard's seat program through the seat's own controls
+([step 0](#step-0-the-walks-instrument)): the body walks from before the
+crossing's first demand to past it and back again. Only the painting's chapter
+turns straight back at the threshold; an abrupt turn at the other two
+thresholds is not walked yet.
 
 | Crossing | Kind | What it loads |
 |---|---|---|
@@ -119,8 +131,10 @@ ships, with the mesh store as a player's build ships it (prewarmed), taking
 the first crossing after boot and then the return. The window is display-paced
 with the ordinary lighting budget and temporal history: no `world.wait`, no
 pause, no lockstep and no pinned exposure at the threshold, since each hides
-what the walk measures. Two more legs are walked and reported beside those and
-are never the acceptance: an empty store, and a lowered budget. A settled
+what the walk measures. On the RTX 2060 machine that store is the player
+channel's prewarmed build. Two more legs are walked and reported beside those
+and are never the acceptance: an empty store, on the lead machine only, and a
+lowered budget. A settled
 capture of the same poses is taken apart, as the picture the burst is judged
 against.
 
@@ -186,7 +200,7 @@ walk all the same.
 | A stall from an upload, a copy, a clear or a relocation | One background budget in bytes and time (3), backing that grows without a copy (7), relocation within the device (5) | A view node's first submission after a reconfiguration blocking on Vulkan: [GPU robustness](open-items.md#vulkan-regressions-and-gpu-robustness) |
 | Bake, decode or disk starvation on an approach, an abrupt turn or a reveal | The lead and cancellation (10), bounded speculative work (3) | One pool with classes: the [job system](engine-job-system.md#6-build-order)'s J1 |
 | A collection pause as an arrival allocates | Managed churn (11), CPU copies (6) | The allocation list in the [job system packet](open-items.md#engine-job-system) |
-| A hitch from JIT, the loader or a pipeline-state compile on the first crossing | Nothing; the fresh-process leg measures it | [Edit to running, hot reload and boot](open-items.md#edit-to-running-hot-reload-and-boot) (the code warmer, a ReadyToRun comparison) |
+| A hitch from JIT, the loader or a pipeline-state compile on the first crossing | Nothing; the fresh-process leg measures it. The player build publishes one composite ReadyToRun image, which cut the methods compiled before `world.status` by about seven eighths, and ships its prepared kernels with their bindings, so a player needs no shader compiler | What the composite image still leaves to the JIT, and pipeline-state creation on a cold driver cache: [edit to running, hot reload and boot](open-items.md#edit-to-running-hot-reload-and-boot) |
 | A frame-thread hitch from rebuilding the draw list, claims or tables on an arrival or a portal straddle | Nothing | [Arrival proportional to change](arrival-proportional.md) and the [visibility plan](visibility.md)'s instance split |
 | A light leak, black or popping indirect light, a relight wave, a missing offscreen caster | Lighting ready before first sight, a trace tier apart from view tiers, support kept though offscreen (9) | What the light computes: [illumination](illumination.md) and [lighting and GI](open-items.md#lighting-and-gi); the cold shaft's difference between backends: [GPU robustness](open-items.md#vulkan-regressions-and-gpu-robustness) |
 | An exposure, sky, atmosphere or tone snap at the gate | Nothing; a window already shows unexposed luminance its viewer exposes | Exposure blended at a seam: [awaiting the owner's review](open-items.md#awaiting-the-owners-review); continuous exposure and the frame handoff: [the valley and the moons](valley-and-moons.md). An authored change is judged against what was authored |
@@ -206,10 +220,10 @@ a research report disagrees with the code, the code wins.
 |---|---|
 | A measure | Built for memory. `world.residency` reads time until near groups land, resident triangles by tier, the region's held, named and limit bytes, the selector's line, the probe cache's bytes and the trace scene's CPU arrays; `host.memory` reads each pool's limit, held, promised and retired bytes and each segment's budget (`IGpuDeviceContext.MemoryReading`). |
 | Near-first ordering | Built: `SdfMeshDemand.Priority`, and detail bounded by what each view resolves (`SdfMeshTier`). A demand point is a view's eye with no lead along its velocity. |
-| A selector across residencies | Built for bytes and background GPU time (`SdfResidencySelector`): one detail bias, a budget for each residency's bake, a reservation for each mesh region and one budget of background GPU work. Each residency still owns its `SdfWorldResidency.MeshDemand` and its mesh region, and the selector does not yet order work across residencies. |
+| A selector across residencies | Built for bytes and background GPU time (`SdfResidencySelector`): one detail bias, a budget for each residency's bake, a reservation for each mesh region and one budget of background GPU work. Each residency still owns its `SdfWorldResidency.MeshDemand` and its mesh region. Background GPU work is weighed across residencies by display share (`SdfGpuWorkBudget.Weigh`); memory and bake admission are not yet ordered across them. |
 | Lighting on the same demand points | Partly built. Each level of the probe window already centres on the box of every view's camera when it fits (`SdfMeshIrradiance.WindowLow`), and probe urgency reads every view. What remains: the window is anchored on the first view (`SdfMeshIrradiance.WindowCamera`), the lighting derives its own view list (`SdfMeshIrradiance.CaptureViewCameras`), the trace scene is built from every static draw of the frame (`SdfMeshIrradiance.StaticKey`), and `SdfMeshIrradiance.ProbeCache` is bounded by window cells, not bytes. |
 | Demand mapped through portal faces | The mapping is built; its use is not. A fitted window's view is the viewer's eye taken through the glass, measured in the display pixels the glass spans and held to its frustum (`SdfViewSnapshot.DemandHeight`, `SdfViewSnapshot.DemandWithinView`), and every attached window's view is a demand point whether or not it renders (`SdfMeshDemand.Observe` leaves out only a view that is elsewhere, has no region or no valid camera). What is missing is arrival without a render: a residency's upload is submitted only for a scheduled render (`SdfWorldPasses.PrepareRender`), so an unseen window still renders at the least share (`WorldViewGraphHost.ReserveArrivals`, `WorldPortalVisibility.ArrivalShare`). |
-| Eviction under a byte budget | Not built. Under pressure a group is planned again at a coarser tier or every demand is coarsened half a rung (`SdfMeshTier.Biased`); no group ever leaves. A mesh the arena cannot place is refused and its draws leave the frame (`SdfMeshRegionArena.Refused`), which shows as a hole. A growth the account or the device refuses leaves the region as it is, and the placements it could not hold are refused the same way (`SdfMeshRegionArena.Clip`). |
+| Eviction under a byte budget | Not built. Under pressure a group is planned again at a coarser tier or every demand is coarsened half a rung (`SdfMeshTier.Biased`); no group ever leaves. A mesh the arena cannot place is refused and its draws leave the frame (`SdfMeshRegionArena.Refused`), which shows as a hole unless its group keeps a floor; only a group that arrived in view keeps one ([step 5](#step-5-the-floor-and-eviction)). A growth the account or the device refuses leaves the region as it is, and the placements it could not hold are refused the same way (`SdfMeshRegionArena.Clip`). |
 | Authored areas | Not built. |
 | Terrain tiles, then the moons | Not built: a bake group is an instance, a slot or a union, so one large instance has one tier and one demand box. |
 
@@ -264,7 +278,57 @@ several:
 | Demand points | `SdfMeshDemand.Observe` and the lighting's own `SdfMeshIrradiance.CaptureViewCameras`, with different filters |
 | A byte ledger | `MemoryAccount` owners fed by `GpuDeviceMemoryWork`; the mesh library's own weight (`SdfMeshLibrary.ByteBudget`) and the region's named bytes copied into the bake (`SdfMeshPathBake.ObserveResidency`) remain |
 | Retention | The library in bytes, the arena's slack in words (`SdfMeshRegionArena.RetainedSlackWords`), the trace scene in triangles (`SdfMeshIrradianceScene.RetainedTriangles`), the probe cache in window cells; the store's disk bound (`SdfMeshStore.DefaultCapacityBytes`) is a fifth, and stays, because disk is its own resource |
-| Scheduling residency work | The bake's own static pool, the lighting's and the restore's thread-pool work and `JobPool`; the GPU budget is one (`SdfGpuWorkBudget`) |
+| Scheduling residency work | The bake's own pool of dedicated threads (`SdfMeshPathBake.StartWorkers`), the lighting's and the restore's thread-pool work and `JobPool`; the GPU budget is one (`SdfGpuWorkBudget`) |
+
+### What the RTX 2060 showed
+
+The first reading on the RTX 2060 machine was taken from a source Release
+build before its device table applied, through a cold and then a part-warm
+bake, with an agent session beside the World, so it is not a player's
+conditions and its figures belong in the commit that lands this page
+**[reading]**. Three things it showed do not depend on those conditions.
+
+- **Host memory, not the card, bound the machine.** The World ran at 8.4 to
+  9.5 GB of private bytes with a managed heap of 2.7 to 3.3 GB until the
+  agent session's low-memory guard ended it, while the host pool's admitted owners
+  held about 2.3 GB of a 6.4 GB spend limit. Most of the process was
+  [the envelope](#what-is-guaranteed-and-where-it-stops): measured, never
+  admitted. The account's bound held and the machine still ran out, so what a
+  16 GB machine needs is bytes moved out of the envelope (steps 2, 6 and 11),
+  not a tighter limit.
+- **The card's fixed storage left elastic detail about half a gigabyte.** Of
+  a 4.83 GB device pool, fixed storage held 2.6 to 3.0 GB and elastic detail
+  0.24 to 0.54 GB; the mesh region refused 739 meshes on the part-warm run,
+  and the cold boot drew thousands of holes. The largest fixed families were
+  the temporal resolve's window (`historyWindow`, 340 MB: it holds
+  `SdfWorldPackage.HistoryWindowWords` words for every output pixel, which at
+  1920 by 1080 is that figure, so a lower render scale does not shrink it), the
+  lighting's trace scene and feedback volume (about half a gigabyte across the
+  two pools, now named apart as `probe-scene` and `probe-feedback`), the
+  probe trace's hit cache and the irradiance volume (about 0.2 GB each). The
+  lighting's device memory is the fixed storage
+  [step 3](#step-3-one-reservation) left unreserved: on this card about
+  0.65 GB of the device pool, and a third of a gigabyte more in system
+  memory.
+- **The ledger missed little.** The local segment's usage beyond the ledger
+  read about 172 MB, the first reading of [step 1](#step-1-as-a-brief)'s gap
+  on a bar device.
+
+The CLI's host admission once refused a windowed World on this machine: it
+expected a 64 GB machine's peak. An unmeasured start's expected peak is now
+held to the budget the World's own account derives
+(`HostLoadThresholds.DefaultPeakGb`, `MemoryAccount.DefaultBudgetOf`: three
+quarters of installed memory, 12 GB on 16 GB). The 2060's own quality table
+(`worlds/standard/quality.puck`) now applies at boot and draws at a 0.75
+render scale with the medium irradiance tier, whose volume, hit cache and
+tables are two thirds of the high tier's.
+
+The next reading is the prewarmed player build through the player channel at
+1920 by 1080 on both backends: `host.memory`'s rows, residuals and device
+families, `world.residency`'s refusals and holes, and a `gc-verbose` trace
+beside `host.frames`' frame-thread allocation. It decides whether the envelope
+still dominates once no bake runs, how much elastic room the 2060's table
+gives back, and the 2060's memory figure.
 
 ## How the research was weighed
 
@@ -395,7 +459,7 @@ means measured and printed with no bound: it is what the envelope still holds.
 | Owner | Bounded by | Step |
 |---|---|---|
 | Mesh payloads on the CPU | The selector's grant: a payload exists because a tier is resident or cached, and [decision 6](#decision-6-what-a-landed-mesh-keeps-on-the-cpu) releases the planes a landed mesh no longer needs | 3, 6 |
-| Bake workspaces: final lattices, contour tables, the material cut's lists (`SdfMeshMaterialCut`) | The workspace class's reservation, with one forced job in the process; a group whose peak passes the class is split or failed by name | 3 |
+| Bake workspaces: final lattices, contour tables, the material cut's lists (`SdfMeshMaterialCut`) | The workspace class's reservation, with one forced job in the process; a group whose peak passes the class is split or failed by name. The reserved peak (`SdfMeshPathBake`'s `PeakOf`) covers the lattice's and fine samples' owned storage only: the contour's rented workspace and the refinement's per-cell masks (`SdfSampledLattice.Refine`) lie outside it, so the account cannot pace the collections they cause (in a lane: bake-garbage) | 3, 11 |
 | The trace scene's CPU hierarchy and a scene build's pieces beside the old scene | A reservation for the build's peak; the hierarchy goes when placement reads the GPU trace | 9 |
 | `GpuRegion`'s host copies and staging | Reserved with the region they mirror, at the same grant | 2, 3 |
 | The probe cache's blocks | A cached owner in bytes, trimmed first | 9 |
@@ -1182,9 +1246,12 @@ misses and any restore the frame thread waited for are counted, and the last
 must stay at nothing.
 
 **Closes.** A second copy of most of what the region holds; the library's
-double load. **Leaves open.** The managed heap is the larger owner and its
-tenants are not yet named; step 2 names them before anything here claims the
-Deck target. **Strongest case against.** Restores from disk on a turn. The
+double load. **Leaves open.** The managed heap is the larger owner: on the
+RTX 2060 machine it held more than the admitted host owners together
+([what the 2060 showed](#what-the-rtx-2060-showed)). Step 2's heap walk
+(`puck host heap`) names its tenants, and each one past a stated size needs an
+owner before anything here claims the Deck or 2060 figure.
+**Strongest case against.** Restores from disk on a turn. The
 rule above prevents it, and restores are counted (`world.residency`'s store
 line), so a release that causes them shows.
 
@@ -1400,8 +1467,10 @@ time it is seen.
 **Evidence.** The gaps are the trace scene's input, the byte bound and the
 second demand derivation, not the window's shape **[opened]**. Every residency
 owns an irradiance volume (`SdfWorldResidency.MeshIrradiance`) and stages it
-on every prepared frame, seen or not. The trace scene holds the tier it
-traces, so a retier wave is paid again in the lighting
+on every prepared frame, seen or not. The trace scene now holds each static
+group's floor where the floor stands for it (below), so a view's retier no
+longer reaches the lighting; a group whose floor is declined, or that arrived
+out of view with no floor, still traces the tier it draws
 ([the lighting follows the tier](bake-demand-tiers.md#the-lighting-follows-the-tier)).
 Its CPU hierarchy also feeds probe placement
 (`SdfMeshIrradianceScene.TryNearestSurface`), depth classification
@@ -1428,10 +1497,15 @@ light sees.
 
 **Favoured: the lighting is a demand class of its own whose resolving unit is
 the probe spacing, which is B, with A as the case it reduces to wherever the
-spacing asks for nothing finer than the floor.** The step's first reading is
-whether A alone holds: the gallery's lit exhibits and a thin partition, traced
-at the floor against the view tier. If it does, floor and trace tier are one
-product. C stays the fallback and D is not built.
+spacing asks for nothing finer than the floor.** A is built with a check: the
+scene traces a static group's floor (`SdfMeshDraw.Trace`, which the bake sets)
+when `SdfMeshTraceJudge` finds the floor and the group's first finer mesh
+within a quarter of the finest probe spacing of each other both ways, and
+traces what the group draws otherwise. The step's first reading is how many
+floors the judge declines and what the gallery's lit exhibits and a thin
+partition look like traced at the floor against the view tier; B is built
+only if declined floors cost the lighting what A was meant to save. C stays
+the fallback and D is not built.
 
 **Favoured, for the rest.**
 
@@ -1484,10 +1558,13 @@ lighting snap at every first sight.
 The purpose asks what each answer becomes when every zone, character and
 server is a world.
 
-- **A hub with many portals.** Every attached window is a residency. Today each
-  takes a quarter of the device, a quarter of the GPU's background time, a
-  hidden render while it arrives, and a lighting volume. After decisions 3, 4,
-  5 and 9 a world behind a window is ready when there is room, gives up
+- **A hub with many portals.** Every attached window is a residency. Step 3
+  already replaced each one's quarter of the device and of the background GPU
+  time with one reservation and one budget, and a released residency retires
+  through the device's one retirement (`GpuDeviceRetirement`) without draining
+  the device. Each still takes a full residency with tables sized at attach, a
+  hidden render while it arrives, and a lighting volume. After decisions 4, 5
+  and 9 a world behind a window is ready when there is room, gives up
   everything it holds for presentation when there is not, lands without a
   render and shares one budget
   ([where the floor stops being a bound](#decision-5-the-unit-is-a-tier-and-the-coarsest-tier-is-the-floor)).
@@ -1518,47 +1595,51 @@ distinct looks, and scale evidence needs both as places
 
 ## The build order
 
-**Source tiles come first** ([the source tile](#the-source-tile-and-its-seam-rule),
-part of step 10). They are a named engine gap: the valley's north-west wall
-cannot reach the 1.56 m spacing its relief declares inside one lattice's
-fine-sample budget (`SdfSampledLattice.MaxFineSamples`), and splitting the
-sector across lattices is the fix at the cause, not a larger budget (the
-terrain pass's report on what set a sector's cell). So the
-tile and its seam rule go ahead of the rows below.
+**Two engine gaps lead, and neither waits on the other.** The first is the
+source tile ([the source tile](#the-source-tile-and-its-seam-rule), part of
+step 10): the valley's north-west wall cannot reach the 1.56 m spacing its
+relief declares inside one lattice's fine-sample budget
+(`SdfSampledLattice.MaxFineSamples`), and splitting the sector across lattices
+is the fix at the cause, not a larger budget (the terrain pass's report on what
+set a sector's cell). It needs nothing below. The second is the floor
+(step 5), which needs only step 3, built.
 
 A step's number is its name, which other pages cite, and it stays when the
 order changes. The rows are in landing order. Each step lands on its own
 check, taken in one window under [the recipe](#how-the-bars-are-read) on both
 backends, at the hero spawn and the meadow, cold and warm, and the steps that
-claim a seam closed are read again by [the seam walk](#the-seam-walk). A
-windowed reading is a verification request to the lead; a lane's own finish
-line is the build and a headless run. Evidence goes in the landing commit.
+claim a seam closed are read again by [the seam walk](#the-seam-walk). Cold
+readings are the lead machine's; the RTX 2060 machine is read warm from the
+player channel's build. A windowed reading is a verification request to the
+lead; a lane's own finish line is the build and a headless run. Evidence goes
+in the landing commit.
 
 | Step | Delivers | Needs |
 |---|---|---|
-| [0. The walk's instrument](#step-0-the-walks-instrument) | The seam walk as a run, and today's seams as the baseline | Nothing |
-| [1. Device readings and pools](#step-1-as-a-brief) | Budgets per segment, placement in the ledger, pools on the account as ledgers | Nothing |
-| [2. Every gigabyte has an owner](#step-2-every-gigabyte-has-an-owner) | The physical rows, their owners and their residuals | Beside 1 |
-| [7. Backing prototype and design](#step-7-the-backing) | Sparse design after the prototype's first reading; contiguous fallback retained | Step 3's admission stands; qualification readings need a GPU grant |
+| [0. The walk's instrument](#step-0-the-walks-instrument) | The seam walk as a run, and today's seams as the baseline. Built; the baseline legs are owed | Nothing |
+| [1. Device readings and pools](#step-1-as-a-brief) | Budgets per segment, placement in the ledger, pools on the account as ledgers. Built; its windowed readings are owed | Nothing |
+| [2. Every gigabyte has an owner](#step-2-every-gigabyte-has-an-owner) | The physical rows, their owners and their residuals. Built; its windowed readings are owed | Beside 1 |
 | [3. One reservation](#step-3-one-reservation) | Admission before allocation; growth that stops at the limit; background work serviced on completion. Built; its windowed readings are owed | 1, 2 |
-| [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device. The selection counters and the coarsest-rung floor are built; the coverage check, eviction by priority, the rungs and relocation remain | 3; 7 before it claims relief |
-| [4. Staged by demand](#step-4-staged-by-demand) | Arrival without a render | Nothing; shares its budget once 3 lands |
-| [7. The backing](#step-7-the-backing) | Memory given back without a replacement | The prototype, 3 |
+| [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device. The selection counters and the coarsest-rung floor for a group arriving in view are built; the coverage check, floors out of view, eviction by priority, the rungs and relocation remain | 3; 7 before it claims relief |
+| [4. Staged by demand](#step-4-staged-by-demand) | Arrival without a render | 3, built |
+| [7. The backing](#step-7-the-backing) | Memory given back without a replacement. Direct3D 12's mapped regions are built; Vulkan's sparse ownership, page-only credit, placement policy and physical compaction remain | 3, built; qualification readings need a GPU grant |
 | [6. CPU copies](#step-6-cpu-copies) | The library, the documents and the widened restore; the static rows after 9 | 2; 5 and 9 for the static rows |
 | [8. Observed use](#step-8-observed-use) | Speculative detail apart from observed | 5 |
 | [9. Lighting on the same demand](#step-9-lighting-on-the-same-demand) | One demand, a lighting floor, placement on the GPU trace | 3; 5 for the floor it traces |
 | [10. Areas, tiles, then the moons](#step-10-areas-tiles-then-the-moons) | Authored areas, the velocity lead, source tiles | 5, 8 |
-| [11. Managed churn](#step-11-managed-churn) | Arrival allocation removed at its sources | Nothing; its trace is taken now |
+| [11. Managed churn](#step-11-managed-churn) | Allocation removed at its sources, the bake's and an arrival's | Nothing; its trace is taken now |
 
-**The floor is an engine gap, so it goes first.** Nothing stands in for a
-distant shape, and a shape not yet landed or evicted can leave a hole
+**Why the floor leads the rest.** Nothing stands in for a distant shape, and a
+shape not yet landed or evicted can leave a hole
 ([the rendering plan's gap 3](rendering-research.md#engine-gaps-filled-first)
 and its [decision 9](rendering-research.md#9-give-memory-back-and-never-show-a-hole)).
-Step 5 needs only step 3, which is built, and claims relief only after step 7,
-so it lands directly after step 3 and ahead of steps 4 and 7. The rendering
-plan's decision 8 counters, which size a floor, come before it. The terrain
-pass's [far shadow step](terrain-pass.md#order-of-work) is the other half of
-gap 3 and does not wait for this one.
+The RTX 2060 machine shows it on the smallest bar device: with half a
+gigabyte of elastic room the region refused hundreds of meshes even warm
+([what it showed](#what-the-rtx-2060-showed)), and a refused group that keeps
+no floor shows a hole until step 5 lands. Step 5 needs only step 3 and claims relief only after
+step 7, so it lands ahead of steps 4 and 7. The rendering plan's decision 8
+counters, which size a floor, are built, and so is the other half of gap 3,
+the distant shadow map of [the terrain pass](terrain-pass.md#order-of-work).
 
 Steps 0, 1 and 2 change no behaviour and run beside any other lane. Step 3 is
 the first that can change a picture, and step 5 the first that changes what a
@@ -1570,15 +1651,7 @@ executor it finds.
 
 ### Step 0: the walk's instrument
 
-**Builds.** The three route segments of [the seam walk](#what-it-walks) at
-their three speeds, and a window over a route stop's own timeline: `puck bench
-frames` measures a plan's stop after settling it, and the tour holds its
-captures under lockstep, so neither reads a crossing as a player takes it. The
-bench gains a window that spans a route stop's timeline display-paced with
-nothing settled first, reporting the slowest frame, the counters' change
-across the window and a presented burst.
-
-The walk is the debug world's `seams` route
+**Built.** The walk is the debug world's `seams` route
 ([`benchmark-route.puck`](../../worlds/debug/benchmark-route.puck)): each crossing
 at the walk (5 m/s), the run (10 m/s, Left Shift held) and the run with the dash
 on each cooldown, a chapter each, played by the standard's seat program through
@@ -1602,8 +1675,14 @@ the mixer started and released, which wait on the
 [transfers packet](open-items.md#transfers-federation-and-server). The window
 carries the body's pose and `audio.state`'s device counts for the cross-world
 row, and the recording of the mixed sound stays `capture.start`'s, not yet driven
-by the window. The baseline legs on both backends are in the landing commit:
-where today's seams are.
+by the window.
+
+**What remains.** The baseline legs, a verification request to the lead's
+quiet window: the route on both backends on the lead machine, warm and from an
+empty store, and warm on the RTX 2060 machine from the player channel's build.
+Whether that build carries the route and a way to play it, with no CLI built
+on the machine, is not checked; if it does not, carrying it is part of this
+step. Their readings go in a commit and say where today's seams are.
 
 ### Step 1 as a brief
 
@@ -1685,8 +1764,11 @@ request to the lead: at the hero spawn and the meadow, the pool and segment
 lines, each segment's API usage against the ledger with the gap named, the
 allocations whose role and placement disagree, the reservation figures, the
 two backends' budgets for the one card, and the change count before and after
-a second GPU program starts. A unified-memory device's reading is the Deck
-lane's ([open questions](#open-questions-and-their-owners)).
+a second GPU program starts. The RTX 2060 machine has given one Direct3D 12
+local-segment figure ([what it showed](#what-the-rtx-2060-showed)); its
+reading on both backends comes from the player build. A unified-memory
+device's reading is the Deck lane's
+([open questions](#open-questions-and-their-owners)).
 
 ### Step 2: every gigabyte has an owner
 
@@ -1769,7 +1851,9 @@ walk's private bytes (the host pool's device blocks against the
 runtime-and-driver row before and after a large upload). A cold bake's
 residual in the native rows is named with a native allocation trace, and so
 is what the host-visible blocks hold above a warm boot's. The spend margin is
-set from the bytes a budget drop takes, on that reading. The DRM client
+set from the bytes a budget drop takes, on that reading. On the RTX 2060
+machine the same rows, read warm from the player build, say which tenants of
+the managed and runtime rows make up most of the process there. The DRM client
 statistics half (`/proc/self/fdinfo` `drm-memory-*`) is owed to a Linux
 machine, and a unified-memory device's reading to the Deck lane.
 
@@ -2027,7 +2111,7 @@ first is built.
 ([the engine job system](engine-job-system.md#1-the-scheduler)); the frame
 thread stays the one thread that records and submits, and drains each result
 at its own install point. Three seams are the ones it moves, none replaced:
-the bake's static pool, whose queue and workers `SdfMeshBakeBacklog` reads
+the bake's own pool, whose queue and workers `SdfMeshBakeBacklog` reads
 and whose stage and lead timings it is fed, becomes the `Bake` class's ready
 queue and the pool's worker count; `SdfMeshPathBake.Offered` becomes the
 bake channel's signal that it holds a result; and a channel whose reader is
@@ -2063,10 +2147,21 @@ mesh region's growth; the observed owner that stood outside admission.
 - *The lighting's device memory* (the trace scene's region, the feedback
   volume, the hit and meter caches) and each client's small tables are fixed
   storage until they reserve: never refused, and outside the elastic budget.
-  They outlive a job, so they are a holder's reservation, not a job's.
+  They outlive a job, so they are a holder's reservation, not a job's. On the
+  RTX 2060 machine they are about 0.65 GB of a 4.83 GB device pool
+  ([what it showed](#what-the-rtx-2060-showed)), where elastic detail had
+  about half a gigabyte.
+- *The backlog's lead.* The lead `SdfMeshBakeBacklog` is meant to measure is
+  the GPU round of a group's first lattice, but the first stage queued after
+  an admission (where `SdfMeshPathBake` calls `SdfMeshBakeBacklog.ObserveLead`) is the
+  group's sample-checkpoint probe, so the lead reads microseconds and the
+  queue admits about one round of workers (argued from the source, not run;
+  in a lane: bake-latency, with the probe itself).
 - *Retired bytes by segment.* A holder states them and names a pool.
-- *Priority across residencies.* The budgets and the background budget are
-  shared equally and first come.
+- *Priority across residencies.* The background budget weighs each
+  residency's turn by its share of the display's pixels
+  (`SdfGpuWorkBudget.Weigh`), but the memory budgets are still shared equally
+  and first come.
 
 **Check.** The laws: `MemoryAdmissionLawTests` (held plus promised along a
 falling budget, a covered allocation, two grants before either is counted,
@@ -2099,7 +2194,8 @@ lowered-budget path (`host.memory budget device` in steps at the meadow, on
 both backends: `over-limit`, `detail-bias`, `refusals` and `growth-refusals`
 at each step, with captures), and the two below.
 
-*The slow-present reading.* From a cold store on each backend, with
+*The slow-present reading.* From a cold store on each backend on the lead
+machine, with
 `world.target 10` and then `world.target 5` set before the bake settles, read
 `world.residency` twice some seconds apart. What decides it: the budget's
 `gpu-charged` over the wall time between the readings reaches
@@ -2116,7 +2212,7 @@ on a fixed 60 Hz display), reads the part the door does not service: the
 Direct3D 12 share there against Vulkan's is the loss.
 
 *The quiet cold bake.* `puck bench startup worlds/debug --bake` on each
-backend. The bake's GPU time is held to the share by design, so servicing
+backend, on the lead machine. The bake's GPU time is held to the share by design, so servicing
 does not raise it; what it removes is waiting: an answer reaches the workers
 when its job completes and a lattice is taken when it is ready, in place of
 a frame later each, and admission keeps the workers fed. What decides it: the
@@ -2206,32 +2302,30 @@ real picture without counting a fallback). Verify each path directly:
 
 ### Step 7: the backing
 
-**Builds.** The prototype below supplies the capability read and the indexed
-read's first result. Next is [the sparse design for
-review](#sparse-backing-design-for-review), before backend implementation:
-reserved resources on Direct3D 12, sparse buffers on Vulkan, and the existing
-contiguous backing where either is unavailable. Both use [the pressure
+**Builds.** Memory given back without a replacement, on
+[the sparse design](#sparse-backing-design-for-review): reserved resources on
+Direct3D 12, sparse buffers on Vulkan, and the existing contiguous backing
+where either is unavailable. Both use [the pressure
 transaction](#decision-8-pages-are-three-things-and-only-one-changes) and the
-backend pool's release of its kept empty blocks under pressure.
+backend pool's release of its kept empty blocks under pressure. Direct3D 12's
+mapped destination is built and backs the mesh region and the probe scene;
+the rest is listed under
+[implementation sequence](#implementation-sequence-and-open-readings).
 
 **Replaces.** Growth by copy and shrinking by replacement on the sparse path.
 The fallback retains both. One region per residency remains on both paths.
 
-**Check.** The capability table. The cost of the views, glass, cascade,
-lighting-trace and picking kernels with and without the index, on both
-backends (`world.gpu-timing`), with the fragmentation, the largest payload,
-the descriptor count and the kept blocks priced. Then: allocated bytes per
-landed byte fall toward one, with page tails and physical-block slack reported
-separately; under a forced budget drop the ledger's held bytes fall after the
-fences with no allocation made to free them. The checks below distinguish a
-hole in a buffer, a returned page and actual physical release.
+**Check.** The capability table, read on every bar device. Then: allocated
+bytes per landed byte fall toward one, with page tails and physical-block
+slack reported separately; under a forced budget drop the ledger's held bytes
+fall after the fences with no allocation made to free them. The checks below
+distinguish a hole in a buffer, a returned page and actual physical release.
 
 #### The prototype as built
 
-This section records the prototype at `e9c1d485c9`. Its slab views and switch
-were removed by the continuation's fallback piece; any remaining paired
-prototype measurement uses that frozen revision, not the current interface.
-The capability read remains live.
+The prototype read each device's capabilities and priced the alternative to
+sparse backing. The capability read remains live; the alternative was
+rejected and its code removed.
 
 **The capability read.** Each backend reads, at device creation, how the
 device can back a large buffer and give memory back, into the record that
@@ -2249,15 +2343,16 @@ indexing feature and the two memory extensions
 line at device creation). `world.counters gpu` prints them on its
 `capabilities` line (`backing=` and the figures), and its JSON form carries
 them; a device whose backend never read them prints no `backing=`, so none is
-told apart from unasked.
+told apart from unasked. The RTX 2060 column is read from that line on the
+player build.
 
-| Capability | RTX 4070 (this machine) | RTX 2060 | Steam Deck (Vulkan, RADV) |
+| Capability | RTX 4070 (the lead machine) | RTX 2060 | Steam Deck (Vulkan, RADV) |
 |---|---|---|---|
 | Sparse binding, buffer residency, aliasing, a binding queue, strict non-residency | Yes on both backends (`world.counters gpu`: Vulkan `sparse-binding+sparse-residency-buffer+sparse-residency-aliased+sparse-queue+sparse-non-resident-strict`; Direct3D 12 the same without aliasing) | Expected on NVIDIA's Vulkan driver; no vendor page this lane could fetch states it, so it is **unverified** until a reading on the card | Yes: RADV sets each from `enable_sparse`, which is `pdev->info.has_sparse` unless disabled, and `has_sparse` holds from GFX7 except four older APUs **[external: RADV backing]** **[external: RADV backing]**; the Deck's GPU is GFX10.3. Every queue family carries `VK_QUEUE_SPARSE_BINDING_BIT`, and a dedicated sparse queue may be added **[external: RADV backing]** |
 | Sparse address space | 1 TiB (`sparse.address-space=1099511627776`, Vulkan) | Unverified | `pdev->info.virtual_address_max` when sparse is enabled **[external: RADV backing]** |
 | Memory priority (`VK_EXT_memory_priority`) | Yes on both backends | Yes on Turing and newer (NVIDIA's 535.43.02 notes, Linux; listed on Windows drivers before it) **[external: NVIDIA 535]** | Yes: `.EXT_memory_priority = true`, `.memoryPriority = true` **[external: RADV backing]** |
 | Pageable device-local memory (`VK_EXT_pageable_device_local_memory`) | Yes on both backends; Direct3D 12 also answers `EnqueueMakeResident` | Yes on Turing and newer, the notes spelling it `VK_EXT_pageable_device_memory` **[external: NVIDIA 535]** | **No**: absent from RADV's extension table **[external: RADV backing]**; an open Mesa issue asks for it **[external: RADV backing]** |
-| Storage-buffer arrays indexed non-uniformly | Yes on both backends | Expected (Puck now requires it of every Vulkan device) | Yes: `.shaderStorageBufferArrayDynamicIndexing = true`, `.shaderStorageBufferArrayNonUniformIndexing = true` **[external: RADV backing]** |
+| Storage-buffer arrays indexed non-uniformly (a support reading only; no path requires it since slabs were rejected) | Yes on both backends | Expected; unverified | Yes: `.shaderStorageBufferArrayDynamicIndexing = true`, `.shaderStorageBufferArrayNonUniformIndexing = true` **[external: RADV backing]** |
 | Storage-buffer offset alignment | 16 bytes (Vulkan) | Unverified | 4 bytes **[external: RADV backing]** |
 | Direct3D 12 reserved resources | Tier 4, 40 address bits a resource | Unverified | Through vkd3d-proton: a tier from RADV's sparse features (`d3d12_device_determine_tiled_resources_tier`, none without sparse binding, aliasing, buffer and 2D image residency and a sparse queue), and a hard-coded 40 address bits a resource **[external: vkd3d-proton]** |
 
@@ -2269,115 +2364,31 @@ pageable device-local memory means an over-budget allocation there fails or
 spills rather than paging, which is decision 2's reason to reserve before
 allocating on every device.
 
-**The indexed read.** Every kernel reads the mesh region through one door,
-`frame/sdf-mesh-words.hlsli`: a draw's record through `sdfMeshRecordWord`, a
-mesh's own words (vertices, triangle materials, indices, level table,
-members) through `sdfMeshWord`. The prototype divided a word index by a
-64 MiB slab's word count and used the remainder as its place. It bound the
-region a second time as 64 views, enough for `GpuRegion.MaxByteCount`, in
-the World, mesh and probe sets. A slab past the region's end bound the
-unused-member buffer. Its generated switch was `SDF_MESH_SLAB_INDEX`:
-off, `sdfMeshWord` reads the one binding directly, as before; on, it indexes
-the views with `NonUniformResourceIndex`, which is the read real slabs would
-put in every kernel (records stay one direct table, as they would beside
-slabs). The views are bound either way, so the two builds differ only in the
-kernels' reads.
-
-- *The invariant:* no kernel reads a mesh word except through the door, so the
-  switch reaches every read. *What enforces it:* the door ends by defining
-  `sdfMeshRegion` as a name that does not exist, so any read of the region
-  after it fails to compile; every reader of mesh words includes it
-  (`frame/sdf-mesh.hlsli`, `shade/sdf-probe-trace.hlsli`). *Where it stops:* a
-  kernel that declared and read the region before including the door would
-  escape; none does, and the bake reads no mesh word.
-- *Who reads mesh words* (from the compiled modules with the switch on, each
-  declaring `ShaderNonUniform`): surface, views (plain, interpreter and
-  shade sets), glass (both), resolve (reprojection), the mesh and both shadow
-  vertex stages, the glass raster fragments, occlusion selection (the level
-  table), and the probe trace, relight and meter. Picking reads none on the
-  GPU: `SdfWorldPickReadback` copies visibility record words, and the CPU
-  diagnostics read `SdfMesh` buffers.
-- *What it costs the build:* nothing to the stored meshes. `puck mesh identity
-  --against` the base build reads the same identity on both backends (code 0
-  members differ, both bake kernels the same), so a comparison's two builds
-  share one mesh store.
-- *What it cost every device:* the prototype required
-  `shaderStorageBufferArrayDynamicIndexing` and
-  `shaderStorageBufferArrayNonUniformIndexing` (`VulkanLogicalDeviceFactory`),
-  which every bar device reports; its device chain enabled a feature flag
-  past a structure's first (`VulkanFeatureFlag`).
-
-**The measurement.** Two builds of one commit, `SdfMeshSlabs.IndexedRead`
-false and true, frozen as `puck measure request` artifacts
-(`--before-input-tree`, `--after-input-tree`), each with a solution build or
-`-p:PuckShaderSpirvEnabled=true`. In a quiet window, for each build and each
-backend, a windowed debug World with `world.lockstep on` before the first tick,
-`world.wait bakes 600`, `world.rate pause`, `world.exposure pin`,
-`world.cadence off`, `world.rates off`, then `world.gpu-timing off`, `on`,
-and a full window of `world.gpu-timing` at the hero spawn and the meadow
-stop. The passes it reads: `sdf.world$surface`, `$views` (and its shade sets
-when present), `$glass`, `$glass-shade`, `$resolve`, `$mesh` (the vertex
-stage and the occlusion kernel), `$shadow-near`, `$shadow-far`,
-`$shadow-second`. The lighting trace runs off the frame: read the
-residency's `gpu-work=[…gpu:…ms…jobs…]` in `world.residency` once the bakes
-settle and again at `[sdf.mesh-gi] done`, and divide the difference by its
-jobs. `world.counters gpu summary` beside each window must read the same draws,
-vertices and texels in both builds (the switch changes no counted work), or the
-timing compares different frames. Priced beside it, from the same runs:
-
-- *The descriptor count:* `SdfMeshSlabs.Count` descriptors in every set that
-  binds the region (a World set per ring slot, each mesh pass set, each probe
-  set), read from `pipeline.inspect world` and the descriptor writes in
-  `world.counters gpu`.
-- *The kept blocks:* the device rows' residual in `host.memory` (room inside
-  shared blocks and the empty block `GpuMemoryPool` keeps per key).
-- *The largest payload and fragmentation:* no counter prints the largest
-  placed mesh yet; `SdfMeshRegion.PlacedBytesOf` over the store's meshes gives
-  both offline, the largest against the slab size and the tail each slab
-  would leave unfilled at that size. The allocator lane adds the reading.
-
-**What each reading decides.**
-
-- *A capability missing on a bar device rules that backing out as the
-  baseline* (upper hardware enhances; the baseline runs everywhere). On the
-  table so far neither is ruled out: the Deck has sparse buffers, the 2060
-  reading is owed.
-- *The index's cost decides between them.* Within the noise of a paired
-  window on every pass and both backends, slabs win, as favoured: no
-  capability question, an emptied slab returns to the device, no
-  single-buffer ceiling, and one store for every residency. Material on any
-  pass, sparse backing of the one buffer wins on devices whose reading
-  allows it, because it changes no kernel, and the region per residency and
-  its ceiling stay.
-- *The Deck is not measured here.* An RDNA2 lane scalarizes a descriptor index
-  that differs across a wave in a loop over its distinct values (an inference
-  from how AMD's compiler treats non-uniform descriptors, unverified here), so
-  NVIDIA's cost is a lower bound for it. A windowed reading on the Deck is owed
-  before slabs land their kernel path; a slab size larger than 64 MiB (a
-  larger `SdfMeshSlabs.WordShift`) lowers the distinct slabs a wave meets and
-  is the lever to try there.
-- *The descriptor count and the largest payload size the slab:* the count
-  must fit every set's pool on every device, and a mesh larger than a slab
-  takes a slab of its own.
-
-**The first reading: material on Direct3D 12.** At the hero spawn on the RTX
-4070, the switch on against off, two boots off around one on, with the same
-counted draws: `surface` about a fifth slower, `shadow-far` and `resolve`
-several percent slower, `views` slightly slower, against a boot-to-boot spread
-near one percent. By the rule above, sparse backing of the one buffer is the
-direction on devices that allow it, and slabs do not land their kernel path.
-On Vulkan at the meadow the pair did not hold its counted work equal (the
-residency settles differently after the arrival, so the two boots drew a fifth
-apart); where the work was close, `surface` and `views` showed no cost and
-`resolve` a few percent. A Vulkan reading with the draws held equal (a stop
-whose residency settles the same, or a frozen frame) is still owed; the door
-and the switch stay, so the comparison can be read again.
+**The indexed read, and why slabs were rejected.** Every kernel reads the mesh
+region through one door, `frame/sdf-mesh-words.hlsli`: a draw's record through
+`sdfMeshRecordWord`, a mesh's own words through `sdfMeshWord`. The door ends by
+defining `sdfMeshRegion` as a name that does not exist, so a kernel that reads
+the region after including it fails to compile, and every reader of mesh words
+includes it (`frame/sdf-mesh.hlsli`, `shade/sdf-probe-trace.hlsli`); a kernel
+that declared and read the region before including the door would escape, and
+none does. The prototype used that door to price shader-visible slabs: it bound
+the region a second time as 64 MiB views and indexed them non-uniformly in
+every reader. At the hero spawn on the RTX 4070 under Direct3D 12, with the
+same counted draws, the indexed read made `surface` about a fifth slower and
+`shadow-far` and `resolve` several percent slower, against a boot-to-boot
+spread near one percent. A material cost on any pass rules slabs out on a bar
+device, so sparse backing of the one buffer is the direction wherever a device
+allows it. The slab views, the switch and the Vulkan indexing requirement were
+removed with the contiguous fallback, and no Vulkan pair is owed: no Vulkan
+result could reverse a material Direct3D 12 cost.
 
 #### Sparse backing design for review
 
-**Status and scope.** The sm7b continuations answer the review below and land
-the contiguous fallback, one device retirement timeline and destination page
-generation proofs (pieces 1 and 2 below). Direct3D 12 has a mapped destination
+**Status and scope.** Built: the contiguous fallback, one device retirement
+timeline and destination page generation proofs (pieces 1 and 2 below), the
+native pool's pressure trim and Vulkan's ordered binding door (piece 3), and
+the device's one retirement for released residencies (`GpuDeviceRetirement`,
+on `GpuRetirementQueue`). Direct3D 12 has a mapped destination
 (`IGpuMappedBuffer`, `DirectXGpuMappedBuffer`, created through
 `IGpuBufferFactory.TryCreateMapped` at reserved resources tier 2 or above): one
 reserved buffer of `GpuRegion.MaxByteCount` whose 1 MiB chunks map to tile runs
@@ -2389,13 +2400,12 @@ replacement; the mesh region fits its chunks to its placements
 wherever it lay, and the probe scene grows in place. The page authority has one
 page a chunk. Reservation credit still counts the whole tile heap a new run
 opens (M2's page-only credit is not built), and nothing compacts physical
-pages. On Vulkan the
-capabilities are support
-readings, not an enabled allocation path: `VulkanLogicalDeviceFactory.BackingOf`
-reads sparse features, but `FeatureIndicesOf` does not enable them and
-`BuildQueues` requests only the graphics/present families. The native mapping
-entry points are absent. The 4070 readings support this direction; the Deck
-column is driver-source evidence, and the 2060 is unverified. Absence of
+pages. On Vulkan a device with a sparse-capable queue enables both sparse
+buffer features (`VulkanLogicalDeviceFactory.FeatureIndicesOf`) and binds
+through `VulkanLogicalDevice.BindSparse`, but no region owns a sparse
+resource yet, so Vulkan mesh regions stay contiguous. The 4070 readings
+support this direction; the Deck column is driver-source evidence, and the
+2060's is owed from the player build. Absence of
 pageable device-local memory does not disqualify sparse buffers: Puck must
 unbind and free its allocations, rather than rely on overcommit.
 
@@ -2726,17 +2736,13 @@ bar-device baseline without pretending it has sparse relief. Sparse mode
 does not solve the single-region address ceiling or geometry duplicated
 across worlds; those remain explicit costs of the chosen shader path.
 
-The first implementation piece removes the prototype's unconditional
-slab-array bindings and Vulkan storage-buffer indexing requirements, with
-callers and generated shader interfaces together. Sparse and contiguous
-direct reads need no such feature. The remaining prototype readings use
-the frozen prototype revision.
-
 ##### Invariants and their enforcement
 
-Every new enforcement below is **proposed**; existing types alone do not yet
-prove sparse lifetime correctness. The reviewer checks the state machine
-before implementation, and the implementation gets the GPU-lifetime review
+The page leases, the device timeline's release proof, the pool's trim and the
+binding door are built (pieces 1 to 3 below); page-only reservation, physical
+compaction and Vulkan's sparse destination are still **proposed**, and no
+row is qualified on hardware yet. The reviewer checks the state machine
+before each remaining piece, and the implementation gets the GPU-lifetime review
 that [the hazards](../development/hazards.md#silent-invariants) requires.
 
 | Invariant | One enforcing place | Where the guarantee stops |
@@ -2753,129 +2759,50 @@ that [the hazards](../development/hazards.md#silent-invariants) requires.
 
 ##### Implementation sequence and open readings
 
-**Piece 1: contiguous fallback and retirement foundation.** The store, arena,
-growth/carry and shader word door remain single. The unused 64-view slab
-array is gone from each World/mesh/probe set and from the generated interfaces.
-Vulkan no longer requires or enables storage-buffer array indexing for those
-reads. `GpuQueueTimeline` has one native completion object per device
-generation: `DirectXQueueTimeline` signals an `ID3D12Fence` after the queue
-door flushes its batch, and `VulkanQueueTimeline` uses the existing timeline
-submit door. Vulkan explicitly enables the feature already required by its
-[graphics API floor](https://docs.vulkan.org/spec/latest/chapters/features.html#features-requirements).
+**Built: pieces 1 to 3.** The store, arena, growth and carry and the shader
+word door stay single. `GpuQueueTimeline` has one native completion object per
+device generation (`DirectXQueueTimeline`, `VulkanQueueTimeline`), and
+`GpuRetirementQueue` releases only the completed prefix of what it holds, with
+`SdfWorldTables.ServiceMemoryTrim` polling it even for a hidden residency.
+`GpuBufferPages` alone issues the writable-page leases every write, landing
+slice and `MeshStands` check carries, so a stale proof restages rather than
+publishes. `GpuMemoryPool.Trim` frees empty blocks under pressure and marks
+live ones for release at their last return, reached through
+`IGpuMemoryOwners.TrimRequested`. Vulkan enables sparse buffers only with a
+binding queue, and `VulkanLogicalDevice.BindSparse` orders a bind between two
+signals of the device timeline. Direct3D 12's reserved destination
+(`DirectXGpuMappedBuffer`) maps and unmaps chunks through the queue door and
+returns a chunk's tiles only after its own fence passes the unmapping; the
+mesh region and the probe scene use it. The laws behind these use modeled
+buffers and native-call recording: they prove call ordering, not driver
+execution or physical-page lifetime, which the hardware windows below
+qualify.
 
-`GpuRetirementQueue.Hold` keeps pending carries and the irradiance feedback
-copy source; `Poll` checkpoints eligible objects together, then releases only
-the completed prefix. `SdfWorldTables.ServiceMemoryTrim` polls even without
-a trim request or render, and `SubmitUpload` polls after submission. A pending
-carry genuinely still needs its source and is not promised immediate relief.
-Failed signals retain all objects and burn their values; a retirement queue
-refuses a different timeline instance. `GpuQueueTimelineLawTests` exercises
-hidden-owner retirement, a carry beside an independently releasable object,
-signal failure and device-generation replacement. Native ordering and the
-actual debug-world release remain windowed verification requests.
+**Still to build, in dependency order.** Vulkan sparse resource ownership
+behind `IGpuMappedBuffer` through its binding door, page-only residency
+admission with pool-owned slack (M2), the sparse arena placement policy (M5)
+and physical compaction (M6). The initial Vulkan join waits on all commands;
+waiting at the first accessing stage (L3) and its measurement come with the
+native resource. Both backends stay bootable at each piece, and the hardware
+check below gates any claim that relief from a budget drop works. Two
+integration items sit in [the packet](open-items.md#residency-and-streaming):
+exact coverage for an external region's disjoint writes before sparse
+external targets are used, and revision-aware lease checks before sparse
+churn is enabled.
 
-**Piece 2: destination write proof.** `GpuBufferPages` owns writable coverage
-and generation stamps. Only it issues `Lease` values; revocation makes existing
-leases stale before remapping can publish new coverage. `GpuRegion.StageOwed`
-intersects the coalesced upload runs with writable pages without joining the
-result again, sizes its request table to those exact runs, and validates their
-leases at recording, restaging a stale request instead of failing the frame.
-Unmapped debt stays owed; changed pages re-owe the host-known prefix, and
-published meshes whose proofs go stale return through ordinary landing.
-Replacement buffers supply their own page authority, and external leases
-include the target offset. The region's address ceiling reserves room for the
-worst-case split table at the minimum supported mapping page, 4 KiB.
-An ordinary contiguous growth preserves proofs through its ordered carry;
-shrink and disposal revoke them. No native sparse destination is selected yet.
-
-Landing retains the whole mesh's lease from its first slice. A slice is counted
-only if it was recorded and that generation still stands at completion;
-`MeshStands` checks the same retained proof before a row can become live.
-A moved mesh's synchronous write requires a lease too; without one it is owed
-and its rows are staged absent until background landing completes. The
-device-free page laws cover holes inside joined and paired runs, request tables
-larger than the original run limit, revocation between staging and recording,
-and remapping without reviving a stale proof. The mesh-arrival laws cover
-generation changes across a job and the moved-mesh path.
-
-Background resource retirement uses the same device timeline as frame readers.
-`SdfGpuWork.Enter` requires the actual frame queue before admitting a job;
-counting wrappers do not define a second queue. A checkpoint after retirement
-covers all preceding jobs without an extra per-job retirement counter or signal.
-The job fences remain responsible for wakeups, readbacks and ring-slot rewrites.
-
-**Piece 3: pool pressure and the Vulkan binding door.** Account trim requests
-reach both native arenas through `IGpuMemoryOwners.TrimRequested` and the
-device ledger. `GpuMemoryPool.Trim` frees empty blocks and marks every
-existing live block for release when its last placement returns. That mark
-survives delayed retirement. New blocks follow the ordinary spare-block
-policy until another request. Arena teardown removes the subscription.
-The pool and native recording-driver laws show that a live neighbour keeps
-the block held and the last return frees it, with no replacement allocation.
-The account law exercises the subscription and its removal.
-
-Vulkan enables both sparse buffer features only with an available binding
-queue, preferring the graphics family and otherwise requesting a separate
-queue. `VulkanLogicalDevice.BindSparse` is the submission-thread transaction:
-flush deferred graphics and signal N, bind waiting N and signaling N+1,
-submit a graphics wait on N+1, then return its completion value. The bind and
-graphics join share the existing device timeline. A failed bind or join
-prevents further completion proofs on that generation; backing must remain
-held until teardown. The native-call laws exercise one or two queue handles,
-an open graphics batch, null-memory unbinding and failure. They prove call
-ordering, not driver execution or physical-page lifetime. The initial join
-uses the existing conservative all-commands wait; first-access-stage
-specialization and its measurement remain with native resource integration.
-This follows the semaphore ordering in the Vulkan reference and the independent
-vkd3d-proton implementation cited in the backend contract above.
-
-**Pieces still to build, in dependency order.** Direct3D 12's reserved
-destination, its tile mapping through the queue door, and fenced unmapping
-(a released chunk's tiles return to the arena only after the buffer's own
-fence passes the queued unmapping, `DirectXGpuMappedBuffer`) exist, and the
-mesh region and the probe scene use them. Still to build: Vulkan sparse
-resource ownership behind `IGpuMappedBuffer` through its binding door,
-page-only residency admission with pool-owned slack (M2), sparse arena
-placement policy (M5), and physical compaction (M6). Both backends must stay
-bootable at each piece, and the final hardware check below still gates any
-claim that budget-drop relief works.
-
-**Code review disposition (continuation 3, findings on 2ad5ac190a).**
-
-| Finding | Answer |
-|---|---|
-| F1 high | Fixed at `RetireBackgroundResource(GpuRegion)`: the pending-use predicate compares the actual feedback buffer. The hidden-residency law holds it across repeated trim polls and releases it after the irradiance copy submits. |
-| F2 high | Fixed: destination shrink re-owes every surviving mesh and draw row, even when forgetting a tail did not relocate the arena. The arrival law starts with a standing mesh, grows for a large tail, forgets it, and verifies lower held region bytes and a standing survivor without another relocation. |
-| F3 medium | Clipped debt is retained, stale staged runs are restaged, the host-known prefix is re-owed on mapping changes, and published stale meshes re-enter landing. Page and arrival laws cover these paths. An external region's disjoint writes beyond its known prefix still need exact retained coverage before sparse external targets are used; this is a remaining integration item, not a claim of complete external remap recovery. |
-| F4 medium | Grow, shrink and restage use one destination-authority selection door; external lease offsets include the target. A fully committed buffer correctly has all-writable coverage. Native paged buffers always supply their own authority. Laws cover replacement and nonzero external targets. |
-| F5 medium | Trim removes retained mesh proofs against the arena's current placements, independently of its consumed Forgotten delta. |
-| F6 low | Stale landing entries no longer reset the traversal cursor per entry. Repeated page scans by retained lease values after an unrelated revision remain a performance follow-up. The claimed two signals per prepare does not follow: `GpuRetirementQueue.Poll` checkpoints only when newly eligible held objects exist. |
-| F7 low | Corrected the sync-pair reference: `MaxCopyRuns` bounds pre-clipping debt; the encoded table can expand after clipping. |
-| F8 info | Confirmed scope: this device timeline unifies SdfWorldTables frame and background retirement. Surface uploads and render-node resources retain their existing completion points; no global consolidation is claimed. |
-
-The laws use modeled buffers and native-call recording, not native validation
-of sparse physical lifetime. Native sparse ownership and hardware qualification
-remain with the pieces above.
-
-**Design review disposition (sm7b, e9c1d485c9).** H1's write/publication proof,
-M1's retirement proof and M3's absent-row path now have device-free laws as
-described above. Their native mapping/reuse qualification remains open. The
-other rows are design closures, not claims of implemented sparse backing.
+**The design review's rows still to build.** The rows for leases, the
+retirement timeline, absent moved meshes, the Vulkan timeline and the tier-2
+floor are built (above).
 
 | Finding | Answer and enforcement to build |
 |---|---|
-| H1 | Accepted. Destination-only writable-page leases carry device/page generations through every write, clipping, slice completion and `MeshStands`. Retirement invalidates the generation before any address can be reused. The whole-mesh publication door alone was insufficient. |
-| M1 | Accepted. One device queue timeline replaces residency upload counts as retirement proof; trim polls it for hidden residencies too. A carry not yet submitted remains an explicit pending use. |
-| M2 | Accepted. Region promises cover pages only; native block admission consumes that page credit and admits net pool slack separately. Two regions sharing one block cannot each reserve its slack. |
-| M3 | Accepted. A moved mesh without writable pages is owed and staged absent. No synchronous moved-mesh upload bypasses the lease. |
-| M4 | Accepted. Vulkan uses its enabled timeline facility and existing submit door, with ordered signals across graphics and binding queues. Binary semaphore recycling is removed from the design. |
-| M5 | Accepted. Sparse placement packs only for an unsatisfied contiguous range or address exhaustion, never free-word density. Page alignment for large meshes is a measured optional choice. |
-| M6 | Accepted. Sealing forbids a reader between copy-out and copy-back; it does not unpublish rows. Copy-back and its barrier precede resumed readers. |
-| L1 | Accepted. D3D12 requires tier 2; tier 1 NULL-mapping behavior is unsuitable. |
-| L2 | Accepted as a qualification requirement, not a guessed constant. The hardware lane reads API usage for N empty and N fully mapped regions at several N and extents, subtracts tracked blocks, and derives a conservative per-virtual-page overhead reservation in the workspace class before qualifying sparse. Driver overhead remains observed, not a claimed exact admission bound; changing budget readings can still refuse a map. Until measured, no hardware row claims this coverage. |
-| L3 | Accepted. The first accessing submission waits at transfer or compute, as appropriate, instead of a global all-commands wait for every map. The quiet window measures binding latency and queue stalls. |
-| L4 | Accepted. No page clear without a named reader. Upload covers every byte a published mesh reads; diagnostics follow the same leased ranges. |
-| L5 | Accepted. GPU execution dependencies order readers before unbind. The host observes completion only for ticket return, cross-resource reuse or native free; it does not wait before queuing unbind. |
+| M2 | Region promises cover pages only; native block admission consumes that page credit and admits net pool slack separately. Two regions sharing one block cannot each reserve its slack. |
+| M5 | Sparse placement packs only for an unsatisfied contiguous range or address exhaustion, never free-word density. Page alignment for large meshes is a measured optional choice. |
+| M6 | Sealing forbids a reader between copy-out and copy-back; it does not unpublish rows. Copy-back and its barrier precede resumed readers. |
+| L2 | A qualification requirement, not a guessed constant. The hardware lane reads API usage for N empty and N fully mapped regions at several N and extents, subtracts tracked blocks, and derives a conservative per-virtual-page overhead reservation in the workspace class before qualifying sparse. Driver overhead remains observed, not a claimed exact admission bound; changing budget readings can still refuse a map. Until measured, no hardware row claims this coverage. |
+| L3 | The first accessing submission waits at transfer or compute, as appropriate, instead of a global all-commands wait for every map. The quiet window measures binding latency and queue stalls. |
+| L4 | No page clear without a named reader. Upload covers every byte a published mesh reads; diagnostics follow the same leased ranges. |
+| L5 | GPU execution dependencies order readers before unbind. The host observes completion only for ticket return, cross-resource reuse or native free; it does not wait before queuing unbind. |
 
 **Unverified source claims have owners.** The backend implementer checks
 `UpdateTileMappings` ordering against execute and enhanced barriers with a
@@ -2888,9 +2815,9 @@ assumption. No remap relies on data inheritance: physical packing explicitly
 copies bytes back. The lead's Linux window measures RADV bind host cost.
 vkd3d-proton remains independent corroboration, never the specification.
 
-The sm7b follow-on implementation lane owns the first five rows after review;
-the lead owns assigning and running the hardware windows. None ran in this
-design lane. Each check reads actual work rather than a saved output baseline.
+The lanes that build the remaining pieces own the first five rows on the
+backend each touches; the lead owns the hardware windows. Each check reads actual work
+rather than a saved output baseline.
 
 | Step | Mechanical check and decision |
 |---|---|
@@ -2903,12 +2830,10 @@ design lane. Each check reads actual work rather than a saved output baseline.
 
 Open readings remain owned, rather than deferred to backend guesswork:
 
-- **Lead's prototype window:** finish the Vulkan indexed-read pair and meadow
-  stop, with the prototype's matching-work checks. They complete the evidence;
-  the Direct3D 12 result already selects the sparse direction.
-- **Step 7 hardware lanes:** read the 2060's two backends and boot the Deck
-  under SteamOS. Confirm page alignment, address/view limits, queues and
-  real budget-drop release. Driver-source support is not a device qualification.
+- **Step 7 hardware lanes:** read the 2060's two backends from the player
+  channel's build and boot the Deck under SteamOS. Confirm page alignment,
+  address/view limits, queues and real budget-drop release. Driver-source
+  support is not a device qualification.
 - **Step 7 allocator lane and lead's quiet window:** measure block slack,
   partly live page bytes, allocation count, map batches and scratch-copy work
   on the debug world with several residencies. Decide whether the existing
@@ -2992,19 +2917,36 @@ level each draws, read back with the portal sight verdicts
 (`SdfWorldTables.ObserveSelectionMarks`), and `world.residency`'s selection
 line prints the triangles each pass draws by level and by tier and the placed
 mesh bytes no pass selected. The floor is the coarsest rung: a group arriving
-with nothing to draw plans it first, starts its demanded tier once it lands,
-keeps it while detail draws (named ahead so its words stay), and falls back to
-it at once when the region refuses its detail (`SdfMeshPathBake.Floor.cs`).
-The floor line prints floors shown, pending, empty and kept, groups with none,
-evictions and their bytes, holes in reach and the frames that had any, and
-floor bytes by class, in logical words. Still to build, in order: a coverage
-check and a finer rung for a floor that meshes nothing or misses what its
-detail covers; a floor for a group taken whole from the library or replanned
-while it drew; placing floors in the arena before detail, so pressure refuses
-detail first; eviction by the selector's priority under a lowered budget, with
-the rungs of what gives way counted; a residency's tables built on demand; and
-relocation by a copy within the device. The readings above are owed to a GPU
-leg.
+in view with nothing to draw plans it first, starts its demanded tier once it
+lands, keeps it while detail draws (named ahead so its words stay), and falls
+back to it at once when the region refuses its detail (`SdfMeshPathBake.Floor.cs`).
+A group arriving out of view plans its demanded tier at once and keeps no
+floor (`SdfMeshPathBake.Tiers.cs`): the cold-boot work cut that, since a floor
+there is about a quarter more work before its detail and no view waits on it,
+so a refusal there falls back through coarser tiers instead. The floor line
+prints floors shown, pending, empty and kept, groups with none, evictions and
+their bytes, holes in reach and the frames that had any, and floor bytes by
+class, in logical words. Still to build, in order:
+
+- a coverage check and a finer rung for a floor that meshes nothing or misses
+  what its detail covers. The lighting already compares a floor with its
+  group's first finer mesh, witness by witness at a stated tolerance
+  (`SdfMeshTraceJudge`), and the floor's check is that comparison at the
+  display's tolerance, not a second one;
+- a floor for a group that arrived out of view, was taken whole from the
+  library or was replanned while it drew, baked behind the demanded set so
+  the boot's minute does not carry it. Whether the cold-bake bar's demanded set counts
+  these floors is settled here, against the bar's wording above;
+- placing floors in the arena before detail, so pressure refuses detail first;
+- eviction by the selector's priority under a lowered budget, with the rungs
+  of what gives way counted;
+- a residency's tables built on demand and given back, which now retire
+  through the device's one retirement without draining the device
+  (`GpuDeviceRetirement`);
+- relocation by a copy within the device.
+
+The readings above are owed to a GPU leg, and they decide most on the RTX
+2060 machine, where the region refuses detail even warm.
 
 ### Step 6: CPU copies
 
@@ -3060,22 +3002,29 @@ world's nested-view table keeps at the glass's presented height
 (`render.nested`'s `indirectLevels`, `SdfFrame.IndirectLevels`), still in a
 window per residency rather than levels allocated on demand; its service draws
 on the one background budget by the glass's share of the display's pixels
-(`SdfGpuWorkBudget.Takes`); and a seen volume's first light is owed work under
+(`SdfGpuWorkBudget.Takes`); a seen volume's first light is owed work under
 the owed allowance (`SdfMeshIrradiance.OwesFirstLight`), though its debt is not
 yet counted apart from an arrival's geometry: both are the budget's `owed-jobs`.
+The trace scene holds each static group's floor where `SdfMeshTraceJudge`
+admits it ([decision 9](#decision-9-lighting-reads-the-same-demand-and-pays-on-demand)),
+a scene built while a batch runs is installed when that batch ends, a probe's
+local cube survives a change that misses it, and a change is walked as a box
+hierarchy rather than one union box, with rebuilds paced by trace progress.
 
 **Check.** Exists: `probe-cache-bytes`, `trace-scene-cpu-array-bytes`,
 `probe-cache-blocks`. Adds: the trace tier installed and pending, scene
 builds with their bytes and peak, lighting owed in frames a view shows, and
-probes invalidated. First reading: the floor against the view tier as the
-traced tier, at the gallery's lit exhibits and a thin partition, with the
-indirect light compared against the full-detail scene's before and after, the
-scene's bytes on both sides, and the boot's wait for the meter. After a tour,
+probes invalidated. First reading: how many floors `SdfMeshTraceJudge`
+declines, and the traced floor against the view tier at the gallery's lit
+exhibits and a thin partition, with the indirect light compared against the
+full-detail scene's before and after, the scene's bytes on both sides, and the
+boot's wait for the meter. After a tour,
 `probe-cache-blocks` stays near the kept probes' own count. GPU
 placement agrees with the CPU placement it replaces, probe for probe within a
 stated tolerance, before the CPU path goes. Probe and scene bytes stay bounded
 along a valley flight, and `ProbeCache` is read again after it. A retier wave
-rebuilds no trace scene, and a settled wait covers the lighting floor's debt,
+rebuilds no trace scene for a group whose floor the judge admitted (built,
+not yet read), and a settled wait covers the lighting floor's debt,
 where `world.wait bakes` returns today before the trace scene has rebuilt over
 swapped meshes. A cold reveal burst at the lift shaft and through a painting
 shows no frame lit by the stand-in on the normal-play leg. The gallery's lit
@@ -3107,14 +3056,42 @@ tile border. The seam walk's fastest legs read nothing.
 
 ### Step 11: managed churn
 
-**Builds.** An allocation trace across an arrival, then pooling or streaming
-its sources, with the [job system packet](open-items.md#engine-job-system)'s
-list. The sources that list already names are taken as they are reached and
-do not wait for this step's place in the order.
+**Builds.** An allocation trace across an arrival and across a cold bake,
+then pooling, owning or streaming their sources, with the
+[job system packet](open-items.md#engine-job-system)'s list. The sources that
+list already names are taken as they are reached and do not wait for this
+step's place in the order.
+
+**Where it stands.** The bake is the largest source found so far. Renting the
+CPU stages' scratch and keeping a group's projection and crossing roots in its
+owned storage cut a cold debug-world bake's managed allocation from about 124
+to 80 GB on both backends, with collections about halved, the meshes
+unchanged. What hunting the rest found, now in a lane (bake-garbage):
+
+- the store's encode builds each entry in a growing managed stream and copies
+  it out (`SdfMeshStoreCodec.EncodePayload`), for every lattice's samples as
+  well as every mesh;
+- a rental past 1 MiB is a fresh large-object array each time (`RentedArrays`),
+  which the contour's and crossing search's group-sized workspace meets on
+  every large group;
+- the refinement's per-cell masks are managed arrays cloned per split and then
+  copied into owned storage (`SdfSampledLattice.Refine`), and with the rented
+  workspace they lie outside the group's reserved peak, so the account cannot
+  pace the collections they cause.
+
+The presentation's own garbage per frame was read from the code as a few
+kilobytes, too little for the collection counts the RTX 2060 machine showed
+during a cold bake, which points at the bake's workers (an inference). The
+2060 never bakes cold now, but a player's build still derives a mesh it misses,
+so the bake's garbage reaches players on a miss.
 
 **Check.** Collections, the duration of each pause and the allocated bytes in
 the arrival window, set against the presented frames of the same window: a
-count of collections alone cannot say a hitch went.
+count of collections alone cannot say a hitch went. For the bake, the done
+line's `managed=` allocation, collections and pause on a cold lead-machine
+bake, as a trend. On the RTX 2060 machine, a `gc-verbose` trace of the player
+build while moving, beside `host.frames`' frame-thread allocation, says which
+threads own what garbage is left with no bake running.
 
 ## The owner's questions
 
@@ -3135,8 +3112,9 @@ says otherwise.
 Already ruled, and followed here: a miss shows the coarsest level and then
 haze, never a hole; level switches cut and a late group fades in; the
 resident-byte target is set on the RTX 4070 and the Steam Deck is a second
-qualification on the same mechanism; a seam is what breaks immersion in normal
-play. One consequence of the haze ruling is worth the owner's eye when step 5
+qualification on the same mechanism; the RTX 2060 machine is a consumer
+release target that runs only the player channel's prewarmed build; a seam is
+what breaks immersion in normal play. One consequence of the haze ruling is worth the owner's eye when step 5
 lands: on a device where even the floors do not fit, the haze stands nearer
 than the authored far distance.
 
@@ -3145,12 +3123,12 @@ than the authored far distance.
 | Question | Owner | Decides |
 |---|---|---|
 | The Deck's numbers: RADV's heaps and budgets, how far the GPU reaches into system memory under SteamOS, free memory with the Steam client running, and whether GPU pages count against the host's free memory | A lane with the hardware, after step 1 | Which limit binds in decision 2's formula; the 10 GB target becomes a qualification on a real reading |
+| The RTX 2060 machine's memory figure: what its process and its 6 GB card are held to at every settled checkpoint, on a 16 GB host | The lead, from the prewarmed player build's first reading ([what the 2060 showed](#what-the-rtx-2060-showed)) | The third device's memory bar; whether the account's derived host budget (three quarters of installed memory) is the figure or only its ceiling |
 | Whether Vulkan's budget on an RTX card tracks the DXGI budget | Step 1's windowed reading | Whether one spend margin fits both backends |
 | The spend margin | Step 2 | The constant in decision 2 |
 | What happens over budget on an RTX card under Linux | A Linux boot of an RTX machine | How strictly Linux discrete must reserve before allocating |
 | The fixed cost of one residency, and of one character | Step 2, then step 5 | Whether a hub of many portals needs a session-scale design beyond this plan |
-| Sparse binding, page alignment, actual binding queues, address/view limits and physical release on the three bar devices | Step 7 hardware lanes: the 4070 support reading is taken; qualify the implementation on both backends, read the 2060, and verify the Deck's driver-source column on hardware ([design](#sparse-backing-design-for-review)) | Sparse-path availability and its automatic contiguous fallback; priority remains optional |
-| The indexed read's remaining Vulkan and meadow pairs | Lead's quiet window ([the measurement](#the-prototype-as-built)) | Completes the prototype evidence; the material Direct3D 12 result already selects sparse backing |
+| Sparse binding, page alignment, actual binding queues, address/view limits and physical release on the three bar devices | Step 7 hardware lanes: the 4070 support reading is taken; qualify the implementation on both backends, read the 2060 from the player build, and verify the Deck's driver-source column on hardware ([design](#sparse-backing-design-for-review)) | Sparse-path availability and its automatic contiguous fallback; priority remains optional |
 | Sparse block slack, partly live pages, map/compaction cost and enhanced-barrier reuse spelling | Step 7 allocator/backend implementers, lifetime reviewer and lead's quiet window ([design](#sparse-backing-design-for-review)) | Physical-block size and qualification of the pressure transaction, without changing the direct shader read |
 | The floor's bytes by class, and the groups whose floor is finer than their coarsest rung | Step 5's first reading | The floor class's size; whether the floor is affordable on each device |
 | Which tier the lighting traces, and what it must keep beyond recent hits | Step 9's first reading | Whether the floor and the trace tier are one product; what observation may evict |
@@ -3175,8 +3153,9 @@ extends:
 - **The backend pool.** `GpuMemoryPool` is where blocks are made, kept and
   freed; pressure release extends it.
 - **The region and retirement.** `GpuRegion`, `SdfMeshRegionArena`,
-  `SdfWorldTables.Retire` and `GpuRetirementQueue` own staging, placement and
-  completion. Step 7 adds range-backed destinations and binding completion to
+  `SdfWorldTables.Retire`, `GpuRetirementQueue` and the device's one
+  retirement for released residencies (`GpuDeviceRetirement`) own staging,
+  placement and completion. Step 7 adds range-backed destinations and binding completion to
   those mechanisms; it does not fork the mesh store or the shader read.
 - **The queue door.** `GpuSubmissionBatch`,
   `DirectXDeviceContext.CommandQueueHandle` and
@@ -3195,8 +3174,10 @@ extends:
 - **Groups and chunks.** A bake group is the source tile's unit as it stands;
   `SdfMeshChunks` stays the within-tier partition, and `SdfMeshPlanarMerge`
   already collapses a flat closing face.
-- **The mesh audit.** Its `open`, `nonmanifold` and `uncovered` metrics are the
-  floor's and the tile's checks.
+- **The mesh audit and the trace judge.** The audit's `open`, `nonmanifold`
+  and `uncovered` metrics are the floor's and the tile's checks offline;
+  `SdfMeshTraceJudge`'s witness comparison of a floor against a finer tier is
+  the bake-time check the floor's coverage test reuses.
 - **The pool.** `JobPool` and the job system's J1 own scheduling.
 - **Visibility.** `SdfMeshOcclusion` is the feedback's producer,
   `RenderGraphSlotResults` its completion, and `SdfPortalSight` a window's
