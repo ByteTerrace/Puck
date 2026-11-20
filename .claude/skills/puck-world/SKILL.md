@@ -476,50 +476,48 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 **Paths resolve beside the document** that names them (`WorldDocumentPaths`);
 shipped engine content resolves through `PuckPaths.Shipped`.
 
-**Reload travels as a delta, prepared off the tick.** `world.reload` is an immediate
-verb (`WorldReload`): it captures the installed declarations and their version on the
-pump, compiles, admits, text-checks and diffs the current source on the thread pool
-(`WorldReloadDelta.Create` over `WorldDocumentBasis.Diff`, proving the merge reproduces
-the target), and submits from the pump; its session holds later lines until the
-authority's verdict, so a following read sees the reloaded world. Only the keyed patch,
-authority document version, base/result fingerprints, directory and source pin cross
-the submission wire; the Rebuild cap stays 16 MiB. The authority prepares a live
-Load or Reload off its tick and gate too (`WorldRebuildPreparation`, taken at the next
-drain by `WorldRebuildPreparations`, on a host with workers): it reconstructs against
-the declarations the delta names (`WorldDocument.Installed`, held weakly while the
-sender holds them, so installs since do not refuse it), shares every member and keyed
-row the patch leaves unchanged with them (`WorldDocumentWalker.Share`, so collider sets,
-stamps and other reference-keyed products carry over), checks the target pin on that
-shared candidate, and admits it once (`WorldDefinitionAdmission`, whose programs
-`ApplyRebuild` adopts). The replay drive and a history seek prepare inline.
-`world.reload.stale-base` names a base the authority cannot name (another activation,
-or replaced declarations nothing holds); `world.reload.base-mismatch` and
-`world.reload.target-mismatch` name disagreeing content. Retry by issuing a fresh
-reload. A sender in the authority's process (`WorldReloadDelta.Create`) keeps the
-candidate it shared beside the declarations it diffed, and `TryPrepare` over that
-same object reconstructs nothing. The success echo prints patch and complete payload
-bytes and what the install kept of the state; `[world.reload] source` and
-`[world.rebuild]` lines (`host.log category world.re`) split the time into compile,
-admission, text, diff, reconstruction, admission and install.
+**A reload is a keyed delta between two source revisions.** The authority keeps the
+revision of the source it last took (`WorldServer.SourceRevision`: the document the
+source composed, drew and settled to, and its content pin), set at boot, load and
+reload; a restored checkpoint falls back to its base. `world.reload` (`WorldReload`)
+captures that revision on the pump and reads the source on the thread pool as an edit
+(`WorldDefinitionLoader.TryLoadFileForEdit`: composed, drawn and settled, never
+admitted, so only the authority validates). A source that still composes to the
+revision's pin is not parsed or sent: the verb answers that it is unchanged. Otherwise
+it cuts the delta from member bytes (`WorldReloadDelta.Between` over
+`WorldDefinitionMembers`, which slices a definition's compact canonical bytes per root
+member with a digest each): only members whose digests moved are diffed, each proved to
+merge and carried whole when its delta cannot be. The wire carries the patch, both
+revision pins (digests over member digests), the directory and the source pin.
 
-**A reload installs as the edit it is.** `WorldDocument.ApplyRebuild` seeds again only
-the state rows the source changed (`WorldDocument.NameReloadEdit`, comparing each row
-with the installed one by its serialized bytes) and keeps every other row's live value, the rule latches and the
-lattices' cells (`WorldArenaContinuity.Edit`); `world.reset` and `world.load` install
-a document whole. A reload candidate that was not shared by a delta against the
-installed declarations (a replay drive's re-read) is shared at the top of the apply
-(`WorldReloadDelta.Share`), so the rows a reload seeds are the same on a replay. The
-reload still clears the journal, moves the base, rebuilds the simulation's compiled
-products and deals placements again
+**The authority merges the delta over the live document.** Its preparation
+(`WorldRebuildPreparation`, off the tick on a host with workers) reconstructs the next
+revision (`WorldReloadDelta.TryReconstruct`; a sender in the same process hands over
+the revision it built, sharing every unchanged row with the last), then merges it over
+the live document (`TryMergeOver`): a member the live document still holds as the
+revision's own instance takes the next revision's, and any other member merges three
+ways (`WorldDocumentBasis.MergeThree`). The source wins every row both changed, and the
+verdict names each such row (`the source won over the session's edits at …`); every
+other live edit stands. It classifies the candidate by which root members are other
+instances (`WorldDocument.ReloadInstallKindOf`) and validates once, as the kind needs:
+nothing installs when nothing changed; state values alone take a value install;
+creations changed only in shading, and shade programs, take a presentation install;
+anything else is admitted whole and takes the full install, which seeds again only the
+rows the source changed (`WorldDocument.NameReloadEdit`) and keeps every other row's
+live value, the rule latches and the lattices' cells. No reload deals placements again.
+`ApplyRebuild` takes the preparation while the revision and the live document it was
+merged against still stand, and merges again on the tick otherwise; a replay drive
+re-reads the file and runs the same cut and merge. The verdict names the members it
+changed. `world.reload.stale-base` names a delta cut from another revision,
+`world.reload.target-mismatch` one that does not reproduce its pin. `world.reload`
+still clears the journal and moves the base to what it installed
 ([the live edit path](../../../docs/plans/iteration.md#the-live-edit-path-step-3)).
 
-**A saved file reaches the World only as a reload.** `world.watch on`
+**A saved file reaches the World as a reload.** `world.watch on`
 (`WorldSourceWatch`, off by default) polls every file fact the last compile read
-and queues an ordinary `world.reload` after a quiet moment. A reload composes and
-validates the whole world for one changed value and clears the journal; a refusal
-`world.reload.delta-unrepresentable` names the first path where the patch's merge
-differs from the source. A value you only want to try goes
-through `world.row.set`, which installs by kind (`WorldDocument.InstallKindOf`).
+and queues an ordinary `world.reload` after a quiet moment. A value you only want to
+try goes through `world.row.set`, which installs by kind (`WorldDocument.InstallKindOf`)
+and survives a later reload that does not change the same row.
 [The authoring loop](../../../docs/plans/iteration/authoring-loop.md) holds the
 measurements and the design that joins the two doors.
 

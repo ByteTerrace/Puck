@@ -532,15 +532,21 @@ What survives an arena install is decided in one place,
   row's `status` to -2 (`WorldScopedReplayRuntime.NoStartStatus`) and names the
   refusal on stderr; the next capture request records afresh and returns it to 0.
   The chess demo's `chess-demo-lost-start` rule reads -2 to clear its `ready` flag.
-- **Reload** (`world.reload`): an edit's continuity, above. The candidate holds
-  the installed declarations' own object for every row the source left
-  unchanged (`WorldReloadDelta.Share`, decided by the content diff, so a replay
-  drive's re-read shares the same rows), and `WorldDocument.NameReloadEdit`
-  seeds again only the rows whose serialized declaration differs from the
-  installed one: the live arena stays when none does, and a replacement born
-  with the changed rows carries the rest otherwise. Lattices keep their cells, and a row whose draw pass the source
-  changed repaints. A reload that changes a part of the state section other
-  than its rows, or a section that declares pools, loads whole, as below.
+- **Reload** (`world.reload`): an edit's continuity, above. The candidate is the
+  source's change between the revision the authority holds and the next one,
+  merged over the live document (`WorldReloadDelta.TryMergeOver`), so it holds
+  the live document's own object for every member and row the change leaves
+  equal, on a live run and a replay drive's re-read alike.
+  `WorldDocument.ReloadInstallKindOf` names the install by which root members
+  are other objects: none installs nothing, state values alone take the value
+  install and creations changed only in shading (with shade programs) the
+  presentation install. Any other change takes the full install, where
+  `WorldDocument.NameReloadEdit` seeds again only the rows whose serialized
+  declaration differs from the installed one: the live arena stays when none
+  does, and a replacement born with the changed rows carries the rest otherwise.
+  Lattices keep their cells, and a row whose draw pass the source changed
+  repaints. A reload that changes a part of the state section other than its
+  rows, or a section that declares pools, loads whole, as below.
 - **Load** (`world.load`, `world.reset`, a history seek, a
   checkpoint restore): the document's state replaces the arena's whether the
   arena is replaced or reloaded in place, so the rule and interaction latches
