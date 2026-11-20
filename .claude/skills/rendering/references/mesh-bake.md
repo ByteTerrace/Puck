@@ -613,7 +613,10 @@ laws exercise that boundary.
   landed group whose demanded tier has been finer than its own for
   `SdfMeshTier.HoldFrames` frames is planned again at the finer tier and placed
   as a replacement (`SdfMeshPathBake.Retier`, its `Replaces` path, at most
-  `MaxInFlight` at once, the finest demand first): the coarser mesh draws
+  `MaxInFlight` at once, the finest demand first; an arrival's landed floors
+  start their first details `SdfMeshTier.FirstsPerFrame` a frame, `StartFirsts`,
+  and a replan plans only the group's own instances, `SdfMeshBakeGroup.Refresh`,
+  never its slot's other groups or the program's other instances): the coarser mesh draws
   until the finer is baked and its words stand in the mesh region
   (`FinishReplacements`; the swap bullet below). The demand is measured a share of the groups each frame
   (`SdfMeshPathBake.MeasureDemands`, one sweep of every group's boxes in
@@ -1193,7 +1196,9 @@ laws exercise that boundary.
   rewrites (`SdfGpuWork.EndLeases`). A batch
   abandoned (a recording that failed, a disposed service) returns its lattices
   to their groups, which dispatch them again, and counts its samples as
-  `discarded`; `Answered` settles a batch once.
+  `returned`, or `discarded` once the GPU sampled them (a failed readback, a
+  group retired while its lattice flew: GPU work spent for nothing);
+  `Answered` settles a batch once.
 - **Readback ownership belongs to a job, never a recycled token.** Every
   completion gets a new `SdfGpuWorkReadback`; its gate serializes reading,
   release and revocation. A stale or concurrent second release cannot free
@@ -1273,21 +1278,27 @@ laws exercise that boundary.
   contouring normally, and it may reuse individual samples for any unchanged
   lattice or point request. The sample key (`SdfMeshPathBake.SampleInput`, the
   one derivation a probe and a write share) is the dispatch's packed lattice row
-  and points over the group's `SampleKeys`, which the group fixes when it
-  begins and the take records beside each lattice it dispatches, so the reader
-  that keeps the samples never reads the live group. The keys hold the group's
+  and points over the group's `SampleKeys`, part of its `CheckpointKeys`
+  (`KeyCheckpoints`: one immutable set taken from one program, replaced whole),
+  which the take records beside each lattice it dispatches, so the reader that
+  keeps the samples never reads the live group. A group a new program keeps
+  mid-bake (`Place`, `Keeps`) carries on and is keyed again under that program,
+  since its sealed geometry, and so its mesh, is the same under either. The keys hold the group's
   sample input (`SampleFieldInput`): its `Shape`,
   which the geometry hashes before the tier and the operands' poses, the
   program's packed field and step scale, its palette and its pose rows. A tier
   changes what a lattice samples only through those rows or the lattice's own
   row, so a detail tier takes its floor's coarse search and final slabs from the
-  store when they sample alike. The take decides a probe inline from what the
-  store knows of the sampling identity's sets (`SdfMeshStore.MayHoldSamples`:
-  the directory listed once on the pool, or found missing, then kept by this
-  process's writes and deletes), so a cold store dispatches every lattice in its
-  first take with no file read; a lattice the store may hold is read on the
-  pool's urgent queue, and one that misses there dispatches in the next take
-  unprobed. A dispatched
+  store when they sample alike. The take decides a probe under the gate from
+  identity-sized facts alone: what the store knows of the sampling identity's
+  sets (`SdfMeshStore.MayHoldSamples(identity)`: the directory listed once on
+  the pool, or found missing, then kept by this process's writes and deletes),
+  so a cold store dispatches every lattice in its first take with no file read
+  and no hash. A lattice whose identity the store may hold goes to the pool's
+  urgent queue (`LoadSamples`), which hashes its points (a request holds up to
+  `LatticeTaps`, never hashed under the gate), checks and reads the set, while
+  the group stays held (`Contouring`) so no stage moves the points; one that
+  misses there dispatches in the next take unprobed. A dispatched
   lattice's samples, its contour and its simplified mesh go to the store's
   writer (`SdfMeshStore.KeepSamples`, `WriteCheckpoint`: a `BoundedWorkQueue`
   of two pool items, drained for up to ten seconds at process exit), never
@@ -1379,7 +1390,9 @@ laws exercise that boundary.
   index shared by demand and dressing, revisit moved frame inputs, prioritize, finish replacements and retier, then
   return a stack-bound `FrameAccess`. Its consumer
   claims the landed meshes and publishes draws/picking before acknowledging that access's captured product revision;
-  disposal releases the gate without acknowledgment. Every mesh replacement, including a same-count or empty result,
+  it reads the groups only while the access holds the gate, and releases it (`FrameAccess.Release`) once its rows claim
+  every mesh it draws, so posing, clipping and publishing run with the gate open; a group read after the release throws.
+  Disposal releases the gate without acknowledgment. Every mesh replacement, including a same-count or empty result,
   advances the revision. `Stage` chooses and slices the exact point/pose rows; its caller uploads the returned span
   through the generic region transport. No bake entry calls the dresser. This is a type boundary as well as a call
   boundary: applied code updates report types, including declaring types of nested helpers, so a partial/nested dresser

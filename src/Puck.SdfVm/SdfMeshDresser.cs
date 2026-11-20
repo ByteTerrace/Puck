@@ -4,7 +4,7 @@ using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
-/// <summary>Reconciles a bake's owners into retained row allocations, under its frame gate.</summary>
+/// <summary>Reconciles a bake's owners into retained row allocations, reading its groups under its frame gate.</summary>
 public sealed class SdfMeshDresser : IDisposable {
     private readonly SdfMeshPathBake m_bake;
     private readonly SdfMeshRows m_rows;
@@ -68,8 +68,17 @@ public sealed class SdfMeshDresser : IDisposable {
     /// <summary>Reconciles products, copy membership and poses without moving unrelated owners.</summary>
     public SdfFrame Dress(SdfFrame frame) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        using var access = m_bake.PrepareFrame(frame: frame);
+        // A mutable local, not a using variable: the dress releases the access part way (Release), which a using
+        // variable's defensive copy would do to the copy alone.
+        var access = m_bake.PrepareFrame(frame: frame);
 
+        try {
+            return DressHeld(frame: frame, access: ref access);
+        } finally {
+            access.Dispose();
+        }
+    }
+    private SdfFrame DressHeld(SdfFrame frame, ref SdfMeshPathBake.FrameAccess access) {
         m_faultThisDress |= SdfRowChecks.TakeDressFault();
         var retry = m_pending;
 
@@ -123,6 +132,10 @@ public sealed class SdfMeshDresser : IDisposable {
             groupsVisited = access.GroupCount;
             DressGroups(access: in access, frame: frame, matrices: ref matrices, updated: ref updated, visited: ref visited);
         }
+        // Every group read is done and the rows claim every mesh they draw: the rest of the dress (copies' own meshes,
+        // poses, clips, publishing) reads no group, so the bake's workers publish meanwhile. The row checks read the
+        // groups again at the end, and keep the gate.
+        if (!SdfRowChecks.Enabled) { access.Release(); }
         // A copy's own mesh: read at every copy the journal names, and dropped where the list ended before it.
         if (copiesWhole) {
             m_removedOwn.Clear();
