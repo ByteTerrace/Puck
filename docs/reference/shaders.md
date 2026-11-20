@@ -419,8 +419,10 @@ A `Depth` resource is a `D32Float` depth attachment. Only a
 [geometry pass](#geometry-passes) writes one, and nothing publishes or retains
 it into the next frame; it declares no `initialization`, because the pass that
 writes it clears or loads it. Only a package pass samples one (the SDF world's
-shadow cascades, which its own raster passes draw and its surface pass reads),
-and the node then creates the depth image sampled as well. The planner refuses
+shadow cascades, which its own raster passes draw and its surface pass reads,
+and which a two-phase selection reads inside the recording that drew them, where
+the plan sees no access), so the node creates every depth image sampled as well
+(`ShaderPipelineRenderNode.UsageOf`). The planner refuses
 each misuse by name: another format (`SHADERPIPE_DEPTH_FORMAT`), an input of a
 document pass (`SHADERPIPE_DEPTH_SAMPLED`), a pipeline output (`SHADERPIPE_DEPTH_PUBLIC`),
 `history` (`SHADERPIPE_DEPTH_HISTORY`), an initialization

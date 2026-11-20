@@ -206,10 +206,15 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         ptr = (set.CpuBase + ((nuint)((set.SlotByBinding[binding] + arrayElement) * set.DescriptorSize))),
     };
     // A two-dimensional texture's shader resource view over every mip level the texture has: the one view a combined
-    // image sampler and a sampled image both read.
+    // image sampler and a sampled image both read. A depth image created without Sampled keeps its depth format, which no
+    // shader resource view takes; creating one removes the device, so the write is refused by name instead.
     private void CreateTextureView(D3D12_CPU_DESCRIPTOR_HANDLE destination, nint imageViewHandle) {
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var imageView = ImageViewOf(imageViewHandle: imageViewHandle);
+
+        if (imageView.Format is DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT or DXGI_FORMAT.DXGI_FORMAT_D16_UNORM or DXGI_FORMAT.DXGI_FORMAT_D24_UNORM_S8_UINT or DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT) {
+            throw new InvalidOperationException(message: $"A sampled image descriptor names image view 0x{imageViewHandle:X}, a {imageView.Format} depth image created without GpuImageUsage.Sampled.");
+        }
         var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
             Format = imageView.Format,
             Shader4ComponentMapping = DefaultShader4ComponentMapping,

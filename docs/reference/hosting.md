@@ -420,16 +420,21 @@ which the container would otherwise release after the device.
 
 Both GPU hosts recover from a loss through one policy, `DeviceLossRecovery` in
 `Puck.Launcher`. It writes a `[device-lost] reason 0x…` line to standard error,
-drains what the device still runs, calls `OnDeviceLost` on the render root
+naming the attempt, the frames the previous rebuild produced and what surfaced
+the loss, drains what the device still runs, calls `OnDeviceLost` on the render root
 while the lost device still exists, and then rebuilds the device in place
 through an `IDeviceRebuild`, retrying every 250 ms for up to 10 seconds while
 the adapter is absent. The windowed host rebuilds through its presenter
 (`PresenterDeviceRebuild`). The offscreen host rebuilds through the rebuild
 the World's offscreen GPU activation registers: on Vulkan the presenter
 rebuilds on the hidden window's surface, and on Direct3D 12 the device context
-is recreated with no swap chain. More than eight losses with no frame between
-them, a device that does not return in time, or a host with nothing to rebuild
-through ends the run; the windowed host closes, and the offscreen host faults.
+is recreated with no swap chain. A rebuilt device lost again before it has
+produced `DeviceLossRecovery.StableFrames` frames continues the streak (an
+invalid call the next frame repeats is one loss, not a recovered one), so more
+than eight losses in one streak, a device that does not return in time, or a
+host with nothing to rebuild through ends the run. On Direct3D 12 the
+`[d3d12-dred]` record names the removal reason, and for `DXGI_ERROR_INVALID_CALL`
+says that only the debug layer (`--debug-layers`) names the call; the windowed host closes, and the offscreen host faults.
 A run that ends has still drained and released the render root first, so every
 capture armed at the loss is refused by name rather than left unserved.
 After recovery the offscreen host retries the completed step's frame with the

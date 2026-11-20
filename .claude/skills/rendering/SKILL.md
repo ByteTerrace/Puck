@@ -405,6 +405,10 @@ layer. The recorder stages the static draws through a second `SdfMeshOcclusion` 
 set group after the cascade's, `OcclusionGroups`) and the moving draws plus every glass draw through the cascade's own
 (`SdfMeshMotion.Dynamic`) over a `CopyDepth` of the layer; the kernel leaves a draw a motion filter excludes untouched.
 A path that draws the layer must call `SdfWorldTables.CastersRead`, or a caster absent then never redraws it on landing.
+The static selection's late step samples the layer it just drew, an access the graph plan never sees; it binds because
+`ShaderPipelineRenderNode.UsageOf` creates every depth sampled. A depth created without `Sampled` is a `D32_FLOAT`
+texture, and Direct3D 12 removes the device (`DXGI_ERROR_INVALID_CALL`, no breadcrumb) on creating its shader resource
+view, so `DirectXGpuBindings` refuses that write by name.
 `sdf.rates`' `shadow-far.static` counts the layer's redraws.
 
 ## The distant shadow map
