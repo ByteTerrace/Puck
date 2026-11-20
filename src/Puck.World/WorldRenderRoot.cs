@@ -300,8 +300,13 @@ public static class WorldRenderRoot {
             // The graph host's environment registrations retain residencies. Release those registrations
             // before the binder's GPU holdings and the world's creator hold, after the runtime's passes have retired.
             // These services can predate the device context, so their later container disposal is too late for GPU owners.
-            // The specializations those residencies retired unfinished are waited out last, while the device lives.
-            Holdings = [compareCapture, host, binder, residency, pipelines.RetiredBuilds],
+            // A released residency's device objects wait in the device's retirement, and releasing them retires the
+            // builds they still lease into the catalog, so the retirement is drained before the catalog's builds, which
+            // are waited out last, while the device lives.
+            Holdings = [compareCapture, host, binder, residency, new DisposeOnce(action: () => {
+                device.TryWaitIdle();
+                device.Services.Retirement.Drain();
+            }), pipelines.RetiredBuilds],
             Prepare = (in FrameContext context) => {
                 // The profile the world authors for this adapter applies once the device is up and has named its
                 // adapter, before the first frame's residencies stage anything; the device opens lazily, so it may have
@@ -378,18 +383,25 @@ public static class WorldRenderRoot {
             root: () => runtime.NodeOf(instance: WorldViewGraphs.MainInstance)
         );
 
-        return new WorldPresentationRoot(root, client, () => frameSource.PinsPresentation, iterations);
+        return new WorldPresentationRoot(root, client, () => frameSource.PinsPresentation, iterations, device, pipelines.RetiredBuilds);
     }
 
     // All graph consumers see the clock of the snapshot the client actually received, including after replay
     // restoration or a paused boot. Host pump elapsed time is only a scheduling coordinate. Each produced frame advances
     // the edit loops the World times, just before the host presents it.
-    private sealed class WorldPresentationRoot(RenderGraphRuntimeNode root, WorldClient client, Func<bool> pinned, WorldIterationClock iterations) : IRenderRoot, ICaptureRequestTarget {
+    private sealed class WorldPresentationRoot(RenderGraphRuntimeNode root, WorldClient client, Func<bool> pinned, WorldIterationClock iterations, IGpuDeviceContext device, RetiredBuilds retired) : IRenderRoot, ICaptureRequestTarget {
         public string? PendingCapturePath => root.PendingCapturePath;
 
         public void RequestCapture(FrameCaptureRequest request) => root.RequestCapture(request: request);
         public void Dispose() => root.Dispose();
-        public void OnDeviceLost() => root.OnDeviceLost();
+        // The runtime's loss releases every residency it holds; a released residency's objects, waiting in the device's
+        // retirement, go next and retire the builds they still lease into the catalog, whose builds are waited out last,
+        // before the device is recreated.
+        public void OnDeviceLost() {
+            root.OnDeviceLost();
+            device.Services.Retirement.Drain();
+            retired.Drain();
+        }
         public RootFrame ProduceFrame(in FrameContext context) {
             var stepTicks = client.StepTicks;
             var fraction = (pinned() ? 1f : client.InterpolationAlpha);

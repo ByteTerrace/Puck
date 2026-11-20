@@ -172,7 +172,8 @@ public sealed class DeviceLossRecovery {
         // Every object on the device is released before the device goes, and every capture armed at the loss is refused,
         // whether or not the run goes on: a run that gives up must not leave a capture to end as unserved or to meet a
         // disposed root. The rebuild below replaces the device in place. What owners retired to the device (a released
-        // residency's tables) waits for no checkpoint of the lost device.
+        // residency's tables), the root's loss included, waits for no checkpoint of the lost device; a root whose
+        // retired objects hand builds on to an owner of its own drains the retirement itself first.
         m_root.OnDeviceLost();
         deviceContext?.Services.Retirement.Drain();
 

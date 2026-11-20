@@ -334,7 +334,9 @@ fence value). An owner that lets go of objects other nodes' submissions read, an
 released residency, a dropped portal's or routed view's tables), hands them to the device's one retirement
 (`GpuDeviceServices.Retirement`, a `GpuDeviceRetirement`) instead of waiting for idle: `RenderGraphRuntime` polls it
 after each frame's batch, which queues a timeline checkpoint behind it, and the hosts drain it at a loss
-(`DeviceLossRecovery`) and at teardown (`LauncherHostRun.DrainRetirement`). Never add a `TryWaitIdle` to a release
+(`DeviceLossRecovery`) and at teardown (`LauncherHostRun.DrainRetirement`). A released residency's release retires the
+builds it still leases into `SdfWorldPipelineCatalog.RetiredBuilds`, so `WorldRenderRoot` drains the device's retirement
+itself before that table, in its holdings and in its loss. Never add a `TryWaitIdle` to a release
 path; `SdfWorldTables.Dispose` and `IGpuSurfaceUpload.DisposeCompleted` wait for nothing. A render node's build in
 flight retires into its runtime's `GpuImageLeases.RetiredBuilds`, which `DrainDisposals` waits out before the device
 goes. A package recorder never sees a fence: a result its recording captured (a readback, a publication, a
