@@ -48,14 +48,14 @@ public sealed class SdfMeshPathBakeSampledLawTests {
         return (Vector3.Max(value1: q, value2: Vector3.Zero).Length() + MathF.Min(x: MathF.Max(x: q.X, y: MathF.Max(x: q.Y, y: q.Z)), y: 0f));
     }
     private static byte[] Answer(SdfMeshBakeBatch batch, Func<Vector3, float> field) {
-        var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
-        var sample = 0;
+        var bytes = new byte[batch.OutputBytes];
+        var offset = 0;
         ReadOnlySpan<Vector3> taps = [new(x: 1f, y: -1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: 1f, y: 1f, z: 1f)];
 
         foreach (var lattice in batch.Lattices) {
             var spacing = lattice.TapSpacing;
 
-            for (var local = 0; (local < lattice.Samples); local++, sample++) {
+            for (var local = 0; local < lattice.Samples; local++) {
                 var position = lattice.SampleAt(local: local);
                 var gradient = Vector3.Zero;
 
@@ -64,14 +64,9 @@ public sealed class SdfMeshPathBakeSampledLawTests {
                     gradient *= (0.25f / spacing);
                 }
 
-                var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
-
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record, value: field(arg: position));
-                BinaryPrimitives.WriteInt32LittleEndian(destination: record[4..], value: 0);
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record[8..], value: gradient.X);
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record[12..], value: gradient.Y);
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record[16..], value: gradient.Z);
+                lattice.WriteSample(bytes.AsSpan(offset, lattice.OutputBytes), local, field(arg: position), 0, gradient);
             }
+            offset += lattice.OutputBytes;
         }
 
         return bytes;
@@ -198,7 +193,7 @@ public sealed class SdfMeshPathBakeSampledLawTests {
 
         var second = batch.Lattices[1].Selector;
         var whole = Answer(batch: batch, field: static point => (point.Length() - 0.25f));
-        var first = ((batch.Lattices[0].Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint));
+        var first = batch.Lattices[0].OutputBytes;
 
         // The readback holds the first lattice's samples alone, so answering the second throws, as a decode that runs out of
         // memory does; the service then abandons the batch.

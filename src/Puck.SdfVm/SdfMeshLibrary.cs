@@ -191,15 +191,16 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         ArgumentNullException.ThrowIfNull(argument: mesh);
         ArgumentNullException.ThrowIfNull(argument: materials);
 
+        SdfMeshStoreCodec.Positions? stored = null;
         var written = ((Allocator is not null) && (Disk is { } disk) && !HoldsAny(geometry: geometry, identity: identity) &&
-            disk.Write(geometry: geometry, identity: identity, materials: materials, mesh: mesh));
+            disk.Write(geometry: geometry, identity: identity, materials: materials, mesh: mesh, stored: out stored));
 
         // A published mesh restores its parts from its identity's set, which this process pins (a lease the store could not
         // open leaves a restore that misses to bake the group again).
         if (written) { _ = Disk!.Hold(identity: identity); }
 
         var owned = (written
-            ? mesh.NativeCopy(Allocator, Account, restore: (this, identity, geometry), asStored: true)
+            ? mesh.NativeCopy(Allocator, Account, restore: (this, identity, geometry), stored: stored)
             : CopyUnstored(mesh));
 
         try {
@@ -497,23 +498,26 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     }
     // The mesh with each triangle material that `from` holds at a place renumbered to what `to` holds there; one neither
     // list reaches keeps its id. The geometry's equality makes the two lists the same length.
-    private SdfMesh Renumber(SdfMesh mesh, int[] from, int[] to) => ((Allocator is { } native) ? mesh.RenumberNative(from, to, native, Account) : RenumberManaged(from: from, mesh: mesh, to: to));
+    private SdfMesh Renumber(SdfMesh mesh, int[] from, int[] to) {
+        var map = new SdfMeshMaterials.Remap(from, to);
+        return Allocator is { } native ? mesh.RenumberNative(map, native, Account) : RenumberManaged(mesh, map);
+    }
     // A managed mesh renumbered into new managed arrays: an offline library's variants, and a decode before its native copy.
-    private static SdfMesh RenumberManaged(SdfMesh mesh, int[] from, int[] to) {
-        if (mesh.Chunks.Count != 0) { return SdfMeshChunks.Join(chunks: mesh.Chunks.Select(selector: chunk => RenumberManaged(from: from, mesh: chunk, to: to)).ToArray()); }
+    private static SdfMesh RenumberManaged(SdfMesh mesh, SdfMeshMaterials.Remap map) {
+        if (mesh.Chunks.Count != 0) { return SdfMeshChunks.Join(chunks: mesh.Chunks.Select(selector: chunk => RenumberManaged(chunk, map)).ToArray()); }
         var levels = new SdfMeshLevel[mesh.Levels.Count];
 
         for (var level = 0; (level < levels.Length); level++) {
-            levels[level] = (mesh.Levels[level] with { TriangleMaterials = Renumbered(from: from, source: mesh.Levels[level].TriangleMaterials.Span, to: to) });
+            levels[level] = (mesh.Levels[level] with { TriangleMaterials = Renumbered(source: mesh.Levels[level].TriangleMaterials.Span, map: map) });
         }
 
-        return new SdfMesh(indices: mesh.Indices, members: mesh.Members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: Renumbered(from: from, source: mesh.TriangleMaterials.Span, to: to), vertexMembers: mesh.VertexMembers, influences: mesh.Influences) { BakeCell = mesh.BakeCell, Levels = levels };
+        return new SdfMesh(indices: mesh.Indices, members: mesh.Members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: Renumbered(source: mesh.TriangleMaterials.Span, map: map), vertexMembers: mesh.VertexMembers, influences: mesh.Influences) { BakeCell = mesh.BakeCell, Levels = levels };
     }
-    private static uint[] Renumbered(ReadOnlySpan<uint> source, int[] from, int[] to) {
+    private static uint[] Renumbered(ReadOnlySpan<uint> source, SdfMeshMaterials.Remap map) {
         var renumbered = new uint[source.Length];
 
         for (var triangle = 0; (triangle < source.Length); triangle++) {
-            renumbered[triangle] = SdfMeshMaterials.Renumber(material: source[triangle], from: from, to: to);
+            renumbered[triangle] = map.Renumber(source[triangle]);
         }
 
         return renumbered;

@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Abstractions.Collections;
 using Puck.Abstractions.Memory;
 
 namespace Puck.SignedDistance.Baking;
@@ -47,13 +46,13 @@ internal interface ISdfContourLattice {
     int Corner(int x, int y, int z);
     bool Inside(int corner);
     double Value(int corner, int x, int y, int z);
-    double Crossing(int x, int y, int z, int axis, int length);
+    double Crossing(int x, int y, int z, int axis, int length, out int index);
     (double X, double Y, double Z) World(double x, double y, double z);
     bool TryNormal(double x, double y, double z, out double nx, out double ny, out double nz);
     // The unit normal at the crossing (wx, wy, wz) of the lattice edge `length` cells long along `axis` from corner
     // (x, y, z), and the field's value there in world units, the distance the surface lies behind the crossing along the
     // normal: zero where the crossing is taken to lie on the surface.
-    bool TryCrossingNormal(int x, int y, int z, int axis, int length, double wx, double wy, double wz, out double nx, out double ny, out double nz, out double offset);
+    bool TryCrossingNormal(int index, int length, double wx, double wy, double wz, out double nx, out double ny, out double nz, out double offset);
     // How far past its cell, in cells, a sharp feature its patch's tangent planes all meet at may lie: a feature whose
     // crossings this cell sees and its neighbour, which holds it, does not. A straight one keeps its vertex there, a curved
     // convex crease moves onto the neighbour's vertex (SdfDualContouring.HandOff). Zero clamps every vertex into
@@ -74,6 +73,7 @@ internal interface ISdfContourLattice {
 internal interface ISdfRefinedContourLattice : ISdfContourLattice {
     // Crossed fine cells, ordered by coarse z/y/x then fine z/y/x. Corner is the low sample's linear index,
     // with CellsX + 1 and CellsY + 1 sample strides; Mask holds the eight signs after sheet closure.
+    ReadOnlySpan<long> CrossingKeys { get; }
     ReadOnlySpan<SdfCrossedCell> CrossedFineCells { get; }
     // Fine cells along each axis of a coarse cell, at least two; the lattice's cells along each axis are a multiple of it.
     int Refinement { get; }
@@ -521,7 +521,7 @@ internal static class SdfDualContouring {
                     }
 
                     var (a, b) = CellEdges[edge];
-                    var t = Crossing(a: a, b: b, grid: grid, stride: factor, x: (cx * factor), y: (cy * factor), z: (cz * factor));
+                    var t = Crossing(index: out _, a: a, b: b, grid: grid, stride: factor, x: (cx * factor), y: (cy * factor), z: (cz * factor));
                     var (ax, ay, az) = Offset(corner: a);
                     var (bx, by, bz) = Offset(corner: b);
                     var dx = (((cx + ax + (t * (bx - ax))) * factor) - px);
@@ -592,41 +592,16 @@ internal static class SdfDualContouring {
 
         // The fine edges a refined cell touches: every sign-changing edge of a crossed fine cell, once, in ascending key
         // order.
-        using var fineEdgeList = new RentedList<long>();
-
-        foreach (var (key, (mask, _)) in fineCells) {
-            var fx = ((int)(key % cells[0]));
-            var fy = ((int)((key / cells[0]) % cells[1]));
-            var fz = ((int)(key / (((long)cells[0]) * cells[1])));
-
-            for (var edge = 0; (edge < CellEdges.Length); edge++) {
-                if (PatchOfEdge[mask][edge] < 0) {
-                    continue;
-                }
-
-                var (a, _) = CellEdges[edge];
-                var (ax, ay, az) = Offset(corner: a);
-                var edgeAxis = (edge >> 2);
-                // An edge's key: its lower sample in fine coordinates and its axis.
-                var edgeKey = ((((((long)(fz + az)) << 21) | ((long)(fy + ay))) << 21) | ((long)(fx + ax))) * 3L + edgeAxis;
-
-                fineEdgeList.Add(item: edgeKey);
-            }
-        }
-
-        var fineEdges = fineEdgeList.AsSpan();
-
-        fineEdges.Sort();
-        fineEdges = fineEdges[..SpanDistinct.Sorted(sorted: fineEdges)];
-        foreach (var edgeKey in fineEdges) {
-            var axis = ((int)(edgeKey % 3L));
-            var packed = (edgeKey / 3L);
-            var u = ((axis + 1) % 3);
-            var v = ((axis + 2) % 3);
-
-            at[0] = ((int)(packed & 0x1FFFFF));
-            at[1] = ((int)((packed >> 21) & 0x1FFFFF));
-            at[2] = ((int)(packed >> 42));
+        foreach (var crossingKey in grid.CrossingKeys) {
+            if ((crossingKey & 1L) != 0) { continue; }
+            var axis = (int)((crossingKey >> 1) % 3);
+            var startCorner = (int)(crossingKey / 6);
+            var row = startCorner / (cells[0] + 1);
+            var u = (axis + 1) % 3;
+            var v = (axis + 2) % 3;
+            at[0] = startCorner % (cells[0] + 1);
+            at[1] = row % (cells[1] + 1);
+            at[2] = row / (cells[1] + 1);
 
             if ((at[u] < 1) || (at[u] >= cells[u]) || (at[v] < 1) || (at[v] >= cells[v])) {
                 continue;
@@ -1233,33 +1208,10 @@ internal static class SdfDualContouring {
     // The lattice's crossing on a sign-changing edge, as a fraction from its first corner. A sampled lattice refines
     // this root along the edge before measuring its normal; moving a linear estimate along its normal can find another
     // face of the solid instead. A cell `stride` lattice cells wide reads its corners `stride` samples apart.
-    private static double Crossing<TLattice>(TLattice grid, int x, int y, int z, int a, int b, int stride = 1) where TLattice : ISdfContourLattice {
+    private static double Crossing<TLattice>(TLattice grid, int x, int y, int z, int a, int b, out int index, int stride = 1) where TLattice : ISdfContourLattice {
         var (ax, ay, az) = Offset(corner: a);
 
-        return grid.Crossing(axis: BitOperations.TrailingZeroCount(value: (a ^ b)), length: stride, x: (x + (ax * stride)), y: (y + (ay * stride)), z: (z + (az * stride)));
-    }
-    private static (double X, double Y, double Z) Mean<TLattice>(TLattice grid, int edges, int x, int y, int z, int stride = 1) where TLattice : ISdfContourLattice {
-        double sx = 0.0, sy = 0.0, sz = 0.0;
-        var count = 0;
-
-        for (var edge = 0; (edge < CellEdges.Length); edge++) {
-            if ((edges & (1 << edge)) == 0) {
-                continue;
-            }
-
-            var (a, b) = CellEdges[edge];
-            var t = Crossing(a: a, b: b, grid: grid, stride: stride, x: x, y: y, z: z);
-
-            var (ax, ay, az) = Offset(corner: a);
-            var (bx, by, bz) = Offset(corner: b);
-
-            sx += (ax + (t * (bx - ax)));
-            sy += (ay + (t * (by - ay)));
-            sz += (az + (t * (bz - az)));
-            count++;
-        }
-
-        return ((sx / count), (sy / count), (sz / count));
+        return grid.Crossing(index: out index, axis: BitOperations.TrailingZeroCount(value: (a ^ b)), length: stride, x: (x + (ax * stride)), y: (y + (ay * stride)), z: (z + (az * stride)));
     }
     // A vertex's unit normal: its crossings' mean normal where the lattice reads normals at its crossings
     // (ISdfContourLattice.CrossingNormals) and they do not cancel, the field's gradient at the vertex otherwise, and up
@@ -1308,8 +1260,8 @@ internal static class SdfDualContouring {
     // `worldPlanes`, when given, takes the crossings' tangent planes in world space (nx, ny, nz, d each) for Merge.
     // `anchor` is the crossings' mean, which lies in the cell.
     private static (double X, double Y, double Z) Place<TLattice>(TLattice grid, int edges, int x, int y, int z, out (double X, double Y, double Z) crossingNormal, out bool feature, out bool flat, out bool solved, out (double X, double Y, double Z)? beyond, out bool beside, out (double X, double Y, double Z) anchor, int stride = 1, RentedList<double>? worldPlanes = null) where TLattice : ISdfContourLattice {
-        var mean = Mean(edges: edges, grid: grid, stride: stride, x: x, y: y, z: z);
-        anchor = mean;
+        double sxMean = 0, syMean = 0, szMean = 0;
+        var crossings = 0;
         beyond = null;
         beside = false;
         double a00 = 0, a01 = 0, a02 = 0, a11 = 0, a12 = 0, a22 = 0, b0 = 0, b1 = 0, b2 = 0;
@@ -1329,7 +1281,7 @@ internal static class SdfDualContouring {
             }
 
             var (a, b) = CellEdges[edge];
-            var t = Crossing(a: a, b: b, grid: grid, stride: stride, x: x, y: y, z: z);
+            var t = Crossing(index: out var crossingIndex, a: a, b: b, grid: grid, stride: stride, x: x, y: y, z: z);
 
             var (ax, ay, az) = Offset(corner: a);
             var (bx, by, bz) = Offset(corner: b);
@@ -1339,8 +1291,12 @@ internal static class SdfDualContouring {
 
             var (wx, wy, wz) = grid.World(x: (x + (px * stride)), y: (y + (py * stride)), z: (z + (pz * stride)));
 
+            sxMean += px;
+            syMean += py;
+            szMean += pz;
+            crossings++;
             if (!grid.TryCrossingNormal(
-                axis: BitOperations.TrailingZeroCount(value: (a ^ b)),
+                index: crossingIndex,
                 length: stride,
                 nx: out var nx,
                 ny: out var ny,
@@ -1348,10 +1304,7 @@ internal static class SdfDualContouring {
                 offset: out var offset,
                 wx: wx,
                 wy: wy,
-                wz: wz,
-                x: (x + (ax * stride)),
-                y: (y + (ay * stride)),
-                z: (z + (az * stride))
+                wz: wz
             )) {
                 continue;
             }
@@ -1404,6 +1357,8 @@ internal static class SdfDualContouring {
             b0 += (nx * d); b1 += (ny * d); b2 += (nz * d);
         }
 
+        var mean = (X: sxMean / crossings, Y: syMean / crossings, Z: szMean / crossings);
+        anchor = mean;
         var cell = new CellSolve(A00: a00, A01: a01, A02: a02, A11: a11, A12: a12, A22: a22, B0: b0, B1: b1, B2: b2, Mean: mean);
         var cellPlanes = planes[..(4 * planeCount)];
         var result = mean;

@@ -60,11 +60,8 @@ public static partial class SdfWorldPackage {
     /// <summary>The fewest texels along each side of the distant shadow map's depth: a view's shadow quality halves the
     /// authored size down to this and no further (<c>WorldDistantShadows.MinTexels</c> is the same).</summary>
     public const int MeshDistantShadowMinResolution = 256;
-    /// <summary>The bake samples the bake pass writes: per lattice sample its field value and material, and, when the bake
-    /// asks for it, its gradient (<see cref="MeshBakeSampleWords"/> words).</summary>
+    /// <summary>The output planes the bake pass writes for each lattice.</summary>
     public const string MeshBakeSamplesWritten = "meshBakeSamplesRW";
-    /// <summary>The words one bake sample holds: the value, the material, then the gradient's three components.</summary>
-    public const int MeshBakeSampleWords = 5;
     /// <summary>The most samples a bake lattice holds along one axis.</summary>
     public const int MeshBakeMaxSamplesPerAxis = 65;
     /// <summary>The most samples one bake dispatch writes, at least a lattice of <see cref="MeshBakeMaxSamplesPerAxis"/>

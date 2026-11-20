@@ -7,11 +7,8 @@
 // slot's frame, which those poses hold at the identity, and its gradient comes back in that frame. The host meshes the
 // samples (SdfMeshPathBake). This is bake-time work: the mesh path's frame dispatches it only while a bake is pending.
 //
-// The sample record is SdfWorldPackage.MeshBakeSampleWords words: the field value, the material, then the field's
-// gradient from the tetrahedral taps in field units per world unit, whose magnitude the contour divides a value by to
-// read it as a distance (SdfSampledLattice.AnswerGradients); a points lattice without gradients writes the dynamic-
-// transform slot of the shape that won the sample in the first gradient word instead (a group's vertex rides it,
-// SdfMesh.Members), and zeros after it. KEEP IN SYNC with SdfMeshPathBake's reader and SdfMeshBakeBlock.Write.
+// Each lattice names its output base and fields in glyphs.w. Value and material planes are contiguous;
+// gradient triples follow the value plane, in the order the contour consumes them.
 #define SDF_DYNAMIC_TRANSFORMS
 #define SDF_MESH_BAKE_POSES
 #define SDF_INSTANCE_MASKS
@@ -75,7 +72,10 @@ void sdfBakeSample(uint sample, uint count) {
     uint lastTap = (mode == 3u) ? SDF_BAKE_GRADIENT_TAPS : 0u;
     float spacing = cell.x;
     float3 gradient = 0.0;
-    uint word = sample * 5u;
+    uint outputMode = asuint(glyphs.w) & 3u;
+    uint outputBase = asuint(glyphs.w) >> 2u;
+    uint samples = dims.x * dims.y * dims.z;
+    uint word = outputBase + local;
     sdfProgramLayout = sdfLoadProgramLayout();
     float unscale = 1.0 / sdfProgramLayout.stepScale;
     [loop]
@@ -86,9 +86,8 @@ void sdfBakeSample(uint sample, uint count) {
         if (tap != 0u) { at += rotatePointByQuaternion(direction * spacing, orientation); }
         SdfHit hit = mapCore(at, maskBase, tap == 0u);
         if (tap == 0u) {
-            meshBakeSamplesRW[word] = asuint(hit.distance * unscale);
-            meshBakeSamplesRW[word + 1u] = asuint(hit.material);
-            if (mode == 2u) { meshBakeSamplesRW[word + 2u] = asuint(hit.frameSlot); }
+            meshBakeSamplesRW[word] = outputMode == 2u ? asuint(hit.material) : asuint(hit.distance * unscale);
+            if (outputMode == 1u) { meshBakeSamplesRW[word + samples] = asuint(hit.material); }
         } else {
             gradient += direction * hit.distance;
         }
@@ -96,10 +95,13 @@ void sdfBakeSample(uint sample, uint count) {
     }
 
     // The four taps sum to four times their spacing times the gradient. Undo the program's step scale as for the centre.
-    if (mode == 3u) { gradient *= (0.25 / spacing) * unscale; }
-    if (mode != 2u) { meshBakeSamplesRW[word + 2u] = asuint(gradient.x); }
-    meshBakeSamplesRW[word + 3u] = asuint(gradient.y);
-    meshBakeSamplesRW[word + 4u] = asuint(gradient.z);
+    if (outputMode == 3u) {
+        gradient *= (0.25 / spacing) * unscale;
+        uint at = outputBase + samples + 3u * local;
+        meshBakeSamplesRW[at] = asuint(gradient.x);
+        meshBakeSamplesRW[at + 1u] = asuint(gradient.y);
+        meshBakeSamplesRW[at + 2u] = asuint(gradient.z);
+    }
     sdfWorkTexels = 1u;
 }
 

@@ -352,13 +352,16 @@ public sealed class SdfMeshStore {
     /// <returns><see langword="true"/> when the entry was written.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
-    public bool Write(UInt128 identity, SdfMeshGeometry geometry, SdfMesh? mesh, int[] materials) {
+    public bool Write(UInt128 identity, SdfMeshGeometry geometry, SdfMesh? mesh, int[] materials) =>
+        Write(identity, geometry, mesh, materials, out _);
+
+    internal bool Write(UInt128 identity, SdfMeshGeometry geometry, SdfMesh? mesh, int[] materials, out SdfMeshStoreCodec.Positions stored) {
         ArgumentNullException.ThrowIfNull(argument: materials);
         if ((mesh is null) && (materials.Length != 0)) { throw new ArgumentException(message: "An empty bake carries no materials.", paramName: nameof(materials)); }
 
         var key = KeyOf(geometry: geometry, identity: identity);
         var path = PathOf(identity: identity, key: key);
-        return WriteEntry(path, Encode(key: key, materials: materials, mesh: mesh));
+        return WriteEntry(path, SdfMeshStoreCodec.Encode(key, mesh, materials, out stored));
     }
 
     // A finished mesh and an intermediate are bounded apart, each in its own directory: PathOf puts every entry under the
@@ -601,7 +604,6 @@ public sealed class SdfMeshStore {
             ? SetDirectoryOf(identity: identity)
             : Path.Combine(path1: IntermediateDirectory, path2: identity.ToString(format: "x32", provider: null))),
         path2: (key.ToString(format: "x32", provider: null) + extension));
-    private static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) => SdfMeshStoreCodec.Encode(key: key, materials: materials, mesh: mesh);
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));
     // Runs a file-system action, answering whether the file system allowed it.

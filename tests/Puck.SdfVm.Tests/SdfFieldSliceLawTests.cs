@@ -28,25 +28,20 @@ public sealed class SdfFieldSliceLawTests {
     // The bake kernel's answer to a batch: at each lattice's points, the field the selector names (every instance, or the
     // segments no instance owns), with the tetrahedral gradient a sixty-fourth of the lattice's cell out.
     private static byte[] Answer(SdfMeshBakeBatch batch, Func<Vector3, float> instances, Func<Vector3, float> world) {
-        var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
-        var sample = 0;
+        var bytes = new byte[batch.OutputBytes];
+        var offset = 0;
 
         foreach (var lattice in batch.Lattices) {
             var field = ((lattice.Selector == int.MinValue) ? world : instances);
             var spacing = lattice.TapSpacing;
 
-            for (var local = 0; (local < lattice.Samples); local++, sample++) {
+            for (var local = 0; local < lattice.Samples; local++) {
                 var position = lattice.SampleAt(local: local);
                 var gradient = (lattice.Gradients ? SdfMeshBakeTaps.Gradient(field: field, point: position, spacing: spacing) : Vector3.Zero);
 
-                var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
-
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record, value: field(arg: position));
-                BinaryPrimitives.WriteInt32LittleEndian(destination: record[4..], value: 0);
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record[8..], value: gradient.X);
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record[12..], value: gradient.Y);
-                BinaryPrimitives.WriteSingleLittleEndian(destination: record[16..], value: gradient.Z);
+                lattice.WriteSample(bytes.AsSpan(offset, lattice.OutputBytes), local, field(arg: position), 0, gradient);
             }
+            offset += lattice.OutputBytes;
         }
 
         return bytes;

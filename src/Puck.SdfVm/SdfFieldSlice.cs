@@ -185,24 +185,20 @@ public sealed class SdfFieldSlice {
     /// <summary>Answers a lattice with its samples, keeping at each point the smaller of its two lattices' values and
     /// that value's gradient.</summary>
     /// <param name="ticket">The ticket <see cref="Take"/> returned.</param>
-    /// <param name="samples">The lattice's samples, <see cref="SdfWorldPackage.MeshBakeSampleWords"/> words each.</param>
+    /// <param name="samples">The value plane followed by one gradient triple per sample.</param>
     /// <returns>Whether the answer completed the slice.</returns>
     internal bool Answer(int ticket, ReadOnlySpan<byte> samples) {
         var first = ((ticket >> 1) * ChunkPoints);
         var count = Math.Min(ChunkPoints, (m_points.Length - first));
 
-        for (var index = 0; (index < count); index++) {
-            var record = samples.Slice(start: ((index * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
-            var value = BinaryPrimitives.ReadSingleLittleEndian(source: record);
-
-            if (value < m_values[(first + index)]) {
-                m_values[(first + index)] = value;
-                m_world[(first + index)] = ((ticket & 1) != 0);
-                m_gradients[(first + index)] = new Vector3(
-                    x: BinaryPrimitives.ReadSingleLittleEndian(source: record[8..]),
-                    y: BinaryPrimitives.ReadSingleLittleEndian(source: record[12..]),
-                    z: BinaryPrimitives.ReadSingleLittleEndian(source: record[16..])
-                );
+        var words = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(samples);
+        var gradients = System.Runtime.InteropServices.MemoryMarshal.Cast<float, Vector3>(words[count..]);
+        for (var index = 0; index < count; index++) {
+            var value = words[index];
+            if (value < m_values[first + index]) {
+                m_values[first + index] = value;
+                m_world[first + index] = (ticket & 1) != 0;
+                m_gradients[first + index] = gradients[index];
             }
         }
 

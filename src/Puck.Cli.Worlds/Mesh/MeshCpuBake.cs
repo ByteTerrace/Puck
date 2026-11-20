@@ -130,24 +130,23 @@ public static class MeshCpuBake {
 
     // The bake kernel's answer to a batch: each lattice's samples, x fastest, grid or points.
     private static byte[] Answer(SdfMeshBakeBatch batch, IReadOnlyDictionary<int, SdfProgram> fields, Dictionary<int, long>? evaluations, Dictionary<int, MeshCpuTaps>? taps) {
-        var bytes = new byte[((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))];
+        var bytes = new byte[batch.OutputBytes];
         var first = 0;
 
         foreach (var lattice in batch.Lattices) {
             var start = first;
             var request = lattice;
 
-            first += lattice.Samples;
+            first += lattice.OutputBytes;
             if (!fields.TryGetValue(key: lattice.Selector, value: out var program)) {
-                for (var sample = start; (sample < first); sample++) {
-                    BinaryPrimitives.WriteSingleLittleEndian(destination: bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))), value: Empty);
+                for (var local = 0; local < lattice.Samples; local++) {
+                    lattice.WriteSample(bytes.AsSpan(start, lattice.OutputBytes), local, Empty, 0, default);
                 }
                 continue;
             }
             if (evaluations is not null) { evaluations[lattice.Selector] = (evaluations.GetValueOrDefault(key: lattice.Selector) + lattice.Taps); }
 
             var spacing = SdfMeshCpuField.TapSpacing(requested: lattice.TapSpacing);
-            var slot = lattice.FrameSlot;
 
             if ((taps is not null) && lattice.Gradients) {
                 var tally = taps.GetValueOrDefault(key: lattice.Selector, defaultValue: MeshCpuTaps.None);
@@ -166,19 +165,9 @@ public static class MeshCpuBake {
                 body: (local, state, tapped) => {
                     var position = request.SampleAt(local: local);
                     var value = SdfMeshCpuField.Sample(field: tapped.Field, material: out var material, point: position);
-                    var record = bytes.AsSpan(start: (((start + local) * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
-
-                    BinaryPrimitives.WriteSingleLittleEndian(destination: record, value: value);
-                    BinaryPrimitives.WriteInt32LittleEndian(destination: record[4..], value: material);
-                    if (request.Gradients) {
-                        var gradient = SdfMeshBakeTaps.Gradient(field: tapped.Read, point: position, spacing: spacing);
-
-                        BinaryPrimitives.WriteSingleLittleEndian(destination: record[8..], value: gradient.X);
-                        BinaryPrimitives.WriteSingleLittleEndian(destination: record[12..], value: gradient.Y);
-                        BinaryPrimitives.WriteSingleLittleEndian(destination: record[16..], value: gradient.Z);
-                    } else if (!request.Points.IsEmpty) {
-                        BinaryPrimitives.WriteInt32LittleEndian(destination: record[8..], value: slot);
-                    }
+                    var gradient = request.Gradients && !request.Points.IsEmpty
+                        ? SdfMeshBakeTaps.Gradient(field: tapped.Read, point: position, spacing: spacing) : Vector3.Zero;
+                    request.WriteSample(bytes.AsSpan(start, request.OutputBytes), local, value, material, gradient);
 
                     return tapped;
                 },

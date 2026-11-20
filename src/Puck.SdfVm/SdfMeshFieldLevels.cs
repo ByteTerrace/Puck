@@ -866,12 +866,7 @@ public sealed class SdfMeshFieldLevels {
     // A mesh's triangle neighbours across welded edges, each triangle's connected component, how many there are, and each
     // triangle's open edges (welded edges it alone holds, as the audit counts them).
     private static (int[][] Neighbours, int[] Component, int Components, int[] Open) Adjacency(ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, int triangles) {
-        var weld = new Dictionary<Vector3, int>(capacity: positions.Length);
-        var welded = new int[positions.Length];
-
-        for (var vertex = 0; (vertex < positions.Length); vertex++) {
-            welded[vertex] = (weld.TryAdd(key: positions[vertex], value: vertex) ? vertex : weld[positions[vertex]]);
-        }
+        var welded = SdfMeshWeld.Sites(positions);
 
         var edges = new Dictionary<(int, int), List<int>>();
 
