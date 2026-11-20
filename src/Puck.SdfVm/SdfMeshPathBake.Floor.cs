@@ -31,18 +31,52 @@ public sealed partial class SdfMeshPathBake {
     private int m_holes;
     private long m_holeFrames;
 
-    // Finds each group whose drawn finer tier the mesh region refuses while the floor it keeps stands there: its draws
-    // wait out of the frame, so the next prepared frame evicts it to that floor (Evict). Under the gate, on the frame's
-    // thread, after the frame's mesh region is staged.
-    private void CollectEvictions(SdfWorldTables tables) {
-        m_evictions.Clear();
-        for (var index = 0; (index < m_groups.Count); index++) {
-            var group = m_groups[index];
+    // The groups that keep a floor (Group.KeptFloor), the only groups an eviction or a verdict can concern, and the only
+    // non-retired ones whose floors the mesh region keeps named ahead of the draws (ServeAhead). Invariant: every group
+    // standing in the list that holds a kept floor is here, which KeepFloorOf, the one place a floor is kept, enforces
+    // through Keep and Restart rebuilds from the list (ListKeepers); a retired group is dropped where the list is walked
+    // whole (ServeAhead). The cursor is where the eviction sweep (CollectEvictions) resumes. Under the gate.
+    private readonly List<Group> m_keepers = [];
+    private int m_evictAt;
 
-            if (group.Retired || !group.Done || (group.Replaces is not null) || group.Ahead || (group.KeptFloor is not { } floor) || (group.Mesh is not { } mesh)) { continue; }
-            if (!AnyPiece(mesh: mesh, tables: tables, test: static (region, piece) => region.RefusesMesh(mesh: piece)) || AnyPiece(mesh: floor, tables: tables, test: static (region, piece) => !region.MeshStands(mesh: piece))) { continue; }
-            m_evictions.Add(item: (group, index));
+    private void Keep(Group group) {
+        if (group.Keeping) { return; }
+        group.Keeping = true;
+        m_keepers.Add(item: group);
+    }
+    // Lists again the groups that keep a floor, for the program a restart plans: the groups it kept from the one before
+    // hold theirs.
+    private void ListKeepers() {
+        foreach (var group in m_keepers) { group.Keeping = false; }
+        m_keepers.Clear();
+        foreach (var group in m_groups) {
+            if (group.KeptFloor is not null) { Keep(group: group); }
         }
+    }
+    // Finds each group whose drawn finer tier the mesh region refuses while the floor it keeps stands there: its draws
+    // wait out of the frame, so the next prepared frame evicts it to that floor (Evict). The groups that keep a floor are
+    // read a share of SdfMeshTier.EvictionPieces mesh pieces a frame from where the last frame's share ended, so a
+    // region refusing meshes costs the frame that share, and a refused draw waits at most one sweep. Under the gate, on
+    // the frame's thread, after the frame's mesh region is staged.
+    private void CollectEvictions(SdfWorldTables tables) {
+        var count = m_keepers.Count;
+
+        if (count == 0) { return; }
+
+        var at = ((m_evictAt < count) ? m_evictAt : 0);
+        var spent = 0;
+
+        for (var visited = 0; ((visited < count) && (spent < SdfMeshTier.EvictionPieces)); visited++) {
+            var group = m_keepers[at];
+
+            if (++at == count) { at = 0; }
+            spent++;
+            if (group.Retired || !group.Listed || !group.Done || (group.Replaces is not null) || group.Ahead || (group.KeptFloor is not { } floor) || (group.Mesh is not { } mesh)) { continue; }
+            spent += (mesh.PieceCount + floor.PieceCount);
+            if (!AnyPiece(mesh: mesh, tables: tables, test: static (region, piece) => region.RefusesMesh(mesh: piece)) || AnyPiece(mesh: floor, tables: tables, test: static (region, piece) => !region.MeshStands(mesh: piece))) { continue; }
+            m_evictions.Add(item: (group, group.Index));
+        }
+        m_evictAt = at;
     }
     // Puts each collected group's floor in its place: a group planned at its coarsest tier, drawing the floor the group
     // kept where that floor was baked from the geometry the plan reads, and otherwise baking it as a coarser replacement
@@ -117,20 +151,26 @@ public sealed partial class SdfMeshPathBake {
     private long m_admittedFloors;
     private long m_declinedFloors;
     private int m_declinedLanded;
-    private long m_judgedProduct = -1;
 
-    // Queues each kept floor that owes the trace judge a verdict (Group.OwesVerdict), when a group's product moved since
-    // the last scan, and moves the product revision for every floor the judge has declined since the last frame, so the
-    // dresser hands its draws the drawn mesh to trace in its place (FrameAccess.TraceOf). Under the gate, on the frame's
-    // thread.
+    // The groups that may newly owe the judge a verdict (Group.OwesVerdict), which JudgeFloors reads in place of every
+    // group. Invariant: a group whose kept floor, done state or product changes is queued here, by Judgeable, which
+    // Group.KeepFloorOf, Group.Done and Group.Mesh, the setters of what OwesVerdict reads, call; a group queued is read
+    // once and queued again by the next such change. A verdict a failed judge returned to unjudged is not queued again.
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Group> m_judgeable = new();
+
+    private void Judgeable(Group group) {
+        if ((group.KeptFloor is not null) && group.TryQueueJudging()) { m_judgeable.Enqueue(item: group); }
+    }
+    // Queues each queued group whose kept floor owes the trace judge a verdict (Group.OwesVerdict), and marks every floor
+    // changed when the judge has declined one since the last frame, so the dresser hands its draws the drawn mesh to
+    // trace in its place (FrameAccess.TraceOf). Under the gate, on the frame's thread.
     private void JudgeFloors() {
-        if (Interlocked.Exchange(location1: ref m_declinedLanded, value: 0) != 0) { m_productRevision++; }
-        if (m_judgedProduct == m_productRevision) { return; }
-        m_judgedProduct = m_productRevision;
+        if (Interlocked.Exchange(location1: ref m_declinedLanded, value: 0) != 0) { TouchAll(); }
 
         var queued = false;
 
-        foreach (var group in m_groups) {
+        while (m_judgeable.TryDequeue(result: out var group)) {
+            group.ClearJudging();
             if (group.Retired || group.Glass || group.Dynamic || !group.OwesVerdict) { continue; }
             group.FloorVerdict!.State = TraceVerdict.Judging;
             lock (m_judging) { m_judging.Enqueue(item: (group.CurrentFloor!.Acquire(), group.JudgedAgainst!.Acquire(), group.FloorVerdict)); }

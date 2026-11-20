@@ -128,9 +128,13 @@ public sealed class SdfMeshDresser : IDisposable {
         }
         if (!startOver && !programChanged && (m_product == access.Revision) && (m_layout == access.CopyLayoutRevision)) {
             SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.DressGroupsStood);
-        } else {
+        } else if (startOver || programChanged || access.Whole || (m_product < 0) || (m_layout != access.CopyLayoutRevision)) {
             groupsVisited = access.GroupCount;
             DressGroups(access: in access, frame: frame, matrices: ref matrices, updated: ref updated, visited: ref visited);
+        } else {
+            // The bake names every group it changed since the last dress (SdfMeshPathBake.Touch), so the rest stand.
+            groupsVisited = access.TouchedCount;
+            DressTouched(access: in access, frame: frame, matrices: ref matrices, updated: ref updated, visited: ref visited);
         }
         // Every group read is done and the rows claim every mesh they draw: the rest of the dress (copies' own meshes,
         // poses, clips, publishing) reads no group, so the bake's workers publish meanwhile. The row checks read the
@@ -224,37 +228,57 @@ public sealed class SdfMeshDresser : IDisposable {
             var group = access.GroupAt(index: g);
 
             if (access.MeshOf(group: group) is not { } mesh) { continue; }
-            if (!m_groups.TryGetValue(key: group, value: out var state)) { m_groups.Add(key: group, value: state = new()); }
-            state.Seen = true;
-            var copies = access.CopiesOf(group: group);
-            var count = (mesh.PieceCount * (copies?.Count ?? 1));
-            var tier = access.TierOf(group: group);
-            var trace = access.TraceOf(group: group);
-            var changed = (!ReferenceEquals(objA: mesh, objB: state.Mesh) || (state.Run.Count != count) || (state.Tier != tier) || !ReferenceEquals(objA: trace, objB: state.Trace) ||
-                ((m_layout != access.CopyLayoutRevision) && !state.Copies.SequenceEqual(second: (copies ?? Array.Empty<int>()))));
-
-            if (!changed) { continue; }
-            var old = state.Run;
-
-            if (old.Count != count) { state.Run = m_writer.Allocate(count: count); }
-            RemoveBindings(run: old);
-            state.Mesh = mesh;
-            state.Tier = tier;
-            state.Trace = trace;
-            state.Copies = (copies?.ToArray() ?? []);
-
-            for (var offset = 0; (offset < count); offset++) {
-                var binding = new DrawBinding(mesh.Piece(index: (offset % mesh.PieceCount)), group,
-                    ((copies is null) ? -1 : copies[(offset / mesh.PieceCount)]), ((copies is null) && (mesh.Chunks.Count > 0)), tier, trace, (offset % mesh.PieceCount));
-
-                Bind(binding: binding, frame: frame, matrices: ref matrices, offset: offset, run: state.Run);
-                visited++; updated++;
-            }
-            if (old != state.Run) { m_writer.Free(run: old); }
+            DressGroup(access: in access, frame: frame, group: group, matrices: ref matrices, mesh: mesh, updated: ref updated, visited: ref visited);
         }
         m_removedGroups.Clear();
         foreach (var (group, state) in m_groups) { if (!state.Seen) { RemoveBindings(run: state.Run); m_writer.Free(run: state.Run); m_removedGroups.Add(item: group); } }
         foreach (var group in m_removedGroups) { _ = m_groups.Remove(key: group); }
+    }
+    // Reconciles only the groups the bake names changed since the last dress (SdfMeshPathBake.FrameAccess.TouchedAt): a
+    // group still listed with a mesh to draw as DressGroups does, and any other gives up the rows it held.
+    private void DressTouched(in SdfMeshPathBake.FrameAccess access, SdfFrame frame, ref int matrices, ref int visited, ref int updated) {
+        for (var t = 0; (t < access.TouchedCount); t++) {
+            var group = access.TouchedAt(index: t);
+
+            if (access.Lists(group: group) && (access.MeshOf(group: group) is { } mesh)) {
+                DressGroup(access: in access, frame: frame, group: group, matrices: ref matrices, mesh: mesh, updated: ref updated, visited: ref visited);
+                continue;
+            }
+            if (m_groups.Remove(key: group, value: out var state)) {
+                RemoveBindings(run: state.Run);
+                m_writer.Free(run: state.Run);
+            }
+        }
+    }
+    // Rebinds a group's rows where its mesh, its place in the copies, its tier or its trace changed.
+    private void DressGroup(in SdfMeshPathBake.FrameAccess access, SdfFrame frame, SdfMeshBakeGroup group, SdfMesh mesh, ref int matrices, ref int visited, ref int updated) {
+        if (!m_groups.TryGetValue(key: group, value: out var state)) { m_groups.Add(key: group, value: state = new()); }
+        state.Seen = true;
+        var copies = access.CopiesOf(group: group);
+        var count = (mesh.PieceCount * (copies?.Count ?? 1));
+        var tier = access.TierOf(group: group);
+        var trace = access.TraceOf(group: group);
+        var changed = (!ReferenceEquals(objA: mesh, objB: state.Mesh) || (state.Run.Count != count) || (state.Tier != tier) || !ReferenceEquals(objA: trace, objB: state.Trace) ||
+            ((m_layout != access.CopyLayoutRevision) && !state.Copies.SequenceEqual(second: (copies ?? Array.Empty<int>()))));
+
+        if (!changed) { return; }
+        var old = state.Run;
+
+        if (old.Count != count) { state.Run = m_writer.Allocate(count: count); }
+        RemoveBindings(run: old);
+        state.Mesh = mesh;
+        state.Tier = tier;
+        state.Trace = trace;
+        state.Copies = (copies?.ToArray() ?? []);
+
+        for (var offset = 0; (offset < count); offset++) {
+            var binding = new DrawBinding(mesh.Piece(index: (offset % mesh.PieceCount)), group,
+                ((copies is null) ? -1 : copies[(offset / mesh.PieceCount)]), ((copies is null) && (mesh.Chunks.Count > 0)), tier, trace, (offset % mesh.PieceCount));
+
+            Bind(binding: binding, frame: frame, matrices: ref matrices, offset: offset, run: state.Run);
+            visited++; updated++;
+        }
+        if (old != state.Run) { m_writer.Free(run: old); }
     }
     // Lets go of the rows a copy's own mesh held at an index, if any.
     private void DropOwn(int index) {
