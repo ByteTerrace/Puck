@@ -36,7 +36,7 @@ public sealed class VulkanRenderer(
     IVulkanCommandBufferRecorder commandBufferRecorder,
     IVulkanPhysicalDeviceApi physicalDeviceApi,
     Func<IVulkanDeviceContext, GpuDeviceServices> createServices
-) : IDisposable, IVulkanDeviceContext, IGpuDeviceContext, IGpuPipelineCache {
+) : IDisposable, IVulkanDeviceContext, IGpuDeviceContext {
     /// <summary>The presentation frame-ring depth: how many presented frames may be in flight before
     /// <see cref="WaitForFrameSlot"/> blocks. Each slot owns a full <see cref="VulkanFrameSynchronization"/>
     /// (its own image-available semaphore and in-flight fence; the per-image render-finished semaphores ride
@@ -186,7 +186,6 @@ public sealed class VulkanRenderer(
     }
 
     // The current device's cache; a device recreated after a loss brings its own, loaded from the same file.
-    void IGpuPipelineCache.Persist() => m_device?.PipelineCache?.Persist();
 
     // Builds the boot chain into the renderer's fields: instance, window surface, physical-device selection, and the
     // logical device (which reads the device's identity). Whatever fails, and whatever it throws, tears down every

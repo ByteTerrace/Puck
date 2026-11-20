@@ -751,7 +751,8 @@ check the flag: the owner may be holding the pad.
   has timed (`WorldIterationClock`): the boot from process start, each
   `world.reload` and `world.shaders.reload`, and a loop a script begins with
   `world.iteration begin <name>` before its own edit. Each line gives the
-  seconds to the first frame from the edited content (`frame`), every mesh
+  seconds to the first produced frame (`first`, the boot's start), the first
+  frame from the edited content (`frame`), every mesh
   drawing its own geometry (`shown`), the bakes settled and resident
   (`meshes`) and the lighting converged (`lit`), then the compiles,
   compositions, root members merged, documents read and validations the edit

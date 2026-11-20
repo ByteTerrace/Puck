@@ -268,7 +268,7 @@ carries for views and glass (`SdfKernelSet.SourceOf`, read when the bytecode was
 taken and replaced only with it), never the tree as it stands: an include the
 source lacks refuses the plan, and bytecode installed without its source stays
 interpreted. An overtaken or released build is retired to the catalog's
-`RetiredShadeBuilds`, disposed on the pool as it finishes and drained at device
+`RetiredBuilds`, disposed on the pool as it finishes and drained at device
 loss and World root teardown, so neither waits on the frame thread.
 A frame whose active set leaves the published one keeps it, shading the programs
 it holds and every other as no program, so a frame never drops to the
@@ -321,7 +321,7 @@ kernels' lifetime, publication or binning keeps all nine.
    (on the shared `ShaderCompileTurns`), reflection and pipeline creation run in
    `SdfShadePipelines.BuildAsync` on the thread pool; `PrepareShade` only polls
    it. A build an edit overtook, and one still running at the residency's final
-   release, is detached into the catalog's `RetiredShadeBuilds`
+   release, is detached into the catalog's `RetiredBuilds`
    (`RetiredBuilds`), which disposes its result on the pool as it finishes; the
    sets a final release disposes are built, so their leases wait for nothing.
    The catalog outlives every residency, so the device's end drains it: a

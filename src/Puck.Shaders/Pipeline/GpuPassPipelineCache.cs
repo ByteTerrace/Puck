@@ -68,9 +68,9 @@ public sealed class GpuPassPipelineCache {
             key: key
         );
     /// <summary>Creates a key's pipeline on a device, on the calling thread: its shader modules, then for a graphics
-    /// pipeline its render pass, then the pipeline, each counted into <paramref name="ledger"/>, and asks a device that
-    /// keeps a persistent pipeline cache to write it. The cache builds through it on the thread pool; a harness that
-    /// drives an owner directly calls it itself.</summary>
+    /// pipeline its render pass, then the pipeline, each counted into <paramref name="ledger"/>. A device that keeps a
+    /// persistent pipeline cache writes it in the background (<see cref="GpuPipelineCacheFile"/>). The cache builds
+    /// through it on the thread pool; a harness that drives an owner directly calls it itself.</summary>
     /// <param name="device">The device the pipeline is created on, through its services.</param>
     /// <param name="key">The pipeline's key.</param>
     /// <param name="ledger">The ledger that counts every object created.</param>
@@ -147,8 +147,6 @@ public sealed class GpuPassPipelineCache {
 
             throw;
         }
-
-        (device as IGpuPipelineCache)?.Persist();
 
         return built;
     }

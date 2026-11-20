@@ -162,7 +162,7 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
         var next = after.Placements;
         // Rows keep their order across a projection install, which only replaces in place, appends or removes; the
         // first row out of step switches the walk to matching by id.
-        Dictionary<string, WorldPlacement>? earlier = null;
+        IReadOnlyDictionary<string, WorldPlacement>? earlier = null;
 
         for (var index = 0; (index < next.Count); index++) {
             var row = next[index];
@@ -179,10 +179,10 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
         }
         // A row the delivery took away moved as much as one it added.
         if ((earlier is not null) || (rows.Count > next.Count)) {
-            HashSet<string> kept = [.. next.Select(selector: static row => row.Id)];
+            var kept = ById(rows: next);
 
             foreach (var row in rows) {
-                if (!kept.Contains(item: row.Id)) { change = Moved(change: change, definitions: (before, after), next: null, previous: row, solid: ref solid); }
+                if (!kept.ContainsKey(key: row.Id)) { change = Moved(change: change, definitions: (before, after), next: null, previous: row, solid: ref solid); }
             }
         }
 
@@ -196,12 +196,18 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
             ? WorldPlacementChange.Facets
             : WorldPlacementChange.Appearance);
     }
-    private static Dictionary<string, WorldPlacement> ById(IReadOnlyList<WorldPlacement> rows) {
-        var byId = new Dictionary<string, WorldPlacement>(capacity: rows.Count, comparer: StringComparer.Ordinal);
+    // A row list's rows by id, the last row of an id winning, derived once per list: every reader of a delivery compares
+    // against the list the delivery before it installed, so each list is indexed once however many readers compare it,
+    // rather than a dictionary the size of the world for each comparison.
+    private static IReadOnlyDictionary<string, WorldPlacement> ById(IReadOnlyList<WorldPlacement> rows) =>
+        RowsById.GetValue(derive: static rows => {
+            var byId = new Dictionary<string, WorldPlacement>(capacity: rows.Count, comparer: StringComparer.Ordinal);
 
-        foreach (var row in rows) { byId[row.Id] = row; }
-        return byId;
-    }
+            foreach (var row in rows) { byId[row.Id] = row; }
+            return byId;
+        }, key: rows);
+
+    private static readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldPlacement>, Dictionary<string, WorldPlacement>> RowsById = new();
     /// <summary>Determines whether any entry of a row's response facet reads one of the named rows — a state
     /// condition's row or comparand row, or a field condition's scalar row.</summary>
     /// <param name="placement">The placement.</param>

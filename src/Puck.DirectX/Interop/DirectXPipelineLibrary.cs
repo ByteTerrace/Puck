@@ -8,8 +8,8 @@ namespace Puck.DirectX.Interop;
 
 /// <summary>
 /// One Direct3D 12 device's <c>ID3D12PipelineLibrary</c>: seeded from the device's <see cref="GpuPipelineCacheFile"/>,
-/// asked first by every compute and graphics pipeline creation on the device, and serialized back by
-/// <see cref="Persist"/> and on disposal. A pipeline is stored under a name hashed from everything that defines it (its
+/// asked first by every compute and graphics pipeline creation on the device, and serialized back by the file in the
+/// background once creations go quiet, and on disposal. A pipeline is stored under a name hashed from everything that defines it (its
 /// bytecode, its serialized root signature, and the fixed state the caller names), so a changed kernel is a new name
 /// rather than a mismatch. The file owns where the library lives and when it is written; this type owns only the
 /// native library.
@@ -39,6 +39,10 @@ public sealed unsafe class DirectXPipelineLibrary : IDisposable {
         m_blob = blob;
         m_file = file;
         m_library = library;
+
+        if (null != library) {
+            file.Attach(serialize: SerializeUnlessDisposed);
+        }
     }
 
     private static ID3D12PipelineLibrary* CreateLibrary(ID3D12Device1* device, void* blob, nuint length) {
@@ -220,15 +224,17 @@ public sealed unsafe class DirectXPipelineLibrary : IDisposable {
 
         return ((nint)pipeline);
     }
-    /// <summary>Serializes the library to its file, then releases it and the blob it was created from. Call before the
-    /// device is released.</summary>
+    /// <summary>Serializes the library to its file when a creation owes a write, then releases it and the blob it was
+    /// created from. Call before the device is released.</summary>
     public void Dispose() {
+        // Outside the gate: the write serializes through SerializeUnlessDisposed, which takes it.
+        m_file.Close();
+
         lock (m_gate) {
             if (m_disposed) {
                 return;
             }
 
-            PersistLocked();
             m_disposed = true;
 
             if (null != m_library) {
@@ -242,25 +248,12 @@ public sealed unsafe class DirectXPipelineLibrary : IDisposable {
             }
         }
     }
-    /// <summary>Serializes the library to its file when a creation missed it since the last write. Safe on any thread;
-    /// a failed serialization or write is reported and leaves the previous file whole.</summary>
-    public void Persist() {
+    // The library's contents for the file's writer, on whatever thread writes, or empty once it is released. Loads and
+    // stores wait only for the in-memory serialization; the file write runs after the gate is released.
+    private ReadOnlyMemory<byte> SerializeUnlessDisposed() {
         lock (m_gate) {
-            if (!m_disposed) {
-                PersistLocked();
-            }
+            return ((m_disposed || (null == m_library)) ? ReadOnlyMemory<byte>.Empty : Serialize(owner: this));
         }
-    }
-
-    private void PersistLocked() {
-        if (null == m_library) {
-            return;
-        }
-
-        m_file.Persist(
-            serialize: static owner => Serialize(owner: owner),
-            state: this
-        );
     }
     // Stores a pipeline just created, unless another thread that missed the same name stored it first.
     private void Store(char* name, void* pipeline) {

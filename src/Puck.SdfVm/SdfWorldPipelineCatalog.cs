@@ -29,12 +29,13 @@ public sealed class SdfWorldPipelineCatalog(GpuRegionCopyPass regionCopy, SdfMes
     public SdfSkyDetails SkyDetails { get; } = new();
     /// <summary>The compiler shared by this composition's background authored specializations.</summary>
     public ShaderCompiler ShadeCompiler { get; } = compiler ?? new(ShaderCompiler.DefaultCacheDirectory);
-    /// <summary>Gets the specializations a residency let go of before they finished, superseded by an edit or left by
-    /// the residency's final release: each is discarded on the pool as it finishes, giving back its leases on
-    /// <see cref="Pipelines"/>, so neither waits on the frame thread. They outlive the residency that started them, so a
+    /// <summary>Gets the builds a residency let go of before they finished: specializations superseded by an edit or
+    /// left by the residency's final release, and the pipeline builds that release leaves unheld
+    /// (<see cref="GpuBuildLease{TKey, T}.Release(RetiredBuilds)"/>). Each is discarded on the pool as it finishes, giving
+    /// back its leases on <see cref="Pipelines"/>, so none waits on the frame thread. They outlive the residency that started them, so a
     /// residency's device loss and the host's teardown, while the device is still alive, drain them
     /// (<see cref="RetiredBuilds.Drain"/>) before the device goes away or is recreated.</summary>
-    public RetiredBuilds RetiredShadeBuilds { get; } = new();
+    public RetiredBuilds RetiredBuilds { get; } = new();
 
     /// <summary>Gets the composition's pass-pipeline cache, the region copy's and the mesh pass's own, whose entries the
     /// engine's kernel variants are too.</summary>

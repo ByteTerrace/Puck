@@ -412,7 +412,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_meshDresser.Dispose();
         MeshPathBake.Retire();
         m_ownedLibrary?.Dispose();
-        m_pipelines.Release();
+        // A pipeline still building is retired with the specializations, not waited for: the catalog's table outlives the
+        // residency, and the host's teardown and every residency's device loss drain it while the device lives.
+        m_pipelines.Release(retired: m_pipelines.Catalog.RetiredBuilds);
     }
 
     // The library the residency made for itself when its host shared none, which it disposes on its last release.

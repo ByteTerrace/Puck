@@ -8,8 +8,7 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>
 /// Laws for <see cref="SdfWorldPipelines"/> over <see cref="FakeGpuDevice"/>: a set leases one pass-pipeline cache entry
-/// per up-front kernel, which the cache creates and counts once and
-/// persists the device's cache once for; a reload leases only the pipelines whose bytecode changed; the cache holds at
+/// per up-front kernel, which the cache creates and counts once; a reload leases only the pipelines whose bytecode changed; the cache holds at
 /// most <see cref="GpuPassPipelineCache.BuildConcurrency"/> creations in the driver however many entries build; a set
 /// disposed while creations are in the driver waits for those alone and creates no more; and creations failing together
 /// are named in the set's order, with everything created released.
@@ -17,7 +16,7 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfWorldPipelinesLawTests {
     [Fact]
     public async Task ASetLeasesEveryEnginePipelineAndAReloadOnlyTheChangedOnes() {
-        var device = new PersistingDevice(services: new FakeGpuDevice().Services);
+        var device = new FakeGpuDevice();
         var cache = new GpuPassPipelineCache();
 
         using var pipelines = SdfTestPipelines.Build(
@@ -28,7 +27,7 @@ public sealed class SdfWorldPipelinesLawTests {
 
         // The set builds the kernels the device runs: the fake device has no ray queries, so their variants build nothing.
         var count = SdfWorldPipelines.BuildOrder(pipelines.Kernels).Count(kernel => SdfWorldPipelines.Runs(device: device, kernel: kernel));
-        Assert.Equal(expected: ((long)count, count), actual: (Created(cache: cache), device.Persisted));
+        Assert.Equal(expected: (long)count, actual: Created(cache: cache));
 
         using var reflector = SdfTestPipelines.Reflector();
 
@@ -51,7 +50,7 @@ public sealed class SdfWorldPipelinesLawTests {
             Assert.Equal(expected: 1, actual: changed.ChangedPipelines);
         }
 
-        Assert.Equal(expected: ((long)count + 1, count + 1), actual: (Created(cache: cache), device.Persisted));
+        Assert.Equal(expected: (long)count + 1, actual: Created(cache: cache));
 
         // A second set of the same kernels on the device joins every entry the first leases.
         using var joined = SdfTestPipelines.Build(
@@ -319,21 +318,5 @@ public sealed class SdfWorldPipelinesLawTests {
             _ = m_permits.Release(releaseCount: GpuPassPipelineCache.BuildConcurrency);
         }
         public void Step() => _ = m_permits.Release();
-    }
-    // A device whose persistent cache counts the writes asked of it, over another device's services.
-    private sealed class PersistingDevice(GpuDeviceServices services) : IGpuDeviceContext, IGpuPipelineCache {
-        private int m_persisted;
-
-        public long AdapterLuid => 0L;
-        public GpuDeviceCapabilities? Capabilities => null;
-        public GpuDeviceIdentity? Identity => null;
-        public GpuMemoryProfile MemoryProfile => default;
-        public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
-        public void RefreshMemoryReading() { }
-        public int Persisted => Volatile.Read(location: ref m_persisted);
-        public GpuDeviceServices Services { get; } = services;
-
-        public void Persist() => Interlocked.Increment(location: ref m_persisted);
-        public void WaitIdle() { }
     }
 }

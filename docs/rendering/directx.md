@@ -428,8 +428,10 @@ the presenter's display encode included, and stores what it had to create. A pip
 name in the library is a hash of everything that defines it: its bytecode, its
 serialized root signature, and the fixed state the caller sets. A changed
 kernel is therefore a new name rather than a mismatch. The context writes the
-library back to disk before it releases the device, and an engine pipeline
-build writes it back when it finishes (`IGpuPipelineCache.Persist`).
+library back to disk in the background once creations go quiet, as on Vulkan,
+and writes what is still owed before it releases the device. A load or store
+waits only for the library's serialization in memory, never for the file
+write.
 
 The runtime validates a library blob when the library is created. A blob from
 another adapter or driver, or a corrupt one, is refused, reported on standard
