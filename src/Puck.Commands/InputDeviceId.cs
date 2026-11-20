@@ -1,5 +1,4 @@
 using Puck.Abstractions;
-using System.Security.Cryptography;
 using System.Text;
 
 namespace Puck.Commands;
@@ -56,9 +55,9 @@ public readonly record struct InputDeviceId(Guid Value, InputDeviceIdentityPersi
     public static InputDeviceId FromContent(ReadOnlySpan<byte> content) {
         Span<byte> digest = stackalloc byte[ContentDigest.SizeInBytes];
 
-        _ = SHA256.HashData(
-            destination: digest,
-            source: content
+        ContentDigest.Hash(
+            content: content,
+            digest: digest
         );
 
         return Reconnecting(digest: digest);

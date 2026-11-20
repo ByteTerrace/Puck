@@ -15,6 +15,12 @@ public static class ContentDigest {
 
     private const int StackBytes = 512;
 
+    /// <summary>Hashes bytes.</summary>
+    /// <param name="content">The bytes to hash.</param>
+    /// <param name="digest">The destination, at least <see cref="SizeInBytes"/> bytes long.</param>
+    public static void Hash(ReadOnlySpan<byte> content, Span<byte> digest) {
+        _ = SHA256.HashData(destination: digest, source: content);
+    }
     /// <summary>Hashes text as its UTF-8 bytes.</summary>
     /// <param name="text">The text to hash.</param>
     /// <param name="digest">The destination, at least <see cref="SizeInBytes"/> bytes long.</param>
@@ -83,7 +89,7 @@ public static class ContentDigest {
     public static string HexOf(ReadOnlySpan<byte> content, bool upperCase = false) {
         Span<byte> digest = stackalloc byte[SizeInBytes];
 
-        _ = SHA256.HashData(destination: digest, source: content);
+        Hash(content: content, digest: digest);
 
         return Hex(digest: digest, upperCase: upperCase);
     }

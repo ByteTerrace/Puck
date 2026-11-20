@@ -25,11 +25,11 @@ public readonly record struct AssetContentHash(ulong Value) {
     /// <param name="content">The bytes to hash.</param>
     /// <returns>The content hash of <paramref name="content"/>.</returns>
     public static AssetContentHash Compute(ReadOnlySpan<byte> content) {
-        Span<byte> hashBytes = stackalloc byte[SHA256.HashSizeInBytes];
+        Span<byte> hashBytes = stackalloc byte[ContentDigest.SizeInBytes];
 
-        _ = SHA256.HashData(
-            destination: hashBytes,
-            source: content
+        ContentDigest.Hash(
+            content: content,
+            digest: hashBytes
         );
         return FromDigest(digest: hashBytes);
     }
