@@ -1,4 +1,5 @@
 using Puck.Abstractions.Machines;
+using Puck.Abstractions.Waiting;
 
 namespace Puck.Machines;
 
@@ -12,9 +13,9 @@ public interface IQueuedWorkItem<TSelf> where TSelf : IQueuedWorkItem<TSelf> {
     ManualResetEventSlim? Completion { get; }
 
     /// <summary>Creates the ordered barrier item whose completion means every earlier item has run.</summary>
-    /// <param name="completion">The handle to set once the item is reached.</param>
+    /// <param name="generation">The drain generation to acknowledge once the item is reached.</param>
     /// <returns>The barrier item.</returns>
-    static abstract TSelf Barrier(ManualResetEventSlim completion);
+    static abstract TSelf Barrier(ulong generation);
     /// <summary>Creates the ordered stop item that ends the worker loop once every earlier item has run.</summary>
     /// <param name="completion">The handle to set once the item is reached.</param>
     /// <returns>The stop item.</returns>
@@ -36,6 +37,16 @@ public interface IQueuedWorkItem<TSelf> where TSelf : IQueuedWorkItem<TSelf> {
 /// </summary>
 /// <typeparam name="TWorkItem">The owning type's work item.</typeparam>
 public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWorkItem<TWorkItem> {
+    private static readonly WaitReason CapacityWait = new("machines", "worker queue capacity");
+    private static readonly WaitReason DrainWait = new("machines", "worker drain");
+    private static readonly WaitReason IdleWait = new("machines", "queued worker work");
+    internal static WaitDeadline StandaloneDeadline() => WaitDeadline.In(TimeSpan.FromSeconds(30));
+
+    internal static QueuedMachineSubmission RequireSettled(QueuedMachineSubmission outcome) => outcome switch {
+        QueuedMachineSubmission.PendingCapacity => throw new TimeoutException(CapacityWait.ToString()),
+        QueuedMachineSubmission.PendingDrain => throw new TimeoutException(DrainWait.ToString()),
+        _ => outcome,
+    };
     private readonly int m_maximumPendingSteps;
     private readonly string m_role;
     private readonly Queue<TWorkItem> m_work;
@@ -48,6 +59,8 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
     private long m_backpressureEvents;
     private long m_completedSteps;
     private long m_submittedSteps;
+    private ulong m_issuedBarrier;
+    private ulong m_completedBarrier;
     private Thread? m_worker;
     private Exception? m_workerFault;
 
@@ -123,29 +136,56 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
             Monitor.PulseAll(obj: m_workLock);
         }
     }
-    /// <summary>Appends a barrier and blocks until the worker has run every item accepted before it — the
-    /// submit-and-drain half of a synchronous step. A closed or faulted queue returns without waiting, rethrowing the
-    /// fault when there is one.</summary>
-    /// <exception cref="InvalidOperationException">The worker faulted.</exception>
-    public void Drain() {
-        using var completion = new ManualResetEventSlim(initialState: false);
-
+    /// <summary>Appends one ordered barrier. After a timeout, pass the same generation back to finish the drain.</summary>
+    public WaitOutcome Drain(ref ulong generation, WaitDeadline deadline) {
         lock (m_workLock) {
-            if (
-                (m_workerFault is not null) ||
-                !m_acceptingWork
-            ) {
-                ThrowIfFaultedLocked();
-
-                return;
+            ThrowIfFaultedLocked();
+            if (generation == 0) {
+                if (!m_acceptingWork) {
+                    return WaitOutcome.Completed;
+                }
+                generation = checked(++m_issuedBarrier);
+                m_work.Enqueue(item: TWorkItem.Barrier(generation: generation));
+                Monitor.PulseAll(obj: m_workLock);
             }
-
-            m_work.Enqueue(item: TWorkItem.Barrier(completion: completion));
-            Monitor.Pulse(obj: m_workLock);
+            while (m_completedBarrier < generation) {
+                var outcome = HostWaits.OnCondition(monitor: m_workLock, reason: DrainWait, deadline: deadline);
+                ThrowIfFaultedLocked();
+                if ((outcome == WaitOutcome.DeadlinePassed) && (m_completedBarrier < generation)) {
+                    return outcome;
+                }
+            }
+            generation = 0;
+            return WaitOutcome.Completed;
         }
+    }
 
-        completion.Wait();
-        ThrowIfFaulted();
+    /// <summary>Acknowledges the ordered barrier on the worker thread.</summary>
+    public void CompleteBarrier(ulong generation) {
+        lock (m_workLock) {
+            m_completedBarrier = generation;
+            Monitor.PulseAll(obj: m_workLock);
+        }
+    }
+
+    /// <summary>Submits and drains a step, holding its place in queue order across wait slices.</summary>
+    public QueuedMachineSubmission Step(in TWorkItem item, ref ulong generation, WaitDeadline deadline) {
+        lock (m_workLock) {
+            var submission = QueuedMachineSubmission.Accepted;
+            if (generation == 0) {
+                submission = Submit(in item, deadline);
+                if (submission == QueuedMachineSubmission.Rejected) {
+                    ThrowIfFaultedLocked();
+                    return submission;
+                }
+                if (submission == QueuedMachineSubmission.PendingCapacity) {
+                    return submission;
+                }
+            }
+            return Drain(ref generation, deadline) == WaitOutcome.Completed
+                ? submission
+                : QueuedMachineSubmission.PendingDrain;
+        }
     }
     /// <summary>Submits one completion-bearing item and blocks until the worker has run it. A refused item (the queue
     /// is closed, or the worker already faulted) never ran, so each caller decides its own fallback. The caller owns
@@ -161,7 +201,7 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
                 (m_workerFault is null)
             ) {
                 m_work.Enqueue(item: item);
-                Monitor.Pulse(obj: m_workLock);
+                Monitor.PulseAll(obj: m_workLock);
                 queued = true;
             }
         }
@@ -178,11 +218,10 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
     /// <param name="exception">The exception that ended the loop.</param>
     /// <param name="current">The item the loop was running.</param>
     public void FaultWith(Exception exception, in TWorkItem current) {
-        current.Completion?.Set();
-
         lock (m_workLock) {
             m_workerFault = exception;
             m_acceptingWork = false;
+            current.Completion?.Set();
 
             while (m_work.TryDequeue(result: out var abandoned)) {
                 abandoned.Completion?.Set();
@@ -238,7 +277,7 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
 
             if (m_workerFault is null) {
                 m_work.Enqueue(item: TWorkItem.Stop(completion: completion));
-                Monitor.Pulse(obj: m_workLock);
+                Monitor.PulseAll(obj: m_workLock);
                 queued = true;
             }
         }
@@ -253,8 +292,9 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
     /// <summary>Accepts one step item for ordered execution, blocking the producer while the pending window is full
     /// rather than dropping or coalescing authoritative history.</summary>
     /// <param name="item">The step item to accept.</param>
+    /// <param name="deadline">The last instant to wait for capacity.</param>
     /// <returns>The observable submission outcome.</returns>
-    public QueuedMachineSubmission Submit(in TWorkItem item) {
+    public QueuedMachineSubmission Submit(in TWorkItem item, WaitDeadline deadline) {
         var backpressured = false;
 
         lock (m_workLock) {
@@ -271,7 +311,12 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
                     }
                 }
 
-                Monitor.Wait(obj: m_workLock);
+                var outcome = HostWaits.OnCondition(monitor: m_workLock, reason: CapacityWait, deadline: deadline);
+                if ((outcome == WaitOutcome.DeadlinePassed) &&
+                    m_acceptingWork &&
+                    ((m_submittedSteps - m_completedSteps) >= m_maximumPendingSteps)) {
+                    return QueuedMachineSubmission.PendingCapacity;
+                }
             }
 
             if (
@@ -283,7 +328,7 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
 
             m_work.Enqueue(item: item);
             ++m_submittedSteps;
-            Monitor.Pulse(obj: m_workLock);
+            Monitor.PulseAll(obj: m_workLock);
         }
 
         return (backpressured
@@ -296,7 +341,7 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
     public TWorkItem TakeWork() {
         lock (m_workLock) {
             while (m_work.Count == 0) {
-                Monitor.Wait(obj: m_workLock);
+                HostWaits.IdleOnCondition(monitor: m_workLock, consumer: HostWaits.ClaimConsumer(reason: IdleWait));
             }
 
             return m_work.Dequeue();

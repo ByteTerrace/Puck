@@ -16,6 +16,7 @@ public static partial class WorldDefinitionValidator {
         RequireRange(preset.RenderScale, 0.125f, 1f, $"{path}.renderScale", errors);
         ValidateSkyFieldScale(preset.SkyFieldScale, $"{path}.skyFieldScale", errors);
         if (preset.DistantShadows?.Refusal(path: $"{path}.distantShadows") is { } distant) { errors.Add(item: distant); }
+        if (preset.ViewsRate?.Refusal(path: $"{path}.viewsRate") is { } rate) { errors.Add(item: rate); }
         if (preset.FarShadows?.Refusal(path: $"{path}.farShadows") is { } far) { errors.Add(item: far); }
         if ((preset.Indirect is { } chosen) && !Enum.IsDefined(value: chosen)) { errors.Add(item: $"{path}.indirect must be off, medium or high."); }
     }

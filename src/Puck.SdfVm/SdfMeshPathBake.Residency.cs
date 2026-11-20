@@ -47,6 +47,18 @@ public sealed partial class SdfMeshPathBake {
     private double m_restartMilliseconds;
     // Whether the frame thread has seen every group resident since the groups or a mesh last changed.
     private bool m_allResident;
+    // The listed groups that have landed and whose mesh has not yet stood in the mesh region, which ObserveResidency walks
+    // in place of the whole list: a group joins through Group.AwaitResidency, queued by whichever thread changed it and
+    // taken into the set under the gate, and leaves once it stands, is unlisted or is drawn again. The invariant, that
+    // every listed done group with no ResidentAt is here or queued, rests on that one door; the groups that have not
+    // landed are the take's (m_tally) and the hole count's (m_unshown).
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Group> m_landed = new();
+    private readonly List<Group> m_unresident = [];
+    // The counts of the groups still baking that each take reads.
+    private readonly GroupTally m_tally = new();
+    // The groups still baking that have nothing to draw, are demanded past a pixel and are not retired, as the latest
+    // Prioritize measured them; the holes of a bake before its meshes land (ObserveResidency counts the rest).
+    private int m_unshown;
 
     // The work waiting off the frame's thread (a store load, a contour stage, a landing) for every bake in the process,
     // each for its group; the lattice answers, which every later stage of their groups waits on, taken first in the
@@ -115,6 +127,7 @@ public sealed partial class SdfMeshPathBake {
             m_site = site;
             m_entered = Stopwatch.GetTimestamp();
             Waited = waited;
+            SdfMeshBakeReport.GateEntered();
         }
 
         // The Stopwatch ticks the entry waited for the gate.
@@ -131,6 +144,7 @@ public sealed partial class SdfMeshPathBake {
         public void Dispose() {
             m_owner.m_accounts.GateHeld(held: (Stopwatch.GetTimestamp() - m_entered), site: m_site, waited: Waited);
             m_scope.Dispose();
+            SdfMeshBakeReport.GateLeft();
         }
     }
     // Adds the time since a timestamp to a stage's account; the report names a stage that held one group's worker for
@@ -154,6 +168,7 @@ public sealed partial class SdfMeshPathBake {
             while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
             if (m_doneThrough >= m_groups.Count) {
                 Volatile.Write(location: ref m_owedGroups, value: 0);
+                m_unshown = 0;
                 return;
             }
         }
@@ -176,11 +191,14 @@ public sealed partial class SdfMeshPathBake {
         }
 
         var holes = 0;
+        var unshown = 0;
 
         foreach (var group in m_groups) {
             if (OwesFrame(group: group)) { holes++; }
+            if (!group.Done && !group.Retired && group.HasDemandBox && (group.Shown is null) && (group.Priority > 1f)) { unshown++; }
         }
         Volatile.Write(location: ref m_owedGroups, value: holes);
+        m_unshown = unshown;
         if (measured) {
             foreach (var group in m_groups) {
                 if (group.Done) { continue; }
@@ -612,33 +630,44 @@ public sealed partial class SdfMeshPathBake {
                 m_holes = 0;
                 return;
             }
-            CountHoles(tables: tables);
+            // The groups that landed or were drawn again since the last frame join the set walked here.
+            while (m_landed.TryDequeue(result: out var landed)) { m_unresident.Add(item: landed); }
 
             var now = Stopwatch.GetTimestamp();
-            var all = true;
+            var dressed = (m_dressedRevision == m_productRevision);
+            var holes = m_unshown;
 
-            foreach (var group in m_groups) {
-                if (!group.Done) {
-                    all = false;
+            for (var at = (m_unresident.Count - 1); (at >= 0); at--) {
+                var group = m_unresident[at];
+
+                if (!group.Listed || (group.ResidentAt != 0)) {
+                    DropUnresident(at: at);
                     continue;
                 }
                 if (group.LandedAt == 0) { group.LandedAt = now; }
-                if (group.ResidentAt != 0) { continue; }
+                // A landed group in reach whose drawn mesh's words the region owes is a hole, as is one still bringing its
+                // first mesh (m_unshown).
+                if (!group.Retired && group.HasDemandBox && (group.Shown is { } shown) && AnyPiece(mesh: shown, tables: tables, test: static (region, piece) => region.OwesMesh(mesh: piece)) && (MeasureDemand(group, priority: true) > 1f)) { holes++; }
                 // A mesh is resident once the frame's draws name it and the region owes none of its words; one the
                 // current draws do not name (a template no copy draws) costs the region nothing and counts too.
-                if (group.Mesh is { } mesh) {
-                    var held = (m_dressedRevision == m_productRevision);
-
-                    for (var piece = 0; (piece < mesh.PieceCount); piece++) { held &= !tables.OwesMesh(mesh: mesh.Piece(index: piece)); }
-                    if (!held) {
-                        all = false;
-                        continue;
-                    }
-                }
+                if ((group.Mesh is { } mesh) && (!dressed || AnyPiece(mesh: mesh, tables: tables, test: static (region, piece) => region.OwesMesh(mesh: piece)))) { continue; }
                 group.ResidentAt = now;
+                DropUnresident(at: at);
             }
-            m_allResident = all;
+            m_holes = holes;
+            if (holes > 0) { m_holeFrames++; }
+            m_allResident = ((m_unresident.Count == 0) && (DoneThrough() >= m_groups.Count));
         }
+    }
+    // Takes a group out of the set ObserveResidency walks, which a later change to it hands back through
+    // Group.AwaitResidency. Under the gate, as every change that hands a group over is (Listed, ResidentAt, Draw).
+    private void DropUnresident(int at) {
+        var group = m_unresident[at];
+        var last = (m_unresident.Count - 1);
+
+        m_unresident[at] = m_unresident[last];
+        m_unresident.RemoveAt(index: last);
+        group.StoodOrLeft();
     }
 
     // Names the tables the products that wait ahead of the draws, then hands the draws to those whose every piece

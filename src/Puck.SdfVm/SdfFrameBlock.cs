@@ -51,6 +51,7 @@ public static partial class SdfFrameBlock {
     private static readonly int GridWorldPitch = Offset(member: SdfWorldPackage.GridWorldPitch);
     private static readonly int PreviousView = Offset(member: SdfWorldPackage.PreviousView);
     private static readonly int Jitter = Offset(member: SdfWorldPackage.Jitter);
+    internal static readonly int ViewsRate = Offset(member: SdfWorldPackage.ViewsRate);
     private static readonly int HistoryFrames = Offset(member: SdfWorldPackage.HistoryFrames);
     private static readonly int Temporal = Offset(member: SdfWorldPackage.Temporal);
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
@@ -195,6 +196,11 @@ public static partial class SdfFrameBlock {
         var snapshot = frame.Views[view];
         var camera = snapshot.Camera;
         var quality = snapshot.Quality;
+        var rate = frame.Settings.ViewsRate ?? SdfViewsRate.Full;
+
+        WriteUInt32(block, ViewsRate, (uint)rate.MaxRate);
+        WriteUInt32(block, ViewsRate + sizeof(uint), (uint)rate.TileSize);
+        block.Slice(ViewsRate + 2 * sizeof(uint), 2 * sizeof(uint)).Clear();
 
         WriteUInt32(block: block, offset: ImageExtent, value: width);
         WriteUInt32(block: block, offset: (ImageExtent + sizeof(uint)), value: height);

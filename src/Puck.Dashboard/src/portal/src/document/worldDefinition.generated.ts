@@ -3810,6 +3810,20 @@ export type SdfSweepParameters = {
 };
 
 /**
+ * The maximum square shading footprint and the tile classified together, in render pixels.
+ */
+export type SdfViewsRate = {
+  /**
+   * Shading samples are at most this many pixels apart along each axis.
+   */
+  maxRate?: number;
+  /**
+   * Edge length of the region that must qualify together.
+   */
+  tileSize?: number;
+};
+
+/**
  * The 17 wallpaper symmetry groups, in IUC order. P1–P4G tile a square/rectangular lattice; P3 and up tile the equilateral hexagonal lattice (the cell must be square — the pitch is the cell's x extent). The kernels read each member as SDF_WPG_* from the generated sdf-isa.hlsli.
  */
 export type SdfWallpaperGroup = "P1" | "P2" | "Pm" | "Pg" | "Cm" | "Pmm" | "Pmg" | "Pgg" | "Cmm" | "P4" | "P4M" | "P4G" | "P3" | "P3M1" | "P31M" | "P6" | "P6M";
@@ -10980,6 +10994,10 @@ export type WorldQualityPreset = {
    * How often the device refreshes the far shadow cascade and the light turn a held cascade tolerates (WorldFarShadows). Absent refreshes it every frame.
    */
   farShadows?: WorldFarShadows | null;
+  /**
+   * The maximum shared shading footprint and classification tile size. Absent shades every pixel.
+   */
+  viewsRate?: SdfViewsRate | null;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -11302,6 +11320,10 @@ export type WorldRenderDefaults = {
    * How often the world boots refreshing the far shadow cascade (WorldFarShadows); a quality preset's row replaces it. Absent refreshes it every frame.
    */
   farShadows?: WorldFarShadows | null;
+  /**
+   * The maximum shared shading footprint and classification tile size. Absent shades every pixel.
+   */
+  viewsRate?: SdfViewsRate | null;
 };
 
 export type WorldRenderEnvironment = {

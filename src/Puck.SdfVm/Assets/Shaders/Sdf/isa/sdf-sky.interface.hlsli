@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/b2c90e197ae394d2c6ec85bfc188c69bd9f064a2550292a177f2b1881b6784b3). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/388a2fb130372833f49f9ffca4d85ba2d2e29fc30cc75c5e61a8a59220792d99). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -246,11 +246,12 @@ struct SdfSkyPass {
     [[vk::offset(2012)]] uint _pad2012;
     [[vk::offset(2016)]] float3 viewUp;
     [[vk::offset(2028)]] uint viewportCount;
-    [[vk::offset(2032)]] uint workCounterRow;
-    [[vk::offset(2036)]] uint workCounterRowDetail;
-    [[vk::offset(2040)]] uint _pad2040;
-    [[vk::offset(2044)]] uint _pad2044;
-    [[vk::offset(2048)]] float4 worldLanes;
+    [[vk::offset(2032)]] uint4 viewsRate;
+    [[vk::offset(2048)]] uint workCounterRow;
+    [[vk::offset(2052)]] uint workCounterRowDetail;
+    [[vk::offset(2056)]] uint _pad2056;
+    [[vk::offset(2060)]] uint _pad2060;
+    [[vk::offset(2064)]] float4 worldLanes;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsaE29704FA : register(b0, space3);
 #define passGroup passGroupIsaE29704FA

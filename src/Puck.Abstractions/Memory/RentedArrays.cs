@@ -24,6 +24,20 @@ public static class RentedArrays {
     private static readonly Lock TrimGate = new();
     private static readonly List<Action> Trimmers = [];
     private static long RetainedBytes;
+    private static IAllocationObserver? LargeCache;
+
+    /// <summary>Connects the process account to the large cache. Every element type shares its admission lock.</summary>
+    /// <param name="owner">The process-lifetime owner of idle large arrays.</param>
+    public static void ObserveLargeCache(IAllocationObserver owner) {
+        ArgumentNullException.ThrowIfNull(owner);
+        lock (TrimGate) {
+            if (LargeCache is not null) { throw new InvalidOperationException("The large array cache already has an owner."); }
+            if (RetainedBytes != 0L && !owner.TryAcquire(RetainedBytes, MemoryBacking.Managed)) {
+                foreach (var trim in Trimmers) { trim(); }
+            }
+            LargeCache = owner;
+        }
+    }
 
     private static int PooledLengthLimit<T>() {
         // The shared pool rounds requests to a power-of-two bucket with at least 16 elements. Count the bucket's
@@ -42,17 +56,47 @@ public static class RentedArrays {
     }
 
     /// <summary>Rents an array of at least <paramref name="minimumLength"/> elements; an empty request gets the shared
-    /// empty array, which <see cref="Return{T}"/> accepts.</summary>
+    /// empty array, which <see cref="Return{T}(T[])"/> accepts.</summary>
     /// <typeparam name="T">The element.</typeparam>
     /// <param name="minimumLength">The fewest elements the array holds.</param>
     /// <returns>The array. Its elements are unspecified.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="minimumLength"/> is negative.</exception>
-    public static T[] Rent<T>(int minimumLength) {
+    public static T[] Rent<T>(int minimumLength) => Rent<T>(minimumLength, owner: null);
+
+    /// <summary>Rents under a workspace owner, charging the bucket capacity before asking the pool.</summary>
+    /// <typeparam name="T">Array element.</typeparam>
+    /// <param name="minimumLength">Fewest elements requested.</param>
+    /// <param name="owner">Owner of the workspace, or null for an unmetered rental.</param>
+    /// <returns>The rented array.</returns>
+    public static T[] Rent<T>(int minimumLength, IAllocationObserver? owner) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: minimumLength);
 
         if (minimumLength == 0) { return []; }
-        if (minimumLength <= PooledLengthLimit<T>()) { return ArrayPool<T>.Shared.Rent(minimumLength: minimumLength); }
-        return (RuntimeHelpers.IsReferenceOrContainsReferences<T>() ? GC.AllocateUninitializedArray<T>(length: minimumLength) : LargePool<T>.Rent(minimumLength: minimumLength));
+        var shared = minimumLength <= PooledLengthLimit<T>();
+        var references = RuntimeHelpers.IsReferenceOrContainsReferences<T>();
+        var capacity = shared ? (int)BitOperations.RoundUpToPowerOf2((uint)Math.Max(16, minimumLength))
+            : references ? minimumLength : ClassLengthOf(minimumLength);
+        var bytes = (long)capacity * Unsafe.SizeOf<T>();
+        // An idle array already occupies this memory. Drop its cache charge before the borrower takes it.
+        var cached = !shared && !references ? LargePool<T>.Take(capacity) : null;
+        owner?.Acquire(bytes, MemoryBacking.Managed);
+        try {
+            var array = shared ? ArrayPool<T>.Shared.Rent(minimumLength)
+                : cached ?? GC.AllocateUninitializedArray<T>(capacity);
+            if (owner is not null && array.Length != capacity) {
+                // The shared pool promises a minimum length. Account the actual bucket if its policy changes.
+                var extra = ((long)array.Length - capacity) * Unsafe.SizeOf<T>();
+                if (extra > 0 && !owner.TryAcquire(extra, MemoryBacking.Managed)) {
+                    Return(array);
+                    throw new HostMemoryRefusedException(owner.Name, extra);
+                }
+                if (extra < 0) { owner.Change(extra, MemoryBacking.Managed); }
+            }
+            return array;
+        } catch {
+            owner?.Change(-bytes, MemoryBacking.Managed);
+            throw;
+        }
     }
     /// <summary>Rents an array for the scope of a <see langword="using"/> declaration: disposing the lease returns it.</summary>
     /// <typeparam name="T">The element.</typeparam>
@@ -80,10 +124,17 @@ public static class RentedArrays {
     /// <param name="array">The array <see cref="Rent{T}(int)"/> or <see cref="Grow{T}"/> gave; the caller holds no reference to
     /// it afterward. An empty array is accepted and kept.</param>
     /// <exception cref="ArgumentNullException"><paramref name="array"/> is <see langword="null"/>.</exception>
-    public static void Return<T>(T[] array) {
+    public static void Return<T>(T[] array) => Return(array, owner: null);
+
+    /// <summary>Returns an array and releases its workspace charge.</summary>
+    /// <typeparam name="T">Array element.</typeparam>
+    /// <param name="array">The rented array.</param>
+    /// <param name="owner">The owner supplied to the rent.</param>
+    public static void Return<T>(T[] array, IAllocationObserver? owner) {
         ArgumentNullException.ThrowIfNull(argument: array);
 
         if (array.Length == 0) { return; }
+        owner?.Change(-(array.LongLength * Unsafe.SizeOf<T>()), MemoryBacking.Managed);
         if (array.Length > PooledLengthLimit<T>()) {
             if (!RuntimeHelpers.IsReferenceOrContainsReferences<T>()) { LargePool<T>.Return(array: array); }
             return;
@@ -96,20 +147,21 @@ public static class RentedArrays {
     /// <param name="array">The rented array to replace; the caller holds no reference to it afterward.</param>
     /// <param name="keep">The leading elements to carry over, at most the array's length.</param>
     /// <param name="minimumLength">The fewest elements the replacement holds.</param>
+    /// <param name="owner">The workspace owner supplied to the rent.</param>
     /// <returns>The replacement, with unspecified elements past <paramref name="keep"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="array"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="keep"/> is negative or past the array's length, or
     /// <paramref name="minimumLength"/> is below it.</exception>
-    public static T[] Grow<T>(T[] array, int keep, int minimumLength) {
+    public static T[] Grow<T>(T[] array, int keep, int minimumLength, IAllocationObserver? owner = null) {
         ArgumentNullException.ThrowIfNull(argument: array);
         ArgumentOutOfRangeException.ThrowIfNegative(value: keep);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: keep, other: array.Length);
         ArgumentOutOfRangeException.ThrowIfLessThan(value: minimumLength, other: keep);
 
-        var grown = Rent<T>(minimumLength: minimumLength);
+        var grown = Rent<T>(minimumLength: minimumLength, owner: owner);
 
         array.AsSpan(start: 0, length: keep).CopyTo(destination: grown);
-        Return(array: array);
+        Return(array: array, owner: owner);
         return grown;
     }
     /// <summary>Gives every array the large pool holds back to the collector. Arrays callers still hold are
@@ -126,44 +178,48 @@ public static class RentedArrays {
     // The arrays of one reference-free element type past the shared pool's limit that finished builds returned. Every
     // array it holds has exactly a size class's length (ClassLengthOf), which is what finds one a later rental can use.
     private static class LargePool<T> {
-        private static readonly Lock Gate = new();
-        private static readonly List<T[]> Arrays = [];
+        private static readonly List<T[]> Arrays = new(capacity: MaxRetainedArrays);
 
         static LargePool() {
             lock (TrimGate) { Trimmers.Add(item: Trim); }
         }
 
-        public static T[] Rent(int minimumLength) {
-            var length = ClassLengthOf(minimumLength: minimumLength);
-
-            lock (Gate) {
+        public static T[]? Take(int length) {
+            lock (TrimGate) {
                 for (var index = (Arrays.Count - 1); (index >= 0); index--) {
                     var array = Arrays[index];
 
                     if (array.Length != length) { continue; }
                     Arrays.RemoveAt(index: index);
-                    _ = Interlocked.Add(location1: ref RetainedBytes, value: -Bytes(array: array));
+                    Release(bytes: Bytes(array));
                     return array;
                 }
             }
-            return GC.AllocateUninitializedArray<T>(length: length);
+            return null;
         }
         public static void Return(T[] array) {
             var bytes = Bytes(array: array);
 
             if ((array.Length != ClassLengthOf(minimumLength: array.Length)) || (bytes > MaxRetainedArrayBytes)) { return; }
-            lock (Gate) {
-                if ((Arrays.Count >= MaxRetainedArrays) || ((Interlocked.Read(location: ref RetainedBytes) + bytes) > MaxRetainedBytes)) { return; }
+            lock (TrimGate) {
+                if ((Arrays.Count >= MaxRetainedArrays) || ((RetainedBytes + bytes) > MaxRetainedBytes)) { return; }
+                if (LargeCache is not null && !LargeCache.TryAcquire(bytes, MemoryBacking.Managed)) { return; }
                 Arrays.Add(item: array);
                 _ = Interlocked.Add(location1: ref RetainedBytes, value: bytes);
             }
         }
         private static void Trim() {
-            lock (Gate) {
-                foreach (var array in Arrays) { _ = Interlocked.Add(location1: ref RetainedBytes, value: -Bytes(array: array)); }
+            lock (TrimGate) {
+                foreach (var array in Arrays) { Release(bytes: Bytes(array)); }
                 Arrays.Clear();
             }
         }
         private static long Bytes(T[] array) => (((long)array.Length) * Unsafe.SizeOf<T>());
+    }
+
+    // Under TrimGate at removal, whether a borrower took the array or a trim dropped it.
+    private static void Release(long bytes) {
+        LargeCache?.Change(-bytes, MemoryBacking.Managed);
+        _ = Interlocked.Add(ref RetainedBytes, -bytes);
     }
 }

@@ -299,6 +299,7 @@ public static partial class SdfWorldPackage {
     /// and shadow slot table, and its curvature shading. The lights and the sky are World-group tables the SDF engine's
     /// kernel interface adds (<c>SdfKernelInterfaces</c>), bound only by the passes that read them.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Values { get; } = [
+        Value(name: ViewsRate, type: ShaderValueType.Uint4),
         Value(name: IndirectSources, type: ShaderValueType.Uint),
         Value(name: IndirectSourceGains, type: ShaderValueType.Float4),
         Value(name: IndirectApply, type: ShaderValueType.Float4),
@@ -484,6 +485,7 @@ public static partial class SdfWorldPackage {
         Read(element: ShaderValueType.Uint, name: ShadeTiles),
         Written(element: ShaderValueType.Uint, name: ShadeTilesWritten),
         Written(element: ShaderValueType.Uint, name: ShadeArgumentsWritten),
+        Read(element: ShaderValueType.Uint, name: HistorySurface),
         .. Tables,
     ];
     /// <summary>Gets the fragment a native view runs as: one view's dispatch set, its scratch retained and counted, its

@@ -21,7 +21,7 @@ namespace Puck.World;
 /// (see <see cref="TryResolveInstance"/>). <c>world.faces</c> has no instance-addressed form: screens, the
 /// derived-face index space, and session binding are the boot instance's own presentation state, and a spawned
 /// instance carries neither a client nor a real machine host to bind them from.</remarks>
-internal sealed partial class WorldPlacementCommandModule(WorldServer server, WorldPopulation population, WorldScreenBinder binder, WorldInstanceHost instances, WorldSessionResolver resolver, IServerLink link, WorldDeferredVerbEchoes echoes) : ICommandModule {
+internal sealed partial class WorldPlacementCommandModule(WorldServer server, WorldScreenBinder binder, WorldInstanceHost instances, WorldSessionResolver resolver, IServerLink link, WorldDeferredVerbEchoes echoes) : ICommandModule {
     private static readonly CommandForms WorldPlacementsForms = CommandForms.Of(verb: "world.placements", "[instance:<name>]");
     private static readonly CommandForms WorldInhabitantsForms = CommandForms.Of(verb: "world.inhabitants", "[instance:<name>]");
     private static readonly CommandForms WorldAttachmentsForms = CommandForms.Of(verb: "world.attachments", "[instance:<name>]");
@@ -193,7 +193,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             : " none")).Append(value: ']').ToString();
     }
     private string DescribeAttachments(WorldInstance? instance, CommandContext context) {
-        var pop = (instance?.Server.Population ?? population);
+        var pop = ((instance?.Server ?? server).Population);
         var definition = (instance?.Server ?? server).ReadView(context).Definition;
         var builder = new StringBuilder(value: "[world.attachments:");
         var any = false;
@@ -333,7 +333,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             : " none")).Append(value: ']').ToString();
     }
     private string DescribeInhabitants(WorldInstance? instance, CommandContext context) {
-        var pop = (instance?.Server.Population ?? population);
+        var pop = ((instance?.Server ?? server).Population);
         var placements = (instance?.Server ?? server).ReadView(context).Placements;
         var builder = new StringBuilder(value: "[world.inhabitants:");
         var any = false;

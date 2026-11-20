@@ -2257,6 +2257,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 // The distant shadow map: render.distantShadows at boot, then the device table's row a quality preset
                 // applies.
                 DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: m_settings.DistantShadows),
+                ViewsRate = m_settings.ViewsRate,
                 FarShadows = WorldRenderFarDistance.ResolveFarShadows(authored: m_settings.FarShadows),
                 Toon = m_settings.ResolveToon(render: m_client.Definition.Render),
                 Tone = WorldRenderSettings.ToneOf(render: m_client.Definition.Render),

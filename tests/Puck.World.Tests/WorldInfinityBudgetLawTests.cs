@@ -16,7 +16,7 @@ public sealed class WorldInfinityBudgetLawTests {
         var roster = new PlayerRoster(definition: row.Server.Definition, link: row.Instance.Link,
             seatBindings: new WorldSeatBindings(definition: row.Server.Definition));
         var registry = new CommandRegistry(modules: [new WorldPopulationCommandModule(roster: roster,
-            population: row.Server.Population, server: row.Server, link: row.Instance.Link, renderProbe: probe)]);
+            server: row.Server, link: row.Instance.Link, renderProbe: probe)]);
         var first = new object();
         var second = new object();
         var spec = new InfinityViewSpec(Anchor: Vector3.Zero, Fallback: Vector3.Zero, FarDistance: 100f,
@@ -61,7 +61,7 @@ public sealed class WorldInfinityBudgetLawTests {
         Assert.Contains("infinity views: none", Budget());
         // Authoritative costs remain readable when no presentation probe is composed.
         var headless = new CommandRegistry(modules: [new WorldPopulationCommandModule(roster: roster,
-            population: row.Server.Population, server: row.Server, link: row.Instance.Link)]).Submit(line: "world.budget");
+            server: row.Server, link: row.Instance.Link)]).Submit(line: "world.budget");
 
         Assert.False(condition: headless.IsError, userMessage: headless.Output);
         Assert.Contains("infinity unavailable: no renderer", headless.Output);

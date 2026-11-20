@@ -117,7 +117,7 @@ correctness rests on an invariant is designed and reviewed before code
    a 16 GB machine, which no plan sets and which the 2060 ran out of; the
    2060's region refusals with its table applied; then the
    [streaming campaign](streaming-and-memory.md#the-build-order)'s next step.
-7. [high] [Engine job system](#engine-job-system): C0.5, then the pool's
+7. [high] [Engine job system](#engine-job-system): finish bounded waits, then the pool's
    design (J1), which folds in the bake's private worker pool; then rows as
    jobs (T4) for the silo. The frame thread still steps the authority and
    emits the whole program; the 2060 trace in item 3 sizes both.
@@ -424,7 +424,8 @@ a specialist builds · high · Next: the next step of
 [the memo's build order](engine-job-system.md#6-build-order), which states the
 order once: the scheduling stage's windowed reading, C0.3's and C0.4's, then
 [the control plane's](engine-job-system.md#the-control-planes-phase-and-bounded-waits)
-step C0.5 (C0.1 to C0.4 are built), then the pool's design (J1). The garbage-collection cuts
+device and present waits (C0.6), then the attach and live-request steps before
+the pool's design (J1). The garbage-collection cuts
 below and the replay burst's tick budget run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 Where the tick runs is an open design question this plan owns
@@ -443,10 +444,10 @@ costs.
   93 to 116 ms `simulate` is one step, and the Vulkan run stepped where
   Direct3D 12 held: its frames answered rendered between converging frames
   (inference, from the code; the reading has no per-iteration render
-  completion). C0.5 owns the step's joins and drains, which bound the control
-  gap once they run through the door; what the step does for 100 ms on Vulkan
-  is a measurement: `host.frames` with the tick lane and a `dotnet-trace` of the
-  pump over a stepping iteration during a convergence on Vulkan.
+  completion). Tick joins and drains now return to the control phase when
+  their wait slice expires. Use `host.frames` with the tick lane and a
+  `dotnet-trace` of a stepping iteration to identify the reported Vulkan
+  simulation work.
 - [medium] A rated item's phase is held by its own cadence, so a long frame
   that spans an interval for one item and not another (a hitch, a missed
   frame on a fixed signal) can land two items that took a tier half a period
@@ -2390,9 +2391,8 @@ State and server:
   instead of returning `StaleAddress`; the addon runtime's query handlers
   (`WorldAddonRuntime.ResolveBodyPoses` and the development queries that
   charge `ChargeHostFuel`) return without a reply when host fuel is exhausted;
-  `WorldStateDocumentValues` formats Bool as `1`/`0` in one path and
-  `true`/`false` in another, and `ValidateStateTransaction` validates the
-  unmaterialized definition; `RuleExpressions.Run` swallows an absent value
+  `ValidateStateTransaction` validates the unmaterialized definition for the
+  authority; `RuleExpressions.Run` swallows an absent value
   inside `not`, `and` and `or`; `StateSeedReader` builds a state section
   without lattices, spaces, enums or pools; `ArenaSnapshot` and `ArenaUndo`
   index rows by non-document lane ordinals and keep change-window state across
@@ -2552,16 +2552,19 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   `CollectReferencedRows`, transform indirections and unresolvable transforms,
   knowledge, witness and readers declarations, reverse relations beyond keyed
   rows, the empty-selection guard below `Replica`, the console row verbs'
-  pre-read). What remains is every check that reads past the declared relation,
-  which only [decision 3a's restricted transaction](disclosure.md#the-structural-write-footprint)
-  closes: whole-document validation of a unit the write does not name (a joint
-  check inside one placement or HUD element over a written row and a withheld
-  one), shared ceilings and the key table, rule firings that leave a hidden row
-  invalid (H2), and `world.parked` and `world.hud.template` on the read side
-  (D0d). D0a still owes the executed witnesses for H1 and H2. The coupling
-  refuses a recipient's write into a row a withheld declaration names (a live
-  audience, a knowledge source), which the token-domain relation alone admitted;
-  scoped input (D6) is where such a writer gets its route back.
+  pre-read). A recipient's state write is validated only as far as its written
+  rows reach ([checkpoint](disclosure.md#bound-write-validation-checkpoint)),
+  which closes H2 for those writes. What remains is every check that reads past
+  the declared relation, which only [decision 3a's restricted transaction](disclosure.md#the-structural-write-footprint)
+  closes: whole-document validation in a recipient's document write and in a
+  cell write into an identity-bound row, shared ceilings and the key table,
+  input selection, and `world.parked` and `world.hud.template` on the read side
+  (D0d). H1's board and search forms remain for D0a. The coupling refuses a
+  recipient's write into a row a withheld declaration names (a live audience, a
+  knowledge source), which the token-domain relation alone admitted; its route
+  back is an inbox a rule collects ([routes back](disclosure.md#routes-back-for-the-writers-the-derived-footprint-refuses)),
+  made structural by D4's scopes and migrated by D6, which follow D0b4, D2, D5,
+  D7 and D3.
 - [high] Hidden state is distinguishable from absent state at doors the
   door-by-door fixes did not reach. [The disclosure plan](disclosure.md#the-build-order)
   is the structural fix and owns the queue: D0b1–D0b4 and step 6, step 0's fuzzer,

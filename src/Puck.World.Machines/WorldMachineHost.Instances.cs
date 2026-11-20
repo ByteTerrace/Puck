@@ -1,3 +1,4 @@
+using Puck.Abstractions.Waiting;
 using System.Collections.Frozen;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -437,56 +438,56 @@ public sealed partial class WorldMachineHost {
         );
     }
 
-    private void AdvanceInstances(ulong stepTicks, ReadOnlySpan<ScreenPadSnapshot> pads, IReadOnlySet<string> linkedInstances) {
-        foreach (var instance in m_instances.Values) {
-            if (
-                !instance.Declaration.Running ||
-                (instance.Lease is not MachineLease.Running lease) ||
-                linkedInstances.Contains(item: instance.Declaration.Name)
-            ) {
-                continue;
-            }
-            var runtime = lease.Runtime;
+    private WaitReason? AdvanceInstance(MachineInstance instance, ulong stepTicks, ReadOnlySpan<ScreenPadSnapshot> pads, WaitDeadline deadline) {
+        if (
+            !instance.Declaration.Running ||
+            (instance.Lease is not MachineLease.Running lease) ||
+            m_linkedInstances.Contains(item: instance.Declaration.Name)
+        ) {
+            return null;
+        }
+        var runtime = lease.Runtime;
 
-            if (runtime is IMachineInputPorts ports) {
-                var sole = (ports.InputPorts.Count == 1);
+        if ((m_stepBarrier == 0) && (runtime is IMachineInputPorts ports)) {
+            var sole = (ports.InputPorts.Count == 1);
 
-                if (ports.InputPorts is FrozenDictionary<string, IMachineInputPort> frozen) {
-                    for (var index = 0; (index < frozen.Count); index++) {
-                        var input = MachineInput(instance: instance.Declaration.Name, pads: pads, port: frozen.Keys[index], sole: sole);
+            if (ports.InputPorts is FrozenDictionary<string, IMachineInputPort> frozen) {
+                for (var index = 0; (index < frozen.Count); index++) {
+                    var input = MachineInput(instance: instance.Declaration.Name, pads: pads, port: frozen.Keys[index], sole: sole);
 
-                        frozen.Values[index].SetState(state: in input);
-                    }
-                } else {
-                    foreach (var (name, port) in ports.InputPorts) {
-                        var input = MachineInput(
-                            instance: instance.Declaration.Name,
-                            pads: pads,
-                            port: name,
-                            sole: sole
-                        );
-
-                        port.SetState(state: in input);
-                    }
+                    frozen.Values[index].SetState(state: in input);
                 }
-            }
-            if ((runtime is IQueuedMachineRuntime queued) && !(SynchronousSteps?.Invoke() ?? false)) {
-                var submitted = queued.Submit(deltaTicks: stepTicks);
+            } else {
+                foreach (var (name, port) in ports.InputPorts) {
+                    var input = MachineInput(
+                        instance: instance.Declaration.Name,
+                        pads: pads,
+                        port: name,
+                        sole: sole
+                    );
 
-                if (
-                    (submitted == QueuedMachineSubmission.Rejected) &&
-                    (runtime.Status is MachineRuntimeStatus.Running or MachineRuntimeStatus.Faulted)
-                ) {
-                    throw new InvalidOperationException(message: $"Machine '{instance.Declaration.Name}' rejected an authoritative segment: {queued.QueueFault}");
+                    port.SetState(state: in input);
                 }
-                if (submitted != QueuedMachineSubmission.Rejected) {
-                    AnyEverPumped = true;
-                }
-            } else if (runtime.Advance(deltaTicks: stepTicks)) {
-                if (runtime is not IQueuedMachineRuntime) { lease.CompletedSteps++; }
-                AnyEverPumped = true;
             }
         }
+        if (runtime is IQueuedMachineRuntime queued) {
+            var submitted = queued.StepSegment(stepTicks, m_drainsMachines, ref m_stepBarrier, deadline);
+            if (PendingMachineStep(submitted) is { } pending) { return pending; }
+
+            if (
+                (submitted == QueuedMachineSubmission.Rejected) &&
+                (runtime.Status is MachineRuntimeStatus.Running or MachineRuntimeStatus.Faulted)
+            ) {
+                throw new InvalidOperationException(message: $"Machine '{instance.Declaration.Name}' rejected an authoritative segment: {queued.QueueFault}");
+            }
+            if (submitted != QueuedMachineSubmission.Rejected) {
+                AnyEverPumped = true;
+            }
+        } else if (runtime.Advance(deltaTicks: stepTicks)) {
+            if (runtime is not IQueuedMachineRuntime) { lease.CompletedSteps++; }
+            AnyEverPumped = true;
+        }
+        return null;
     }
     // The input one port of a named machine receives: the engaged pads of every screen showing the machine whose route
     // names that port, or that names none when the port is the machine's sole one, merged; neutral when none is engaged.

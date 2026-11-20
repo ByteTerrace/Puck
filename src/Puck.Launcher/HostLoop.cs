@@ -185,7 +185,7 @@ public sealed class HostLoop(
                 output.Flush();
                 timeline.Mark(phase: HostFramePhase.Commands);
 
-                if (produce is not null) {
+                if (produce is not null && pump?.StepPending != true) {
                     var stepsNext = ((pump is not null) && (tickLocked || ((pump.AccumulatorTicks + interval) >= stepTicks)));
 
                     holding = produce(new HostIteration(
@@ -205,7 +205,7 @@ public sealed class HostLoop(
                 }
                 if (wait is not null) {
                     wait();
-                } else if (!pacing.IsUnpaced) {
+                } else if (!pacing.IsUnpaced || pump?.StepPending == true) {
                     var period = (frequency / ((long)LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation)));
 
                     nextDeadline += period;

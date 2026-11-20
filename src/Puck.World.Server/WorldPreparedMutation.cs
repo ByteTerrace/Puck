@@ -55,7 +55,7 @@ public sealed partial class WorldDocument {
                     mark = host.BeginStateTransaction();
                     var time = ComposeTime(document.m_definition, engineTick: engineTick, tick: tick);
                     accepted = document.TryStateMembers(reads, mutation, in time, out reason, out evicted) &&
-                        host.ValidateStateTransaction(mutation.Principal, out reason);
+                        host.ValidateStateTransaction(mutation.Principal, out reason, reads);
                 } else {
                     accepted = document.TryStageDocument(mutation, tick, engineTick, out stage, out reason);
                 }
