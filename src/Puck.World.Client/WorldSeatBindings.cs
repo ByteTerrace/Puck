@@ -425,7 +425,10 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     }
     // Whether the authority's mirrored selection targets the camera control application.
     private bool PublishesCameraTarget(int slot, IReadOnlyList<WorldSeatModeFamily> families) {
-        foreach (var family in families) {
+        // Indexed, since the lists are interfaces and a foreach over one boxes its enumerator.
+        for (var at = 0; (at < families.Count); at++) {
+            var family = families[at];
+
             if (
                 string.IsNullOrWhiteSpace(value: family.Name) ||
                 !m_contextStates[slot].TryGetValue(
@@ -436,7 +439,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 continue;
             }
 
-            foreach (var state in family.States) {
+            var states = family.States;
+
+            for (var index = 0; (index < states.Count); index++) {
+                var state = states[index];
+
                 if (
                     string.Equals(
                     a: state.Name,

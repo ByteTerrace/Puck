@@ -56,7 +56,12 @@ public sealed partial class WorldScreenBinder {
     // onto it. A destination instance retiring ends the observation, with a stderr note: the screen's access settles to
     // none, so its picture is withdrawn (SettleSessionRoutes) and it shows nothing until a session observes again.
     private void ReconcileSessionLifecycles() {
-        foreach (var row in m_rows) {
+        // Indexed, since the rows are an interface list and a foreach over one boxes its enumerator.
+        var rows = m_rows;
+
+        for (var at = 0; (at < rows.Count); at++) {
+            var row = rows[at];
+
             if (
                 (row.Source is not WorldScreenSource.Session declared) ||
                 !m_slots.TryGetValue(

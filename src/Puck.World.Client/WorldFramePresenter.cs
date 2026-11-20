@@ -960,7 +960,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             return null;
         }
 
-        foreach (var screen in m_client.Definition.Screens) {
+        // Indexed, since the rows are an interface list and a foreach over one boxes its enumerator.
+        var screens = m_client.Definition.Screens;
+
+        for (var row = 0; (row < screens.Count); row++) {
+            var screen = screens[row];
+
             if (screen.Index != index) {
                 continue;
             }
@@ -970,9 +975,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 screen: screen
             )) {
                 if (screen.Carry?.Camera is { } name) {
-                    foreach (var camera in m_client.Definition.Cameras) {
-                        if (string.Equals(a: camera.Name, b: name, comparisonType: StringComparison.Ordinal)) {
-                            held = camera;
+                    var cameras = m_client.Definition.Cameras;
+
+                    for (var at = 0; (at < cameras.Count); at++) {
+                        if (string.Equals(a: cameras[at].Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                            held = cameras[at];
 
                             break;
                         }

@@ -361,28 +361,35 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                     slot: slot,
                     windowSeconds: recently.WindowSeconds
                 );
-            case OverlayPredicate.All all:
-                foreach (var inner in (all.Predicates ?? [])) {
-                    if (!Evaluate(
-                        predicate: inner,
-                        slot: slot
-                    )) {
-                        return false;
-                    }
-                }
+            // Indexed, since the lists are interfaces and a foreach over one boxes its enumerator for each predicate every frame.
+            case OverlayPredicate.All all: {
+                    var inners = (all.Predicates ?? []);
 
-                return true;
-            case OverlayPredicate.Any any:
-                foreach (var inner in (any.Predicates ?? [])) {
-                    if (Evaluate(
-                        predicate: inner,
-                        slot: slot
-                    )) {
-                        return true;
+                    for (var index = 0; (index < inners.Count); index++) {
+                        if (!Evaluate(
+                            predicate: inners[index],
+                            slot: slot
+                        )) {
+                            return false;
+                        }
                     }
-                }
 
-                return false;
+                    return true;
+                }
+            case OverlayPredicate.Any any: {
+                    var inners = (any.Predicates ?? []);
+
+                    for (var index = 0; (index < inners.Count); index++) {
+                        if (Evaluate(
+                            predicate: inners[index],
+                            slot: slot
+                        )) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
             case OverlayPredicate.Not not:
                 return !Evaluate(
                     predicate: not.Predicate,
