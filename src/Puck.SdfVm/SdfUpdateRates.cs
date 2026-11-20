@@ -367,6 +367,10 @@ public static class SdfUpdateRateCounts {
     public static readonly WorkKind ShadowFarHeld = new(name: "sdf.rates.shadow-far.held", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a view drew its distant shadow map.</summary>
     public static readonly WorkKind ShadowDistantRendered = new(name: "sdf.rates.shadow-distant.rendered", unit: "frames", workClass: WorkClass.Pacing);
+    /// <summary>Counts each frame a view drew one share of a distant shadow map redraw spread over several frames
+    /// (<see cref="SdfDistantShadows.Slices"/>) that completed no map; the share that completes one counts as
+    /// <see cref="ShadowDistantRendered"/>.</summary>
+    public static readonly WorkKind ShadowDistantShared = new(name: "sdf.rates.shadow-distant.share", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a view held its distant shadow map.</summary>
     public static readonly WorkKind ShadowDistantHeld = new(name: "sdf.rates.shadow-distant.held", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a nested view was shown at a reduced rate.</summary>
@@ -377,7 +381,7 @@ public static class SdfUpdateRateCounts {
     /// <summary>Counts each frame a screen's source was shown at a reduced rate.</summary>
     public static readonly WorkKind ScreensRated = new(name: "sdf.rates.screens.rated", unit: "footprints", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, ShadowFarRendered, ShadowFarSplit, ShadowFarHeld, ShadowDistantRendered, ShadowDistantHeld, ViewsRated, ViewsHeld, ScreensRated];
+    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, ShadowFarRendered, ShadowFarSplit, ShadowFarHeld, ShadowDistantRendered, ShadowDistantShared, ShadowDistantHeld, ViewsRated, ViewsHeld, ScreensRated];
 
     /// <summary>Creates the counters a host's frames count into.</summary>
     /// <returns>A set over every kind this class declares, in report order, every count zero.</returns>

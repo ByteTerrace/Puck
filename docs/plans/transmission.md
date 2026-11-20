@@ -145,7 +145,7 @@ compares the whole word. The rules:
 - **An index is allocated when its body is first drawn and retired when the
   body has not been drawn for longer than any reader may hold a cascade or a
   history that names it.** The tables know the holds: the far cascade's
-  (`SdfWorldPasses.Rates`, bounded by `SdfUpdateRateTiers.ShadowFarHertz`),
+  (`SdfWorldPasses.Rates`, bounded by the authored far rate, `SdfFrame.FarShadows`),
   a V5 static cache's, and V1's history by instance generation. Each hold
   records the frame it was drawn; an index freed at frame F is reusable only
   once every hold drawn at or before F has been redrawn. The far cascade's

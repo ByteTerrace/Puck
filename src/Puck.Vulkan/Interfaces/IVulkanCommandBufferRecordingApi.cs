@@ -273,6 +273,8 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="destinationImageLayout">The current layout of the destination image, as a <c>VkImageLayout</c> value.</param>
     /// <param name="width">The width, in texels, of the region to copy.</param>
     /// <param name="height">The height, in texels, of the region to copy.</param>
+    /// <param name="aspectMask">The <c>VkImageAspectFlags</c> both images are copied in: the color aspect, or the depth
+    /// aspect for two depth images of one format.</param>
     void CopyImageToImage(
         VulkanDeviceCommands device,
         nint commandBufferHandle,
@@ -281,7 +283,8 @@ public interface IVulkanCommandBufferRecordingApi {
         nint destinationImageHandle,
         uint destinationImageLayout,
         uint width,
-        uint height
+        uint height,
+        uint aspectMask = VulkanGpuFormats.ColorAspect
     );
     /// <summary>Records a copy of the whole of a 2D, single-level, single-layer color image into a buffer's rows, from the
     /// buffer's first byte.</summary>

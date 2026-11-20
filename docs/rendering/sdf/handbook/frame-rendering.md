@@ -1562,29 +1562,31 @@ second stable slot choose the view's fragment (`SdfWorldPackage.WithShadows`),
 so changing either rebuilds the view's graph once; the slot count is the
 world's configured policy, so a handoff between lights allocates nothing.
 
-The far cascade refreshes at least 30 times a second (`world.rates shadow-far`,
-`SdfUpdateRates.ShadowFar`): a view holds its far cascade's depth and fit while
-a 30 Hz floor allows on the frames' presentation time (`SdfWorldPasses.Rates`,
-`SdfUpdateRateTiers.Holds`), counted only over frames that decided it in a row,
+The far cascade refreshes at the rate a device table authors
+(`farShadows { hertz, turnDegrees }` on a quality row or `render.farShadows`,
+`SdfFrame.FarShadows`; every frame where none is authored) while
+`world.rates shadow-far` is on (`SdfUpdateRates.ShadowFar`): a view holds its
+far cascade's depth and fit while that floor allows on the frames'
+presentation time (`SdfWorldPasses.Rates`, `SdfUpdateRateTiers.Holds`),
+counted only over frames that decided it in a row,
 so `shadow-far` stands between refreshes whatever forces the frame's other
 passes, and every pass of the view reads that depth through the camera it was
 drawn from, so a static caster's shadow is exact on a held frame and only a
 dynamic caster beyond the near cascade lags, by under one of the far cascade's
 texels at walking speed. A hold ends early when the fit no longer covers what
-the view shows: the light turns far enough to move the shadow of a caster at
-the far end of the cascade's depth span by one texel
-(`SdfUpdateRateTiers.ShadowFarLightTurnRadians`, so a sun on a day clock still
-holds), the cascade's extent or texels change, the camera cuts, turns past half
-a degree or moves half a metre, the view follows another residency, or a
-capture converges. Frames that come at or below 30 a second hold nothing.
+the view shows: the light turns past the authored `turnDegrees` (or, where none
+is authored, far enough to move the shadow of a caster at the far end of the
+cascade's depth span by one texel, `SdfFarShadows.TurnRadiansFor`), the
+cascade's extent or texels change, the camera cuts, turns past half a degree or
+moves half a metre, the view follows another residency, or a capture
+converges. Frames that come at or below the authored rate hold nothing.
 
 A refresh the rate alone calls for is split over two frames whatever the
 frames' pace: the first draws the depth and its glass extinction, the second
-draws the exit layer and holds the depth (`SdfFarLayers`), so a 60 Hz view
-draws one layer a frame and each still refreshes 30 times a second, and a
-slower view draws one layer a frame too, each layer refreshing every two
-frames, so the cascade never costs a slow frame a whole refresh and holds it
-slow. A refresh that ends a hold redraws both. Under occlusion culling a layer
+draws the exit layer and holds the depth (`SdfFarLayers`), so at a rate of
+half the frame rate or more every frame draws one layer, and at a lower rate
+the frames between refreshes stand; the cascade never costs a slow frame a
+whole refresh and holds it slow. A refresh that ends a hold redraws both. Under occlusion culling a layer
 also records the sample grid its receivers were classified on
 (`SdfWorldPasses.ReceiverSignatureOf`: cull level, detail, extent, scale, cut
 and bindings, never the camera, the geometry or the jitter, which the hold's
@@ -1635,6 +1637,17 @@ or any other input of the cascade fit changes the view's signature, since the
 cadence signs the fitted cascade set (`SdfWorldTables.ViewSignature`).
 `world.rates shadow-distant off` lets it follow every turn of the light, and
 `world.rates` counts `shadow-distant.rendered` and `.held`.
+
+A map may spread each redraw over `frames` frames (`distantShadows.frames`,
+`SdfDistantShadows.Slices`), so no one frame pays a whole redraw. Its view then
+keeps a back map beside the map receivers read: each frame draws one share of
+the casters (those whose draw index leaves the share's remainder) into the back
+map from the camera the redraw started from, and the last share copies the back
+map into the map, whose camera only then changes. A redraw so lands `frames`
+frames after it starts, and runs to its end whatever the light or the eye does
+meanwhile; a static draw that changes during it is redrawn by the next one.
+`world.rates` counts each share that completes no map as
+`shadow-distant.share`.
 
 A shadow handoff (`SdfShadowHandoff`) is a pass value: while one runs, the
 outgoing light fades from its stable slot's cascade by the handoff's weight, and

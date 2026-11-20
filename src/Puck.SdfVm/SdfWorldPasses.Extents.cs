@@ -17,9 +17,11 @@ public sealed partial class SdfWorldPasses {
     // Each fragment with its views pass shading in bins (SdfWorldPackage.WithBins), made once for the same reason.
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> BinnedFragments = new();
 
-    // The sizes a distant map takes, each a power of two from the least through the most (SdfWorldPackage), and none.
-    private static readonly int DistantShapes = ((System.Numerics.BitOperations.Log2(value: (uint)SdfWorldPackage.MeshDistantShadowMaxResolution) -
-        System.Numerics.BitOperations.Log2(value: (uint)SdfWorldPackage.MeshDistantShadowMinResolution)) + 2);
+    // The sizes a distant map takes, each a power of two from the least through the most (SdfWorldPackage).
+    private static readonly int DistantSizes = ((System.Numerics.BitOperations.Log2(value: (uint)SdfWorldPackage.MeshDistantShadowMaxResolution) -
+        System.Numerics.BitOperations.Log2(value: (uint)SdfWorldPackage.MeshDistantShadowMinResolution)) + 1);
+    // The shapes a distant map takes: none, then each size without a back map, then each size with one.
+    private static readonly int DistantShapes = ((2 * DistantSizes) + 1);
     // The shapes a fragment's cascades take: each resolution with and without the second slot's cascade, with each
     // distant map.
     private static readonly int ShadowShapes = (6 * DistantShapes);
@@ -104,9 +106,14 @@ public sealed partial class SdfWorldPasses {
         // The texels a side of the view's distant map while it renders shadows, zero while its world draws none
         // (SdfDistantShadows.TexelsAt); a power of two from the least through the most the package allows.
         private int RequestsDistantTexels => (View?.Residency.Frame?.DistantShadows.TexelsAt(resolution: ShadowResolution) ?? 0);
-        // The distant map's shape: zero for none, else one more than its size's power of two above the least.
+        // Whether the view's distant map spreads a redraw over several frames, so its fragment keeps the back map
+        // (SdfWorldPackage.WithShadows).
+        private bool RequestsDistantSliced => (View?.Residency.Frame?.DistantShadows.IsSliced ?? false);
+        // The distant map's shape: zero for none, else one more than its size's power of two above the least, past every
+        // size without a back map for one with it.
         private int DistantShape => ((RequestsDistantTexels is var texels and > 0)
-            ? ((System.Numerics.BitOperations.Log2(value: (uint)texels) - System.Numerics.BitOperations.Log2(value: (uint)SdfWorldPackage.MeshDistantShadowMinResolution)) + 1)
+            ? ((System.Numerics.BitOperations.Log2(value: (uint)texels) - System.Numerics.BitOperations.Log2(value: (uint)SdfWorldPackage.MeshDistantShadowMinResolution)) + 1 +
+                (RequestsDistantSliced ? DistantSizes : 0))
             : 0);
         // Whether the view's program holds a glass shape, so the view runs the glass passes and allocates their
         // storages (SdfWorldPackage.WithGlass); a view of any other program pays nothing for them.
@@ -142,6 +149,7 @@ public sealed partial class SdfWorldPasses {
             var resolution = ShadowResolution;
             var second = RequestsSecondShadow;
             var distantTexels = RequestsDistantTexels;
+            var distantSliced = RequestsDistantSliced;
             var shaped = ShadowedFragments.GetValue(createValueCallback: static _ => new RenderGraphPackageFragment[ShadowShapes], key: fragment);
             var index = ((((((int)resolution) * 2) + (second ? 1 : 0)) * DistantShapes) + DistantShape);
 
@@ -149,7 +157,7 @@ public sealed partial class SdfWorldPasses {
             return (Volatile.Read(location: ref shaped[index]) ?? (Interlocked.CompareExchange(
                 comparand: null,
                 location1: ref shaped[index],
-                value: SdfWorldPackage.WithShadows(distantTexels: distantTexels, fragment: fragment, second: second, texels: SdfShadowResolutions.Texels(resolution: resolution))
+                value: SdfWorldPackage.WithShadows(distantSliced: distantSliced, distantTexels: distantTexels, fragment: fragment, second: second, texels: SdfShadowResolutions.Texels(resolution: resolution))
             ) ?? shaped[index]!));
         }
 

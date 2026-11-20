@@ -674,6 +674,11 @@ public static partial class SdfWorldPackage {
         public const string ShadowDistantDepth = "shadowDistantDepth";
         /// <summary>The distant shadow map's exit layer.</summary>
         public const string ShadowDistantExit = "shadowDistantExit";
+        /// <summary>The distant shadow map's back depth, which a redraw spread over several frames draws its shares into
+        /// before it is copied into <see cref="ShadowDistantDepth"/> (<see cref="WithShadows"/>).</summary>
+        public const string ShadowDistantBackDepth = "shadowDistantBackDepth";
+        /// <summary>The distant shadow map's back exit layer, beside <see cref="ShadowDistantBackDepth"/>.</summary>
+        public const string ShadowDistantBackExit = "shadowDistantBackExit";
         /// <summary>The near cascade's depth: per texel the reversed-Z orthographic depth of the nearest caster, zero (the
         /// far plane) where none was drawn.</summary>
         public const string ShadowNearDepth = "shadowNearDepth";

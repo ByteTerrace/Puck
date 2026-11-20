@@ -135,6 +135,7 @@ public static partial class SdfWorldPackage {
     // The cascades that carry glass extinction, in the order of their optical storages.
     private static readonly string[] ShadowParts = [Parts.ShadowNear, Parts.ShadowFar, Parts.ShadowSecond];
     private static readonly string[] DistantStorages = [Parts.ShadowDistantDepth, Parts.ShadowDistantExit];
+    private static readonly string[] DistantBackStorages = [Parts.ShadowDistantBackDepth, Parts.ShadowDistantBackExit];
     private static readonly string[] ShadowStorages = [
         Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth,
         Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit,
@@ -154,19 +155,23 @@ public static partial class SdfWorldPackage {
     }
     /// <summary>Returns a fragment whose cascades are <paramref name="texels"/> a side, with the second shadow slot's
     /// cascade only when <paramref name="second"/> and the distant map only when <paramref name="distantTexels"/> is
-    /// positive, at that size: a view allocates the cascades its shadow quality, its world's shadow slots and its
-    /// world's distant map draw, and no more.</summary>
+    /// positive, at that size, with its back map only when <paramref name="distantSliced"/>: a view allocates the cascades
+    /// its shadow quality, its world's shadow slots and its world's distant map draw, and no more. The back map's two
+    /// depths are further outputs of the distant pass, which draws a redraw spread over several frames into them and
+    /// copies them into the map the surface pass reads once its last share is drawn.</summary>
     /// <param name="fragment">The fragment, any of the package's that holds the cascades.</param>
     /// <param name="texels">The texels along each side of every cascade, from 1 through <see cref="MeshShadowResolution"/>.</param>
     /// <param name="second">Whether the fragment keeps the second shadow slot's cascade.</param>
     /// <param name="distantTexels">The texels along each side of the distant map, from 1 through
     /// <see cref="MeshDistantShadowMaxResolution"/>, or zero for a fragment without it.</param>
+    /// <param name="distantSliced">Whether the distant map keeps a back map for redraws spread over several frames;
+    /// ignored without the distant map.</param>
     /// <returns>The fragment with the cascades sized and chosen.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="fragment"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="texels"/> lies outside 1 through
     /// <see cref="MeshShadowResolution"/>, or <paramref name="distantTexels"/> is negative or past
     /// <see cref="MeshDistantShadowMaxResolution"/>.</exception>
-    public static RenderGraphPackageFragment WithShadows(RenderGraphPackageFragment fragment, int texels, bool second, int distantTexels) {
+    public static RenderGraphPackageFragment WithShadows(RenderGraphPackageFragment fragment, int texels, bool second, int distantTexels, bool distantSliced = false) {
         ArgumentNullException.ThrowIfNull(argument: fragment);
         ArgumentOutOfRangeException.ThrowIfLessThan(value: texels, other: 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: texels, other: MeshShadowResolution);
@@ -176,9 +181,18 @@ public static partial class SdfWorldPackage {
         var shaped = (second ? fragment : Without(fragment: fragment, parts: [Parts.ShadowSecond], storages: [Parts.ShadowSecondDepth, Parts.ShadowSecondExit, Parts.ShadowSecondOptical]));
 
         shaped = ((distantTexels > 0) ? shaped : Without(fragment: shaped, parts: [Parts.ShadowDistant], storages: DistantStorages));
+        if ((distantTexels > 0) && distantSliced) {
+            shaped = shaped with {
+                Passes = [.. shaped.Passes.Select(selector: static pass => ((pass.Name != Parts.ShadowDistant) ? pass : (pass with {
+                    OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
+                    Outputs = [.. pass.Outputs, .. DistantBackStorages.Select(selector: static name => new ResourceReference(Name: name))],
+                })))],
+                Resources = [.. shaped.Resources, .. DistantBackStorages.Select(selector: name => ShadowDepth(name: name, texels: distantTexels))],
+            };
+        }
 
         return (shaped with {
-            Resources = [.. shaped.Resources.Select(selector: resource => (DistantStorages.Contains(value: resource.Name)
+            Resources = [.. shaped.Resources.Select(selector: resource => ((DistantStorages.Contains(value: resource.Name) || DistantBackStorages.Contains(value: resource.Name))
                 ? ShadowDepth(name: resource.Name, texels: distantTexels)
                 : ((ShadowStorages.Contains(value: resource.Name) && (texels != MeshShadowResolution))
                     ? (ShadowOpticalStorages.Contains(resource.Name) ? ShadowOptical(resource.Name, texels) : ShadowDepth(name: resource.Name, texels: texels))
