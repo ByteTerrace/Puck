@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Maths;
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
@@ -1857,7 +1858,7 @@ public static class WorldAddonMutationDecoder {
     }.SelectMany(selector: static names => names).Distinct(comparer: StringComparer.Ordinal).ToArray();
 
     private static JsonMembers UniqueMembers(JsonElement element, string context) {
-        Span<ulong> seen = stackalloc ulong[((MemberNames.Length + 63) / 64)];
+        Span<ulong> seen = stackalloc ulong[MemberNames.Length.CeilingDivide(divisor: 64)];
 
         seen.Clear();
 

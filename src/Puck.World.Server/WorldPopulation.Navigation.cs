@@ -204,7 +204,7 @@ public sealed partial class WorldPopulation {
             var lift = (FixedQ4816.Max(x: m_navigation[from.Domain].Tuning.MaxStepHeight, y: m_navigation[to.Domain].Tuning.MaxStepHeight) + skin);
             var height = (FixedQ4816.Max(x: start.Y, y: end.Y) + lift);
             var planar = new FixedVector3(X: (end.X - start.X), Y: FixedQ4816.Zero, Z: (end.Z - start.Z));
-            var steps = ((index == 0) ? 0 : Math.Max(val1: 1, val2: (int)((planar.Length.Value + spacing.Value - 1L) / spacing.Value)));
+            var steps = ((index == 0) ? 0 : Math.Max(val1: 1, val2: (int)planar.Length.Value.CeilingDivide(divisor: spacing.Value)));
 
             LiftRouteVolumes(source: collider.Volumes, destination: volumes, lift: lift);
             var previous = start with { Y = height };

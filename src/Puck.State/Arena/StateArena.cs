@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Puck.State;
@@ -152,7 +153,7 @@ public sealed partial class StateArena {
         m_historyCursors = new long[layout.RowCount];
         m_journal = new ArenaJournal();
         m_laneNumbers = new long[layout.LaneSlotCount];
-        m_laneRoster = new ulong[((layout.LaneRosterCount + 63) / 64)];
+        m_laneRoster = new ulong[layout.LaneRosterCount.CeilingDivide(divisor: 64)];
         m_layout = layout;
         m_nextSlots = new(column: ArenaColumn.NextSlot, layout: layout);
         m_previousSlots = new(column: ArenaColumn.PreviousSlot, layout: layout);
@@ -163,7 +164,7 @@ public sealed partial class StateArena {
         m_memberCounts = new long[layout.RowCount];
         m_memberKeys = new int[layout.CellSlotCount];
         m_numbers = new long[layout.CellSlotCount];
-        m_presence = new ulong[((layout.CellSlotCount + 63) / 64)];
+        m_presence = new ulong[layout.CellSlotCount.CeilingDivide(divisor: 64)];
         m_clockSet = new ArenaColumnBuffer<bool>(column: ArenaColumn.ClockSet, layout: layout);
         m_reindexRow = new int[layout.RowCount];
         m_reindexStamp = new long[layout.RowCount];
@@ -187,7 +188,7 @@ public sealed partial class StateArena {
             m_poolOccupancy = new ulong[catalog.Pools.Count][];
             foreach (var pool in catalog.Pools) {
                 m_poolOfDomainRow[pool.DomainRowOrdinal] = pool.Ordinal;
-                m_poolOccupancy[pool.Ordinal] = new ulong[((pool.Capacity + 63) / 64)];
+                m_poolOccupancy[pool.Ordinal] = new ulong[pool.Capacity.CeilingDivide(divisor: 64)];
             }
             m_poolAddresses = BuildPoolAddresses(catalog: catalog, layout: layout, occupancy: m_poolOccupancy);
         }

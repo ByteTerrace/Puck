@@ -1864,7 +1864,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var fineY = ((cellsY * factor) + 1);
         var listed = cells.AsSpan().ToArray();
 
-        _ = Parallel.For(fromInclusive: 0, toExclusive: ((listed.Length + (PrimeCells - 1)) / PrimeCells), body: partition => {
+        _ = Parallel.For(fromInclusive: 0, toExclusive: listed.Length.CeilingDivide(divisor: PrimeCells), body: partition => {
             var end = Math.Min(val1: listed.Length, val2: ((partition + 1) * PrimeCells));
 
             for (var at = (partition * PrimeCells); (at < end); at++) {

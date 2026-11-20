@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using Puck.Abstractions.Counting;
@@ -795,7 +796,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             Corner(e1: out e1, e2: out e2, indices: Indices.Span, positions: Positions.Span, triangle: Triangles[index], v0: out v0);
         public static Geometry Build(SdfMesh mesh) {
             var count = mesh.TriangleCount;
-            var chunks = (((count + ParallelPrimitives) - 1) / ParallelPrimitives);
+            var chunks = count.CeilingDivide(divisor: ParallelPrimitives);
             var pieces = new Pieces[chunks];
 
             // Each chunk's pieces in triangle order, joined in chunk order, so a geometry builds alike on every run.
@@ -849,7 +850,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 body(arg1: 0, arg2: count);
                 return;
             }
-            _ = Parallel.For(fromInclusive: 0, toExclusive: (((count + ParallelPrimitives) - 1) / ParallelPrimitives), body: chunk => body(arg1: (chunk * ParallelPrimitives), arg2: Math.Min(val1: count, val2: ((chunk + 1) * ParallelPrimitives))));
+            _ = Parallel.For(fromInclusive: 0, toExclusive: count.CeilingDivide(divisor: ParallelPrimitives), body: chunk => body(arg1: (chunk * ParallelPrimitives), arg2: Math.Min(val1: count, val2: ((chunk + 1) * ParallelPrimitives))));
         }
 
         // The boxes a run of triangles enters the hierarchy as, each with the triangle it bounds a piece of: a triangle
@@ -1078,7 +1079,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         // Builds a node over a range of the order; wide says its parent, if any, is wider than the braid width.
         private int BuildNode(int node, int first, int count, bool wide, int depth) {
             var levelsLeft = StackDepth - 2 - depth;
-            var leaves = ((long)count + m_leaf - 1) / m_leaf;
+            var leaves = ((long)count).CeilingDivide(divisor: m_leaf);
             var balanced = leaves <= 1 ? 0 : BitOperations.Log2((ulong)(leaves - 1)) + 1;
             if (levelsLeft < balanced) {
                 throw new InvalidOperationException($"{m_name}: {count} primitives cannot fit within the mesh GI hierarchy depth bound {StackDepth - 2}.");

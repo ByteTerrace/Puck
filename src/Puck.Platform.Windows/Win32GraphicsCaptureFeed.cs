@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -1351,7 +1352,7 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
     // ceil((x + 1) * sourceWidth / targetWidth). A row then walks each bucket's run with no division per pixel.
     private static void ColumnEnds(Span<int> ends, int sourceWidth, int targetWidth) {
         for (var x = 0; (x < ends.Length); x++) {
-            ends[x] = ((int)(((((long)(x + 1)) * sourceWidth) + (targetWidth - 1)) / targetWidth));
+            ends[x] = ((int)(((long)(x + 1)) * sourceWidth).CeilingDivide(divisor: targetWidth));
         }
     }
     private static void ScaleMapped(byte* source, uint sourceRowPitch, int sourceWidth, int sourceHeight, byte[] destination, int targetWidth, int targetHeight, ulong[] accumulators, int[] columns) {

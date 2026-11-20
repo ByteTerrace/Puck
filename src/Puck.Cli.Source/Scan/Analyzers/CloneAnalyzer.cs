@@ -1,4 +1,5 @@
 using Puck.Abstractions;
+using Puck.Maths;
 using System.Text;
 
 using Microsoft.CodeAnalysis;
@@ -87,7 +88,7 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
         var firstChunk = true;
 
         foreach (var cluster in clusters) {
-            var chunkCount = (((cluster.Members.Count + maxPerChunk) - 1) / maxPerChunk);
+            var chunkCount = cluster.Members.Count.CeilingDivide(divisor: maxPerChunk);
 
             for (var offset = 0; (offset < cluster.Members.Count); offset += maxPerChunk) {
                 if (!firstChunk) {

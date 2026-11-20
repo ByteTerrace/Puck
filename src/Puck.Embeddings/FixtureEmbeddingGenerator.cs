@@ -93,7 +93,7 @@ public sealed class FixtureEmbeddingGenerator : IEmbeddingGenerator<string, Embe
         var textBytes = Encoding.UTF8.GetBytes(s: text);
 
         var prefixLength = (((((((modelBytes.Length + 1) + revisionBytes.Length) + 1) + dimsBytes.Length) + 1) + textBytes.Length) + 1);
-        var blockCount = ((dims + 31) / 32);
+        var blockCount = dims.CeilingDivide(divisor: 32);
 
         for (var b = 0; (b < blockCount); b++) {
             var blockStrBytes = Encoding.UTF8.GetBytes(s: b.ToString(provider: CultureInfo.InvariantCulture));

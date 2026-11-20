@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -77,7 +78,7 @@ internal static class ScanJsonl {
             keySelector: static pair => pair.Key,
             comparer: StringComparer.Ordinal
         )) {
-            var chunkCount = (((sites.Count + maxPerChunk) - 1) / maxPerChunk);
+            var chunkCount = sites.Count.CeilingDivide(divisor: maxPerChunk);
 
             for (var offset = 0; (offset < sites.Count); offset += maxPerChunk) {
                 if (!firstChunk) {

@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.Overlays;
 
@@ -50,7 +51,7 @@ public sealed class ConsolePanelWriter {
     private static int SegmentCount(int length, int cols) =>
         Math.Max(
             val1: 1,
-            val2: ((length + (cols - 1)) / cols)
+            val2: length.CeilingDivide(divisor: cols)
         );
 
     /// <summary>Emits this frame's console panel, when one is visible.</summary>

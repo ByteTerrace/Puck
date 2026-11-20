@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Runtime.InteropServices;
 
 namespace Puck.Hosting;
@@ -121,7 +122,7 @@ public readonly record struct PresentationRate(int DisplayHertz, double GridHert
 
         return ((DisplayHertz <= 0)
             ? 1
-            : Math.Max(val1: 1, val2: ((int)((((long)DisplayHertz) + (hertz - 1)) / hertz))));
+            : Math.Max(val1: 1, val2: ((int)((long)DisplayHertz).CeilingDivide(divisor: hertz))));
     }
 }
 /// <summary>

@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.SignedDistance;
 
 /// <summary>The buffer capacity a program needs, measured from a builder's emission without packing it
@@ -45,7 +47,7 @@ public sealed partial class SdfProgramBuilder {
         var pathEdges = 0;
 
         foreach (var (_, vertices) in m_convexPolygonProfiles) {
-            convexPolygonVectors += ((vertices.Length + 1) / 2);
+            convexPolygonVectors += vertices.Length.CeilingDivide(divisor: 2);
         }
 
         foreach (var path in m_paths) {

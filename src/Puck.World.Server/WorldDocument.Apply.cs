@@ -1074,7 +1074,7 @@ public sealed partial class WorldDocument {
             m_snapshotState = new long[stateWidth];
         }
 
-        var partitions = (((capacity + SnapshotPartitionRows) - 1) / SnapshotPartitionRows);
+        var partitions = capacity.CeilingDivide(divisor: SnapshotPartitionRows);
         int count;
 
         if (

@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Globalization;
 
 namespace Puck.SignedDistance;
@@ -171,7 +172,7 @@ public sealed partial class SdfShadeProgram {
                 var start = checked((((((int)constantsOffset) + relative) + 1) * 4));
 
                 words[start] = BitConverter.SingleToUInt32Bits(value: data0.X);
-                RequireRange(((uint)(words.Count / 4)), checked(((constantsOffset + ((uint)relative)) + 7)), ((uint)((shape.Table.Count + 3) / 4)));
+                RequireRange(((uint)(words.Count / 4)), checked(((constantsOffset + ((uint)relative)) + 7)), ((uint)shape.Table.Count.CeilingDivide(divisor: 4)));
             }
             foreach (var (_, word) in m_relocations) { words[word] = checked((words[word] + constantsOffset)); }
             words[14] = ((uint)(words.Count / 4)); words[15] = ((uint)m_parameters.Count);
