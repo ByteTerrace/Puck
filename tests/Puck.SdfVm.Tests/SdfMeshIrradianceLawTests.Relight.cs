@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Reflection;
 using Puck.Abstractions.Cameras;
 using Puck.SignedDistance;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -53,15 +54,19 @@ public sealed partial class SdfMeshIrradianceLawTests {
         const int PerSecond = 25;
         var frame = Frame() with { TickLocked = tickLocked, IndirectBounces = 0, IndirectBudget = new SdfIndirectBudget(RelightPerSecond: 0, TracePerSecond: PerSecond, Age: 0f) };
         var volume = Volume();
-        var clock = System.Diagnostics.Stopwatch.StartNew();
+        const int Frames = 20;
+        var staged = 0;
 
-        for (var stage = 0; (stage < 20); stage++) {
+        // The scene builds and the worker traces on the thread pool and a frame installs and grants what they await, so
+        // the law stages a frame at a time until the worker has spent its first grant, and at least Frames of them.
+        TestLiveness.Until(reason: volume.Describe, step: () => {
+            Step(volume: volume);
             _ = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.Medium, write: _ => { });
-            Thread.Sleep(millisecondsTimeout: 20);
-        }
-        // The grants fund the rate for the wall time the frames spanned, and a sixtieth of a second for the first: no
-        // more traces than that, whatever the frames' count.
-        Assert.InRange(actual: volume.Counters.Read(kind: SdfMeshIrradiance.Traced), low: 1L, high: (long)Math.Ceiling(a: (PerSecond * (clock.Elapsed.TotalSeconds + SdfMeshIrradiance.FirstGrantSeconds))));
+            return ((++staged >= Frames) && (volume.Counters.Read(kind: SdfMeshIrradiance.Traced) >= 1L));
+        });
+        // The grants fund the rate for the time the frames spanned, and a sixtieth of a second for the first: no more
+        // traces than that, whatever the frames' count.
+        Assert.InRange(actual: volume.Counters.Read(kind: SdfMeshIrradiance.Traced), low: 1L, high: (long)Math.Ceiling(a: (PerSecond * (((staged - 1) * VirtualClock.Frame.TotalSeconds) + SdfMeshIrradiance.FirstGrantSeconds))));
 
         var words = Array.Empty<uint>();
         var locked = Task.Run(() => volume.Stage(bakePending: false, frame: (frame with { ConvergesLighting = true }), tier: SdfIndirectTier.Medium, write: memory => words = memory.ToArray()), TestContext.Current.CancellationToken);
@@ -208,7 +213,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         // Exercise production capture invalidation independently of volume tracing.
         const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
         var layoutType = typeof(SdfMeshIrradiance).GetNestedType("Layout", BindingFlags.NonPublic)!;
-        var layout = layoutType.GetMethod("Of", BindingFlags.Static | BindingFlags.Public)!.Invoke(null, [SdfIndirectTier.Medium, 0, frame.FarDistance]);
+        var layout = layoutType.GetMethod("Of", BindingFlags.Static | BindingFlags.Public)!.Invoke(null, [SdfIndirectTier.Medium, 0, frame.FarDistance, frame.IndirectLevels]);
         var refresh = typeof(SdfMeshIrradiance).GetMethod("RefreshLighting", Private)!;
         var version = typeof(SdfMeshIrradiance).GetField("m_lightingVersion", Private)!;
         refresh.Invoke(volume, [frame, layout]);

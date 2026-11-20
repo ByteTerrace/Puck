@@ -26,7 +26,8 @@ public sealed class SdfWorldPipelinesLawTests {
             kernels: SdfTestPipelines.Kernels(mask: 1)
         );
 
-        var count = SdfWorldPipelines.BuildOrder(pipelines.Kernels).Count;
+        // The set builds the kernels the device runs: the fake device has no ray queries, so their variants build nothing.
+        var count = SdfWorldPipelines.BuildOrder(pipelines.Kernels).Count(kernel => SdfWorldPipelines.Runs(device: device, kernel: kernel));
         Assert.Equal(expected: ((long)count, count), actual: (Created(cache: cache), device.Persisted));
 
         using var reflector = SdfTestPipelines.Reflector();
@@ -146,7 +147,8 @@ public sealed class SdfWorldPipelinesLawTests {
             kernels: SdfTestPipelines.Kernels(mask: 1)
         );
         var started = new List<string>();
-        var count = SdfWorldPipelines.BuildOrder(pipelines.Kernels).Count;
+        // The set builds the kernels the device runs: the fake device has no ray queries, so their variants build nothing.
+        var count = SdfWorldPipelines.BuildOrder(pipelines.Kernels).Count(kernel => SdfWorldPipelines.Runs(device: gpu, kernel: kernel));
 
         // The first creations enter together; after that each creation let through lets exactly one more start.
         for (var creation = 0; (creation < GpuPassPipelineCache.BuildConcurrency); creation++) {

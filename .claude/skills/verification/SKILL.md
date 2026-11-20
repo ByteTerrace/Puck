@@ -459,6 +459,13 @@ regular expression misses some. When a scan law misses a real site, replace it
 with the type and delete the scan; a law that cannot fail at a real site pins
 nothing.
 
+A law over the device-free SDF residency, tables or irradiance volume never waits
+for wall time to land background work: the rig builds its fake device on a
+`VirtualClock` (`FakeGpuDevice(clock:)`, `UploadModelGpu(clock:)`, `SdfMeshIrradiance.Time`)
+and advances it `VirtualClock.Frame` for each frame it drives, so frame counts decide
+what the budget, the upload rate and the lighting grants release. A wait for work on
+the thread pool (a build, a trace's worker) is `TestLiveness`, in real time.
+
 In xUnit v3, `Assert.Throws`, `Xunit.Record.Exception` and their async forms rethrow
 the skip exception, so a test that wraps a call which can skip reports
 **Skipped** instead of failing; catch it with `try`/`catch` and assert on it.
