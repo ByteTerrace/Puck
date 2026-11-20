@@ -58,7 +58,7 @@ public sealed partial class WorldSiloHost {
         /// <returns>The operation's result.</returns>
         public Task<T> After<T>(Func<RowPublished, Task<T>> operation) =>
             Append(start: previous => Task.Run(function: async () => {
-                await SettledAsync(operation: previous).ConfigureAwait(continueOnCapturedContext: false);
+                await previous.ConfigureAwait(options: ConfigureAwaitOptions.SuppressThrowing);
                 return await operation(arg: new RowPublished(Blocked: m_blocked, Fence: fence, JournalSequence: Volatile.Read(location: ref m_journalSequence))).ConfigureAwait(continueOnCapturedContext: false);
             }));
 
@@ -71,7 +71,7 @@ public sealed partial class WorldSiloHost {
             }
         }
         private async Task<WorldAuthorityStoreOutcome> PublishAsync(Task previous, Func<WorldAuthorityFence, Task<WorldAuthorityStoreOutcome>> write, bool live, CancellationToken cancellationToken) {
-            await SettledAsync(operation: previous).ConfigureAwait(continueOnCapturedContext: false);
+            await previous.ConfigureAwait(options: ConfigureAwaitOptions.SuppressThrowing);
             if (m_blocked) { return WorldAuthorityStoreOutcome.Failed(detail: BlockedDetail); }
 
             WorldAuthorityStoreOutcome outcome;
@@ -99,9 +99,6 @@ public sealed partial class WorldSiloHost {
                 m_blocked = true;
             }
             return outcome;
-        }
-        private static async Task SettledAsync(Task operation) {
-            try { await operation.ConfigureAwait(continueOnCapturedContext: false); } catch (Exception) { }
         }
     }
 
