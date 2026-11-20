@@ -510,6 +510,7 @@ add the row you found.
 | Compute or check a lane the builder derives from others (a scale's correction, a repeat's reciprocal, a noise relief's normalization), or ask how the program door classes a lane | `SdfDerivedLanes` (the one function per derived lane, called by the builder and the door), `SdfNoiseDisplacement` (the decoded noise relief), `SdfProgram.LaneContractOf` | `src/Puck.SignedDistance`; [Lipschitz reference](../../../docs/rendering/sdf/reference/lipschitz-and-field-correctness.md#procedural-detail) |
 | Weight a relief by regions (no relief over a bowl, a pad, a path) | `SdfReliefMask` (a band, `SdfReliefBand`, over listed region shapes, `SdfReliefRegion`), carried as `SdfOp.ReliefRow` rows before the relief and decoded once by the program's door (`SdfProgram.ReliefMasksAt`); a document's masks compile through `CreationStampEmitter.ReliefMasks` | `src/Puck.SignedDistance`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters) |
 | Evaluate the field on the CPU, deterministically (contact, picking, bounds, cull certificates) | `SdfFieldEvaluator`; its GPU partner is `mapCore` | `src/Puck.SignedDistance/Queries`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters) |
+| Write or change a primitive's or blend's distance arithmetic once for both readers (fixed-point C# and precise HLSL) | `SdfFieldFormulas` in the closed expression language of `SdfFormula`, named by the catalogue entry's `Formula` facet | `src/Puck.SignedDistance/Formulas`; [changing the instruction set](#changing-the-instruction-set) |
 | Bake a mesh from the field, or find the one already baked | `SdfMeshPathBake` (the path), `SdfSampledLattice` and `SdfDualContouring` (the sampling and contouring), `SdfMeshStore` (the shared on-disk cache of baked meshes, one set per bake identity) | `src/Puck.SdfVm`, `src/Puck.SignedDistance/Baking`; [mesh bake](references/mesh-bake.md) |
 | Judge which way a contour's triangle faces, or hold a vertex move to it | `SdfContourFacing` (the lattice edge a quad crosses, then its corners' patches), read through `SdfContour.QuadAxes` and `Patches`; never vertex normals or a triangle's earlier facing | `src/Puck.SignedDistance/Baking`; [mesh bake](references/mesh-bake.md#contouring) |
 | Make coarser levels of a baked mesh, or choose a draw's level | `SdfMeshCollapse` (half-edge collapse, every level a subset of the mesh's own vertices), `SdfMeshDetail` (the level a draw takes) | `src/Puck.SdfVm` |
@@ -1103,6 +1104,14 @@ Each abstract facet asks for an explicit choice, including an identity action
 or a refusal. The Roslyn generator emits the packed enums and static selectors.
 The CPU walks consume those selectors. Admission checks the lanes, and bake
 keys take the external dependencies through `SdfFieldOps.ResourcesOf`.
+
+A primitive's or blend's arithmetic is a formula in `SdfFieldFormulas`, which
+the entry's `Formula` facet names: the generator lowers it to the evaluator's
+fixed-point method and `puck shaders generate` to the kernels' precise function,
+so neither reader is written by hand. A shape whose readers need a side table, a
+texture or a loop is a target escape (a null `Formula`, hand-written `Shader`
+and `ShapePoint`) and takes a case in `SdfFieldDeviceLawTests`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters)
+lists the escapes and where generation's guarantee stops.
 
 `ShaderDeclarations` regenerates the field switch includes and operand readers
 under `Assets/Shaders/Sdf/isa/`, and `SdfIsaHlsl` stamps both the field and whole

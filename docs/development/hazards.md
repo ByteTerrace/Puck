@@ -233,14 +233,13 @@ or one adds a field the other forgets.
   `HeapAllocator`, now one `tests/Shared/HeapAllocator.cs`.
 - The box cull is written in C# and HLSL (`SdfMeshCull.Keeps`,
   `sdf-mesh-selection.hlsli`).
-- The Superellipsoid and the Capsule are written in C#
-  (`SdfFieldEvaluator.SdfSuperellipsoid`, `SdfCapsule`) and HLSL
-  (`sdfSuperellipsoid`, `sdfCapsule`). Both readers evaluate one formula from
-  the same lanes: a capsule projects by its endpoint's own squared length, and a
-  superellipsoid's radii and exponent lie on the grid both carriers hold
-  (`SdfDerivedLanes.FixedGrid`), so both scale its gauge by one smallest radius.
-  `SdfFieldDeviceLawTests`' shape-formula leg evaluates both on the same inputs
-  on both backends.
+- Every primitive and blend the fixed-point evaluator and the kernels both
+  read was written once in C# and once in HLSL, and the Superellipsoid and the
+  Capsule drifted apart. Each is now one formula (`SdfFieldFormulas.Superellipsoid`,
+  `SdfFieldFormulas.Capsule` and the rest) that the generators lower to both
+  readers; the shapes that need a side table, a texture or a loop stay
+  hand-written target escapes, and `SdfFieldDeviceLawTests`' shape-formula leg
+  evaluates every formula on the same inputs on both backends.
 - The irradiance probe gather is written in C# (`SdfMeshIrradiance.Select` and
   `Gather`, `SdfMeshProbeDepth.Visibility`) and HLSL (`sdfMeshProbesAt`,
   `shade/sdf-mesh-irradiance.hlsli`). `SdfMeshIrradianceGatherDeviceLawTests`

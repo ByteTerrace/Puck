@@ -20,14 +20,17 @@ the parent through the pop's blend and the same winner rule.
 ## Primitive contract
 
 Every shape has a packed lane layout shared by `SdfInstruction`,
-`SdfProgramBuilder`, and `field/sdf-shapes.hlsli`. A new primitive requires:
+`SdfProgramBuilder`, and its entry in `SdfFieldShapes`. A new primitive requires:
 
 - a stable shape identifier and documented lane layout;
 - host validation and conservative bound analysis;
-- distance and gradient implementations;
+- a distance formula in `SdfFieldFormulas`, which generates both the kernel's
+  function and the fixed-point evaluator's, or, for a shape that reads a side
+  table or texture, hand-written readers in `field/sdf-shapes.hlsli` and
+  `SdfFieldEvaluator` (or the evaluator's refusal by name);
 - Lipschitz analysis when the field is not factor 1;
-- agreement with the CPU twin in `SdfFieldEvaluator`, or its refusal by name; and
-- cross-backend verification.
+- a hand-written interval enclosure for the evaluator's bounds walk; and
+- cross-backend verification, a case in `SdfFieldDeviceLawTests`.
 
 Lifted two-dimensional profiles use `SdfLift.Revolve` or `SdfLift.Extrude`.
 Regular polygons, stars, trapezoids, rounded rectangles, ellipses, glyphs, and
