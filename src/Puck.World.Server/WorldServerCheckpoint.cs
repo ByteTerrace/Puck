@@ -65,7 +65,9 @@ public sealed record WorldServerCheckpoint(
     IReadOnlyList<WorldScopedReplayCheckpoint>? ScopedReplays = null,
     WorldDrawPositions? DrawPositions = null,
     WorldDrawPositions? BaseDrawPositions = null,
-    string? AuthorityIdentity = null
+    string? AuthorityIdentity = null,
+    byte[]? SourceRevisionPatch = null,
+    string? SourceContentHash = null
 ) {
     /// <summary>Serializes a document into the form <see cref="DefinitionJson"/> and <see cref="BaseDefinitionJson"/>
     /// hold: the compact canonical bytes, the form a compiled world stores and a definition travels in. Every writer

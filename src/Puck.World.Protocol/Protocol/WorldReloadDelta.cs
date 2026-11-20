@@ -122,6 +122,27 @@ public sealed record WorldReloadDelta(string BaseHash, string TargetHash, byte[]
     /// <exception cref="InvalidDataException">The patch is not a JSON object.</exception>
     public IReadOnlyList<string> Members() => [.. PatchTree().Select(selector: static member => member.Key)];
 
+    /// <summary>Records what the source edit actually changed after merging over the live document.</summary>
+    public byte[] AcceptedPatch(WorldDefinition live, WorldDefinition candidate) {
+        var patch = PatchTree();
+        foreach (var name in patch.Select(static pair => pair.Key).ToArray()) {
+            var before = WorldDefinitionMembers.Value(live, name);
+            var after = WorldDefinitionMembers.Value(candidate, name);
+            if (ReferenceEquals(before, after)) {
+                patch.Remove(name);
+                continue;
+            }
+            var basis = WorldDefinitionMembers.Write(name, before);
+            var target = WorldDefinitionMembers.Write(name, after);
+            if (OrderedJson.Equals(basis, target)) {
+                patch.Remove(name);
+            } else {
+                patch[name] = MemberDelta(name, basis, target);
+            }
+        }
+        return CanonicalJsonDocument.SerializeCompact(patch);
+    }
+
     /// <summary>Reproduces the next revision over the revision the delta was cut from: each named member merged from
     /// its delta, every other member <paramref name="previous"/>'s own instance, and within a merged member every row
     /// the delta leaves alone <paramref name="previous"/>'s own (<see cref="WorldDefinitionMembers.Replace"/>).</summary>
@@ -147,28 +168,37 @@ public sealed record WorldReloadDelta(string BaseHash, string TargetHash, byte[]
             reason = $"{StaleBaseCode}: the delta was cut from source revision {BaseHash}, and the authority holds {before.Pin}";
             return false;
         }
-        try {
-            var replacements = new List<(string Name, ReadOnlyMemory<byte>? Value)>();
-
-            foreach (var (name, delta) in PatchTree()) {
-                if (delta is null) { replacements.Add(item: (name, null)); continue; }
-
-                var basis = new JsonObject { [name] = (before.TryGet(name: name, member: out var member) ? member.Tree() : null) };
-
-                if (!WorldDocumentBasis.TryMerge(basis: basis, composed: out var merged, overlay: new JsonObject { [name] = delta.DeepClone() }, reason: out reason)) {
-                    reason = $"{InvalidCode}: the member '{name}' does not merge: {reason}";
-                    return false;
-                }
-                replacements.Add(item: (name, ((merged![name] is { } value) ? CanonicalJsonDocument.SerializeCompact(value) : null)));
-            }
-
-            var reconstructed = WorldDefinitionMembers.Replace(basis: previous, documentDirectory: DocumentDirectory, replacements: replacements);
-
+        if (TryApplyPatch(previous, Patch, DocumentDirectory, out var reconstructed, out reason)) {
             if (!string.Equals(TargetHash, WorldDefinitionMembers.Of(definition: reconstructed).Pin, StringComparison.Ordinal)) {
                 reason = $"{TargetMismatchCode}: the reconstructed revision does not match {TargetHash}";
                 return false;
             }
             next = reconstructed;
+            reason = string.Empty;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Applies the already admitted form of a reload to a reconstructed journal prefix.</summary>
+    public static bool TryApplyPatch(WorldDefinition previous, ReadOnlySpan<byte> patch, string? directory,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldDefinition? candidate, out string reason) {
+        candidate = null;
+        try {
+            var replacements = new List<(string Name, ReadOnlyMemory<byte>? Value)>();
+            var trees = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
+            foreach (var (name, delta) in PatchTree(patch)) {
+                if (delta is null) { replacements.Add((name, null)); continue; }
+                var tree = WorldDefinitionMembers.Write(name, WorldDefinitionMembers.Value(previous, name));
+                trees.Add(name, tree);
+                var basis = new JsonObject { [name] = tree };
+                if (!WorldDocumentBasis.TryMerge(basis, new JsonObject { [name] = delta.DeepClone() }, out var merged, out reason)) {
+                    reason = $"{InvalidCode}: the member '{name}' does not merge: {reason}";
+                    return false;
+                }
+                replacements.Add((name, merged![name] is { } value ? CanonicalJsonDocument.SerializeCompact(value) : null));
+            }
+            candidate = WorldDefinitionMembers.Replace(previous, replacements, directory, trees);
             reason = string.Empty;
             return true;
         } catch (Exception exception) when (exception is ArgumentException or InvalidDataException or JsonException or NotSupportedException) {
@@ -240,5 +270,12 @@ public sealed record WorldReloadDelta(string BaseHash, string TargetHash, byte[]
         }
     }
 
-    private JsonObject PatchTree() => ((JsonNode.Parse(utf8Json: Patch) as JsonObject) ?? throw new InvalidDataException(message: $"{InvalidCode}: the patch is not a JSON object"));
+    private JsonObject PatchTree() => PatchTree(Patch);
+    private static JsonObject PatchTree(ReadOnlySpan<byte> patch) {
+        try {
+            return CanonicalJsonDocument.ParseObject(patch);
+        } catch (JsonException error) {
+            throw new InvalidDataException($"{InvalidCode}: {error.Message}", error);
+        }
+    }
 }

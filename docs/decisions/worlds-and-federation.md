@@ -343,6 +343,13 @@ Traveler relays forward the acknowledgement to the authority that encoded the
 image. Streams sharing a projected table and baseline share the encoded body
 bytes. Each stream still owns its stamps, cells, input answers and cues.
 
+A definition edit travels on the same stream as the rows it changed
+(`WorldPresentationRows`), through the same recipient view and delivery cursor
+as a whole document. Its record takes a stamp but retains no body image, so
+body deltas keep naming acknowledged snapshots across it. The cursor observes
+the body policy before taking the rows, and a policy that moved owes a cut,
+which sends the stream through its document door and a new primer.
+
 ## The tables
 
 **Decided.**

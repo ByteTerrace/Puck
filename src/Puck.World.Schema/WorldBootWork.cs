@@ -140,6 +140,16 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     /// <summary>Gets the kind counting the installs of a live document that changed only what presentation reads,
     /// keeping the arena, every compiled product and the population.</summary>
     public static WorkKind PresentationInstalls { get; } = Registry.Declare(name: "world.boot.presentation-installs", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting host pump calls with an enabled source watch.</summary>
+    public static WorkKind WatchPumps { get; } = Registry.Declare("world.boot.watch-pumps", "count", WorkClass.Pacing);
+    /// <summary>Gets the kind counting source input stamp queries on the host pump.</summary>
+    public static WorkKind WatchStampReads { get; } = Registry.Declare("world.boot.watch-stamp-reads", "count", WorkClass.Pacing);
+    /// <summary>Gets the kind counting source input queries that read file contents or directory listings.</summary>
+    public static WorkKind WatchContentReads { get; } = Registry.Declare("world.boot.watch-content-reads", "count", WorkClass.Pacing);
+    /// <summary>Gets the kind counting creation and shade rows delivered to local or replica clients.</summary>
+    public static WorkKind PresentationRowsDelivered { get; } = Registry.Declare("world.boot.presentation-rows-delivered", "count", WorkClass.Deterministic);
+    /// <summary>Gets the kind counting compact row payload bytes delivered to local or replica clients.</summary>
+    public static WorkKind PresentationBytesDelivered { get; } = Registry.Declare("world.boot.presentation-bytes-delivered", "bytes", WorkClass.Deterministic);
     /// <summary>Gets the kind counting the installs that judged the compiled products against the parts of the
     /// document they were built from: a full install of a mutation or a reload, an undo, and a presentation install
     /// fitting the render envelope.</summary>

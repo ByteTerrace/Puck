@@ -5,6 +5,8 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
     private readonly WorldDisclosureImages m_disclosureImages = new();
+    internal void ContinueValueDisclosure(WorldDefinition before, WorldDefinition after) =>
+        m_disclosureImages.ContinueValues(before, after);
     private readonly ArenaChangedKeys m_snapshotKeys = new();
     private readonly Dictionary<Principal, List<WorldDeliveryCursor>> m_deliveryCursors = [];
     private readonly Dictionary<Principal, WorldRecipientView> m_readViews = [];

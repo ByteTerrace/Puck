@@ -68,13 +68,13 @@ public static class WorldKeyedValues {
     /// <param name="definition">The document.</param>
     /// <returns>Both lists, each in document order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static WorldAuthoredValues AuthoredBy(WorldDefinition definition) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
+    public static WorldAuthoredValues AuthoredBy(WorldDefinition definition) => Read(definition);
 
+    internal static WorldAuthoredValues Read(object graph) {
         var visitor = new Visitor();
 
         Walker.Walk(
-            root: definition,
+            root: graph,
             visitor: visitor
         );
 

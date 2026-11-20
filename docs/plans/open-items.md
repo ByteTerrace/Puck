@@ -102,12 +102,9 @@ correctness rests on an invariant is designed and reviewed before code
    whole frame on its own), the resolve's capture, device and host memory.
    Step 4's shadow check runs now, on the 4070, since the far and distant
    shadow work landed without a windowed run.
-4. [high] [Edit to running](#edit-to-running-hot-reload-and-boot): the
-   [authoring loop](iteration/authoring-loop.md)'s step 4 remainder (the
-   source watch on at boot, the reload kept as a journal entry, only changed
-   rows delivered), then step 5 (validation proportional to the edit). Steps
-   1 and 2 are built and 3 and 4 in part; 5 to 8 have not started. Step 4's
-   row delivery also takes the whole-document delivery off the frame thread.
+4. [high] [Edit to running](#edit-to-running-hot-reload-and-boot): make
+   validation proportional to the edit
+   ([authoring loop step 5](iteration/authoring-loop.md#build-order)).
 5. [high; in lanes] [Bake proportional to change](#bake-proportional-to-change):
    the cold bake runs at about twice the minute figure on the lead machine,
    and its kernel is a small share of the wall time. The three bake lanes take
@@ -2919,10 +2916,10 @@ provider assumption outside its provider's project (AGENTS.md).
 ### Edit to running, hot reload and boot
 
 Owner: the authoring-loop lanes (build, compile and hot reload) · high, rapid
-iteration is the first fundamental (the owner's ruling) · Next: the rest of
-[the authoring loop](iteration/authoring-loop.md#build-order)'s step 4, then
-its step 5 (narrow validation), each read through `world.iteration`; beside
-them, what a shading edit still allocates and a reboot for an edit outside
+iteration is the first fundamental (the owner's ruling) · Next:
+[the authoring loop](iteration/authoring-loop.md#build-order)'s step 5
+(narrow validation), read through `world.iteration`. The packet also covers
+what a shading edit still allocates and a reboot for an edit outside
 `PuckHotReload`.
 
 The loop is an author's and a developer's, so it is built and timed on the
@@ -2952,16 +2949,14 @@ The edit loop:
 - [high] An edit still costs work in proportion to the whole debug world in
   several places. [The authoring loop](iteration/authoring-loop.md#what-was-measured)
   took the profile, and its [build order](iteration/authoring-loop.md#build-order)
-  is the work. Steps 1 and 2 have landed, and steps 3 and 4 in part: a value
+  is the work. Steps 1 and 2 have landed, and step 3 in part. A value
   edit recompiles one source and recomposes only the root members it writes,
   and a reload is a keyed delta between two source revisions, merged over the
   live document and installed by the root members it changes, so a one-colour
   edit is one presentation install with no rule compile. What still scales
   with the document: the session emits no delta between revisions, so the
-  World parses and diffs whole documents; the candidate is validated whole
-  (step 5); the install clears the journal; a presentation install delivers
-  the whole definition to each client; and the source watch stays off until
-  asked. The memo's step texts hold each check.
+  World parses and diffs whole documents. The candidate is validated whole
+  (step 5). The memo's step texts hold each check.
 - [medium] `puck decompile` writes a source the compiler refuses when the
   document holds a shading program: a palette's `shade` prints as its table
   key (`shade: "program/<hash>"`), which is PUCK126, and
