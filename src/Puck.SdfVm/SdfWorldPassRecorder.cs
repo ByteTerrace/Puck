@@ -478,26 +478,21 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // The mesh set groups that run a selection: the cascade's own, and the static layer's when the pass keeps one.
     private int OcclusionGroups => (HasFarStatic ? 2 : 1);
 
-    // Whether a submitted recording of this graph drew the static layer of the target instance a recording binds.
-    private bool StaticWritten(IGpuImage? target) {
-        for (var index = 0; (index < m_staticWritten.Length); index++) {
-            if (ReferenceEquals(objA: m_meshTargets[index], objB: target)) {
-                return m_staticWritten[index];
-            }
-        }
-
-        return false;
-    }
-    // Whether every layer of the target instance a recording binds has been drawn in this graph.
-    private bool LayersWritten(IGpuImage? target) {
+    // The index of the target instance a recording binds among the part's instances, or -1 for none of them.
+    private int TargetIndexOf(IGpuImage? target) {
         for (var index = 0; (index < m_meshTargets.Count); index++) {
             if (ReferenceEquals(objA: m_meshTargets[index], objB: target)) {
-                return (m_targetsWritten[index] && (!IsShadowCascade || m_exitsWritten[index]));
+                return index;
             }
         }
 
-        return false;
+        return -1;
     }
+    // Whether a submitted recording of this graph drew the static layer of the target instance a recording binds.
+    private bool StaticWritten(IGpuImage? target) => ((TargetIndexOf(target: target) is var index and >= 0) && (index < m_staticWritten.Length) && m_staticWritten[index]);
+    // Whether every layer of the target instance a recording binds has been drawn in this graph.
+    private bool LayersWritten(IGpuImage? target) => ((TargetIndexOf(target: target) is var index and >= 0) &&
+        m_targetsWritten[index] && (!IsShadowCascade || m_exitsWritten[index]));
 
     public void Dispose() {
         if (m_disposed) {
@@ -1057,27 +1052,23 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var twoPhase = (occlude && !IsGlass && (!IsShadowCascade || ((m_part == SdfWorldPackage.Parts.ShadowFar) && (m_inputs.Length > 0))));
         var entryLateFramebuffer = ((m_entryLateFramebuffers.Length > 0) ? m_entryLateFramebuffers[0] : lateFramebuffer);
         var shadowGlassFramebuffer = (HasShadowOptical ? m_shadowGlassFramebuffers[0] : null);
-        var targetIndex = -1;
+        var targetIndex = TargetIndexOf(target: target);
 
         m_recordedStatic = null;
-        for (var index = 0; (index < m_meshTargets.Count); index++) {
-            if (ReferenceEquals(
-                objA: m_meshTargets[index],
-                objB: target
-            )) {
-                targetIndex = index;
-                framebuffer = m_framebuffers[index];
-                lateFramebuffer = ((m_lateFramebuffers.Length > 0) ? m_lateFramebuffers[index] : null);
-                entryLateFramebuffer = ((m_entryLateFramebuffers.Length > 0) ? m_entryLateFramebuffers[index] : lateFramebuffer);
-                m_recordedLayers = (index, (drawsDepth ? (PartDrawCount(tables: tables) == 0) : null), ((IsShadowCascade && drawsExit) ? (PartDrawCount(tables: tables) == 0) : null));
-                if (HasShadowOptical) { shadowGlassFramebuffer = m_shadowGlassFramebuffers[index]; }
-                if (share is { } drawing) {
-                    framebuffer = ((drawing.Slice == 0) ? m_backFramebuffers[index] : m_backLoadFramebuffers[index]);
-                    lateFramebuffer = ((drawing.Slice == 0) ? m_backExitFramebuffers[index] : m_backExitLoadFramebuffers[index]);
-                    // A share leaves the map receivers read as it was; the last copies the back map into it, which may
-                    // hold casters of earlier shares a later share's draw count no longer shows, so it is never clear.
-                    m_recordedLayers = (drawing.Completes ? (index, false, false) : null);
-                }
+        if (targetIndex >= 0) {
+            var index = targetIndex;
+
+            framebuffer = m_framebuffers[index];
+            lateFramebuffer = ((m_lateFramebuffers.Length > 0) ? m_lateFramebuffers[index] : null);
+            entryLateFramebuffer = ((m_entryLateFramebuffers.Length > 0) ? m_entryLateFramebuffers[index] : lateFramebuffer);
+            m_recordedLayers = (index, (drawsDepth ? (PartDrawCount(tables: tables) == 0) : null), ((IsShadowCascade && drawsExit) ? (PartDrawCount(tables: tables) == 0) : null));
+            if (HasShadowOptical) { shadowGlassFramebuffer = m_shadowGlassFramebuffers[index]; }
+            if (share is { } drawing) {
+                framebuffer = ((drawing.Slice == 0) ? m_backFramebuffers[index] : m_backLoadFramebuffers[index]);
+                lateFramebuffer = ((drawing.Slice == 0) ? m_backExitFramebuffers[index] : m_backExitLoadFramebuffers[index]);
+                // A share leaves the map receivers read as it was; the last copies the back map into it, which may
+                // hold casters of earlier shares a later share's draw count no longer shows, so it is never clear.
+                m_recordedLayers = (drawing.Completes ? (index, false, false) : null);
             }
         }
 

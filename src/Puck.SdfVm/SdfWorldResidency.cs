@@ -404,16 +404,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         m_disposed = true;
         if (m_deviceContext is { } device) {
-            device.Services.Retirement.Retire(item: new Retired(residency: this));
+            device.Services.Retirement.Retire(item: new Puck.Abstractions.DisposeOnce(action: ReleaseDeviceObjects));
         } else {
             ReleaseDeviceObjects();
         }
     }
 
-    // The residency's device objects, waiting in the device's retirement for the submissions that read them.
-    private sealed class Retired(SdfWorldResidency residency) : IDisposable {
-        public void Dispose() => residency.ReleaseDeviceObjects();
-    }
     // Runs once, after the last hold: at once without a device, otherwise from the device's retirement once no
     // submission reads the objects, or at its drain after a loss or at teardown.
     private void ReleaseDeviceObjects() {
