@@ -194,10 +194,19 @@ public static partial class WorldDocumentEmitter {
     // indistinguishable from a written one. Flattening RECURSES, so a template may contain a loop, a loop may
     // invoke a template, and a template may invoke another — the dispatcher never learns that any of it happened.
     private static IEnumerable<(StatementNode Statement, DocumentScope Scope)> Expand(IReadOnlyList<StatementNode> statements, DocumentScope scope) {
+        var active = scope;
+
         foreach (var stmt in statements) {
+            if (stmt is LetNode binding) {
+                active = DocumentLowering.BindLocalLet(binding: binding, scope: active);
+                continue;
+            }
+            if (stmt is TemplateNode) {
+                continue;
+            }
             foreach (var produced in ExpandOne(
                 depth: 0,
-                scope: scope,
+                scope: active,
                 statement: stmt
             )) {
                 yield return produced;
@@ -223,6 +232,8 @@ public static partial class WorldDocumentEmitter {
         switch (statement) {
             // The parser reported the statement it could not read where it read it; no section reports it again.
             case ErrorStatementNode:
+            case LetNode:
+            case TemplateNode:
                 yield break;
 
             case ForStatementNode loop:

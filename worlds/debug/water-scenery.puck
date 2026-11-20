@@ -272,7 +272,6 @@ waterViews(views: [
     maximumDepth: 1
     heightScale: 1.8
     cell: 0.5
-    material: waterMaterial
   }
   {
     name: "plunge"
@@ -284,7 +283,6 @@ waterViews(views: [
     maximumDepth: 2.35
     heightScale: 1
     cell: 1
-    material: waterMaterial
   }
   {
     name: "reservoir"
@@ -296,6 +294,5 @@ waterViews(views: [
     maximumDepth: 1
     heightScale: 1.8
     cell: 1
-    material: waterMaterial
   }
 ])

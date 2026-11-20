@@ -144,12 +144,12 @@ public static partial class WorldConstructs {
         new(
             DocumentMember: "state.world[]",
             Enclosing: "world",
-            Grammar: "table name[family] [: Enum] [capacity(n)] [bounds([minimum]..[maximum], overflow:)] [advance(perSecond:)] [evicts] [space(name)] [embeds(row)] { key = value [advance(perSecond:)] [behavior(none)] }",
+            Grammar: "table name[family] [: Enum] [capacity(n | auto)] [bounds([minimum]..[maximum], overflow:)] [advance(perSecond:)] [evicts] [space(name)] [embeds(row)] { key = value [advance(perSecond:)] [behavior(none)] }",
             Keyword: "table",
             Members: [
                 RowName(summary: "The row's name, which every rule and binding reads it by."),
                 RowEnum(),
-                Capacity(summary: "The row's cell-count ceiling; smaller than its own authored cells is refused."),
+                Capacity(summary: "The row's cell-count ceiling; `auto` lowers to the authored cells' count, and a number smaller than them is refused."),
                 Bounds(),
                 Advance(),
                 new(
@@ -263,7 +263,7 @@ public static partial class WorldConstructs {
         new(
             DocumentMember: "state.world[]",
             Enclosing: "world",
-            Grammar: "pile name[family] of tokenRow [capacity(n)] { token … }",
+            Grammar: "pile name[family] of tokenRow [capacity(n | auto)] { token … }",
             Keyword: "pile",
             Members: [
                 RowName(summary: "The row's name, which every rule and binding reads it by."),
@@ -275,7 +275,7 @@ public static partial class WorldConstructs {
                     Required: true,
                     Summary: "The plain token-domain row supplying the keys this pile holds membership over."
                 ),
-                Capacity(summary: "The pile's member ceiling, never past its token domain's own."),
+                Capacity(summary: "The pile's member ceiling (`auto` lowers to its authored tokens' count), never past its token domain's own."),
                 new(
                     DocumentKeys: ["cells"],
                     Kind: WorldMemberKind.Tokens,

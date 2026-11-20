@@ -1,0 +1,26 @@
+// A let inside prototypes and inside a template expanded in prototypes lowers identically to a top-level let.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+template blockProto(id, h) {
+  let half = h / 2
+
+  prototype $"{id}" {
+    document {
+      schema: "puck.creation.v1"
+      name: id
+      palette [{ color: "#888888", roughness: 0.5 }]
+      shape Box "body" {
+        material: 0
+        position [0, half, 0]
+        scale [1, half, 1]
+      }
+    }
+  }
+}
+
+prototypes {
+  let height = 2
+
+  blockProto(id: "pillar", h: height)
+}

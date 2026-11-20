@@ -1,0 +1,13 @@
+// `table ... capacity(auto)` lowers to the count of authored cells, identical to `capacity(N)`.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    table play capacity(auto) {
+      cursor = 0
+      held = -1
+      judging = 0
+    }
+  }
+}

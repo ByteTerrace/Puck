@@ -1,0 +1,25 @@
+// Repeated exports blocks and export statements inside templates compose into one exports object.
+template partA() {
+  export binding `cam-a`
+  exports {
+    reads [score]
+  }
+}
+
+template partB() {
+  partA()
+  export binding camB
+  exports {
+    reads [turns]
+    actions [score]
+  }
+}
+
+partB()
+
+state {
+  world {
+    slot score = 0
+    slot turns = 0
+  }
+}

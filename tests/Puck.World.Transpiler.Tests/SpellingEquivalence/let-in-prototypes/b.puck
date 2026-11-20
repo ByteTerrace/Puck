@@ -1,0 +1,17 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "pillar" {
+    document {
+      schema: "puck.creation.v1"
+      name: "pillar"
+      palette [{ color: "#888888", roughness: 0.5 }]
+      shape Box "body" {
+        material: 0
+        position [0, 1, 0]
+        scale [1, 1, 1]
+      }
+    }
+  }
+}

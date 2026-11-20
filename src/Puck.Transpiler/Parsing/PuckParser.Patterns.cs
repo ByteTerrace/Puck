@@ -425,13 +425,15 @@ public static partial class PuckParser {
             style: NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint
         );
     }
-    private static string ReadRestOfLine(ParseContext context) {
+    private static string ReadRestOfLine(ParseContext context, bool stopAtClosingBrace = false) {
         var cursor = context.Scanner.Cursor;
         var buffer = context.Scanner.Buffer;
 
         SkipSpacesOnLine(context: context);
 
         var start = cursor.Offset;
+        var braceDepth = 0;
+        var inString = false;
 
         while (!cursor.Eof) {
             var c = cursor.Current;
@@ -439,12 +441,40 @@ public static partial class PuckParser {
             if (c is '\n' or '\r') {
                 break;
             }
+            if (stopAtClosingBrace) {
+                if (inString) {
+                    if ((c == '\\') && ((cursor.Offset + 1) < buffer.Length) && (buffer[(cursor.Offset + 1)] is not ('\n' or '\r'))) {
+                        cursor.Advance(count: 2);
+                        continue;
+                    }
+                    if (c == '"') {
+                        inString = false;
+                    }
+                    cursor.Advance();
+                    continue;
+                }
+                if (c == '"') {
+                    inString = true;
+                    cursor.Advance();
+                    continue;
+                }
+            }
             if (
                 (c == '/') &&
                 ((cursor.Offset + 1) < buffer.Length) &&
                 (buffer[(cursor.Offset + 1)] is '/' or '*')
             ) {
                 break;
+            }
+            if (stopAtClosingBrace) {
+                if (c == '{') {
+                    braceDepth++;
+                } else if (c == '}') {
+                    if (braceDepth == 0) {
+                        break;
+                    }
+                    braceDepth--;
+                }
             }
             cursor.Advance();
         }

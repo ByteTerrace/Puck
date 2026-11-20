@@ -2633,45 +2633,14 @@ lane's.
 
 ### Language and authoring
 
-Owner: language lane (transpiler) · medium · Next: the inline console command
-hang, then the cost corpus, then the unreproduced language findings.
+Owner: language lane (transpiler) · medium · Next: the cost corpus, then the
+unreproduced language findings.
 
-- [medium] A scratch test with `when { seat1: world.state.cell.set marker 0 7 }`
-  on one line consumed minutes of CPU in preparation with no diagnostic; the
-  command and the closing brace on separate lines compiled in seconds.
-  Reproduce it and bound or repair the compile.
 - [medium] The cost pairs two documents cannot share (static placements
   against one creation, `wall - opening` against its box tiling, a mirrored
   pair against a `symmetry` fold, union shape order, `x += 3` against
   `x = x + 3`) need a cost corpus over bake groups and the work sheet beside
   the document corpus.
-- [medium] A rule `local` costs more than the expression it names:
-  `local k = a + 1` then `cards[k]` prices one unit above `cards[a + 1]`,
-  because the key program reads the local (`world.budget.rules --why`). Lower
-  a local read into the canonical form, and add the pair to the corpus.
-  `docs/reference/state/rules.md` also claims an `$expr:` key compiles into an
-  implicit local, which the code does not do.
-- [medium] A record-like table of fixed fields states its room by counting
-  them: `table play capacity(25)` (`worlds/debug/chess.puck`) restates its 25
-  fields by hand, since work pricing reads declarations only
-  (`RuleCompileContext.RowCapacity`). A spelling that lowers to the authored
-  entries' count gives the same document without the count.
-- [medium] Template walls: `let`s inside a `prototypes` block are refused
-  (PUCK036) and `with` takes only an object literal, so a shared view material
-  became a required field and helper functions (`waterViews`, `riverChannel`);
-  an `enum` block inside a template is silently dropped, so a row naming it
-  fails with PUCK119 (`chaseCamera` works around it); a `for` loop cannot
-  produce list elements where `map` does.
-- [medium] `exports` does not compose: two `exports { … }` blocks keep only
-  the later block's lists, where the `export` statement appends
-  (`WorldDocumentEmitter`'s `ExportNode`), and `export` does not parse inside
-  a template, so every document expanding `cameraResponse` writes its own
-  exports after the expansion. Merge repeated blocks or admit `export` in a
-  template body, and decide whether an import's surface carries its own
-  imports' exports.
-- [medium] No log of author walls exists, though "Ergonomic is optimal"
-  (AGENTS.md) asks for one. The walls sit in S11's audit, this packet and the
-  sdf-authoring skill's evals: start the one page those link to.
 - [medium] The authoring-time creation store `WorldPrototype`'s remarks name
   has no implementation: no code puts or gets a creation document outside a
   projection. Build it when a creation-library step needs it, or delete the

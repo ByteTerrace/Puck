@@ -70,6 +70,18 @@ public static partial class WorldDocumentEmitter {
         }
     }
 
+    // Registers an enum encountered during lowering (for example inside an expanded template or `for`) when pre-scan
+    // has not already registered it.
+    private static void EnsureEnumRegistered(EnumDeclarationNode enumNode, DocumentScope scope) {
+        if (!GetOrCreateEnums(scope: scope).ContainsKey(key: enumNode.Name)) {
+            RegisterEnum(
+                enumNode: enumNode,
+                inherited: false,
+                scope: scope
+            );
+        }
+    }
+
     // Binds an enum's members: each qualified member, and each bare member no other name in the scope spells.
     private static void RegisterEnum(EnumDeclarationNode enumNode, DocumentScope scope, bool inherited) {
         GetOrCreateEnums(scope: scope)[enumNode.Name] = new EnumDefinition(Name: enumNode.Name, Members: [.. enumNode.Members.Select(selector: static member => member.Name)], Inherited: inherited);
