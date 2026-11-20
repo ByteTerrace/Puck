@@ -28,11 +28,11 @@ public static class StartupBake {
                 // The answer's first residency follows the prefix; each further residency is a line of its own, indented.
                 var report = (text.StartsWith(Prefix, StringComparison.Ordinal) ? text[Prefix.Length..] : text).TrimStart();
                 if (!report.StartsWith("residency=", StringComparison.Ordinal)) { continue; }
-                if (Field(report, "residency-id") is not { } id) {
+                if (CliLineFields.Field(report, "residency-id") is not { } id) {
                     reasons.Add($"world.residency omitted a residency identity: {report}");
                     continue;
                 }
-                reported[id] = Field(report, "residency") ?? id;
+                reported[id] = CliLineFields.Field(report, "residency") ?? id;
                 continue;
             }
             if (text.StartsWith("[bakes: settled at tick ", StringComparison.Ordinal)) { settled = true; }
@@ -41,12 +41,12 @@ public static class StartupBake {
             if (text.Contains("failed:", StringComparison.Ordinal) || text.Contains("refused:", StringComparison.Ordinal)) { reasons.Add(text); }
             var starting = text.StartsWith("[sdf.mesh-bake] start ", StringComparison.Ordinal);
             if (!starting && !text.StartsWith("[sdf.mesh-bake] done ", StringComparison.Ordinal)) { continue; }
-            if (Field(text, "residency-id") is not { } identity) {
+            if (CliLineFields.Field(text, "residency-id") is not { } identity) {
                 reasons.Add($"bake endpoint omitted a residency identity: {text}");
                 continue;
             }
             observed.TryGetValue(identity, out var prior);
-            observed[identity] = new(identity, Field(text, "residency") ?? identity,
+            observed[identity] = new(identity, CliLineFields.Field(text, "residency") ?? identity,
                 starting ? prior?.StartMilliseconds ?? line.ElapsedMilliseconds : prior?.StartMilliseconds,
                 starting ? null : line.ElapsedMilliseconds);
         }
@@ -71,13 +71,5 @@ public static class StartupBake {
                 : null,
             Error = reasons.Count == 0 ? null : string.Join("; ", reasons),
         };
-    }
-
-    private static string? Field(string text, string name) {
-        var prefix = name + "=";
-        foreach (var token in text.Split(' ', StringSplitOptions.RemoveEmptyEntries)) {
-            if (token.StartsWith(prefix, StringComparison.Ordinal)) { return token[prefix.Length..].TrimEnd(']'); }
-        }
-        return null;
     }
 }

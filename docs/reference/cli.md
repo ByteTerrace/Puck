@@ -367,12 +367,16 @@ toolchains above); publishes each `--extension` project into
 `extensions/<name>/`, where the host discovers it (a hosted authority's sign-in
 provider is one); compiles the package's parent directory into `worlds/` as
 `compile --tree` does; and exports the package's specialized shading kernels into
-`derived/` as `world prepare` does. It then boots the published engine itself,
-windowed and paused at its first tick, once per `--backend` and `--target`, with
-`--cache-dir cache`: each boot applies the target's device profile (a name of the
-world's `render.devices`, or `auto`) at the target's window size and waits for its
-bakes to settle, which fills `cache/` with the baked meshes, compiled worlds,
-compiles and prepared cartridges a consumer's boot of the same folder reads. The
+`derived/` as `world prepare` does, and prepares every file a machine of the
+package can mount from its content folders into `cache/derived/`. It then boots
+the published engine itself, windowed and paused at its first tick, once per
+`--backend` and `--target`, with `--cache-dir cache`: each boot applies the
+target's device profile (a name of the world's `render.devices`, or `auto`) at
+the target's window size and waits for its bakes to settle, which fills `cache/`
+with the baked meshes, compiled worlds and compiles a consumer's boot of the same
+folder reads. A second boot of each pair over the finished store reports the
+groups it baked and the groups it loaded, which `player.json` keeps under
+`checked`; a store that hits bakes none. The
 mesh store keys by the bake's code and kernel bytecode, never the adapter, but the
 tiers a view demands follow its window size and its profile's memory bars, so each
 consumer device gets its own target. The driver's pipeline cache is per adapter

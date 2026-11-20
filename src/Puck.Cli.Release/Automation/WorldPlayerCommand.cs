@@ -150,13 +150,27 @@ public static class WorldPlayerCommand {
             var composed = WorldPrepareCommand.Compose(primary: entry);
 
             WorldPrepareCommand.PrepareShading(output: output, sets: composed.ShadeSets);
+            PrepareCartridges(cache: Path.Combine(path1: output, path2: CacheName, path3: "derived"), composed: composed);
 
             var world = Path.Combine(path1: output, path2: "worlds", path3: Path.GetFileName(path: Path.TrimEndingDirectorySeparator(path: package)));
+
+            var verified = new JsonObject();
 
             if (bake) {
                 foreach (var backend in backends) {
                     foreach (var target in targets) {
-                        Bake(backend: backend, bakeSeconds: bakeSeconds, logs: logs, output: output, target: target, world: world);
+                        var (baking, loading, bakes) = Bake(backend: backend, bakeSeconds: bakeSeconds, logs: logs, output: output, pass: "bake", target: target, world: world);
+
+                        verified[$"bake {WorldBackendTokens.Token(backend: backend)}-{target}"] = new JsonObject { ["baked"] = baking, ["loaded"] = loading, ["bakes"] = bakes };
+                    }
+                }
+                // A second boot of each pair over the finished store is what a consumer's boot does: every group it demands
+                // should load. The counts it reports are the evidence the store hits.
+                foreach (var backend in backends) {
+                    foreach (var target in targets) {
+                        var (baking, loading, bakes) = Bake(backend: backend, bakeSeconds: bakeSeconds, logs: logs, output: output, pass: "check", target: target, world: world);
+
+                        verified[$"check {WorldBackendTokens.Token(backend: backend)}-{target}"] = new JsonObject { ["baked"] = baking, ["loaded"] = loading, ["bakes"] = bakes };
                     }
                 }
             }
@@ -173,6 +187,7 @@ public static class WorldPlayerCommand {
                 ["backends"] = new JsonArray([.. backends.Select(selector: static backend => JsonValue.Create(value: WorldBackendTokens.Token(backend: backend)))]),
                 ["targets"] = new JsonArray([.. (bake ? targets : []).Select(selector: static target => JsonValue.Create(value: target.ToString()))]),
                 ["extensions"] = new JsonArray([.. extensions.Select(selector: static extension => JsonValue.Create(value: Path.GetFileNameWithoutExtension(path: Path.TrimEndingDirectorySeparator(path: extension))))]),
+                ["checked"] = verified,
             });
             ReportSizes(output: output);
             return 0;
@@ -208,6 +223,40 @@ public static class WorldPlayerCommand {
             workingDirectory: repository
         ).GetAwaiter().GetResult();
     }
+    // Every file a machine of the composed worlds can mount (its content folders, WorldMachineContentFolder.TryList) is
+    // prepared through its engine's content provider into the cache root's derived store, so a cartridge swapped in at
+    // play is read, not compiled, as the ones the baking boots bind at spawn are. The products key by their inputs and the
+    // provider's code, never by this process, so the published engine reads them.
+    private static void PrepareCartridges(WorldPrepareCommand.Composition composed, string cache) {
+        var catalog = CliWorldVocabulary.EnsureInstalled();
+        var previous = Puck.Assets.DerivedBytes.DefaultDirectory;
+        var prepared = new HashSet<string>(comparer: Puck.Abstractions.PuckPaths.Comparer);
+
+        Puck.Assets.DerivedBytes.DefaultDirectory = cache;
+        try {
+            foreach (var (name, definition, directory) in composed.Worlds) {
+                foreach (var machine in definition.Machines) {
+                    if (!catalog.TryContentProvider(engineId: machine.Engine, provider: out var provider) ||
+                        !WorldMachineContentFolder.TryList(catalog: catalog, documentDirectory: directory, entries: out var entries, folders: out _, machine: machine, reason: out _)) {
+                        continue;
+                    }
+                    foreach (var entry in entries.Where(predicate: entry => (entry.Refusal is null) && provider.Recognizes(contentPath: entry.ContentPath))) {
+                        var path = WorldDocumentPaths.Resolve(documentDirectory: directory, path: entry.ContentPath);
+
+                        if (!prepared.Add(item: path)) { continue; }
+                        try {
+                            _ = provider.Prepare(content: File.ReadAllBytes(path: path), contentPath: path);
+                        } catch (Puck.Abstractions.Machines.MachineContentException exception) {
+                            Console.Error.WriteLine(value: $"{Verb}: {name}: {entry.ContentPath} does not prepare, so a consumer compiles it at mount and is refused the same way: {exception.Message}");
+                        }
+                    }
+                }
+            }
+        } finally {
+            Puck.Assets.DerivedBytes.DefaultDirectory = previous;
+        }
+        Console.WriteLine(value: $"{Verb}: prepared {prepared.Count} machine content file(s) into {CliPaths.ToDisplay(fullPath: cache)}.");
+    }
     // An extension installs as the host discovers one (PuckExtensionDiscovery): extensions/<name>/<name>.dll beside its
     // dependency manifest.
     private static void PublishExtension(string repository, string project, string output) {
@@ -230,10 +279,12 @@ public static class WorldPlayerCommand {
     }
     // One windowed boot of the published engine, held at its first tick so the view is the spawn's, with the folder's own
     // cache root: it applies the target's device profile (whose memory bars set the mesh budget) at the target's window
-    // size (whose pixels set the tiers the bake demands) and waits until every resident bake has landed.
-    private static void Bake(WorldBackendPreference backend, BakeTarget target, string output, string world, string logs, int bakeSeconds) {
+    // size (whose pixels set the tiers the bake demands) and waits until every resident bake has landed. Returns the groups
+    // its bakes baked and the groups they loaded from the store, summed over every bake start it reported, and its settle
+    // answer.
+    private static (int Baking, int Loading, string Bakes) Bake(WorldBackendPreference backend, BakeTarget target, string output, string world, string logs, int bakeSeconds, string pass) {
         var name = $"{WorldBackendTokens.Token(backend: backend)}-{target.Profile}-{target.Width}x{target.Height}";
-        var directory = Path.Combine(path1: logs, path2: name);
+        var directory = Path.Combine(path1: logs, path2: $"{pass}-{name}");
         var deadline = TimeSpan.FromSeconds(seconds: (bakeSeconds + 300));
         var request = new WorldLaunchRequest(Artifact: Path.Combine(path1: output, path2: "Puck.World.dll"), Step: Verb) {
             Arguments = ["--paused", "--width", target.Width.ToString(provider: CultureInfo.InvariantCulture), "--height", target.Height.ToString(provider: CultureInfo.InvariantCulture),
@@ -247,7 +298,7 @@ public static class WorldPlayerCommand {
             World = world,
         };
 
-        Console.WriteLine(value: $"{Verb}: baking {name}.");
+        Console.WriteLine(value: $"{Verb}: {pass} {name}.");
 
         WorldProcess started;
 
@@ -275,10 +326,29 @@ public static class WorldPlayerCommand {
 
             var baked = process.WaitFor(accept: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[bakes:"), from: mark, timeout: TimeSpan.FromSeconds(seconds: 60));
 
-            if ((baked is null) || !baked.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[bakes: settled")) {
-                throw new InvalidOperationException(message: $"{name}: the bakes did not settle: {baked?.Text ?? "no answer"}; its logs are in {CliPaths.ToDisplay(fullPath: directory)}.");
+            var lines = process.LinesFrom(from: 0);
+
+            // Every bake the boot started has landed once a done line follows the last start. The settle barrier also waits
+            // for the detail to stop moving between tiers, which a profile whose memory bars press the mesh budget may not
+            // reach; the store then holds every tier the boot demanded, and the answer is kept as the boot's record.
+            if ((baked is null) ||
+                (lines.LastOrDefault(predicate: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] start ")) is { } last &&
+                 !lines.Any(predicate: row => (row.Index > last.Index) && row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] done ")))) {
+                throw new InvalidOperationException(message: $"{name}: the bakes did not land: {baked?.Text ?? "no answer"}; its logs are in {CliPaths.ToDisplay(fullPath: directory)}.");
             }
-            Console.WriteLine(value: $"{Verb}: {name}: {baked.Text}");
+            var (baking, loading) = (0, 0);
+
+            foreach (var line in lines.Where(predicate: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] start "))) {
+                baking += CliLineFields.Count(line: line.Text, name: "baking");
+                loading += CliLineFields.Count(line: line.Text, name: "loading");
+            }
+
+            // The answer without the residency report a not-settled answer appends after its reason.
+            var report = baked.Text.IndexOf(value: ": [sdf.mesh-bake]", comparisonType: StringComparison.Ordinal);
+            var bakes = ((report > 0) ? baked.Text[..report] : baked.Text);
+
+            Console.WriteLine(value: $"{Verb}: {pass} {name}: {bakes}; groups baked {baking}, loaded from the store {loading}");
+            return (baking, loading, bakes);
         } finally {
             // A windowed World can outlive its quit; one that does not exit is stopped by its process.
             if (!process.Send(line: "quit") || (process.WaitForExit(timeout: TimeSpan.FromSeconds(seconds: 60)) is null)) {
