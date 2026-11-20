@@ -180,15 +180,22 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 - **Disclosure is checked at every read.** Every untrusted read and delivery
   asks the recipient view again; caching a bound address never caches
   permission. Recipient mutations and guards require whole-row admission before
-  grants or cell lookup, over the mutation's declared write footprint: the rows
-  it names, each one's token domain and every row keyed over it
+  grants or cell lookup, over the mutation's write footprint, which is derived,
+  never listed: every name the submission spells at any position
+  (`WorldMutationNames`, reading document values through the name registry's
+  grammar), each row's token domain, every row keyed over it
   (`StateCatalog.DependentRows`, the relation the arena's commit check and the
-  touched-row validator read too), every row an incoming declaration names
-  (`WorldRecipientView.AdmitsDeclaration`), every row a transform resolves to
-  (`RuleCompiler.TryCollectTransformRows`), a placement's parent chain and the
-  template every id on it spells as a dealt child, the installed placement,
-  machine or kit an upsert replaces or a removal drops, and, for a spatial guard,
-  every placement that can enter a census. A recipient's mutation of rules or
+  touched-row validator read too) and every state name the declarations around
+  it spell (`WorldRowDeclarationNames`), every row a transform resolves to
+  (`RuleCompiler.TryCollectTransformRows`; an unresolvable transform refuses), a
+  placement's parent chain and the template every id on it spells as a dealt
+  child, every state name the installed value an upsert replaces or a removal
+  drops spells (`WorldRecipientView.AdmitsInstalled`), and, for a spatial guard,
+  every placement that can enter a census. A guard over the document answers only
+  a recipient whose read door hands it a replica document. A name-bearing member
+  the registry or `WorldMutationNames.Fields` does not hold escapes the footprint,
+  so a new one is registered (`puck registry --check`, `WorldMutationNames.Uncovered`).
+  A recipient's mutation of rules or
   interactions (`WorldSectionFacts.IsProgram`) is refused by kind before it
   compiles: authoring the program is the authority's. A `readersFrom` audience admits only
   while every recipient reads it whole. Whole-document validation and rule
@@ -220,6 +227,7 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 | Worst-case work fits a tick | `RuleWorkBudget` against `RuleCapacity.MaxWorkUnitsPerTick`, at load; the evaluator's deferred locals and the sheet read one `CompiledRule.Deferred`, and the world host's rule pass and the sheet's line places (`RuleWorkContributor.Order`) read one `RuleEvaluationOrder`. A host with another pass order builds its own |
 | A price is a function of declarations | `RuleCompileContext.RowCapacity`, the one room `IRuleCostContext` serves every fact, search price and rewind estimate; `RecipientOracleLawTests` compares two hidden-member variants. Nothing refuses a new price that reads storage instead |
 | A read audience encloses the destination's | `StateArena.ReadAudienceEncloses`, called by search and the disclosure transforms |
+| A recipient's write answers alike whether a row it spells is withheld or absent | `WorldRecipientMutations.Admits`, the one door, over a footprint read from the name registry; `WriteDoorNoninterferenceLawTests` respells every registered state position of a submitted value and every vocabulary entry, and refuses an uncovered mutation member or an unresolved replacing kind |
 | A host fact declares what a derived transient discloses | the compiler, through the abstract `CollectDisclosure` on `WorldFactOperand` and `WorldFactEffect`; `WorldRuleDisclosure.Classify` withholds an undeclared facet fact from every recipient but the authority; `CueDisclosureLawTests` |
 | Same input, same state | row digests in `StateArena.ComputeHash`; `puck test --reproduce` compares two runs and recomputes every tick |
 

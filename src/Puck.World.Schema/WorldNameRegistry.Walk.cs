@@ -24,7 +24,7 @@ public static partial class WorldNameRegistry {
         "Best", "Move", "Plan", "Medium", "Family", "Field", "Binding", "Template", "ForEach", "Key", "FromKey", "SetKey",
         "TargetKey", "ComparandKey", "ComparandState", "FromState", "FilterRow", "SpillRow", "ValuesFrom",
         "PhaseOf", "CapacityRow", "RangeState", "HalfAngleState", "Set", "Left", "Right", "Codes",
-        "With", "Over", "Register", "Score", "Mask", "ReadersFrom", "Id", "Names",
+        "With", "Over", "Register", "Score", "Mask", "ReadersFrom", "Id", "Names", "Positions",
         "Parent", "Placement", "Prototype",
     };
     private static readonly string[] NameShapedSuffixes = ["State", "Row", "Key", "Rule", "Table", "Pattern", "Zone", "Zones", "Topology", "Field", "Binding", "Expression", "PlacementId", "PrototypeId"];

@@ -840,7 +840,9 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
     }
     private static bool TryReadMutationRow(WorldServer server, WorldStateReadView view, Principal principal, string path, RowSection section, string key, string verb, out RowReadOutcome read, out CommandResult error) {
         read = default;
-        if ((section.RowType == typeof(WorldStateRow)) && (view.Withheld(row: key) is not null)) {
+        // The write door's own question, which answers a row no declaration names exactly as a withheld one, so the
+        // verb never tells them apart before the mutation reaches admission.
+        if ((section.RowType == typeof(WorldStateRow)) && !view.Recipient.Admits(row: key)) {
             error = CommandResult.Error(output: view.Refusal(key: null, row: key, verb: verb));
             return false;
         }
