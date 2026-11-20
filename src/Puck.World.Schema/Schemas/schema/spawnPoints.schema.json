@@ -1,4 +1,5 @@
 {
+  "description": "The named spawn poses seats and population policies place bodies at; absent, one implicit point at the world origin is declared.",
   "type": [
     "array",
     "null"

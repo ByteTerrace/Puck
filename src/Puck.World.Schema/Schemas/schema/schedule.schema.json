@@ -1,4 +1,5 @@
 {
+  "description": "Commands submitted at scheduled ticks, and the tick the world writes its state export at.",
   "type": [
     "object",
     "null"
@@ -37,7 +38,11 @@
               "Refused"
             ],
             "default": "Submitted",
-            "title": "WorldScheduleExpectation"
+            "title": "WorldScheduleExpectation",
+            "x-enumDescriptions": {
+              "Submitted": "The ingress took the line. The default: a step exists to land, and a refusal it did not declare is a step that did not run.",
+              "Refused": "The ingress or the handler refused the line, which is the point of the step \u2014 a test whose claim is that the world says no."
+            }
           },
           "refusal": {
             "description": "Text the recorded refusal detail must contain, or null to accept any refusal. Legitimate only beside Refused.",

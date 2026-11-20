@@ -1,4 +1,5 @@
 {
+  "description": "The simulation rate: how many fixed steps the authority advances each second.",
   "type": [
     "object",
     "null"

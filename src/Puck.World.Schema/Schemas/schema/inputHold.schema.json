@@ -1,4 +1,5 @@
 {
+  "description": "How long a participant\u0027s input may be held, by default and per participant; absent, nothing is held.",
   "type": [
     "object",
     "null"

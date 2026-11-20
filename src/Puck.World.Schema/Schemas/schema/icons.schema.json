@@ -1,4 +1,5 @@
 {
+  "description": "The icon repertoire the HUD and bindings draw from.",
   "type": [
     "object",
     "null"

@@ -1,4 +1,5 @@
 {
+  "description": "The screen materials screens and creation faces name; absent, every screen draws its picture untreated.",
   "type": [
     "array",
     "null"

@@ -18,18 +18,7 @@ public sealed class WorldSchemaCompletenessLawTests {
     // does not resolve it.
     // Named by pointer, so a NEW untyped leaf fails this law and a FIXED one must be removed here (see
     // <see cref="TheAllowlistNamesNoAlreadyTypedLeaf"/>).
-    private static readonly HashSet<string> UntypedAllowlist = new(comparer: StringComparer.Ordinal) {
-        "#/$defs/WorldPrototype/properties/document/properties/shapes/items/properties/domain/items/anyOf/1/properties/limit",
-        "#/$defs/WorldPrototype/properties/document/properties/shapes/items/properties/domain/items/anyOf/3/properties/limit",
-        "#/$defs/WorldPrototype/properties/document/properties/shapes/items/properties/swings/items/properties/phase",
-        "#/$defs/WorldPrototype/properties/document/properties/shapes/items/properties/slides/items/properties/phase",
-        "#/$defs/WorldPrototype/properties/document/properties/shapes/items/properties/joint",
-        "#/$defs/WorldPrototype/properties/document/properties/effectors/items/properties/target/properties/direction",
-        "#/$defs/WorldPrototype/properties/document/properties/effectors/items/properties/target/properties/reach",
-        "#/$defs/WorldPrototype/properties/document/properties/effectors/items/properties/target/properties/standoff",
-        "#/$defs/WorldPrototype/properties/document/properties/effectors/items/properties/target/properties/offset",
-        "#/$defs/WorldPrototype/properties/document/properties/effectors/items/properties/weight",
-    };
+    private static readonly HashSet<string> UntypedAllowlist = new(comparer: StringComparer.Ordinal);
     private static readonly Lazy<JsonObject> BundleHolder = new(valueFactory: BuildBundle);
 
     private static JsonObject Bundle => BundleHolder.Value;

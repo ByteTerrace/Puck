@@ -66,7 +66,7 @@ public sealed partial class WorldServer {
             principal: principal
         );
     /// <inheritdoc cref="WorldDocument.AttachAddons"/>
-    public void AttachAddons(IWorldAddonHost runtime) => m_document.AttachAddons(runtime: runtime);
+    public void AttachAddons(IWorldAddonHost runtime, WorldDocumentInputs? preparedFrom = null) => m_document.AttachAddons(preparedFrom: preparedFrom, runtime: runtime);
     /// <inheritdoc cref="WorldDocument.AttachSink(IClientSink)"/>
     public IDisposable AttachSink(IClientSink sink) => m_document.AttachSink(sink: sink);
 

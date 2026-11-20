@@ -34,7 +34,12 @@
             "Presentation",
             "Replica"
           ],
-          "title": "WorldDisclosureTier"
+          "title": "WorldDisclosureTier",
+          "x-enumDescriptions": {
+            "Frames": "Pixels only. No document of any kind crosses.",
+            "Presentation": "A puck.world.projection.v1 document \u2014 what a visitor\u0027s client needs to render and be embodied. The wire default: a peer whose admission entry authors no tier receives this.",
+            "Replica": "The whole puck.world.definition.v1 document, verbatim \u2014 the sanctioned download. Authored explicitly, never defaulted into."
+          }
         }
       },
       "required": [
@@ -118,7 +123,13 @@
             "High"
           ],
           "default": "Off",
-          "title": "ShadowTier"
+          "title": "ShadowTier",
+          "x-enumDescriptions": {
+            "Off": "No shadows: no cascade renders or is held, and every light goes unshadowed.",
+            "Low": "Cascades at a quarter of the full resolution, 512 texels a side.",
+            "Medium": "Cascades at half the full resolution, 1024 texels a side.",
+            "High": "Cascades at the full resolution, 2048 texels a side."
+          }
         },
         "ambientOcclusion": {
           "description": "Whether ambient occlusion boots on.",
@@ -160,7 +171,13 @@
                 "Medium",
                 "High"
               ],
-              "title": "ShadowTier"
+              "title": "ShadowTier",
+              "x-enumDescriptions": {
+                "Off": "No shadows: no cascade renders or is held, and every light goes unshadowed.",
+                "Low": "Cascades at a quarter of the full resolution, 512 texels a side.",
+                "Medium": "Cascades at half the full resolution, 1024 texels a side.",
+                "High": "Cascades at the full resolution, 2048 texels a side."
+              }
             },
             "ambientOcclusion": {
               "description": "Whether the preset enables ambient occlusion.",
@@ -214,7 +231,14 @@
                 "Eighth"
               ],
               "default": "Quarter",
-              "title": "WorldRenderScaleTier"
+              "title": "WorldRenderScaleTier",
+              "x-enumDescriptions": {
+                "Native": "Native resolution (scale 1): the view renders at its rect\u0027s own extent, 1280x800, and a lone whole-display view is not placed at all, so the root shows the world\u0027s output itself.",
+                "ThreeQuarter": "Scale 221/255 (about 0.867), which the extent quantization rounds up to 0.875: 1120x700, about three quarters of the native pixel work.",
+                "Half": "Scale 181/255 (about 0.710), which the extent quantization rounds up to 0.75: 960x600, about 0.56 of the native pixel work.",
+                "Quarter": "Scale 128/255 (about 0.502), which the extent quantization rounds up to 0.5625: 720x450, about 0.32 of the native pixel work.",
+                "Eighth": "Scale 90/255 (about 0.353), which the extent quantization rounds up to 0.375: 480x300, about 0.14 of the native pixel work; the most aggressive tier."
+              }
             },
             "sky": {
               "description": "The sky\u0027s quality tier the preset selects (world.sky-quality).",
@@ -235,7 +259,12 @@
                 null
               ],
               "default": null,
-              "title": "SdfIndirectTier"
+              "title": "SdfIndirectTier",
+              "x-enumDescriptions": {
+                "Off": "No indirect light: the coarse volume occludes, and none of its light is applied.",
+                "Medium": "The coarse volume.",
+                "High": "The fine volume."
+              }
             },
             "skyFieldScale": {
               "description": "The independent sky field grid fraction, one or one half.",
@@ -311,7 +340,13 @@
                 "Medium",
                 "High"
               ],
-              "title": "ShadowTier"
+              "title": "ShadowTier",
+              "x-enumDescriptions": {
+                "Off": "No shadows: no cascade renders or is held, and every light goes unshadowed.",
+                "Low": "Cascades at a quarter of the full resolution, 512 texels a side.",
+                "Medium": "Cascades at half the full resolution, 1024 texels a side.",
+                "High": "Cascades at the full resolution, 2048 texels a side."
+              }
             },
             "ambientOcclusion": {
               "description": "Whether the preset enables ambient occlusion.",
@@ -365,7 +400,14 @@
                 "Eighth"
               ],
               "default": "Quarter",
-              "title": "WorldRenderScaleTier"
+              "title": "WorldRenderScaleTier",
+              "x-enumDescriptions": {
+                "Native": "Native resolution (scale 1): the view renders at its rect\u0027s own extent, 1280x800, and a lone whole-display view is not placed at all, so the root shows the world\u0027s output itself.",
+                "ThreeQuarter": "Scale 221/255 (about 0.867), which the extent quantization rounds up to 0.875: 1120x700, about three quarters of the native pixel work.",
+                "Half": "Scale 181/255 (about 0.710), which the extent quantization rounds up to 0.75: 960x600, about 0.56 of the native pixel work.",
+                "Quarter": "Scale 128/255 (about 0.502), which the extent quantization rounds up to 0.5625: 720x450, about 0.32 of the native pixel work.",
+                "Eighth": "Scale 90/255 (about 0.353), which the extent quantization rounds up to 0.375: 480x300, about 0.14 of the native pixel work; the most aggressive tier."
+              }
             },
             "sky": {
               "description": "The sky\u0027s quality tier the preset selects (world.sky-quality).",
@@ -386,7 +428,12 @@
                 null
               ],
               "default": null,
-              "title": "SdfIndirectTier"
+              "title": "SdfIndirectTier",
+              "x-enumDescriptions": {
+                "Off": "No indirect light: the coarse volume occludes, and none of its light is applied.",
+                "Medium": "The coarse volume.",
+                "High": "The fine volume."
+              }
             },
             "skyFieldScale": {
               "description": "The independent sky field grid fraction, one or one half.",
@@ -437,7 +484,13 @@
                 "Medium",
                 "High"
               ],
-              "title": "ShadowTier"
+              "title": "ShadowTier",
+              "x-enumDescriptions": {
+                "Off": "No shadows: no cascade renders or is held, and every light goes unshadowed.",
+                "Low": "Cascades at a quarter of the full resolution, 512 texels a side.",
+                "Medium": "Cascades at half the full resolution, 1024 texels a side.",
+                "High": "Cascades at the full resolution, 2048 texels a side."
+              }
             },
             "ambientOcclusion": {
               "description": "Whether the preset enables ambient occlusion.",
@@ -491,7 +544,14 @@
                 "Eighth"
               ],
               "default": "Quarter",
-              "title": "WorldRenderScaleTier"
+              "title": "WorldRenderScaleTier",
+              "x-enumDescriptions": {
+                "Native": "Native resolution (scale 1): the view renders at its rect\u0027s own extent, 1280x800, and a lone whole-display view is not placed at all, so the root shows the world\u0027s output itself.",
+                "ThreeQuarter": "Scale 221/255 (about 0.867), which the extent quantization rounds up to 0.875: 1120x700, about three quarters of the native pixel work.",
+                "Half": "Scale 181/255 (about 0.710), which the extent quantization rounds up to 0.75: 960x600, about 0.56 of the native pixel work.",
+                "Quarter": "Scale 128/255 (about 0.502), which the extent quantization rounds up to 0.5625: 720x450, about 0.32 of the native pixel work.",
+                "Eighth": "Scale 90/255 (about 0.353), which the extent quantization rounds up to 0.375: 480x300, about 0.14 of the native pixel work; the most aggressive tier."
+              }
             },
             "sky": {
               "description": "The sky\u0027s quality tier the preset selects (world.sky-quality).",
@@ -512,7 +572,12 @@
                 null
               ],
               "default": null,
-              "title": "SdfIndirectTier"
+              "title": "SdfIndirectTier",
+              "x-enumDescriptions": {
+                "Off": "No indirect light: the coarse volume occludes, and none of its light is applied.",
+                "Medium": "The coarse volume.",
+                "High": "The fine volume."
+              }
             },
             "skyFieldScale": {
               "description": "The independent sky field grid fraction, one or one half.",
@@ -3050,7 +3115,12 @@
                       null
                     ],
                     "default": null,
-                    "title": "WorldEase"
+                    "title": "WorldEase",
+                    "x-enumDescriptions": {
+                      "Linear": "Time runs evenly from this key to the next.",
+                      "Smooth": "Time starts and ends slowly: t\u00B2 (3 \u2212 2t), so the value leaves and arrives at rest.",
+                      "Step": "The value holds this key\u0027s until the next key, where it changes at once."
+                    }
                   },
                   "lights": {
                     "description": "The lights this key moves, by name: each the same kind as the light of that name, stating only the fields it moves. A light\u0027s name and shadowing are structure, which a key never states.",
@@ -9099,7 +9169,12 @@
                       null
                     ],
                     "default": null,
-                    "title": "WorldEase"
+                    "title": "WorldEase",
+                    "x-enumDescriptions": {
+                      "Linear": "Time runs evenly from this key to the next.",
+                      "Smooth": "Time starts and ends slowly: t\u00B2 (3 \u2212 2t), so the value leaves and arrives at rest.",
+                      "Step": "The value holds this key\u0027s until the next key, where it changes at once."
+                    }
                   },
                   "layers": {
                     "description": "The layers this key moves, by name: each the same kind as the layer of that name, stating only the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, kinds, a layer\u0027s name, blend, mask, visibility, tier and clock and the sun disc\u0027s light are structure, which a key never states.",
@@ -10580,7 +10655,12 @@
                 "High"
               ],
               "default": "Medium",
-              "title": "SdfIndirectTier"
+              "title": "SdfIndirectTier",
+              "x-enumDescriptions": {
+                "Off": "No indirect light: the coarse volume occludes, and none of its light is applied.",
+                "Medium": "The coarse volume.",
+                "High": "The fine volume."
+              }
             },
             "budget": {
               "description": "The irradiance work each second grants the volume and the lighting age it reports past; absent bounds nothing.",
@@ -10670,7 +10750,11 @@
                 "Auto"
               ],
               "default": "Manual",
-              "title": "SdfExposureMode"
+              "title": "SdfExposureMode",
+              "x-enumDescriptions": {
+                "Manual": "A fixed EV100, Ev100.",
+                "Auto": "The EV100 the view\u0027s own image meters (Meter), less the compensation, held within the bounds, and eased toward over the adaptation time once its target leaves the dead band."
+              }
             },
             "ev100": {
               "description": "The manual exposure value at ISO 100, in [\u22126, 20]: about 15 for a sunlit day, 7 for a lit room, 3 for a dim one. An automatic exposure starts there and holds it while its meter has no reading. Absent is SdfExposure.DefaultEv100, or with automatic exposure the middle of its bounds.",
@@ -11321,7 +11405,21 @@
                                         "Superellipsoid",
                                         "Sweep"
                                       ],
-                                      "title": "SdfSolidPrimitive"
+                                      "title": "SdfSolidPrimitive",
+                                      "x-enumDescriptions": {
+                                        "Sphere": "A sphere.",
+                                        "Box": "A box.",
+                                        "Torus": "A torus.",
+                                        "Cylinder": "A cylinder.",
+                                        "Capsule": "A capsule.",
+                                        "Ellipsoid": "An ellipsoid.",
+                                        "RoundCone": "A tapered capsule \u2014 a fat base narrowing to a rounded tip along \u002BY (teeth, horns, spikes).",
+                                        "Plane": "An infinite plane bounding a solid half-space; local \u002BY is the outward normal.",
+                                        "Cone": "A sharp circular cone with a flat base, centered along local Y.",
+                                        "Prism": "A bounded profile in local XY extruded along Z. The default trapezoid has unit bottom half-width, half-height and depth, with an authored top-to-bottom width ratio (default one half). SdfPrismProfile selects rounded rectangles, polygons, ellipses, or a convex vertex list instead.",
+                                        "Superellipsoid": "A generalized ellipsoid: q = pow(abs(p)/r, e); d = (pow(q.x\u002Bq.y\u002Bq.z, 1/e) - 1) * min(r), unit radii (1,1,1) and an authored exponent e in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (the document\u0027s exponent field carries it; unauthored is the minimum, the ellipsoid itself \u2014 an Ellipsoid emits the identical instruction, since every ellipsoid is this shape at that exponent). A squircle/rounded-cube family: the minimum exponent is a plain ellipsoid, larger values round toward a box.",
+                                        "Sweep": "A quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as 1-4 helical strands \u2014 see Sweep. NOT a closed solid a body can stand on in the sense the rest of this enum\u0027s members are: its field is \u0022exact enough\u0022, not exact, and carries no Reach unit-scale law \u2014 its control points and radii already carry creation-unit dimensions directly (see SweepReach). The authoring layer admits it only with a curve facet naming its control points and radii."
+                                      }
                                     },
                                     "x": {
                                       "type": "number",
@@ -11356,7 +11454,16 @@
                                             "Convex",
                                             "Path"
                                           ],
-                                          "title": "SdfPrismProfileKind"
+                                          "title": "SdfPrismProfileKind",
+                                          "x-enumDescriptions": {
+                                            "Trapezoid": "A trapezoid controlled by the shape\u0027s taper.",
+                                            "RoundedRectangle": "A rectangle with independently controlled corner rounding.",
+                                            "Polygon": "A regular polygon, stretched by the authored X/Y scale.",
+                                            "Ellipse": "An exact elliptical profile, extruded with flat front and rear caps.",
+                                            "ChamferedRectangle": "A rectangle with independently controlled 45-degree corner chamfers.",
+                                            "Convex": "An arbitrary convex polygon authored by Vertices, with CornerRadius reused as a uniform corner-rounding radius. The exact convex-polygon SDF, not the study\u0027s smoothed half-plane intersection.",
+                                            "Path": "Filled contours or variable-width strokes, flattened with an explicit tolerance and edge budget."
+                                          }
                                         },
                                         "cornerRadius": {
                                           "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded.",
@@ -11573,7 +11680,11 @@
                                         "Extrude"
                                       ],
                                       "default": "Extrude",
-                                      "title": "SdfLift"
+                                      "title": "SdfLift",
+                                      "x-enumDescriptions": {
+                                        "Revolve": "Revolve the 2D profile around the local Y axis (the revolve lift operator): the profile sits in the (radial, Y) half-plane at a radial offset (the shape\u0027s liftAmount). Exact when the offset clears the profile\u0027s radial extent (a torus-like solid); a harmless conservative underestimate near the axis when the profile crosses it (offset 0 = a solid of revolution centred on the axis, e.g. a spheroid from an ellipse). Always 1-Lipschitz.",
+                                        "Extrude": "Extrude the 2D profile along the local Z axis (the extrude lift operator) to the given half-height (the shape\u0027s liftAmount): a prism/slab whose cross-section is the exact 2D shape. Exact for any exact 2D field, and 1-Lipschitz."
+                                      }
                                     },
                                     "rounding": {
                                       "type": "number",
@@ -11862,7 +11973,13 @@
                       "Medium",
                       "High"
                     ],
-                    "title": "ShadowTier"
+                    "title": "ShadowTier",
+                    "x-enumDescriptions": {
+                      "Off": "No shadows: no cascade renders or is held, and every light goes unshadowed.",
+                      "Low": "Cascades at a quarter of the full resolution, 512 texels a side.",
+                      "Medium": "Cascades at half the full resolution, 1024 texels a side.",
+                      "High": "Cascades at the full resolution, 2048 texels a side."
+                    }
                   },
                   "ambientOcclusion": {
                     "description": "Whether the preset enables ambient occlusion.",
@@ -11916,7 +12033,14 @@
                       "Eighth"
                     ],
                     "default": "Quarter",
-                    "title": "WorldRenderScaleTier"
+                    "title": "WorldRenderScaleTier",
+                    "x-enumDescriptions": {
+                      "Native": "Native resolution (scale 1): the view renders at its rect\u0027s own extent, 1280x800, and a lone whole-display view is not placed at all, so the root shows the world\u0027s output itself.",
+                      "ThreeQuarter": "Scale 221/255 (about 0.867), which the extent quantization rounds up to 0.875: 1120x700, about three quarters of the native pixel work.",
+                      "Half": "Scale 181/255 (about 0.710), which the extent quantization rounds up to 0.75: 960x600, about 0.56 of the native pixel work.",
+                      "Quarter": "Scale 128/255 (about 0.502), which the extent quantization rounds up to 0.5625: 720x450, about 0.32 of the native pixel work.",
+                      "Eighth": "Scale 90/255 (about 0.353), which the extent quantization rounds up to 0.375: 480x300, about 0.14 of the native pixel work; the most aggressive tier."
+                    }
                   },
                   "sky": {
                     "description": "The sky\u0027s quality tier the preset selects (world.sky-quality).",
@@ -11937,7 +12061,12 @@
                       null
                     ],
                     "default": null,
-                    "title": "SdfIndirectTier"
+                    "title": "SdfIndirectTier",
+                    "x-enumDescriptions": {
+                      "Off": "No indirect light: the coarse volume occludes, and none of its light is applied.",
+                      "Medium": "The coarse volume.",
+                      "High": "The fine volume."
+                    }
                   },
                   "skyFieldScale": {
                     "description": "The independent sky field grid fraction, one or one half.",
@@ -12011,7 +12140,13 @@
                   null
                 ],
                 "default": null,
-                "title": "ShadowTier"
+                "title": "ShadowTier",
+                "x-enumDescriptions": {
+                  "Off": "No shadows: no cascade renders or is held, and every light goes unshadowed.",
+                  "Low": "Cascades at a quarter of the full resolution, 512 texels a side.",
+                  "Medium": "Cascades at half the full resolution, 1024 texels a side.",
+                  "High": "Cascades at the full resolution, 2048 texels a side."
+                }
               },
               "ambientOcclusion": {
                 "description": "Whether the view keeps ambient occlusion: false drops it. Absent keeps the world\u0027s.",
@@ -12272,7 +12407,11 @@
                       "Window"
                     ],
                     "default": "Camera",
-                    "title": "WorldScreenProjection"
+                    "title": "WorldScreenProjection",
+                    "x-enumDescriptions": {
+                      "Camera": "The destination renders through its own declared (or default) camera, unaffected by the viewer\u0027s position \u2014 today\u0027s behavior, unchanged for every session facet authored before this member existed.",
+                      "Window": "The destination renders through an off-axis frustum fitted to THIS face\u0027s aperture, apexed at the viewer\u0027s eye mapped through the border pair\u0027s isometry (see Puck.World.Client.WorldWindowProjectionMath, downstream of this project \u2014 see docs/project-map.md\u0027s layering) \u2014 requires this same face\u0027s Portal to author Mapped with a Counterpart (refused by name otherwise \u2014 see WorldDefinitionValidator), since the aperture and the mapping both come from the SAME border pair. CameraName is ignored under this mode \u2014 the camera is derived every produced frame, never an authored row."
+                    }
                   },
                   "resolution": {
                     "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Refused under Window, which renders at the extent its glass covers on screen. Omitted from the wire when null.",
@@ -12644,7 +12783,11 @@
                             "Window"
                           ],
                           "default": "Camera",
-                          "title": "WorldScreenProjection"
+                          "title": "WorldScreenProjection",
+                          "x-enumDescriptions": {
+                            "Camera": "The destination renders through its own declared (or default) camera, unaffected by the viewer\u0027s position \u2014 today\u0027s behavior, unchanged for every session facet authored before this member existed.",
+                            "Window": "The destination renders through an off-axis frustum fitted to THIS face\u0027s aperture, apexed at the viewer\u0027s eye mapped through the border pair\u0027s isometry (see Puck.World.Client.WorldWindowProjectionMath, downstream of this project \u2014 see docs/project-map.md\u0027s layering) \u2014 requires this same face\u0027s Portal to author Mapped with a Counterpart (refused by name otherwise \u2014 see WorldDefinitionValidator), since the aperture and the mapping both come from the SAME border pair. CameraName is ignored under this mode \u2014 the camera is derived every produced frame, never an authored row."
+                          }
                         },
                         "resolution": {
                           "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Refused under Window, which renders at the extent its glass covers on screen. Omitted from the wire when null.",
@@ -14892,7 +15035,15 @@
                             "SeatCameraApplication",
                             "ScreenFramed"
                           ],
-                          "title": "OverlayFact"
+                          "title": "OverlayFact",
+                          "x-enumDescriptions": {
+                            "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                            "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                            "WheelOpen": "The seat\u0027s binding wheel is open.",
+                            "ConsoleOpen": "The seat\u0027s console is open.",
+                            "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                            "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                          }
                         }
                       },
                       "required": [
@@ -14917,7 +15068,15 @@
                             "SeatCameraApplication",
                             "ScreenFramed"
                           ],
-                          "title": "OverlayFact"
+                          "title": "OverlayFact",
+                          "x-enumDescriptions": {
+                            "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                            "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                            "WheelOpen": "The seat\u0027s binding wheel is open.",
+                            "ConsoleOpen": "The seat\u0027s console is open.",
+                            "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                            "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                          }
                         },
                         "windowSeconds": {
                           "description": "How long after the fact last held the predicate still holds in full.",
@@ -14969,7 +15128,15 @@
                                       "SeatCameraApplication",
                                       "ScreenFramed"
                                     ],
-                                    "title": "OverlayFact"
+                                    "title": "OverlayFact",
+                                    "x-enumDescriptions": {
+                                      "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                                      "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                                      "WheelOpen": "The seat\u0027s binding wheel is open.",
+                                      "ConsoleOpen": "The seat\u0027s console is open.",
+                                      "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                                      "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                                    }
                                   }
                                 },
                                 "required": [
@@ -14994,7 +15161,15 @@
                                       "SeatCameraApplication",
                                       "ScreenFramed"
                                     ],
-                                    "title": "OverlayFact"
+                                    "title": "OverlayFact",
+                                    "x-enumDescriptions": {
+                                      "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                                      "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                                      "WheelOpen": "The seat\u0027s binding wheel is open.",
+                                      "ConsoleOpen": "The seat\u0027s console is open.",
+                                      "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                                      "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                                    }
                                   },
                                   "windowSeconds": {
                                     "description": "How long after the fact last held the predicate still holds in full.",
@@ -15075,7 +15250,15 @@
                                               "SeatCameraApplication",
                                               "ScreenFramed"
                                             ],
-                                            "title": "OverlayFact"
+                                            "title": "OverlayFact",
+                                            "x-enumDescriptions": {
+                                              "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                                              "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                                              "WheelOpen": "The seat\u0027s binding wheel is open.",
+                                              "ConsoleOpen": "The seat\u0027s console is open.",
+                                              "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                                              "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                                            }
                                           }
                                         },
                                         "required": [
@@ -15100,7 +15283,15 @@
                                               "SeatCameraApplication",
                                               "ScreenFramed"
                                             ],
-                                            "title": "OverlayFact"
+                                            "title": "OverlayFact",
+                                            "x-enumDescriptions": {
+                                              "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                                              "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                                              "WheelOpen": "The seat\u0027s binding wheel is open.",
+                                              "ConsoleOpen": "The seat\u0027s console is open.",
+                                              "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                                              "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                                            }
                                           },
                                           "windowSeconds": {
                                             "description": "How long after the fact last held the predicate still holds in full.",
@@ -15838,7 +16029,11 @@
               "Eager",
               "OnDemand"
             ],
-            "title": "SeatActivationPolicy"
+            "title": "SeatActivationPolicy",
+            "x-enumDescriptions": {
+              "Eager": "The seat\u0027s body is minted at boot, mirroring a session join for it immediately \u2014 the only policy seat 0 (player 1) may declare, since a session always needs a first player.",
+              "OnDemand": "The seat stays empty at boot; its body is minted the first time something claims it."
+            }
           }
         },
         "networkPlayers": {
@@ -16307,7 +16502,12 @@
                 "SelfOnly"
               ],
               "default": "All",
-              "title": "WorldObserverDisclosureMode"
+              "title": "WorldObserverDisclosureMode",
+              "x-enumDescriptions": {
+                "All": "Every active body. The default, and what every world authoring no policy delivers.",
+                "Radius": "Only bodies within Radius metres of the observer\u0027s own body, plus that body itself. An observer with no body of its own is delivered nothing.",
+                "SelfOnly": "Only the observer\u0027s own body. An observer with no body of its own is delivered nothing."
+              }
             },
             "radius": {
               "description": "The disclosure radius in metres for Radius; authored only for that mode.",
@@ -16580,7 +16780,14 @@
               "Relative",
               "Text"
             ],
-            "title": "ChannelShape"
+            "title": "ChannelShape",
+            "x-enumDescriptions": {
+              "Bipolar": "Ranges [-1, 1] \u2014 a stick axis.",
+              "Unipolar": "Ranges [0, 1] \u2014 an analog trigger.",
+              "Binary": "A bit: exactly {0, 1} once quantized. Edges derive from the value crossing the channel\u0027s threshold against the previous sub-step (see Puck.World.Server.WorldBody\u0027s per-channel edge tracking) \u2014 never carried.",
+              "Relative": "A Q32.32 displacement accumulated since the preceding input submission, consumed once.",
+              "Text": "Ordered Unicode scalar events with no held value or numeric/button storage."
+            }
           },
           "role": {
             "description": "The engine motion role this channel claims, or null for a composition channel.",
@@ -16600,7 +16807,21 @@
               null
             ],
             "default": null,
-            "title": "ChannelRole"
+            "title": "ChannelRole",
+            "x-enumDescriptions": {
+              "MoveAdvance": "Motion along facing, \u002B1 ahead / -1 back.",
+              "MoveStrafe": "Motion along the body\u0027s right, \u002B1 right / -1 left.",
+              "Turn": "The heading turn rate, \u002B1 left (counter-clockwise about the body\u0027s up) / -1 right. The grounded program integrates it into the heading scalar the attitude derives from; the free program reads it as the yaw rate beside Pitch/Roll.",
+              "MoveUp": "Motion along the body\u0027s up, \u002B1 up / -1 down.",
+              "Pitch": "Pitch rate about the body\u0027s right, \u002B1 nose-up / -1 nose-down.",
+              "Roll": "Roll rate about the body\u0027s forward axis, \u002B1 banks left (the body\u0027s right rises) / -1 right.",
+              "FaceX": "The world \u002BX component of a commanded facing direction \u2014 with FaceY and FaceZ a world-frame vector; nonzero, it is the direction the body faces this tick, ahead of movement-facing. All zero commands nothing.",
+              "FaceY": "The world \u002BY (up) component of a commanded facing direction. Carried so the commanded facing rides as a whole vector; no motion op reads it yet \u2014 the yaw snap takes its angle from the planar pair alone.",
+              "FaceZ": "The world \u002BZ component of a commanded facing direction (see FaceX).",
+              "MoveX": "The world \u002BX component of a commanded movement direction \u2014 with MoveY and MoveZ a full world-frame vector. Claimed, it supersedes the MoveAdvance/MoveStrafe pair whenever it is nonzero.",
+              "MoveY": "The world \u002BY component of a commanded movement direction (see MoveX).",
+              "MoveZ": "The world \u002BZ component of a commanded movement direction (see MoveX)."
+            }
           },
           "composition": {
             "description": "Whether this channel is a kit-composition trigger. Exactly one of Role or this must be set.",
@@ -16623,7 +16844,12 @@
               "Heading"
             ],
             "default": "World",
-            "title": "ChannelFrame"
+            "title": "ChannelFrame",
+            "x-enumDescriptions": {
+              "World": "Raw world axes \u2014 what the sim reads; the kit\u0027s own MoveFrame/FacingSnap decide the rest.",
+              "Camera": "Relative to the seat\u0027s camera yaw \u2014 latched the tick movement begins, so the camera may orbit mid-run without steering \u2014 and the body\u0027s HEADING turns to the way it moves (the seat composes the direction into the FaceX/FaceZ roles) \u2014 the third-person scheme.",
+              "Heading": "Relative to the body\u0027s own heading, which the Turn role steers and movement never turns \u2014 the keyboard scheme: strafe sidesteps (the drawn attitude angling toward the travel under the kit\u0027s facing snap, the heading intact), turn turns, the camera is its own control."
+            }
           },
           "relative": {
             "description": "Required units, sensitivity and limit for Relative channels; absent on levels.",
@@ -17855,7 +18081,15 @@
                                 "LessOrEqual",
                                 "Greater",
                                 "GreaterOrEqual"
-                              ]
+                              ],
+                              "x-enumDescriptions": {
+                                "Equal": "Equality, pushing Int 1 or 0.",
+                                "NotEqual": "Inequality, pushing Int 1 or 0.",
+                                "Less": "Less-than, pushing Int 1 or 0.",
+                                "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+                                "Greater": "Greater-than, pushing Int 1 or 0.",
+                                "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+                              }
                             },
                             "value": {
                               "description": "The authored constant comparand, or null when ComparandState or Text spells the comparand instead.",
@@ -19035,7 +19269,15 @@
                                 "LessOrEqual",
                                 "Greater",
                                 "GreaterOrEqual"
-                              ]
+                              ],
+                              "x-enumDescriptions": {
+                                "Equal": "Equality, pushing Int 1 or 0.",
+                                "NotEqual": "Inequality, pushing Int 1 or 0.",
+                                "Less": "Less-than, pushing Int 1 or 0.",
+                                "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+                                "Greater": "Greater-than, pushing Int 1 or 0.",
+                                "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+                              }
                             },
                             "right": {
                               "description": "Right numeric expression.",
@@ -19900,7 +20142,14 @@
                                 null
                               ],
                               "default": null,
-                              "title": "CellKind"
+                              "title": "CellKind",
+                              "x-enumDescriptions": {
+                                "Int": "A whole 64-bit signed integer cell (a score, a round counter, an inventory count, or \u2014 declaring min zero \u2014 a tick-count timer).",
+                                "Fixed": "A fixed-point cell holding raw FixedQ4816 bits \u2014 the deterministic replacement for a float in simulation state. Human-authored surfaces (document JSON, console verb arguments, validator refusal text, read-back echoes) use the decimal representation via FixedQ4816.TryParse/ToString; only the addon ABI channel wire and the per-cell mutation payload carry the raw bit pattern.",
+                                "Bool": "A boolean cell (a win flag, a toggle). Carries no range \u2014 a gauge cannot bind to it.",
+                                "Text": "A short-text cell (a status label, a player name slot), bounded to MaxTextValueLength UTF-16 code units. Carries no range \u2014 a gauge cannot bind to it. The only kind whose value is carried in Text rather than Value.",
+                                "Vector": "A vector cell holding an admitted, normalized signed 8-bit embedding vector, carried in Vector rather than Value or Text."
+                              }
                             }
                           },
                           "required": [
@@ -20040,7 +20289,15 @@
                                           "LessOrEqual",
                                           "Greater",
                                           "GreaterOrEqual"
-                                        ]
+                                        ],
+                                        "x-enumDescriptions": {
+                                          "Equal": "Equality, pushing Int 1 or 0.",
+                                          "NotEqual": "Inequality, pushing Int 1 or 0.",
+                                          "Less": "Less-than, pushing Int 1 or 0.",
+                                          "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+                                          "Greater": "Greater-than, pushing Int 1 or 0.",
+                                          "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+                                        }
                                       },
                                       "value": {
                                         "description": "The authored constant comparand, or null when ComparandState or Text spells the comparand instead.",
@@ -21220,7 +21477,15 @@
                                           "LessOrEqual",
                                           "Greater",
                                           "GreaterOrEqual"
-                                        ]
+                                        ],
+                                        "x-enumDescriptions": {
+                                          "Equal": "Equality, pushing Int 1 or 0.",
+                                          "NotEqual": "Inequality, pushing Int 1 or 0.",
+                                          "Less": "Less-than, pushing Int 1 or 0.",
+                                          "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+                                          "Greater": "Greater-than, pushing Int 1 or 0.",
+                                          "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+                                        }
                                       },
                                       "right": {
                                         "description": "Right numeric expression.",
@@ -22085,7 +22350,14 @@
                                           null
                                         ],
                                         "default": null,
-                                        "title": "CellKind"
+                                        "title": "CellKind",
+                                        "x-enumDescriptions": {
+                                          "Int": "A whole 64-bit signed integer cell (a score, a round counter, an inventory count, or \u2014 declaring min zero \u2014 a tick-count timer).",
+                                          "Fixed": "A fixed-point cell holding raw FixedQ4816 bits \u2014 the deterministic replacement for a float in simulation state. Human-authored surfaces (document JSON, console verb arguments, validator refusal text, read-back echoes) use the decimal representation via FixedQ4816.TryParse/ToString; only the addon ABI channel wire and the per-cell mutation payload carry the raw bit pattern.",
+                                          "Bool": "A boolean cell (a win flag, a toggle). Carries no range \u2014 a gauge cannot bind to it.",
+                                          "Text": "A short-text cell (a status label, a player name slot), bounded to MaxTextValueLength UTF-16 code units. Carries no range \u2014 a gauge cannot bind to it. The only kind whose value is carried in Text rather than Value.",
+                                          "Vector": "A vector cell holding an admitted, normalized signed 8-bit embedding vector, carried in Vector rather than Value or Text."
+                                        }
                                       }
                                     },
                                     "required": [
@@ -22256,7 +22528,15 @@
                                                   "LessOrEqual",
                                                   "Greater",
                                                   "GreaterOrEqual"
-                                                ]
+                                                ],
+                                                "x-enumDescriptions": {
+                                                  "Equal": "Equality, pushing Int 1 or 0.",
+                                                  "NotEqual": "Inequality, pushing Int 1 or 0.",
+                                                  "Less": "Less-than, pushing Int 1 or 0.",
+                                                  "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+                                                  "Greater": "Greater-than, pushing Int 1 or 0.",
+                                                  "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+                                                }
                                               },
                                               "value": {
                                                 "description": "The authored constant comparand, or null when ComparandState or Text spells the comparand instead.",
@@ -23436,7 +23716,15 @@
                                                   "LessOrEqual",
                                                   "Greater",
                                                   "GreaterOrEqual"
-                                                ]
+                                                ],
+                                                "x-enumDescriptions": {
+                                                  "Equal": "Equality, pushing Int 1 or 0.",
+                                                  "NotEqual": "Inequality, pushing Int 1 or 0.",
+                                                  "Less": "Less-than, pushing Int 1 or 0.",
+                                                  "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+                                                  "Greater": "Greater-than, pushing Int 1 or 0.",
+                                                  "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+                                                }
                                               },
                                               "right": {
                                                 "description": "Right numeric expression.",
@@ -24301,7 +24589,14 @@
                                                   null
                                                 ],
                                                 "default": null,
-                                                "title": "CellKind"
+                                                "title": "CellKind",
+                                                "x-enumDescriptions": {
+                                                  "Int": "A whole 64-bit signed integer cell (a score, a round counter, an inventory count, or \u2014 declaring min zero \u2014 a tick-count timer).",
+                                                  "Fixed": "A fixed-point cell holding raw FixedQ4816 bits \u2014 the deterministic replacement for a float in simulation state. Human-authored surfaces (document JSON, console verb arguments, validator refusal text, read-back echoes) use the decimal representation via FixedQ4816.TryParse/ToString; only the addon ABI channel wire and the per-cell mutation payload carry the raw bit pattern.",
+                                                  "Bool": "A boolean cell (a win flag, a toggle). Carries no range \u2014 a gauge cannot bind to it.",
+                                                  "Text": "A short-text cell (a status label, a player name slot), bounded to MaxTextValueLength UTF-16 code units. Carries no range \u2014 a gauge cannot bind to it. The only kind whose value is carried in Text rather than Value.",
+                                                  "Vector": "A vector cell holding an admitted, normalized signed 8-bit embedding vector, carried in Vector rather than Value or Text."
+                                                }
                                               }
                                             },
                                             "required": [
@@ -25246,7 +25541,11 @@
               "Solid"
             ],
             "default": "Overlap",
-            "title": "WorldBodyContactMode"
+            "title": "WorldBodyContactMode",
+            "x-enumDescriptions": {
+              "Overlap": "Bodies may overlap. This is the default; the engine never introduces crowd shoving implicitly.",
+              "Solid": "Two bodies physically depenetrate only when both of their kits select this mode."
+            }
           }
         },
         "required": [
@@ -26455,7 +26754,15 @@
                           "SeatCameraApplication",
                           "ScreenFramed"
                         ],
-                        "title": "OverlayFact"
+                        "title": "OverlayFact",
+                        "x-enumDescriptions": {
+                          "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                          "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                          "WheelOpen": "The seat\u0027s binding wheel is open.",
+                          "ConsoleOpen": "The seat\u0027s console is open.",
+                          "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                          "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                        }
                       }
                     },
                     "required": [
@@ -26480,7 +26787,15 @@
                           "SeatCameraApplication",
                           "ScreenFramed"
                         ],
-                        "title": "OverlayFact"
+                        "title": "OverlayFact",
+                        "x-enumDescriptions": {
+                          "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                          "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                          "WheelOpen": "The seat\u0027s binding wheel is open.",
+                          "ConsoleOpen": "The seat\u0027s console is open.",
+                          "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                          "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                        }
                       },
                       "windowSeconds": {
                         "description": "How long after the fact last held the predicate still holds in full.",
@@ -26690,7 +27005,15 @@
                   "LessOrEqual",
                   "Greater",
                   "GreaterOrEqual"
-                ]
+                ],
+                "x-enumDescriptions": {
+                  "Equal": "Equality, pushing Int 1 or 0.",
+                  "NotEqual": "Inequality, pushing Int 1 or 0.",
+                  "Less": "Less-than, pushing Int 1 or 0.",
+                  "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+                  "Greater": "Greater-than, pushing Int 1 or 0.",
+                  "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+                }
               },
               "value": {
                 "description": "The literal comparand, or null when ComparandState spells the comparand instead.",
@@ -27153,7 +27476,11 @@
                             "Window"
                           ],
                           "default": "Camera",
-                          "title": "WorldScreenProjection"
+                          "title": "WorldScreenProjection",
+                          "x-enumDescriptions": {
+                            "Camera": "The destination renders through its own declared (or default) camera, unaffected by the viewer\u0027s position \u2014 today\u0027s behavior, unchanged for every session facet authored before this member existed.",
+                            "Window": "The destination renders through an off-axis frustum fitted to THIS face\u0027s aperture, apexed at the viewer\u0027s eye mapped through the border pair\u0027s isometry (see Puck.World.Client.WorldWindowProjectionMath, downstream of this project \u2014 see docs/project-map.md\u0027s layering) \u2014 requires this same face\u0027s Portal to author Mapped with a Counterpart (refused by name otherwise \u2014 see WorldDefinitionValidator), since the aperture and the mapping both come from the SAME border pair. CameraName is ignored under this mode \u2014 the camera is derived every produced frame, never an authored row."
+                          }
                         },
                         "resolution": {
                           "description": "The offscreen target\u0027s [width, height] in pixels, or null for the default 160x144 panel (Puck.World.Client.WorldViewInstances.DefaultSessionWidth x DefaultSessionHeight). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Refused under Window, which renders at the extent its glass covers on screen. Omitted from the wire when null.",
@@ -27445,7 +27772,11 @@
                   "Presence",
                   "Endowed"
                 ],
-                "title": "WorldContributionTenure"
+                "title": "WorldContributionTenure",
+                "x-enumDescriptions": {
+                  "Presence": "The piece stands while Link is reachable. The per-tick sweep stamps RetractDeadlineTick at GraceSeconds out when the link first reads unreachable, clears the stamp when it comes back, and retracts once the deadline passes.",
+                  "Endowed": "The piece persists; the sweep never touches the row. Link and a positive GraceSeconds are refused beside this tenure \u2014 the disjoint-field-set rule StateGenerator\u0027s source arms follow."
+                }
               },
               "slotCreationId": {
                 "description": "The host-owned Id the slot shows while unfilled and returns to on retraction. Must resolve to a declared creation row.",
@@ -27532,7 +27863,15 @@
                             "LessOrEqual",
                             "Greater",
                             "GreaterOrEqual"
-                          ]
+                          ],
+                          "x-enumDescriptions": {
+                            "Equal": "Equality, pushing Int 1 or 0.",
+                            "NotEqual": "Inequality, pushing Int 1 or 0.",
+                            "Less": "Less-than, pushing Int 1 or 0.",
+                            "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+                            "Greater": "Greater-than, pushing Int 1 or 0.",
+                            "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+                          }
                         },
                         "value": {
                           "description": "The scalar compared against (literal or state-row reference) \u2014 the same WorldLatticeScalar grammar a fields.reactions Transform/Expose condition already uses.",
@@ -27568,7 +27907,15 @@
                             "LessOrEqual",
                             "Greater",
                             "GreaterOrEqual"
-                          ]
+                          ],
+                          "x-enumDescriptions": {
+                            "Equal": "Equality, pushing Int 1 or 0.",
+                            "NotEqual": "Inequality, pushing Int 1 or 0.",
+                            "Less": "Less-than, pushing Int 1 or 0.",
+                            "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+                            "Greater": "Greater-than, pushing Int 1 or 0.",
+                            "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+                          }
                         },
                         "value": {
                           "description": "The literal comparand, or null when ComparandState spells the comparand instead.",
@@ -27700,7 +28047,11 @@
                   "Return"
                 ],
                 "default": "Record",
-                "title": "WorldBoardEnforcement"
+                "title": "WorldBoardEnforcement",
+                "x-enumDescriptions": {
+                  "Record": "An illegal move is recorded; the body that moved stays where it settled.",
+                  "Return": "An illegal move is recorded and the body that moved is posed back onto the move\u0027s origin cell."
+                }
               },
               "accept": {
                 "description": "The Verdict value the judge writes to accept a move \u2014 any other value is a refusal.",
@@ -27935,7 +28286,12 @@
                     "Clearance",
                     "Influence"
                   ],
-                  "title": "WorldPlacementSpatialRole"
+                  "title": "WorldPlacementSpatialRole",
+                  "x-enumDescriptions": {
+                    "Occupation": "Blocks occupation by another occupation volume.",
+                    "Clearance": "Reserves passage around an occupation volume.",
+                    "Influence": "Reports presence to a named, author-defined channel without blocking."
+                  }
                 },
                 "shape": {
                   "description": "The common bounded shape.",
@@ -27947,7 +28303,11 @@
                         "Box",
                         "Sphere"
                       ],
-                      "title": "WorldSpatialShapeKind"
+                      "title": "WorldSpatialShapeKind",
+                      "x-enumDescriptions": {
+                        "Box": "A finite oriented box.",
+                        "Sphere": "A finite sphere."
+                      }
                     },
                     "center": {
                       "description": "The local shape center.",
@@ -28940,7 +29300,11 @@
               "SmoothUnionContact",
               "GradientDerivedUp"
             ],
-            "title": "WorldContactRequirement"
+            "title": "WorldContactRequirement",
+            "x-enumDescriptions": {
+              "SmoothUnionContact": "Blended creation surfaces remain solid across their smooth-union seams.",
+              "GradientDerivedUp": "A body\u0027s up direction follows the contacted field gradient rather than world \u002BY."
+            }
           }
         },
         "contactSkin": {
@@ -29683,7 +30047,14 @@
                   null
                 ],
                 "default": null,
-                "title": "WorldRenderScaleTier"
+                "title": "WorldRenderScaleTier",
+                "x-enumDescriptions": {
+                  "Native": "Native resolution (scale 1): the view renders at its rect\u0027s own extent, 1280x800, and a lone whole-display view is not placed at all, so the root shows the world\u0027s output itself.",
+                  "ThreeQuarter": "Scale 221/255 (about 0.867), which the extent quantization rounds up to 0.875: 1120x700, about three quarters of the native pixel work.",
+                  "Half": "Scale 181/255 (about 0.710), which the extent quantization rounds up to 0.75: 960x600, about 0.56 of the native pixel work.",
+                  "Quarter": "Scale 128/255 (about 0.502), which the extent quantization rounds up to 0.5625: 720x450, about 0.32 of the native pixel work.",
+                  "Eighth": "Scale 90/255 (about 0.353), which the extent quantization rounds up to 0.375: 480x300, about 0.14 of the native pixel work; the most aggressive tier."
+                }
               },
               "tier": {
                 "description": "The authored quality preset whose floor this view uses.",
@@ -31019,7 +31390,26 @@
                     "Warning",
                     "Danger"
                   ],
-                  "title": "WorldThemeRole"
+                  "title": "WorldThemeRole",
+                  "x-enumDescriptions": {
+                    "SurfaceBase": "The deepest surface (a held control\u0027s seated plate).",
+                    "SurfaceRaised": "A raised surface (a control\u0027s resting plate).",
+                    "SurfaceInset": "A recessed surface (a well inside a panel).",
+                    "ScrimPanel": "The panel scrim.",
+                    "ScrimStrip": "The strip scrim.",
+                    "ScrimChip": "The chip scrim.",
+                    "LineHair": "The hairline rule.",
+                    "LineSoft": "The soft rule (a band divider).",
+                    "TextPrimary": "The primary text.",
+                    "TextDim": "The dimmed text.",
+                    "TextMute": "The muted text.",
+                    "Accent": "The accent (also the hover and selected tier).",
+                    "AccentQuiet": "The quiet accent fill.",
+                    "AccentInk": "The ink drawn on the accent.",
+                    "Positive": "The positive status.",
+                    "Warning": "The warning status.",
+                    "Danger": "The danger status."
+                  }
                 },
                 "visible": {
                   "description": "The drawn cursor\u0027s visibility condition, or null for always.",
@@ -31046,7 +31436,15 @@
                             "SeatCameraApplication",
                             "ScreenFramed"
                           ],
-                          "title": "OverlayFact"
+                          "title": "OverlayFact",
+                          "x-enumDescriptions": {
+                            "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                            "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                            "WheelOpen": "The seat\u0027s binding wheel is open.",
+                            "ConsoleOpen": "The seat\u0027s console is open.",
+                            "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                            "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                          }
                         }
                       },
                       "required": [
@@ -31071,7 +31469,15 @@
                             "SeatCameraApplication",
                             "ScreenFramed"
                           ],
-                          "title": "OverlayFact"
+                          "title": "OverlayFact",
+                          "x-enumDescriptions": {
+                            "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                            "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                            "WheelOpen": "The seat\u0027s binding wheel is open.",
+                            "ConsoleOpen": "The seat\u0027s console is open.",
+                            "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                            "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                          }
                         },
                         "windowSeconds": {
                           "description": "How long after the fact last held the predicate still holds in full.",
@@ -31285,7 +31691,15 @@
                         "SeatCameraApplication",
                         "ScreenFramed"
                       ],
-                      "title": "OverlayFact"
+                      "title": "OverlayFact",
+                      "x-enumDescriptions": {
+                        "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                        "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                        "WheelOpen": "The seat\u0027s binding wheel is open.",
+                        "ConsoleOpen": "The seat\u0027s console is open.",
+                        "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                        "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                      }
                     }
                   },
                   "required": [
@@ -31310,7 +31724,15 @@
                         "SeatCameraApplication",
                         "ScreenFramed"
                       ],
-                      "title": "OverlayFact"
+                      "title": "OverlayFact",
+                      "x-enumDescriptions": {
+                        "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                        "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                        "WheelOpen": "The seat\u0027s binding wheel is open.",
+                        "ConsoleOpen": "The seat\u0027s console is open.",
+                        "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                        "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                      }
                     },
                     "windowSeconds": {
                       "description": "How long after the fact last held the predicate still holds in full.",
@@ -31541,7 +31963,12 @@
                   "Over",
                   "Replace"
                 ],
-                "title": "WorldHudLayer"
+                "title": "WorldHudLayer",
+                "x-enumDescriptions": {
+                  "Under": "Draws before the first-party writers (document order among Under panels).",
+                  "Over": "Draws after the first-party writers, or after the replace panels when any are live (document order among Over panels) \u2014 always the topmost band.",
+                  "Replace": "Takes the base slot the five first-party writers would otherwise occupy: while at least one live panel declares Replace, every replace panel renders itself there (document order) and the five first-party writers do not run. Removing the last replace panel restores them."
+                }
               },
               "style": {
                 "description": "The panel\u0027s chrome recipe.",
@@ -31550,7 +31977,12 @@
                   "Strip",
                   "Chip"
                 ],
-                "title": "WorldHudPanelStyle"
+                "title": "WorldHudPanelStyle",
+                "x-enumDescriptions": {
+                  "Panel": "The full panel scrim.",
+                  "Strip": "The strip scrim (a thinner readout band).",
+                  "Chip": "The chip scrim (a small badge-sized panel)."
+                }
               },
               "visible": {
                 "description": "The panel\u0027s visibility condition over presentation facts, or null for always.",
@@ -31577,7 +32009,15 @@
                           "SeatCameraApplication",
                           "ScreenFramed"
                         ],
-                        "title": "OverlayFact"
+                        "title": "OverlayFact",
+                        "x-enumDescriptions": {
+                          "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                          "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                          "WheelOpen": "The seat\u0027s binding wheel is open.",
+                          "ConsoleOpen": "The seat\u0027s console is open.",
+                          "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                          "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                        }
                       }
                     },
                     "required": [
@@ -31602,7 +32042,15 @@
                           "SeatCameraApplication",
                           "ScreenFramed"
                         ],
-                        "title": "OverlayFact"
+                        "title": "OverlayFact",
+                        "x-enumDescriptions": {
+                          "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                          "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                          "WheelOpen": "The seat\u0027s binding wheel is open.",
+                          "ConsoleOpen": "The seat\u0027s console is open.",
+                          "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                          "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                        }
                       },
                       "windowSeconds": {
                         "description": "How long after the fact last held the predicate still holds in full.",
@@ -31804,7 +32252,14 @@
                         "Plot",
                         "Frame"
                       ],
-                      "title": "WorldHudElementKind"
+                      "title": "WorldHudElementKind",
+                      "x-enumDescriptions": {
+                        "Rect": "A filled rect \u2014 1 render element, no binding.",
+                        "Text": "A fixed-cell text run \u2014 the authored Text string, or (when Binding names one) the live-resolved binding\u0027s text form.",
+                        "Gauge": "A fill-bar readout of a bound binding\u0027s normalized 0..1 value (0 when unbound).",
+                        "Plot": "A scrolling recent series in an authored range, with an optional reference line.",
+                        "Frame": "A sampled frame: the element rect shows the frame a WorldFrameSource produces (camera/view/probe/capture) \u2014 the picture-in-picture element kind (e.g. a face-cam overlay)."
+                      }
                     },
                     "rect": {
                       "description": "The element\u0027s rect, normalized to the owning panel\u0027s local space.",
@@ -31840,7 +32295,15 @@
                         "Warning",
                         "Danger"
                       ],
-                      "title": "WorldHudStyleToken"
+                      "title": "WorldHudStyleToken",
+                      "x-enumDescriptions": {
+                        "Primary": "The primary text/fill tone.",
+                        "Dim": "The muted/dim tone.",
+                        "Accent": "The accent tone.",
+                        "Positive": "The positive/healthy tone.",
+                        "Warning": "The warning tone.",
+                        "Danger": "The danger tone."
+                      }
                     },
                     "text": {
                       "description": "The authored literal string a Text element draws when neither Binding nor Template is set; ignored for Rect and Gauge. Omitted from the wire when null.",
@@ -32063,7 +32526,15 @@
                                       "SeatCameraApplication",
                                       "ScreenFramed"
                                     ],
-                                    "title": "OverlayFact"
+                                    "title": "OverlayFact",
+                                    "x-enumDescriptions": {
+                                      "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                                      "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                                      "WheelOpen": "The seat\u0027s binding wheel is open.",
+                                      "ConsoleOpen": "The seat\u0027s console is open.",
+                                      "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                                      "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                                    }
                                   }
                                 },
                                 "required": [
@@ -32088,7 +32559,15 @@
                                       "SeatCameraApplication",
                                       "ScreenFramed"
                                     ],
-                                    "title": "OverlayFact"
+                                    "title": "OverlayFact",
+                                    "x-enumDescriptions": {
+                                      "SeatInput": "The seat sent any input (a routed signal) this tick.",
+                                      "PointerMotion": "The seat\u0027s pointer moved this tick.",
+                                      "WheelOpen": "The seat\u0027s binding wheel is open.",
+                                      "ConsoleOpen": "The seat\u0027s console is open.",
+                                      "SeatCameraApplication": "The seat\u0027s camera control application is active (see Target).",
+                                      "ScreenFramed": "The seat is captured on a screen it engaged, and its view shows that screen\u0027s picture alone (not the held view of a carried screen, nor the room after player.frame)."
+                                    }
                                   },
                                   "windowSeconds": {
                                     "description": "How long after the fact last held the predicate still holds in full.",
@@ -33276,7 +33755,11 @@
                             null
                           ],
                           "default": null,
-                          "title": "SdfFlowFrame"
+                          "title": "SdfFlowFrame",
+                          "x-enumDescriptions": {
+                            "Object": "The frame of the surface\u0027s own object: the creation\u0027s frame for a placed creation (its copies turn the vector with them), the slot\u0027s frame for a surface riding a slot, and world space for a surface emitted in world space (a field row).",
+                            "World": "World space whatever the surface rides, the pattern included, so it runs continuously across every surface wearing the material: a wind across a meadow of separately swaying blades."
+                          }
                         },
                         "coverageLane": {
                           "description": "The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.",
@@ -33396,7 +33879,21 @@
                               "Superellipsoid",
                               "Sweep"
                             ],
-                            "title": "SdfSolidPrimitive"
+                            "title": "SdfSolidPrimitive",
+                            "x-enumDescriptions": {
+                              "Sphere": "A sphere.",
+                              "Box": "A box.",
+                              "Torus": "A torus.",
+                              "Cylinder": "A cylinder.",
+                              "Capsule": "A capsule.",
+                              "Ellipsoid": "An ellipsoid.",
+                              "RoundCone": "A tapered capsule \u2014 a fat base narrowing to a rounded tip along \u002BY (teeth, horns, spikes).",
+                              "Plane": "An infinite plane bounding a solid half-space; local \u002BY is the outward normal.",
+                              "Cone": "A sharp circular cone with a flat base, centered along local Y.",
+                              "Prism": "A bounded profile in local XY extruded along Z. The default trapezoid has unit bottom half-width, half-height and depth, with an authored top-to-bottom width ratio (default one half). SdfPrismProfile selects rounded rectangles, polygons, ellipses, or a convex vertex list instead.",
+                              "Superellipsoid": "A generalized ellipsoid: q = pow(abs(p)/r, e); d = (pow(q.x\u002Bq.y\u002Bq.z, 1/e) - 1) * min(r), unit radii (1,1,1) and an authored exponent e in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (the document\u0027s exponent field carries it; unauthored is the minimum, the ellipsoid itself \u2014 an Ellipsoid emits the identical instruction, since every ellipsoid is this shape at that exponent). A squircle/rounded-cube family: the minimum exponent is a plain ellipsoid, larger values round toward a box.",
+                              "Sweep": "A quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as 1-4 helical strands \u2014 see Sweep. NOT a closed solid a body can stand on in the sense the rest of this enum\u0027s members are: its field is \u0022exact enough\u0022, not exact, and carries no Reach unit-scale law \u2014 its control points and radii already carry creation-unit dimensions directly (see SweepReach). The authoring layer admits it only with a curve facet naming its control points and radii."
+                            }
                           },
                           "color": {
                             "description": "The paint\u0027s color, #RRGGBB or a state binding.",
@@ -33504,7 +34001,16 @@
                                   "Convex",
                                   "Path"
                                 ],
-                                "title": "SdfPrismProfileKind"
+                                "title": "SdfPrismProfileKind",
+                                "x-enumDescriptions": {
+                                  "Trapezoid": "A trapezoid controlled by the shape\u0027s taper.",
+                                  "RoundedRectangle": "A rectangle with independently controlled corner rounding.",
+                                  "Polygon": "A regular polygon, stretched by the authored X/Y scale.",
+                                  "Ellipse": "An exact elliptical profile, extruded with flat front and rear caps.",
+                                  "ChamferedRectangle": "A rectangle with independently controlled 45-degree corner chamfers.",
+                                  "Convex": "An arbitrary convex polygon authored by Vertices, with CornerRadius reused as a uniform corner-rounding radius. The exact convex-polygon SDF, not the study\u0027s smoothed half-plane intersection.",
+                                  "Path": "Filled contours or variable-width strokes, flattened with an explicit tolerance and edge budget."
+                                }
                               },
                               "cornerRadius": {
                                 "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded.",
@@ -33729,7 +34235,11 @@
                               null
                             ],
                             "default": null,
-                            "title": "SdfLift"
+                            "title": "SdfLift",
+                            "x-enumDescriptions": {
+                              "Revolve": "Revolve the 2D profile around the local Y axis (the revolve lift operator): the profile sits in the (radial, Y) half-plane at a radial offset (the shape\u0027s liftAmount). Exact when the offset clears the profile\u0027s radial extent (a torus-like solid); a harmless conservative underestimate near the axis when the profile crosses it (offset 0 = a solid of revolution centred on the axis, e.g. a spheroid from an ellipse). Always 1-Lipschitz.",
+                              "Extrude": "Extrude the 2D profile along the local Z axis (the extrude lift operator) to the given half-height (the shape\u0027s liftAmount): a prism/slab whose cross-section is the exact 2D shape. Exact for any exact 2D field, and 1-Lipschitz."
+                            }
                           },
                           "rounding": {
                             "description": "The edge-rounding radius, as a shape\u0027s.",
@@ -34000,7 +34510,15 @@
                               "LessOrEqual",
                               "Greater",
                               "GreaterOrEqual"
-                            ]
+                            ],
+                            "x-enumDescriptions": {
+                              "Equal": "Equality, pushing Int 1 or 0.",
+                              "NotEqual": "Inequality, pushing Int 1 or 0.",
+                              "Less": "Less-than, pushing Int 1 or 0.",
+                              "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+                              "Greater": "Greater-than, pushing Int 1 or 0.",
+                              "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+                            }
                           },
                           "value": {
                             "description": "The scalar compared against (literal or state-row reference).",
@@ -34036,7 +34554,11 @@
                               "Set",
                               "Add"
                             ],
-                            "title": "WorldFieldWriteOp"
+                            "title": "WorldFieldWriteOp",
+                            "x-enumDescriptions": {
+                              "Set": "Replace the cell.",
+                              "Add": "Add to the cell."
+                            }
                           },
                           "value": {
                             "description": "The constant written or added; the result clamps to the field\u0027s range.",
@@ -34121,7 +34643,15 @@
                         "LessOrEqual",
                         "Greater",
                         "GreaterOrEqual"
-                      ]
+                      ],
+                      "x-enumDescriptions": {
+                        "Equal": "Equality, pushing Int 1 or 0.",
+                        "NotEqual": "Inequality, pushing Int 1 or 0.",
+                        "Less": "Less-than, pushing Int 1 or 0.",
+                        "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+                        "Greater": "Greater-than, pushing Int 1 or 0.",
+                        "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+                      }
                     },
                     "value": {
                       "description": "The constant compared against.",
@@ -34356,7 +34886,14 @@
                             "SymmetryOrbit"
                           ],
                           "default": "Markov",
-                          "title": "GeneratorSource"
+                          "title": "GeneratorSource",
+                          "x-enumDescriptions": {
+                            "Markov": "The weighted-transition walk over Contexts \u2014 reads Start/Bound/Contexts/ Mode, writes text. The only source that deals (see GeneratorMode) and the only one whose emission costs more than one sample.",
+                            "UniformRange": "One draw over the closed integer range [RangeMin, RangeMax] \u2014 reads only those two fields, writes an int or fixed value. The shared Maths rejection sampler makes every accepted value equally likely. The cursor counts all raw words, including rejected words. A result attempts at most MaxBoundedAttempts words, then refuses without a biased fallback.",
+                            "WeightedNumeric": "One alias-table draw over Weighted\u0027s numeric outcomes \u2014 reads that field and Mode, writes an int or fixed value. Each outcome\u0027s probability is exactly its weight over the total. A draw takes two advances, plus the raw words of one exact wide draw on the one word in 2\u00B3\u00B2 that lands on a column\u0027s threshold; the result reports the advances consumed, and the Markov walk pays the same per token. Under an exhausting mode the outcomes are drawn through the site\u0027s one DrawnMasks mask, which is the numeric shuffle bag.",
+                            "StreamDraw": "One raw, unshaped 32-bit draw off the site\u0027s own stream \u2014 no range, no weights \u2014 widened into the target\u0027s raw value as-is. One fixed-cost advance per draw. The unshaped-entropy primitive: no distribution is applied.",
+                            "SymmetryOrbit": "One uniform draw over an orbit of the symmetry lattice: the thirty nodes of Ring, or the nodes Node visits under Word (the lattice\u0027s own cycle when none is authored, so the node\u0027s ring) \u2014 reads those fields and Mode, writes the node index in the site\u0027s displayed unit (a fixed site stores node.0, the phase a cycle trait reads). The units are the orbit\u0027s nodes in walk order, equally weighted, drawn under an exhausting mode through the site\u0027s one DrawnMasks mask exactly as a weighted numeric source is; two advances per draw, plus the rare exact wide draw a weighted numeric source takes."
+                          }
                         },
                         "start": {
                           "description": "Markov only: the context every emission begins from. Must name a declared context.",
@@ -34452,7 +34989,12 @@
                             "RestartOnExhaustion"
                           ],
                           "default": "WithReplacement",
-                          "title": "GeneratorMode"
+                          "title": "GeneratorMode",
+                          "x-enumDescriptions": {
+                            "WithReplacement": "Every sample leaves the entry set unchanged \u2014 the ordinary weighted draw.",
+                            "WithoutReplacement": "Each entry may be drawn at most once per pass; a set whose entries are all drawn refuses the whole emission by name (never a silent stall, never a re-draw).",
+                            "RestartOnExhaustion": "Each entry may be drawn at most once per pass; a set whose entries are all drawn clears its mask and draws again from the full set, deterministically, in the same emission \u2014 the shuffle bag."
+                          }
                         },
                         "rangeMin": {
                           "description": "UniformRange only: the closed range\u0027s inclusive lower bound \u2014 both bounds present or neither. Raw-encoded per the destination site\u0027s CellKind (raw FixedQ4816 bits for a fixed site) \u2014 unlike a site row\u0027s own min/max, which a fixed row authors as decimal text, since a source is not bound to one site and cannot know the kind it will write.",
@@ -34666,7 +35208,11 @@
                   "Distance",
                   "Region"
                 ],
-                "title": "WorldInteractionCoOccurrence"
+                "title": "WorldInteractionCoOccurrence",
+                "x-enumDescriptions": {
+                  "Distance": "Every pair of a body tagged Left and a different body tagged Right within Range of one another \u2014 property x property; the pair is bound as $left/$right.",
+                  "Region": "Every body tagged Left inside the region of the placement Right names \u2014 property x region; the occupant is bound as $left."
+                }
               },
               "range": {
                 "description": "The distance threshold, for Distance alone \u2014 an exact JSON decimal lowered directly to deterministic fixed point, with no binary32 intermediate. Ignored (and unchecked) under Region.",
@@ -34801,7 +35347,12 @@
                             "AffectingSubject"
                           ],
                           "default": "Self",
-                          "title": "ActionTarget"
+                          "title": "ActionTarget",
+                          "x-enumDescriptions": {
+                            "Self": "The participant whose trigger fired.",
+                            "ProducerTarget": "The target selected by the participant\u0027s active producer.",
+                            "AffectingSubject": "The participant that applied the recipient\u0027s most recent targeted effect."
+                          }
                         },
                         "key": {
                           "description": "The cell inside State \u2014 null writes the row\u0027s slot cell, which a keyed row does not have (refused by name).",
@@ -36088,7 +36639,12 @@
                             "AffectingSubject"
                           ],
                           "default": "Self",
-                          "title": "ActionTarget"
+                          "title": "ActionTarget",
+                          "x-enumDescriptions": {
+                            "Self": "The participant whose trigger fired.",
+                            "ProducerTarget": "The target selected by the participant\u0027s active producer.",
+                            "AffectingSubject": "The participant that applied the recipient\u0027s most recent targeted effect."
+                          }
                         },
                         "key": {
                           "description": "The cell inside State \u2014 see Key.",
@@ -38618,7 +39174,14 @@
                                     "Slice"
                                   ],
                                   "default": "Key",
-                                  "title": "ZoneSelector"
+                                  "title": "ZoneSelector",
+                                  "x-enumDescriptions": {
+                                    "Key": "Select by stable token identity.",
+                                    "First": "Select the first cell of an ordered zone.",
+                                    "Last": "Select the last cell of an ordered zone.",
+                                    "Random": "Select by one draw from an explicitly named stream-draw state row.",
+                                    "Slice": "Select the keyed token and every token after it in the zone \u2014 a cascade\u0027s tail, moved in order as one run (a solitaire column\u0027s run from a card to its top)."
+                                  }
                                 },
                                 "key": {
                                   "description": "The token key for key or slice selection. In an authored rule this may be a dynamic key, resolved from the active store before each transfer; direct mutations carry the resolved literal.",
@@ -40406,7 +40969,19 @@
                                     "Shift",
                                     "Image"
                                   ],
-                                  "title": "BoardCombineOp"
+                                  "title": "BoardCombineOp",
+                                  "x-enumDescriptions": {
+                                    "Copy": "Every cell of left, value for value, including its empty value even when the target\u0027s differs.",
+                                    "Fill": "Every cell a member.",
+                                    "Clear": "No cell a member.",
+                                    "And": "Members of both left and right.",
+                                    "Or": "Members of either.",
+                                    "Xor": "Members of exactly one.",
+                                    "AndNot": "Members of left that are not members of right.",
+                                    "Not": "Every cell that is not a member of left.",
+                                    "Shift": "Each member of left moved one step along direction; a member with no neighbour that way drops \u2014 the same move boardShift makes on a 64-bit mask.",
+                                    "Image": "Each member of left carried through the point-group element \u2014 the same move boardImage makes."
+                                  }
                                 },
                                 "left": {
                                   "description": "The first source board, over the same topology; absent for Fill and Clear.",
@@ -42623,7 +43198,15 @@
                                     "LessOrEqual",
                                     "Greater",
                                     "GreaterOrEqual"
-                                  ]
+                                  ],
+                                  "x-enumDescriptions": {
+                                    "Equal": "Equality, pushing Int 1 or 0.",
+                                    "NotEqual": "Inequality, pushing Int 1 or 0.",
+                                    "Less": "Less-than, pushing Int 1 or 0.",
+                                    "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+                                    "Greater": "Greater-than, pushing Int 1 or 0.",
+                                    "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+                                  }
                                 },
                                 "value": {
                                   "description": "The authored constant comparand, or null when ComparandState or Text spells the comparand instead.",
@@ -43803,7 +44386,15 @@
                                     "LessOrEqual",
                                     "Greater",
                                     "GreaterOrEqual"
-                                  ]
+                                  ],
+                                  "x-enumDescriptions": {
+                                    "Equal": "Equality, pushing Int 1 or 0.",
+                                    "NotEqual": "Inequality, pushing Int 1 or 0.",
+                                    "Less": "Less-than, pushing Int 1 or 0.",
+                                    "LessOrEqual": "Less-or-equal, pushing Int 1 or 0.",
+                                    "Greater": "Greater-than, pushing Int 1 or 0.",
+                                    "GreaterOrEqual": "Greater-or-equal, pushing Int 1 or 0."
+                                  }
                                 },
                                 "right": {
                                   "description": "Right numeric expression.",
@@ -44668,7 +45259,14 @@
                                     null
                                   ],
                                   "default": null,
-                                  "title": "CellKind"
+                                  "title": "CellKind",
+                                  "x-enumDescriptions": {
+                                    "Int": "A whole 64-bit signed integer cell (a score, a round counter, an inventory count, or \u2014 declaring min zero \u2014 a tick-count timer).",
+                                    "Fixed": "A fixed-point cell holding raw FixedQ4816 bits \u2014 the deterministic replacement for a float in simulation state. Human-authored surfaces (document JSON, console verb arguments, validator refusal text, read-back echoes) use the decimal representation via FixedQ4816.TryParse/ToString; only the addon ABI channel wire and the per-cell mutation payload carry the raw bit pattern.",
+                                    "Bool": "A boolean cell (a win flag, a toggle). Carries no range \u2014 a gauge cannot bind to it.",
+                                    "Text": "A short-text cell (a status label, a player name slot), bounded to MaxTextValueLength UTF-16 code units. Carries no range \u2014 a gauge cannot bind to it. The only kind whose value is carried in Text rather than Value.",
+                                    "Vector": "A vector cell holding an admitted, normalized signed 8-bit embedding vector, carried in Vector rather than Value or Text."
+                                  }
                                 }
                               },
                               "required": [
@@ -45397,7 +45995,12 @@
                             "AffectingSubject"
                           ],
                           "default": "Self",
-                          "title": "ActionTarget"
+                          "title": "ActionTarget",
+                          "x-enumDescriptions": {
+                            "Self": "The participant whose trigger fired.",
+                            "ProducerTarget": "The target selected by the participant\u0027s active producer.",
+                            "AffectingSubject": "The participant that applied the recipient\u0027s most recent targeted effect."
+                          }
                         }
                       },
                       "required": [
@@ -45519,7 +46122,12 @@
                             "AffectingSubject"
                           ],
                           "default": "Self",
-                          "title": "ActionTarget"
+                          "title": "ActionTarget",
+                          "x-enumDescriptions": {
+                            "Self": "The participant whose trigger fired.",
+                            "ProducerTarget": "The target selected by the participant\u0027s active producer.",
+                            "AffectingSubject": "The participant that applied the recipient\u0027s most recent targeted effect."
+                          }
                         }
                       },
                       "required": [
@@ -45664,7 +46272,12 @@
                             "AffectingSubject"
                           ],
                           "default": "Self",
-                          "title": "ActionTarget"
+                          "title": "ActionTarget",
+                          "x-enumDescriptions": {
+                            "Self": "The participant whose trigger fired.",
+                            "ProducerTarget": "The target selected by the participant\u0027s active producer.",
+                            "AffectingSubject": "The participant that applied the recipient\u0027s most recent targeted effect."
+                          }
                         },
                         "useMoveDirection": {
                           "description": "Uses the normalized current movement command when nonzero, falling back to the authored body direction.",
@@ -45835,7 +46448,12 @@
                             "AffectingSubject"
                           ],
                           "default": "Self",
-                          "title": "ActionTarget"
+                          "title": "ActionTarget",
+                          "x-enumDescriptions": {
+                            "Self": "The participant whose trigger fired.",
+                            "ProducerTarget": "The target selected by the participant\u0027s active producer.",
+                            "AffectingSubject": "The participant that applied the recipient\u0027s most recent targeted effect."
+                          }
                         }
                       },
                       "required": [
@@ -45862,7 +46480,11 @@
                             "Clear"
                           ],
                           "default": "Body",
-                          "title": "WorldBodyDesignationKind"
+                          "title": "WorldBodyDesignationKind",
+                          "x-enumDescriptions": {
+                            "Body": "Designate another active body.",
+                            "Clear": "Clear the register."
+                          }
                         },
                         "key": {
                           "description": "The body a world rule names \u2014 see Key.",
@@ -47273,7 +47895,11 @@
                             "Add"
                           ],
                           "default": "Set",
-                          "title": "WorldFieldWriteOp"
+                          "title": "WorldFieldWriteOp",
+                          "x-enumDescriptions": {
+                            "Set": "Replace the cell.",
+                            "Add": "Add to the cell."
+                          }
                         },
                         "radius": {
                           "type": "integer",
@@ -47313,7 +47939,12 @@
                                 "Over",
                                 "Replace"
                               ],
-                              "title": "WorldHudLayer"
+                              "title": "WorldHudLayer",
+                              "x-enumDescriptions": {
+                                "Under": "Draws before the first-party writers (document order among Under panels).",
+                                "Over": "Draws after the first-party writers, or after the replace panels when any are live (document order among Over panels) \u2014 always the topmost band.",
+                                "Replace": "Takes the base slot the five first-party writers would otherwise occupy: while at least one live panel declares Replace, every replace panel renders itself there (document order) and the five first-party writers do not run. Removing the last replace panel restores them."
+                              }
                             },
                             "style": {
                               "description": "The panel\u0027s chrome recipe.",
@@ -47322,7 +47953,12 @@
                                 "Strip",
                                 "Chip"
                               ],
-                              "title": "WorldHudPanelStyle"
+                              "title": "WorldHudPanelStyle",
+                              "x-enumDescriptions": {
+                                "Panel": "The full panel scrim.",
+                                "Strip": "The strip scrim (a thinner readout band).",
+                                "Chip": "The chip scrim (a small badge-sized panel)."
+                              }
                             },
                             "visible": {
                               "$ref": "#/properties/hud/properties/panels/items/properties/visible",
@@ -50546,7 +51182,11 @@
                   "Edge"
                 ],
                 "default": "Edge",
-                "title": "ActionTriggerMode"
+                "title": "ActionTriggerMode",
+                "x-enumDescriptions": {
+                  "Level": "Fires every evaluation the condition holds \u2014 the default, and the right shape for a continuous effect (a per-tick drain, a standing impulse).",
+                  "Edge": "Fires once on the condition crossing from not-holding to holding, and re-arms only when it crosses back \u2014 the right shape for anything that writes a document row, since a level-triggered write fires once per tick the condition holds rather than once per crossing."
+                }
               },
               "neighbours": {
                 "type": [
@@ -50812,7 +51452,10 @@
               "Closed"
             ],
             "default": "Closed",
-            "title": "WorldAdjacencyUnavailable"
+            "title": "WorldAdjacencyUnavailable",
+            "x-enumDescriptions": {
+              "Closed": "The handoff is refused and the local authority stays authoritative. At a boundary a body walks through, one whose frame is yaw-only, the body is clamped one raw unit inside it, as against closed terrain. At a pitched boundary, a floor or a ceiling, the body keeps its pose and its velocity and goes on moving under the local authority: a clamp there would pin a falling body in mid-air at the plane."
+            }
           },
           "onUnavailable": {
             "description": "Optional declared channel pressed once on the body after the engine applies the failure treatment. Use a kit action on this channel for authored sound, animation, state, or other feedback; ownership safety never depends on the binding.",
@@ -50904,7 +51547,14 @@
               "Text",
               "Vector"
             ],
-            "title": "CellKind"
+            "title": "CellKind",
+            "x-enumDescriptions": {
+              "Int": "A whole 64-bit signed integer cell (a score, a round counter, an inventory count, or \u2014 declaring min zero \u2014 a tick-count timer).",
+              "Fixed": "A fixed-point cell holding raw FixedQ4816 bits \u2014 the deterministic replacement for a float in simulation state. Human-authored surfaces (document JSON, console verb arguments, validator refusal text, read-back echoes) use the decimal representation via FixedQ4816.TryParse/ToString; only the addon ABI channel wire and the per-cell mutation payload carry the raw bit pattern.",
+              "Bool": "A boolean cell (a win flag, a toggle). Carries no range \u2014 a gauge cannot bind to it.",
+              "Text": "A short-text cell (a status label, a player name slot), bounded to MaxTextValueLength UTF-16 code units. Carries no range \u2014 a gauge cannot bind to it. The only kind whose value is carried in Text rather than Value.",
+              "Vector": "A vector cell holding an admitted, normalized signed 8-bit embedding vector, carried in Vector rather than Value or Text."
+            }
           },
           "cells": {
             "type": "array",
@@ -51025,7 +51675,17 @@
                         "Ring"
                       ],
                       "default": "Step",
-                      "title": "CycleOutput"
+                      "title": "CycleOutput",
+                      "x-enumDescriptions": {
+                        "Step": "The rotation\u0027s step count in [0, order), one full turn per Order steps \u2014 an int cell.",
+                        "Turns": "The rotation as a fraction of one turn, \u230Astep \u00B7 2^16 / order\u230B in raw FixedQ4816 bits, so the value wraps once per loop the way a state clock reads its row \u2014 a fixed cell.",
+                        "Cos": "The unit rotation\u0027s cosine, the real part of the order\u0027s root of unity at the step \u2014 a fixed cell.",
+                        "Sin": "The unit rotation\u0027s sine, the imaginary part of that root of unity \u2014 a fixed cell.",
+                        "Node": "The symmetry-lattice node the phase node has been carried to along its orbit under the generator, in [0, 240) \u2014 an int cell whose stored value is the node the walk starts from.",
+                        "ProjectionX": "The current node\u0027s projected X coordinate on the plane of eight concentric rings \u2014 a fixed cell.",
+                        "ProjectionY": "The current node\u0027s projected Y coordinate on that plane \u2014 a fixed cell.",
+                        "Ring": "The ring, 0..7, the current node lies on \u2014 an int cell; constant along the lattice\u0027s own cycle, and a value that moves under a word whose orbits cross rings."
+                      }
                     },
                     "ticksPerStep": {
                       "description": "The server ticks one step lasts; refused at zero or below.",
@@ -51605,7 +52265,12 @@
               "Change"
             ],
             "default": "Level",
-            "title": "WorldHapticMode"
+            "title": "WorldHapticMode",
+            "x-enumDescriptions": {
+              "Level": "Continuous motor drive: while Low or High is positive, the pad motors run at those intensities, re-armed within DurationSeconds and stopped when both return to zero.",
+              "Rise": "Rising-edge pulse: fires one finite pulse of DurationSeconds at (Low, High) when Signal transitions from non-positive to positive.",
+              "Change": "Change-edge pulse: fires one finite pulse of DurationSeconds at (Low, High) whenever Signal changes to a new finite value after initial observation."
+            }
           },
           "seat": {
             "description": "Optional target seat (seat1..seat4), or null for every local joined seat.",
@@ -51784,7 +52449,21 @@
                                   "Superellipsoid",
                                   "Sweep"
                                 ],
-                                "title": "SdfSolidPrimitive"
+                                "title": "SdfSolidPrimitive",
+                                "x-enumDescriptions": {
+                                  "Sphere": "A sphere.",
+                                  "Box": "A box.",
+                                  "Torus": "A torus.",
+                                  "Cylinder": "A cylinder.",
+                                  "Capsule": "A capsule.",
+                                  "Ellipsoid": "An ellipsoid.",
+                                  "RoundCone": "A tapered capsule \u2014 a fat base narrowing to a rounded tip along \u002BY (teeth, horns, spikes).",
+                                  "Plane": "An infinite plane bounding a solid half-space; local \u002BY is the outward normal.",
+                                  "Cone": "A sharp circular cone with a flat base, centered along local Y.",
+                                  "Prism": "A bounded profile in local XY extruded along Z. The default trapezoid has unit bottom half-width, half-height and depth, with an authored top-to-bottom width ratio (default one half). SdfPrismProfile selects rounded rectangles, polygons, ellipses, or a convex vertex list instead.",
+                                  "Superellipsoid": "A generalized ellipsoid: q = pow(abs(p)/r, e); d = (pow(q.x\u002Bq.y\u002Bq.z, 1/e) - 1) * min(r), unit radii (1,1,1) and an authored exponent e in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (the document\u0027s exponent field carries it; unauthored is the minimum, the ellipsoid itself \u2014 an Ellipsoid emits the identical instruction, since every ellipsoid is this shape at that exponent). A squircle/rounded-cube family: the minimum exponent is a plain ellipsoid, larger values round toward a box.",
+                                  "Sweep": "A quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as 1-4 helical strands \u2014 see Sweep. NOT a closed solid a body can stand on in the sense the rest of this enum\u0027s members are: its field is \u0022exact enough\u0022, not exact, and carries no Reach unit-scale law \u2014 its control points and radii already carry creation-unit dimensions directly (see SweepReach). The authoring layer admits it only with a curve facet naming its control points and radii."
+                                }
                               },
                               "x": {
                                 "type": "number",
@@ -51819,7 +52498,16 @@
                                       "Convex",
                                       "Path"
                                     ],
-                                    "title": "SdfPrismProfileKind"
+                                    "title": "SdfPrismProfileKind",
+                                    "x-enumDescriptions": {
+                                      "Trapezoid": "A trapezoid controlled by the shape\u0027s taper.",
+                                      "RoundedRectangle": "A rectangle with independently controlled corner rounding.",
+                                      "Polygon": "A regular polygon, stretched by the authored X/Y scale.",
+                                      "Ellipse": "An exact elliptical profile, extruded with flat front and rear caps.",
+                                      "ChamferedRectangle": "A rectangle with independently controlled 45-degree corner chamfers.",
+                                      "Convex": "An arbitrary convex polygon authored by Vertices, with CornerRadius reused as a uniform corner-rounding radius. The exact convex-polygon SDF, not the study\u0027s smoothed half-plane intersection.",
+                                      "Path": "Filled contours or variable-width strokes, flattened with an explicit tolerance and edge budget."
+                                    }
                                   },
                                   "cornerRadius": {
                                     "description": "A fraction in [0, 1]: the profile\u0027s smaller half-extent for RoundedRectangle\u0027s corner radius or ChamferedRectangle\u0027s chamfer radius; the scaled polygon\u0027s conservative inradius (ConvexPolygonInradius) for Convex\u0027s uniform corner rounding, also clamped to the extrusion half-depth when extruded.",
@@ -51853,7 +52541,11 @@
                                   "Extrude"
                                 ],
                                 "default": "Extrude",
-                                "title": "SdfLift"
+                                "title": "SdfLift",
+                                "x-enumDescriptions": {
+                                  "Revolve": "Revolve the 2D profile around the local Y axis (the revolve lift operator): the profile sits in the (radial, Y) half-plane at a radial offset (the shape\u0027s liftAmount). Exact when the offset clears the profile\u0027s radial extent (a torus-like solid); a harmless conservative underestimate near the axis when the profile crosses it (offset 0 = a solid of revolution centred on the axis, e.g. a spheroid from an ellipse). Always 1-Lipschitz.",
+                                  "Extrude": "Extrude the 2D profile along the local Z axis (the extrude lift operator) to the given half-height (the shape\u0027s liftAmount): a prism/slab whose cross-section is the exact 2D shape. Exact for any exact 2D field, and 1-Lipschitz."
+                                }
                               },
                               "rounding": {
                                 "type": "number",

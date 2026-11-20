@@ -1,4 +1,5 @@
 {
+  "description": "Probes that read live hardware or a recorded track at a bounded rate and route their channels into the world.",
   "type": [
     "array",
     "null"

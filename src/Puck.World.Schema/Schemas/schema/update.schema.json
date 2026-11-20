@@ -1,4 +1,5 @@
 {
+  "description": "The world\u0027s self-update settings.",
   "type": [
     "object",
     "null"

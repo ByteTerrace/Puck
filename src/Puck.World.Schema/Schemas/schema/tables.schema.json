@@ -1,4 +1,5 @@
 {
+  "description": "Static lookup tables rules read by name, each pinned by its content hash.",
   "type": [
     "array",
     "null"

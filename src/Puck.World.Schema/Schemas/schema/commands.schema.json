@@ -1,4 +1,5 @@
 {
+  "description": "Console commands the world builds from existing verbs.",
   "type": [
     "array",
     "null"
@@ -50,7 +51,15 @@
                 "Spawn"
               ],
               "default": "Text",
-              "title": "WorldConsoleCommandParameterKind"
+              "title": "WorldConsoleCommandParameterKind",
+              "x-enumDescriptions": {
+                "Text": "Any one plain token.",
+                "Number": "An invariant-culture decimal number.",
+                "Integer": "An invariant-culture integer.",
+                "Choice": "One of the parameter\u0027s own Values, matched ignoring case and substituted as declared.",
+                "Body": "A body index, 0 up to the body capacity ceiling.",
+                "Spawn": "The id of one of the document\u0027s spawnPoints, matched ignoring case and substituted as declared."
+              }
             },
             "default": {
               "description": "The argument a caller who omits it gets, written as it would be typed; null makes the argument required.",

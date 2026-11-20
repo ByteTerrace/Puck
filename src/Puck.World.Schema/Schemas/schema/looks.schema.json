@@ -1,4 +1,5 @@
 {
+  "description": "The appearances bodies wear, and the policy that deals them to bodies.",
   "type": [
     "object",
     "null"

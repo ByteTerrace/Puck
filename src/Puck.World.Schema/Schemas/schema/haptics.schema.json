@@ -1,4 +1,5 @@
 {
+  "description": "Haptic pulses a pad plays when the world names them.",
   "type": [
     "array",
     "null"
@@ -39,7 +40,12 @@
           "Change"
         ],
         "default": "Level",
-        "title": "WorldHapticMode"
+        "title": "WorldHapticMode",
+        "x-enumDescriptions": {
+          "Level": "Continuous motor drive: while Low or High is positive, the pad motors run at those intensities, re-armed within DurationSeconds and stopped when both return to zero.",
+          "Rise": "Rising-edge pulse: fires one finite pulse of DurationSeconds at (Low, High) when Signal transitions from non-positive to positive.",
+          "Change": "Change-edge pulse: fires one finite pulse of DurationSeconds at (Low, High) whenever Signal changes to a new finite value after initial observation."
+        }
       },
       "seat": {
         "description": "Optional target seat (seat1..seat4), or null for every local joined seat.",

@@ -1,4 +1,5 @@
 {
+  "description": "Rule groups that claim rules and run them together, to a fixpoint or in stages; absent, every rule runs on its own.",
   "type": [
     "array",
     "null"
@@ -21,7 +22,11 @@
           "Fixpoint",
           "Staged"
         ],
-        "title": "RuleGroupShape"
+        "title": "RuleGroupShape",
+        "x-enumDescriptions": {
+          "Fixpoint": "One pass per tick over every member, repeated until a pass leaves no row of the group\u0027s write set changed or the pass ceiling is reached.",
+          "Staged": "A cursor over ordered steps: a step advances when its own effects commit."
+        }
       },
       "steps": {
         "description": "The members, in authored order; for a staged group this is the step sequence, and the last step is terminal.",
@@ -45,7 +50,11 @@
                 "Skip"
               ],
               "default": "Stall",
-              "title": "RuleGroupStepPolicy"
+              "title": "RuleGroupStepPolicy",
+              "x-enumDescriptions": {
+                "Stall": "The cursor stays on the step and retries it next tick.",
+                "Skip": "The cursor advances past the step\u0027s own refusal."
+              }
             }
           },
           "required": [

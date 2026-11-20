@@ -1,4 +1,5 @@
 {
+  "description": "The contact solver\u0027s tuning: skin, iterations, slope limit and which contact each body uses. A world with bodies must author it.",
   "type": [
     "object",
     "null"
@@ -13,7 +14,11 @@
           "SmoothUnionContact",
           "GradientDerivedUp"
         ],
-        "title": "WorldContactRequirement"
+        "title": "WorldContactRequirement",
+        "x-enumDescriptions": {
+          "SmoothUnionContact": "Blended creation surfaces remain solid across their smooth-union seams.",
+          "GradientDerivedUp": "A body\u0027s up direction follows the contacted field gradient rather than world \u002BY."
+        }
       }
     },
     "contactSkin": {

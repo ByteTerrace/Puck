@@ -250,7 +250,7 @@ public sealed partial class WorldPersistence {
             Host.Document.Install(
                 authority: authority!,
                 definition: candidate,
-                rebuildPopulation: plan.RebuildsPopulation
+                products: plan
             );
             Host.Document.FinishUndoProducts(addons: addonInputs, machines: machineInputs, products: plan);
             Host.Tick.PrimeDealProjection();

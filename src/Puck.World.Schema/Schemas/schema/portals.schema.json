@@ -1,4 +1,5 @@
 {
+  "description": "The portals that join this world to the worlds its references name.",
   "type": [
     "object",
     "null"
@@ -29,7 +30,11 @@
             "Refuse"
           ],
           "default": "Retry",
-          "title": "WorldTransferFullPolicy"
+          "title": "WorldTransferFullPolicy",
+          "x-enumDescriptions": {
+            "Retry": "Refuse this attempt and let the client retry on a later source tick.",
+            "Refuse": "Refuse this attempt without scheduling another one."
+          }
         },
         "partyAllOrNothing": {
           "description": "Whether a party transfer reserves and commits as one cohort. When false, each member is a separate atomic body transfer.",

@@ -208,7 +208,7 @@ public sealed class WorldFieldLatticeLawTests {
         Assert.NotNull(@object: population.FieldRegions[0].Lattice);
     }
     [Fact]
-    public void PopulationRebuildInstallsReactionOnlyEditsWithoutResettingLiveCells() {
+    public void InstallFieldsInstallsReactionOnlyEditsWithoutResettingLiveCells() {
         var originalFields = Fields(reactions: [new WorldReaction.Transform(
                 When: [],
                 Then: [new WorldFieldWrite(
@@ -237,10 +237,7 @@ public sealed class WorldFieldLatticeLawTests {
         var lattice = Assert.IsType<FieldLattice>(@object: population.FieldRegions[0].Lattice);
 
         FieldLatticeSteps.Step(lattice: lattice);
-        population.Rebuild(
-            definition: replacement,
-            solids: null
-        );
+        population.InstallFields(definition: replacement);
 
         Assert.Same(
             expected: lattice,
@@ -265,7 +262,7 @@ public sealed class WorldFieldLatticeLawTests {
         );
     }
     [Fact]
-    public void PopulationRebuildRejectsAnIncompatibleLatticeBeforeChangingDerivedState() {
+    public void InstallFieldsRejectsAnIncompatibleLatticeBeforeChangingDerivedState() {
         var original = Fixtures.WithLattice(
             definition: Fixtures.BuildDocument(),
             composite: Fields()
@@ -280,10 +277,7 @@ public sealed class WorldFieldLatticeLawTests {
         var revision = population.Revision;
         var seats = population.LocalSeatCount;
 
-        Assert.Throws<InvalidOperationException>(testCode: () => population.Rebuild(
-            definition: incompatible,
-            solids: null
-        ));
+        Assert.Throws<InvalidOperationException>(testCode: () => population.InstallFields(definition: incompatible));
 
         Assert.Same(
             expected: lattice,

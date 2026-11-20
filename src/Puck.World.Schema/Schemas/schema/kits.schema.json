@@ -1,4 +1,5 @@
 {
+  "description": "The locomotion kits bodies are built from, and the policy that deals them to bodies.",
   "type": [
     "object",
     "null"
@@ -582,7 +583,11 @@
                         "Tangent",
                         "Volume"
                       ],
-                      "title": "WorldFlockSpace"
+                      "title": "WorldFlockSpace",
+                      "x-enumDescriptions": {
+                        "Tangent": "The body\u0027s current support/gravity tangent plane, including walls or curved worlds.",
+                        "Volume": "All three dimensions; the steering preference itself does not establish traversability."
+                      }
                     },
                     "separation": {
                       "description": "Local repulsion weight in [0,1].",
@@ -717,13 +722,9 @@
                         "default": null
                       },
                       "mode": {
+                        "$ref": "./common.schema.json#/$defs/ActionTriggerMode",
                         "description": "Level or edge.",
-                        "enum": [
-                          "Level",
-                          "Edge"
-                        ],
-                        "default": "Level",
-                        "title": "ActionTriggerMode"
+                        "default": "Level"
                       }
                     },
                     "required": [
@@ -838,7 +839,11 @@
               "Solid"
             ],
             "default": "Overlap",
-            "title": "WorldBodyContactMode"
+            "title": "WorldBodyContactMode",
+            "x-enumDescriptions": {
+              "Overlap": "Bodies may overlap. This is the default; the engine never introduces crowd shoving implicitly.",
+              "Solid": "Two bodies physically depenetrate only when both of their kits select this mode."
+            }
           },
           "mass": {
             "type": "number",
@@ -1017,7 +1022,27 @@
                 "Start",
                 "Back"
               ],
-              "title": "WorldPadElement"
+              "title": "WorldPadElement",
+              "x-enumDescriptions": {
+                "LeftStickX": "The left stick\u0027s X axis.",
+                "LeftStickY": "The left stick\u0027s Y axis.",
+                "RightStickX": "The right stick\u0027s X axis.",
+                "RightStickY": "The right stick\u0027s Y axis.",
+                "LeftTrigger": "The left analog trigger.",
+                "RightTrigger": "The right analog trigger.",
+                "South": "The bottom face button.",
+                "East": "The right face button.",
+                "West": "The left face button.",
+                "North": "The top face button.",
+                "DpadUp": "The directional pad\u0027s up direction.",
+                "DpadDown": "The directional pad\u0027s down direction.",
+                "DpadLeft": "The directional pad\u0027s left direction.",
+                "DpadRight": "The directional pad\u0027s right direction.",
+                "LeftShoulder": "The left shoulder (bumper) button.",
+                "RightShoulder": "The right shoulder (bumper) button.",
+                "Start": "The start/menu/plus button.",
+                "Back": "The back/select/view/minus button."
+              }
             },
             "default": null
           },

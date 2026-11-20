@@ -1,4 +1,5 @@
 {
+  "description": "Per-seat mode families (such as a camera or build mode) a seat switches between.",
   "type": [
     "array",
     "null"

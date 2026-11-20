@@ -778,10 +778,12 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
     protected override IReadOnlyList<string> SchemaDrawSiteMembers => ["field"];
 
     /// <inheritdoc/>
-    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\"|\"Vector\",\"space\":…,\"enum\":…,\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"behavior\":\"None\",\"clock\":{\"epochTick\":…,\"epochEngineTick\":…,\"y0\":…,\"v0\":…,\"substepTicks\":…}}],\"clock\":{…},\"min\":…,\"max\":…,\"capacity\":…,\"reservedCapacity\":…,\"cellSlots\":[…],\"overflow\":\"Refuse\"|\"Saturate\",\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"perSecondNumerator\":…,\"perSecondDenominator\":…},\"dynamics\":{\"row\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"Markov\"|\"UniformRange\"|\"WeightedNumeric\"|\"StreamDraw\"|\"SymmetryOrbit\",…},\"timing\":\"Boot\"|\"TickPeriod\"|\"Event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"cellVisibility\":true,\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…},\"verdict\":{\"gate\":…,\"status\":…},\"witness\":…}";
-
-    /// <inheritdoc/>
-    protected override bool ClaimsMember(string name) => (name is "gatesDrive" or "field" or "verdict" or "witness");
+    protected override IReadOnlyList<ClaimedShapeMember> ClaimedShapeMembers { get; } = [
+        new(After: "overflow", Name: "gatesDrive", Spelling: """ "gatesDrive":… """),
+        new(After: "cycle", Name: "field", Spelling: """ "field":{"initial":…,"min":…,"max":…,"heightScale":…,"color":…,"paint":[…]} """),
+        new(After: "inverse", Name: "verdict", Spelling: """ "verdict":{"gate":…,"status":…} """),
+        new(After: "inverse", Name: "witness", Spelling: """ "witness":… """),
+    ];
     /// <inheritdoc/>
     protected override WorldStateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => new(
         row: row,
@@ -1167,7 +1169,7 @@ internal sealed class GranteeJsonConverter : TryParseStringJsonConverter<Grantee
 /// <see cref="Puck.World.Authoring.CreationCanonicalizer"/> hashes. Formatting (indent/newlines) rides the outer canonical
 /// writer, which is deterministic — the ouroboros round-trip covers the composition.
 /// </summary>
-internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.Authoring.CreationDocument>, IJsonSchemaNodeConverter {
+internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.Authoring.CreationDocument>, IJsonSchemaGraphConverter {
     // Document doctrine for this whole family (see CreationDocument's own remarks) declares every optional member
     // nullable and every nullable member optional; the exporter's own "required" computation only reads a
     // constructor parameter's DEFAULT VALUE, blind to that convention, so a nullable positional-record parameter
@@ -1217,28 +1219,28 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.A
         ((Nullable.GetUnderlyingType(nullableType: parameter.ParameterType) is not null) ||
         (!parameter.ParameterType.IsValueType && (context.Create(parameterInfo: parameter).WriteState == NullabilityState.Nullable)));
 
+    // The exporter requires an explicit TypeInfoResolver on the options it walks; DocumentJsonOptions.Shared relies on
+    // STJ's implicit reflection default instead (attached lazily on first (de)serialize, never by the exporter), so the
+    // schema reads a resolver-bearing copy rather than mutating the shared, possibly frozen singleton.
+    private static readonly Lazy<JsonSerializerOptions> SchemaOptionsHolder = new(valueFactory: static () => new JsonSerializerOptions(options: Puck.Assets.Documents.DocumentJsonOptions.Shared) {
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
+    });
+
     /// <inheritdoc/>
-    // A fully self-contained fragment: $id makes any "#/$defs/…" the exporter emits for a repeated CreationDocument
-    // shape resolve against THIS fragment's own root, never the enclosing WorldDefinition schema's, wherever this
-    // node ends up embedded in the larger document tree. The exporter requires an explicit TypeInfoResolver on the
-    // options it walks; DocumentJsonOptions.Shared relies on STJ's implicit reflection default instead (attached
-    // lazily on first (de)serialize, never by the exporter), so this reads a resolver-bearing COPY rather than
-    // risking a mutation of the shared, possibly-already-frozen singleton.
-    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) {
-        var options = new JsonSerializerOptions(options: Puck.Assets.Documents.DocumentJsonOptions.Shared) {
-            TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
-        };
-        // This walk never reaches WorldSchema's own TransformSchemaNode (a different JsonSerializerOptions, outside
-        // WorldJsonContext's metadata), so the same converter-hidden-shape defect ApplyConverterVocabulary fixes
-        // there needs its own narrow fixup here — the only converters this document family's own graph carries
-        // beyond what the exporter already understands natively (a plain JsonStringEnumConverter) are the shared
-        // Vector2/Vector3/Quaternion array converters.
-        var exporterOptions = new JsonSchemaExporterOptions {
-            TransformSchemaNode = (context, node) => WorldSchema.AnnotateCreationDocumentation(
-            context: context,
-            node: DropNullableMembersFromRequired(
-                context: context,
-                node: (((node is JsonValue value) && value.TryGetValue<bool>(value: out var permissive) && permissive)
+    public JsonSerializerOptions SchemaOptions => SchemaOptionsHolder.Value;
+    /// <inheritdoc/>
+    public Type SchemaType => typeof(Puck.World.Authoring.CreationDocument);
+    /// <inheritdoc/>
+    public string SchemaId => Puck.World.Authoring.CreationDocument.CurrentSchema;
+
+    /// <inheritdoc/>
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => WorldSchema.ExportGraph(graph: this);
+    /// <inheritdoc/>
+    // The shared Vector2/Vector3/Quaternion array converters hide their shape from the exporter, so a permissive node of
+    // one of those types is its fixed-arity number array.
+    public JsonNode PrepareSchemaNode(JsonSchemaExporterContext context, JsonNode node) => DropNullableMembersFromRequired(
+        context: context,
+        node: (((node is JsonValue value) && value.TryGetValue<bool>(value: out var permissive) && permissive)
             ? ((context.TypeInfo.Type == typeof(Vector2))
                 ? Puck.Assets.Documents.FixedArityNumberArraySchema.Build(arity: 2)
                 : ((context.TypeInfo.Type == typeof(Vector3))
@@ -1247,19 +1249,7 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.A
                         ? Puck.Assets.Documents.FixedArityNumberArraySchema.Build(arity: 4)
                         : node)))
             : node)
-            )
-        ),
-        };
-        var schema = options.GetJsonSchemaAsNode(
-            exporterOptions: exporterOptions,
-            type: typeof(Puck.World.Authoring.CreationDocument)
-        ).AsObject();
-
-        WorldSchema.ExpandOwnReferences(node: schema, root: schema);
-        schema["$id"] = Puck.World.Authoring.CreationDocument.CurrentSchema;
-
-        return schema;
-    }
+    );
     /// <inheritdoc/>
     public override Puck.World.Authoring.CreationDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         Puck.World.Authoring.CreationDocumentJson.Read(reader: ref reader);

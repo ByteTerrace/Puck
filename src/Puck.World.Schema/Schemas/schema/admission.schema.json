@@ -1,4 +1,5 @@
 {
+  "description": "The keys trusted to admit remote peers; absent, no remote peer is admitted.",
   "type": [
     "array",
     "null"
@@ -22,7 +23,13 @@
           "FederatedAuthority",
           "OAuth"
         ],
-        "title": "WorldAdmissionTrustMode"
+        "title": "WorldAdmissionTrustMode",
+        "x-enumDescriptions": {
+          "SignsDirectly": "The pinned key signs the connecting peer\u0027s claim directly \u2014 no chain travels with it. Pins one individual (a friend, a known peer) without trusting whatever domain minted them.",
+          "Vouches": "The pinned key is a domain root that vouches for an issuing key, which vouches for the connecting peer\u0027s subject key \u2014 a two-hop chain travels with the claim.",
+          "FederatedAuthority": "Domain names an authenticated federation authority namespace (or AnyAuthority), and the row says what a traveler that authority hands over is minted. The proof behind it is Puck.Networking.IAuthenticator\u0027s signed-claim challenge/proof handshake (Puck.World.Protocol.WorldAttestedAuthenticator) rather than an admission-door attestation claim, so such a row carries no Algorithm and no PublicKey, and WorldAdmissionDoor skips it when building its trust list. An arriving traveler\u0027s body index, profile id, and display name are all supplied by the handing authority; which authority is speaking is the only verified fact, so it is the only one trust is authored against.",
+          "OAuth": "A trusted host has validated an OAuth issuer and subject. Domain is the exact HTTPS issuer; Subject is exact. No signing key is stored in the world document. Grants still belong to this world."
+        }
       },
       "grants": {
         "description": "What a peer verified under this entry is minted, INSTEAD OF the blanket Control/all every admitted peer used to receive unconditionally. Empty (never null) is a legitimate authored choice: a verified-but-granted-nothing identity, admitted onto the connection table and able to hold a socket open, but unable to submit anything the grant table would honor.",
@@ -104,7 +111,12 @@
           null
         ],
         "default": null,
-        "title": "WorldDisclosureTier"
+        "title": "WorldDisclosureTier",
+        "x-enumDescriptions": {
+          "Frames": "Pixels only. No document of any kind crosses.",
+          "Presentation": "A puck.world.projection.v1 document \u2014 what a visitor\u0027s client needs to render and be embodied. The wire default: a peer whose admission entry authors no tier receives this.",
+          "Replica": "The whole puck.world.definition.v1 document, verbatim \u2014 the sanctioned download. Authored explicitly, never defaulted into."
+        }
       }
     },
     "required": [

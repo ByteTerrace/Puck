@@ -1,4 +1,5 @@
 {
+  "description": "The placed creation instances and the policy for growing and moving them live.",
   "type": [
     "object",
     "null"

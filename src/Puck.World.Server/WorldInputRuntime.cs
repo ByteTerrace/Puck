@@ -47,13 +47,21 @@ public sealed partial class WorldInputRuntime {
     /// <summary>Constructs the authority's bounded clock history; owners allocate only when admitted.</summary>
     public WorldInputRuntime(WorldServer host, WorldDefinition definition) {
         m_host = host;
-        var horizon = (definition.InputHistory?.MaximumLatenessSeconds ?? 0);
+        var horizon = WorldDocumentReads.Record(build: () => (definition.InputHistory?.MaximumLatenessSeconds ?? 0), inputs: out var read);
+
+        BuiltFrom = read;
         var intervals = checked((FixedTickConversion.DurationEngineTicks(seconds: horizon) + 2));
 
         if (intervals > 1_000_000) { throw new ArgumentException(message: "inputHistory lateness requires more than 1,000,000 retained engine intervals", paramName: nameof(definition)); }
         m_intervals = new WorldInputInterval[((int)intervals)];
     }
 
+    /// <summary>Gets the parts of the document the runtime and its owners were built from
+    /// (<see cref="WorldDocumentReads"/>): its construction, every owner it prepared and every
+    /// <see cref="Reconfigure"/>. It only grows, so an owner prepared under an earlier document keeps its parts. An
+    /// install that changes none of them, and keeps the population whose input catalog the owners read, leaves the
+    /// owners as they are.</summary>
+    public WorldDocumentInputs BuiltFrom { get; private set; }
     /// <summary>The open processing interval, with its original rate's exact engine coordinates.</summary>
     public WorldInputInterval Interval { get; private set; }
     /// <summary>Number of admitted owners, including local script and simulation observation sessions.</summary>
@@ -152,6 +160,16 @@ public sealed partial class WorldInputRuntime {
 
     private Owner PrepareOwner(Principal principal, int bodyIndex, IReadOnlyList<WorldInputSource> sources, uint revision, IReadOnlyDictionary<string, string>? seatStates = null,
         WorldInputControllerOrigin? controller = null) {
+        var recording = WorldDocumentReads.Begin();
+
+        try {
+            return PrepareOwnerCore(principal, bodyIndex, sources, revision, seatStates, controller);
+        } finally {
+            BuiltFrom |= recording.End();
+        }
+    }
+    private Owner PrepareOwnerCore(Principal principal, int bodyIndex, IReadOnlyList<WorldInputSource> sources, uint revision, IReadOnlyDictionary<string, string>? seatStates,
+        WorldInputControllerOrigin? controller) {
         if ((bodyIndex < -1) || (bodyIndex >= m_host.Population.Capacity)) { throw new ArgumentOutOfRangeException(paramName: nameof(bodyIndex)); }
         var catalog = m_host.Population.InputCatalog;
         var owner = new Owner {
@@ -208,7 +226,18 @@ public sealed partial class WorldInputRuntime {
         TryGetBodyOwner(body: owner.Body, principal: out var principal) && (principal == owner.Principal));
 
     /// <summary>Reconciles rebuilt consumers, translating unchanged actions by name and cancelling changed meanings.</summary>
+    /// <param name="definition">The installed definition.</param>
+    /// <exception cref="ArgumentException">An owner cannot synchronize with <paramref name="definition"/>.</exception>
     public void Reconfigure(WorldDefinition definition) {
+        var recording = WorldDocumentReads.Begin();
+
+        try {
+            ReconfigureCore(definition: definition);
+        } finally {
+            BuiltFrom |= recording.End();
+        }
+    }
+    private void ReconfigureCore(WorldDefinition definition) {
         var capacity = checked((((int)FixedTickConversion.DurationEngineTicks(seconds: (definition.InputHistory?.MaximumLatenessSeconds ?? 0))) + 2));
 
         if (capacity != m_intervals.Length) {

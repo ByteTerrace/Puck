@@ -10,8 +10,9 @@ namespace Puck.World.Server.Tests;
 /// scripted <see cref="IWorldAddonHost"/> double rather than a real Wasmtime guest (this project references neither
 /// <c>Puck.World.Addons</c> nor <c>Puck.Scripting</c>): an <c>UpsertAddon</c> mutation's addon-prepare gate refuses
 /// the WHOLE mutation — document byte-identical, no plan committed — when the attached host's
-/// <see cref="IWorldAddonHost.TryPrepare"/> refuses, and applies normally when it accepts. Only <c>UpsertAddon</c>/
-/// <c>RemoveAddon</c> ever reach the gate at all — a mutation on any other section never calls
+/// <see cref="IWorldAddonHost.TryPrepare"/> refuses, and applies normally when it accepts. Only a mutation that changes
+/// a part of the document the host's last preparation read reaches the gate (<c>WorldDocument.PlanProducts</c>): the
+/// double reads the addon rows, as a real host does, so a mutation on any other section never calls
 /// <see cref="IWorldAddonHost.TryPrepare"/>, proved by the plan-count assertions below staying at their pre-call
 /// values across an unrelated section.
 /// </summary>
@@ -86,7 +87,7 @@ public sealed class AddonPrepareGateLawTests {
         using var fixture = Fixtures.FreshServer();
         var host = new RecordingAddonHost();
 
-        fixture.Server.AttachAddons(runtime: host);
+        host.AttachTo(server: fixture.Server);
         host.Reset();
         var before = fixture.DefinitionBytes();
 
@@ -115,7 +116,7 @@ public sealed class AddonPrepareGateLawTests {
             NextPlanMountedCount = 1_500_000_000,
         };
 
-        fixture.Server.AttachAddons(runtime: host);
+        host.AttachTo(server: fixture.Server);
 
         var thrown = Record.Exception(testCode: () => Submit(
             fixture: fixture,
@@ -146,7 +147,7 @@ public sealed class AddonPrepareGateLawTests {
         using var fixture = Fixtures.FreshServer();
         var host = new RecordingAddonHost();
 
-        fixture.Server.AttachAddons(runtime: host);
+        host.AttachTo(server: fixture.Server);
 
         fixture.Server.EnqueueMutation(
             mutation: new WorldMutation.UpsertStateRow(
@@ -272,7 +273,7 @@ public sealed class AddonPrepareGateLawTests {
             RefuseWhen = static _ => true,
         };
 
-        fixture.Server.AttachAddons(runtime: host);
+        host.AttachTo(server: fixture.Server);
         Submit(
             fixture: fixture,
             name: "refused"
@@ -318,7 +319,7 @@ public sealed class AddonPrepareGateLawTests {
         using var fixture = Fixtures.FreshServer();
         var host = new RecordingAddonHost();
 
-        fixture.Server.AttachAddons(runtime: host);
+        host.AttachTo(server: fixture.Server);
         Submit(
             fixture: fixture,
             name: "a"
@@ -368,7 +369,7 @@ public sealed class AddonPrepareGateLawTests {
         using var fixture = Fixtures.FreshServer();
         var host = new RecordingAddonHost();
 
-        fixture.Server.AttachAddons(runtime: host);
+        host.AttachTo(server: fixture.Server);
 
         Laws.RefusalWithControl(
             lawId: "addon.prepare-gate-all-or-nothing",
@@ -400,7 +401,7 @@ public sealed class AddonPrepareGateLawTests {
             RefuseWhen = static _ => true, // would refuse EVERYTHING if ever consulted
         };
 
-        fixture.Server.AttachAddons(runtime: host);
+        host.AttachTo(server: fixture.Server);
 
         var before = fixture.DefinitionBytes();
 
@@ -466,6 +467,16 @@ internal sealed class RecordingAddonHost : IWorldAddonHost {
     /// non-addon mutation never reaches this host at all.</summary>
     public int TryPrepareCallCount { get; private set; }
 
+    /// <summary>Attaches this host to <paramref name="server"/> as a host mounted against its live document is attached:
+    /// with what mounting read of that document, which the server's next install judges the host by.</summary>
+    /// <param name="server">The server.</param>
+    public void AttachTo(WorldServer server) {
+        _ = WorldDocumentReads.Record(build: () => { ReadRows(definition: server.Definition); return true; }, inputs: out var mounted);
+        server.AttachAddons(preparedFrom: mounted, runtime: this);
+    }
+    // A host prepares from the addon rows, as every real host does, so reading them makes them its preparation's input.
+    private static void ReadRows(WorldDefinition definition) => _ = definition.Addons;
+
     /// <inheritdoc/>
     public void ApplyContributions(ulong tick) { }
     /// <inheritdoc/>
@@ -501,6 +512,7 @@ internal sealed class RecordingAddonHost : IWorldAddonHost {
     /// <inheritdoc/>
     public bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldAddonPreparedPlan? plan, out string? reason) {
         ++TryPrepareCallCount;
+        ReadRows(definition: candidate);
 
         if (RefuseWhen?.Invoke(arg: candidate) == true) {
             plan = null;

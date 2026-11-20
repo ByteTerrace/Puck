@@ -1,4 +1,5 @@
 {
+  "description": "The locomotion speeds a stand-in with no seated profile advances on; absent, stand-ins barely move.",
   "type": [
     "object",
     "null"

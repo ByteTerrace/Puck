@@ -920,7 +920,7 @@ public sealed partial class WorldDocument {
                 compilation: compilation,
                 continuity: ((reloadEdit is null) ? WorldArenaContinuity.Load : WorldArenaContinuity.Edit),
                 definition: installed,
-                rebuildPopulation: products.RebuildsPopulation,
+                products: products,
                 rebuildKind: request.Kind
             );
             AdoptProductInputs(addons: addonInputs, envelope: envelopeInputs, machines: machineInputs);
@@ -1285,8 +1285,10 @@ public sealed partial class WorldDocument {
     // assignment, motion, producer, seat kit, spawns) recompile the population's fixed tables and live bodies; the
     // scene/screens rebuild on the client through the delivered definition, and cameras/render/population defaults are
     // document-only.
-    internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldGrants.PreparedAuthorityTransition authority, WorldRuleCompilation? compilation = null, StateArena? arena = null,
+    internal void Install(WorldDefinition definition, WorldProductPlan products, WorldGrants.PreparedAuthorityTransition authority, WorldRuleCompilation? compilation = null, StateArena? arena = null,
         WorldRebuildKind? rebuildKind = null, WorldArenaContinuity? continuity = null) {
+        var rebuildPopulation = products.RebuildsPopulation;
+
         Host.Input.PrepareCameraReconfigure(definition);
         authority.Install();
         var previousActionState = (rebuildKind.HasValue ? Host.Population.ActionStateLane.Definitions : null);
@@ -1337,7 +1339,7 @@ public sealed partial class WorldDocument {
         // read the registers into instances Rebuild is about to discard, leaving the fresh ones at their constructed
         // default until the next Install happens to touch state again.
         Host.Population.SyncBodyCells(definition: definition);
-        if (rebuildPopulation) { Host.Input.Reconfigure(definition: definition); }
+        if (products.ReconfiguresInput) { Host.Input.Reconfigure(definition: definition); }
     }
 
     // Rebuilds the population's compiled tables and live bodies against a definition, then reconciles the inhabited
@@ -2244,15 +2246,28 @@ public sealed partial class WorldDocument {
     /// server never observes a half-built host. Also re-sizes the per-tick contention tracking to cover the addon
     /// writers that now exist beside the seat lanes.</summary>
     /// <param name="runtime">The mounted host.</param>
+    /// <param name="preparedFrom">What the preparation that mounted the host read of the live document
+    /// (<see cref="WorldDocumentReads"/>), which the next install judges the host by; <see langword="null"/> when the
+    /// caller did not record it, which keeps what is known of a host attached again and otherwise prepares the host at
+    /// the next install. A pending checkpoint the attach restores the host from records its own.</param>
     /// <exception cref="ArgumentNullException"><paramref name="runtime"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">A tick-pumped host does not implement recomputed contributions.</exception>
-    internal void AttachAddons(IWorldAddonHost runtime) {
+    internal void AttachAddons(IWorldAddonHost runtime, WorldDocumentInputs? preparedFrom = null) {
         ArgumentNullException.ThrowIfNull(argument: runtime);
         if (runtime.ReplayPolicy != WorldExtensionReplayPolicy.Recomputed) {
             throw new InvalidOperationException(message: "Tick-pumped addon hosts must implement Recomputed contributions; use WorldRecordedExtension for recorded providers.");
         }
 
-        Host.Persistence.RestoreAttachedAddons(host: runtime);
+        var restoresCheckpoint = Host.Persistence.HasPendingAddonCheckpoint;
+        var restoring = WorldDocumentReads.Begin();
+        WorldDocumentInputs restored;
+
+        try {
+            Host.Persistence.RestoreAttachedAddons(host: runtime);
+        } finally {
+            restored = restoring.End();
+        }
+        m_addonInputs = (restoresCheckpoint ? restored : (preparedFrom ?? (ReferenceEquals(objA: Host.Addons, objB: runtime) ? m_addonInputs : null)));
         Host.AdoptAddonHost(runtime: runtime);
 
         StageAddonContentionArrays(

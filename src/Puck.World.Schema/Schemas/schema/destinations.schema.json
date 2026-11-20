@@ -1,4 +1,5 @@
 {
+  "description": "How an instance of a referenced world is chosen or minted when a player travels to it.",
   "type": [
     "array",
     "null"

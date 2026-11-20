@@ -1,4 +1,5 @@
 {
+  "description": "The placeable speakers sound plays from.",
   "type": [
     "array",
     "null"

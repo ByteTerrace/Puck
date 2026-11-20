@@ -1,4 +1,5 @@
 {
+  "description": "How the world presents itself when it boots windowed; absent, it presents nothing.",
   "type": [
     "object",
     "null"
@@ -11,7 +12,12 @@
         "None",
         "Offscreen"
       ],
-      "title": "WorldHostPresentation"
+      "title": "WorldHostPresentation",
+      "x-enumDescriptions": {
+        "Windowed": "Boot a native window, GPU device, and swapchain \u2014 World\u0027s original, still-default shape.",
+        "None": "Boot the authoritative server, console, and tape only \u2014 no window, no GPU device, no swapchain, no audio device. Every presentation-only console verb (world.fps, the render levers, view*/ .screenshot, screen.*, audio, editor) refuses as unknown \u2014 the honest reflection of the composed set, not a special-cased denial.",
+        "Offscreen": "Boot the authoritative server plus a real GPU device and the composed-frame render pipeline (the world render \u2014 no unified overlay/console-mirror/binding-bar, no audio device, no gamepad/pointer input), with NO window and NO swapchain ever created: world.screenshot writes real PNGs of the composed world, the render levers (world.cadence, world.shadows, world.render-scale, world.quality and the rest) apply exactly as windowed, and every other presentation-only console verb (audio, HUD levers, recording, gamepads) still refuses as unknown. See Puck.World.WorldBootComposition.AddWorldOffscreenPresentation for the exact composition and the per-backend device bring-up (Direct3D 12 is genuinely surfaceless; Vulkan uses a never-shown native window solely to obtain the device \u2014 see its remarks for why)."
+      }
     },
     "width": {
       "description": "The window client width in pixels.",

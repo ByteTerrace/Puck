@@ -1,4 +1,5 @@
 {
+  "description": "Other worlds this world names, which its portals and destinations resolve against.",
   "type": [
     "array",
     "null"

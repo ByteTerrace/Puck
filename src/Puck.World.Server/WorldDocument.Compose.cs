@@ -6,14 +6,21 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldDocument {
-    // Adjacency overlap proofs depend on motion envelopes, every kit's collider, and interaction/targeting reach.
-    // Those edits need a fresh neighbour proof at the load boundary.
-    private static bool AdjacencyProofInputsChanged(WorldDefinition current, WorldDefinition candidate, WorldMutation mutation) => mutation switch {
-        WorldMutation.SetMotion => (current.Motion != candidate.Motion),
-        WorldMutation.UpsertKit or WorldMutation.RemoveKit => !current.Kits.SequenceEqual(second: candidate.Kits),
-        WorldMutation.UpsertInteraction or WorldMutation.RemoveInteraction => (current.Interactions != candidate.Interactions),
-        _ => false,
-    };
+    // A load proves each adjacency's overlap from this document's overlap terms alone (WorldOverlapTerms: body and
+    // interaction reach, the speed ceiling, the rate and the deadbands), so a candidate whose terms equal the live
+    // document's leaves every standing proof true, and one whose terms differ needs a fresh proof at the load boundary.
+    // Deriving the candidate's terms is skipped when it changed no part deriving them reads; a batch is compared whole.
+    private static bool AdjacencyProofInputsChanged(WorldDefinition current, WorldDefinition candidate) {
+        var standing = WorldDocumentReads.Record(
+            build: () => (WorldOverlapTerms.TryDerive(definition: current, reason: out _, terms: out var terms) ? terms : null),
+            inputs: out var proofInputs
+        );
+
+        if (!WorldDocumentInputs.Changed(after: candidate, before: current).Overlaps(other: proofInputs)) {
+            return false;
+        }
+        return !(WorldOverlapTerms.TryDerive(definition: candidate, reason: out _, terms: out var next) && Equals(objA: standing, objB: next));
+    }
     // A batch is classified by its members: it is whatever any member is.
     private static bool AnyMember(WorldMutation mutation, Func<WorldMutation, bool> affects) {
         if (mutation is not WorldMutation.Batch batch) {

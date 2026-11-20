@@ -1,4 +1,5 @@
 {
+  "description": "The audio host settings; absent, the world is silent.",
   "type": [
     "object",
     "null"

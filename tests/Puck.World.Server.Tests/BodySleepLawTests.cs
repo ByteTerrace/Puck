@@ -140,10 +140,10 @@ public sealed class BodySleepLawTests {
         var sleptAt = body.AsleepSinceTick;
         var versionBeforeBump = population.ContactFieldVersion;
 
-        // A no-op collision retune still recompiles the analytic contact field — an install, by this population's
-        // own ComposeContactField contract, regardless of whether the compiled colliders differ.
+        // A collision retune changes what the population was built from, so the install recompiles the contact field
+        // (an unchanged collision section rebuilds nothing, WorldDocument.PlanProducts).
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetCollision(
-            Collision: fixture.Server.Definition.Collision,
+            Collision: (fixture.Server.Definition.Collision with { MaxIterations = (fixture.Server.Definition.Collision.MaxIterations + 1) }),
             Principal: Principal.Console
         ));
         fixture.Step();

@@ -1,4 +1,5 @@
 {
+  "description": "The heads-up display: whether it shows, its cursor and its panels.",
   "type": [
     "object",
     "null"
@@ -48,7 +49,26 @@
                 "Warning",
                 "Danger"
               ],
-              "title": "WorldThemeRole"
+              "title": "WorldThemeRole",
+              "x-enumDescriptions": {
+                "SurfaceBase": "The deepest surface (a held control\u0027s seated plate).",
+                "SurfaceRaised": "A raised surface (a control\u0027s resting plate).",
+                "SurfaceInset": "A recessed surface (a well inside a panel).",
+                "ScrimPanel": "The panel scrim.",
+                "ScrimStrip": "The strip scrim.",
+                "ScrimChip": "The chip scrim.",
+                "LineHair": "The hairline rule.",
+                "LineSoft": "The soft rule (a band divider).",
+                "TextPrimary": "The primary text.",
+                "TextDim": "The dimmed text.",
+                "TextMute": "The muted text.",
+                "Accent": "The accent (also the hover and selected tier).",
+                "AccentQuiet": "The quiet accent fill.",
+                "AccentInk": "The ink drawn on the accent.",
+                "Positive": "The positive status.",
+                "Warning": "The warning status.",
+                "Danger": "The danger status."
+              }
             },
             "visible": {
               "$ref": "./common.schema.json#/$defs/OverlayPredicateNullable",
@@ -96,13 +116,8 @@
             "description": "The panel\u0027s viewport rect, normalized to screen space."
           },
           "layer": {
-            "description": "Which band the panel draws in.",
-            "enum": [
-              "Under",
-              "Over",
-              "Replace"
-            ],
-            "title": "WorldHudLayer"
+            "$ref": "./common.schema.json#/$defs/WorldHudLayer",
+            "description": "Which band the panel draws in."
           },
           "style": {
             "$ref": "./common.schema.json#/$defs/WorldHudPanelStyle",

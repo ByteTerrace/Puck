@@ -1,4 +1,5 @@
 {
+  "description": "The in-world editor\u0027s settings, such as its camera\u0027s feel.",
   "type": [
     "object",
     "null"
@@ -19,7 +20,12 @@
             "Follow",
             "Plane"
           ],
-          "title": "WorldEditorGridMode"
+          "title": "WorldEditorGridMode",
+          "x-enumDescriptions": {
+            "Surface": "On every surface the view hits, projected along the surface normal: floors at any height, walls and slopes alike.",
+            "Follow": "On a horizontal working plane at the height of the surface under the seat\u0027s pointer, moving with it.",
+            "Plane": "On a horizontal working plane at a fixed height (PlaneY)."
+          }
         },
         "pitch": {
           "$ref": "./common.schema.json#/$defs/DocumentVector3",

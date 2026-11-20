@@ -354,12 +354,16 @@ public sealed partial class WorldAddonRuntime {
             reason = null;
             return true;
         }
-        if (!candidate.TryPrepare(
-            candidate: definition,
-            current: null,
-            plan: out var plan,
-            reason: out reason
-        )) {
+        // What the mounting preparation reads is what the server's next install judges the host by.
+        IWorldAddonPreparedPlan? plan = null;
+        string? refusal = null;
+        var prepared = WorldDocumentReads.Record(
+            build: () => candidate.TryPrepare(candidate: definition, current: null, plan: out plan, reason: out refusal),
+            inputs: out var mounted
+        );
+
+        reason = refusal;
+        if (!prepared) {
             candidate.Dispose();
             runtime = null;
 
@@ -368,7 +372,7 @@ public sealed partial class WorldAddonRuntime {
 
         try {
             candidate.Commit(plan: plan!);
-            server.AttachAddons(runtime: candidate);
+            server.AttachAddons(preparedFrom: mounted, runtime: candidate);
             candidate.Finish(plan: plan!);
         } catch {
             candidate.Dispose();

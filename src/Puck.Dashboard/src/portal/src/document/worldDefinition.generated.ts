@@ -7,80 +7,305 @@
  * The definition of this world — the aggregate describing what the world is, distinct from the live session state that plays in it. It gathers named spawn points (SpawnPoints), motion defaults (Motion), and render-lever defaults and quality presets (Render). Every consumer takes it by construction.
  */
 export type WorldDefinition = {
+  /**
+   * The locomotion speeds a stand-in with no seated profile advances on; absent, stand-ins barely move.
+   */
   motion?: WorldMotionDefaults | null;
+  /**
+   * The named spawn poses seats and population policies place bodies at; absent, one implicit point at the world origin is declared.
+   */
   spawnPoints?: WorldSpawnPoint[] | null;
+  /**
+   * The render levers the world boots with and its quality presets; absent, every lever is inert and no preset is offered.
+   */
   render?: WorldRenderDefaults | null;
+  /**
+   * The diegetic screens standing in the world, each showing a machine, a view or a picture.
+   */
   screens?: (WorldScreen | null)[] | null;
+  /**
+   * The screen materials screens and creation faces name; absent, every screen draws its picture untreated.
+   */
   screenMaterials?: (WorldScreenMaterial | null)[] | null;
+  /**
+   * The placeable cameras a view screen renders the world from.
+   */
   cameras?: (WorldCamera | null)[] | null;
+  /**
+   * The census: how many local seats, network players and simulated bodies the world holds, and how they are placed and varied.
+   */
   bodies?: WorldBodiesDefaults | null;
+  /**
+   * The player-profile seed palette and picker tuning a new seat starts from.
+   */
   seatDefaults?: WorldPlayerDefaults | null;
+  /**
+   * The world's input channels, the movement and action set every binding and kit names; the engine declares none of its own.
+   */
   channels?: (WorldChannel | null)[] | null;
+  /**
+   * The input families a seat switches between and which of them may hold at once.
+   */
   inputModes?: WorldInputModes | null;
+  /**
+   * How much input each owner retains and how late an input may arrive and still count.
+   */
   inputHistory?: WorldInputHistory | null;
+  /**
+   * Named input patterns (taps, holds, chords, sequences) that match over each owner's recent input.
+   */
   inputPatterns?: (WorldInputPattern | null)[] | null;
+  /**
+   * The named per-body target registers and the envelopes a designation into them must stay within.
+   */
   targetRegisters?: (WorldTargetRegister | null)[] | null;
+  /**
+   * The fixed-phase body motion programs kits select by name.
+   */
   bodyMotionPrograms?: (BodyMotionProgram | null)[] | null;
+  /**
+   * The locomotion kits bodies are built from, and the policy that deals them to bodies.
+   */
   kits?: WorldKitsSection | null;
+  /**
+   * The kit every seat body is built from; absent, the sole declared kit when exactly one is declared.
+   */
   defaultSeatKit?: string | null;
+  /**
+   * The addon modules the world mounts, each pinned by its content hash.
+   */
   addons?: (WorldAddonRow | null)[] | null;
+  /**
+   * Per-world overlays on the standard input bindings.
+   */
   bindingOverlays?: (WorldBindingOverlay | null)[] | null;
+  /**
+   * Where the world keeps durable identity and saves; absent, identity is declined.
+   */
   storage?: WorldStorageDefaults | null;
+  /**
+   * The creations the world can place, each a shape a placement row instantiates.
+   */
   prototypes?: (WorldPrototype | null)[] | null;
+  /**
+   * The placed creation instances and the policy for growing and moving them live.
+   */
   placements?: WorldPlacementsSection | null;
+  /**
+   * The placeable speakers sound plays from.
+   */
   speakers?: (WorldSpeaker | null)[] | null;
+  /**
+   * The tunes the world can play.
+   */
   tunes?: (WorldTune | null)[] | null;
+  /**
+   * The synthesizer patches tunes and cues play through.
+   */
   patches?: (WorldPatch | null)[] | null;
+  /**
+   * The audio host settings; absent, the world is silent.
+   */
   audio?: WorldAudioDefaults | null;
+  /**
+   * The contact solver's tuning: skin, iterations, slope limit and which contact each body uses. A world with bodies must author it.
+   */
   collision?: WorldCollision | null;
+  /**
+   * The gravitational field bodies fall in.
+   */
   gravity?: WorldGravity | null;
+  /**
+   * How the world presents itself when it boots windowed; absent, it presents nothing.
+   */
   host?: WorldHostDefaults | null;
+  /**
+   * How the window is composed into views for the seats. A world with bodies must author it.
+   */
   views?: WorldViewDefaults | null;
+  /**
+   * The appearances bodies wear, and the policy that deals them to bodies.
+   */
   looks?: WorldLooksSection | null;
+  /**
+   * Named second-order follower rows (spring, damping, response) that looks, camera booms, kits and state cells name to ease toward a target.
+   */
   dynamics?: (DynamicsRow | null)[] | null;
+  /**
+   * Grant rows that add to the permissions the world starts with.
+   */
   grants?: WorldGrant[] | null;
+  /**
+   * The heads-up display: whether it shows, its cursor and its panels.
+   */
   hud?: WorldHudSection | null;
+  /**
+   * The icon repertoire the HUD and bindings draw from.
+   */
   icons?: WorldIconographySection | null;
+  /**
+   * The world's state: its rows and cells, body and identity state, lattices, spaces, enums, families, records and pools.
+   */
   state?: WorldStateSection | null;
+  /**
+   * How long a participant's input may be held, by default and per participant; absent, nothing is held.
+   */
   inputHold?: WorldInputHoldAuthoring | null;
+  /**
+   * The colors, type and spacing the world's interface uses; absent, the engine's neutral theme.
+   */
   theme?: WorldThemeSection | null;
+  /**
+   * Marker rows: icon chips, and optional rings, the world shows over the rows they follow.
+   */
   markers?: (WorldMarkerRow | null)[] | null;
+  /**
+   * Haptic pulses a pad plays when the world names them.
+   */
   haptics?: (WorldHapticRow | null)[] | null;
+  /**
+   * The rules that react to the world's state and write it.
+   */
   rules?: (WorldRule | null)[] | null;
+  /**
+   * The authored identity that seeds an owned world's player.
+   */
   identity?: WorldIdentityDefinition | null;
+  /**
+   * Group kinds and the groups and memberships the world starts with.
+   */
   groups?: WorldGroupsSection | null;
+  /**
+   * The vocabulary of property names the world's carriers and interactions may use.
+   */
   properties?: WorldPropertyRegistrySection | null;
+  /**
+   * The property interactions: what happens when one thing with a property meets another.
+   */
   interactions?: WorldInteractionsSection | null;
+  /**
+   * The world seed, one value that rerolls every random draw in the document at once.
+   */
   generation?: WorldGenerationDefaults | null;
+  /**
+   * Named random sources draw sites reference, so several sites can share one table while drawing independent sequences.
+   */
   generators?: (GeneratorRow | null)[] | null;
+  /**
+   * Other worlds this world names, which its portals and destinations resolve against.
+   */
   references?: (WorldReference | null)[] | null;
+  /**
+   * The portals that join this world to the worlds its references name.
+   */
   portals?: WorldPortalsSection | null;
+  /**
+   * The simulation rate: how many fixed steps the authority advances each second.
+   */
   simulation?: WorldSimulationDefaults | null;
+  /**
+   * How an instance of a referenced world is chosen or minted when a player travels to it.
+   */
   destinations?: (WorldDestination | null)[] | null;
+  /**
+   * The keys trusted to admit remote peers; absent, no remote peer is admitted.
+   */
   admission?: (WorldAdmissionEntry | null)[] | null;
+  /**
+   * The neighbouring worlds this one borders, edge by edge, and the overlap the seam between them keeps.
+   */
   adjacencies?: (WorldAdjacency | null)[] | null;
+  /**
+   * The fonts the world's text surfaces can use.
+   */
   text?: TextFontCatalogDefinition | null;
+  /**
+   * Facts about the world for its readers, such as its credited authors.
+   */
   metadata?: WorldMetadataSection | null;
+  /**
+   * The world's self-update settings.
+   */
   update?: WorldUpdateDefaults | null;
+  /**
+   * The music scores the world can play, each pinned by its content hash.
+   */
   music?: (WorldMusicRow | null)[] | null;
+  /**
+   * Per-seat mode families (such as a camera or build mode) a seat switches between.
+   */
   seatModes?: (WorldSeatModeFamily | null)[] | null;
+  /**
+   * Probes that read live hardware or a recorded track at a bounded rate and route their channels into the world.
+   */
   probes?: (WorldProbe | null)[] | null;
+  /**
+   * Captures the world schedules of itself, and the directory they are written to.
+   */
   captures?: WorldCapturesSection | null;
+  /**
+   * Commands submitted at scheduled ticks, and the tick the world writes its state export at.
+   */
   schedule?: WorldScheduleSection | null;
+  /**
+   * Named splines a camera path or a body's curve-follow target follows.
+   */
   curves?: (WorldCurveRow | null)[] | null;
+  /**
+   * The surfaces, free volumes and live media bodies find routes through.
+   */
   navigation?: WorldNavigationSection | null;
+  /**
+   * The pattern-language table rules match over the world's topology.
+   */
   patterns?: (PatternRow | null)[] | null;
+  /**
+   * Static lookup tables rules read by name, each pinned by its content hash.
+   */
   tables?: (TableRow | null)[] | null;
+  /**
+   * Search jobs that ask what a board would be, by trying each token at every other cell under the world's rules.
+   */
   search?: WorldSearchSection | null;
+  /**
+   * The emulated machines the world runs, each named so a screen can show it; absent, no machine runs.
+   */
   machines?: (WorldMachine | null)[] | null;
+  /**
+   * Rule groups that claim rules and run them together, to a fixpoint or in stages; absent, every rule runs on its own.
+   */
   ruleGroups?: (RuleGroupDeclaration | null)[] | null;
+  /**
+   * Named cell sets a rule addresses as one.
+   */
   sets?: (CellSetRow | null)[] | null;
+  /**
+   * The in-world editor's settings, such as its camera's feel.
+   */
   editor?: WorldEditorDefaults | null;
+  /**
+   * The world's named presentation clocks.
+   */
   timeline?: WorldTimelineSection | null;
+  /**
+   * Console commands the world builds from existing verbs.
+   */
   commands?: (WorldConsoleCommand | null)[] | null;
+  /**
+   * Authored input programs, each with the part of the world its replay restores and compares.
+   */
   replays?: (WorldScopedReplay | null)[] | null;
+  /**
+   * The companion roles the world offers; absent, every companion is refused.
+   */
   roles?: (WorldRole | null)[] | null;
+  /**
+   * How a seat's controls are worked to carry its body along a route, the way a player at a pad works them.
+   */
   seatPrograms?: (WorldSeatProgram | null)[] | null;
+  /**
+   * Routes a seat plays through the world, step by step.
+   */
   routes?: (WorldRoute | null)[] | null;
   /**
    * Gets or initializes the world's shade programs, each under its computed identity: read, the table a document carried, which resolves the uses that name a program by key; written, every program this definition's uses name (Of), so a row no use names is never written and a use that holds its program carries it. ABSENT when nothing uses a program.
@@ -475,7 +700,7 @@ export type ActionPredicateCompareState = {
   /**
    * The comparison to apply.
    */
-  comparison: ExpressionComparison;
+  comparison: ExpressionComparisonNonNullable;
   /**
    * The authored constant comparand, or null when ComparandState or Text spells the comparand instead.
    */
@@ -510,7 +735,7 @@ export type ActionPredicateCompareValue = {
   /**
    * The comparison operation.
    */
-  comparison: ExpressionComparison;
+  comparison: ExpressionComparisonNonNullable;
   /**
    * Right numeric expression.
    */
@@ -660,6 +885,9 @@ export type ActionTrigger = {
   latchSeconds?: number;
 };
 
+/**
+ * One edge/latch vocabulary, shared by every gated trigger the engine evaluates — a per-body fact trigger and a state rule alike. It is deliberately not two concepts with two spellings: "fires while the condition holds" and "fires once when the condition becomes true" is the same distinction at both scopes, so it is the same enum.
+ */
 export type ActionTriggerMode = "Level" | "Edge";
 
 export type BindableAngle = number | string | ShapeNonNullable5;
@@ -1145,6 +1373,33 @@ export type CellValueJsonConverterVectorShape = {
   value: number[];
 };
 
+export type ChainDocument = {
+  /**
+   * The chain's stable id.
+   */
+  id: number;
+  /**
+   * The player-given name (null = unnamed).
+   */
+  name?: string | null;
+  /**
+   * The member shape ids, root→tip order.
+   */
+  shapes: number[];
+  /**
+   * KindLimb or KindSpine (null = limb when exactly 3 shapes, else spine).
+   */
+  kind?: string | null;
+  /**
+   * The live goal position (null = the rest tip — re-seeded at load).
+   */
+  goal?: DocumentVector3;
+  /**
+   * The bend-direction hint (null = above the root — re-seeded at load).
+   */
+  pole?: DocumentVector3;
+};
+
 export type ChannelFrame = "World" | "Camera" | "Heading";
 
 export type ChannelRef = unknown;
@@ -1165,65 +1420,114 @@ export type CreationBehaviorDocument = {
   /**
    * The declared screen faces (null = none). A creation with a face shows a feed on its body; the face's default source is pure data, wirable to any camera feed.
    */
-  faces?: ({
-    /**
-     * The face's name (a wiring handle — face by default).
-     */
-    name: string;
-    /**
-     * The shape whose surface is the screen (a Id; -1/null = the whole creation's canonical face surface, resolved by the consumer).
-     */
-    shapeId?: number | null;
-    /**
-     * The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map — none (unbound glass), test (the test pattern), and camera:<name> / feed:<name> (a View of the named camera, resolved against the placement's derived creation-eye feeds then the world's own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) shows unbound glass. Null = unbound glass until a world's face override wires a feed.
-     */
-    defaultSource?: string | null;
-  } | null)[] | null;
+  faces?: (CreationFaceDocument | null)[] | null;
   /**
    * The declared sounds (null = none). Omitted from the wire when null, so a creation authored without this member serializes to unchanged bytes.
    */
-  sounds?: ({
-    /**
-     * The sound's name (a wiring handle — sound by default; unique within the creation).
-     */
-    name: string;
-    /**
-     * The shape the voice emits from (a Id; null = the creation's root). A sound naming a missing shape is dropped at load (the post-edit-deletion self-heal, mirroring faces).
-     */
-    shapeId?: number | null;
-    /**
-     * The voice's puck.synthesizer-patch.v1 patch, inline (validated through the synth family's own canonicalizer as part of creation validation).
-     */
-    patch: {
-      schema?: string | null;
-      name?: string | null;
-      oscillator?: "Pulse" | "Saw" | "Triangle" | "Sine" | "Noise" | null;
-      dutyThousandths?: number | null;
-      polynomial?: number | null;
-      attackFrames?: number | null;
-      decayFrames?: number | null;
-      sustainThousandths?: number | null;
-      releaseFrames?: number | null;
-      pitchMillihertz: number;
-      sweepMillihertzPerFrame?: number | null;
-      vibratoDepthMillihertz?: number | null;
-      vibratoRateMillihertz?: number | null;
-      durationFrames?: number | null;
-      pitchFromCueArgument?: boolean;
-    };
-    /**
-     * The emitter level (null = 1 — unity).
-     */
-    level?: number | null;
-    /**
-     * The audible support radius in world units (null = the consuming world's default speaker radius).
-     */
-    radius?: number | null;
-  } | null)[] | null;
+  sounds?: (CreationSoundDocument | null)[] | null;
   /**
    * Whether a placed copy of the creation may animate at the update-rate lever's reduced tiers (world.rates bodies: at least 30 or 15 updates a second) while it stands small on every view that may see it. Null or false = full rate wherever anything may show or read it; a copy nothing may show holds either way. A body-rooted creation takes the reduced tiers whatever this says.
    */
   reducedRateAtDistance?: boolean | null;
+};
+
+export type CreationCameraDocument = {
+  /**
+   * The eye's stable id within the creation.
+   */
+  id: number;
+  /**
+   * The anchored shape id (a Id). A camera naming a missing shape is dropped at load (its offset frame has no anchor).
+   */
+  shapeId: number;
+  /**
+   * The eye offset from the anchored shape's frame origin, in the creation's author frame (see CreationFrame).
+   */
+  position: DocumentVector3;
+  /**
+   * The eye heading offset, degrees (null = 0).
+   */
+  yaw?: number | null;
+  /**
+   * The eye tilt offset, degrees (null = 0).
+   */
+  pitch?: number | null;
+  /**
+   * The vertical field of view, degrees (null = the engine default).
+   */
+  fov?: number | null;
+  /**
+   * The look-at target distance ahead (null = 1).
+   */
+  focus?: number | null;
+  /**
+   * The named feed this eye publishes (null = the eye's id as a name). A screen face wired to this name shows this eye's live render — pure data, no creature-specific channel.
+   */
+  feed?: string | null;
+};
+
+export type CreationClipDocument = {
+  /**
+   * The clip's name, unique within the creation.
+   */
+  name: string;
+  /**
+   * The driver that plays the clip; its phase is in the units of At.
+   */
+  driver: string;
+  /**
+   * The keys, at strictly increasing positions; at least one.
+   */
+  keys: (CreationClipKeyDocument | null)[];
+  /**
+   * Whether the clip loops: its position is the driver's phase modulo Period, counted so a negative phase wraps like a positive one, and the stretch from a track's last key back to its first interpolates like any other. Null or false holds: the position is the phase, and a track holds its first key before it and its last key after it. A driver whose phase wraps (a travel or time driver, and a driver that follows one) may play only a looping clip whose period divides the span the phase wraps over.
+   */
+  wrap?: boolean | null;
+  /**
+   * A looping clip's period, in phase units (null = one turn, 2π); every key lies in [0, period). Refused on a held clip.
+   */
+  period?: number | null;
+};
+
+export type CreationClipKeyDocument = {
+  /**
+   * The key's position, in the units of its driver's phase.
+   */
+  at: number;
+  /**
+   * The shapes the key poses; a shape the key does not name has no key here, and its track interpolates across this position.
+   */
+  poses: (CreationClipPoseDocument | null)[];
+  /**
+   * How the stretch arriving at this key moves: EaseLinear (null), EaseSmooth or EaseHold.
+   */
+  ease?: string | null;
+};
+
+export type CreationClipPoseDocument = {
+  /**
+   * The name of the shape posed. A shape carrying domain folds may not be posed.
+   */
+  shape: string;
+  /**
+   * The turn's steps, composed in the order written, the first turning first; the composed turn is under a half turn. Null is no turn.
+   */
+  turn?: (CreationClipTurnDocument | null)[] | null;
+  /**
+   * The translation, in creation units, added after every turn of the shape. Null is none.
+   */
+  slide?: [number, number, number];
+};
+
+export type CreationClipTurnDocument = {
+  /**
+   * The axis, non-zero; its length is ignored.
+   */
+  axis: [number, number, number];
+  /**
+   * The angle in radians, right-handed about Axis.
+   */
+  angle: number;
 };
 
 export type CreationDocument = {
@@ -1234,413 +1538,27 @@ export type CreationDocument = {
   /**
    * The creation's handle, authored literally or through a containing world's Text state cell; normalization narrows a literal value to letters, digits, dashes, and underscores.
    */
-  name?: DocumentIdentifierVariant2;
+  name?: DocumentIdentifier;
   /**
    * The material palette (null = the default sweep).
    */
-  palette?: ({
-    /**
-     * The base color as #RRGGBB (see HexColor).
-     */
-    color: string;
-    /**
-     * The emissive luminance, in nits, the colour tints (null = 0 — optional members are nullable and normalized at load).
-     */
-    emissive?: number | null;
-    /**
-     * The specular strength (null = the material default).
-     */
-    specular?: number | null;
-    /**
-     * The GGX roughness in [0, 1] (null = DefaultRoughness) — see SdfMaterial for the roughness-floor formula. A document still spelling shininess is an unmapped member and is refused.
-     */
-    roughness?: number | null;
-    /**
-     * The fresnel edge-lift strength in [0, 1] (null = 0 — no lift) — see SdfMaterial.
-     */
-    sheen?: number | null;
-    /**
-     * The metalness in [0, 1] (null = 0 — dielectric) — see SdfMaterial.
-     */
-    metal?: number | null;
-    /**
-     * The clearcoat strength in [0, 1] (null = 0 — no coat) — see SdfMaterial.
-     */
-    coat?: number | null;
-    /**
-     * Optional generic coverage and reveal surfaces.
-     */
-    weathering?: {
-      edge?: number;
-      lines?: number;
-      settle?: number;
-      reach?: number;
-      seed?: number;
-      scale?: number;
-      floor?: number;
-      lane?: number;
-      deposit?: ShapeNullable | null;
-      noise?: number;
-      patternScale?: unknown;
-      softness?: number;
-      octaves?: number;
-      octaveRatio?: number;
-      octaveGain?: number;
-      turn?: unknown;
-      /**
-       * Gets the surfaces the coverage reveals, each at an ascending threshold. The list is owned.
-       */
-      under?: ({
-        threshold: number;
-        surface: {
-          color: string;
-          roughness: number;
-          metal: number;
-        };
-      } | null)[] | null;
-    } | null;
-    /**
-     * The wrap-lighting share in [0, 1] (null = 0 — the plain Lambert term) — see Wrap.
-     */
-    wrap?: number | null;
-    /**
-     * The shading-normal broadening in [0, 1] (null = 0 — no broadening) — see Soften.
-     */
-    soften?: number | null;
-    /**
-     * The fill tint as #RRGGBB or a state binding (null = black — no fill) — see Fill.
-     */
-    fill?: string | null;
-    /**
-     * Optional refractive paint layer.
-     */
-    inset?: {
-      origin: unknown;
-      rotation: unknown;
-      depth: number;
-      ior: number;
-      paint: {
-        softness?: number;
-        modulationAmplitude?: number;
-        modulationFrequency?: number;
-        seed?: number;
-        /**
-         * Gets the one to four radial stops, each an ascending radius and the colour it ramps to. The list is owned.
-         */
-        stops: ({
-          radius: number;
-          color: string;
-        } | null)[];
-      };
-    } | null;
-    /**
-     * The color multiplying outgoing indirect reflectance and emission, as #RRGGBB or a state binding; null means white.
-     */
-    bleed?: string | null;
-    /**
-     * The finite nonnegative gain on received indirect light; null means one.
-     */
-    receive?: number | null;
-    /**
-     * The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body's own look lanes (a placement without them reads zero), 4 to 7 the world's render.lanes (SdfLanes). Null keeps the emissive static.
-     */
-    emissiveLane?: number | null;
-    /**
-     * The slot's glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque.
-     */
-    glass?: {
-      /**
-       * The thickness, in creation units, over which light takes on the tint; finite and positive. A part twice this thick reads twice as deep.
-       */
-      depth: number;
-      /**
-       * The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5).
-       */
-      ior?: number | null;
-      /**
-       * The colour the glass scatters as a medium, the colour a deep body of it reads as under the light arriving at its surface (null = none).
-       */
-      scatter?: string | null;
-      /**
-       * How much the medium scatters, per creation unit, finite and non-negative; it also dims what lies behind (null = 0, no scattering).
-       */
-      scattering?: number | null;
-      /**
-       * Foam or a wet margin where an opaque surface behind the glass comes within reach of its surface, revealed through the slot's flow coverage (null = none).
-       */
-      contact?: {
-        /**
-         * The distance, in creation units along the view from the glass surface to the opaque surface behind it, over which the added coverage falls to zero; positive.
-         */
-        reach: number;
-        /**
-         * The coverage added where the opaque surface touches the glass's, in [0, 1].
-         */
-        coverage: number;
-      } | null;
-      /**
-       * Shadow extinction per creation unit, finite and non-negative (null = zero).
-       */
-      shadowDensity?: number | null;
-    } | null;
-    /**
-     * The slot's own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world's default style (render.toon).
-     */
-    toon?: ShapeNullable2 | null;
-    /**
-     * The slot's styles chosen live by a state cell (PaletteToonSelectDocument), whose case replaces Toon while the cell names one; null keeps Toon.
-     */
-    toonSelect?: {
-      /**
-       * The state.<row>[.<key>] binding naming the cell.
-       */
-      state: string;
-      /**
-       * Gets the looks, the first for the value zero (PaletteToonCaseDocument). The list is owned.
-       */
-      cases: ({
-        /**
-         * The case's style (ToonStyleDocument), or null for none.
-         */
-        toon?: ShapeNullable2 | null;
-        /**
-         * The case's program, or null for none.
-         */
-        shade?: unknown;
-      } | null)[];
-    } | null;
-    /**
-     * The slot's flow layer (PaletteFlowDocument): shading that moves along an authored flow over still geometry; null moves nothing.
-     */
-    flow?: {
-      /**
-       * The flow, in units per second.
-       */
-      velocity: unknown;
-      /**
-       * The pattern's frequency, in cells per unit; positive (null = 1).
-       */
-      scale?: number | null;
-      /**
-       * How many times longer a pattern feature is along the flow than across; at least 1 (null = 1).
-       */
-      stretch?: number | null;
-      /**
-       * The seconds a layer advects before it restarts, in [0.25, 4096] (null = 1).
-       */
-      cycle?: number | null;
-      /**
-       * The normal tilt per unit slope of the pattern; non-negative (null = 0).
-       */
-      tilt?: number | null;
-      /**
-       * The share of the slot the pattern reveals Surface over, in [0, 1] (null = 0).
-       */
-      coverage?: number | null;
-      /**
-       * The coverage edge's width, in [0, 1] (null = 0.1).
-       */
-      softness?: number | null;
-      /**
-       * The surface the coverage reveals; required when Coverage is positive.
-       */
-      surface?: ShapeNullable | null;
-      /**
-       * The pattern's seed (null = 0).
-       */
-      seed?: number | null;
-      /**
-       * The render lane whose value scales the velocity: 0 to 3 an inhabited body's look lanes (a placement without them reads zero and stands still), 4 to 7 the world's render.lanes (SdfLanes). Null keeps the velocity constant.
-       */
-      lane?: number | null;
-      /**
-       * The frame the velocity is authored in (null = Object).
-       */
-      frame?: "Object" | "World" | null;
-      /**
-       * The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.
-       */
-      coverageLane?: number | null;
-      /**
-       * A sphere in world coordinates within which the velocity varies.
-       */
-      region?: {
-        /**
-         * Centre in world coordinates.
-         */
-        center: unknown;
-        /**
-         * Radius in world units over which the velocity blends back to the base, finite and positive.
-         */
-        radius: number;
-        /**
-         * Velocity at the centre in the flow's velocity frame, before placement scaling.
-         */
-        velocity: unknown;
-      } | null;
-    } | null;
-    /**
-     * The slot's shade program (ShadeReference), or null for the world's default.
-     */
-    shade?: unknown;
-    /**
-     * Gets up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none. The list is owned (a lattice field's material sits in a cached state row).
-     */
-    paints?: ({
-      /**
-       * The primitive, read as a shape's type: every primitive but a path profile.
-       */
-      type: ShapeNonNullable50;
-      /**
-       * The paint's color, #RRGGBB or a state binding.
-       */
-      color: string;
-      /**
-       * The primitive's position (null = the frame's origin).
-       */
-      position?: unknown;
-      /**
-       * The primitive's rotation (null = identity).
-       */
-      rotation?: unknown;
-      /**
-       * The primitive's size, as a shape's scale (null = one).
-       */
-      scale?: unknown;
-      /**
-       * The half-width of the band painted about the primitive's surface, in the frame's units; null or zero fills the primitive.
-       */
-      stroke?: number | null;
-      /**
-       * The shape whose frame carries the paint, in that shape's local frame as a shape-riding volume is; null paints in the frame of the slot that owns the hit, or world space on a static placement. A static placement draws no parented paint.
-       */
-      parent?: string | null;
-      /**
-       * Prism only: the top-to-bottom width ratio.
-       */
-      taper?: number | null;
-      /**
-       * Prism only: the cross-section; a path profile is refused.
-       */
-      profile?: ShapeNullable8 | null;
-      /**
-       * Prism only: extrude or revolve.
-       */
-      lift?: ShapeNullable9 | null;
-      /**
-       * The edge-rounding radius, as a shape's.
-       */
-      rounding?: number | null;
-      /**
-       * The cap chamfer radius, as a shape's.
-       */
-      chamfer?: number | null;
-      /**
-       * Superellipsoid only: the exponent.
-       */
-      exponent?: number | null;
-      /**
-       * Sweep only: the curve, in the frame's units.
-       */
-      curve?: ShapeNullable10 | null;
-    } | null)[] | null;
-  } | null)[] | null;
+  palette?: (PaletteEntryDocument | null)[] | null;
   /**
    * The authored shapes (null = empty).
    */
-  shapes?: (ShapeNullable28 | null)[] | null;
+  shapes?: (ShapeDocument | null)[] | null;
   /**
    * The animation timeline frames (null = none).
    */
-  frames?: ({
-    /**
-     * The frame's name (rest is the live pose).
-     */
-    name: string;
-    /**
-     * The per-shape transform snapshots, keyed by shape id.
-     */
-    transforms: ({
-      /**
-       * The shape id the snapshot belongs to.
-       */
-      id: number;
-      /**
-       * The pose position.
-       */
-      position: unknown;
-      /**
-       * The pose orientation.
-       */
-      rotation: unknown;
-    } | null)[];
-  } | null)[] | null;
+  frames?: (FrameDocument | null)[] | null;
   /**
    * The IK rig's chains (null = none). Shapes stay flat; a chain only references shape ids.
    */
-  chains?: ({
-    /**
-     * The chain's stable id.
-     */
-    id: number;
-    /**
-     * The player-given name (null = unnamed).
-     */
-    name?: string | null;
-    /**
-     * The member shape ids, root→tip order.
-     */
-    shapes: number[];
-    /**
-     * KindLimb or KindSpine (null = limb when exactly 3 shapes, else spine).
-     */
-    kind?: string | null;
-    /**
-     * The live goal position (null = the rest tip — re-seeded at load).
-     */
-    goal?: unknown;
-    /**
-     * The bend-direction hint (null = above the root — re-seeded at load).
-     */
-    pole?: unknown;
-  } | null)[] | null;
+  chains?: (ChainDocument | null)[] | null;
   /**
    * The creation's anchored camera eyes (null = none). Each rides a shape and produces a named feed — the lantern-fish's lure lens is one entry here.
    */
-  cameras?: ({
-    /**
-     * The eye's stable id within the creation.
-     */
-    id: number;
-    /**
-     * The anchored shape id (a Id). A camera naming a missing shape is dropped at load (its offset frame has no anchor).
-     */
-    shapeId: number;
-    /**
-     * The eye offset from the anchored shape's frame origin, in the creation's author frame (see CreationFrame).
-     */
-    position: unknown;
-    /**
-     * The eye heading offset, degrees (null = 0).
-     */
-    yaw?: number | null;
-    /**
-     * The eye tilt offset, degrees (null = 0).
-     */
-    pitch?: number | null;
-    /**
-     * The vertical field of view, degrees (null = the engine default).
-     */
-    fov?: number | null;
-    /**
-     * The look-at target distance ahead (null = 1).
-     */
-    focus?: number | null;
-    /**
-     * The named feed this eye publishes (null = the eye's id as a name). A screen face wired to this name shows this eye's live render — pure data, no creature-specific channel.
-     */
-    feed?: string | null;
-  } | null)[] | null;
+  cameras?: (CreationCameraDocument | null)[] | null;
   /**
    * The behavior manifest (null = the defaults: walks, no face). Records how the creation moves and any screen faces it declares, so consumers stop re-supplying those facts by hand.
    */
@@ -1648,81 +1566,11 @@ export type CreationDocument = {
   /**
    * The engraved/embossed text runs the creation carries (null/empty = none). Each is a string laid onto a surface, expanded at emission into Glyph shapes — see TextRunDocument. Omitted from the wire when null, so a creation authored without this member serializes to unchanged bytes.
    */
-  textRuns?: ({
-    /**
-     * The run's text (whitespace / unmapped code points advance the pen without a glyph).
-     */
-    text: string;
-    /**
-     * The run's anchor centre on the host surface (workbench space).
-     */
-    position: unknown;
-    /**
-     * The run plane's orientation (local +X advance, +Y ascent, +Z the relief normal).
-     */
-    rotation: unknown;
-    /**
-     * The world height of one em, in the creation's own (pre-placement) units.
-     */
-    emHeight: number;
-    /**
-     * The glyph extrude half-depth — the relief the slab straddles the surface by (null = DefaultDepth).
-     */
-    depth?: number | null;
-    /**
-     * engrave (Subtraction — a carved recess) or emboss (Union — proud relief); null = emboss.
-     */
-    mode?: string | null;
-    /**
-     * The palette slot the letters shade with (null = 0).
-     */
-    material?: number | null;
-    /**
-     * The world text catalog font name; null selects that catalog's default font.
-     */
-    font?: string | null;
-    /**
-     * The greedy word wrap width, in the creation's own units (null = only explicit line feeds break lines). Must be positive when present.
-     */
-    maxWidth?: number | null;
-    /**
-     * left, center, or right — how lines position against the block's widest line (null = left).
-     */
-    align?: string | null;
-    /**
-     * Extra advance after every glyph, in em units (null = 0; negative tightens).
-     */
-    tracking?: number | null;
-    /**
-     * A multiplier on the font's line height for the baseline step between lines (null = 1).
-     */
-    lineSpacing?: number | null;
-    /**
-     * The shape the run rides, or null for a run placed in creation space. A riding run's Position/Rotation are in that shape's unit-local frame: scaled by the shape's scale, then rotated and translated with it, so the run stays on the surface as the shape resizes.
-     */
-    shapeId?: number | null;
-  } | null)[] | null;
+  textRuns?: (TextRunDocument | null)[] | null;
   /**
    * The authored part identities this creation publishes when used as an entity look (null = none). Each maps a stable identifier to one shape's dynamic transform.
    */
-  parts?: ({
-    /**
-     * The ordinal, case-sensitive identifier an entity-part anchor or a mask names. Part ids are local to the creation; the engine reserves none.
-     */
-    id: string;
-    /**
-     * The stable Id whose dynamic pose the part publishes.
-     */
-    shapeId: number;
-    /**
-     * The names of the shapes the part covers, each with every shape that hangs from it through Parent; null covers the anchor shape and what hangs from it. A subtree rather than a list, so a hand stays a hand when a finger gains a segment.
-     */
-    shapes?: (string | null)[] | null;
-    /**
-     * The ids of parts declared earlier whose shapes this part does not cover, so "the trunk without the arms" is sayable when the root carries the whole body. Parts may overlap: a later part never narrows an earlier one.
-     */
-    except?: (string | null)[] | null;
-  } | null)[] | null;
+  parts?: (CreationPartDocument | null)[] | null;
   /**
    * The creation-level noise-relief facet (null = none) — see CreationNoiseDocument. Omitted from the wire when null, so a creation authored without it serializes to unchanged bytes.
    */
@@ -1730,212 +1578,15 @@ export type CreationDocument = {
   /**
    * The named animation drivers (null = none), any number — see CreationDriverDocument. A shape's Swings/Slides name one of these. Presentation-only, like the facets that read them.
    */
-  drivers?: ({
-    /**
-     * The driver's name, unique within the creation — the spelling a facet's driver member resolves against.
-     */
-    name: string;
-    /**
-     * One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, SignalTurnRate, SignalTravelDirection, SignalLateralAcceleration, SignalForwardAcceleration, a state cell (state.<row>[.<key>], whose numeric value at the frame's tick is the phase times the cadence), or a SignalDriverPrefix earlier driver. The first three integrate: φ accumulates Cadence × the signal's per-frame delta while w > 0, and wraps modulo 2π so a wheel spins forever without losing precision. The rest are instantaneous: φ is set to Cadence × the current value (through Dynamics when one is named), so a facet reading them tracks rather than cycles.
-     */
-    signal: string;
-    /**
-     * The signal-to-phase gain: radians per metre for the travel signals, radians per second for SignalTime, radians per metre-per-second for SignalSpeed/SignalVerticalSpeed, radians per radian-per-second for SignalTurnRate, radians per radian for SignalTravelDirection, and radians per metre-per-second-squared for the acceleration signals. Magnitude at most MaxCadence.
-     */
-    cadence: unknown;
-    /**
-     * The gate: every token must hold for the driver's weight to ease toward 1 (it eases toward 0 otherwise, using the authored blend times or WeightSeconds by default, so a limb returns to rest instead of freezing mid-stride). Authored as one token or an array of them — a bare string reads as a one-token gate and canonicalizes to the array form. A token is a Puck.Physics.Motion.BodyFacts member name, WhenAlways, TokenMoving, or TokenStill; null is ungated. At most MaxGateTokens. A token no consumer can resolve gates the driver permanently off.
-     */
-    when?: (string | null)[] | null;
-    /**
-     * The exponential time constant in seconds the weight rises over (the gate opening, or a WeightBy level climbing); null uses WeightSeconds. Finite and non-negative; zero applies immediately on the next positive frame delta.
-     */
-    blendInSeconds?: number | null;
-    /**
-     * The exponential time constant in seconds the weight falls over (the gate releasing, or a WeightBy level dropping), on the same terms as BlendInSeconds. Independent release timing lets a mechanism settle after a quick body response.
-     */
-    blendOutSeconds?: number | null;
-    /**
-     * The containing world's dynamics row (natural frequency, damping, initial response) an instantaneous signal's phase follows through, or null to track the signal exactly. A hip that trails a turn and overshoots as it settles, a lean that builds and relaxes, and a pose that eases toward a new level are one signal read through a second-order response. Refused on an integrating signal and on a SignalDriverPrefix signal, whose phase is a running cycle rather than a level; the world validator refuses a name its dynamics section does not declare.
-     */
-    dynamics?: string | null;
-    /**
-     * Scales Cadence each frame by a curve of an earlier driver's phase, or null to keep it fixed. A stride on planar travel that takes its radians per metre from a curve of the body's speed lengthens its stride as the body speeds up, so its step rate rises less than its speed does.
-     */
-    cadenceBy?: ShapeNullable29 | null;
-    /**
-     * Sets the level the weight eases toward while the gate holds, from a curve of an earlier driver's phase clamped to [0, 1], or null for 1. Two drivers reading one stride's phase through SignalDriverPrefix, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk into a run without their legs ever leaving step.
-     */
-    weightBy?: ShapeNullable29 | null;
-    /**
-     * The driver's mask: ids of the creation's parts (CreationPartDocument). The driver's swings, slides and clip poses play only on shapes those parts cover, and a replacing driver reduces earlier drivers only there. Null is the shapes the driver itself poses.
-     */
-    parts?: (string | null)[] | null;
-    /**
-     * How the driver layers: ModeAdd (null) adds its motion to the drivers before it; ModeReplace also scales every driver declared before it by one minus its weight on the shapes its mask covers, so a stance takes the arms from the gait without the gait knowing (Share).
-     */
-    mode?: string | null;
-    /**
-     * The name of a world input channel a state-cell signal may be guessed from (null = none). On a client that presents for exactly one seat, which controls the body, while one of that seat's own edges on the channel has been taken in by a tick and its answer has not yet been presented, and for no longer than LeadSeconds, the phase follows the seat's own level on the channel in place of the cell. It changes only that seat's picture, never what the authority computes. The channel must be a button or an axis.
-     */
-    lead?: string | null;
-    /**
-     * How long, in seconds, an unanswered guess may show (null = DefaultLeadSeconds). Finite and positive; meaningful only with Lead.
-     */
-    leadSeconds?: number | null;
-  } | null)[] | null;
+  drivers?: (CreationDriverDocument | null)[] | null;
   /**
    * The inverse-kinematics effectors (null = none), any number — see CreationEffectorDocument. Each corrects a chain of this creation's own shapes so its tip reaches a target, composing after the drivers and the parent chain. Presentation-only, like the drivers.
    */
-  effectors?: ({
-    /**
-     * The effector's name, unique within the creation — what a read-back or a refusal spells.
-     */
-    name: string;
-    /**
-     * The bones, root→tip, each the Name of a shape that DESCENDS from the one before it through Parent. A bone's joint is the pivot of its first Swings entry, or its authored Joint when it swings nothing. Two bones (MinChainBones) solve analytically; three or more — a tail, a tentacle, a spider leg with a coxa — solve by cyclic coordinate descent over Iterations sweeps. At most MaxChainBones.
-     */
-    chain: (string | null)[];
-    /**
-     * The Name of the shape whose posed origin IS the end effector — the last bone itself, or a shape descending from it (a boot under a shin, a claw under a tarsus).
-     */
-    tip: string;
-    /**
-     * Where the tip is asked to be.
-     */
-    target: {
-      /**
-       * One of KindSurface, KindBody, KindState or KindShape.
-       */
-      kind: string;
-      /**
-       * KindSurface: the probe direction in the creation's author frame (see CreationFrame), so it turns with the body — [0, -1, 0] is "below the body", which on a wall-held body points at the wall's own down. KindShape (optional): the way the tip approaches the point, carried by Shape's motion; its reverse is the normal an effector's align turns the tip onto. Normalized at canonicalization; zero names no direction and is refused.
-       */
-      direction?: unknown;
-      /**
-       * KindSurface: how far along Direction the probe searches, in creation units: world units at the body's scale of one, and multiplied by its scale, as its shapes are. Beyond MaxReach, or at zero or less, is refused. A probe that finds nothing eases the correction out rather than reaching at nothing.
-       */
-      reach?: unknown;
-      /**
-       * KindSurface: how far off the hit surface, along its normal, the tip is placed, in creation units as Reach is (null = 0 — the tip lands on the surface). The thickness of a boot's sole or the gap a claw keeps.
-       */
-      standoff?: unknown;
-      /**
-       * KindBody: the population entity index whose pose is the target, fixed in the document. A body target names this or Reference, never both.
-       */
-      index?: number | null;
-      /**
-       * KindBody: the offset from that body's root (or its Part), in the creation's author frame, riding the target's attitude (null = the point exactly). KindShape: a point in the creation at rest, author frame, that rides Shape's motion (null = the shape's own origin).
-       */
-      offset?: unknown;
-      /**
-       * KindState: a state.<row>[.<key>] reference to a text cell spelling a world-space [x, y, z], read at the frame's tick — a target a rule, a console write, or another system publishes. KindBody: a reference to a numeric cell holding the target body's population index, read as stored truth each frame: a whole number naming an active body selects it, and any other value or none selects none, so a rule clears the target by clearing the cell or writing -1. The containing world refuses a row it does not declare.
-       */
-      reference?: string | null;
-      /**
-       * KindShape: the name of a shape of the same creation the point rides. It may not be a bone or the tip of the effector's own chain, nor hang from one, and no effector declared later may write it or a shape it hangs from, so the solve reads the shape's final pose for the frame.
-       */
-      shape?: string | null;
-      /**
-       * KindBody (optional): a part id the target body's look publishes; the point is that part's anchor as last drawn, and the body's root when its look publishes no such part.
-       */
-      part?: string | null;
-    };
-    /**
-     * The gate, in the same vocabulary and with the same easing a driver's When uses: the correction blends in while every token holds and back out otherwise, so a released effector returns the limb to its driver-posed pose instead of dropping it.
-     */
-    when?: (string | null)[] | null;
-    /**
-     * A constant ceiling on the correction, in [0, 1] (null = 1 — full correction). Multiplied by the eased weight and the layer share, so a half-weight effector suggests rather than commands.
-     */
-    weight?: unknown;
-    /**
-     * The contact latch (null = none) — see CreationPlantDocument.
-     */
-    plant?: {
-      /**
-       * The Name whose wrapped phase the window is read against.
-       */
-      driver: string;
-      /**
-       * The phase interval [from, to] in radians, each in [0, 2π). A window whose from exceeds its to wraps through 0 — the half-cycle straddling the phase origin is as authorable as any other.
-       */
-      window: unknown;
-      /**
-       * The target influence outside the plant window while the driver is active, in [0, 1]. Null means 1 (continue following the target); 0 releases the tip to its authored swing. As the driver eases to rest, target influence returns to 1 so an idle limb can settle onto its surface.
-       */
-      swingWeight?: number | null;
-      /**
-       * The stepping latch the tip keeps while Driver is at rest (null = none, and a resting tip follows its target every frame) — see CreationReplantDocument.
-       */
-      replant?: {
-        /**
-         * The drift that starts a step, in creation units (world units at the body's scale of one, multiplied by its scale), in (0, MaxDistance].
-         */
-        distance: number;
-        /**
-         * The step's duration, seconds, in (0, MaxSeconds].
-         */
-        seconds: number;
-        /**
-         * The arc's peak lift, in creation units as Distance is, in [0, MaxHeight].
-         */
-        height: number;
-      } | null;
-    } | null;
-    /**
-     * How much of the tip's tilt the contact takes out, in [0, 1] (null = 0: the tip keeps whatever orientation the solved chain hands it). At 1 the tip's rest orientation is re-aligned to the contact normal: the tip axis that points against the target's probe Direction at rest (creation up for a target that names none) turns onto the surface normal at the target, latched with the plant, or onto world up when the target reports no surface. The turn is the shortest one, about the tip's own origin, so the tip stays on its target and keeps the heading the chain gave it. It is weighted by the eased weight the goal blends by, so a tip a plant releases to its swing (SwingWeight 0) keeps its authored swing off the ground. A boot whose sole is flat at rest keeps it flat when the chain bends to reach a target off its rest offset, and a Standoff equal to the tip origin's rest height then puts the whole sole on the surface.
-     */
-    align?: number | null;
-    /**
-     * The level the effector's weight eases toward while its gate holds, from a curve of a driver's phase clamped to [0, 1], read as a driver's WeightBy reads one (null = 1). The driver it names owns the effector: the effector's layer share is that driver's share over every shape the effector writes (EffectorShare), and a driver with no Parts covers what its effectors write. Any declared driver may own one, since every driver advances before any effector solves.
-     */
-    weightBy?: ShapeNullable29 | null;
-    /**
-     * The exponential time constant the weight rises over, as a driver's (null = WeightSeconds; zero is immediate).
-     */
-    blendInSeconds?: number | null;
-    /**
-     * The exponential time constant the weight falls over, on the same terms.
-     */
-    blendOutSeconds?: number | null;
-  } | null)[] | null;
+  effectors?: (CreationEffectorDocument | null)[] | null;
   /**
    * The bounded participating volumes (null = none), at most MaxVolumes — see VolumeDocument. Each rides the creation root's or a named shape's dynamic slot; a static placement bakes its frame in. Presentation-only: no distance field, no collider.
    */
-  volumes?: ({
-    kind: string;
-    position: unknown;
-    rotation: unknown;
-    halfExtent: unknown;
-    ramp: ({
-      density: number;
-      color: string;
-    } | null)[];
-    parent?: string | null;
-    axis?: number | null;
-    width?: number | null;
-    speed?: number | null;
-    seed?: number | null;
-    steps?: number | null;
-    intensity?: number | null;
-    extinction?: number | null;
-    pulseAmplitude?: number | null;
-    pulseFrequency?: number | null;
-    intensityLane?: number | null;
-    enabled?: boolean;
-    coverage?: number | null;
-    softness?: number | null;
-    scatter?: number | null;
-    spread?: number | null;
-    fade?: number | null;
-    noiseScale?: number | null;
-    noiseDepth?: number | null;
-    /**
-     * Whether the family is supported.
-     */
-    isKnownKind?: boolean;
-  } | null)[] | null;
+  volumes?: (VolumeDocument | null)[] | null;
   /**
    * Optional numeric state binding (state.row[.key]) whose authority value, clamped to [0, 1], uniformly scales the creation about its origin. Zero hides it and removes contact. A solid draws the exact size contact sampled before body motion, published with that tick's snapshot; presentation easing never drives contact.
    */
@@ -1943,63 +1594,178 @@ export type CreationDocument = {
   /**
    * The pose clips (null = none), each key poses on joints played by one of Drivers — see CreationClipDocument. Presentation-only, like the drivers.
    */
-  clips?: ({
-    /**
-     * The clip's name, unique within the creation.
-     */
-    name: string;
-    /**
-     * The driver that plays the clip; its phase is in the units of At.
-     */
-    driver: string;
-    /**
-     * The keys, at strictly increasing positions; at least one.
-     */
-    keys: ({
-      /**
-       * The key's position, in the units of its driver's phase.
-       */
-      at: number;
-      /**
-       * The shapes the key poses; a shape the key does not name has no key here, and its track interpolates across this position.
-       */
-      poses: ({
-        /**
-         * The name of the shape posed. A shape carrying domain folds may not be posed.
-         */
-        shape: string;
-        /**
-         * The turn's steps, composed in the order written, the first turning first; the composed turn is under a half turn. Null is no turn.
-         */
-        turn?: ({
-          /**
-           * The axis, non-zero; its length is ignored.
-           */
-          axis: [number, number, number];
-          /**
-           * The angle in radians, right-handed about Axis.
-           */
-          angle: number;
-        } | null)[] | null;
-        /**
-         * The translation, in creation units, added after every turn of the shape. Null is none.
-         */
-        slide?: unknown;
-      } | null)[];
-      /**
-       * How the stretch arriving at this key moves: EaseLinear (null), EaseSmooth or EaseHold.
-       */
-      ease?: string | null;
-    } | null)[];
-    /**
-     * Whether the clip loops: its position is the driver's phase modulo Period, counted so a negative phase wraps like a positive one, and the stretch from a track's last key back to its first interpolates like any other. Null or false holds: the position is the phase, and a track holds its first key before it and its last key after it. A driver whose phase wraps (a travel or time driver, and a driver that follows one) may play only a looping clip whose period divides the span the phase wraps over.
-     */
-    wrap?: boolean | null;
-    /**
-     * A looping clip's period, in phase units (null = one turn, 2π); every key lies in [0, period). Refused on a held clip.
-     */
-    period?: number | null;
-  } | null)[] | null;
+  clips?: (CreationClipDocument | null)[] | null;
+  [k: string]: unknown;
+};
+
+/**
+ * A curve of an earlier driver's phase, the way a driver's CadenceBy and WeightBy read one signal through another: the value is the height (Z) of the containing world's curves row where its X equals Driver's phase, held at the end knots outside the row's span. The named driver's cadence scales its signal onto the curve's X, and its dynamics smooths it.
+ */
+export type CreationDriverCurveDocument = {
+  /**
+   * A driver declared before the one this curve modulates.
+   */
+  driver: string;
+  /**
+   * The world's curves row: open and drawn left to right, each knot further along X than the last with its tangent pointing toward +X. The world validator refuses a row that is not.
+   */
+  curve: string;
+};
+
+export type CreationDriverDocument = {
+  /**
+   * The driver's name, unique within the creation — the spelling a facet's driver member resolves against.
+   */
+  name: string;
+  /**
+   * One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, SignalTurnRate, SignalTravelDirection, SignalLateralAcceleration, SignalForwardAcceleration, a state cell (state.<row>[.<key>], whose numeric value at the frame's tick is the phase times the cadence), or a SignalDriverPrefix earlier driver. The first three integrate: φ accumulates Cadence × the signal's per-frame delta while w > 0, and wraps modulo 2π so a wheel spins forever without losing precision. The rest are instantaneous: φ is set to Cadence × the current value (through Dynamics when one is named), so a facet reading them tracks rather than cycles.
+   */
+  signal: string;
+  /**
+   * The signal-to-phase gain: radians per metre for the travel signals, radians per second for SignalTime, radians per metre-per-second for SignalSpeed/SignalVerticalSpeed, radians per radian-per-second for SignalTurnRate, radians per radian for SignalTravelDirection, and radians per metre-per-second-squared for the acceleration signals. Magnitude at most MaxCadence.
+   */
+  cadence: DocumentScalar;
+  /**
+   * The gate: every token must hold for the driver's weight to ease toward 1 (it eases toward 0 otherwise, using the authored blend times or WeightSeconds by default, so a limb returns to rest instead of freezing mid-stride). Authored as one token or an array of them — a bare string reads as a one-token gate and canonicalizes to the array form. A token is a Puck.Physics.Motion.BodyFacts member name, WhenAlways, TokenMoving, or TokenStill; null is ungated. At most MaxGateTokens. A token no consumer can resolve gates the driver permanently off.
+   */
+  when?: (string | null)[] | null;
+  /**
+   * The exponential time constant in seconds the weight rises over (the gate opening, or a WeightBy level climbing); null uses WeightSeconds. Finite and non-negative; zero applies immediately on the next positive frame delta.
+   */
+  blendInSeconds?: number | null;
+  /**
+   * The exponential time constant in seconds the weight falls over (the gate releasing, or a WeightBy level dropping), on the same terms as BlendInSeconds. Independent release timing lets a mechanism settle after a quick body response.
+   */
+  blendOutSeconds?: number | null;
+  /**
+   * The containing world's dynamics row (natural frequency, damping, initial response) an instantaneous signal's phase follows through, or null to track the signal exactly. A hip that trails a turn and overshoots as it settles, a lean that builds and relaxes, and a pose that eases toward a new level are one signal read through a second-order response. Refused on an integrating signal and on a SignalDriverPrefix signal, whose phase is a running cycle rather than a level; the world validator refuses a name its dynamics section does not declare.
+   */
+  dynamics?: string | null;
+  /**
+   * Scales Cadence each frame by a curve of an earlier driver's phase, or null to keep it fixed. A stride on planar travel that takes its radians per metre from a curve of the body's speed lengthens its stride as the body speeds up, so its step rate rises less than its speed does.
+   */
+  cadenceBy?: CreationDriverCurveDocument | null;
+  /**
+   * Sets the level the weight eases toward while the gate holds, from a curve of an earlier driver's phase clamped to [0, 1], or null for 1. Two drivers reading one stride's phase through SignalDriverPrefix, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk into a run without their legs ever leaving step.
+   */
+  weightBy?: CreationDriverCurveDocument | null;
+  /**
+   * The driver's mask: ids of the creation's parts (CreationPartDocument). The driver's swings, slides and clip poses play only on shapes those parts cover, and a replacing driver reduces earlier drivers only there. Null is the shapes the driver itself poses.
+   */
+  parts?: (string | null)[] | null;
+  /**
+   * How the driver layers: ModeAdd (null) adds its motion to the drivers before it; ModeReplace also scales every driver declared before it by one minus its weight on the shapes its mask covers, so a stance takes the arms from the gait without the gait knowing (Share).
+   */
+  mode?: string | null;
+  /**
+   * The name of a world input channel a state-cell signal may be guessed from (null = none). On a client that presents for exactly one seat, which controls the body, while one of that seat's own edges on the channel has been taken in by a tick and its answer has not yet been presented, and for no longer than LeadSeconds, the phase follows the seat's own level on the channel in place of the cell. It changes only that seat's picture, never what the authority computes. The channel must be a button or an axis.
+   */
+  lead?: string | null;
+  /**
+   * How long, in seconds, an unanswered guess may show (null = DefaultLeadSeconds). Finite and positive; meaningful only with Lead.
+   */
+  leadSeconds?: number | null;
+};
+
+export type CreationEffectorDocument = {
+  /**
+   * The effector's name, unique within the creation — what a read-back or a refusal spells.
+   */
+  name: string;
+  /**
+   * The bones, root→tip, each the Name of a shape that DESCENDS from the one before it through Parent. A bone's joint is the pivot of its first Swings entry, or its authored Joint when it swings nothing. Two bones (MinChainBones) solve analytically; three or more — a tail, a tentacle, a spider leg with a coxa — solve by cyclic coordinate descent over Iterations sweeps. At most MaxChainBones.
+   */
+  chain: (string | null)[];
+  /**
+   * The Name of the shape whose posed origin IS the end effector — the last bone itself, or a shape descending from it (a boot under a shin, a claw under a tarsus).
+   */
+  tip: string;
+  /**
+   * Where the tip is asked to be.
+   */
+  target: CreationEffectorTargetDocument;
+  /**
+   * The gate, in the same vocabulary and with the same easing a driver's When uses: the correction blends in while every token holds and back out otherwise, so a released effector returns the limb to its driver-posed pose instead of dropping it.
+   */
+  when?: (string | null)[] | null;
+  /**
+   * A constant ceiling on the correction, in [0, 1] (null = 1 — full correction). Multiplied by the eased weight and the layer share, so a half-weight effector suggests rather than commands.
+   */
+  weight?: DocumentScalar;
+  /**
+   * The contact latch (null = none) — see CreationPlantDocument.
+   */
+  plant?: CreationPlantDocument | null;
+  /**
+   * How much of the tip's tilt the contact takes out, in [0, 1] (null = 0: the tip keeps whatever orientation the solved chain hands it). At 1 the tip's rest orientation is re-aligned to the contact normal: the tip axis that points against the target's probe Direction at rest (creation up for a target that names none) turns onto the surface normal at the target, latched with the plant, or onto world up when the target reports no surface. The turn is the shortest one, about the tip's own origin, so the tip stays on its target and keeps the heading the chain gave it. It is weighted by the eased weight the goal blends by, so a tip a plant releases to its swing (SwingWeight 0) keeps its authored swing off the ground. A boot whose sole is flat at rest keeps it flat when the chain bends to reach a target off its rest offset, and a Standoff equal to the tip origin's rest height then puts the whole sole on the surface.
+   */
+  align?: number | null;
+  /**
+   * The level the effector's weight eases toward while its gate holds, from a curve of a driver's phase clamped to [0, 1], read as a driver's WeightBy reads one (null = 1). The driver it names owns the effector: the effector's layer share is that driver's share over every shape the effector writes (EffectorShare), and a driver with no Parts covers what its effectors write. Any declared driver may own one, since every driver advances before any effector solves.
+   */
+  weightBy?: CreationDriverCurveDocument | null;
+  /**
+   * The exponential time constant the weight rises over, as a driver's (null = WeightSeconds; zero is immediate).
+   */
+  blendInSeconds?: number | null;
+  /**
+   * The exponential time constant the weight falls over, on the same terms.
+   */
+  blendOutSeconds?: number | null;
+};
+
+export type CreationEffectorTargetDocument = {
+  /**
+   * One of KindSurface, KindBody, KindState or KindShape.
+   */
+  kind: string;
+  /**
+   * KindSurface: the probe direction in the creation's author frame (see CreationFrame), so it turns with the body — [0, -1, 0] is "below the body", which on a wall-held body points at the wall's own down. KindShape (optional): the way the tip approaches the point, carried by Shape's motion; its reverse is the normal an effector's align turns the tip onto. Normalized at canonicalization; zero names no direction and is refused.
+   */
+  direction?: DocumentVector3;
+  /**
+   * KindSurface: how far along Direction the probe searches, in creation units: world units at the body's scale of one, and multiplied by its scale, as its shapes are. Beyond MaxReach, or at zero or less, is refused. A probe that finds nothing eases the correction out rather than reaching at nothing.
+   */
+  reach?: DocumentScalar;
+  /**
+   * KindSurface: how far off the hit surface, along its normal, the tip is placed, in creation units as Reach is (null = 0 — the tip lands on the surface). The thickness of a boot's sole or the gap a claw keeps.
+   */
+  standoff?: DocumentScalar;
+  /**
+   * KindBody: the population entity index whose pose is the target, fixed in the document. A body target names this or Reference, never both.
+   */
+  index?: number | null;
+  /**
+   * KindBody: the offset from that body's root (or its Part), in the creation's author frame, riding the target's attitude (null = the point exactly). KindShape: a point in the creation at rest, author frame, that rides Shape's motion (null = the shape's own origin).
+   */
+  offset?: DocumentVector3;
+  /**
+   * KindState: a state.<row>[.<key>] reference to a text cell spelling a world-space [x, y, z], read at the frame's tick — a target a rule, a console write, or another system publishes. KindBody: a reference to a numeric cell holding the target body's population index, read as stored truth each frame: a whole number naming an active body selects it, and any other value or none selects none, so a rule clears the target by clearing the cell or writing -1. The containing world refuses a row it does not declare.
+   */
+  reference?: string | null;
+  /**
+   * KindShape: the name of a shape of the same creation the point rides. It may not be a bone or the tip of the effector's own chain, nor hang from one, and no effector declared later may write it or a shape it hangs from, so the solve reads the shape's final pose for the frame.
+   */
+  shape?: string | null;
+  /**
+   * KindBody (optional): a part id the target body's look publishes; the point is that part's anchor as last drawn, and the body's root when its look publishes no such part.
+   */
+  part?: string | null;
+};
+
+export type CreationFaceDocument = {
+  /**
+   * The face's name (a wiring handle — face by default).
+   */
+  name: string;
+  /**
+   * The shape whose surface is the screen (a Id; -1/null = the whole creation's canonical face surface, resolved by the consumer).
+   */
+  shapeId?: number | null;
+  /**
+   * The feed this face shows when nothing else is wired, as a source token a consuming world resolves through a closed four-token map — none (unbound glass), test (the test pattern), and camera:<name> / feed:<name> (a View of the named camera, resolved against the placement's derived creation-eye feeds then the world's own camera rows). An unrecognized token (including a bare named:emotes, which named a host registry no world provides) shows unbound glass. Null = unbound glass until a world's face override wires a feed.
+   */
+  defaultSource?: string | null;
 };
 
 export type CreationNoiseDocument = {
@@ -2030,28 +1796,106 @@ export type CreationNoiseDocument = {
   /**
    * The regions that scale the relief's displacement down (null = none), in authored order: each entry's weight multiplies the relief, so a basin, a pad or a path stands where its shapes put it (CreationReliefMaskDocument).
    */
-  masks?: ({
-    /**
-     * The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding), each a box, a sphere, an ellipsoid, a superellipsoid, a capsule scaled alike in X and Z or a plane (Lower). A relief's masks hold at most MaxRegions shapes in all.
-     */
-    shapes: (ShapeNullable28 | null)[];
-    /**
-     * The band's width, in creation units, at least 2⁻¹²; snapped to a multiple of 2⁻¹² (SdfReliefBand).
-     */
-    fade: number;
-    /**
-     * Where the band starts, as a distance in creation units from the region's surface; negative starts it inside the region (null = 0). Snapped to a multiple of 2⁻¹²; the start, the fade and their sum lie within Limit units.
-     */
-    start?: number | null;
-    /**
-     * The weight on and inside the region, in [0, 1] (null = 0), snapped to a multiple of 2⁻¹⁶.
-     */
-    inside?: number | null;
-    /**
-     * The weight past the band, in [0, 1] (null = 1), snapped to a multiple of 2⁻¹⁶.
-     */
-    outside?: number | null;
-  } | null)[] | null;
+  masks?: (CreationReliefMaskDocument | null)[] | null;
+};
+
+export type CreationPartDocument = {
+  /**
+   * The ordinal, case-sensitive identifier an entity-part anchor or a mask names. Part ids are local to the creation; the engine reserves none.
+   */
+  id: string;
+  /**
+   * The stable Id whose dynamic pose the part publishes.
+   */
+  shapeId: number;
+  /**
+   * The names of the shapes the part covers, each with every shape that hangs from it through Parent; null covers the anchor shape and what hangs from it. A subtree rather than a list, so a hand stays a hand when a finger gains a segment.
+   */
+  shapes?: (string | null)[] | null;
+  /**
+   * The ids of parts declared earlier whose shapes this part does not cover, so "the trunk without the arms" is sayable when the root carries the whole body. Parts may overlap: a later part never narrows an earlier one.
+   */
+  except?: (string | null)[] | null;
+};
+
+export type CreationPlantDocument = {
+  /**
+   * The Name whose wrapped phase the window is read against.
+   */
+  driver: string;
+  /**
+   * The phase interval [from, to] in radians, each in [0, 2π). A window whose from exceeds its to wraps through 0 — the half-cycle straddling the phase origin is as authorable as any other.
+   */
+  window: DocumentVector2;
+  /**
+   * The target influence outside the plant window while the driver is active, in [0, 1]. Null means 1 (continue following the target); 0 releases the tip to its authored swing. As the driver eases to rest, target influence returns to 1 so an idle limb can settle onto its surface.
+   */
+  swingWeight?: number | null;
+  /**
+   * The stepping latch the tip keeps while Driver is at rest (null = none, and a resting tip follows its target every frame) — see CreationReplantDocument.
+   */
+  replant?: CreationReplantDocument | null;
+};
+
+export type CreationReliefMaskDocument = {
+  /**
+   * The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding), each a box, a sphere, an ellipsoid, a superellipsoid, a capsule scaled alike in X and Z or a plane (Lower). A relief's masks hold at most MaxRegions shapes in all.
+   */
+  shapes: (ShapeDocument | null)[];
+  /**
+   * The band's width, in creation units, at least 2⁻¹²; snapped to a multiple of 2⁻¹² (SdfReliefBand).
+   */
+  fade: number;
+  /**
+   * Where the band starts, as a distance in creation units from the region's surface; negative starts it inside the region (null = 0). Snapped to a multiple of 2⁻¹²; the start, the fade and their sum lie within Limit units.
+   */
+  start?: number | null;
+  /**
+   * The weight on and inside the region, in [0, 1] (null = 0), snapped to a multiple of 2⁻¹⁶.
+   */
+  inside?: number | null;
+  /**
+   * The weight past the band, in [0, 1] (null = 1), snapped to a multiple of 2⁻¹⁶.
+   */
+  outside?: number | null;
+};
+
+export type CreationReplantDocument = {
+  /**
+   * The drift that starts a step, in creation units (world units at the body's scale of one, multiplied by its scale), in (0, MaxDistance].
+   */
+  distance: number;
+  /**
+   * The step's duration, seconds, in (0, MaxSeconds].
+   */
+  seconds: number;
+  /**
+   * The arc's peak lift, in creation units as Distance is, in [0, MaxHeight].
+   */
+  height: number;
+};
+
+export type CreationSoundDocument = {
+  /**
+   * The sound's name (a wiring handle — sound by default; unique within the creation).
+   */
+  name: string;
+  /**
+   * The shape the voice emits from (a Id; null = the creation's root). A sound naming a missing shape is dropped at load (the post-edit-deletion self-heal, mirroring faces).
+   */
+  shapeId?: number | null;
+  /**
+   * The voice's puck.synthesizer-patch.v1 patch, inline (validated through the synth family's own canonicalizer as part of creation validation).
+   */
+  patch: SynthPatchDocument;
+  /**
+   * The emitter level (null = 1 — unity).
+   */
+  level?: number | null;
+  /**
+   * The audible support radius in world units (null = the consuming world's default speaker radius).
+   */
+  radius?: number | null;
 };
 
 /**
@@ -2065,9 +1909,9 @@ export type DocumentIdentifier = string;
 
 export type DocumentIdentifierList = DocumentIdentifier[];
 
-export type DocumentIdentifierVariant2 = string;
-
 export type DocumentQuaternion = [number, number, number, number] | string;
+
+export type DocumentScalar = number | string;
 
 export type DocumentVector2 = [number, number] | string;
 
@@ -2102,6 +1946,11 @@ export type DynamicsRow = {
  * A comparison as a document spells it: one of the six comparison operations of ExpressionOp (Equal, NotEqual, Less, LessOrEqual, Greater, GreaterOrEqual), named by its member name exactly. Another operation's name, another casing, and a number are refused on read.
  */
 export type ExpressionComparison = "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual";
+
+/**
+ * A comparison as a document spells it: one of the six comparison operations of ExpressionOp (Equal, NotEqual, Less, LessOrEqual, Greater, GreaterOrEqual), named by its member name exactly. Another operation's name, another casing, and a number are refused on read.
+ */
+export type ExpressionComparisonNonNullable = "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual";
 
 /**
  * The one expression IR: a bounded postfix program a world rule, decision, cartridge step, or flock affinity evaluates. Each instruction either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins.
@@ -2146,6 +1995,32 @@ export type ExpressionProgramNonNullable2 = {
    */
   subprograms?: ShapeNonNullable49[];
   [k: string]: unknown;
+};
+
+export type FrameDocument = {
+  /**
+   * The frame's name (rest is the live pose).
+   */
+  name: string;
+  /**
+   * The per-shape transform snapshots, keyed by shape id.
+   */
+  transforms: (FrameTransformDocument | null)[];
+};
+
+export type FrameTransformDocument = {
+  /**
+   * The shape id the snapshot belongs to.
+   */
+  id: number;
+  /**
+   * The pose position.
+   */
+  position: DocumentVector3;
+  /**
+   * The pose orientation.
+   */
+  rotation: DocumentQuaternion;
 };
 
 /**
@@ -2745,15 +2620,15 @@ export type PaletteEntryDocument = {
   /**
    * The emissive luminance, in nits, the colour tints (null = 0 — optional members are nullable and normalized at load).
    */
-  emissive: number | null;
+  emissive?: number | null;
   /**
    * The specular strength (null = the material default).
    */
-  specular: number | null;
+  specular?: number | null;
   /**
    * The GGX roughness in [0, 1] (null = DefaultRoughness) — see SdfMaterial for the roughness-floor formula. A document still spelling shininess is an unmapped member and is refused.
    */
-  roughness: number | null;
+  roughness?: number | null;
   /**
    * The fresnel edge-lift strength in [0, 1] (null = 0 — no lift) — see SdfMaterial.
    */
@@ -2821,9 +2696,99 @@ export type PaletteEntryDocument = {
   /**
    * Gets up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none. The list is owned (a lattice field's material sits in a cached state row).
    */
-  paints?: PalettePaintDocument[] | null;
+  paints?: (PalettePaintDocument | null)[] | null;
 };
 
+export type PaletteEntryDocumentVariant2 = {
+  /**
+   * The base color as #RRGGBB (see HexColor).
+   */
+  color: string;
+  /**
+   * The emissive luminance, in nits, the colour tints (null = 0 — optional members are nullable and normalized at load).
+   */
+  emissive: number | null;
+  /**
+   * The specular strength (null = the material default).
+   */
+  specular: number | null;
+  /**
+   * The GGX roughness in [0, 1] (null = DefaultRoughness) — see SdfMaterial for the roughness-floor formula. A document still spelling shininess is an unmapped member and is refused.
+   */
+  roughness: number | null;
+  /**
+   * The fresnel edge-lift strength in [0, 1] (null = 0 — no lift) — see SdfMaterial.
+   */
+  sheen?: number | null;
+  /**
+   * The metalness in [0, 1] (null = 0 — dielectric) — see SdfMaterial.
+   */
+  metal?: number | null;
+  /**
+   * The clearcoat strength in [0, 1] (null = 0 — no coat) — see SdfMaterial.
+   */
+  coat?: number | null;
+  /**
+   * Optional generic coverage and reveal surfaces.
+   */
+  weathering?: PaletteWeatheringDocumentVariant2 | null;
+  /**
+   * The wrap-lighting share in [0, 1] (null = 0 — the plain Lambert term) — see Wrap.
+   */
+  wrap?: number | null;
+  /**
+   * The shading-normal broadening in [0, 1] (null = 0 — no broadening) — see Soften.
+   */
+  soften?: number | null;
+  /**
+   * The fill tint as #RRGGBB or a state binding (null = black — no fill) — see Fill.
+   */
+  fill?: string | null;
+  /**
+   * Optional refractive paint layer.
+   */
+  inset?: PaletteInsetDocumentVariant2 | null;
+  /**
+   * The color multiplying outgoing indirect reflectance and emission, as #RRGGBB or a state binding; null means white.
+   */
+  bleed?: string | null;
+  /**
+   * The finite nonnegative gain on received indirect light; null means one.
+   */
+  receive?: number | null;
+  /**
+   * The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body's own look lanes (a placement without them reads zero), 4 to 7 the world's render.lanes (SdfLanes). Null keeps the emissive static.
+   */
+  emissiveLane?: number | null;
+  /**
+   * The slot's glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque.
+   */
+  glass?: PaletteGlassDocument | null;
+  /**
+   * The slot's own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world's default style (render.toon).
+   */
+  toon?: ToonStyleDocument | null;
+  /**
+   * The slot's styles chosen live by a state cell (PaletteToonSelectDocument), whose case replaces Toon while the cell names one; null keeps Toon.
+   */
+  toonSelect?: PaletteToonSelectDocumentVariant2 | null;
+  /**
+   * The slot's flow layer (PaletteFlowDocument): shading that moves along an authored flow over still geometry; null moves nothing.
+   */
+  flow?: PaletteFlowDocument | null;
+  /**
+   * The slot's shade program (ShadeReference), or null for the world's default.
+   */
+  shade?: ShadeReference;
+  /**
+   * Gets up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none. The list is owned (a lattice field's material sits in a cached state row).
+   */
+  paints?: PalettePaintDocumentVariant2[] | null;
+};
+
+/**
+ * A palette slot's flow layer: the slot's shading moves along Velocity while its geometry stays still. A seeded noise pattern advects with the flow in two layers half a cycle apart, so neither restart shows, tilting the shading normal by Tilt times its slope and revealing Surface over Coverage of the slot (streaks, foam). The velocity is authored in the shader's frame, as the other palette layers are: for a creation, its engine frame (the author frame's x and z negated), turned with each placement; for a field row, world space; FrameWorld keeps it and the pattern in world space on any surface.
+ */
 export type PaletteFlowDocument = {
   /**
    * The flow, in units per second.
@@ -2879,6 +2844,9 @@ export type PaletteFlowDocument = {
   region?: PaletteFlowRegionDocument | null;
 };
 
+/**
+ * A localized flow velocity blended into the base velocity.
+ */
 export type PaletteFlowRegionDocument = {
   /**
    * Centre in world coordinates.
@@ -2894,6 +2862,9 @@ export type PaletteFlowRegionDocument = {
   velocity: DocumentVector3;
 };
 
+/**
+ * A glass slot's contact: the slot's flow coverage rises toward Coverage where the opaque surface behind the glass lies within Reach of the glass's surface along the view, so foam gathers at a step, a pier or a bank in the flow's own pattern. The slot's flow must name the surface its coverage reveals.
+ */
 export type PaletteGlassContactDocument = {
   /**
    * The distance, in creation units along the view from the glass surface to the opaque surface behind it, over which the added coverage falls to zero; positive.
@@ -2905,6 +2876,9 @@ export type PaletteGlassContactDocument = {
   coverage: number;
 };
 
+/**
+ * A palette slot's glass: the slot's shapes transmit what lies behind them, refracted and absorbed over the distance the view ray travels through the shape, and reflect their surroundings by Fresnel. The slot's color is the tint, the colour light takes on through Depth of the glass, and its roughness the frost. A glass slot's shapes bake and draw apart from the creation's opaque shapes: they never blend with them, a cut or engraving never carves them, and a pooled creation keeps them out of any group.
+ */
 export type PaletteGlassDocument = {
   /**
    * The thickness, in creation units, over which light takes on the tint; finite and positive. A part twice this thick reads twice as deep.
@@ -2940,7 +2914,74 @@ export type PaletteInsetDocument = {
   paint: PaletteRadialPaintDocument;
 };
 
+export type PaletteInsetDocumentVariant2 = {
+  origin: DocumentVector3;
+  rotation: DocumentQuaternion;
+  depth: number;
+  ior: number;
+  paint: PaletteRadialPaintDocumentVariant2;
+};
+
 export type PalettePaintDocument = {
+  /**
+   * The primitive, read as a shape's type: every primitive but a path profile.
+   */
+  type: SdfSolidPrimitive;
+  /**
+   * The paint's color, #RRGGBB or a state binding.
+   */
+  color: string;
+  /**
+   * The primitive's position (null = the frame's origin).
+   */
+  position?: DocumentVector3;
+  /**
+   * The primitive's rotation (null = identity).
+   */
+  rotation?: DocumentQuaternion;
+  /**
+   * The primitive's size, as a shape's scale (null = one).
+   */
+  scale?: DocumentVector3;
+  /**
+   * The half-width of the band painted about the primitive's surface, in the frame's units; null or zero fills the primitive.
+   */
+  stroke?: number | null;
+  /**
+   * The shape whose frame carries the paint, in that shape's local frame as a shape-riding volume is; null paints in the frame of the slot that owns the hit, or world space on a static placement. A static placement draws no parented paint.
+   */
+  parent?: string | null;
+  /**
+   * Prism only: the top-to-bottom width ratio.
+   */
+  taper?: number | null;
+  /**
+   * Prism only: the cross-section; a path profile is refused.
+   */
+  profile?: SdfPrismProfileNullable | null;
+  /**
+   * Prism only: extrude or revolve.
+   */
+  lift?: SdfLiftNullable | null;
+  /**
+   * The edge-rounding radius, as a shape's.
+   */
+  rounding?: number | null;
+  /**
+   * The cap chamfer radius, as a shape's.
+   */
+  chamfer?: number | null;
+  /**
+   * Superellipsoid only: the exponent.
+   */
+  exponent?: number | null;
+  /**
+   * Sweep only: the curve, in the frame's units.
+   */
+  curve?: ShapeCurveDocument | null;
+};
+
+export type PalettePaintDocumentVariant2 = {
   /**
    * The primitive, read as a shape's type: every primitive but a path profile.
    */
@@ -2980,7 +3021,7 @@ export type PalettePaintDocument = {
   /**
    * Prism only: extrude or revolve.
    */
-  lift?: SdfLift | null;
+  lift?: SdfLiftNullable | null;
   /**
    * The edge-rounding radius, as a shape's.
    */
@@ -3007,6 +3048,17 @@ export type PaletteRadialPaintDocument = {
   /**
    * Gets the one to four radial stops, each an ascending radius and the colour it ramps to. The list is owned.
    */
+  stops: (PaletteRadialStopDocument | null)[];
+};
+
+export type PaletteRadialPaintDocumentVariant2 = {
+  softness?: number;
+  modulationAmplitude?: number;
+  modulationFrequency?: number;
+  seed?: number;
+  /**
+   * Gets the one to four radial stops, each an ascending radius and the colour it ramps to. The list is owned.
+   */
   stops: PaletteRadialStopDocument[];
 };
 
@@ -3017,13 +3069,22 @@ export type PaletteRadialStopDocument = {
 
 export type PaletteRevealDocument = {
   threshold: number;
-  surface: PaletteSurfaceDocument;
+  surface: PaletteSurfaceDocumentNonNullable;
 };
 
 /**
  * An authored surface tint and reflectance.
  */
 export type PaletteSurfaceDocument = {
+  color: string;
+  roughness: number;
+  metal: number;
+};
+
+/**
+ * An authored surface tint and reflectance.
+ */
+export type PaletteSurfaceDocumentNonNullable = {
   color: string;
   roughness: number;
   metal: number;
@@ -3048,10 +3109,44 @@ export type PaletteToonSelectDocument = {
   /**
    * Gets the looks, the first for the value zero (PaletteToonCaseDocument). The list is owned.
    */
+  cases: (PaletteToonCaseDocument | null)[];
+};
+
+export type PaletteToonSelectDocumentVariant2 = {
+  /**
+   * The state.<row>[.<key>] binding naming the cell.
+   */
+  state: string;
+  /**
+   * Gets the looks, the first for the value zero (PaletteToonCaseDocument). The list is owned.
+   */
   cases: PaletteToonCaseDocument[];
 };
 
 export type PaletteWeatheringDocument = {
+  edge?: number;
+  lines?: number;
+  settle?: number;
+  reach?: number;
+  seed?: number;
+  scale?: number;
+  floor?: number;
+  lane?: number;
+  deposit?: PaletteSurfaceDocument | null;
+  noise?: number;
+  patternScale?: DocumentVector3;
+  softness?: number;
+  octaves?: number;
+  octaveRatio?: number;
+  octaveGain?: number;
+  turn?: DocumentQuaternion;
+  /**
+   * Gets the surfaces the coverage reveals, each at an ascending threshold. The list is owned.
+   */
+  under?: (PaletteRevealDocument | null)[] | null;
+};
+
+export type PaletteWeatheringDocumentVariant2 = {
   edge?: number;
   lines?: number;
   settle?: number;
@@ -3318,13 +3413,26 @@ export type RulePoolIteration = {
 
 export type SafeName = string;
 
+export type SdfAxis = "X" | "Y" | "Z";
+
+export type SdfBlendOp = "Union" | "SmoothUnion" | "Subtraction" | "Intersection" | "Xor" | "SmoothIntersection" | "SmoothSubtraction" | "ChamferUnion" | "ChamferIntersection" | "ChamferSubtraction" | "GrooveUnion" | "PipeUnion" | "Morph" | "GrooveSubtraction" | "PipeSubtraction" | "StairsUnion" | "StairsSubtraction";
+
+export type SdfCellMode = "F1" | "F2MinusF1";
+
 export type SdfExposureMode = "Manual" | "Auto";
 
 export type SdfFlowFrame = "Object" | "World";
 
 export type SdfIndirectTier = "Off" | "Medium" | "High";
 
+/**
+ * How a 2D-primitive family shape (RoundedRectangle, RegularPolygon, Star, Trapezoid, Ellipse, ChamferedRectangle) is lifted from its 2D signed-distance field into a 3D solid. The kernels read each member as SDF_LIFT_* from the generated sdf-isa.hlsli; the mode is packed into the shape instruction's Data1.y and decoded as > 0.5.
+ */
 export type SdfLift = "Revolve" | "Extrude";
+
+export type SdfLiftNullable = "Revolve" | "Extrude";
+
+export type SdfNoiseFlavor = "White" | "Blue" | "Gaussian";
 
 /**
  * A continuous contour. Filled contours close implicitly; stroked contours remain open unless Closed.
@@ -3421,6 +3529,8 @@ export type SdfPathStroke = {
   from?: number;
   to?: number;
 };
+
+export type SdfPlane = "XZ" | "XY" | "YZ";
 
 /**
  * Authored profile controls for a solid prism. The profile is extruded along local Z.
@@ -3699,6 +3809,11 @@ export type SdfSweepParameters = {
   strandOffset?: number;
 };
 
+/**
+ * The 17 wallpaper symmetry groups, in IUC order. P1–P4G tile a square/rectangular lattice; P3 and up tile the equilateral hexagonal lattice (the cell must be square — the pitch is the cell's x extent). The kernels read each member as SDF_WPG_* from the generated sdf-isa.hlsli.
+ */
+export type SdfWallpaperGroup = "P1" | "P2" | "Pm" | "Pg" | "Cm" | "Pmm" | "Pmg" | "Pgg" | "Cmm" | "P4" | "P4M" | "P4G" | "P3" | "P3M1" | "P31M" | "P6" | "P6M";
+
 export type SearchMethod = "Negamax" | "MonteCarlo";
 
 export type SeatActivationPolicy = "Eager" | "OnDemand";
@@ -3708,6 +3823,9 @@ export type SeatActivationPolicy = "Eager" | "OnDemand";
  */
 export type ShadeReference = string | SdfShadeDefinition;
 
+/**
+ * The engine-wide shadow tier: whether the shadow cascades render, and at what resolution. Each step down halves every cascade's texels along each side, a quarter of its memory and fill, so its shadows soften and lose their finest contacts over the same reach.
+ */
 export type ShadowTier = "Off" | "Low" | "Medium" | "High";
 
 export type Shape = {
@@ -3716,6 +3834,38 @@ export type Shape = {
   ease?: "Linear" | "Smooth" | "Step";
 };
 
+/**
+ * The authored form of one GaussianPush bump: a gaussian displacement of the shape's local point applied before the primitive evaluates — p -= Push · exp(-|(p - Center) / Radii|²) (see Bumps). The pipeline's faceOffset cheek/muzzle bumps (pushed along local +Z) are two of these. Render-only, like Twist/Bend: Puck.SignedDistance.Queries.SdfFieldEvaluator does not interpret GaussianPush, so a shape carrying one is unreachable for deterministic field contact.
+ */
+export type ShapeBumpDocument = {
+  /**
+   * The bump's local center, in creation units.
+   */
+  center: DocumentVector3;
+  /**
+   * The per-axis Gaussian falloff radii, in creation units — clamped away from zero at normalization (GaussianPushMinRadius) so the exponent's divisor is never zero. Refused by name if any authored component is negative or non-finite (a magnitude is what the field reads; a negative radius states nothing a positive one does not).
+   */
+  radii: DocumentVector3;
+  /**
+   * The peak displacement at the center, in creation units (zero = an exact identity, still admitted — it still charges the per-copy instance count).
+   */
+  push: DocumentVector3;
+};
+
+/**
+ * Shape-local cellular relief. Frequency and amplitude use creation units. Contact geometry retains the base shape; the fixed-point VM can evaluate the emitted field independently.
+ */
+export type ShapeCellsDocument = {
+  frequency: number;
+  amplitude: number;
+  seed: number;
+  mode: SdfCellMode;
+  randomness: number;
+};
+
+/**
+ * The authored form of a Sweep — a quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as helical strands orbiting the curve (the pipeline's hair locks and braid). Admitted only on TypeSweep (refused elsewhere, by name), and required there (a Sweep with no curve is refused, by name). Not a closed solid: refused alongside Panel, Trims, Flare, Shear, Bumps, and Domain on the same shape, and contributes no contact/collider geometry — Scale must be uniform (refused otherwise, by name) and multiplies every one of the curve's own lengths, exactly as it does for every other primitive's canonical unit dimensions.
+ */
 export type ShapeCurveDocument = {
   /**
    * The curve's first control point, in the shape's local (workbench) frame — creation units, or a state.<row>[.<key>] reference.
@@ -3753,6 +3903,407 @@ export type ShapeCurveDocument = {
    * The strand orbit radius, in creation units (null = 0); non-negative, finite, refused past MaxSweepStrandOffsetRatio times max(RadiusStart, RadiusEnd).
    */
   strandOffset?: number | null;
+};
+
+/**
+ * The authored form of Displace: a bounded separable sine relief added to the shape's own field inside its own scope, the SDF-native height map (the relief is real geometry, so it shadows and self-occludes). Admitted on every closed primitive (Displace), evaluated at the shape's rigid frame like Cells. Render-only: contact rides the undisplaced primitive.
+ */
+export type ShapeDisplaceDocument = {
+  /**
+   * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
+   */
+  frequency: DocumentVector3;
+  /**
+   * The relief's height either way, creation units (clamped to [-MaxAmplitude, MaxAmplitude]).
+   */
+  amplitude: number;
+  /**
+   * The farthest the relief carries the surface outward.
+   */
+  reach?: number;
+};
+
+/**
+ * The persisted form of a placed shape. Position and Rotation are authored in the creation's author frame — see CreationFrame — and Scale is the primitive's size directly: see CreationGeometry's unit table.
+ */
+export type ShapeDocument = {
+  /**
+   * The shape's stable id.
+   */
+  id: number;
+  /**
+   * The optional player-given name, authored literally or through a containing world's Text state cell.
+   */
+  name?: DocumentIdentifier;
+  /**
+   * The primitive.
+   */
+  type: SdfSolidPrimitive;
+  /**
+   * The shape's position (the author frame's workbench space).
+   */
+  position: DocumentVector3;
+  /**
+   * The orientation.
+   */
+  rotation: DocumentQuaternion;
+  /**
+   * The per-axis scale — the primitive's size (see CreationGeometry).
+   */
+  scale: DocumentVector3;
+  /**
+   * The palette slot (null = 0).
+   */
+  material?: number | null;
+  /**
+   * The blend op name (null = Union).
+   */
+  blend?: SdfBlendOp | null;
+  /**
+   * The smooth-blend radius (null = 0).
+   */
+  smooth?: number | null;
+  /**
+   * The composition group (null = ungrouped).
+   */
+  group?: number | null;
+  /**
+   * The shape's local twist rate (null = 0).
+   */
+  twist?: number | null;
+  /**
+   * The shape's shell thickness (null = 0, solid).
+   */
+  onion?: number | null;
+  /**
+   * The shape's local bend rate about Y (null = 0).
+   */
+  bend?: number | null;
+  /**
+   * The shape's inflation radius (null = 0).
+   */
+  dilate?: number | null;
+  /**
+   * The ordered SDF VM domain operators (ShapeDomainOp) applied to the shape's point in creation space, before its own translate/rotate/scale (null = none). Every op the copy expansion covers reaches contact as well as render; wallpaper does not expand, and a solid placement carrying one is refused at validation.
+   */
+  domain?: (ShapeDomainOp | null)[] | null;
+  /**
+   * The driver-fed rotations this shape rides (ShapeSwingDocument), any number (null = none), composed in the order written.
+   */
+  swings?: (ShapeSwingDocument | null)[] | null;
+  /**
+   * The driver-fed translations this shape rides (ShapeSlideDocument), any number (null = none). Applied after every swing, along the authored axis. Both facets are presentation-only — composed onto the shape's per-frame dynamic transform and read nowhere else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape carrying Domain rides its own slot packed with its Parent chain's rigid delta (the identity with no parent), leaving nowhere for its OWN swing/slide to compose, so they are refused alongside a domain list at validation.
+   */
+  slides?: (ShapeSlideDocument | null)[] | null;
+  /**
+   * The Name of the shape this one hangs from (null = the creation root): the parent's animated motion carries this shape and its own pivots with it, so a forearm swung at the elbow also rides the upper arm's swing at the shoulder. The parent must be declared earlier in shapes (so a chain resolves in one pass and can never cycle); presentation-only on the same terms as the swings it composes with.
+   */
+  parent?: string | null;
+  /**
+   * The point this shape turns about (null = the pivot of its first swing, or its own position when it has neither): an effector's solve turns a bone about it (Joint). Author-frame, like every other point here. It changes no pose on its own.
+   */
+  joint?: DocumentVector3;
+  /**
+   * Only for Prism: top width divided by bottom width, finite in [0, 1]. Null uses 0.5; zero makes a triangular profile and one a rectangular profile. Scale holds bottom half-width, half-height and extrusion half-depth. Rotate the prism to reverse its taper.
+   */
+  taper?: number | null;
+  /**
+   * Optional Prism cross-section controls. Null uses a trapezoid; other profiles expose rounded rectangles, polygons, and ellipses with flat extruded caps.
+   */
+  profile?: SdfPrismProfileNullable | null;
+  /**
+   * Only for Prism: how the XY profile becomes a solid. Null or extrude sweeps it along local Z to scale.z. revolve sweeps it about the local Y axis with scale.z as the radial offset — zero gives a solid of revolution (a cowl, a boot cuff, a pauldron dome), a positive offset a ring. Renderable for every profile; a solid placement refuses it, because both contact compilers read a per-axis-scaled local box and a revolve reads scale.z as an offset rather than an extent.
+   */
+  lift?: SdfLiftNullable | null;
+  /**
+   * Only for Box, Prism, Cylinder and Cone: the edge-rounding radius in the creation's own units, finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field offsets back out, so the shape keeps its authored extent and its edges fillet; a Box without it is sharp, so boxes that touch meet as one solid, and a solid placement collides as the same rounded or sharp box. Refused by name past MaxRounding.
+   */
+  rounding?: number | null;
+  /**
+   * The shape's second-material inset face region (null = none) — see ShapePanelDocument. Render-only; refused by name on a Plane, on a shape carrying Domain ops or a non-zero Group, and on a creation that otherwise needs its own field scope.
+   */
+  panel?: ShapePanelDocument | null;
+  /**
+   * Only for Box, Cylinder and Prism (an extruded prism only — a revolve has no cap seam to bevel): the 45-degree edge-chamfer radius in the creation's own units, finite and non-negative. Refused by name past MaxChamfer, and refused by name alongside a nonzero Rounding on the same shape.
+   */
+  chamfer?: number | null;
+  /**
+   * The shape's second-material surface bands against other, earlier-declared shapes (null = none), at most MaxTrims — see ShapeTrimDocument. Render-only, like Panel; refused by name on a shape carrying Domain ops, a non-zero Group, or on a creation that otherwise needs its own field scope.
+   */
+  trims?: (ShapeTrimDocument | null)[] | null;
+  /**
+   * Whether this shape is a detail shape (null = false): excluded from contact (it never carves the contact field or the collider) while the baked frame samples it like any other shape, so a seam (a thin subtraction) or a rivet (a small union, its own material) bakes into the mesh and paints its footprint through the bake's point-sampled materials. Refused by name alongside Panel or Trims on the same shape.
+   */
+  detail?: boolean | null;
+  /**
+   * The shape's radial flare warp (null = none) — see ShapeFlareDocument. Admitted on every primitive; applies to the shape's own local point after Twist/Bend, in that order (twist, then bend, then flare), before the primitive's own scale. Render-only, like Twist/Bend.
+   */
+  flare?: ShapeFlareDocument | null;
+  /**
+   * Only for Superellipsoid: the generalizing exponent, finite in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (null = MinSuperellipsoidExponent, the ellipsoid limit — an unauthored Superellipsoid is a plain ellipsoid).
+   */
+  exponent?: number | null;
+  /**
+   * The shape's Gaussian domain-push bumps (null = none), at most MaxBumps — see ShapeBumpDocument. Applied to the shape's own local point after Shear, before the primitive's own scale. Render-only, like Twist/Bend/Flare.
+   */
+  bumps?: (ShapeBumpDocument | null)[] | null;
+  /**
+   * A polynomial point shear with explicit target and driver axes.
+   */
+  shear?: ShapeShearDocument | null;
+  /**
+   * The shape's swept-curve geometry (null = none) — see ShapeCurveDocument. Admitted only, and required, on Sweep (refused elsewhere, by name; a Sweep with no curve is refused, by name); refused alongside Panel, Trims, Flare, Shear, Bumps, or Domain on the same shape.
+   */
+  curve?: ShapeCurveDocument | null;
+  /**
+   * The shape's per-instance lane-driven erosion (null = none) — see ShapeErodeDocument. Admitted on every primitive; its reach is this shape's own Reach, so it needs no separate authored magnitude.
+   */
+  erode?: ShapeErodeDocument | null;
+  /**
+   * Shape-local cellular relief, evaluated after geometry within its own field scope.
+   */
+  cells?: ShapeCellsDocument | null;
+  /**
+   * The shape's cross-coupled sinusoidal domain warp (null = none) — see ShapeWarpDocument. Applied to the shape's own local point after Bumps, before Elongate. Render-only.
+   */
+  warp?: ShapeWarpDocument | null;
+  /**
+   * The shape's sine relief (null = none) — see ShapeDisplaceDocument. Added to the shape's own field inside its own scope. Render-only.
+   */
+  displace?: ShapeDisplaceDocument | null;
+  /**
+   * The half-extents the primitive's cross-section is swept over, creation units (null = none): Elongate, the capsule-from-sphere operator, applied last to the shape's own local point. Each component is clamped to [0, MaxElongate]. Render-only.
+   */
+  elongate?: DocumentVector3;
+  /**
+   * Only with a stairs Blend (StairsUnion, StairsSubtraction): the steps the seam takes over the blend radius Smooth, in [1, MaxSteps] (null = DefaultSteps).
+   */
+  steps?: number | null;
+  /**
+   * Only with a MorphBlend, and required by it: the lane and range the morph runs over — see ShapeMorphDocument.
+   */
+  morph?: ShapeMorphDocument | null;
+};
+
+/**
+ * One domain operator authored on a ShapeDocument, applied in creation space — after the creation/placement frame chain (origin/rotation/scale) and before the shape's own translate/rotate/scale, so every entry in Domain shares one space regardless of kind. The wire form of SdfDomainOp: a $type-discriminated ordered list whose optional members ToDomainOps resolves.
+ */
+export type ShapeDomainOp = ShapeDomainOpSymmetry | ShapeDomainOpRepeat | ShapeDomainOpPolar | ShapeDomainOpWallpaper | ShapeDomainOpJitter | ShapeDomainOpLogSphere | null;
+
+/**
+ * Stochastic lattice fold — Jitter: a repeat whose every cell displaces, tumbles and recolours its copy by a hash of the cell. Render only: a hashed copy per cell has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation.
+ */
+export type ShapeDomainOpJitter = {
+  $type?: "jitter";
+  /**
+   * The per-axis cell spacing, creation units (clamped to at least 0.001 per axis).
+   */
+  spacing: DocumentVector3;
+  /**
+   * The peak-to-peak hashed displacement per axis, creation units; it must stay under the least spacing, and the shape's reach plus half of it under half the least spacing, or the copies cross their cell walls and the program refuses them.
+   */
+  amount: number;
+  /**
+   * The hash seed (null = 0).
+   */
+  seed?: number | null;
+  /**
+   * The hashed rotation's share of a half turn, in [0, 1] (null = 0, every copy upright).
+   */
+  tumble?: number | null;
+  /**
+   * The hashed palette rows a copy's material strides over (null = 0, geometric only); the palette must hold the rows the stride reaches.
+   */
+  materialVariants?: number | null;
+  /**
+   * How the displacement is distributed over the cell (null = White).
+   */
+  flavor?: SdfNoiseFlavor | null;
+  /**
+   * The point the lattice folds around, creation units (null = the creation origin).
+   */
+  origin?: DocumentVector3;
+};
+
+/**
+ * Log-spherical shell fold — LogSphere: space tiled into self-similar shells about the origin, each a scaled copy of the prototype shell, so one shape repeats outward and inward at every scale. Render only: a scaled copy per shell has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation.
+ */
+export type ShapeDomainOpLogSphere = {
+  $type?: "logSphere";
+  /**
+   * The ratio between neighbouring shells' radii, above 1 (clamped to at least MinShellRatio).
+   */
+  shellRatio: number;
+  /**
+   * The spin each shell turns about the fold's Z axis, in radians per shell (null = 0, concentric shells).
+   */
+  twist?: number | null;
+  /**
+   * The point the shells centre on, creation units (null = the creation origin).
+   */
+  origin?: DocumentVector3;
+};
+
+/**
+ * Angular domain repeat — Polar. Its sectors expand to one rigid copy each, so contact carries the full ring.
+ */
+export type ShapeDomainOpPolar = {
+  $type?: "polar";
+  /**
+   * The sector count around the axis (clamped >= 1).
+   */
+  count: number;
+  /**
+   * The rotation axis (null = Y, the XZ ground plane).
+   */
+  axis?: SdfAxis | null;
+  /**
+   * Whether adjacent sectors mirror across their shared bisector (null = false).
+   */
+  mirror?: boolean | null;
+  /**
+   * The per-sector palette stride (null = 0, geometric only).
+   */
+  materialStride?: number | null;
+  /**
+   * The point the sector fold pivots around, creation units (null = the creation origin, the pivot this op has always used). A null origin is byte-identical to today's fold.
+   */
+  origin?: DocumentVector3;
+};
+
+/**
+ * Bounded linear domain repeat — Repeat. Expands for contact only when the limit is a whole number within the copy budget; an absent limit is unbounded (UnboundedRepeatLimit per axis) and does not expand.
+ */
+export type ShapeDomainOpRepeat = {
+  $type?: "repeat";
+  /**
+   * The per-axis cell spacing, creation units (clamped to >= 0.001 per axis, matching the builder's own floor).
+   */
+  spacing: DocumentVector3;
+  /**
+   * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedRepeatLimit per axis, a lattice with no edge).
+   */
+  limit?: DocumentVector3;
+  /**
+   * The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root — the lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.
+   */
+  origin?: DocumentVector3;
+  /**
+   * Whether the lattice has no edge: its limit, or an absent one, reaches UnboundedRepeatLimit on any axis. The program's own answer (IsUnboundedRepeat) decides it.
+   */
+  isUnbounded?: boolean;
+};
+
+/**
+ * Reflection fold across a plane — Symmetry. One authored half repeats mirror-imaged across the plane.
+ */
+export type ShapeDomainOpSymmetry = {
+  $type?: "symmetry";
+  /**
+   * The plane normal, in the shape's creation-space frame (normalized at canonicalization; a zero/non-finite normal falls back to UnitX — the retired Mirror: true flag's exact fold).
+   */
+  normal: DocumentVector3;
+  /**
+   * The plane's signed offset along Normal (null = 0, through the creation origin).
+   */
+  offset?: number | null;
+};
+
+/**
+ * Wallpaper-group lattice fold — Wallpaper. Render only: it has no rigid-copy expansion, so a solid placement carrying one is refused by name at validation.
+ */
+export type ShapeDomainOpWallpaper = {
+  $type?: "wallpaper";
+  /**
+   * The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds.
+   */
+  group: SdfWallpaperGroup;
+  /**
+   * The lattice cell extents in the fold plane, creation units.
+   */
+  cell: DocumentVector2;
+  /**
+   * The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal).
+   */
+  limit?: DocumentVector2;
+  /**
+   * The fold plane (null = XZ).
+   */
+  plane?: SdfPlane | null;
+  /**
+   * The parity-material stride (null = 0, geometric only).
+   */
+  materialStride?: number | null;
+};
+
+/**
+ * The authored form of LaneErode — per-shape lane-driven erosion, the diegetic "the body IS the health bar" carrier: reads the riding dynamic slot's Lane component and, as it rises from From to To, dilates the shape inward — ragged-fronted by noise — until it is skipped entirely. Admitted on every primitive (Erode); applies to the shape's own local point, immediately before its own primitive emission (whatever Twist/ Bend/Flare/Shear/ Bumps the shape's own chain still applies land on the point as usual). A shape under no dynamic slot (a static placement, or a dynamic one with no bound lanes expression) reads lane 0. Render-only: LaneErode's remarks list the field-contact exclusion.
+ */
+export type ShapeErodeDocument = {
+  /**
+   * Which dynamic-slot lane drives the erosion.
+   */
+  lane: number;
+  /**
+   * The lane value where erosion begins (t = 0).
+   */
+  from: number;
+  /**
+   * The lane value where the shape is fully eroded (t = 1); may be less than From to run the fold in reverse (the shape grows IN as the lane rises — the torn-fabric use). Must differ from From.
+   */
+  to: number;
+  /**
+   * The erosion front's noise lattice frequency, cells per world unit (null = 1).
+   */
+  noise?: number | null;
+};
+
+/**
+ * An axial cross-section profile with a linear endpoint change and sinusoidal bulge. The profile's axis, start scale, origin and span are authored explicitly. Render-only.
+ */
+export type ShapeFlareDocument = {
+  /**
+   * The linear flare rate at the far end of the span (dimensionless; s(1) = StartScale + Amount). Clamped to [MinAmount, MaxAmount].
+   */
+  amount: number;
+  /**
+   * The mid-span sinusoidal bulge amplitude (dimensionless, peaks at the span's midpoint). Clamped to [-MaxBulge, MaxBulge].
+   */
+  bulge: number;
+  /**
+   * The axial distance the profile runs over, in creation units; finite and strictly greater than zero, or the shape is refused at validation.
+   */
+  span: number;
+  /**
+   * The axial coordinate where the profile begins, in creation units (null = 0).
+   */
+  top?: number | null;
+  /**
+   * Profile axis in [0, 2].
+   */
+  axis?: number;
+  /**
+   * Positive radial scale at the span origin.
+   */
+  startScale?: number;
+};
+
+/**
+ * The authored form of PushFieldMorph's parameters, carried by a shape whose Blend is Morph: the shape's own scope composes into the field before it by linear interpolation, the riding dynamic slot's Lane running the blend from the field (lane at From) to the shape (lane at To). A shape under no dynamic slot (a static placement) reads lane 0.
+ */
+export type ShapeMorphDocument = {
+  /**
+   * Which dynamic-slot lane drives the morph, in [0, 3].
+   */
+  lane: number;
+  /**
+   * The lane value where the field before the shape shows alone (t = 0).
+   */
+  from: number;
+  /**
+   * The lane value where the shape shows alone (t = 1); must differ from From.
+   */
+  to: number;
 };
 
 export type ShapeNonNullable = {
@@ -3965,154 +4516,20 @@ export type ShapeNonNullable5 = {
   keys: ShapeNonNullable4[];
 };
 
-export type ShapeNonNullable50 = "Sphere" | "Box" | "Torus" | "Cylinder" | "Capsule" | "Ellipsoid" | "RoundCone" | "Plane" | "Cone" | "Prism" | "Superellipsoid" | "Sweep";
+export type ShapeNonNullable50 = number | string | boolean;
 
-export type ShapeNonNullable51 = "Trapezoid" | "RoundedRectangle" | "Polygon" | "Ellipse" | "ChamferedRectangle" | "Convex" | "Path";
-
-export type ShapeNonNullable52 = {
-  $type?: "symmetry";
-  /**
-   * The plane normal, in the shape's creation-space frame (normalized at canonicalization; a zero/non-finite normal falls back to UnitX — the retired Mirror: true flag's exact fold).
-   */
-  normal: unknown;
-  /**
-   * The plane's signed offset along Normal (null = 0, through the creation origin).
-   */
-  offset?: number | null;
-};
-
-export type ShapeNonNullable53 = {
-  $type?: "repeat";
-  /**
-   * The per-axis cell spacing, creation units (clamped to >= 0.001 per axis, matching the builder's own floor).
-   */
-  spacing: unknown;
-  /**
-   * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedRepeatLimit per axis, a lattice with no edge).
-   */
-  limit?: unknown;
-  /**
-   * The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root — the lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.
-   */
-  origin?: unknown;
-  /**
-   * Whether the lattice has no edge: its limit, or an absent one, reaches UnboundedRepeatLimit on any axis. The program's own answer (IsUnboundedRepeat) decides it.
-   */
-  isUnbounded?: boolean;
-};
-
-export type ShapeNonNullable54 = {
-  $type?: "polar";
-  /**
-   * The sector count around the axis (clamped >= 1).
-   */
-  count: number;
-  /**
-   * The rotation axis (null = Y, the XZ ground plane).
-   */
-  axis?: ShapeNullable12 | null;
-  /**
-   * Whether adjacent sectors mirror across their shared bisector (null = false).
-   */
-  mirror?: boolean | null;
-  /**
-   * The per-sector palette stride (null = 0, geometric only).
-   */
-  materialStride?: number | null;
-  /**
-   * The point the sector fold pivots around, creation units (null = the creation origin, the pivot this op has always used). A null origin is byte-identical to today's fold.
-   */
-  origin?: unknown;
-};
-
-export type ShapeNonNullable55 = "P1" | "P2" | "Pm" | "Pg" | "Cm" | "Pmm" | "Pmg" | "Pgg" | "Cmm" | "P4" | "P4M" | "P4G" | "P3" | "P3M1" | "P31M" | "P6" | "P6M";
-
-export type ShapeNonNullable56 = {
-  $type?: "wallpaper";
-  /**
-   * The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds.
-   */
-  group: ShapeNonNullable55;
-  /**
-   * The lattice cell extents in the fold plane, creation units.
-   */
-  cell: unknown;
-  /**
-   * The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal).
-   */
-  limit?: unknown;
-  /**
-   * The fold plane (null = XZ).
-   */
-  plane?: ShapeNullable13 | null;
-  /**
-   * The parity-material stride (null = 0, geometric only).
-   */
-  materialStride?: number | null;
-};
-
-export type ShapeNonNullable57 = {
-  $type?: "jitter";
-  /**
-   * The per-axis cell spacing, creation units (clamped to at least 0.001 per axis).
-   */
-  spacing: unknown;
-  /**
-   * The peak-to-peak hashed displacement per axis, creation units; it must stay under the least spacing, and the shape's reach plus half of it under half the least spacing, or the copies cross their cell walls and the program refuses them.
-   */
-  amount: number;
-  /**
-   * The hash seed (null = 0).
-   */
-  seed?: number | null;
-  /**
-   * The hashed rotation's share of a half turn, in [0, 1] (null = 0, every copy upright).
-   */
-  tumble?: number | null;
-  /**
-   * The hashed palette rows a copy's material strides over (null = 0, geometric only); the palette must hold the rows the stride reaches.
-   */
-  materialVariants?: number | null;
-  /**
-   * How the displacement is distributed over the cell (null = White).
-   */
-  flavor?: ShapeNullable14 | null;
-  /**
-   * The point the lattice folds around, creation units (null = the creation origin).
-   */
-  origin?: unknown;
-};
-
-export type ShapeNonNullable58 = {
-  $type?: "logSphere";
-  /**
-   * The ratio between neighbouring shells' radii, above 1 (clamped to at least MinShellRatio).
-   */
-  shellRatio: number;
-  /**
-   * The spin each shell turns about the fold's Z axis, in radians per shell (null = 0, concentric shells).
-   */
-  twist?: number | null;
-  /**
-   * The point the shells centre on, creation units (null = the creation origin).
-   */
-  origin?: unknown;
-};
-
-export type ShapeNonNullable59 = number | string | boolean;
-
-export type ShapeNonNullable6 = {
-  at: number;
-  value: [number, number];
-  ease?: "Linear" | "Smooth" | "Step";
-};
-
-export type ShapeNonNullable60 = {
+export type ShapeNonNullable51 = {
   epochTick?: number;
   epochEngineTick?: number;
   y0?: string;
   v0?: string;
   substepTicks?: number;
+};
+
+export type ShapeNonNullable6 = {
+  at: number;
+  value: [number, number];
+  ease?: "Linear" | "Smooth" | "Step";
 };
 
 export type ShapeNonNullable7 = {
@@ -4127,112 +4544,10 @@ export type ShapeNonNullable8 = {
 
 export type ShapeNonNullable9 = "Add" | "Subtract" | "Multiply" | "Divide" | "Minimum" | "Maximum" | "Clamp" | "Remainder" | "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "ShiftLeft" | "ShiftRight" | "ShiftRightLogical" | "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Select" | "SetBitCount" | "LeadingZeroCount" | "TrailingZeroCount" | "LowestSetBit" | "ClearLowestSetBit" | "RotateLeft" | "RotateRight" | "ByteSwap" | "ReverseBits" | "Negate" | "Absolute" | "ParallelBitExtract" | "ParallelBitDeposit" | "BitField" | "BitInsert" | "Sign" | "Pair" | "PairX" | "PairY" | "PairSwap" | "PairMaximum" | "PairMinimum" | "PairSum" | "PairDifference" | "PairTranslate" | "PairScale" | "MortonIndex" | "MortonX" | "MortonY" | "HilbertIndex" | "HilbertX" | "HilbertY" | "HexIndex" | "HexQ" | "HexR" | "HexRadius" | "HexEuclideanSquared" | "HexDistance" | "HexNeighbor" | "HexRotate" | "HexMirror" | "HexSwap" | "HexAdd" | "HexSubtract" | "HexMultiply" | "HexScale" | "HexTranslate" | "Layer" | "LayerOffset" | "LayerStart" | "LayerSize" | "SquareRoot" | "Sine" | "Cosine" | "SquareIndex" | "SquareX" | "SquareY" | "SquareRadius" | "SquareLength" | "SquareEuclideanSquared" | "SquareDistance" | "SquareChebyshev" | "SquareNeighbor" | "SquareRotate" | "SquareMirror" | "SquareSwap" | "SquareAdd" | "SquareSubtract" | "SquareMultiply" | "SquareScale" | "SquareTranslate" | "GreatestCommonDivisor" | "LeastCommonMultiple" | "FloorModulo" | "FloorDivide" | "FloorDivideModulo" | "DivideRemainder" | "Power" | "ModularPower" | "ModularInverse" | "ExtendedGreatestCommonDivisor" | "CycleForward" | "CycleDistance" | "SmallestMissing" | "IsPrime" | "PrimeAt" | "BinomialCoefficient" | "Factorial" | "SubsetRank" | "SubsetAt" | "SubsetMember" | "ArrangementRank" | "ArrangementAt" | "ArrangementMember" | "Floor" | "Ceiling" | "Round" | "ReplicationMask" | "RepeatBits" | "IsAbsent" | "Coalesce" | "Member" | "And" | "Or" | "Not";
 
-export type ShapeNullable = {
-  color: string;
-  roughness: number;
-  metal: number;
-};
-
-export type ShapeNullable10 = {
-  /**
-   * The curve's first control point, in the shape's local (workbench) frame — creation units, or a state.<row>[.<key>] reference.
-   */
-  a: unknown;
-  /**
-   * The curve's middle control point.
-   */
-  b: unknown;
-  /**
-   * The curve's last control point.
-   */
-  c: unknown;
-  /**
-   * The sweep radius at t = 0; finite and strictly positive.
-   */
-  radiusStart: number;
-  /**
-   * The sweep radius at t = 1; finite and strictly positive.
-   */
-  radiusEnd: number;
-  /**
-   * The mid-span radius bulge amplitude (null = 0), added by bulge·sin(π·t)^0.65; refused past MaxSweepBulgeRatio times max(RadiusStart, RadiusEnd).
-   */
-  bulge?: number | null;
-  /**
-   * The helical strand count (null = 1), in [MinSweepStrands, MaxSweepStrands]. A count above 1 is render-only — refused for deterministic field contact by name, matching Sweep's own status.
-   */
-  strands?: number | null;
-  /**
-   * The strand orbit rate, in turns along the curve (null = 0); finite.
-   */
-  twist?: number | null;
-  /**
-   * The strand orbit radius, in creation units (null = 0); non-negative, finite, refused past MaxSweepStrandOffsetRatio times max(RadiusStart, RadiusEnd).
-   */
-  strandOffset?: number | null;
-};
-
-export type ShapeNullable11 = "Union" | "SmoothUnion" | "Subtraction" | "Intersection" | "Xor" | "SmoothIntersection" | "SmoothSubtraction" | "ChamferUnion" | "ChamferIntersection" | "ChamferSubtraction" | "GrooveUnion" | "PipeUnion" | "Morph" | "GrooveSubtraction" | "PipeSubtraction" | "StairsUnion" | "StairsSubtraction";
-
-export type ShapeNullable12 = "X" | "Y" | "Z";
-
-export type ShapeNullable13 = "XZ" | "XY" | "YZ";
-
-export type ShapeNullable14 = "White" | "Blue" | "Gaussian";
-
-export type ShapeNullable15 = ShapeNonNullable52 | ShapeNonNullable53 | ShapeNonNullable54 | ShapeNonNullable56 | ShapeNonNullable57 | ShapeNonNullable58 | null;
-
-export type ShapeNullable16 = {
-  /**
-   * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
-   */
-  driver: string;
-  /**
-   * The joint the shape turns about, in the creation's author frame (see CreationFrame) — a shoulder or a hip, not the shape's own centre.
-   */
-  pivot: unknown;
-  /**
-   * The rotation axis, in the creation's author frame; normalized at canonicalization. A positive angle turns right-handed about it.
-   */
-  axis: unknown;
-  /**
-   * The peak angle in radians, magnitude at most MaxAmplitude. A negative amplitude mirrors the swing, which is how a limb on the body's other side reads.
-   */
-  amplitude: unknown;
-  /**
-   * The phase offset added to the driver's phase, radians (null = 0) — how two limbs on one driver are put out of step (contralateral arms differ by π).
-   */
-  phase?: unknown;
-  /**
-   * The waveform name (null = Sine); see CreationWave.
-   */
-  wave?: string | null;
-};
-
-export type ShapeNullable17 = {
-  /**
-   * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
-   */
-  driver: string;
-  /**
-   * The slide direction, in the creation's author frame; normalized at canonicalization.
-   */
-  axis: unknown;
-  /**
-   * The peak offset in creation units, magnitude at most MaxAmplitude.
-   */
-  amplitude: unknown;
-  /**
-   * The phase offset added to the driver's phase, radians (null = 0).
-   */
-  phase?: unknown;
-  /**
-   * The waveform name (null = Sine); see CreationWave.
-   */
-  wave?: string | null;
-};
-
-export type ShapeNullable18 = {
+/**
+ * A second-material inset face region carried by a ShapeDocument — one authored shape that reads as two: an eroded copy of the same primitive, offset along its own local face and composed with its own material, recessed into or raised proud of the plate. Authored as one shape that bakes two field operands; no budget admits or refuses them, StampShapeCount only reports that bake work (a panelled shape counts as 2).
+ */
+export type ShapePanelDocument = {
   /**
    * How far the panel copy shrinks on every local axis before it is placed — the copy's own scale is shape scale − Inset per axis (floored at MinimumScale), a sharp-cornered shrink rather than a rounded Minkowski erosion. The panel recipe changes the copy's primitive dimensions rather than applying Dilate to its field. Creation units. Finite and non-negative; refused by name past the shape's smallest local half-extent (the smallest of HalfExtent over the X, Y, and Z local axes) — past that the eroded copy is empty everywhere.
    */
@@ -4248,10 +4563,80 @@ export type ShapeNullable18 = {
   /**
    * The local direction the panel erodes and offsets against, read in the primitive's own local frame — before its placement transform, the same frame Domain ops read. Null defaults to +Z (the Prism extrude axis / a Box's front); a non-finite or zero-length authored value is refused by name, and a finite non-unit one is normalized at canonicalization, mirroring a domain op's own normal. Any primitive may author a curved face (a Cylinder's +X rim, say) — the erode/translate/blend recipe reads only Support along the axis, never the primitive's curvature.
    */
-  face?: unknown;
+  face?: DocumentVector3;
 };
 
-export type ShapeNullable19 = {
+/**
+ * Polynomial point shear: target += linear*driver + quadratic*driver² + cubic*driver³. Target and Driver are distinct axes in [0, 2]. Coefficients carry inverse powers of creation length.
+ */
+export type ShapeShearDocument = {
+  linear: number;
+  quadratic?: number;
+  cubic?: number;
+  target?: number;
+  driver?: number;
+};
+
+/**
+ * One driver-fed translation authored on a ShapeDocument: the shape slides along Axis by amplitude · wave(φ + phase) · w — a piston, a hull's bob, a breathing chest. Presentation-only on the same terms as ShapeSwingDocument.
+ */
+export type ShapeSlideDocument = {
+  /**
+   * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
+   */
+  driver: string;
+  /**
+   * The slide direction, in the creation's author frame; normalized at canonicalization.
+   */
+  axis: DocumentVector3;
+  /**
+   * The peak offset in creation units, magnitude at most MaxAmplitude.
+   */
+  amplitude: DocumentScalar;
+  /**
+   * The phase offset added to the driver's phase, radians (null = 0).
+   */
+  phase?: DocumentScalar;
+  /**
+   * The waveform name (null = Sine); see CreationWave.
+   */
+  wave?: string | null;
+};
+
+/**
+ * One driver-fed rotation authored on a ShapeDocument: the shape turns about Axis at Pivot by amplitude · wave(φ + phase) · w. Presentation-only — nothing downstream of the dynamic transform buffer reads it, so the SDF program, the analytic colliders, the compiled solid field, and every simulation value are untouched by an authored swing.
+ */
+export type ShapeSwingDocument = {
+  /**
+   * The Name supplying (φ, w). An unresolvable name is refused at canonicalization.
+   */
+  driver: string;
+  /**
+   * The joint the shape turns about, in the creation's author frame (see CreationFrame) — a shoulder or a hip, not the shape's own centre.
+   */
+  pivot: DocumentVector3;
+  /**
+   * The rotation axis, in the creation's author frame; normalized at canonicalization. A positive angle turns right-handed about it.
+   */
+  axis: DocumentVector3;
+  /**
+   * The peak angle in radians, magnitude at most MaxAmplitude. A negative amplitude mirrors the swing, which is how a limb on the body's other side reads.
+   */
+  amplitude: DocumentScalar;
+  /**
+   * The phase offset added to the driver's phase, radians (null = 0) — how two limbs on one driver are put out of step (contralateral arms differ by π).
+   */
+  phase?: DocumentScalar;
+  /**
+   * The waveform name (null = Sine); see CreationWave.
+   */
+  wave?: string | null;
+};
+
+/**
+ * A second-material band painted onto a ShapeDocument's own surface wherever it sits near another, earlier-declared shape in the same creation — the pipeline's ivory boot band (max(shin - .003, -ankleCut - .095)) generalized: the host's surface where it is within Width of the reference shape's own surface, painted with Material. Where ShapePanelDocument recesses or raises a copy of a shape's OWN geometry, a trim colors the host's surface against a REFERENCE shape's geometry instead — a Subtraction cutter riding the host's own Group is the common case (the carve's own edge becomes the trim's guide), or a plain plane-like Box authored purely to mark a seam. Authored as one shape that bakes two field operands (the host's own eroded copy plus the reference's own dilated copy); no budget admits or refuses them, StampShapeCount only reports that bake work.
+ */
+export type ShapeTrimDocument = {
   /**
    * The Name of another shape in the same creation, declared EARLIER in shapes (so a chain resolves in one pass and can never cycle — mirrors Parent's own rule). A Subtraction cutter riding the host's own Group is the common case; a plain plane-like Box with blend Union works too. Only the reference's own primitive geometry (type, scale, taper, profile, lift, rounding, chamfer) and pose are re-read; its own blend, domain, panel, and trims play no part in the band.
    */
@@ -4270,111 +4655,14 @@ export type ShapeNullable19 = {
   inset?: number;
 };
 
-export type ShapeNullable2 = {
-  /**
-   * Whether the style is on; absent is on. False on a palette row keeps that material unstyled whatever the world's default is; false on render.toon leaves the world's default off.
-   */
-  enabled?: boolean | null;
-  /**
-   * The close outline radius in output pixels, in [0, 4]; zero disables outlines.
-   */
-  outlineWidth?: number | null;
-  /**
-   * The distance in metres at which the outline radius halves, in [0.1, 1000].
-   */
-  outlineDistance?: number | null;
-  /**
-   * The crease normal cosine, in [0, 0.95].
-   */
-  outlineNormal?: number | null;
-  /**
-   * The outline multiplier, three linear RGB values in [0, 1].
-   */
-  outlineTint?: unknown;
-};
-
-export type ShapeNullable20 = {
-  /**
-   * The linear flare rate at the far end of the span (dimensionless; s(1) = StartScale + Amount). Clamped to [MinAmount, MaxAmount].
-   */
-  amount: number;
-  /**
-   * The mid-span sinusoidal bulge amplitude (dimensionless, peaks at the span's midpoint). Clamped to [-MaxBulge, MaxBulge].
-   */
-  bulge: number;
-  /**
-   * The axial distance the profile runs over, in creation units; finite and strictly greater than zero, or the shape is refused at validation.
-   */
-  span: number;
-  /**
-   * The axial coordinate where the profile begins, in creation units (null = 0).
-   */
-  top?: number | null;
-  /**
-   * Profile axis in [0, 2].
-   */
-  axis?: number;
-  /**
-   * Positive radial scale at the span origin.
-   */
-  startScale?: number;
-};
-
-export type ShapeNullable21 = {
-  /**
-   * The bump's local center, in creation units.
-   */
-  center: unknown;
-  /**
-   * The per-axis Gaussian falloff radii, in creation units — clamped away from zero at normalization (GaussianPushMinRadius) so the exponent's divisor is never zero. Refused by name if any authored component is negative or non-finite (a magnitude is what the field reads; a negative radius states nothing a positive one does not).
-   */
-  radii: unknown;
-  /**
-   * The peak displacement at the center, in creation units (zero = an exact identity, still admitted — it still charges the per-copy instance count).
-   */
-  push: unknown;
-};
-
-export type ShapeNullable22 = {
-  linear: number;
-  quadratic?: number;
-  cubic?: number;
-  target?: number;
-  driver?: number;
-};
-
-export type ShapeNullable23 = {
-  /**
-   * Which dynamic-slot lane drives the erosion.
-   */
-  lane: number;
-  /**
-   * The lane value where erosion begins (t = 0).
-   */
-  from: number;
-  /**
-   * The lane value where the shape is fully eroded (t = 1); may be less than From to run the fold in reverse (the shape grows IN as the lane rises — the torn-fabric use). Must differ from From.
-   */
-  to: number;
-  /**
-   * The erosion front's noise lattice frequency, cells per world unit (null = 1).
-   */
-  noise?: number | null;
-};
-
-export type ShapeNullable24 = {
-  frequency: number;
-  amplitude: number;
-  seed: number;
-  mode: "F1" | "F2MinusF1";
-  randomness: number;
-};
-
-export type ShapeNullable25 = {
+/**
+ * The authored form of DomainWarp: a bounded, cross-coupled sinusoidal warp of the shape's own local point (each axis moved by the sine of the next axis's coordinate) before its primitive evaluates, an organic wobble. Admitted on every primitive (Warp); applied after Bumps, before Elongate and the primitive's own scale. Render-only, like Flare: contact rides the unwarped primitive.
+ */
+export type ShapeWarpDocument = {
   /**
    * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
    */
-  frequency: unknown;
+  frequency: DocumentVector3;
   /**
    * The farthest the point moves per axis, creation units (clamped to [-MaxAmplitude, MaxAmplitude]).
    */
@@ -4384,276 +4672,6 @@ export type ShapeNullable25 = {
    */
   reach?: number;
 };
-
-export type ShapeNullable26 = {
-  /**
-   * The per-axis angular frequency, radians per creation unit (each clamped to [-MaxFrequency, MaxFrequency]).
-   */
-  frequency: unknown;
-  /**
-   * The relief's height either way, creation units (clamped to [-MaxAmplitude, MaxAmplitude]).
-   */
-  amplitude: number;
-  /**
-   * The farthest the relief carries the surface outward.
-   */
-  reach?: number;
-};
-
-export type ShapeNullable27 = {
-  /**
-   * Which dynamic-slot lane drives the morph, in [0, 3].
-   */
-  lane: number;
-  /**
-   * The lane value where the field before the shape shows alone (t = 0).
-   */
-  from: number;
-  /**
-   * The lane value where the shape shows alone (t = 1); must differ from From.
-   */
-  to: number;
-};
-
-export type ShapeNullable28 = {
-  /**
-   * The shape's stable id.
-   */
-  id: number;
-  /**
-   * The optional player-given name, authored literally or through a containing world's Text state cell.
-   */
-  name?: unknown;
-  /**
-   * The primitive.
-   */
-  type: ShapeNonNullable50;
-  /**
-   * The shape's position (the author frame's workbench space).
-   */
-  position: unknown;
-  /**
-   * The orientation.
-   */
-  rotation: unknown;
-  /**
-   * The per-axis scale — the primitive's size (see CreationGeometry).
-   */
-  scale: unknown;
-  /**
-   * The palette slot (null = 0).
-   */
-  material?: number | null;
-  /**
-   * The blend op name (null = Union).
-   */
-  blend?: ShapeNullable11 | null;
-  /**
-   * The smooth-blend radius (null = 0).
-   */
-  smooth?: number | null;
-  /**
-   * The composition group (null = ungrouped).
-   */
-  group?: number | null;
-  /**
-   * The shape's local twist rate (null = 0).
-   */
-  twist?: number | null;
-  /**
-   * The shape's shell thickness (null = 0, solid).
-   */
-  onion?: number | null;
-  /**
-   * The shape's local bend rate about Y (null = 0).
-   */
-  bend?: number | null;
-  /**
-   * The shape's inflation radius (null = 0).
-   */
-  dilate?: number | null;
-  /**
-   * The ordered SDF VM domain operators (ShapeDomainOp) applied to the shape's point in creation space, before its own translate/rotate/scale (null = none). Every op the copy expansion covers reaches contact as well as render; wallpaper does not expand, and a solid placement carrying one is refused at validation.
-   */
-  domain?: (ShapeNullable15 | null)[] | null;
-  /**
-   * The driver-fed rotations this shape rides (ShapeSwingDocument), any number (null = none), composed in the order written.
-   */
-  swings?: (ShapeNullable16 | null)[] | null;
-  /**
-   * The driver-fed translations this shape rides (ShapeSlideDocument), any number (null = none). Applied after every swing, along the authored axis. Both facets are presentation-only — composed onto the shape's per-frame dynamic transform and read nowhere else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape carrying Domain rides its own slot packed with its Parent chain's rigid delta (the identity with no parent), leaving nowhere for its OWN swing/slide to compose, so they are refused alongside a domain list at validation.
-   */
-  slides?: (ShapeNullable17 | null)[] | null;
-  /**
-   * The Name of the shape this one hangs from (null = the creation root): the parent's animated motion carries this shape and its own pivots with it, so a forearm swung at the elbow also rides the upper arm's swing at the shoulder. The parent must be declared earlier in shapes (so a chain resolves in one pass and can never cycle); presentation-only on the same terms as the swings it composes with.
-   */
-  parent?: string | null;
-  /**
-   * The point this shape turns about (null = the pivot of its first swing, or its own position when it has neither): an effector's solve turns a bone about it (Joint). Author-frame, like every other point here. It changes no pose on its own.
-   */
-  joint?: unknown;
-  /**
-   * Only for Prism: top width divided by bottom width, finite in [0, 1]. Null uses 0.5; zero makes a triangular profile and one a rectangular profile. Scale holds bottom half-width, half-height and extrusion half-depth. Rotate the prism to reverse its taper.
-   */
-  taper?: number | null;
-  /**
-   * Optional Prism cross-section controls. Null uses a trapezoid; other profiles expose rounded rectangles, polygons, and ellipses with flat extruded caps.
-   */
-  profile?: ShapeNullable8 | null;
-  /**
-   * Only for Prism: how the XY profile becomes a solid. Null or extrude sweeps it along local Z to scale.z. revolve sweeps it about the local Y axis with scale.z as the radial offset — zero gives a solid of revolution (a cowl, a boot cuff, a pauldron dome), a positive offset a ring. Renderable for every profile; a solid placement refuses it, because both contact compilers read a per-axis-scaled local box and a revolve reads scale.z as an offset rather than an extent.
-   */
-  lift?: ShapeNullable9 | null;
-  /**
-   * Only for Box, Prism, Cylinder and Cone: the edge-rounding radius in the creation's own units, finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field offsets back out, so the shape keeps its authored extent and its edges fillet; a Box without it is sharp, so boxes that touch meet as one solid, and a solid placement collides as the same rounded or sharp box. Refused by name past MaxRounding.
-   */
-  rounding?: number | null;
-  /**
-   * The shape's second-material inset face region (null = none) — see ShapePanelDocument. Render-only; refused by name on a Plane, on a shape carrying Domain ops or a non-zero Group, and on a creation that otherwise needs its own field scope.
-   */
-  panel?: ShapeNullable18 | null;
-  /**
-   * Only for Box, Cylinder and Prism (an extruded prism only — a revolve has no cap seam to bevel): the 45-degree edge-chamfer radius in the creation's own units, finite and non-negative. Refused by name past MaxChamfer, and refused by name alongside a nonzero Rounding on the same shape.
-   */
-  chamfer?: number | null;
-  /**
-   * The shape's second-material surface bands against other, earlier-declared shapes (null = none), at most MaxTrims — see ShapeTrimDocument. Render-only, like Panel; refused by name on a shape carrying Domain ops, a non-zero Group, or on a creation that otherwise needs its own field scope.
-   */
-  trims?: (ShapeNullable19 | null)[] | null;
-  /**
-   * Whether this shape is a detail shape (null = false): excluded from contact (it never carves the contact field or the collider) while the baked frame samples it like any other shape, so a seam (a thin subtraction) or a rivet (a small union, its own material) bakes into the mesh and paints its footprint through the bake's point-sampled materials. Refused by name alongside Panel or Trims on the same shape.
-   */
-  detail?: boolean | null;
-  /**
-   * The shape's radial flare warp (null = none) — see ShapeFlareDocument. Admitted on every primitive; applies to the shape's own local point after Twist/Bend, in that order (twist, then bend, then flare), before the primitive's own scale. Render-only, like Twist/Bend.
-   */
-  flare?: ShapeNullable20 | null;
-  /**
-   * Only for Superellipsoid: the generalizing exponent, finite in [MinSuperellipsoidExponent, MaxSuperellipsoidExponent] (null = MinSuperellipsoidExponent, the ellipsoid limit — an unauthored Superellipsoid is a plain ellipsoid).
-   */
-  exponent?: number | null;
-  /**
-   * The shape's Gaussian domain-push bumps (null = none), at most MaxBumps — see ShapeBumpDocument. Applied to the shape's own local point after Shear, before the primitive's own scale. Render-only, like Twist/Bend/Flare.
-   */
-  bumps?: (ShapeNullable21 | null)[] | null;
-  /**
-   * A polynomial point shear with explicit target and driver axes.
-   */
-  shear?: ShapeNullable22 | null;
-  /**
-   * The shape's swept-curve geometry (null = none) — see ShapeCurveDocument. Admitted only, and required, on Sweep (refused elsewhere, by name; a Sweep with no curve is refused, by name); refused alongside Panel, Trims, Flare, Shear, Bumps, or Domain on the same shape.
-   */
-  curve?: ShapeNullable10 | null;
-  /**
-   * The shape's per-instance lane-driven erosion (null = none) — see ShapeErodeDocument. Admitted on every primitive; its reach is this shape's own Reach, so it needs no separate authored magnitude.
-   */
-  erode?: ShapeNullable23 | null;
-  /**
-   * Shape-local cellular relief, evaluated after geometry within its own field scope.
-   */
-  cells?: ShapeNullable24 | null;
-  /**
-   * The shape's cross-coupled sinusoidal domain warp (null = none) — see ShapeWarpDocument. Applied to the shape's own local point after Bumps, before Elongate. Render-only.
-   */
-  warp?: ShapeNullable25 | null;
-  /**
-   * The shape's sine relief (null = none) — see ShapeDisplaceDocument. Added to the shape's own field inside its own scope. Render-only.
-   */
-  displace?: ShapeNullable26 | null;
-  /**
-   * The half-extents the primitive's cross-section is swept over, creation units (null = none): Elongate, the capsule-from-sphere operator, applied last to the shape's own local point. Each component is clamped to [0, MaxElongate]. Render-only.
-   */
-  elongate?: unknown;
-  /**
-   * Only with a stairs Blend (StairsUnion, StairsSubtraction): the steps the seam takes over the blend radius Smooth, in [1, MaxSteps] (null = DefaultSteps).
-   */
-  steps?: number | null;
-  /**
-   * Only with a MorphBlend, and required by it: the lane and range the morph runs over — see ShapeMorphDocument.
-   */
-  morph?: ShapeNullable27 | null;
-};
-
-export type ShapeNullable29 = {
-  /**
-   * A driver declared before the one this curve modulates.
-   */
-  driver: string;
-  /**
-   * The world's curves row: open and drawn left to right, each knot further along X than the last with its tangent pointing toward +X. The world validator refuses a row that is not.
-   */
-  curve: string;
-};
-
-export type ShapeNullable3 = {
-  radiusStart: number;
-  radiusEnd: number;
-  smooth?: boolean;
-  from?: number;
-  to?: number;
-};
-
-export type ShapeNullable4 = {
-  linear: number;
-  quadratic?: number;
-  cubic?: number;
-  offset?: number;
-  from?: number;
-  to?: number;
-  target?: number;
-};
-
-export type ShapeNullable5 = {
-  end: [number, number];
-  control?: unknown;
-  control2?: unknown;
-  arcCenter?: unknown;
-  clockwise?: boolean;
-};
-
-export type ShapeNullable6 = {
-  start: [number, number];
-  closed?: boolean;
-  /**
-   * Gets the contour's segments in order, each ending where the next begins. The list is owned.
-   */
-  segments: (ShapeNullable5 | null)[];
-};
-
-export type ShapeNullable7 = {
-  tolerance?: number;
-  stroke?: ShapeNullable3 | null;
-  shear?: ShapeNullable4 | null;
-  /**
-   * Gets the profile's contours, filled with even/odd fill. The list is owned, since Compile caches its edges by the profile.
-   */
-  contours: (ShapeNullable6 | null)[];
-};
-
-export type ShapeNullable8 = {
-  /**
-   * The profile family.
-   */
-  kind: ShapeNonNullable51;
-  /**
-   * A fraction in [0, 1]: the profile's smaller half-extent for RoundedRectangle's corner radius or ChamferedRectangle's chamfer radius; the scaled polygon's conservative inradius (ConvexPolygonInradius) for Convex's uniform corner rounding, also clamped to the extrusion half-depth when extruded.
-   */
-  cornerRadius?: number;
-  /**
-   * Polygon side count, from 3 through 32.
-   */
-  sides?: number;
-  /**
-   * Required only for Path; its points are normalized profile coordinates.
-   */
-  path?: ShapeNullable7 | null;
-  /**
-   * Gets, for Convex only, 3 to MaxConvexVertices local XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind. The list is owned.
-   */
-  vertices?: unknown[] | null;
-};
-
-export type ShapeNullable9 = "Revolve" | "Extrude";
 
 /**
  * One numeric key of a Sort, in its declared precedence order.
@@ -5428,6 +5446,26 @@ export type StringList = (string | null)[];
 
 export type StringListNullable = (string | null)[];
 
+export type SynthOscillator = "Pulse" | "Saw" | "Triangle" | "Sine" | "Noise";
+
+export type SynthPatchDocument = {
+  schema?: string | null;
+  name?: string | null;
+  oscillator?: SynthOscillator | null;
+  dutyThousandths?: number | null;
+  polynomial?: number | null;
+  attackFrames?: number | null;
+  decayFrames?: number | null;
+  sustainThousandths?: number | null;
+  releaseFrames?: number | null;
+  pitchMillihertz: number;
+  sweepMillihertzPerFrame?: number | null;
+  vibratoDepthMillihertz?: number | null;
+  vibratoRateMillihertz?: number | null;
+  durationFrames?: number | null;
+  pitchFromCueArgument?: boolean;
+};
+
 export type TableRow = {
   /**
    * The row's stable name.
@@ -5459,6 +5497,61 @@ export type TextFontDefinition = {
   faceIndex?: number | null;
   padding?: number | null;
   columns?: number | null;
+};
+
+export type TextRunDocument = {
+  /**
+   * The run's text (whitespace / unmapped code points advance the pen without a glyph).
+   */
+  text: string;
+  /**
+   * The run's anchor centre on the host surface (workbench space).
+   */
+  position: DocumentVector3;
+  /**
+   * The run plane's orientation (local +X advance, +Y ascent, +Z the relief normal).
+   */
+  rotation: DocumentQuaternion;
+  /**
+   * The world height of one em, in the creation's own (pre-placement) units.
+   */
+  emHeight: number;
+  /**
+   * The glyph extrude half-depth — the relief the slab straddles the surface by (null = DefaultDepth).
+   */
+  depth?: number | null;
+  /**
+   * engrave (Subtraction — a carved recess) or emboss (Union — proud relief); null = emboss.
+   */
+  mode?: string | null;
+  /**
+   * The palette slot the letters shade with (null = 0).
+   */
+  material?: number | null;
+  /**
+   * The world text catalog font name; null selects that catalog's default font.
+   */
+  font?: string | null;
+  /**
+   * The greedy word wrap width, in the creation's own units (null = only explicit line feeds break lines). Must be positive when present.
+   */
+  maxWidth?: number | null;
+  /**
+   * left, center, or right — how lines position against the block's widest line (null = left).
+   */
+  align?: string | null;
+  /**
+   * Extra advance after every glyph, in em units (null = 0; negative tightens).
+   */
+  tracking?: number | null;
+  /**
+   * A multiplier on the font's line height for the baseline step between lines (null = 1).
+   */
+  lineSpacing?: number | null;
+  /**
+   * The shape the run rides, or null for a run placed in creation space. A riding run's Position/Rotation are in that shape's unit-local frame: scaled by the shape's scale, then rotated and translated with it, so the run stays on the surface as the shape resizes.
+   */
+  shapeId?: number | null;
 };
 
 export type TilingFamily = "Triangular" | "Kagome" | "TruncatedSquare" | "Rhombitrihexagonal" | "TruncatedHexagonal" | "ElongatedTriangular" | "TruncatedTrihexagonal" | "Penrose";
@@ -5539,6 +5632,42 @@ export type VectorTerm = {
    * The integer weight in [-1000, 1000] and non-zero.
    */
   weight: number;
+};
+
+export type VolumeDensityStopDocument = {
+  density: number;
+  color: string;
+};
+
+export type VolumeDocument = {
+  kind: string;
+  position: DocumentVector3;
+  rotation: DocumentQuaternion;
+  halfExtent: DocumentVector3;
+  ramp: (VolumeDensityStopDocument | null)[];
+  parent?: string | null;
+  axis?: number | null;
+  width?: number | null;
+  speed?: number | null;
+  seed?: number | null;
+  steps?: number | null;
+  intensity?: number | null;
+  extinction?: number | null;
+  pulseAmplitude?: number | null;
+  pulseFrequency?: number | null;
+  intensityLane?: number | null;
+  enabled?: boolean;
+  coverage?: number | null;
+  softness?: number | null;
+  scatter?: number | null;
+  spread?: number | null;
+  fade?: number | null;
+  noiseScale?: number | null;
+  noiseDepth?: number | null;
+  /**
+   * Whether the family is supported.
+   */
+  isKnownKind?: boolean;
 };
 
 export type WorldAddonMemoryWatch = {
@@ -7786,7 +7915,7 @@ export type WorldFieldCondition = {
   /**
    * The comparison.
    */
-  comparison: ExpressionComparison;
+  comparison: ExpressionComparisonNonNullable;
   /**
    * The scalar compared against (literal or state-row reference).
    */
@@ -7856,6 +7985,9 @@ export type WorldFieldWrite = {
   retain?: WorldLatticeScalar | null;
 };
 
+/**
+ * How a transform writes a field cell.
+ */
 export type WorldFieldWriteOp = "Set" | "Add";
 
 export type WorldFlockProfile = {
@@ -8618,6 +8750,9 @@ export type WorldHudFrameCandidate = {
   when?: OverlayPredicateNullable | null;
 };
 
+/**
+ * Where a WorldHudPanel draws relative to the five first-party overlay writers (the console panel, binding bars, gizmos, editor HUD, and toast) — the banded pipeline's ordering key.
+ */
 export type WorldHudLayer = "Under" | "Over" | "Replace";
 
 /**
@@ -10294,7 +10429,7 @@ export type WorldPlacementResponseConditionFieldCondition = {
   /**
    * The comparison.
    */
-  comparison: ExpressionComparison;
+  comparison: ExpressionComparisonNonNullable;
   /**
    * The scalar compared against (literal or state-row reference) — the same WorldLatticeScalar grammar a fields.reactions Transform/Expose condition already uses.
    */
@@ -10313,7 +10448,7 @@ export type WorldPlacementResponseConditionStateCondition = {
   /**
    * The comparison.
    */
-  comparison: ExpressionComparison;
+  comparison: ExpressionComparisonNonNullable;
   /**
    * The literal comparand, or null when ComparandState spells the comparand instead.
    */
@@ -10340,7 +10475,7 @@ export type WorldPlacementResponseConditionStateConditionBare = {
   /**
    * The comparison.
    */
-  comparison: ExpressionComparison;
+  comparison: ExpressionComparisonNonNullable;
   /**
    * The literal comparand, or null when ComparandState spells the comparand instead.
    */
@@ -10876,7 +11011,7 @@ export type WorldReactionExpose = {
   /**
    * The comparison.
    */
-  comparison: ExpressionComparison;
+  comparison: ExpressionComparisonNonNullable;
   /**
    * The constant compared against.
    */
@@ -13807,6 +13942,9 @@ export type WorldSpatialShape = {
   yawDegrees?: number;
 };
 
+/**
+ * The shared shape vocabulary used by occupation, clearance, and influence volumes.
+ */
 export type WorldSpatialShapeKind = "Box" | "Sphere";
 
 export type WorldSpawnPoint = {
@@ -14018,13 +14156,13 @@ export type WorldStateRow = {
    * The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int declaring min zero.
    */
   kind: "Int" | "Fixed" | "Bool" | "Text" | "Vector";
-  value?: ShapeNonNullable59;
+  value?: ShapeNonNullable50;
   /**
    * The row's current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name — unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.
    */
   cells?: {
     key: string;
-    value: ShapeNonNullable59;
+    value: ShapeNonNullable50;
     advance?: StateAdvance;
     dynamics?: StateDynamics;
     cycle?: StateCycle;
@@ -14032,7 +14170,7 @@ export type WorldStateRow = {
      * Whether a cell's effective value-over-time behavior is its carrying row's own default, or an explicit opt-out — see Behavior and Resolve.
      */
     behavior?: "Inherit" | "None";
-    clock?: ShapeNonNullable60;
+    clock?: ShapeNonNullable51;
     visibility?: StateVisibility;
     /**
      * When a stored token property was last seen and whether the latest observation still sees it.
@@ -14172,7 +14310,7 @@ export type WorldStateRow = {
   };
   dynamics?: StateDynamics;
   cycle?: StateCycle;
-  clock?: ShapeNonNullable60;
+  clock?: ShapeNonNullable51;
   /**
    * The vector space name.
    */
@@ -14212,7 +14350,7 @@ export type WorldStateRow = {
     /**
      * Optional surface material using the creation palette vocabulary.
      */
-    material?: PaletteEntryDocument | null;
+    material?: PaletteEntryDocumentVariant2 | null;
     /**
      * Keep this row in lattice reactions and omit its surface and body coupling.
      */

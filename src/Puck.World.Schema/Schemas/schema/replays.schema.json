@@ -1,4 +1,5 @@
 {
+  "description": "Authored input programs, each with the part of the world its replay restores and compares.",
   "type": [
     "array",
     "null"

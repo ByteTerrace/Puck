@@ -1,4 +1,5 @@
 {
+  "description": "The kit every seat body is built from; absent, the sole declared kit when exactly one is declared.",
   "type": [
     "string",
     "null"

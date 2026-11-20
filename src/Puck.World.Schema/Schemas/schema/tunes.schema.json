@@ -1,4 +1,5 @@
 {
+  "description": "The tunes the world can play.",
   "type": [
     "array",
     "null"

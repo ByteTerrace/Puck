@@ -1,4 +1,5 @@
 {
+  "description": "Search jobs that ask what a board would be, by trying each token at every other cell under the world\u0027s rules.",
   "type": [
     "object",
     "null"
@@ -331,7 +332,11 @@
               "MonteCarlo"
             ],
             "default": "Negamax",
-            "title": "SearchMethod"
+            "title": "SearchMethod",
+            "x-enumDescriptions": {
+              "Negamax": "Iterative-deepening negamax with alpha-beta and a transposition table, the score read at the depth cap.",
+              "MonteCarlo": "UCB1 Monte Carlo tree search over a bounded node pool with seeded playouts, the score read where no candidate is accepted or at the depth cap, the most-visited root move landed."
+            }
           },
           "iterations": {
             "description": "How many tree iterations a MonteCarlo job runs before it lands.",

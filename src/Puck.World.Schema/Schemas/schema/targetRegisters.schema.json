@@ -1,4 +1,5 @@
 {
+  "description": "The named per-body target registers and the envelopes a designation into them must stay within.",
   "type": [
     "array",
     "null"

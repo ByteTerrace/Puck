@@ -1,4 +1,5 @@
 {
+  "description": "The fonts the world\u0027s text surfaces can use.",
   "type": [
     "object",
     "null"

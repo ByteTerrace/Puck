@@ -1,4 +1,5 @@
 {
+  "description": "The gravitational field bodies fall in.",
   "type": [
     "object",
     "null"
@@ -11,7 +12,12 @@
         "FastMonopole",
         "AdaptiveFmm"
       ],
-      "title": "WorldGravitySolver"
+      "title": "WorldGravitySolver",
+      "x-enumDescriptions": {
+        "Pairwise": "Every source-target interaction, the exact deterministic oracle.",
+        "FastMonopole": "An adaptive octree whose accepted distant cells contribute their total mass at their centre of mass.",
+        "AdaptiveFmm": "An adaptive dual-tree fast multipole solve with first-order Cartesian local expansions."
+      }
     },
     "gravitationalConstant": {
       "description": "The non-negative proportionality constant applied to every source mass.",
@@ -116,7 +122,11 @@
               "Combine",
               "Replace"
             ],
-            "title": "WorldGravityAreaMode"
+            "title": "WorldGravityAreaMode",
+            "x-enumDescriptions": {
+              "Combine": "Add the area\u0027s acceleration to the accumulated global and lower-priority answer.",
+              "Replace": "Replace the accumulated answer with the area\u0027s acceleration. A zero directional vector creates a deliberate zero-gravity pocket."
+            }
           },
           "bounds": {
             "description": "The placement-relative analytic bound. Boundary points are included.",
