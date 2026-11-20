@@ -63,6 +63,8 @@ public sealed partial class SdfWorldPasses {
     /// <summary>Returns the cascades a pass of an instance draws and reads this frame: the frame's own fit, its far
     /// cascade's layers and its distant map through the cameras they were drawn from.</summary>
     /// <param name="instance">The instance's name.</param>
+    /// <param name="tables">The tables its residency staged, which fit the frame's cascades once a frame
+    /// (<see cref="SdfWorldTables.CascadesOf"/>).</param>
     /// <param name="frame">The frame its residency holds.</param>
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>, clamped to the frame's views.</param>
     /// <param name="texels">The texels along each side of the cascade depths the pass binds, or <see langword="null"/>
@@ -70,8 +72,8 @@ public sealed partial class SdfWorldPasses {
     /// <param name="distantTexels">The texels along each side of the distant map's depth the pass binds, or
     /// <see langword="null"/> for the frame's distant map at the view's quality.</param>
     /// <returns>The cascades.</returns>
-    internal SdfMeshShadowCascades CascadesOf(string instance, SdfFrame frame, int view, int? texels = null, int? distantTexels = null) {
-        var cascades = SdfMeshShadowCascades.Fit(distantTexels: distantTexels, frame: frame, texels: texels, view: view);
+    internal SdfMeshShadowCascades CascadesOf(string instance, SdfWorldTables tables, SdfFrame frame, int view, int? texels = null, int? distantTexels = null) {
+        var cascades = tables.CascadesOf(distantTexels: distantTexels, frame: frame, texels: texels, view: view);
 
         if (cascades.Count == 0) {
             return cascades;
@@ -109,8 +111,8 @@ public sealed partial class SdfWorldPasses {
         };
     }
     // Whether the instance's far cascade pass stands this frame, deciding it when no pass has yet: held, with no layer owed.
-    private bool HoldsFar(string instance, SdfFrame frame, int view) {
-        _ = CascadesOf(frame: frame, instance: instance, view: view);
+    private bool HoldsFar(string instance, SdfWorldTables tables, SdfFrame frame, int view) {
+        _ = CascadesOf(frame: frame, instance: instance, tables: tables, view: view);
 
         return (Refresh(instance: instance).FarLayers == SdfFarLayers.None);
     }
