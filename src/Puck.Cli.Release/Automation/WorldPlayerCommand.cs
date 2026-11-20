@@ -146,9 +146,7 @@ public static class WorldPlayerCommand {
 
         try {
             Publish(repository: repository, output: output);
-            foreach (var extension in extensions) {
-                PublishExtension(repository: repository, project: extension, output: output);
-            }
+            var installed = extensions.Select(selector: extension => PublishExtension(repository: repository, project: extension, output: output)).ToArray();
 
             Console.WriteLine(value: $"{Verb}: compiling {CliPaths.ToDisplay(fullPath: worldsRoot)} into worlds/.");
             if (CompileCommand.Create().Parse(args: ["--tree", worldsRoot, "--output", Path.Combine(path1: output, path2: "worlds")]).Invoke() != 0) {
@@ -187,7 +185,7 @@ public static class WorldPlayerCommand {
 
             var commit = CliProcess.RunCheckedAsync(arguments: ["rev-parse", "HEAD"], capture: true, fileName: "git", workingDirectory: repository).GetAwaiter().GetResult().Trim();
 
-            WriteReadme(commit: commit, extensions: extensions, output: output, targets: (bake ? targets : []), world: Puck.Abstractions.PuckPaths.Relative(path: world, relativeTo: output));
+            WriteReadme(commit: commit, extensions: installed, output: output, targets: (bake ? targets : []), world: Puck.Abstractions.PuckPaths.Relative(path: world, relativeTo: output));
             CliFiles.WriteJson(path: Path.Combine(path1: output, path2: MarkerName), value: new JsonObject {
                 ["schema"] = "puck.player-build.v1",
                 ["complete"] = true,
@@ -197,7 +195,7 @@ public static class WorldPlayerCommand {
                 ["cacheDirectory"] = CacheName,
                 ["backends"] = new JsonArray([.. backends.Select(selector: static backend => JsonValue.Create(value: WorldBackendTokens.Token(backend: backend)))]),
                 ["targets"] = new JsonArray([.. (bake ? targets : []).Select(selector: static target => JsonValue.Create(value: target.ToString()))]),
-                ["extensions"] = new JsonArray([.. extensions.Select(selector: static extension => JsonValue.Create(value: Path.GetFileNameWithoutExtension(path: Path.TrimEndingDirectorySeparator(path: extension))))]),
+                ["extensions"] = new JsonArray([.. installed.Select(selector: static name => JsonValue.Create(value: name))]),
                 ["checked"] = verified,
             });
             ReportSizes(output: output);
@@ -286,7 +284,7 @@ public static class WorldPlayerCommand {
     }
     // An extension installs as the host discovers one (PuckExtensionDiscovery): extensions/<name>/<name>.dll beside its
     // dependency manifest.
-    private static void PublishExtension(string repository, string project, string output) {
+    private static string PublishExtension(string repository, string project, string output) {
         var path = Path.GetFullPath(path: Path.Combine(path1: repository, path2: project));
         var file = (Directory.Exists(path: path) ? Directory.EnumerateFiles(path: path, searchPattern: "*.csproj").SingleOrDefault() : path);
 
@@ -303,6 +301,7 @@ public static class WorldPlayerCommand {
             timeout: BuildTimeout,
             workingDirectory: repository
         ).GetAwaiter().GetResult();
+        return name;
     }
     // One windowed boot of the published engine, held at its first tick so the view is the spawn's, with the folder's own
     // cache root: it applies the target's device profile (whose memory bars set the mesh budget) at the target's window
@@ -339,7 +338,7 @@ public static class WorldPlayerCommand {
             if (!string.Equals(a: target.Profile, b: "auto", comparisonType: StringComparison.Ordinal)) {
                 var applied = process.RunScript(lines: [$"world.device-profile {target.Profile}"], timeout: TimeSpan.FromSeconds(seconds: 60));
 
-                var answer = applied.Lines.FirstOrDefault(predicate: static line => line.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[world.device-profile:"))?.Text;
+                var answer = applied.Lines.LastOrDefault(predicate: static line => line.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[world.device-profile:"))?.Text;
 
                 if ((answer is null) || answer.Contains(value: "authors no profile", comparisonType: StringComparison.Ordinal)) {
                     throw new InvalidOperationException(message: $"{name}: the World did not apply the profile {target.Profile}: {answer ?? "no answer"}");
@@ -386,10 +385,10 @@ public static class WorldPlayerCommand {
     // The page a consumer reads first: how to start the folder locally and against a remote authority.
     private static void WriteReadme(string output, string world, string commit, IReadOnlyList<string> extensions, IReadOnlyList<BakeTarget> targets) {
         var executable = (OperatingSystem.IsWindows() ? "Puck.World.exe" : "./Puck.World");
-        var baked = ((targets.Count == 0) ? "none (the store is empty, so the first boot bakes)" : string.Join(separator: ", ", values: targets));
-        var signIn = (extensions.Any(predicate: static extension => extension.Contains(value: "Puck.World.Azure", comparisonType: StringComparison.OrdinalIgnoreCase))
-            ? "The Azure sign-in extension is installed in `extensions/`. Sign in with an account in the deployment's user group (the provider uses the ambient Azure sign-in, such as `az login`), and take `world-authentication.json` from the deployed world release; it names the tenant, the API and the host's public key fingerprint."
-            : "No sign-in extension is installed, so a remote authority that requires sign-in refuses this folder; rebuild it with `--extension src/Puck.World.Azure`.");
+        var baked = ((targets.Count == 0) ? "nothing by this verb, so a boot bakes what the store lacks" : string.Join(separator: ", ", values: targets.Select(selector: static target => $"profile `{target.Profile}` at {target.Width} by {target.Height}")));
+        var signIn = ((extensions.Count == 0)
+            ? "No extension is installed, so an authority that requires sign-in refuses this folder; rebuild it with the deployment's provider extension (`--extension <project>`)."
+            : $"Installed in `extensions/`: {string.Join(separator: ", ", values: extensions.Select(selector: static name => $"`{name}`"))}. An authority that requires sign-in names its provider and settings in the authentication configuration its deployment publishes; the provider acquires the credential itself, from the sign-in it documents.");
         var text = $$"""
             # Puck player build
 
@@ -402,7 +401,7 @@ public static class WorldPlayerCommand {
             | `{{executable}}` and its files | The engine and its own .NET runtime. |
             | `worlds/` | The compiled package: documents, compiled worlds, the shader package store, cartridge sources. |
             | `derived/` | The shipping cache: the AGB BIOS, the Rust addon guests, specialized shading kernels. |
-            | `cache/` | The device caches: baked meshes, compiled worlds, compiles, prepared cartridges. Baked for: {{baked}}. |
+            | `cache/` | The device caches: baked meshes for each backend, compiles, prepared cartridges and boot ROMs. |
             | `extensions/` | Installed extensions, if any. |
 
             ## Start it locally
@@ -416,7 +415,9 @@ public static class WorldPlayerCommand {
             The world runs with its authority in the same process. `--cache-dir cache` points the boot at the prewarmed
             caches; without it the boot uses the per-user caches and bakes every mesh again. `--backend directx` or
             `--backend vulkan` picks the backend (each has its own baked meshes), and `--width`/`--height` set the window.
-            A boot on a device or window size the caches were not baked for bakes the tiers it lacks, once, into `cache/`.
+            The meshes were baked for {{baked}}; the profile follows the adapter's name. Start at the window size baked
+            for the device: a boot at another size, or on a device whose profile was not baked, bakes the mesh detail it
+            lacks once, into `cache/`.
 
             ## Attach to a remote authority
 
