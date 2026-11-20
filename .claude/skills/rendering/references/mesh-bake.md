@@ -441,6 +441,12 @@ laws exercise that boundary.
   (`SdfMeshPathBake.AnsweredSamples`, shared until its last answer ends), then
   advances `Progress` (`SdfMeshPathBake.Progressed`), since a field slice's
   answer queues no work item.
+- **A bake draws on the machine's headroom, not the play bar.** Its group
+  workspaces, readback, store writes and sample reads are authoring owners
+  (`MemoryAllowance.Authoring`), held to the machine's room alone; the meshes it
+  publishes into the library are play. A player's build holds authoring to the
+  play bar (`MemoryAccount.SetAuthoringOnPlayBar`), so a bake there degrades
+  and never fails ([the owners and their allowances](../../../../docs/plans/streaming-and-memory.md#the-large-host-owners)).
 - **A dispatch's answer never waits for host memory.** The copy, and a sample
   set read in place of a dispatch, are charged to the bake's readback owner
   inside a standing reservation of `SdfMeshPathBake.ReadbackBytes`: the take
@@ -453,8 +459,9 @@ laws exercise that boundary.
   fails (`SdfMeshPathBake.Refusals`): a sample set the store keeps or reads past
   the account's room is dropped or missed (`store-writes-dropped`), a copy into
   the library the account refuses (a landing's published mesh, a follower's
-  renumbered take of its leader's) waits parked until the group can reserve its
-  bytes (`Park`, `copy-waits`), and any other refused stage starts its group's
+  renumbered take of its leader's) waits parked until its bytes can be reserved
+  as play's, since the library's copy is play storage (`Park`, `copy-waits`),
+  and any other refused stage starts its group's
   final lattice again under an admission of at least the most the group's
   storage held and the bytes refused (`Group.PeakFloor`, `readmitted`). A request's points are its group's
   workspace (a final lattice's one point buffer, reused round to round; the

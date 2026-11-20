@@ -609,6 +609,10 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
 
         services.AddSingleton(implementationInstance: recordingSource);
     }
+    // A player's build never bakes; if one ever does, its authoring work degrades under the play bar instead of drawing on
+    // headroom the player never offered. Anywhere else (a checkout, a player folder's own baking boots) authoring draws on
+    // the machine's headroom.
+    Puck.Hosting.Jobs.MemoryAccount.Shared.SetAuthoringOnPlayBar(onPlayBar: Puck.Launcher.Release.PlayerBuildLayout.ProcessRunsAsPlayer());
     // Everything the boot resolved above becomes the one service collection its shape needs; the composition laws build
     // the same collection through the same method.
     services.AddWorldBoot(inputs: new WorldBootInputs(

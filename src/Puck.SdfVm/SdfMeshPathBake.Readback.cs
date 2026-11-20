@@ -22,7 +22,7 @@ public sealed partial class SdfMeshPathBake {
     // their storage is freed (AnsweredSamples.Release, or a batch that never copied, ReleaseReadback). The reservation is taken
     // before any group of the bake is admitted and is held while any group is still baking or any answer is held, so the
     // groups the account admitted can always be answered: a readback never waits on room the groups it answers hold.
-    private readonly MemoryAccount.Owner m_readback = MemoryAccount.Shared.CreateOwner(memoryClass: MemoryClass.Workspace, name: "mesh-bake-readback");
+    private readonly MemoryAccount.Owner m_readback = MemoryAccount.Shared.CreateOwner(allowance: MemoryAllowance.Authoring, memoryClass: MemoryClass.Workspace, name: "mesh-bake-readback");
     // The output bytes of the batches and probes taken whose storage is not yet freed; written with Interlocked.
     private long m_readbackPending;
     // Under m_readbackGate: whether m_readback holds its reservation; whether the latest take found nothing to take (no

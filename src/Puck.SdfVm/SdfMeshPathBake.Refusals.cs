@@ -1,4 +1,5 @@
 using Puck.Abstractions.Memory;
+using Puck.Hosting.Jobs;
 using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
 
 namespace Puck.SdfVm;
@@ -10,39 +11,41 @@ public sealed partial class SdfMeshPathBake {
     // renumbered take of its leader's) waits parked until there is room for it (Park, ResumeParked), and any other stage
     // the account refuses starts its group's final lattice again under a larger admission (Readmit).
 
-    // The work whose copy into the library the account refused, each with its group and the bytes the copy needs,
-    // waiting for the group to reserve them (ResumeParked). Under the gate.
-    private readonly List<(Group Group, long Bytes, Action Work)> m_parked = [];
+    // The work whose copy into the library the account refused, each with its group, the bytes the copy needs and the
+    // owner that reserves them in the copy's own allowance, waiting for room (ResumeParked). Under the gate.
+    private readonly List<(Group Group, long Bytes, MemoryAccount.Owner Room, Action Work)> m_parked = [];
 
-    // Parks a group's copy into the library that the account refused, to run again as `work` once the group can reserve
-    // `bytes`; the group waits where it stands, neither offering a lattice nor done. A group the bake no longer holds lets
-    // the work go.
+    // Parks a group's copy into the library that the account refused, to run again as `work` once `bytes` can be
+    // reserved; the group waits where it stands, neither offering a lattice nor done. A group the bake no longer holds
+    // lets the work go. The copy lands in the library's play storage (a mesh a prewarmed boot decodes into the same
+    // owners), so its room is reserved as play's, apart from the group's authoring workspace.
     private void Park(Group group, long bytes, HostMemoryRefusedException refused, Action work) {
         using (EnterGate(site: BakeGate.Land)) {
             m_accounts.CopyWaits++;
             if (group.Retired || !GroupList.Holds(group: group)) { return; }
-            m_parked.Add(item: (group, bytes, work));
+            m_parked.Add(item: (group, bytes, MemoryAccount.Shared.CreateOwner(memoryClass: MemoryClass.Workspace, name: "mesh-bake-copy"), work));
         }
         SdfMeshBakeReport.CopyDeferred(bytes: bytes, owner: refused.Owner, residency: Residency, selector: group.Selector);
     }
-    // Runs again each parked copy whose group can now reserve what it holds and the bytes the copy needs: the reservation
-    // holds that room until the work, on the pool, gives it back for the copy's own owners to charge (SchedulePark).
-    // Under the gate, on the take's thread, before the take admits any group.
+    // Runs again each parked copy whose bytes can now be reserved in play's allowance: the reservation holds that room
+    // until the work, on the pool, gives it back for the copy's own owners to charge (SchedulePark). Under the gate, on
+    // the take's thread, before the take admits any group.
     private void ResumeParked() {
         for (var index = (m_parked.Count - 1); (index >= 0); index--) {
-            var (group, bytes, work) = m_parked[index];
+            var (group, bytes, room, work) = m_parked[index];
 
             if (group.Retired || !GroupList.Holds(group: group)) {
                 m_parked.RemoveAt(index: index);
+                room.Dispose();
                 continue;
             }
-            if (!group.Memory.TryReserve(peak: (group.Memory.Bytes + bytes))) { continue; }
+            if (!room.TryReserve(peak: bytes)) { continue; }
             m_parked.RemoveAt(index: index);
-            SchedulePark(group: group, work: work);
+            SchedulePark(group: group, room: room, work: work);
         }
     }
-    private void SchedulePark(Group group, Action work) => Schedule(group: group, work: () => {
-        _ = group.Memory.TryReserve(peak: group.Memory.Bytes);
+    private void SchedulePark(Group group, MemoryAccount.Owner room, Action work) => Schedule(group: group, work: () => {
+        room.Dispose();
         work();
     });
 

@@ -69,17 +69,6 @@ public static class WorldCachesCommand {
         return command;
     }
 
-    private static bool TryRecord(string folder, out JsonNode record, out string? why) {
-        record = new JsonObject();
-        try {
-            record = (JsonNode.Parse(utf8Json: File.ReadAllBytes(path: Path.Combine(path1: folder, path2: PlayerBuildLayout.RecordName))) ?? new JsonObject());
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException) {
-            why = $"holds no readable {PlayerBuildLayout.RecordName}: {exception.Message}";
-            return false;
-        }
-        why = (((bool?)record["complete"] == true) ? null : $"is not a complete player build ({PlayerBuildLayout.RecordName} says so)");
-        return why is null;
-    }
     private static IReadOnlyList<string> Backends(JsonNode record) =>
         [.. (record["backends"]?.AsArray() ?? []).Select(selector: static node => (string?)node).OfType<string>()];
     private static bool TryIdentity(string folder, string backend, out UInt128 identity, out string? why) {
@@ -98,7 +87,7 @@ public static class WorldCachesCommand {
     private static string SetPrefix(UInt128 identity) => $"{PlayerBuildLayout.CacheDirectoryName}/{PlayerBuildLayout.MeshesDirectoryName}/{identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture)}/";
 
     private static async Task<int> ProduceAsync(string folder, string output, bool push, CancellationToken cancellationToken) {
-        if (!TryRecord(folder: folder, record: out var record, why: out var refusal)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: refusal!); }
+        if (!PlayerBuildLayout.TryReadComplete(folder: folder, record: out var record, why: out var refusal)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: refusal!); }
 
         // The groups the folder's world plans, recorded so a release can tell whether it plans the same ones.
         if (!WorldCachePlan.TryRead(folder: folder, world: ((string?)record["world"] ?? string.Empty), keys: out var plan, why: out var unplanned)) {
@@ -173,7 +162,7 @@ public static class WorldCachesCommand {
     }
 
     private static async Task<int> FetchAsync(string folder, string? from, string? notes, CancellationToken cancellationToken) {
-        if (!TryRecord(folder: folder, record: out var record, why: out var refusal)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: refusal!); }
+        if (!PlayerBuildLayout.TryReadComplete(folder: folder, record: out var record, why: out var refusal)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: refusal!); }
 
         var lines = new List<string>();
         var held = new List<string>();

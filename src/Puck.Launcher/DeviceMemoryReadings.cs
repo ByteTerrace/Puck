@@ -10,7 +10,7 @@ namespace Puck.Launcher;
 /// (<see cref="IGpuDeviceContext.RefreshMemoryReading"/>) and the account records it
 /// (<see cref="MemoryAccount.Record"/>), which moves the device pool's limit; the floors the presentation's selector
 /// recorded in the account are passed to the device's own reservation (<see cref="IGpuDeviceContext.ReserveMemory"/>);
-/// and a pressure the account read since the last frame fires its trim (<see cref="MemoryAccount.ServicePressure"/>)
+/// the sampled owners are read again (<see cref="MemoryAccount.ServiceSampledOwners"/>); and a pressure the account read since the last frame fires its trim (<see cref="MemoryAccount.ServicePressure"/>)
 /// here, outside every admission. A device not brought up is not brought up, and reads as absent.
 /// </summary>
 public static class DeviceMemoryReadings {
@@ -28,6 +28,7 @@ public static class DeviceMemoryReadings {
             account.Record(reading: device.MemoryReading);
             _ = device.ReserveMemory(bytes: ((ulong)account.FloorOf(pool: GpuMemorySegments.ExpectedPool(role: GpuMemoryRole.DeviceLocal, unifiedMemory: device.MemoryProfile.UnifiedMemory))));
         }
+        account.ServiceSampledOwners();
         _ = account.ServicePressure();
     }
 }

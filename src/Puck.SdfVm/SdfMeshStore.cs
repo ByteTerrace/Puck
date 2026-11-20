@@ -451,7 +451,7 @@ public sealed class SdfMeshStore {
     private MemoryAccount.Owner WriteOwner {
         get {
             if (Volatile.Read(location: ref m_writeOwner) is { } owner) { return owner; }
-            var created = Account.CreateOwner(memoryClass: MemoryClass.Workspace, name: "mesh-store-writes");
+            var created = Account.CreateOwner(allowance: MemoryAllowance.Authoring, memoryClass: MemoryClass.Workspace, name: "mesh-store-writes");
 
             if (Interlocked.CompareExchange(comparand: null, location1: ref m_writeOwner, value: created) is { } raced) {
                 created.Dispose();
@@ -521,7 +521,7 @@ public sealed class SdfMeshStore {
         key = SampleKeyOf(identity, key);
         var path = PathOf(identity, key, SampleExtension);
         var workspace = Workspace;
-        using var owner = workspace.CreateOwner("mesh-bake-samples");
+        using var owner = workspace.CreateOwner(allowance: MemoryAllowance.Authoring, name: "mesh-bake-samples");
         using var entry = new OwnedBuffer<byte>(m_allocator, owner);
         try {
             if (!TryReadEntryBytes(entry, owner, path, in workspace)) { return false; }
@@ -905,8 +905,10 @@ internal readonly record struct SdfMeshStoreWorkspace(MemoryAccount Account, Tim
 
     /// <summary>Creates the owner one read's scratch is counted under.</summary>
     /// <param name="name">The owner's name.</param>
+    /// <param name="allowance">The allowance the read draws on: play for a read a player's boot makes, authoring for one
+    /// only a bake makes.</param>
     /// <returns>The owner.</returns>
-    public MemoryAccount.Owner CreateOwner(string name) => Account.CreateOwner(memoryClass: MemoryClass.Workspace, name: name);
+    public MemoryAccount.Owner CreateOwner(string name, MemoryAllowance allowance = MemoryAllowance.Play) => Account.CreateOwner(allowance: allowance, memoryClass: MemoryClass.Workspace, name: name);
     /// <summary>Reserves a read's scratch before it is allocated: admitted when the host pool has room or as the
     /// process's one forced job, and otherwise after a wait for room no longer than the patience.</summary>
     /// <param name="owner">The read's owner.</param>

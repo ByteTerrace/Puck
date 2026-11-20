@@ -550,6 +550,7 @@ public sealed partial class SdfMeshPathBake {
                 group.Retired = true;
                 group.InFlight = false;
             }
+            foreach (var (_, _, room, _) in m_parked) { room.Dispose(); }
             m_parked.Clear();
         }
         lock (WorkGate) { _ = WorkQueue.RemoveAll(match: item => { if (!item.Group.Retired) { return false; } item.Group.EndWork(); return true; }); }

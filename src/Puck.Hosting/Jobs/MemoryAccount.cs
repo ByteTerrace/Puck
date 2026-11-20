@@ -17,6 +17,23 @@ public enum MemoryCategory {
     /// <summary>Bookkeeping storage beside the payloads it describes.</summary>
     Metadata,
 }
+/// <summary>
+/// Which allowance a host owner's storage draws on. A device profile's authored host bar
+/// (<see cref="MemoryAccount.SetHostBar"/>) is a play budget: it bounds what a player's process holds while playing. Work
+/// a player never does (a bake's workspaces, its readback, the store's writes of what it baked) draws on the machine's
+/// measured headroom instead, as an engine cooks offline on a workstation and a player never pays the cook. A player's
+/// build never bakes; if it ever did, its authoring work falls back to the play bar
+/// (<see cref="MemoryAccount.SetAuthoringOnPlayBar"/>) and degrades there, never failing.
+/// </summary>
+public enum MemoryAllowance {
+    /// <summary>The play working set: resident meshes, region copies, staging, caches, store reads, the lighting. Held to
+    /// the authored host bar, the process's private bytes beyond every owner counted, and to the machine's room.</summary>
+    Play,
+    /// <summary>Authoring work: held to the machine's room alone (its free physical memory and commit room, as the
+    /// account reads them, under three quarters of what it has installed), never to the play bar, unless the process is
+    /// a player's.</summary>
+    Authoring,
+}
 /// <summary>A consistent reading of owned storage and future admission promises, in bytes.</summary>
 public readonly record struct MemoryReading(long Live, long Reserved, long Cached, long Retirement, long Metadata, long Budget, long Headroom) {
     /// <summary>Gets physical bytes owned by participating subsystems; reservations are not physical allocations.</summary>
@@ -35,6 +52,17 @@ public readonly record struct MemoryReading(long Live, long Reserved, long Cache
 /// pass a limit, and both are counted: the process's one forced job (<see cref="Owner.TryReserveForced"/>), so work
 /// always settles, and storage whose class cannot give way (<see cref="MemoryClasses.GivesWay"/>), since refusing it
 /// would end the presentation.
+/// </para>
+/// <para>
+/// The host pool has two allowances (<see cref="MemoryAllowance"/>), fixed for each owner when it is created. Invariant:
+/// play storage (every device grant, and every owner created as <see cref="MemoryAllowance.Play"/>) fits the authored
+/// host bar on what play holds and has promised with play's part of the private bytes beyond every owner, and fits the
+/// machine's room; authoring storage fits the machine's room past play's entitlement (the larger of what play holds and
+/// has promised and the bar's limit), so a bake never crowds play out of its budget. The one place
+/// that enforces it is the account's room arithmetic (<c>Fits</c>, <c>FitsHostBar</c>, <c>FitsChargedHostBar</c>), which
+/// every door reaches with the owner's allowance, and the allowance's held and promised bytes move only where an owner's
+/// charge or peak moves (<c>Owner.RecordChange</c>, <c>Owner.SetPeak</c>). A player's build counts authoring as play
+/// (<see cref="SetAuthoringOnPlayBar"/>).
 /// </para>
 /// <para>
 /// A pool holds its admitted owners' bytes (host memory) and the device blocks the backends' ledgers placed in it. The
@@ -66,6 +94,7 @@ public sealed class MemoryAccount {
 
     private const int Backings = 4;
     private const int Pools = 2;
+    private const int Allowances = 2;
 
     private readonly Lock m_gate = new();
     // The admitted host owners' bytes by category.
@@ -74,9 +103,10 @@ public sealed class MemoryAccount {
     private readonly long[] m_deviceBlocks = new long[Pools];
     // What admitted owners and device families name, by pool and row (pool * Backings + backing).
     private readonly long[] m_named = new long[(Pools * Backings)];
-    // The admitted host owners' bytes and promises by class, and the reserving device families' by pool and class.
-    private readonly long[] m_ownerHeld = new long[MemoryClasses.Count];
-    private readonly long[] m_ownerPromised = new long[MemoryClasses.Count];
+    // The admitted host owners' bytes and promises by allowance and class (OwnerIndexOf), and the reserving device
+    // families' by pool and class.
+    private readonly long[] m_ownerHeld = new long[(Allowances * MemoryClasses.Count)];
+    private readonly long[] m_ownerPromised = new long[(Allowances * MemoryClasses.Count)];
     private readonly long[] m_familyHeld = new long[(Pools * MemoryClasses.Count)];
     private readonly long[] m_familyPromised = new long[(Pools * MemoryClasses.Count)];
     private readonly HashSet<Owner> m_owners = [];
@@ -88,6 +118,8 @@ public sealed class MemoryAccount {
     private readonly Lock m_sampleGate = new();
     private readonly Lock m_availableGate = new();
     private readonly List<SampledOwner> m_sampled = [];
+    // When the sampled owners were last read by the frame's service (ServiceSampledOwners).
+    private long m_sampledOwnersAt;
 
     private readonly Func<long?> m_readAvailable;
     private readonly Func<long> m_clock;
@@ -101,10 +133,20 @@ public sealed class MemoryAccount {
     private long m_reserved;
     private long? m_budget;
     private long? m_hostBar;
-    // Sampled private bytes beyond the host charges at the sample. They reduce admission room and are never added
-    // to the physical rows (which already name parts of the same memory).
+    // Sampled private bytes beyond the host pool's holdings at the sample. They reduce admission room and are never added
+    // to the physical rows (which already name parts of the same memory). Play's part is the whole until authoring work
+    // first holds or promises anything in the process, as in every player's process; from then on it is no more than the
+    // last reading taken before (m_preAuthoringBeyond), and the rest is authoring's. The garbage and slack a bake leaves
+    // name no owner and outlive the bake (the collector keeps its committed heap, the allocator its slack), so no
+    // admission can tell whose they are, and counting them as play's would degrade a developer's play below what a
+    // player's process, which never bakes, would show. Only the machine's limit, which counts the whole, holds that part.
     private long m_privateBeyondHeld;
+    private long m_playBeyondHeld;
+    private long? m_preAuthoringBeyond;
+    private bool m_authoringRan;
     private long HostBudget => Math.Min(m_hostBar ?? DefaultBudget, m_budget ?? DefaultBudget);
+    // Whether a player's build counts authoring owners (MemoryAllowance.Authoring) as play.
+    private bool m_authoringOnPlayBar;
     private long m_negativeResiduals;
 
     private GpuMemoryReading m_device = GpuMemoryReading.Absent;
@@ -128,9 +170,8 @@ public sealed class MemoryAccount {
     private long m_pressureTrims;
 
     /// <summary>Initializes a new instance of the <see cref="MemoryAccount"/> class.</summary>
-    /// <param name="availablePhysicalBytes">Reads the machine's free physical memory, in bytes, or
-    /// <see langword="null"/> where the host reports none; <see langword="null"/> reads
-    /// <see cref="HostMemory.AvailablePhysicalBytes"/>.</param>
+    /// <param name="availablePhysicalBytes">Reads the machine's free memory, in bytes, or <see langword="null"/> where the
+    /// host reports none; <see langword="null"/> reads <see cref="HostMemory.AdmissibleBytes"/>.</param>
     /// <param name="installedPhysicalBytes">The machine's installed physical memory, in bytes, which the budget and the
     /// headroom derive from; <see langword="null"/> reads the host's.</param>
     /// <param name="clock">Reads the time, in <see cref="Stopwatch"/> ticks, which paces the free-memory reading, the
@@ -140,7 +181,7 @@ public sealed class MemoryAccount {
         var installed = (installedPhysicalBytes ?? (HostMemory.InstalledPhysicalBytes() ?? GC.GetGCMemoryInfo().TotalAvailableMemoryBytes));
 
         m_clock = (clock ?? Stopwatch.GetTimestamp);
-        m_readAvailable = (availablePhysicalBytes ?? HostMemory.AvailablePhysicalBytes);
+        m_readAvailable = (availablePhysicalBytes ?? HostMemory.AdmissibleBytes);
         DefaultBudget = DefaultBudgetOf(installedPhysicalBytes: installed);
         Headroom = Math.Clamp(max: (512L << 20), min: (16L << 20), value: (installed / 32));
     }
@@ -205,10 +246,11 @@ public sealed class MemoryAccount {
     /// machine-derived budget.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative.</exception>
     public void SetBudget(long? bytes) => SetBudget(bytes: bytes, pool: PhysicalMemory.Host);
-    /// <summary>Selects the profile's host bar, against which admissions count what the owners hold and are promised with
-    /// the process's private resident bytes beyond them; fixed host allocations obey it, and the forced job and progress
-    /// floors obey it on what the owners hold and are promised alone (<see cref="Owner.TryReserveForced"/>).
-    /// Selecting a profile restores its budget after an operator override.</summary>
+    /// <summary>Selects the profile's host bar, the play budget: play admissions (<see cref="MemoryAllowance.Play"/>)
+    /// count what play owners hold and are promised with the process's private resident bytes beyond every owner against
+    /// it; fixed play storage, the forced job and progress floors obey it on what play owners hold and are promised alone
+    /// (<see cref="Owner.TryReserveForced"/>). Authoring owners never count against it unless the process is a player's
+    /// (<see cref="SetAuthoringOnPlayBar"/>). Selecting a profile restores its budget after an operator override.</summary>
     /// <param name="bytes">The authored bar in bytes, or null to return to machine-derived admission.</param>
     public void SetHostBar(long? bytes) {
         if (bytes is < 0) { throw new ArgumentOutOfRangeException(nameof(bytes)); }
@@ -219,12 +261,26 @@ public sealed class MemoryAccount {
                 m_hostBar = bytes;
                 m_budget = null;
                 Volatile.Write(ref m_availableAt, 0);
-                if (bytes is null) { m_privateBeyondHeld = 0; }
+                if (bytes is null) {
+                    m_privateBeyondHeld = 0L;
+                    m_playBeyondHeld = 0L;
+                    m_preAuthoringBeyond = null;
+                }
                 lowered = HostBudget < before;
             }
             RefreshAvailable();
         }
         if (lowered) { TrimCaches(); }
+    }
+    /// <summary>Sets whether authoring owners (<see cref="MemoryAllowance.Authoring"/>) count as play: a player's build
+    /// sets it, since it never bakes and, if it ever did, its work must degrade under the play bar rather than draw on
+    /// headroom the player never offered. Otherwise authoring draws on the machine's room alone.</summary>
+    /// <param name="onPlayBar">Whether authoring storage is held to the play bar.</param>
+    public void SetAuthoringOnPlayBar(bool onPlayBar) {
+        lock (m_gate) {
+            m_authoringOnPlayBar = onPlayBar;
+            NotePressure(pool: PhysicalMemory.Host);
+        }
     }
     /// <summary>Lowers a pool's budget, or restores the value it derives. The budget is a cap, never a raise: the host
     /// pool's is at most <see cref="DefaultBudget"/>, and a discrete adapter's pool limit is the smaller of the value and
@@ -276,8 +332,10 @@ public sealed class MemoryAccount {
     /// <param name="category">The category its charges count in until it is reclassified.</param>
     /// <param name="memoryClass">What its storage is for; storage in the <see cref="MemoryCategory.Cached"/> category
     /// counts as <see cref="MemoryClass.Cached"/> whatever this says.</param>
+    /// <param name="allowance">The allowance its storage draws on for the owner's life: play unless the work is one a
+    /// player never does.</param>
     /// <returns>The owner.</returns>
-    public Owner CreateOwner(string name, MemoryCategory category = MemoryCategory.Live, MemoryClass memoryClass = MemoryClass.Fixed) => new(account: this, category: category, family: null, kind: OwnerKind.Admitted, memoryClass: memoryClass, name: name, pool: PhysicalMemory.Host);
+    public Owner CreateOwner(string name, MemoryCategory category = MemoryCategory.Live, MemoryClass memoryClass = MemoryClass.Fixed, MemoryAllowance allowance = MemoryAllowance.Play) => new(account: this, allowance: allowance, category: category, family: null, kind: OwnerKind.Admitted, memoryClass: memoryClass, name: name, pool: PhysicalMemory.Host);
     /// <summary>Creates a sampled owner: an owner whose bytes are a figure its subsystem derives, such as the payload of
     /// a structure that never reports its growth, read each time the account is measured (<see cref="Measure"/>) and
     /// charged in <paramref name="backing"/> from then until the next measure: admission counts it as of that
@@ -402,12 +460,30 @@ public sealed class MemoryAccount {
     public void Measure(HostMemorySample sample) {
         ArgumentNullException.ThrowIfNull(argument: sample);
         lock (m_sampleGate) {
-            foreach (var sampled in m_sampled) { sampled.Sample(); }
+            SampleOwners();
             lock (m_gate) {
                 m_sample = sample;
                 m_sampledAt = Stopwatch.GetTimestamp();
             }
         }
+    }
+    /// <summary>Reads every sampled owner (<see cref="CreateSampledOwner"/>) again once its last read is
+    /// <see cref="AvailableInterval"/> old, so admission counts what those subsystems hold between measures rather than
+    /// only after one. The host calls it on its frame thread at the top of a frame, holding no lock a sampled owner's read
+    /// could take; nothing inside an admission reads them, since a read may take its subsystem's lock.</summary>
+    public void ServiceSampledOwners() {
+        var now = m_clock();
+        var last = Volatile.Read(location: ref m_sampledOwnersAt);
+
+        if ((last != 0L) && ((now - last) < AvailableInterval)) { return; }
+        lock (m_sampleGate) {
+            Volatile.Write(location: ref m_sampledOwnersAt, value: Math.Max(val1: 1L, val2: now));
+            SampleOwners();
+        }
+    }
+    // Under m_sampleGate: reads every sampled owner and records its bytes.
+    private void SampleOwners() {
+        foreach (var sampled in m_sampled) { sampled.Sample(); }
     }
     /// <summary>Records the bytes of one class a presentation's selector holds its demand to in a pool, which the
     /// pools' reading carries (<see cref="MemoryAdmissionReading.Floor"/>): the floors, whose device bytes the host passes
@@ -425,18 +501,19 @@ public sealed class MemoryAccount {
     public long FloorOf(PhysicalMemory pool) {
         lock (m_gate) { return m_pools[((int)pool)].Floor; }
     }
-    /// <summary>Reads what one pool's admission holds it to, without allocating: its limit and the bytes it holds and
-    /// has promised.</summary>
+    /// <summary>Reads what one pool's play admission holds it to, without allocating: its limit and the bytes play holds
+    /// and has promised in it (<see cref="MemoryAllowance.Play"/>; in host memory, authoring's bytes are left out and its
+    /// share of the machine is taken from the limit).</summary>
     /// <param name="pool">The pool.</param>
-    /// <param name="limit">The pool's limit, in bytes.</param>
-    /// <param name="held">The bytes the pool holds.</param>
-    /// <param name="promised">The bytes the pool has promised.</param>
+    /// <param name="limit">The pool's play limit, in bytes.</param>
+    /// <param name="held">The bytes play holds in the pool.</param>
+    /// <param name="promised">The bytes play has promised in the pool.</param>
     /// <returns><see langword="false"/> where nothing bounds the pool, and <paramref name="limit"/> reads zero.</returns>
     public bool TryReadTotals(PhysicalMemory pool, out long limit, out long held, out long promised) {
         RefreshAvailable();
         lock (m_gate) {
-            held = HeldOf(pool: pool);
-            promised = PromisedOf(pool: pool);
+            held = PlayHeldOf(pool: pool);
+            promised = PlayPromisedOf(pool: pool);
             limit = (LimitOf(pool: pool) ?? 0L);
 
             return (LimitOf(pool: pool) is not null);
@@ -536,16 +613,31 @@ public sealed class MemoryAccount {
                 m_availableHeld = Math.Min(heldBefore, HeldOf(PhysicalMemory.Host));
                 // The process's private resident pages (HostMemory.PrivateResidentBytes): commit no page backs yet, such
                 // as a driver's mirror of device memory or a collector's committed reserve, occupies no host memory and is
-                // left out. Host-placed GPU blocks may lie outside it; only the non-device owners are known to occupy it.
-                if (process is { } bytes) { m_privateBeyondHeld = Math.Max(0L, bytes - Math.Min(hostOwnersBefore, m_bytes.Sum())); }
+                // left out. The host-placed device blocks lie in it (the driver's write-combined views of upload and
+                // readback heaps are resident private pages, as a walk's driver-mapped resident figure shows) and the pool
+                // already holds them, so they are taken out with the owners rather than counted twice.
+                if (process is { } bytes) { RecordBeyond(beyond: Math.Max(0L, ((bytes - Math.Min(hostOwnersBefore, m_bytes.Sum())) - m_deviceBlocks[((int)PhysicalMemory.Host)]))); }
                 Volatile.Write(location: ref m_availableAt, value: Math.Max(val1: 1L, val2: now));
                 NotePressure(pool: PhysicalMemory.Host);
             }
         }
     }
+    // Under m_gate: records the private bytes beyond the pool's holdings and play's part of them (m_playBeyondHeld).
+    private void RecordBeyond(long beyond) {
+        m_privateBeyondHeld = beyond;
+        m_authoringRan |= ((AuthoringSum(bytes: m_ownerHeld) + AuthoringSum(bytes: m_ownerPromised)) != 0L);
+        if (m_authoringOnPlayBar || !m_authoringRan) {
+            m_preAuthoringBeyond = beyond;
+            m_playBeyondHeld = beyond;
+            return;
+        }
+        m_playBeyondHeld = ((m_preAuthoringBeyond is { } before) ? Math.Min(val1: beyond, val2: before) : beyond);
+    }
     // Under m_gate.
     private long Named(PhysicalMemory pool, MemoryBacking backing) => m_named[((((int)pool) * Backings) + ((int)backing))];
-    private static int ClassIndex(PhysicalMemory pool, MemoryClass memoryClass) => ((((int)pool) * MemoryClasses.Count) + ((int)memoryClass));
+    private static int ClassIndex(PhysicalMemory pool, MemoryClass memoryClass) => ByClass(major: ((int)pool), memoryClass: memoryClass);
+    // The index of a class within one row of an array kept by row (a pool, an allowance) and class.
+    private static int ByClass(int major, MemoryClass memoryClass) => ((major * MemoryClasses.Count) + ((int)memoryClass));
     // Under m_gate: a row and what its owners name in it; a residual skew makes negative is counted.
     private MemoryRowReading Row(string name, PhysicalMemory pool, MemoryBacking backing, long? bytes, bool measured) {
         var named = Named(backing: backing, pool: pool);
@@ -563,14 +655,54 @@ public sealed class MemoryAccount {
 
         return ((state.Granted + state.FamilyPromised) + ((pool == PhysicalMemory.Host) ? m_reserved : 0L));
     }
-    // Under m_gate: a pool's spend limit, or null where nothing bounds it (a device pool no reading names).
+    // Under m_gate: what authoring owners hold and have promised apart from play; nothing in a player's build, whose
+    // authoring counts as play.
+    private long AuthoringHeld => (m_authoringOnPlayBar ? 0L : AuthoringSum(bytes: m_ownerHeld));
+    private long AuthoringPromised => (m_authoringOnPlayBar ? 0L : AuthoringSum(bytes: m_ownerPromised));
+    private static long AuthoringSum(long[] bytes) {
+        var sum = 0L;
+
+        for (var index = 0; (index < MemoryClasses.Count); index++) { sum += bytes[OwnerIndexOf(allowance: MemoryAllowance.Authoring, memoryClass: ((MemoryClass)index))]; }
+
+        return sum;
+    }
+    // An owner's index in the by-allowance-and-class arrays.
+    private static int OwnerIndexOf(MemoryAllowance allowance, MemoryClass memoryClass) => ByClass(major: ((int)allowance), memoryClass: memoryClass);
+    // Under m_gate: whether an owner's allowance draws on the machine's room apart from the play bar.
+    private bool Apart(MemoryAllowance allowance) => ((allowance == MemoryAllowance.Authoring) && !m_authoringOnPlayBar);
+    // Under m_gate: what play holds and has promised in a pool: everything but authoring's.
+    private long PlayHeldOf(PhysicalMemory pool) => (HeldOf(pool: pool) - ((pool == PhysicalMemory.Host) ? AuthoringHeld : 0L));
+    private long PlayPromisedOf(PhysicalMemory pool) => (PromisedOf(pool: pool) - ((pool == PhysicalMemory.Host) ? AuthoringPromised : 0L));
+    // Under m_gate: what the whole host pool (play and authoring) may hold and promise before the headroom: the budget an
+    // operator set or the machine-derived one, less the private bytes beyond the owners, and with a free-memory reading no
+    // more than what is free with what the pool held at that reading (the free memory already leaves out the bytes beyond
+    // the owners, so they are not taken from it again).
+    private long MachineBudget() {
+        var budget = ((m_budget ?? DefaultBudget) - m_privateBeyondHeld);
+
+        return ((m_available is { } available) ? Math.Min(val1: budget, val2: available.AddSaturating(right: m_availableHeld)) : budget);
+    }
+    // Under m_gate: the machine's budget less the headroom.
+    private long MachineLimit() => Math.Max(val1: 0L, val2: (MachineBudget() - Headroom));
+    // Under m_gate: what play's owners may hold and promise under the authored bar: the bar less play's part of the
+    // private bytes beyond the owners and the headroom; null without a bar.
+    private long? BarLimit() => ((m_hostBar is { } bar) ? Math.Max(val1: 0L, val2: ((Math.Min(val1: bar, val2: (m_budget ?? DefaultBudget)) - m_playBeyondHeld) - Headroom)) : null);
+    // Under m_gate: the room authoring apart from play has left for a new promise: the machine's limit less what
+    // authoring holds and has promised and less play's entitlement, the larger of what play holds and has promised and
+    // its bar's limit, so a bake draws on the headroom past play's budget and never crowds play out of it. Without a bar,
+    // play is entitled only to what it holds and has promised. Negative when the pool stands past it.
+    private long AuthoringRoomLocked() =>
+        ((MachineLimit() - (AuthoringHeld + AuthoringPromised)) - Math.Max(val1: (PlayHeldOf(pool: PhysicalMemory.Host) + PlayPromisedOf(pool: PhysicalMemory.Host)), val2: (BarLimit() ?? 0L)));
+    // Under m_gate: a pool's spend limit, or null where nothing bounds it (a device pool no reading names). The host
+    // pool's is play's: the bar's limit, and no more than the machine's limit leaves once authoring's bytes are taken
+    // out.
     private long? LimitOf(PhysicalMemory pool) {
         if (pool == PhysicalMemory.Host) {
-            var budget = HostBudget - m_privateBeyondHeld;
+            var play = (MachineLimit() - (AuthoringHeld + AuthoringPromised));
 
-            if (m_available is { } available) { budget = Math.Min(val1: budget, val2: available.AddSaturating(right: m_availableHeld)); }
+            if (BarLimit() is { } bar) { play = Math.Min(val1: play, val2: bar); }
 
-            return Math.Max(val1: 0L, val2: (budget - Headroom));
+            return Math.Max(val1: 0L, val2: play);
         }
         long? limit = null;
 
@@ -590,23 +722,41 @@ public sealed class MemoryAccount {
     }
     // Under m_gate: the room a pool has left for a new promise; null where nothing bounds it. Negative when the pool
     // holds and has promised more than its limit.
-    private long? RoomOf(PhysicalMemory pool) => ((LimitOf(pool: pool) is { } limit) ? ((limit - HeldOf(pool: pool)) - PromisedOf(pool: pool)) : null);
-    // Under m_gate: whether a pool has room for extra bytes of promise.
-    private bool Fits(PhysicalMemory pool, long extra) => ((extra <= 0L) || (RoomOf(pool: pool) is not { } room) || (extra <= room));
+    // A play room, of a pool's play limit: what play holds and has promised is taken from it.
+    private long? RoomOf(PhysicalMemory pool) => ((LimitOf(pool: pool) is { } limit) ? ((limit - PlayHeldOf(pool: pool)) - PlayPromisedOf(pool: pool)) : null);
+    // Under m_gate: whether a pool has room for extra bytes of promise in an allowance: play's room, or authoring's
+    // (AuthoringRoomLocked).
+    private bool Fits(PhysicalMemory pool, long extra, MemoryAllowance allowance = MemoryAllowance.Play) {
+        if (extra <= 0L) { return true; }
+        if ((pool == PhysicalMemory.Host) && Apart(allowance: allowance)) { return (extra <= AuthoringRoomLocked()); }
+
+        return ((RoomOf(pool: pool) is not { } room) || (extra <= room));
+    }
 
     // Ordinary admission leaves headroom. Storage that gives way may spend that reserve when it acquires, but no promise
-    // or acquisition that gives way can pass an explicit host bar, the process's private bytes beyond its owners counted.
-    private bool FitsHostBar(PhysicalMemory pool, long extra) =>
-        pool != PhysicalMemory.Host || extra <= 0 || m_hostBar is null ||
-        extra <= Math.Min(m_hostBar.Value, DefaultBudget) - m_privateBeyondHeld - HeldOf(pool) - PromisedOf(pool);
-    // Under m_gate: whether extra bytes of promise fit the authored host bar counting only what the host pool's owners
-    // hold and are promised. The private bytes beyond them (m_privateBeyondHeld: the collector's and allocator's slack,
-    // the runtime, the driver, storage no owner names) are a sampled reading no admission can shrink, and can stand past
-    // the bar for as long as work runs; what cannot give way (fixed storage, a reservation's floor) and what work needs to
-    // progress at all (the forced job, an owner's progress floor) are judged without them, so the presentation keeps its
-    // tables and work still settles, one job at a time, while every byte the owners name stays under the bar.
-    private bool FitsChargedHostBar(PhysicalMemory pool, long extra) =>
-        (pool != PhysicalMemory.Host) || (extra <= 0L) || (m_hostBar is not { } bar) || (extra <= ((Math.Min(val1: bar, val2: DefaultBudget) - HeldOf(pool: pool)) - PromisedOf(pool: pool)));
+    // or acquisition that gives way can pass an explicit host bar on what play holds, the process's private bytes beyond
+    // its owners counted. Authoring storage apart from play reserves only past play's entitlement (Fits), but a charge past
+    // its reservation (a bake stage's scratch its peak does not cover) is transient and needs only the machine's budget, so a
+    // busy machine defers a bake's next group rather than restarting one already running.
+    private bool FitsHostBar(PhysicalMemory pool, long extra, MemoryAllowance allowance = MemoryAllowance.Play) {
+        if ((pool != PhysicalMemory.Host) || (extra <= 0L)) { return true; }
+        if (Apart(allowance: allowance)) { return (extra <= ((MachineBudget() - HeldOf(pool: pool)) - PromisedOf(pool: pool))); }
+
+        return ((m_hostBar is not { } bar) || (extra <= (((Math.Min(val1: bar, val2: DefaultBudget) - m_playBeyondHeld) - PlayHeldOf(pool: pool)) - PlayPromisedOf(pool: pool))));
+    }
+    // Under m_gate: whether extra bytes of promise fit the authored host bar counting only what play's owners hold and are
+    // promised. The private bytes beyond them (m_playBeyondHeld: the collector's and allocator's slack, the runtime,
+    // the driver, storage no owner names) are a sampled reading no admission can shrink, and can stand past the bar for as
+    // long as work runs; what cannot give way (fixed storage, a reservation's floor) and what work needs to progress at
+    // all (the forced job, an owner's progress floor) are judged without them, so the presentation keeps its tables and
+    // work still settles, one job at a time, while every byte the owners name stays under the bar. Authoring storage,
+    // apart from play, is judged the same way against the machine's budget on everything the pool's owners hold.
+    private bool FitsChargedHostBar(PhysicalMemory pool, long extra, MemoryAllowance allowance = MemoryAllowance.Play) {
+        if ((pool != PhysicalMemory.Host) || (extra <= 0L)) { return true; }
+        if (Apart(allowance: allowance)) { return (extra <= (((m_budget ?? DefaultBudget) - HeldOf(pool: pool)) - PromisedOf(pool: pool))); }
+
+        return ((m_hostBar is not { } bar) || (extra <= ((Math.Min(val1: bar, val2: DefaultBudget) - PlayHeldOf(pool: pool)) - PlayPromisedOf(pool: pool))));
+    }
     // Under m_gate.
     private MemorySegmentLimit? RecordedLimit(GpuMemorySegment segment) {
         foreach (var recorded in m_segmentLimits) {
@@ -681,14 +831,18 @@ public sealed class MemoryAccount {
             var family = m_familyHeld[ClassIndex(memoryClass: ((MemoryClass)index), pool: pool)];
 
             families += family;
-            held[index] = (family + ((pool == PhysicalMemory.Host) ? m_ownerHeld[index] : 0L));
-            promised[index] = (m_familyPromised[ClassIndex(memoryClass: ((MemoryClass)index), pool: pool)] + ((pool == PhysicalMemory.Host) ? m_ownerPromised[index] : 0L));
+            // Play's bytes by class; a player's build counts authoring's as play.
+            var play = OwnerIndexOf(allowance: MemoryAllowance.Play, memoryClass: ((MemoryClass)index));
+            var authoring = OwnerIndexOf(allowance: MemoryAllowance.Authoring, memoryClass: ((MemoryClass)index));
+
+            held[index] = (family + ((pool == PhysicalMemory.Host) ? (m_ownerHeld[play] + (m_authoringOnPlayBar ? m_ownerHeld[authoring] : 0L)) : 0L));
+            promised[index] = (m_familyPromised[ClassIndex(memoryClass: ((MemoryClass)index), pool: pool)] + ((pool == PhysicalMemory.Host) ? (m_ownerPromised[play] + (m_authoringOnPlayBar ? m_ownerPromised[authoring] : 0L)) : 0L));
         }
         // The device blocks no reserving family names are fixed: targets, tables, the room inside shared blocks.
         held[((int)MemoryClass.Fixed)] += (m_deviceBlocks[((int)pool)] - families);
         promised[((int)MemoryClass.Fixed)] += state.Granted;
 
-        var total = HeldOf(pool: pool);
+        var host = (pool == PhysicalMemory.Host);
 
         return new(
             ClassHeld: held,
@@ -697,19 +851,25 @@ public sealed class MemoryAccount {
             Floor: state.Floor,
             Forced: (((pool == PhysicalMemory.Host) && (m_forced is not null)) ? m_forcedBytes : 0L),
             ForcedJobs: ((pool == PhysicalMemory.Host) ? m_forcedJobs : 0L),
-            Held: total,
+            Held: PlayHeldOf(pool: pool),
             Limit: LimitOf(pool: pool),
             OverLimitBytes: state.OverLimitBytes,
             OverLimitGrants: state.OverLimitGrants,
             Peak: state.Peak,
             Pool: pool,
             PressureTrims: m_pressureTrims,
-            Promised: PromisedOf(pool: pool),
+            Promised: PlayPromisedOf(pool: pool),
             Refusals: state.Refusals,
-            Retired: (state.Retiring + ((pool == PhysicalMemory.Host) ? m_bytes[((int)MemoryCategory.Retirement)] : 0L))
+            Retired: (state.Retiring + (host ? m_bytes[((int)MemoryCategory.Retirement)] : 0L))
         ) {
+            AuthoringHeld = (host ? AuthoringHeld : 0L),
+            AuthoringOnPlayBar = (host && m_authoringOnPlayBar),
+            AuthoringPromised = (host ? AuthoringPromised : 0L),
             LastRefusedOwner = state.LastRefusedOwner,
-            PrivateBeyondHeld = pool == PhysicalMemory.Host ? m_privateBeyondHeld : 0L,
+            AuthoringRoom = (host ? (m_authoringOnPlayBar ? 0L : Math.Max(val1: 0L, val2: AuthoringRoomLocked())) : null),
+            MachineLimit = (host ? MachineLimit() : null),
+            PlayBeyondHeld = (host ? m_playBeyondHeld : 0L),
+            PrivateBeyondHeld = (host ? m_privateBeyondHeld : 0L),
         };
     }
     // Under m_gate: counts a refused admission. A refusal is admission working, not pressure: pressure is a limit that
@@ -718,7 +878,7 @@ public sealed class MemoryAccount {
         var state = m_pools[(int)pool];
         state.Refusals++;
         state.LastRefusedOwner = owner;
-        if (trim && pool == PhysicalMemory.Host && m_hostBar is not null && m_ownerHeld[(int)MemoryClass.Cached] > 0L) {
+        if (trim && pool == PhysicalMemory.Host && m_hostBar is not null && (m_ownerHeld[OwnerIndexOf(allowance: MemoryAllowance.Play, memoryClass: MemoryClass.Cached)] > 0L)) {
             m_pressure = 1;
         }
     }
@@ -727,9 +887,13 @@ public sealed class MemoryAccount {
     // at every reading; one that falls back and passes it again asks again.
     private void NotePressure(PhysicalMemory pool) {
         var state = m_pools[((int)pool)];
+        var forced = (((pool == PhysicalMemory.Host) && (m_forced is not null)) ? m_forcedBytes : 0L);
         var over = ((LimitOf(pool: pool) is { } limit)
-            ? Math.Max(val1: 0L, val2: (((HeldOf(pool: pool) + PromisedOf(pool: pool)) - (((pool == PhysicalMemory.Host) && (m_forced is not null)) ? m_forcedBytes : 0L)) - limit))
+            ? Math.Max(val1: 0L, val2: (((PlayHeldOf(pool: pool) + PlayPromisedOf(pool: pool)) - forced) - limit))
             : 0L);
+
+        // Authoring apart from play passes only the machine's limit, on everything the pool holds.
+        if (pool == PhysicalMemory.Host) { over = Math.Max(val1: over, val2: (((HeldOf(pool: pool) + PromisedOf(pool: pool)) - forced) - MachineLimit())); }
 
         if (over > state.PressureOver) { m_pressure = 1; }
         state.PressureOver = over;
@@ -885,6 +1049,7 @@ public sealed class MemoryAccount {
         private readonly OwnerKind m_kind;
         private readonly MemoryClass m_class;
         private readonly FamilyEntry? m_family;
+        private readonly MemoryAllowance m_allowance;
 
         private readonly long[] m_rows = new long[Backings];
 
@@ -914,10 +1079,15 @@ public sealed class MemoryAccount {
             }
         }
 
-        internal Owner(MemoryAccount account, string name, MemoryCategory category, PhysicalMemory pool, OwnerKind kind, MemoryClass memoryClass, FamilyEntry? family) { m_account = account; Name = name; m_category = category; m_pool = pool; m_kind = kind; m_class = memoryClass; m_family = family; }
+        internal Owner(MemoryAccount account, string name, MemoryCategory category, PhysicalMemory pool, OwnerKind kind, MemoryClass memoryClass, FamilyEntry? family, MemoryAllowance allowance = MemoryAllowance.Play) { m_account = account; Name = name; m_category = category; m_pool = pool; m_kind = kind; m_class = memoryClass; m_family = family; m_allowance = allowance; }
+
+        /// <summary>Gets the allowance the owner's storage draws on.</summary>
+        public MemoryAllowance Allowance => m_allowance;
 
         // Under the account's lock.
         internal long HeldLocked => m_bytes;
+        // The owner's index in the account's by-allowance-and-class arrays.
+        private int OwnerIndex => OwnerIndexOf(allowance: m_allowance, memoryClass: EffectiveClass);
         internal long PeakLocked => m_ownedPeak;
 
         private long Promise => Math.Max(val1: 0, val2: (m_reservationPeak - m_bytes));
@@ -941,15 +1111,20 @@ public sealed class MemoryAccount {
 
             var change = (Promise - before);
 
-            m_account.m_reserved += change;
-            m_account.m_ownerPromised[((int)EffectiveClass)] += change;
+            MovePromise(change: change);
             Track();
             if (change < 0L) { m_account.SignalRoom(); }
+        }
+        // Under the account's lock: the one place an admitted owner's promise moves the account's, its class's and its
+        // allowance's promises.
+        private void MovePromise(long change) {
+            m_account.m_reserved += change;
+            m_account.m_ownerPromised[OwnerIndex] += change;
         }
 
         internal MemoryOwnerReading Read() {
             lock (m_account.m_gate) {
-                return new(Name, m_category, m_bytes, Promise, m_ownedPeak, m_reservationPeak, m_closed, m_pool, (m_kind != OwnerKind.Admitted), (m_kind == OwnerKind.Segment), new MemoryRowBytes(DeviceBlocks: m_rows[((int)MemoryBacking.DeviceBlocks)], Managed: m_rows[((int)MemoryBacking.Managed)], NativeAllocator: m_rows[((int)MemoryBacking.NativeAllocator)], NativeDirect: m_rows[((int)MemoryBacking.NativeDirect)]), EffectiveClass, ReferenceEquals(objA: m_account.m_forced, objB: this));
+                return new(Name, m_category, m_bytes, Promise, m_ownedPeak, m_reservationPeak, m_closed, m_pool, (m_kind != OwnerKind.Admitted), (m_kind == OwnerKind.Segment), new MemoryRowBytes(DeviceBlocks: m_rows[((int)MemoryBacking.DeviceBlocks)], Managed: m_rows[((int)MemoryBacking.Managed)], NativeAllocator: m_rows[((int)MemoryBacking.NativeAllocator)], NativeDirect: m_rows[((int)MemoryBacking.NativeDirect)]), EffectiveClass, ReferenceEquals(objA: m_account.m_forced, objB: this)) { Allowance = m_allowance };
             }
         }
 
@@ -973,8 +1148,8 @@ public sealed class MemoryAccount {
 
                 var extra = (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise);
 
-                if (!m_account.Fits(extra: extra, pool: PhysicalMemory.Host)) {
-                    if (!progress || !m_account.FitsChargedHostBar(extra: extra, pool: PhysicalMemory.Host)) { return RefusePeak(peak); }
+                if (!m_account.Fits(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host)) {
+                    if (!progress || !m_account.FitsChargedHostBar(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host)) { return RefusePeak(peak); }
 
                     var state = m_account.m_pools[((int)PhysicalMemory.Host)];
 
@@ -1015,7 +1190,7 @@ public sealed class MemoryAccount {
                 ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
                 ThrowIfNotAdmitted();
                 if ((m_account.m_forced is { } holder) && !ReferenceEquals(objA: holder, objB: this)) { return false; }
-                if (!m_account.FitsChargedHostBar(extra: (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise), pool: PhysicalMemory.Host)) { return RefusePeak(peak); }
+                if (!m_account.FitsChargedHostBar(allowance: m_allowance, extra: (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise), pool: PhysicalMemory.Host)) { return RefusePeak(peak); }
                 if (m_account.m_forced is null) { m_account.m_forcedJobs++; }
                 m_account.m_forced = this;
                 m_account.m_forcedBytes = peak;
@@ -1099,11 +1274,11 @@ public sealed class MemoryAccount {
                 var extra = bytes - Promise;
                 // Storage that cannot give way is judged on what the owners name alone (FitsChargedHostBar).
                 var fitsBar = (MemoryClasses.GivesWay(memoryClass: EffectiveClass)
-                    ? m_account.FitsHostBar(PhysicalMemory.Host, extra)
-                    : m_account.FitsChargedHostBar(extra: extra, pool: PhysicalMemory.Host));
+                    ? m_account.FitsHostBar(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host)
+                    : m_account.FitsChargedHostBar(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host));
 
                 if (!fitsBar ||
-                    (EffectiveClass == MemoryClass.Cached && !m_account.Fits(PhysicalMemory.Host, extra))) {
+                    (EffectiveClass == MemoryClass.Cached && !m_account.Fits(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host))) {
                     m_account.Refused(PhysicalMemory.Host, Name, trim: EffectiveClass != MemoryClass.Cached);
                     return false;
                 }
@@ -1166,9 +1341,8 @@ public sealed class MemoryAccount {
                     case OwnerKind.Admitted:
                         m_account.m_bytes[((int)m_category)] += bytes;
                         m_account.m_named[((((int)m_pool) * Backings) + ((int)backing))] += bytes;
-                        m_account.m_ownerHeld[((int)EffectiveClass)] += bytes;
-                        m_account.m_reserved += (Promise - promise);
-                        m_account.m_ownerPromised[((int)EffectiveClass)] += (Promise - promise);
+                        m_account.m_ownerHeld[OwnerIndex] += bytes;
+                        MovePromise(change: (Promise - promise));
                         m_account.RaisePeak(pool: m_pool);
                         break;
                     default:
@@ -1189,12 +1363,12 @@ public sealed class MemoryAccount {
                 var promise = Promise;
 
                 m_account.m_bytes[((int)m_category)] -= m_bytes;
-                m_account.m_ownerHeld[((int)EffectiveClass)] -= m_bytes;
-                m_account.m_ownerPromised[((int)EffectiveClass)] -= promise;
+                m_account.m_ownerHeld[OwnerIndex] -= m_bytes;
+                m_account.m_ownerPromised[OwnerIndex] -= promise;
                 m_category = category;
                 m_account.m_bytes[((int)m_category)] += m_bytes;
-                m_account.m_ownerHeld[((int)EffectiveClass)] += m_bytes;
-                m_account.m_ownerPromised[((int)EffectiveClass)] += promise;
+                m_account.m_ownerHeld[OwnerIndex] += m_bytes;
+                m_account.m_ownerPromised[OwnerIndex] += promise;
             }
         }
 
