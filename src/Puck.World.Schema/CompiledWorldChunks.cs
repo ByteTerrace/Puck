@@ -140,7 +140,7 @@ public sealed class CompiledWorldChunks : IReadOnlyList<ICompiledWorldChunk> {
     public CodeClosure Code => m_code.Value;
 
     /// <summary>Gets the deriving code identity, including hot-reload updates to types its closure reads.</summary>
-    public string EngineBuild => AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: $"{Code.Hash:x32}\n{Puck.Abstractions.CodeRevision.AppliedTo(reads: Code.Reads)}")).ToString();
+    public string EngineBuild => AssetContentHash.OfText(text: $"{Code.Hash:x32}\n{Puck.Abstractions.CodeRevision.AppliedTo(reads: Code.Reads)}").ToString();
 
     /// <summary>Gets the standard derivations: <see cref="DefinitionChunk"/>, <see cref="AssetChunk"/> and <see cref="CurvatureChunk"/>.</summary>
     public static CompiledWorldChunks Standard { get; } = new(chunks: [DefinitionChunk.Instance, AssetChunk.Instance, CurvatureChunk.Instance]);

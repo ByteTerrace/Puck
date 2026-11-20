@@ -96,10 +96,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 if (placement.ShapeId is { } shapeId) {
-                    var row = WorldDefinitionRows.FindPlacement(
-                        placements: placements,
-                        id: placement.PlacementId
-                    );
+                    var row = WorldPlacementIndex.ById(placements: placements).GetValueOrDefault(key: placement.PlacementId);
                     var creation = ((row is null)
                         ? null
                         : WorldDefinitionRows.FindCreation(

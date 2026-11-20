@@ -37,6 +37,12 @@ public readonly record struct ContentPin {
     /// <param name="text">The text to hash.</param>
     /// <returns>The pin of the UTF-8 bytes of <paramref name="text"/>.</returns>
     public static ContentPin OfText(ReadOnlySpan<char> text) => new(hex: ContentDigest.HexOfText(text: text));
+    /// <summary>Computes the pin of the UTF-8 bytes of a <see cref="System.Text.StringBuilder"/>'s text, hashed chunk by
+    /// chunk so no string of the whole text is built.</summary>
+    /// <param name="text">The text to hash.</param>
+    /// <returns>The pin of the UTF-8 bytes of <paramref name="text"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/> is <see langword="null"/>.</exception>
+    public static ContentPin OfText(System.Text.StringBuilder text) => new(hex: ContentDigest.HexOfText(text: text));
     /// <summary>Computes the pin of everything remaining in <paramref name="content"/>, streamed so a large input
     /// costs no copy.</summary>
     /// <param name="content">The stream to hash, read from its current position to its end.</param>

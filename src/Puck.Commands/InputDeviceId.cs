@@ -1,3 +1,4 @@
+using Puck.Abstractions;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -53,17 +54,14 @@ public readonly record struct InputDeviceId(Guid Value, InputDeviceIdentityPersi
     /// <param name="content">The stable identity bytes to address.</param>
     /// <returns>The content-addressed device id.</returns>
     public static InputDeviceId FromContent(ReadOnlySpan<byte> content) {
-        Span<byte> digest = stackalloc byte[32];
+        Span<byte> digest = stackalloc byte[ContentDigest.SizeInBytes];
 
         _ = SHA256.HashData(
             destination: digest,
             source: content
         );
 
-        return new InputDeviceId(
-            Value: new Guid(b: digest[..16]),
-            Persistence: InputDeviceIdentityPersistence.Reconnect
-        );
+        return Reconnecting(digest: digest);
     }
     /// <summary>Derives a content-addressed id from a textual device key (UTF-8 encoded), such as a device path.</summary>
     /// <param name="key">The stable identity string to address.</param>
@@ -72,8 +70,14 @@ public readonly record struct InputDeviceId(Guid Value, InputDeviceIdentityPersi
     public static InputDeviceId FromKey(string key) {
         ArgumentNullException.ThrowIfNull(key);
 
-        // Hashed once per device connection, so the small allocation here is immaterial.
-        return FromContent(content: Encoding.UTF8.GetBytes(s: key));
+        Span<byte> digest = stackalloc byte[ContentDigest.SizeInBytes];
+
+        ContentDigest.HashText(
+            digest: digest,
+            text: key
+        );
+
+        return Reconnecting(digest: digest);
     }
     /// <summary>Creates a fresh, random device id with no stable meaning across connections.</summary>
     /// <returns>A new random device id.</returns>
@@ -86,4 +90,9 @@ public readonly record struct InputDeviceId(Guid Value, InputDeviceIdentityPersi
     public override string ToString() {
         return $"input/{Value:n}";
     }
+
+    private static InputDeviceId Reconnecting(ReadOnlySpan<byte> digest) => new(
+        Value: new Guid(b: digest[..16]),
+        Persistence: InputDeviceIdentityPersistence.Reconnect
+    );
 }

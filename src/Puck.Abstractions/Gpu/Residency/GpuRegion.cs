@@ -1256,7 +1256,7 @@ public sealed unsafe class GpuRegion : IDisposable {
 
         if (release.Bytes != 0UL) {
             var chunk = MappedChunkBytes;
-            var first = ((((offset + chunk) - 1L) / chunk) * chunk);
+            var first = (offset.CeilingDivide(divisor: chunk) * chunk);
             var end = Math.Min(val1: ((((offset + bytes) / chunk) * chunk)), val2: ByteCount);
 
             DropOwed(endWord: ((int)(end / sizeof(uint))), startWord: ((int)(first / sizeof(uint))));

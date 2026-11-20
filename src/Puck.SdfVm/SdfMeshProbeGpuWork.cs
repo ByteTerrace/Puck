@@ -555,7 +555,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             recorder.Dispatch(command, (uint)query.Origins.Length, 1, 1);
         }
         else { recorder.Dispatch(commandBufferHandle: command,
-            groupCountX: (uint)(query.CameraSample ? query.Origins.Length : query.Selection ? (query.Origins.Length + SdfMeshProbeRelight.SelectGroupSize - 1) / SdfMeshProbeRelight.SelectGroupSize : (query.Origins.Length * SdfMeshProbeDepth.HitCount + SdfMeshProbeTrace.GroupSize - 1) / SdfMeshProbeTrace.GroupSize), groupCountY: 1, groupCountZ: 1); }
+            groupCountX: (uint)(query.CameraSample ? query.Origins.Length : query.Selection ? query.Origins.Length.CeilingDivide(divisor: SdfMeshProbeRelight.SelectGroupSize) : (query.Origins.Length * SdfMeshProbeDepth.HitCount).CeilingDivide(divisor: SdfMeshProbeTrace.GroupSize)), groupCountY: 1, groupCountZ: 1); }
         recording.CopyToReadback(hits, bytes + 4);
         if (!query.CacheSlots.IsEmpty) {
             // The readback left the hits a transfer source; each origin's hits land behind its cache slot's two token

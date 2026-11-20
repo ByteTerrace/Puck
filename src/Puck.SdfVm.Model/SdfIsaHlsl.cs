@@ -1,6 +1,6 @@
+using Puck.Abstractions;
 using System.Buffers.Binary;
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 using Puck.Abstractions.Gpu;
 using Puck.Maths;
@@ -122,7 +122,14 @@ public static class SdfIsaHlsl {
         ArgumentNullException.ThrowIfNull(argument: include);
         ArgumentNullException.ThrowIfNull(argument: encoding);
 
-        return BinaryPrimitives.ReadUInt32LittleEndian(source: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: $"{include}\0{encoding}")));
+        Span<byte> digest = stackalloc byte[ContentDigest.SizeInBytes];
+
+        ContentDigest.HashText(
+            digest: digest,
+            text: $"{include}\0{encoding}"
+        );
+
+        return BinaryPrimitives.ReadUInt32LittleEndian(source: digest);
     }
     /// <summary>Returns the interface stamp (<see cref="Puck.Shaders.ShaderInterface.Stamp"/>) of an instruction set:
     /// <c>Isa</c> followed by its fingerprint in eight upper-case hexadecimal digits.</summary>

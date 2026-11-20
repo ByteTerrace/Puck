@@ -138,7 +138,7 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
             _ = text.Append(value: name).Append(value: '=').Append(value: version.ToString(format: "N")).Append(value: ';');
         }
 
-        return (ContentPin.OfText(text: text.ToString()).Hex, modules.Keys.ToHashSet(comparer: StringComparer.Ordinal));
+        return (ContentPin.OfText(text: text).Hex, modules.Keys.ToHashSet(comparer: StringComparer.Ordinal));
     }
     private static bool IsFramework(string? name) => (
         (name is null) ||

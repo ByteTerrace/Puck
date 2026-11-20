@@ -145,7 +145,7 @@ public static class SdfShadeOps {
 
             text.Append(value: name).Append(value: '\n').Append(value: reader.ReadToEnd()).Append(value: '\n');
         }
-        return ContentDigest.HexOfText(text: text.ToString());
+        return ContentDigest.HexOfText(text: text);
     }
     private static SdfShadeOpInfo D(SdfShadeOp op, string name, int arity, uint work, string template, bool commutative = false) => new(Arity: arity, Commutative: commutative, Name: name, Op: op, Template: template, Work: checked((work + DispatchWork)));
     private static SdfShadeInput I(string name, SdfShadeType type = SdfShadeType.Float, SdfShadePhase? phase = null, SdfShadeReads reads = SdfShadeReads.None) => new(name, type, phase, reads);

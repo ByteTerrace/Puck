@@ -1,6 +1,6 @@
+using Puck.Abstractions;
 using Puck.Confinement;
 using System.Security.Cryptography;
-using System.Text;
 
 
 namespace Puck.Launcher.Release;
@@ -30,7 +30,12 @@ public static class ReleaseRolloutBucket {
             return false;
         }
 
-        var hash = SHA256.HashData(source: Encoding.UTF8.GetBytes(s: installId));
+        Span<byte> hash = stackalloc byte[ContentDigest.SizeInBytes];
+
+        ContentDigest.HashText(
+            digest: hash,
+            text: installId
+        );
         var bucket = (((uint)hash[0]) << 24) | (((uint)hash[1]) << 16) | (((uint)hash[2]) << 8) | hash[3];
 
         return ((bucket % 100U) < ((uint)percent));

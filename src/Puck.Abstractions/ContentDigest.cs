@@ -39,6 +39,43 @@ public static class ContentDigest {
             ArrayPool<byte>.Shared.Return(array: rented);
         }
     }
+    /// <summary>
+    /// Hashes the text a <see cref="StringBuilder"/> holds as its UTF-8 bytes, chunk by chunk, so no string of the whole
+    /// text is built. The digest equals the one <see cref="HashText(ReadOnlySpan{char}, Span{byte})"/> gives for the text
+    /// joined, including a surrogate pair split across two chunks.
+    /// </summary>
+    /// <param name="text">The text to hash.</param>
+    /// <param name="digest">The destination, at least <see cref="SizeInBytes"/> bytes long.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/> is <see langword="null"/>.</exception>
+    public static void HashText(StringBuilder text, Span<byte> digest) {
+        ArgumentNullException.ThrowIfNull(argument: text);
+        var chunks = text.GetChunks().GetEnumerator();
+
+        if (!chunks.MoveNext()) {
+            HashText(digest: digest, text: ReadOnlySpan<char>.Empty);
+
+            return;
+        }
+
+        var first = chunks.Current;
+
+        if (!chunks.MoveNext()) {
+            HashText(digest: digest, text: first.Span);
+
+            return;
+        }
+
+        using var hash = IncrementalHash.CreateHash(hashAlgorithm: HashAlgorithmName.SHA256);
+        var encoder = Encoding.UTF8.GetEncoder();
+        Span<byte> buffer = stackalloc byte[StackBytes];
+
+        AppendChunk(buffer: buffer, chars: first.Span, encoder: encoder, flush: false, hash: hash);
+        do {
+            AppendChunk(buffer: buffer, chars: chunks.Current.Span, encoder: encoder, flush: false, hash: hash);
+        } while (chunks.MoveNext());
+        AppendChunk(buffer: buffer, chars: default, encoder: encoder, flush: true, hash: hash);
+        _ = hash.GetHashAndReset(destination: digest);
+    }
     /// <summary>Gets the SHA-256 digest of bytes as hexadecimal text.</summary>
     /// <param name="content">The bytes to hash.</param>
     /// <param name="upperCase"><see langword="true"/> for uppercase digits, <see langword="false"/> for lowercase.</param>
@@ -72,6 +109,36 @@ public static class ContentDigest {
         return Hex(digest: digest, upperCase: upperCase);
     }
 
+    /// <summary>Gets the SHA-256 digest of the UTF-8 bytes of a <see cref="StringBuilder"/>'s text as hexadecimal text,
+    /// hashed chunk by chunk.</summary>
+    /// <param name="text">The text to hash.</param>
+    /// <param name="upperCase"><see langword="true"/> for uppercase digits, <see langword="false"/> for lowercase.</param>
+    /// <returns>The 64 hexadecimal digits of the digest.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/> is <see langword="null"/>.</exception>
+    public static string HexOfText(StringBuilder text, bool upperCase = false) {
+        Span<byte> digest = stackalloc byte[SizeInBytes];
+
+        HashText(text: text, digest: digest);
+
+        return Hex(digest: digest, upperCase: upperCase);
+    }
+
+    private static void AppendChunk(Span<byte> buffer, ReadOnlySpan<char> chars, Encoder encoder, bool flush, IncrementalHash hash) {
+        bool completed;
+
+        do {
+            encoder.Convert(
+                bytes: buffer,
+                bytesUsed: out var bytesUsed,
+                chars: chars,
+                charsUsed: out var charsUsed,
+                completed: out completed,
+                flush: flush
+            );
+            hash.AppendData(data: buffer[..bytesUsed]);
+            chars = chars[charsUsed..];
+        } while (!completed);
+    }
     private static string Hex(ReadOnlySpan<byte> digest, bool upperCase) => (upperCase
         ? Convert.ToHexString(bytes: digest)
         : Convert.ToHexStringLower(bytes: digest));

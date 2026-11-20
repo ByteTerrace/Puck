@@ -3608,14 +3608,12 @@ proves itself with `puck compile` lowering to the same document.
   (`SdfSampledLattice.m_fineGradients`, `m_crossingGradients`,
   `m_crossingRootIndex`). Each moves to `RentedList`/`RentedArrays` as the
   contour's did.
-- Small duplicates whose shared home sits a layer above them.
-  `DirectoryObjectBlobStoreBackend.Token` and `MachineConfigurationFields.CatalogFingerprint` and `DescriptorFingerprint` still
-  spell SHA-256 hex by hand, because `ContentPin` is in `Puck.Assets`, which neither `Puck.Storage` nor
-  `Puck.Abstractions` reaches. Many more `Convert.ToHexStringLower(SHA256.HashData(...))`
-  sites hash text rather than content (`SdfShadeKernels`, `SdfKernelSource`, `ImageSourceSettings.Digest`
-  and others) and may want a text-hash helper beside `ContentPin`. Ceiling division is still spelled
-  `(x + n - 1) / n` outside the GPU files (`PlacePackage`, `ShaderPipelineRenderNode`,
-  `StateArena`, `PngDecoder`, `QrBitWriter`, `SdfMeshIrradianceScene` and others) where `CeilingDivide` serves.
+- Small duplicates still spelled by hand. A few text hashes (`WorldOperationIds.Next`,
+  `FixtureEmbeddingGenerator`, `RemoteMcpChallenges.Fingerprint`, `TokenDiscriminator`) build a per-call
+  byte array that `ContentDigest.HashText` could replace. The
+  "last page or chunk of a byte range" expression `((offset + bytes) - 1) / unit` is still written out in
+  `GpuBufferPages`, `DirectXGpuMappedBuffer` and `SdfWorldTables.MeshRegion.Cover`; it is a floor of the
+  last byte, not a ceiling division, so it wants its own `Puck.Maths` helper rather than `CeilingDivide`.
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock

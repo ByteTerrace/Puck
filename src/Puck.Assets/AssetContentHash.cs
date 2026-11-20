@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Security.Cryptography;
+using Puck.Abstractions;
 
 namespace Puck.Assets;
 
@@ -29,6 +30,33 @@ public readonly record struct AssetContentHash(ulong Value) {
         _ = SHA256.HashData(
             destination: hashBytes,
             source: content
+        );
+        return FromDigest(digest: hashBytes);
+    }
+    /// <summary>Computes the content hash of text's UTF-8 bytes, through a stack or pooled buffer rather than a per-call
+    /// byte array.</summary>
+    /// <param name="text">The text to hash.</param>
+    /// <returns>The content hash of the UTF-8 bytes of <paramref name="text"/>.</returns>
+    public static AssetContentHash OfText(ReadOnlySpan<char> text) {
+        Span<byte> hashBytes = stackalloc byte[ContentDigest.SizeInBytes];
+
+        ContentDigest.HashText(
+            digest: hashBytes,
+            text: text
+        );
+        return FromDigest(digest: hashBytes);
+    }
+    /// <summary>Computes the content hash of the UTF-8 bytes of a <see cref="System.Text.StringBuilder"/>'s text, hashed
+    /// chunk by chunk so no string of the whole text is built.</summary>
+    /// <param name="text">The text to hash.</param>
+    /// <returns>The content hash of the UTF-8 bytes of <paramref name="text"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/> is <see langword="null"/>.</exception>
+    public static AssetContentHash OfText(System.Text.StringBuilder text) {
+        Span<byte> hashBytes = stackalloc byte[ContentDigest.SizeInBytes];
+
+        ContentDigest.HashText(
+            digest: hashBytes,
+            text: text
         );
         return FromDigest(digest: hashBytes);
     }

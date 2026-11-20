@@ -24,7 +24,7 @@ public sealed class SdfKernelSource {
             key.Append(value: path).Append(value: '|').Append(value: ShaderSourceClosure.HashOf(text: text)).Append(value: '\n');
         }
 
-        Key = ContentDigest.HexOfText(text: key.ToString());
+        Key = ContentDigest.HexOfText(text: key);
     }
 
     /// <summary>Gets the content key of the source: every file's full path and content hash, the stage's first.</summary>

@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Security.Cryptography;
+using Puck.Abstractions;
 using Puck.Assets;
 using Puck.Storage;
 
@@ -87,12 +87,14 @@ public static class WorldReleaseFenceClaim {
                 StringComparer.Ordinal
             ).Select(selector: item => $"{item.Identity.Owner:D}/{item.Identity.World.Value}/{item.Fence.Epoch}/{item.Fence.Token:D}")
         );
-        var hash = SHA256.HashData(source: Encoding.UTF8.GetBytes(s: canonical));
+        Span<byte> hash = stackalloc byte[ContentDigest.SizeInBytes];
 
-        return new Guid(b: hash.AsSpan(
-            length: 16,
-            start: 0
-        ));
+        ContentDigest.HashText(
+            digest: hash,
+            text: canonical
+        );
+
+        return new Guid(b: hash[..16]);
     }
 }
 /// <summary>

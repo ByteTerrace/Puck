@@ -43,7 +43,7 @@ public sealed class CompiledWorldCache {
     /// <returns>The file's full path.</returns>
     public string FileFor(string documentPath) => Path.Combine(
         path1: Directory,
-        path2: (AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: PuckPaths.Normalize(path: Path.GetFullPath(path: documentPath)))).Hex + CompiledWorld.Extension)
+        path2: (AssetContentHash.OfText(text: PuckPaths.Normalize(path: Path.GetFullPath(path: documentPath))).Hex + CompiledWorld.Extension)
     );
     /// <summary>Starts one boot's use of this cache.</summary>
     /// <param name="documentPath">The document the boot loads: its <c>.puck</c> source or <c>.world.json</c> file.</param>

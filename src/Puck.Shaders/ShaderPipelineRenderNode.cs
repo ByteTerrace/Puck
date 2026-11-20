@@ -3,6 +3,7 @@ using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.Shaders;
 
@@ -1280,9 +1281,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             );
             recorder.Dispatch(
                 commandBufferHandle: handle,
-                groupCountX: (((extent.Width + spec.GroupSizeX) - 1) / spec.GroupSizeX),
-                groupCountY: (((extent.Height + spec.GroupSizeY) - 1) / spec.GroupSizeY),
-                groupCountZ: (((1u + spec.GroupSizeZ) - 1) / spec.GroupSizeZ)
+                groupCountX: extent.Width.CeilingDivide(divisor: spec.GroupSizeX),
+                groupCountY: extent.Height.CeilingDivide(divisor: spec.GroupSizeY),
+                groupCountZ: 1U.CeilingDivide(divisor: spec.GroupSizeZ)
             );
             return;
         }
