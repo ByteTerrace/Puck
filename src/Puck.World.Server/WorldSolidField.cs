@@ -273,15 +273,10 @@ public sealed class WorldSolidField : IContactField {
         }
 
         var scale = FixedQ4816.One;
+        var scaleSlot = WorldBodyStateReads.PlanFor(definition: definition).Scale;
 
         if (
-            (definition.Population.Scale is { } scaleRegister) &&
-            WorldBodyStateReads.TryResolveSlot(
-            definition: definition,
-            kind: out _,
-            name: scaleRegister,
-            slot: out var scaleSlot
-        ) &&
+            (scaleSlot >= 0) &&
             (scaleSlot < definition.BodyState.Count) &&
             (definition.BodyState[scaleSlot].Envelope is ActionStateEnvelope.Range scaleRange)
         ) {
