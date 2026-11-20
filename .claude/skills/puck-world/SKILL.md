@@ -67,6 +67,8 @@ See [mutations](references/mutations.md). The predicate admits a mutation's decl
 footprint (its rows, their domains, the rows keyed over them, an incoming declaration's names, a
 placement's parent chain and dealt templates), never a current member
 ([decision 3](../../../docs/plans/disclosure.md#3-a-writer-that-cannot-read-a-row-whole-cannot-write-it)).
+A recipient's state write into a bound row is validated only as far as the written row reaches,
+never against units it does not name ([checkpoint](../../../docs/plans/disclosure.md#bound-write-validation-checkpoint)).
 A row's `cellVisibility` reserves per-cell policies even when empty and makes every recipient's
 write to the row undisclosed; a public row an observation or a seat writes declares neither it nor
 `visibility {}`.
