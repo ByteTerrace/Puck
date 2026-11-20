@@ -138,6 +138,15 @@ internal static partial class LawRegistry {
                 Laws.SweptClaim(claim: Subjects.ReciprocalDivisionSample, domain: ScalarDivision, lawId: Id, tier: Tier.Default, width: 1);
             }
         ),
+        Case(
+            id: "sampling.multiset-digest-order-independence",
+            run: () => {
+                const string Id = "sampling.multiset-digest-order-independence";
+
+                Laws.Claim(claim: Subjects.MultisetDigestBoundaries, lawId: Id);
+                Laws.SweptClaim(claim: Subjects.MultisetDigestSample, domain: BitMix64, lawId: Id, tier: Tier.Default, width: 4);
+            }
+        ),
         SweptCase(
             claim: Subjects.PackedPairHash,
             domain: BitMix64,

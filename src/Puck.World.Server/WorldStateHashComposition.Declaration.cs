@@ -356,10 +356,10 @@ public static partial class WorldStateHashComposition {
             return;
         }
 
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: lattice.Initial));
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: lattice.Min));
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: lattice.Max));
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: lattice.HeightScale));
+        hash.AddBits(value: lattice.Initial);
+        hash.AddBits(value: lattice.Min);
+        hash.AddBits(value: lattice.Max);
+        hash.AddBits(value: lattice.HeightScale);
         AppendString(
             hash: ref hash,
             value: lattice.Color
@@ -376,25 +376,25 @@ public static partial class WorldStateHashComposition {
             switch (paint[paintIndex]) {
                 case WorldLatticeFill.Rect rect:
                     hash.Add(value: ((byte)1));
-                    hash.Add(value: BitConverter.SingleToUInt32Bits(value: rect.Value));
-                    hash.Add(value: BitConverter.SingleToUInt32Bits(value: rect.MinX));
-                    hash.Add(value: BitConverter.SingleToUInt32Bits(value: rect.MinZ));
-                    hash.Add(value: BitConverter.SingleToUInt32Bits(value: rect.MaxX));
-                    hash.Add(value: BitConverter.SingleToUInt32Bits(value: rect.MaxZ));
+                    hash.AddBits(value: rect.Value);
+                    hash.AddBits(value: rect.MinX);
+                    hash.AddBits(value: rect.MinZ);
+                    hash.AddBits(value: rect.MaxX);
+                    hash.AddBits(value: rect.MaxZ);
 
                     break;
                 case WorldLatticeFill.Noise noise:
                     hash.Add(value: ((byte)2));
-                    hash.Add(value: BitConverter.SingleToUInt32Bits(value: noise.Value));
+                    hash.AddBits(value: noise.Value);
                     hash.Add(value: ((uint)noise.Frequency));
-                    hash.Add(value: BitConverter.SingleToUInt32Bits(value: noise.Threshold));
+                    hash.AddBits(value: noise.Threshold);
                     hash.Add(value: ((uint)noise.Octaves));
                     hash.Add(value: noise.Seed);
 
                     break;
                 case WorldLatticeFill.Scatter scatter:
                     hash.Add(value: ((byte)3));
-                    hash.Add(value: BitConverter.SingleToUInt32Bits(value: scatter.Value));
+                    hash.AddBits(value: scatter.Value);
                     hash.Add(value: ((uint)scatter.Spacing));
                     hash.Add(value: ((uint)scatter.Radius));
                     hash.Add(value: scatter.Seed);

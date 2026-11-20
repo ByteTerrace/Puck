@@ -21,6 +21,31 @@
     ]
   },
   {
+    "Id": "sampling.multiset-digest-order-independence",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.MultisetDigest", "Name": ".ctor" },
+      { "Type": "Puck.Maths.MultisetDigest", "Name": "Value" },
+      { "Type": "Puck.Maths.MultisetDigest", "Name": "Empty" },
+      { "Type": "Puck.Maths.MultisetDigest", "Name": "Add" },
+      { "Type": "Puck.Maths.MultisetDigest", "Name": "Remove" },
+      { "Type": "Puck.Maths.MultisetDigest", "Name": "Union" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical", "Flavor": "None",
+        "Subject": "MultisetDigest.Add over sampled multisets with repeats: the digest of each multiset",
+        "Against": "Oracles.MultisetDigest: the BigInteger sum of InvertibleBitMix.Mix64 over the elements, reduced modulo 2^64",
+        "Shared": "InvertibleBitMix.Mix64, whose own law pins it", "Citation": "", "Absolute": ""
+      },
+      {
+        "Kind": "Structural", "Flavor": "None",
+        "Subject": "Empty is zero; every order of one multiset digests equally; Remove undoes Add from any digest; Union of two digests equals adding both multisets' elements to Empty.",
+        "Against": "", "Shared": "", "Citation": "", "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "sampling.packed-int-pair-hash",
     "Tier": "Default",
     "Members": [

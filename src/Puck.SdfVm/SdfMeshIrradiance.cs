@@ -524,38 +524,39 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private readonly Dictionary<(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material), int> m_changeCounts = new(comparer: DrawKeyComparer.Instance);
     private readonly List<Box> m_changeBoxes = [];
 
-    private int m_sceneKey;
-    private int m_buildingKey;
+    // The static-draw digests of the installed scene and of the build in flight; null for none.
+    private MultisetDigest? m_sceneKey;
+    private MultisetDigest? m_buildingKey;
 
     // The static-draw key as StaticKey last folded it, and what it read: the list and its journal, the journal serial and
-    // list revision, and per draw whether it was static and its own hash. A frame whose journal names only rows that are
-    // and were not static, or that hash as they did, keeps the key without reading the rest of the list.
+    // list revision, and per draw whether it was static and its own digest. A frame whose journal names only rows that
+    // are and were not static, or that digest as they did, keeps the key without reading the rest of the list.
     private readonly Puck.Abstractions.Gpu.GpuRowCursor m_keyCursor = new();
 
-    private int m_keyValue;
+    private MultisetDigest m_keyValue;
     private int m_keyStatic;
     private int m_keyExtent;
     private long m_skipKeyThrough;
 
-    private int[] m_drawKeys = [];
+    private ulong[] m_drawKeys = [];
     private bool[] m_drawStatic = [];
     private readonly HashSet<int> m_staticRows = [];
     private readonly Puck.Abstractions.Gpu.GpuUploadRuns m_keyRuns = new(capacity: Puck.Abstractions.Gpu.GpuRegion.MaxCopyRuns);
 
     private Task? m_build;
     private Lighting? m_lighting;
-    private int m_lightingKey;
+    private ulong m_lightingKey;
     private SdfSkyBlock m_lightingSky;
 
     private readonly SdfSkyLayer[] m_lightingSkyLayers = new SdfSkyLayer[SdfSky.MaxLayers];
 
-    private int m_localKey;
+    private ulong m_localKey;
     private int m_localVersion;
     private long m_lightingCheckedAt;
     private int m_lightingVersion;
     private SdfProgram? m_materialsProgram;
     private SdfMeshIrradianceScene? m_materialsScene;
-    private int m_materialsKey;
+    private ulong m_materialsKey;
 
     private readonly SdfSkyLayer[] m_skyLayers = new SdfSkyLayer[SdfSky.MaxLayers];
     private readonly SdfSkyDetails m_skyDetails = new();
@@ -1551,7 +1552,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // whatever its draws; until then Settling holds the frame, and the next frame builds again.
     private Task? RefreshScene(SdfFrame frame, bool bakePending = false) {
         if (m_build is { IsFaulted: true } faulted) {
-            (m_build, m_buildingKey) = (null, 0);
+            (m_build, m_buildingKey) = (null, null);
             throw new InvalidOperationException(message: "The irradiance volume's scene build failed.", innerException: faulted.Exception);
         }
 
@@ -1566,34 +1567,34 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         return StartSceneBuild(draws: draws, frame: frame, key: key);
     }
-    // An order-independent sum, updated only for cursor-named rows; packing leaves the scene standing.
-    private (int Key, int Draws) StaticKey(SdfFrame frame) {
+    // An order-independent multiset digest, updated only for cursor-named rows; packing leaves the scene standing.
+    private (MultisetDigest Key, int Draws) StaticKey(SdfFrame frame) {
         var draws = frame.DrawRows;
         var whole = m_keyCursor.Collect(draws.Changes, draws.Serial, draws.Roster, draws.Count,
             draws.Revision, m_keyRuns);
 
         if (whole) {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.SceneWhole);
-            m_keyValue = 17; m_keyStatic = 0;
+            m_keyValue = MultisetDigest.Empty; m_keyStatic = 0;
             Array.Clear(array: m_drawStatic); Array.Clear(array: m_drawKeys);
             m_staticRows.Clear();
         }
         if (m_drawKeys.Length < draws.Count) { var size = Math.Max(val1: draws.Count, val2: (2 * m_drawKeys.Length)); Array.Resize(array: ref m_drawKeys, newSize: size); Array.Resize(array: ref m_drawStatic, newSize: size); }
         for (var row = draws.Count; (row < m_keyExtent); row++) {
-            if (m_drawStatic[row]) { m_keyValue = unchecked((m_keyValue - m_drawKeys[row])); m_keyStatic--; }
+            if (m_drawStatic[row]) { m_keyValue = m_keyValue.Remove(element: m_drawKeys[row]); m_keyStatic--; }
             m_drawStatic[row] = false; m_drawKeys[row] = 0;
             m_staticRows.Remove(item: row);
         }
         for (var run = 0; (run < m_keyRuns.Count); run++) {
             for (var row = m_keyRuns.Start(index: run); (row < (m_keyRuns.Start(index: run) + m_keyRuns.Length(index: run))); row++) {
-                if (m_drawStatic[row]) { m_keyValue = unchecked((m_keyValue - m_drawKeys[row])); m_keyStatic--; }
+                if (m_drawStatic[row]) { m_keyValue = m_keyValue.Remove(element: m_drawKeys[row]); m_keyStatic--; }
                 var draw = draws[row];
                 var isStatic = draw.IsStatic;
 
                 m_drawStatic[row] = isStatic;
                 if (isStatic) { m_staticRows.Add(item: row); } else { m_staticRows.Remove(item: row); }
                 m_drawKeys[row] = (isStatic ? DrawKey(draw: in draw) : 0);
-                if (isStatic) { m_keyValue = unchecked((m_keyValue + m_drawKeys[row])); m_keyStatic++; }
+                if (isStatic) { m_keyValue = m_keyValue.Add(element: m_drawKeys[row]); m_keyStatic++; }
             }
         }
         m_keyExtent = draws.Count;
@@ -1604,11 +1605,21 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         } else { m_keyCursor.Commit(); }
         return (m_keyValue, m_keyStatic);
     }
-    // A static row's part of the scene key: what the scene holds for it (TraceDraws), so a row whose drawn mesh moves
-    // to another tier while it traces its group's floor keeps the key.
-    private static int DrawKey(in SdfMeshDraw draw) => ((draw.Trace is { } trace)
-        ? ((draw.Piece == 0) ? DrawKeyComparer.Instance.GetHashCode(obj: (trace, draw.ObjectToWorld, draw.Material)) : 0)
-        : DrawKeyComparer.Instance.GetHashCode(obj: (draw.Mesh, draw.ObjectToWorld, draw.Material)));
+    // A static row's element of the scene key: what the scene holds for it (TraceDraws), so a row whose drawn mesh moves
+    // to another tier while it traces its group's floor keeps the key. The mesh counts by reference, as the scene holds
+    // it, the transform and material by their bits. Zero, which the digest's mix leaves out, stands for a row that
+    // adds nothing to the scene.
+    private static ulong DrawKey(in SdfMeshDraw draw) => ((draw.Trace is { } trace)
+        ? ((draw.Piece == 0) ? DrawElement(material: draw.Material, mesh: trace, objectToWorld: draw.ObjectToWorld) : 0UL)
+        : DrawElement(material: draw.Material, mesh: draw.Mesh, objectToWorld: draw.ObjectToWorld));
+    private static ulong DrawElement(SdfMesh mesh, in Matrix4x4 objectToWorld, int material) {
+        var hash = Fnv1aHash.Create();
+
+        hash.Add(value: ReferenceSerial.Of(value: mesh));
+        hash.AddBits(value: in objectToWorld);
+        hash.Add(value: unchecked((uint)material));
+        return hash.Value;
+    }
     // Appends what the trace scene holds for one static row: its drawn mesh, or where the row's placement traces its
     // group's floor (SdfMeshDraw.Trace), every piece of that floor once, at the placement's first piece.
     private static int TraceDraws(in SdfMeshDraw draw, ref SdfMeshDraw[] into, int count) {
@@ -1629,7 +1640,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
     // Apart from RefreshScene, since the build's closure is made on entry to the method holding it, and nearly every frame
     // matches the installed scene.
-    private Task StartSceneBuild(SdfFrame frame, int key, int draws) {
+    private Task StartSceneBuild(SdfFrame frame, MultisetDigest key, int draws) {
         lock (m_gate) { if (m_disposed) { return Task.CompletedTask; } }
         if (!m_trimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += TrimRetained; m_trimListening = true; }
 
@@ -1702,7 +1713,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
     // A built scene waiting to replace the installed one: its input, its key and the change it makes; Done completes
     // once it is installed, or dropped by a disposed volume.
-    private sealed record SceneInstall(SdfMeshIrradianceScene Scene, int Key, SdfMeshDraw[] Draws, int Count, ChangeTree? Changed) {
+    private sealed record SceneInstall(SdfMeshIrradianceScene Scene, MultisetDigest Key, SdfMeshDraw[] Draws, int Count, ChangeTree? Changed) {
         public TaskCompletionSource Done { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     }
     // The trace units in flight (BeginUnit): a listing or a batch the worker runs on the snapshot it took. A scene built
@@ -1733,7 +1744,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The replaced draws' array becomes the next snapshot's.
         (m_snapshotDraws, m_diagnosticDraws, m_diagnosticCount) = (m_diagnosticDraws, install.Draws, install.Count);
         m_sceneKey = install.Key;
-        m_buildingKey = 0;
+        m_buildingKey = null;
         m_tracedSinceScene = 0L;
         AdvanceGeometry(changed: install.Changed);
     }
@@ -1757,7 +1768,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             for (var index = 0; (index < frame.Lights.Count); index++) { m_captureLights.Set(index: index, light: grid.Snap(light: frame.Lights[index])); }
             captureLights = m_captureLights;
         }
-        var localKey = HashCode.Combine(value1: frame.IndirectGains, value2: frame.IndirectSources, value3: MaterialsKey(program: frame.Program));
+        // Both keys are 64-bit digests of every input bit they name: equal keys stand for unchanged lighting.
+        var local = Fnv1aHash.Create();
+        var gains = frame.IndirectGains;
+
+        local.AddBits(value: gains.Lights); local.AddBits(value: gains.Emission); local.AddBits(value: gains.Screens);
+        local.AddBits(value: gains.Sky); local.AddBits(value: gains.Feedback);
+        local.Add(value: (uint)frame.IndirectSources);
+        local.Add(value: MaterialsKey(program: frame.Program));
+
         var sameSky = true;
         var skyBlock = default(SdfSkyBlock);
         var records = frame.Lights.Records;
@@ -1765,16 +1784,24 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         for (var index = 0; (index < frame.Lights.Count); index++) {
             var light = records[index];
 
-            if (light.IsTraced && (light.Kind != SdfLightKind.Directional)) { localKey = HashCode.Combine(value1: localKey, value2: index, value3: light); }
+            if (light.IsTraced && (light.Kind != SdfLightKind.Directional)) { AddLight(hash: ref local, index: index, light: in light); }
         }
 
-        var key = HashCode.Combine(value1: localKey, value2: layout.Bounce, value3: grid, value4: frame.ConvergesLighting);
+        var localKey = local.Value;
+        var whole = Fnv1aHash.Create();
 
+        whole.Add(value: localKey);
+        whole.Add(value: (layout.Bounce ? 1U : 0U));
+        whole.AddBits(value: grid.DirectionDegrees); whole.AddBits(value: grid.Radiance);
+        whole.Add(value: (frame.ConvergesLighting ? 1U : 0U));
         for (var index = 0; (index < frame.Lights.Count); index++) {
             var light = captureLights[index];
 
-            if (light.Kind == SdfLightKind.Directional) { key = HashCode.Combine(value1: key, value2: index, value3: light); }
+            if (light.Kind == SdfLightKind.Directional) { AddLight(hash: ref whole, index: index, light: in light); }
         }
+
+        var key = whole.Value;
+
         if ((frame.IndirectSources & SdfIndirectSources.Sky) != 0) {
             frame.Sky.Pack(captureLights, frame.FarDistance, m_skyDetails, out skyBlock, m_skyLayers);
             sameSky = SdfSkyEnvironment.SameMap(block: skyBlock, layers: m_skyLayers, otherBlock: m_lightingSky, otherLayers: m_lightingSkyLayers);
@@ -1814,27 +1841,40 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // rebuilt with one of them changed in place (a bound color's move, a placement showing another creation over the same
     // meshes) leaves the static draws as they were, so only this key relights it; a body's palette coming or going, which
     // no probe ray meets, leaves it alone.
-    private int MaterialsKey(SdfProgram program) {
+    private ulong MaterialsKey(SdfProgram program) {
         if (ReferenceEquals(objA: program, objB: m_materialsProgram) && ReferenceEquals(objA: m_scene, objB: m_materialsScene)) { return m_materialsKey; }
 
-        var key = 17;
+        var hash = Fnv1aHash.Create();
         var materials = program.Appearance.Materials;
 
         foreach (var id in (m_scene?.Materials ?? [])) {
+            hash.Add(value: unchecked((uint)id));
             if ((id < 0) || (id >= materials.Count)) {
-                key = HashCode.Combine(value1: key, value2: id);
+                hash.Add(value: 0U);
                 continue;
             }
 
             var material = materials[id];
 
-            key = HashCode.Combine(value1: key, value2: id, value3: material.Albedo, value4: material.Emissive, value5: material.Metal, value6: material.Bleed, value7: material.EmissiveLane);
+            hash.Add(value: 1U);
+            hash.AddBits(value: material.Albedo);
+            hash.AddBits(value: material.Emissive);
+            hash.AddBits(value: material.Metal);
+            hash.Add(value: (material.Bleed.HasValue ? 1U : 0U));
+            hash.AddBits(value: material.Bleed.GetValueOrDefault());
+            hash.Add(value: (material.EmissiveLane.HasValue ? 1U : 0U));
+            hash.Add(value: unchecked((uint)material.EmissiveLane.GetValueOrDefault()));
         }
         m_materialsProgram = program;
         m_materialsScene = m_scene;
-        m_materialsKey = key;
+        m_materialsKey = hash.Value;
 
-        return key;
+        return m_materialsKey;
+    }
+    // Folds a light whole, with its index: its explicit 64-byte record has no padding, so its bytes are its fields.
+    private static void AddLight(ref Fnv1aHash hash, int index, in SdfLight light) {
+        hash.Add(value: unchecked((uint)index));
+        hash.Add(values: MemoryMarshal.AsBytes(span: new ReadOnlySpan<SdfLight>(reference: in light)));
     }
     // Whether a cell lies in a window's middle: an eighth of the window, at least one cell, short of each face.
     private static bool InMiddle((int X, int Y, int Z) cell, (int X, int Y, int Z) dims, (int X, int Y, int Z) low) =>

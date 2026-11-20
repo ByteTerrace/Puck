@@ -155,7 +155,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
         var hash = Fnv1aHash.Create();
 
         hash.Add(value: value);
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Views[index].Quality.SkyFieldFraction));
+        hash.AddBits(value: frame.Views[index].Quality.SkyFieldFraction);
         foreach (var binding in (frame.Views[index].SkyViews ?? [])) {
             var parameters = binding.Parameters;
 

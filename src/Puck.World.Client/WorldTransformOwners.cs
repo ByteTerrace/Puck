@@ -16,7 +16,7 @@ public sealed class WorldTransformOwners {
     private bool[] m_reseated;
     private bool[] m_resident;
     private bool[] m_restless;
-    private int[] m_version;
+    private ulong[] m_version;
 
     /// <summary>Initializes a new instance of the <see cref="WorldTransformOwners"/> class.</summary>
     /// <param name="capacity">The number of owners the band holds.</param>
@@ -28,7 +28,7 @@ public sealed class WorldTransformOwners {
         m_reseated = new bool[capacity];
         m_resident = new bool[capacity];
         m_restless = new bool[capacity];
-        m_version = new int[capacity];
+        m_version = new ulong[capacity];
     }
 
     /// <summary>Grows the owner state to the live instance count, preserving resting owners.</summary>
@@ -49,10 +49,10 @@ public sealed class WorldTransformOwners {
     /// <param name="deltaSeconds">The seconds available to advance the owner's followers this frame.</param>
     /// <param name="discontinuity">Whether the owner's pose jumped this frame (a teleport, a reused body index), which
     /// always repacks it.</param>
-    /// <param name="version">Any other input the owner's pack reads, as a counter that moves when it does (a state
+    /// <param name="version">Any other input the owner's pack reads, as a counter or 64-bit digest that moves when it does (a state
     /// delivery); zero when there is none.</param>
     /// <returns><see langword="true"/> when the owner repacks.</returns>
-    public bool Wake(int owner, SdfMovedTransforms moved, Vector3 position, Quaternion orientation, float deltaSeconds, bool discontinuity = false, int version = 0) {
+    public bool Wake(int owner, SdfMovedTransforms moved, Vector3 position, Quaternion orientation, float deltaSeconds, bool discontinuity = false, ulong version = 0) {
         ArgumentNullException.ThrowIfNull(argument: moved);
 
         var wake = (

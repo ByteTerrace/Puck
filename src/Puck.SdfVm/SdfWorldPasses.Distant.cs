@@ -53,14 +53,14 @@ public sealed partial class SdfWorldPasses {
         var camera = entry.DistantChosen;
         var hash = Fnv1aHash.Create();
 
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: camera.Position.X));
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: camera.Position.Y));
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: camera.Position.Z));
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: camera.Forward.X));
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: camera.Forward.Y));
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: camera.Forward.Z));
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: camera.HalfHeight));
-        hash.Add(value: BitConverter.SingleToUInt32Bits(value: camera.Far));
+        hash.AddBits(value: camera.Position.X);
+        hash.AddBits(value: camera.Position.Y);
+        hash.AddBits(value: camera.Position.Z);
+        hash.AddBits(value: camera.Forward.X);
+        hash.AddBits(value: camera.Forward.Y);
+        hash.AddBits(value: camera.Forward.Z);
+        hash.AddBits(value: camera.HalfHeight);
+        hash.AddBits(value: camera.Far);
         hash.Add(value: unchecked((uint)entry.DistantChosenTexels));
         hash.Add(value: unchecked((ulong)tables.StaticDrawRevision));
         hash.Add(value: ((uint)frame.MeshCull));

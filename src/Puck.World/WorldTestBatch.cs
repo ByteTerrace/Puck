@@ -345,23 +345,23 @@ internal sealed class WorldTestBatch {
             hash.Add(value: (uint)snapshot.Entries.Length);
             foreach (ref readonly var entry in snapshot.Entries.Span) {
                 hash.Add(value: (uint)entry.Index);
-                Add(hash: ref hash, value: entry.Position);
-                Add(hash: ref hash, value: entry.Orientation);
-                Add(hash: ref hash, value: entry.BodyColor);
+                hash.AddBits(value: entry.Position);
+                hash.AddBits(value: entry.Orientation);
+                hash.AddBits(value: entry.BodyColor);
                 hash.Add(value: (byte)(entry.Active ? 1 : 0));
                 hash.Add(value: entry.Kit);
                 hash.Add(value: entry.Look);
                 hash.Add(value: entry.CatalogRig);
                 hash.Add(value: (uint)entry.Continuity.Kind);
-                hash.Add(value: BitConverter.SingleToUInt32Bits(value: entry.Continuity.Seconds));
+                hash.AddBits(value: entry.Continuity.Seconds);
                 if (entry.Continuity.Carried is { } carried) {
-                    Add(hash: ref hash, value: carried.Rotation);
-                    Add(hash: ref hash, value: carried.Translation);
-                    hash.Add(value: BitConverter.SingleToUInt32Bits(value: carried.Scale));
+                    hash.AddBits(value: carried.Rotation);
+                    hash.AddBits(value: carried.Translation);
+                    hash.AddBits(value: carried.Scale);
                 }
                 hash.Add(value: (uint)entry.Generation);
                 hash.Add(value: entry.PlacementId);
-                hash.Add(value: BitConverter.SingleToUInt32Bits(value: entry.Heading));
+                hash.AddBits(value: entry.Heading);
                 hash.Add(value: (ulong)entry.Facts);
                 foreach (var cell in entry.State.Span) { hash.Add(value: cell); }
             }
@@ -374,18 +374,6 @@ internal sealed class WorldTestBatch {
         public void CloseSpan(ulong stream) { }
         public void DeliverSessionLever(WorldSessionLever lever) { }
         public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) { }
-
-        private static void Add(ref Puck.Maths.Fnv1aHash hash, System.Numerics.Vector3 value) {
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.X));
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.Y));
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.Z));
-        }
-        private static void Add(ref Puck.Maths.Fnv1aHash hash, System.Numerics.Quaternion value) {
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.X));
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.Y));
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.Z));
-            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.W));
-        }
     }
 
     // HostLog and logging providers retain this writer for the native host's entire lifetime.

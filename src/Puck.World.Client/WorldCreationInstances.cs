@@ -130,8 +130,8 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         // Moves each time a full pack changes a slot, so a registration whose rig reads this body wakes (WorldRigReads.Revision).
         public int PoseSerial;
         // The view's revision at the last full pack, and at this frame's wake test, which tell a wake from a changed read.
-        public int ReadRevision;
-        public int WakeRevision;
+        public ulong ReadRevision;
+        public ulong WakeRevision;
 
         public float Clock;
         public required WorldPrototype Creation;

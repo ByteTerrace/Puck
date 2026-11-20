@@ -665,6 +665,40 @@ internal static class CoreSurfaceClaims {
         Assert.Equal(expected: Fnv1aHash.Compute(values: characterBytes), actual: characters.Value);
         Assert.Equal(expected: characters.Value, actual: Fnv1aHash.Compute(values: text.AsSpan()));
 
+        // A float folds as its IEEE bit pattern, little-endian, so zero and negative zero differ; a vector, quaternion
+        // and matrix fold their components in declaration and row-major order.
+        float[] components = [0f, -0f, 1.5f, float.NaN, -3.25f, 7f, 8f, 9f, 10f, 11f, 12f, 13f, 14f, 15f, 16f, 17f];
+        var bits = Fnv1aHash.Create();
+        var littleEndian = new byte[components.Length * sizeof(float)];
+
+        for (var index = 0; (index < components.Length); index++) {
+            bits.AddBits(value: components[index]);
+            System.Buffers.Binary.BinaryPrimitives.WriteSingleLittleEndian(destination: littleEndian.AsSpan(start: (index * sizeof(float))), value: components[index]);
+        }
+        Assert.Equal(expected: Fnv1aHash.Compute(values: littleEndian), actual: bits.Value);
+
+        var zero = Fnv1aHash.Create();
+        var negativeZero = Fnv1aHash.Create();
+
+        zero.AddBits(value: 0f);
+        negativeZero.AddBits(value: -0f);
+        Assert.NotEqual(expected: zero.Value, actual: negativeZero.Value);
+
+        var composite = Fnv1aHash.Create();
+        var scalars = Fnv1aHash.Create();
+
+        composite.AddBits(value: new Vector3(x: components[0], y: components[1], z: components[2]));
+        composite.AddBits(value: new Vector4(x: components[3], y: components[4], z: components[5], w: components[6]));
+        composite.AddBits(value: new Quaternion(x: components[7], y: components[8], z: components[9], w: components[10]));
+        composite.AddBits(value: new Matrix4x4(
+            m11: components[0], m12: components[1], m13: components[2], m14: components[3],
+            m21: components[4], m22: components[5], m23: components[6], m24: components[7],
+            m31: components[8], m32: components[9], m33: components[10], m34: components[11],
+            m41: components[12], m42: components[13], m43: components[14], m44: components[15]));
+        foreach (var component in components.AsSpan(start: 0, length: 11)) { scalars.AddBits(value: component); }
+        foreach (var component in components) { scalars.AddBits(value: component); }
+        Assert.Equal(expected: scalars.Value, actual: composite.Value);
+
         var framed = Fnv1aHash.Create();
 
         framed.Add(value: ((uint)text.Length));

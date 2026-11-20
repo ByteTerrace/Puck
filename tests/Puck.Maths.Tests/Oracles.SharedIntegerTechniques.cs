@@ -10,4 +10,10 @@ internal static partial class Oracles {
 
         return unchecked((int)((uint)(product >> 32)));
     }
+    public static ulong MultisetDigest(ReadOnlySpan<long> elements) {
+        var sum = BigInteger.Zero;
+
+        foreach (var element in elements) { sum += InvertibleBitMix.Mix64(value: unchecked((ulong)element)); }
+        return ((ulong)(sum & ((BigInteger.One << 64) - 1)));
+    }
 }
