@@ -2213,6 +2213,26 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `haptics[].high.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `haptics[].signal` | State | Binding | Binding | `WorldHapticRow.Signal` |
 | `haptics[].signal.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `keyLights.idle` | State | Binding | Binding | `WorldKeyLightSection.Idle` |
+| `keyLights.idle.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `keyLights.flash` | State | Binding | Binding | `WorldKeyLightSection.Flash` |
+| `keyLights.flash.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `keyLights.modifier` | State | Binding | Binding | `WorldKeyLightSection.Modifier` |
+| `keyLights.modifier.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `keyLights.rows[].color` | State | Binding | Binding | `WorldKeyLightRow.Color` |
+| `keyLights.rows[].color.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `keyLights.rows[].character` | State | Binding | Binding | `WorldKeyLightRow.Character` |
+| `keyLights.rows[].character.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `keyLights.rows[].lit` | State | Binding | Binding | `WorldKeyLightRow.Lit` |
+| `keyLights.rows[].lit.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `keyLights.rows[].available` | State | Binding | Binding | `WorldKeyLightRow.Available` |
+| `keyLights.rows[].available.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `keyLights.rows[].flashSignal` | State | Binding | Binding | `WorldKeyLightRow.FlashSignal` |
+| `keyLights.rows[].flashSignal.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `keyLights.rows[].flashColor` | State | Binding | Binding | `WorldKeyLightRow.FlashColor` |
+| `keyLights.rows[].flashColor.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `highlights[].signal` | State | Binding | Binding | `WorldHighlightRow.Signal` |
+| `highlights[].signal.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `rules[].name` | Rule | Declares |  | `Rule.Name` |
 | `rules[].effects[][setState].state` | State | Names | Action | `ActionEffect.SetState.State` |
 | `rules[].effects[][setState].key` | State | Key | Read | `ActionEffect.SetState.Key` |
@@ -4992,6 +5012,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `markers[].icon` | `WorldMarkerRow.Icon` | an icon name |
 | `haptics[].id` | `WorldHapticRow.Id` | a haptic row id |
 | `haptics[].seat` | `WorldHapticRow.Seat` | a seat selector |
+| `keyLights.rows[].id` | `WorldKeyLightRow.Id` | a key light row id |
+| `keyLights.rows[].keys` | `WorldKeyLightRow.Keys` | input source identifiers |
+| `keyLights.rows[].bound` | `WorldKeyLightRow.Bound` | binding entry ids |
+| `keyLights.rows[].seat` | `WorldKeyLightRow.Seat` | a seat selector |
+| `highlights[].id` | `WorldHighlightRow.Id` | a highlight row id, the stem of the files it writes |
 | `rules[].effects[][setState].text` | `ActionEffect.SetState.Text` | literal text |
 | `rules[].effects[][setState].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].effects[][setState].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
