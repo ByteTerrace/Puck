@@ -23,6 +23,9 @@ public interface IClientSink {
     /// reflects, which a reader orders mutation verdicts against.</param>
     /// <param name="stream">The stamp of the record in its stream.</param>
     void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream);
+    /// <summary>Delivers changed creation and shade rows over a definition already held by this stream.</summary>
+    void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) =>
+        DeliverDefinition(definition, version, stream);
     /// <summary>Delivers the server's live world definition after an applied mutation batch that changed only cell
     /// values — a cell write, removal, transform, or draw-site fire, never a row/channel/register/HUD shape (the
     /// same state-mutation test the server's own installer used to decide the mutation touched values only). The

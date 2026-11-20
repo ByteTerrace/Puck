@@ -23,26 +23,29 @@ internal sealed class WorldWatchCommandModule(WorldSourceWatch watch, Func<TextC
                 if ((args.Count != 1) || !(args.Is(index: 0, value: "on") || args.Is(index: 0, value: "off"))) {
                     return WorldWatchForms.Refuse();
                 }
+                if (args.Is(index: 0, value: "on")) { return Start(context.Principal); }
                 Dispose();
-                if (args.Is(index: 0, value: "off")) { return new CommandResult(Output: "[world.watch: off]"); }
-                TextCommandSession? session = null;
-
-                void Settled(string line, CommandResult result) {
-                    if (ReferenceEquals(objA: m_session, objB: session)) {
-                        watch.Complete(result: result);
-                    }
-                }
-                try {
-                    session = ((context.Principal.Kind == PrincipalKind.Seat)
-                        ? source().CreateSeatSession(router(), context.Principal.Index, dueNextTick: true, onSettled: Settled)
-                        : source().CreateSession(context.Principal, dueNextTick: true, onSettled: Settled));
-                    m_session = session;
-                    watch.Start(submitReload: () => session.Enqueue(line: "world.reload"));
-                } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
-                    Dispose();
-                    return CommandResult.Error(output: $"[world.watch: {error.Message}]");
-                }
-                return new CommandResult(Output: "[world.watch: on]");
+                return new CommandResult(Output: "[world.watch: off]");
             });
+    }
+
+    internal CommandResult Start(Principal principal, Puck.Assets.CompileInputLog? bootReads = null) {
+        Dispose();
+        TextCommandSession? session = null;
+
+        void Settled(string line, CommandResult result) {
+            if (ReferenceEquals(m_session, session)) { watch.Complete(result); }
+        }
+        try {
+            session = (principal.Kind == PrincipalKind.Seat)
+                ? source().CreateSeatSession(router(), principal.Index, dueNextTick: true, onSettled: Settled)
+                : source().CreateSession(principal, dueNextTick: true, onSettled: Settled);
+            m_session = session;
+            watch.Start(submitReload: () => session.Enqueue(line: "world.reload"), bootReads: bootReads);
+        } catch (Exception error) when (error is IOException or UnauthorizedAccessException) {
+            Dispose();
+            return CommandResult.Error(output: $"[world.watch: {error.Message}]");
+        }
+        return new CommandResult(Output: "[world.watch: on]");
     }
 }

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Puck.Abstractions;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Assets;
 using Puck.Hosting;
 using Puck.Launcher;
 using Puck.World;
@@ -424,20 +425,25 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     // read their values from the resolved host section. Read by DI from the roster, population, frame source, render
     // settings, and the world.quality verb; the resolved source is registered so world.save knows its default target. Any
     // path that will not load ends the boot here — a typo must never quietly run a different world.
-    if (!PuckWorldLoader.TryResolveWorld(
-        preview: batchHost is not null,
-        caches: caches,
-        entry: parseResult.GetValue(option: entryOption),
-        worldPath: worldPath,
-        failure: out var worldFailure,
-        source: out var worldSource,
-        catalogFingerprint: machineCatalogFingerprint,
-        catalog: machineCatalog,
-        overrides: bootOverrides
-    )) {
-        Console.Error.WriteLine(value: worldFailure);
+    var bootReads = new CompileInputLog();
+    WorldDefinitionSource worldSource;
+    string worldFailure;
+    using (CompileInputs.Record(bootReads)) {
+        if (!PuckWorldLoader.TryResolveWorld(
+            preview: batchHost is not null,
+            caches: caches,
+            entry: parseResult.GetValue(option: entryOption),
+            worldPath: worldPath,
+            failure: out worldFailure,
+            source: out worldSource,
+            catalogFingerprint: machineCatalogFingerprint,
+            catalog: machineCatalog,
+            overrides: bootOverrides
+        )) {
+            Console.Error.WriteLine(value: worldFailure);
 
-        return 1;
+            return 1;
+        }
     }
     using var compositionWorkspace = worldSource.Staging;
     if (batchHost is null && connectTarget is null) {
@@ -711,6 +717,13 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     if (!WorldPostBuildWiring.Install(services: host.Services, armSchedule: (batchHost is null))) {
         host.Dispose();
         return 1;
+    }
+    if (connectTarget is null && hostSettings.Listen is null && batchHost is null &&
+        parseResult.GetValue(scheduleDirOption) is null &&
+        worldSource.SourcePath.EndsWith(".puck", StringComparison.OrdinalIgnoreCase) &&
+        admissionServer.Grants.IsOperator(Principal.Console)) {
+        var watch = host.Services.GetServices<ICommandModule>().OfType<WorldWatchCommandModule>().Single();
+        Console.Error.WriteLine(watch.Start(Principal.Console, bootReads).Output);
     }
     var pacing = host.Services.GetRequiredService<PresentPacingControl>();
 

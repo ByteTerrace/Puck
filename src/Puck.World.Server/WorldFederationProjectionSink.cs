@@ -133,6 +133,12 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         }
         Write(kind, WorldFederationCodec.Stamped(body: body, stream: m_cursor.Stamp()));
     }
+    // Reads the live body policy and records it on the cursor, which decides a cut when the policy turns redacting.
+    private WorldSinkDisclosure ObserveBodies() {
+        var bodies = disclosure();
+        m_cursor.ObserveBodies(bodies.Policy);
+        return bodies;
+    }
     // Queues the record a cut the cursor decided owes, once: the new generation, with no content. True when one was
     // queued, after which the stream owes its whole disclosed document and a primer before anything newer.
     private bool AnnounceCut() {
@@ -190,7 +196,8 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         // The hub's fan-out has one span that never ends; this stream decides its own cuts.
     }
     public void CloseSpan(ulong stream) { }
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => DeliverDocument();
+    private void DeliverDocument(WorldPresentationRows? rows = null) {
         if (!Current()) {
             return;
         }
@@ -198,9 +205,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         server!.AttachCursor(cursor: m_cursor, recipient: recipient);
         // An install can change the body policy while no snapshot follows (a paused world): it is observed here too, so
         // a policy that turns redacting cuts with the document that carries it.
-        var bodies = disclosure().Policy;
-
-        m_cursor.ObserveBodies(mode: bodies.Mode, radius: bodies.Radius);
+        _ = ObserveBodies();
 
         if (m_feed is not null) {
             var time = server!.DeliveryTime;
@@ -209,7 +214,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             // Only a disclosure refusal ends the stream by name; any other failure to compose is a fault, which the
             // hub detaches the sink for.
             try {
-                var delivery = m_feed.Compose(cursor: m_cursor, view: m_view);
+                var delivery = rows is null ? m_feed.Compose(m_view, m_cursor) : m_feed.ComposeAppearance(m_view, m_cursor, rows);
 
                 if (AnnounceCut()) {
                     cut = true;
@@ -255,6 +260,18 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     }
     public void DeliverSessionLever(WorldSessionLever lever) { }
 
+    public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+        if (!Current()) { return; }
+        // A body policy that moved with the edit owes a cut, which the row path refuses so the document door primes it.
+        _ = ObserveBodies();
+        if (tier != WorldDisclosureTier.Replica || m_view is null || !m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
+            DeliverDocument(rows);
+        } else if (moved) {
+            WriteRecord(WorldFederationResponse.PresentationRows, WorldFederationCodec.DocumentLeaf(rows.Payload.Span, tier, Version));
+            WorldOutputHub.CountPresentationRows(rows);
+        }
+    }
+
     private WorldInputPublication[] m_inputDisclosure = [];
     private WorldInputAnswer[] m_answerDisclosure = [];
 
@@ -280,12 +297,9 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
                 return;
             }
         }
-        var currentDisclosure = disclosure();
-
         // The body policy is observed at every authoritative tick, sampled or not, so a policy that turns redacting cuts
         // at once rather than at the cadence's next sample.
-        m_cursor.ObserveBodies(mode: currentDisclosure.Policy.Mode, radius: currentDisclosure.Policy.Radius);
-
+        var currentDisclosure = ObserveBodies();
         var bodies = new WorldBodyView(frame, currentDisclosure);
         var atCadence = m_view is null ? snapshot : server!.PresentCues(snapshot, m_view, currentDisclosure.IsFull, bodies);
         m_sampler.SetUpdateSeconds(currentDisclosure.Policy.UpdateSeconds);

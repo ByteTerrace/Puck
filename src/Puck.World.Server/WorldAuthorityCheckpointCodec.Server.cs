@@ -418,6 +418,12 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeItem: static (w, entry) => {
                 w.WriteUInt64(value: entry.Tick);
                 w.WriteUInt64(value: entry.EngineTick);
+                w.WriteBoolean(entry.ReloadPatch is not null);
+                if (entry.ReloadPatch is { } patch) {
+                    w.WriteBlock(patch);
+                    WriteDrawPositions(w, entry.ReloadDrawPositions);
+                    return;
+                }
                 w.WriteBlock(value: EncodeLeafBlock<WorldMutation>(
                     tryEncode: WorldSubmissionCodec.TryEncodeCommittedMutation,
                     value: entry.Mutation,
@@ -510,6 +516,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteNullableString(value: section.AuthorityIdentity);
         WriteDrawPositions(writer, section.DrawPositions);
         WriteDrawPositions(writer, section.BaseDrawPositions);
+        writer.WriteNullableString(section.SourceContentHash);
+        writer.WriteBlock(section.SourceRevisionPatch ?? []);
 
         return writer.ToArray();
     }
@@ -651,6 +659,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             readItem: static (ref WireReader r) => {
                 var tick = r.ReadUInt64();
                 var engineTick = r.ReadUInt64();
+                if (r.ReadBoolean()) {
+                    var patch = r.ReadBlock("journal reload patch", MaxSectionBytes);
+                    return new WorldJournalEntry(tick, engineTick, patch, ReadDrawPositions(ref r));
+                }
                 var mutation = ReadLeafBlock<WorldMutation>(
                     field: "journal mutation",
                     reader: ref r,
@@ -823,6 +835,8 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         var positions = ReadDrawPositions(ref reader);
         var basePositions = ReadDrawPositions(ref reader);
+        var sourceContentHash = reader.ReadNullableString("source revision content hash", MaxStringBytes);
+        var sourceRevisionPatch = reader.ReadBlock("source revision patch", MaxSectionBytes);
         return new WorldServerCheckpoint(
             DrawPositions: positions, BaseDrawPositions: basePositions,
             Arena: arena,
@@ -856,6 +870,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             RuleGroups: ruleGroups,
             ScopedReplays: scopedReplays,
             SolidRevision: solidRevision,
+            SourceContentHash: sourceContentHash,
+            SourceRevisionPatch: sourceRevisionPatch.Length == 0 ? null : sourceRevisionPatch,
             Undo: undo
         );
     }
