@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 
 namespace Puck.SdfVm;
@@ -33,13 +34,17 @@ public static class SdfMeshPlanarMerge {
 
     /// <summary>Merges a mesh's coplanar triangles into the polygons they tile.</summary>
     /// <param name="mesh">The mesh.</param>
+    /// <param name="owner">The workspace owner charged for the merge's tables, or <see langword="null"/> for none.</param>
     /// <returns>The merged mesh, with the same <see cref="SdfMesh.BakeCell"/> and members, and the attributes of the
     /// vertices it keeps; <paramref name="mesh"/> itself when nothing merges or it carries no vertex normals.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
-    public static SdfMesh Merge(SdfMesh mesh) {
+    public static SdfMesh Merge(SdfMesh mesh, IAllocationObserver? owner = null) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
+        if ((mesh.Normals.Length == 0) || (mesh.TriangleCount < 2)) { return mesh; }
 
-        return (((mesh.Normals.Length == 0) || (mesh.TriangleCount < 2)) ? mesh : new Merger(mesh: mesh).Run());
+        using var scope = new RentedScope(owner: owner);
+
+        return new Merger(mesh: mesh, scope: scope).Run();
     }
     /// <summary>
     /// Makes a mesh's near-coplanar regions coplanar so <see cref="Merge"/> merges them: a region is a connected run of
@@ -191,7 +196,9 @@ public static class SdfMeshPlanarMerge {
     // half-edge leaving it.
     private sealed class Merger {
         private readonly SdfMesh m_mesh;
+        private readonly RentedScope m_scope;
         private readonly int m_triangles;
+        private readonly int m_vertices;
         private readonly int[] m_site;
         private readonly float[] m_u;
         private readonly float[] m_w;
@@ -214,8 +221,11 @@ public static class SdfMeshPlanarMerge {
         private int[] m_following = [];
         private int[] m_outside = [];
 
-        public Merger(SdfMesh mesh) {
+        // The tables are rented through the scope the caller disposes; a rented array can be longer than asked for, so each
+        // read is bounded by the vertex or triangle count.
+        public Merger(SdfMesh mesh, RentedScope scope) {
             m_mesh = mesh;
+            m_scope = scope;
             m_triangles = mesh.TriangleCount;
 
             var positions = mesh.Positions.Span;
@@ -223,26 +233,27 @@ public static class SdfMeshPlanarMerge {
             var indices = mesh.Indices.Span;
             var vertices = positions.Length;
 
+            m_vertices = vertices;
             m_site = mesh.Sites();
-            m_u = new float[vertices];
-            m_w = new float[vertices];
+            m_u = scope.Rent<float>(minimumLength: vertices);
+            m_w = scope.Rent<float>(minimumLength: vertices);
             for (var vertex = 0; (vertex < vertices); vertex++) {
                 // Every vertex a region holds carries the region's normal, so its plane coordinates are the region's.
                 (m_u[vertex], m_w[vertex]) = Plane(normal: normals[vertex], position: positions[vertex]);
             }
 
-            m_corners = new int[(3 * m_triangles)];
-            m_twins = new int[(3 * m_triangles)];
-            m_regionOf = new int[m_triangles];
-            m_alive = new bool[m_triangles];
-            m_degree = new int[vertices];
-            m_leave = new int[vertices];
+            m_corners = scope.Rent<int>(minimumLength: (3 * m_triangles));
+            m_twins = scope.Rent<int>(minimumLength: (3 * m_triangles));
+            m_regionOf = scope.Rent<int>(minimumLength: m_triangles);
+            m_alive = scope.Rent<bool>(minimumLength: m_triangles);
+            m_degree = scope.Rent<int>(minimumLength: vertices, clear: true);
+            m_leave = scope.Rent<int>(minimumLength: vertices, clear: true);
             for (var half = 0; (half < indices.Length); half++) {
                 m_corners[half] = ((int)indices[half]);
                 m_degree[m_corners[half]]++;
                 m_leave[m_corners[half]] = half;
             }
-            Array.Fill(array: m_alive, value: true);
+            m_alive.AsSpan(start: 0, length: m_triangles).Fill(value: true);
         }
 
         public SdfMesh Run() {
@@ -251,7 +262,7 @@ public static class SdfMeshPlanarMerge {
 
             // The vertices are taken in a scattered order, so the holes removals leave stay a few vertices wide: in lattice
             // order each removal widens the last one's hole, and its ears and flips grow with it.
-            var candidates = Candidates();
+            var candidates = Candidates().AsSpan();
 
             candidates.Sort();
             foreach (var (_, vertex) in candidates) {
@@ -266,9 +277,9 @@ public static class SdfMeshPlanarMerge {
         // Each half-edge's twin: the one half-edge running the other way between its two vertices, where exactly one runs
         // each way; -1 at an open or non-manifold edge.
         private void Twins() {
-            var vertices = m_site.Length;
+            var vertices = m_vertices;
             var halves = (3 * m_triangles);
-            var starts = new int[(vertices + 1)];
+            var starts = m_scope.Rent<int>(minimumLength: (vertices + 1), clear: true);
 
             for (var half = 0; (half < halves); half++) {
                 starts[(m_corners[half] + 1)]++;
@@ -277,8 +288,8 @@ public static class SdfMeshPlanarMerge {
                 starts[(vertex + 1)] += starts[vertex];
             }
 
-            var outgoing = new int[halves];
-            var filled = new int[vertices];
+            var outgoing = m_scope.Rent<int>(minimumLength: halves);
+            var filled = m_scope.Rent<int>(minimumLength: vertices, clear: true);
 
             for (var half = 0; (half < halves); half++) {
                 var from = m_corners[half];
@@ -311,7 +322,7 @@ public static class SdfMeshPlanarMerge {
             var normals = m_mesh.Normals.Span;
             var materials = m_mesh.TriangleMaterials.Span;
             var members = m_mesh.VertexMembers.Span;
-            var eligible = new bool[m_triangles];
+            var eligible = m_scope.Rent<bool>(minimumLength: m_triangles);
             var queue = new Queue<int>();
             var regions = 0;
             var any = false;
@@ -329,7 +340,7 @@ public static class SdfMeshPlanarMerge {
                 );
             }
 
-            Array.Fill(array: m_regionOf, value: -1);
+            m_regionOf.AsSpan(start: 0, length: m_triangles).Fill(value: -1);
             for (var seed = 0; (seed < m_triangles); seed++) {
                 if (!eligible[seed] || (m_regionOf[seed] >= 0)) { continue; }
 
@@ -385,15 +396,15 @@ public static class SdfMeshPlanarMerge {
         }
         // The vertices a removal may take, each the one vertex one region's triangles name at its place, no triangle outside
         // that region naming the place, keyed by a scattered order.
-        private List<(uint Order, int Vertex)> Candidates() {
+        private RentedList<(uint Order, int Vertex)> Candidates() {
             const int None = -1;
             const int Blocked = -2;
-            var vertices = m_site.Length;
-            var named = new int[vertices];
-            var region = new int[vertices];
-            var candidates = new List<(uint Order, int Vertex)>();
+            var vertices = m_vertices;
+            var named = m_scope.Rent<int>(minimumLength: vertices);
+            var region = m_scope.Rent<int>(minimumLength: vertices);
+            var candidates = m_scope.RentList<(uint Order, int Vertex)>(capacity: (vertices / 2));
 
-            Array.Fill(array: named, value: None);
+            named.AsSpan(start: 0, length: vertices).Fill(value: None);
             for (var half = 0; (half < (3 * m_triangles)); half++) {
                 var vertex = m_corners[half];
                 var site = m_site[vertex];
@@ -637,10 +648,10 @@ public static class SdfMeshPlanarMerge {
             var remaining = (m_triangles - m_removedTriangles);
             var indices = new uint[(3 * remaining)];
             var triangleMaterials = (materials.IsEmpty ? [] : new uint[remaining]);
-            var remap = new int[positions.Length];
+            var remap = m_scope.Rent<int>(minimumLength: m_vertices);
             var at = 0;
 
-            Array.Fill(array: remap, value: -1);
+            remap.AsSpan(start: 0, length: m_vertices).Fill(value: -1);
             for (var triangle = 0; (triangle < m_triangles); triangle++) {
                 if (!m_alive[triangle]) { continue; }
                 if (!materials.IsEmpty) { triangleMaterials[at] = materials[triangle]; }
@@ -653,19 +664,19 @@ public static class SdfMeshPlanarMerge {
 
             var kept = 0;
 
-            for (var vertex = 0; (vertex < remap.Length); vertex++) {
+            for (var vertex = 0; (vertex < m_vertices); vertex++) {
                 if (remap[vertex] == 0) { remap[vertex] = kept++; }
             }
 
             var keptSites = new int[kept];
-            var firstKept = new int[remap.Length];
-            Array.Fill(firstKept, -1);
+            var firstKept = m_scope.Rent<int>(minimumLength: m_vertices);
+            firstKept.AsSpan(start: 0, length: m_vertices).Fill(value: -1);
             var keptPositions = new Vector3[kept];
             var keptNormals = new Vector3[kept];
             var keptMembers = (members.IsEmpty ? [] : new byte[kept]);
             var keptInfluences = (m_mesh.Influences.IsEmpty ? [] : new SdfMeshInfluence[kept]);
 
-            for (var vertex = 0; (vertex < remap.Length); vertex++) {
+            for (var vertex = 0; (vertex < m_vertices); vertex++) {
                 if (remap[vertex] < 0) { continue; }
                 ref var site = ref firstKept[m_site[vertex]];
                 if (site < 0) { site = remap[vertex]; }

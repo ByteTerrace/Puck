@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.IO.Hashing;
 using System.Numerics;
 using Puck.Abstractions;
+using Puck.Abstractions.Memory;
 using Puck.SignedDistance.Illumination;
 
 namespace Puck.SdfVm;
@@ -114,7 +115,8 @@ internal static class SdfMeshStoreCodec {
     private static void EncodePlanes(Stream output, UInt128 key, IReadOnlyList<SdfMesh> pieces, bool chunked, Positions stored,
         int[] materials, int[] canonical, bool exact) {
         var (low, high, width) = stored.Grid;
-        using var payload = new MemoryStream();
+        // The payload's length leads the envelope, so it is collected whole; its storage is rented, a pool the next entry draws on.
+        using var payload = new RentedMemoryStream(capacity: PayloadEstimate(pieces: pieces));
 
         using (var writer = new BinaryWriter(payload, System.Text.Encoding.UTF8, leaveOpen: true)) {
             writer.Write(value: canonical.Length);
@@ -126,7 +128,22 @@ internal static class SdfMeshStoreCodec {
                 WriteMesh(writer, pieces[piece], low, high, width, map, exact, width == 4 ? default : stored.Planes[piece]);
             }
         }
-        EncodePayload(output, key, payload.GetBuffer().AsSpan(0, checked((int)payload.Length)));
+        EncodePayload(output, key, payload.Written);
+    }
+
+    // The payload's size to within a small share: sixteen bytes a vertex (positions at up to four bytes an axis and a packed
+    // normal), each index plane's width, and a byte a triangle's material, so the stream rents once and does not grow.
+    private static int PayloadEstimate(IReadOnlyList<SdfMesh> pieces) {
+        var bytes = (1L << 12);
+
+        foreach (var piece in pieces) {
+            var width = ((piece.Positions.Length <= 65536) ? 2 : 4);
+
+            bytes += ((16L * piece.Positions.Length) + (((long)width) * piece.Indices.Length) + (4L * piece.TriangleCount));
+            foreach (var level in piece.Levels) { bytes += ((((long)width) * level.Indices.Length) + (4L * level.TriangleMaterials.Length)); }
+        }
+
+        return ((int)Math.Min(val1: bytes, val2: Array.MaxLength));
     }
 
     // Writes an entry's envelope, header then zlib-compressed payload then the checksum of both, straight to the stream
@@ -170,30 +187,35 @@ internal static class SdfMeshStoreCodec {
                 WritePlane(writer, quantized.Slice(axis * positions.Length, positions.Length), width);
                 continue;
             }
-            var words = new uint[positions.Length];
+            using var lease = RentedArrays.Rent<uint>(minimumLength: positions.Length, array: out var rented);
+            var words = rented.AsSpan(start: 0, length: positions.Length);
+
             for (var index = 0; index < words.Length; index++) {
                 words[index] = BitConverter.SingleToUInt32Bits(positions[index][axis]);
             }
             WritePlane(width: width, words: words, writer: writer);
         }
-        var oct = !exact && IsOctahedral(normals: mesh.Normals.Span);
+
+        var normals = mesh.Normals.Span;
+        var oct = !exact && IsOctahedral(normals: normals);
 
         writer.Write(value: oct);
-        if (oct) {
-            var words = new uint[mesh.Normals.Length];
+        {
+            using var lease = RentedArrays.Rent<uint>(minimumLength: normals.Length, array: out var rented);
+            var words = rented.AsSpan(start: 0, length: normals.Length);
 
-            for (var index = 0; (index < words.Length); index++) {
-                var normal = mesh.Normals.Span[index];
+            if (oct) {
+                for (var index = 0; (index < words.Length); index++) {
+                    var normal = normals[index];
 
-                words[index] = SdfOctahedral.PackSigned(bits: OctahedralBits, direction: new Double3(X: normal.X, Y: normal.Y, Z: normal.Z));
-            }
-            WritePlane(width: 4, words: words, writer: writer);
-        } else {
-            for (var axis = 0; (axis < 3); axis++) {
-                var words = new uint[mesh.Normals.Length];
-
-                for (var index = 0; (index < words.Length); index++) { words[index] = BitConverter.SingleToUInt32Bits(value: mesh.Normals.Span[index][axis]); }
+                    words[index] = SdfOctahedral.PackSigned(bits: OctahedralBits, direction: new Double3(X: normal.X, Y: normal.Y, Z: normal.Z));
+                }
                 WritePlane(width: 4, words: words, writer: writer);
+            } else {
+                for (var axis = 0; (axis < 3); axis++) {
+                    for (var index = 0; (index < words.Length); index++) { words[index] = BitConverter.SingleToUInt32Bits(value: normals[index][axis]); }
+                    WritePlane(width: 4, words: words, writer: writer);
+                }
             }
         }
         WritePlane(writer, mesh.Indices.Span, ((positions.Length <= 65536) ? 2 : 4));
@@ -206,9 +228,19 @@ internal static class SdfMeshStoreCodec {
         }
         writer.Write(value: mesh.VertexMembers.Length);
         writer.Write(buffer: mesh.VertexMembers.Span);
-        WritePlane(writer, mesh.Influences.Span.ToArray().Select(selector: i => i.Blend).ToArray(), 4);
-        WritePlane(writer, mesh.Influences.Span.ToArray().Select(selector: i => i.GradientXY).ToArray(), 4);
-        WritePlane(writer, mesh.Influences.Span.ToArray().Select(selector: i => i.GradientZ).ToArray(), 4);
+        {
+            var influences = mesh.Influences.Span;
+
+            using var lease = RentedArrays.Rent<uint>(minimumLength: influences.Length, array: out var rented);
+            var words = rented.AsSpan(start: 0, length: influences.Length);
+
+            for (var field = 0; (field < 3); field++) {
+                for (var index = 0; (index < words.Length); index++) {
+                    words[index] = ((field == 0) ? influences[index].Blend : ((field == 1) ? influences[index].GradientXY : influences[index].GradientZ));
+                }
+                WritePlane(width: 4, words: words, writer: writer);
+            }
+        }
         writer.Write(value: mesh.Levels.Count);
         foreach (var level in mesh.Levels) {
             writer.Write(value: level.Error);
@@ -231,17 +263,25 @@ internal static class SdfMeshStoreCodec {
     private static void WritePlane(BinaryWriter writer, ReadOnlySpan<uint> words, int width, SdfMeshMaterials.Remap? map = null) {
         writer.Write(value: ((byte)width));
         writer.Write(value: words.Length);
-        var bytes = new byte[checked((words.Length * width))];
-        var previous = 0U;
+        // Byte planes lie one after another, each the low-first byte of every word's delta; a plane is written in chunks so
+        // no plane-sized array stands between the words and the stream.
+        Span<byte> chunk = stackalloc byte[4096];
 
-        for (var index = 0; (index < words.Length); index++) {
-            var word = (map?.Renumber(words[index]) ?? words[index]);
-            var delta = unchecked((word - previous));
+        for (var plane = 0; (plane < width); plane++) {
+            var previous = 0U;
 
-            previous = word;
-            for (var plane = 0; (plane < width); plane++) { bytes[((plane * words.Length) + index)] = ((byte)(delta >> (plane * 8))); }
+            for (var start = 0; (start < words.Length); start += chunk.Length) {
+                var count = Math.Min(val1: chunk.Length, val2: (words.Length - start));
+
+                for (var at = 0; (at < count); at++) {
+                    var word = (map?.Renumber(words[(start + at)]) ?? words[(start + at)]);
+
+                    chunk[at] = ((byte)(unchecked((word - previous)) >> (plane * 8)));
+                    previous = word;
+                }
+                writer.Write(buffer: chunk[..count]);
+            }
         }
-        writer.Write(buffer: bytes);
     }
     private static void WriteVector(BinaryWriter writer, Vector3 value) { writer.Write(value: value.X); writer.Write(value: value.Y); writer.Write(value: value.Z); }
 }

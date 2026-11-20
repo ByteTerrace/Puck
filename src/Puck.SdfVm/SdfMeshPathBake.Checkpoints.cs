@@ -3,6 +3,7 @@ using System.IO.Hashing;
 using System.Runtime.InteropServices;
 
 using Puck.Abstractions;
+using Puck.Abstractions.Memory;
 using Puck.SignedDistance;
 using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
 
@@ -151,12 +152,12 @@ public sealed partial class SdfMeshPathBake {
     // The simplifier consumes all shape inputs through this call. The contour closure stops here, and the simplifier
     // closure starts here. Calling another simplification routine upstream makes it part of the contour closure.
     internal static class SimplificationStage {
-        internal static SdfMesh Run(SdfMesh mesh, bool dynamic, bool glass, int instances, bool preserveFeatures) {
+        internal static SdfMesh Run(SdfMesh mesh, bool dynamic, bool glass, int instances, bool preserveFeatures, IAllocationObserver? owner) {
             if (!dynamic && !glass && ((instances > 1) || (mesh.TriangleCount >= SdfMeshChunks.WholeTriangles))) {
-                return SdfMeshChunks.Bake(mesh, preserveFeatures);
+                return SdfMeshChunks.Bake(mesh, preserveFeatures, owner);
             }
-            var merged = SdfMeshPlanarMerge.Merge(mesh);
-            return glass ? merged : SdfMeshCollapse.Levels(merged, preserveFeatures);
+            var merged = SdfMeshPlanarMerge.Merge(mesh, owner);
+            return glass ? merged : SdfMeshCollapse.Levels(merged, preserveFeatures, owner);
         }
     }
 
