@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Collections;
 using Puck.Assets.Documents;
 
 namespace Puck.World.Authoring;
@@ -12,6 +13,8 @@ namespace Puck.World.Authoring;
 /// <param name="State">The <c>state.&lt;row&gt;[.&lt;key&gt;]</c> binding naming the cell.</param>
 /// <param name="Cases">The looks, the first for the value zero (<see cref="PaletteToonCaseDocument"/>).</param>
 public sealed record PaletteToonSelectDocument(string State, IReadOnlyList<PaletteToonCaseDocument> Cases) {
+    /// <summary>Gets the looks, the first for the value zero (<see cref="PaletteToonCaseDocument"/>). The list is owned.</summary>
+    public IReadOnlyList<PaletteToonCaseDocument> Cases { get => field; init => field = OwnedLists.Freeze(items: value)!; } = OwnedLists.Freeze(items: Cases)!;
     /// <summary>Returns the case a cell's value names.</summary>
     /// <param name="value">The cell's value, or <see langword="null"/> when the cell holds none.</param>
     /// <returns>The case, or <see langword="null"/> when the value names none.</returns>

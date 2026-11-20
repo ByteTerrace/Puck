@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
@@ -47,7 +48,7 @@ public sealed record GeneratorAlternative(string Token, ulong Weight, CellName N
 public sealed record GeneratorContext(CellName Key, IReadOnlyList<GeneratorAlternative>? Alternatives = null) {
     /// <summary>The weighted alternatives out of this context, or empty for a terminal context.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<GeneratorAlternative>? Alternatives { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Alternatives);
+    public IReadOnlyList<GeneratorAlternative>? Alternatives { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Alternatives);
 }
 /// <summary>The closed vocabulary of a <see cref="StateGenerator"/>'s draw shape — which of its fields are read, and
 /// what one emission produces: a Markov text walk, a multiset draw, a uniform range, a weighted numeric table, and a
@@ -136,11 +137,11 @@ public sealed record GeneratorExtended(
     /// <summary>The whole extension table, exactly <see cref="K"/> words — or <see langword="null"/> when <see
     /// cref="Script"/> authors it instead.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<uint>? Table { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Table);
+    public IReadOnlyList<uint>? Table { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Table);
     /// <summary>Up to <see cref="K"/> values in the source's own output space, authoring the site's first draws
     /// directly — or <see langword="null"/> when <see cref="Table"/> is authored instead.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<long>? Script { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Script);
+    public IReadOnlyList<long>? Script { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Script);
 }
 /// <summary>
 /// An authored stochastic source — the vocabulary for every randomness declaration in the document: a name
@@ -213,7 +214,7 @@ public sealed record StateGenerator(
 ) {
     /// <summary>Markov only: the declared contexts, at least one, uniquely keyed.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<GeneratorContext>? Contexts { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Contexts);
+    public IReadOnlyList<GeneratorContext>? Contexts { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Contexts);
     /// <summary>Markov, weighted numeric and symmetry orbit: how the entries are consumed (see <see
     /// cref="GeneratorMode"/>).</summary>
     public GeneratorMode Mode { get; init; } = Mode;
@@ -231,7 +232,7 @@ public sealed record StateGenerator(
     /// least one carrying a non-zero weight; under an exhausting <see cref="Mode"/> each outcome contributes <see
     /// cref="GeneratorWeightedNumeric.Multiplicity"/> units to the pass.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<GeneratorWeightedNumeric>? Weighted { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Weighted);
+    public IReadOnlyList<GeneratorWeightedNumeric>? Weighted { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Weighted);
     /// <summary><see cref="GeneratorSource.SymmetryOrbit"/> only: the ring, 0..7, whose thirty nodes are the units —
     /// exactly one of <see cref="Ring"/> and <see cref="Node"/>.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -244,7 +245,7 @@ public sealed record StateGenerator(
     /// (one to eight mirror nodes, applied first to last) the orbit is taken under, or <see langword="null"/> for the
     /// lattice's own cycle — the same generator vocabulary a <see cref="StateCycle"/> authors.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<int>? Word { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Word);
+    public IReadOnlyList<int>? Word { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Word);
     /// <summary>The extended-generator facet (see <see cref="GeneratorExtended"/>), or <see langword="null"/> for the
     /// ordinary <c>Pcg32XshRr</c> generator every other source draws through.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

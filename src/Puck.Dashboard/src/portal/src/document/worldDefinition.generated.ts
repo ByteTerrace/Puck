@@ -1279,14 +1279,6 @@ export type CreationDocument = {
       scale?: number;
       floor?: number;
       lane?: number;
-      under?: ({
-        threshold: number;
-        surface: {
-          color: string;
-          roughness: number;
-          metal: number;
-        };
-      } | null)[] | null;
       deposit?: ShapeNullable | null;
       noise?: number;
       patternScale?: unknown;
@@ -1295,6 +1287,17 @@ export type CreationDocument = {
       octaveRatio?: number;
       octaveGain?: number;
       turn?: unknown;
+      /**
+       * Gets the surfaces the coverage reveals, each at an ascending threshold. The list is owned.
+       */
+      under?: ({
+        threshold: number;
+        surface: {
+          color: string;
+          roughness: number;
+          metal: number;
+        };
+      } | null)[] | null;
     } | null;
     /**
      * The wrap-lighting share in [0, 1] (null = 0 — the plain Lambert term) — see Wrap.
@@ -1317,14 +1320,17 @@ export type CreationDocument = {
       depth: number;
       ior: number;
       paint: {
-        stops: ({
-          radius: number;
-          color: string;
-        } | null)[];
         softness?: number;
         modulationAmplitude?: number;
         modulationFrequency?: number;
         seed?: number;
+        /**
+         * Gets the one to four radial stops, each an ascending radius and the colour it ramps to. The list is owned.
+         */
+        stops: ({
+          radius: number;
+          color: string;
+        } | null)[];
       };
     } | null;
     /**
@@ -1335,67 +1341,6 @@ export type CreationDocument = {
      * The finite nonnegative gain on received indirect light; null means one.
      */
     receive?: number | null;
-    /**
-     * Up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none.
-     */
-    paints?: ({
-      /**
-       * The primitive, read as a shape's type: every primitive but a path profile.
-       */
-      type: ShapeNonNullable50;
-      /**
-       * The paint's color, #RRGGBB or a state binding.
-       */
-      color: string;
-      /**
-       * The primitive's position (null = the frame's origin).
-       */
-      position?: unknown;
-      /**
-       * The primitive's rotation (null = identity).
-       */
-      rotation?: unknown;
-      /**
-       * The primitive's size, as a shape's scale (null = one).
-       */
-      scale?: unknown;
-      /**
-       * The half-width of the band painted about the primitive's surface, in the frame's units; null or zero fills the primitive.
-       */
-      stroke?: number | null;
-      /**
-       * The shape whose frame carries the paint, in that shape's local frame as a shape-riding volume is; null paints in the frame of the slot that owns the hit, or world space on a static placement. A static placement draws no parented paint.
-       */
-      parent?: string | null;
-      /**
-       * Prism only: the top-to-bottom width ratio.
-       */
-      taper?: number | null;
-      /**
-       * Prism only: the cross-section; a path profile is refused.
-       */
-      profile?: ShapeNullable7 | null;
-      /**
-       * Prism only: extrude or revolve.
-       */
-      lift?: ShapeNullable8 | null;
-      /**
-       * The edge-rounding radius, as a shape's.
-       */
-      rounding?: number | null;
-      /**
-       * The cap chamfer radius, as a shape's.
-       */
-      chamfer?: number | null;
-      /**
-       * Superellipsoid only: the exponent.
-       */
-      exponent?: number | null;
-      /**
-       * Sweep only: the curve, in the frame's units.
-       */
-      curve?: ShapeNullable9 | null;
-    } | null)[] | null;
     /**
      * The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body's own look lanes (a placement without them reads zero), 4 to 7 the world's render.lanes (SdfLanes). Null keeps the emissive static.
      */
@@ -1441,7 +1386,7 @@ export type CreationDocument = {
     /**
      * The slot's own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world's default style (render.toon).
      */
-    toon?: ShapeNullable10 | null;
+    toon?: ShapeNullable2 | null;
     /**
      * The slot's styles chosen live by a state cell (PaletteToonSelectDocument), whose case replaces Toon while the cell names one; null keeps Toon.
      */
@@ -1451,13 +1396,13 @@ export type CreationDocument = {
        */
       state: string;
       /**
-       * The looks, the first for the value zero (PaletteToonCaseDocument).
+       * Gets the looks, the first for the value zero (PaletteToonCaseDocument). The list is owned.
        */
       cases: ({
         /**
          * The case's style (ToonStyleDocument), or null for none.
          */
-        toon?: ShapeNullable10 | null;
+        toon?: ShapeNullable2 | null;
         /**
          * The case's program, or null for none.
          */
@@ -1538,6 +1483,67 @@ export type CreationDocument = {
      * The slot's shade program (ShadeReference), or null for the world's default.
      */
     shade?: unknown;
+    /**
+     * Gets up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none. The list is owned (a lattice field's material sits in a cached state row).
+     */
+    paints?: ({
+      /**
+       * The primitive, read as a shape's type: every primitive but a path profile.
+       */
+      type: ShapeNonNullable50;
+      /**
+       * The paint's color, #RRGGBB or a state binding.
+       */
+      color: string;
+      /**
+       * The primitive's position (null = the frame's origin).
+       */
+      position?: unknown;
+      /**
+       * The primitive's rotation (null = identity).
+       */
+      rotation?: unknown;
+      /**
+       * The primitive's size, as a shape's scale (null = one).
+       */
+      scale?: unknown;
+      /**
+       * The half-width of the band painted about the primitive's surface, in the frame's units; null or zero fills the primitive.
+       */
+      stroke?: number | null;
+      /**
+       * The shape whose frame carries the paint, in that shape's local frame as a shape-riding volume is; null paints in the frame of the slot that owns the hit, or world space on a static placement. A static placement draws no parented paint.
+       */
+      parent?: string | null;
+      /**
+       * Prism only: the top-to-bottom width ratio.
+       */
+      taper?: number | null;
+      /**
+       * Prism only: the cross-section; a path profile is refused.
+       */
+      profile?: ShapeNullable8 | null;
+      /**
+       * Prism only: extrude or revolve.
+       */
+      lift?: ShapeNullable9 | null;
+      /**
+       * The edge-rounding radius, as a shape's.
+       */
+      rounding?: number | null;
+      /**
+       * The cap chamfer radius, as a shape's.
+       */
+      chamfer?: number | null;
+      /**
+       * Superellipsoid only: the exponent.
+       */
+      exponent?: number | null;
+      /**
+       * Sweep only: the curve, in the frame's units.
+       */
+      curve?: ShapeNullable10 | null;
+    } | null)[] | null;
   } | null)[] | null;
   /**
    * The authored shapes (null = empty).
@@ -2789,10 +2795,6 @@ export type PaletteEntryDocument = {
    */
   receive?: number | null;
   /**
-   * Up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none.
-   */
-  paints?: PalettePaintDocument[] | null;
-  /**
    * The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body's own look lanes (a placement without them reads zero), 4 to 7 the world's render.lanes (SdfLanes). Null keeps the emissive static.
    */
   emissiveLane?: number | null;
@@ -2816,6 +2818,10 @@ export type PaletteEntryDocument = {
    * The slot's shade program (ShadeReference), or null for the world's default.
    */
   shade?: ShadeReference;
+  /**
+   * Gets up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none. The list is owned (a lattice field's material sits in a cached state row).
+   */
+  paints?: PalettePaintDocument[] | null;
 };
 
 export type PaletteFlowDocument = {
@@ -2994,11 +3000,14 @@ export type PalettePaintDocument = {
 };
 
 export type PaletteRadialPaintDocument = {
-  stops: PaletteRadialStopDocument[];
   softness?: number;
   modulationAmplitude?: number;
   modulationFrequency?: number;
   seed?: number;
+  /**
+   * Gets the one to four radial stops, each an ascending radius and the colour it ramps to. The list is owned.
+   */
+  stops: PaletteRadialStopDocument[];
 };
 
 export type PaletteRadialStopDocument = {
@@ -3037,7 +3046,7 @@ export type PaletteToonSelectDocument = {
    */
   state: string;
   /**
-   * The looks, the first for the value zero (PaletteToonCaseDocument).
+   * Gets the looks, the first for the value zero (PaletteToonCaseDocument). The list is owned.
    */
   cases: PaletteToonCaseDocument[];
 };
@@ -3051,7 +3060,6 @@ export type PaletteWeatheringDocument = {
   scale?: number;
   floor?: number;
   lane?: number;
-  under?: PaletteRevealDocument[] | null;
   deposit?: PaletteSurfaceDocument | null;
   noise?: number;
   patternScale?: DocumentVector3;
@@ -3060,6 +3068,10 @@ export type PaletteWeatheringDocument = {
   octaveRatio?: number;
   octaveGain?: number;
   turn?: DocumentQuaternion;
+  /**
+   * Gets the surfaces the coverage reveals, each at an ascending threshold. The list is owned.
+   */
+  under?: PaletteRevealDocument[] | null;
 };
 
 /**
@@ -3319,8 +3331,11 @@ export type SdfLift = "Revolve" | "Extrude";
  */
 export type SdfPathContour = {
   start: [number, number];
-  segments: SdfPathSegment[];
   closed?: boolean;
+  /**
+   * Gets the contour's segments in order, each ending where the next begins. The list is owned.
+   */
+  segments: SdfPathSegment[];
 };
 
 /**
@@ -3328,28 +3343,37 @@ export type SdfPathContour = {
  */
 export type SdfPathContourNullable = {
   start: [number, number];
-  segments: (SdfPathSegmentNullable | null)[];
   closed?: boolean;
+  /**
+   * Gets the contour's segments in order, each ending where the next begins. The list is owned.
+   */
+  segments: (SdfPathSegmentNullable | null)[];
 };
 
 /**
  * A bounded presentation profile. Filled contours use even/odd fill, including holes. Curves are flattened once at composition, with a local-space geometric error at most Tolerance (apart from floating-point rounding). Strokes approximate the union of disks along the curve, including their varying radius, to the same tolerance. The emitted polygon/rounded-segment field is 1-Lipschitz; no margin moves its zero surface. At most 128 edges are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.
  */
 export type SdfPathProfile = {
-  contours: SdfPathContour[];
   tolerance?: number;
   stroke?: SdfPathStroke | null;
   shear?: SdfPathShear | null;
+  /**
+   * Gets the profile's contours, filled with even/odd fill. The list is owned, since Compile caches its edges by the profile.
+   */
+  contours: SdfPathContour[];
 };
 
 /**
  * A bounded presentation profile. Filled contours use even/odd fill, including holes. Curves are flattened once at composition, with a local-space geometric error at most Tolerance (apart from floating-point rounding). Strokes approximate the union of disks along the curve, including their varying radius, to the same tolerance. The emitted polygon/rounded-segment field is 1-Lipschitz; no margin moves its zero surface. At most 128 edges are emitted; exceeding that budget refuses instead of silently relaxing the requested tolerance.
  */
 export type SdfPathProfileNullable = {
-  contours: (SdfPathContourNullable | null)[];
   tolerance?: number;
   stroke?: SdfPathStroke | null;
   shear?: SdfPathShear | null;
+  /**
+   * Gets the profile's contours, filled with even/odd fill. The list is owned, since Compile caches its edges by the profile.
+   */
+  contours: (SdfPathContourNullable | null)[];
 };
 
 /**
@@ -3415,13 +3439,13 @@ export type SdfPrismProfile = {
    */
   sides?: number;
   /**
-   * Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.
-   */
-  vertices?: [number, number][] | null;
-  /**
    * Required only for Path; its points are normalized profile coordinates.
    */
   path?: SdfPathProfile | null;
+  /**
+   * Gets, for Convex only, 3 to MaxConvexVertices local XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind. The list is owned.
+   */
+  vertices?: [number, number][] | null;
 };
 
 /**
@@ -3446,13 +3470,13 @@ export type SdfPrismProfileNullable = {
    */
   sides?: number;
   /**
-   * Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.
-   */
-  vertices?: [number, number][] | null;
-  /**
    * Required only for Path; its points are normalized profile coordinates.
    */
   path?: SdfPathProfileNullable | null;
+  /**
+   * Gets, for Convex only, 3 to MaxConvexVertices local XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind. The list is owned.
+   */
+  vertices?: [number, number][] | null;
 };
 
 /**
@@ -4111,25 +4135,41 @@ export type ShapeNullable = {
 
 export type ShapeNullable10 = {
   /**
-   * Whether the style is on; absent is on. False on a palette row keeps that material unstyled whatever the world's default is; false on render.toon leaves the world's default off.
+   * The curve's first control point, in the shape's local (workbench) frame — creation units, or a state.<row>[.<key>] reference.
    */
-  enabled?: boolean | null;
+  a: unknown;
   /**
-   * The close outline radius in output pixels, in [0, 4]; zero disables outlines.
+   * The curve's middle control point.
    */
-  outlineWidth?: number | null;
+  b: unknown;
   /**
-   * The distance in metres at which the outline radius halves, in [0.1, 1000].
+   * The curve's last control point.
    */
-  outlineDistance?: number | null;
+  c: unknown;
   /**
-   * The crease normal cosine, in [0, 0.95].
+   * The sweep radius at t = 0; finite and strictly positive.
    */
-  outlineNormal?: number | null;
+  radiusStart: number;
   /**
-   * The outline multiplier, three linear RGB values in [0, 1].
+   * The sweep radius at t = 1; finite and strictly positive.
    */
-  outlineTint?: unknown;
+  radiusEnd: number;
+  /**
+   * The mid-span radius bulge amplitude (null = 0), added by bulge·sin(π·t)^0.65; refused past MaxSweepBulgeRatio times max(RadiusStart, RadiusEnd).
+   */
+  bulge?: number | null;
+  /**
+   * The helical strand count (null = 1), in [MinSweepStrands, MaxSweepStrands]. A count above 1 is render-only — refused for deterministic field contact by name, matching Sweep's own status.
+   */
+  strands?: number | null;
+  /**
+   * The strand orbit rate, in turns along the curve (null = 0); finite.
+   */
+  twist?: number | null;
+  /**
+   * The strand orbit radius, in creation units (null = 0); non-negative, finite, refused past MaxSweepStrandOffsetRatio times max(RadiusStart, RadiusEnd).
+   */
+  strandOffset?: number | null;
 };
 
 export type ShapeNullable11 = "Union" | "SmoothUnion" | "Subtraction" | "Intersection" | "Xor" | "SmoothIntersection" | "SmoothSubtraction" | "ChamferUnion" | "ChamferIntersection" | "ChamferSubtraction" | "GrooveUnion" | "PipeUnion" | "Morph" | "GrooveSubtraction" | "PipeSubtraction" | "StairsUnion" | "StairsSubtraction";
@@ -4231,11 +4271,26 @@ export type ShapeNullable19 = {
 };
 
 export type ShapeNullable2 = {
-  end: [number, number];
-  control?: unknown;
-  control2?: unknown;
-  arcCenter?: unknown;
-  clockwise?: boolean;
+  /**
+   * Whether the style is on; absent is on. False on a palette row keeps that material unstyled whatever the world's default is; false on render.toon leaves the world's default off.
+   */
+  enabled?: boolean | null;
+  /**
+   * The close outline radius in output pixels, in [0, 4]; zero disables outlines.
+   */
+  outlineWidth?: number | null;
+  /**
+   * The distance in metres at which the outline radius halves, in [0.1, 1000].
+   */
+  outlineDistance?: number | null;
+  /**
+   * The crease normal cosine, in [0, 0.95].
+   */
+  outlineNormal?: number | null;
+  /**
+   * The outline multiplier, three linear RGB values in [0, 1].
+   */
+  outlineTint?: unknown;
 };
 
 export type ShapeNullable20 = {
@@ -4444,11 +4499,11 @@ export type ShapeNullable28 = {
   /**
    * Optional Prism cross-section controls. Null uses a trapezoid; other profiles expose rounded rectangles, polygons, and ellipses with flat extruded caps.
    */
-  profile?: ShapeNullable7 | null;
+  profile?: ShapeNullable8 | null;
   /**
    * Only for Prism: how the XY profile becomes a solid. Null or extrude sweeps it along local Z to scale.z. revolve sweeps it about the local Y axis with scale.z as the radial offset — zero gives a solid of revolution (a cowl, a boot cuff, a pauldron dome), a positive offset a ring. Renderable for every profile; a solid placement refuses it, because both contact compilers read a per-axis-scaled local box and a revolve reads scale.z as an offset rather than an extent.
    */
-  lift?: ShapeNullable8 | null;
+  lift?: ShapeNullable9 | null;
   /**
    * Only for Box, Prism, Cylinder and Cone: the edge-rounding radius in the creation's own units, finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field offsets back out, so the shape keeps its authored extent and its edges fillet; a Box without it is sharp, so boxes that touch meet as one solid, and a solid placement collides as the same rounded or sharp box. Refused by name past MaxRounding.
    */
@@ -4488,7 +4543,7 @@ export type ShapeNullable28 = {
   /**
    * The shape's swept-curve geometry (null = none) — see ShapeCurveDocument. Admitted only, and required, on Sweep (refused elsewhere, by name; a Sweep with no curve is refused, by name); refused alongside Panel, Trims, Flare, Shear, Bumps, or Domain on the same shape.
    */
-  curve?: ShapeNullable9 | null;
+  curve?: ShapeNullable10 | null;
   /**
    * The shape's per-instance lane-driven erosion (null = none) — see ShapeErodeDocument. Admitted on every primitive; its reach is this shape's own Reach, so it needs no separate authored magnitude.
    */
@@ -4531,12 +4586,6 @@ export type ShapeNullable29 = {
 };
 
 export type ShapeNullable3 = {
-  start: [number, number];
-  segments: (ShapeNullable2 | null)[];
-  closed?: boolean;
-};
-
-export type ShapeNullable4 = {
   radiusStart: number;
   radiusEnd: number;
   smooth?: boolean;
@@ -4544,7 +4593,7 @@ export type ShapeNullable4 = {
   to?: number;
 };
 
-export type ShapeNullable5 = {
+export type ShapeNullable4 = {
   linear: number;
   quadratic?: number;
   cubic?: number;
@@ -4554,14 +4603,34 @@ export type ShapeNullable5 = {
   target?: number;
 };
 
+export type ShapeNullable5 = {
+  end: [number, number];
+  control?: unknown;
+  control2?: unknown;
+  arcCenter?: unknown;
+  clockwise?: boolean;
+};
+
 export type ShapeNullable6 = {
-  contours: (ShapeNullable3 | null)[];
-  tolerance?: number;
-  stroke?: ShapeNullable4 | null;
-  shear?: ShapeNullable5 | null;
+  start: [number, number];
+  closed?: boolean;
+  /**
+   * Gets the contour's segments in order, each ending where the next begins. The list is owned.
+   */
+  segments: (ShapeNullable5 | null)[];
 };
 
 export type ShapeNullable7 = {
+  tolerance?: number;
+  stroke?: ShapeNullable3 | null;
+  shear?: ShapeNullable4 | null;
+  /**
+   * Gets the profile's contours, filled with even/odd fill. The list is owned, since Compile caches its edges by the profile.
+   */
+  contours: (ShapeNullable6 | null)[];
+};
+
+export type ShapeNullable8 = {
   /**
    * The profile family.
    */
@@ -4575,55 +4644,16 @@ export type ShapeNullable7 = {
    */
   sides?: number;
   /**
-   * Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.
-   */
-  vertices?: unknown[] | null;
-  /**
    * Required only for Path; its points are normalized profile coordinates.
    */
-  path?: ShapeNullable6 | null;
+  path?: ShapeNullable7 | null;
+  /**
+   * Gets, for Convex only, 3 to MaxConvexVertices local XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind. The list is owned.
+   */
+  vertices?: unknown[] | null;
 };
 
-export type ShapeNullable8 = "Revolve" | "Extrude";
-
-export type ShapeNullable9 = {
-  /**
-   * The curve's first control point, in the shape's local (workbench) frame — creation units, or a state.<row>[.<key>] reference.
-   */
-  a: unknown;
-  /**
-   * The curve's middle control point.
-   */
-  b: unknown;
-  /**
-   * The curve's last control point.
-   */
-  c: unknown;
-  /**
-   * The sweep radius at t = 0; finite and strictly positive.
-   */
-  radiusStart: number;
-  /**
-   * The sweep radius at t = 1; finite and strictly positive.
-   */
-  radiusEnd: number;
-  /**
-   * The mid-span radius bulge amplitude (null = 0), added by bulge·sin(π·t)^0.65; refused past MaxSweepBulgeRatio times max(RadiusStart, RadiusEnd).
-   */
-  bulge?: number | null;
-  /**
-   * The helical strand count (null = 1), in [MinSweepStrands, MaxSweepStrands]. A count above 1 is render-only — refused for deterministic field contact by name, matching Sweep's own status.
-   */
-  strands?: number | null;
-  /**
-   * The strand orbit rate, in turns along the curve (null = 0); finite.
-   */
-  twist?: number | null;
-  /**
-   * The strand orbit radius, in creation units (null = 0); non-negative, finite, refused past MaxSweepStrandOffsetRatio times max(RadiusStart, RadiusEnd).
-   */
-  strandOffset?: number | null;
-};
+export type ShapeNullable9 = "Revolve" | "Extrude";
 
 /**
  * One numeric key of a Sort, in its declared precedence order.

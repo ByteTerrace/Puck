@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Collections;
 using Puck.Assets.Documents;
 using Puck.SignedDistance;
 
@@ -20,7 +21,11 @@ public sealed record PaletteRevealDocument(float Threshold, PaletteSurfaceDocume
 public sealed record PaletteRadialStopDocument(float Radius, string Color);
 /// <summary>One to four radial paint stops with optional angular modulation.</summary>
 public sealed record PaletteRadialPaintDocument(IReadOnlyList<PaletteRadialStopDocument> Stops, float Softness = 0f,
-    float ModulationAmplitude = 0f, float ModulationFrequency = 0f, uint Seed = 0);
+    float ModulationAmplitude = 0f, float ModulationFrequency = 0f, uint Seed = 0) {
+    /// <summary>Gets the one to four radial stops, each an ascending radius and the colour it ramps to. The list is
+    /// owned.</summary>
+    public IReadOnlyList<PaletteRadialStopDocument> Stops { get => field; init => field = OwnedLists.Freeze(items: value)!; } = OwnedLists.Freeze(items: Stops)!;
+}
 /// <summary>A palette slot's glass: the slot's shapes transmit what lies behind them, refracted and absorbed over the
 /// distance the view ray travels through the shape, and reflect their surroundings by Fresnel. The slot's <c>color</c>
 /// is the tint, the colour light takes on through <paramref name="Depth"/> of the glass, and its <c>roughness</c> the
@@ -242,6 +247,8 @@ public sealed record PaletteWeatheringDocument(float Edge = 0f, float Lines = 0f
     uint Seed = 0, float Scale = 1f, float Floor = 0f, int Lane = 0,
     IReadOnlyList<PaletteRevealDocument>? Under = null, PaletteSurfaceDocument? Deposit = null, float Noise = 0f, DocumentVector3? PatternScale = null, float Softness = 0f,
     int Octaves = 1, float OctaveRatio = 2f, float OctaveGain = 0.5f, DocumentQuaternion? Turn = null) {
+    /// <summary>Gets the surfaces the coverage reveals, each at an ascending threshold. The list is owned.</summary>
+    public IReadOnlyList<PaletteRevealDocument>? Under { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Under);
     /// <summary>Resolves the generic engine response at a placement scale.</summary>
     /// <param name="resolve">The color resolver.</param>
     /// <param name="scale">The placement scale: the curvature reach, a length, multiplies by it, and the pattern

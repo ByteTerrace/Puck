@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Assets.Documents;
@@ -102,10 +103,10 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     ), IDiscreteLatticeTopology {
         /// <summary>See <see cref="IDiscreteLatticeTopology.Directions"/>.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public IReadOnlyList<TopologyDirection>? Directions { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Directions);
+        public IReadOnlyList<TopologyDirection>? Directions { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Directions);
         /// <summary>See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public IReadOnlyList<TopologyElementAlias>? ElementAliases { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: ElementAliases);
+        public IReadOnlyList<TopologyElementAlias>? ElementAliases { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: ElementAliases);
 
         /// <inheritdoc/>
         [JsonIgnore]
@@ -129,10 +130,10 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     ), IDiscreteLatticeTopology {
         /// <summary>See <see cref="IDiscreteLatticeTopology.Directions"/>.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public IReadOnlyList<TopologyDirection>? Directions { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Directions);
+        public IReadOnlyList<TopologyDirection>? Directions { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Directions);
         /// <summary>See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public IReadOnlyList<TopologyElementAlias>? ElementAliases { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: ElementAliases);
+        public IReadOnlyList<TopologyElementAlias>? ElementAliases { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: ElementAliases);
 
         /// <inheritdoc/>
         [JsonIgnore]
@@ -156,10 +157,10 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     ), IDiscreteLatticeTopology {
         /// <summary>See <see cref="IDiscreteLatticeTopology.Directions"/>.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public IReadOnlyList<TopologyDirection>? Directions { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Directions);
+        public IReadOnlyList<TopologyDirection>? Directions { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Directions);
         /// <summary>See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public IReadOnlyList<TopologyElementAlias>? ElementAliases { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: ElementAliases);
+        public IReadOnlyList<TopologyElementAlias>? ElementAliases { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: ElementAliases);
 
         /// <inheritdoc/>
         [JsonIgnore]
@@ -189,10 +190,10 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     ), IDiscreteLatticeTopology {
         /// <summary>See <see cref="IDiscreteLatticeTopology.Directions"/>.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public IReadOnlyList<TopologyDirection>? Directions { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Directions);
+        public IReadOnlyList<TopologyDirection>? Directions { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Directions);
         /// <summary>See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public IReadOnlyList<TopologyElementAlias>? ElementAliases { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: ElementAliases);
+        public IReadOnlyList<TopologyElementAlias>? ElementAliases { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: ElementAliases);
 
         /// <inheritdoc/>
         [JsonIgnore]
@@ -237,11 +238,11 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
         CellSize
     ) {
         /// <summary>The cells, in ordinal order.</summary>
-        public IReadOnlyList<GraphCell> Cells { get => field; init => field = StateLists.Freeze(items: value)!; } = StateLists.Freeze(items: Cells)!;
+        public IReadOnlyList<GraphCell> Cells { get => field; init => field = OwnedLists.Freeze(items: value)!; } = OwnedLists.Freeze(items: Cells)!;
         /// <summary>The direction slots, each naming its opposite (possibly itself).</summary>
-        public IReadOnlyList<GraphDirection> Directions { get => field; init => field = StateLists.Freeze(items: value)!; } = StateLists.Freeze(items: Directions)!;
+        public IReadOnlyList<GraphDirection> Directions { get => field; init => field = OwnedLists.Freeze(items: value)!; } = OwnedLists.Freeze(items: Directions)!;
         /// <summary>The edges.</summary>
-        public IReadOnlyList<GraphEdge> Edges { get => field; init => field = StateLists.Freeze(items: value)!; } = StateLists.Freeze(items: Edges)!;
+        public IReadOnlyList<GraphEdge> Edges { get => field; init => field = OwnedLists.Freeze(items: value)!; } = OwnedLists.Freeze(items: Edges)!;
 
         /// <inheritdoc/>
         [JsonIgnore]

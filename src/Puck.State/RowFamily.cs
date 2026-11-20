@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 
 namespace Puck.State;
@@ -22,10 +23,10 @@ public sealed record StateFamily(CellName Name, int Size, IReadOnlyList<int>? In
     /// <summary>The family index each member carries, in member order, or <see langword="null"/> when the members are
     /// indexed <c>0</c>..<c>Size-1</c> with no gaps. A family index is what <c>&lt;family&gt;[i]</c> selects on, so an
     /// index the list omits is a gap that selects no row.</summary>
-    public IReadOnlyList<int>? Indices { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Indices);
+    public IReadOnlyList<int>? Indices { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Indices);
     /// <summary>The member rows' own names, in member order, or <see langword="null"/> when the members are named by
     /// the <c>&lt;name&gt;&lt;index&gt;</c> convention.</summary>
-    public IReadOnlyList<CellName>? Members { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Members);
+    public IReadOnlyList<CellName>? Members { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Members);
 
     /// <summary>Returns the row name of the family's member at <paramref name="index"/>.</summary>
     /// <param name="index">The zero-based member position, never the family index the member carries.</param>

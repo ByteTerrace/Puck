@@ -553,7 +553,7 @@ public sealed class WorldSchemaCompletenessLawTests {
         // Existing converter vocabulary gaps, not new capabilities supplied by naming their definitions.
         Assert.Equal(
             actual: gaps,
-            expected: ["ChannelRef", "ClosedBitset256", "CommandValue", "WorldLatticeScalar", "WorldScreenResolution"]
+            expected: ["ChannelRef", "CommandValue", "WorldLatticeScalar", "WorldScreenResolution"]
         );
     }
 }
