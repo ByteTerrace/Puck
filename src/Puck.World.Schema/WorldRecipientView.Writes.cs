@@ -71,7 +71,10 @@ public sealed partial class WorldRecipientView {
         var reads = Writes.GetValue(this, static _ => new()).Sets;
         reads.Clear();
         RuleCompiler.CollectCellSetReads(WorldFactsCompiler.Context(Source), set, reads);
-        foreach (var ordinal in reads) {
+        return WritesWholeAll(reads);
+    }
+    private bool WritesWholeAll(List<int> rows) {
+        foreach (var ordinal in rows) {
             if (!WritesWhole(ordinal)) { return false; }
         }
         return true;
@@ -89,11 +92,7 @@ public sealed partial class WorldRecipientView {
         if (Unrestricted) { return true; }
         var rows = Writes.GetValue(this, static _ => new()).Sets;
         rows.Clear();
-        if (!RuleCompiler.TryCollectTransformRows(transform, WorldFactsCompiler.Context(Source), rows, out _)) { return false; }
-        foreach (var ordinal in rows) {
-            if (!WritesWhole(ordinal)) { return false; }
-        }
-        return true;
+        return RuleCompiler.TryCollectTransformRows(transform, WorldFactsCompiler.Context(Source), rows, out _) && WritesWholeAll(rows);
     }
 
     /// <summary>The one write refusal, independent of verb, key, membership, value and grants. <paramref name="row"/> is
