@@ -150,7 +150,7 @@ public sealed partial class WorldDocumentWalker {
                 case JsonTypeInfoKind.Object when shape.Described && (value.GetType() == basis.GetType()) && (patch is JsonObject delta) && !WorldDocumentBasis.ReplacesObject(delta: delta) &&
                     (valueTree is JsonObject valueObject) && (basisTree is JsonObject basisObject):
                     return ShareMembers(basis: basis, basisObject: basisObject, delta: delta, shape: shape, value: value, valueObject: valueObject);
-                case JsonTypeInfoKind.Enumerable when (patch is JsonArray rows) && ((rows.Count == 0) || !WorldDocumentBasis.IsReplaceMarker(node: rows[0])) &&
+                case JsonTypeInfoKind.Enumerable when (patch is JsonArray rows) &&
                     (valueTree is JsonArray valueRows) && (basisTree is JsonArray basisRows) && (value is IEnumerable items) && (basis is IEnumerable basisItems):
                     return ShareRows(basisItems: basisItems, basisRows: basisRows, rows: rows, value: value, items: items, valueRows: valueRows);
                 default:
@@ -200,7 +200,8 @@ public sealed partial class WorldDocumentWalker {
             }
 
             var basisIndex = WorldDocumentBasis.IndexRows(list: basisRows, key: key, duplicate: out _);
-            var patchIndex = WorldDocumentBasis.IndexRows(list: rows, key: key, duplicate: out _);
+            var wholesale = rows.Count > 0 && WorldDocumentBasis.IsReplaceMarker(rows[0]);
+            var patchIndex = wholesale ? null : WorldDocumentBasis.IndexRows(list: rows, key: key, duplicate: out _);
             List<object?>? shared = null;
 
             for (var index = 0; (index < held.Count); index++) {
@@ -208,7 +209,9 @@ public sealed partial class WorldDocumentWalker {
                 var next = held[index];
 
                 if ((identity is not null) && basisIndex.TryGetValue(key: identity, value: out var basisAt)) {
-                    if (!patchIndex.TryGetValue(key: identity, value: out var patchAt)) {
+                    if (patchIndex is null) {
+                        if (Puck.Abstractions.Documents.OrderedJson.Equals(basisRows[basisAt], valueRows[index])) { next = basisHeld[basisAt]; }
+                    } else if (!patchIndex.TryGetValue(key: identity, value: out var patchAt)) {
                         next = basisHeld[basisAt];
                     } else {
                         m_path.Add(item: new Segment(Index: index, Key: null, Name: null));
