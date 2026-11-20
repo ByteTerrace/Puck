@@ -315,7 +315,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// every <see cref="WorldSnapshot"/>), and the screen-removal admin cleanup
     /// (<c>Puck.World.WorldScreenBinder.ReconcileScreens</c> calls <see cref="Server.WorldEngagement.DissolveScreen"/>
     /// directly — loopback-only, like every other client↔server call that has not yet crossed a wire).</summary>
-    public WorldEngagement Engagement => m_engagement;
+    public WorldEngagement Engagement { get { ThrowIfTickPending(); return m_engagement; } }
     /// <summary>Gets this instance's own render-capacity oracle — configured by whatever presentation-side content
     /// source renders this instance (the boot world's own <c>WorldFramePresenter</c>, or an observing destination's
     /// session or continuum view), so a document mutation the same instance receives is checked against the same
@@ -326,7 +326,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// (collision pairs, region enter/exit, seat join/leave, route/engagement transitions). Read by
     /// <see cref="IWorldAddonHost"/>'s read pump; a diagnostic/delivery surface, never itself hashed (the
     /// underlying state it derives from already is).</summary>
-    public WorldEventFeed Events => m_events;
+    public WorldEventFeed Events { get { ThrowIfTickPending(); return m_events; } }
     /// <summary>Gets the capability table's <see cref="IWorldGrantsView"/> — the one grant primitive the engagement view, the
     /// addon runtime, and the grant/mutation command modules read (plus the two engagement-route writes the view
     /// carries). Reads are loopback-local today; a socket transport moves grant changes onto the wire. Deliberately not
@@ -492,27 +492,29 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <summary>Compacts the journal: the live definition becomes the new base and the edit history is cleared (the
     /// <c>world.save</c> half — a saved world is clean). Reads/writes only journal state, so it runs on the Immediate
     /// console path behind the stdin barrier.</summary>
-    public void Compact() => m_document.Compact();
+    public void Compact() {
+        lock (AuthorityGate) { ThrowIfTickPending(); m_document.Compact(); }
+    }
     /// <summary>Executes a narrow authority operation without racing the fixed-step population fold.</summary>
     /// <exception cref="InvalidOperationException">This activation has frozen for retirement.</exception>
     public T ExecuteAuthorityOperation<T>(Func<T> operation) {
         ArgumentNullException.ThrowIfNull(operation);
         EnterAuthorityGate();
-        try { ThrowIfTickPending(); ThrowIfAuthorityRetiring(); return operation(); } finally { m_authorityGate.Exit(); }
+        try { return operation(); } finally { m_authorityGate.Exit(); }
     }
     /// <summary>Executes a void authority operation under the same gate.</summary>
     /// <exception cref="InvalidOperationException">This activation has frozen for retirement.</exception>
     public void ExecuteAuthorityOperation(Action operation) {
         ArgumentNullException.ThrowIfNull(operation);
         EnterAuthorityGate();
-        try { ThrowIfTickPending(); ThrowIfAuthorityRetiring(); operation(); } finally { m_authorityGate.Exit(); }
+        try { operation(); } finally { m_authorityGate.Exit(); }
     }
 
     /// <summary>Runs a stateful operation under the authority gate without a boundary closure.</summary>
     internal void ExecuteAuthorityAction<T>(T state, Action<T> operation) {
         ArgumentNullException.ThrowIfNull(operation);
         EnterAuthorityGate();
-        try { ThrowIfTickPending(); ThrowIfAuthorityRetiring(); operation(state); } finally { m_authorityGate.Exit(); }
+        try { operation(state); } finally { m_authorityGate.Exit(); }
     }
 
     /// <summary>Gets or sets a callback invoked on a thread whose <see cref="ExecuteAuthorityOperation{T}"/> finds the
@@ -522,17 +524,23 @@ public sealed partial class WorldServer : IWorldServerHost {
     public Action? AuthorityGateContended { get; set; }
 
     internal void ThrowIfTickPending() {
-        if (m_tick?.BlockedReason is { } reason) {
+        if (m_tick?.BlockedDetail is { } reason) {
             throw new InvalidOperationException($"Authority tick is incomplete while waiting for {reason}.");
         }
     }
 
     private void EnterAuthorityGate() {
-        if (m_authorityGate.TryEnter()) {
-            return;
+        if (!m_authorityGate.TryEnter()) {
+            AuthorityGateContended?.Invoke();
+            m_authorityGate.Enter();
         }
-        AuthorityGateContended?.Invoke();
-        m_authorityGate.Enter();
+        try {
+            ThrowIfTickPending();
+            ThrowIfAuthorityRetiring();
+        } catch {
+            m_authorityGate.Exit();
+            throw;
+        }
     }
 
     /// <summary>The installed authority sampler.</summary>

@@ -274,7 +274,7 @@ public sealed partial class WorldTick {
                 retiringSubmission.Completion?.Invoke(Host.RetiredRefusal());
                 return;
             }
-            if ((BlockedReason is { } pending) && (entry is WorldOrderedEntry.Submission submission)) {
+            if ((BlockedDetail is { } pending) && (entry is WorldOrderedEntry.Submission submission)) {
                 submission.Completion?.Invoke(new WorldSubmissionResult.Refusal("world.authority.pending", $"authority tick is incomplete while waiting for {pending}"));
                 return;
             }
@@ -997,7 +997,7 @@ public sealed partial class WorldTick {
     private PendingTick m_pendingTick;
     private bool m_resumingTick;
     private volatile TickBlock? m_tickBlock;
-    private sealed record TickBlock(WaitReason Reason, ulong PreviousEngineTicks);
+    private sealed record TickBlock(WaitReason Reason, ulong PreviousEngineTicks, string Detail);
 
     private struct PendingTick {
         public FixedStepContext Context;
@@ -1010,7 +1010,8 @@ public sealed partial class WorldTick {
 
     internal WaitReason? PendingReason => m_tickBlock?.Reason;
     private bool ResumingOnOwner => Host.AuthorityGate.IsHeldByCurrentThread && m_resumingTick;
-    internal WaitReason? BlockedReason => ResumingOnOwner ? null : PendingReason;
+    internal WaitReason? BlockedReason => PendingReason is { } reason && !ResumingOnOwner ? reason : null;
+    internal string? BlockedDetail => m_tickBlock is { } block && !ResumingOnOwner ? block.Detail : null;
 
     /// <summary>Advances the authoritative world by one exact host tick: run every mounted addon's guest code first (see
     /// <see cref="IWorldAddonHost.TickAddons"/>, which applies nothing) → drain the buffered live edits (mutations,
@@ -1073,7 +1074,11 @@ public sealed partial class WorldTick {
             var pending = ResumeTick(deadline);
             if (pending is { } reason) {
                 held = true;
-                if (PendingReason != reason) { m_tickBlock = new TickBlock(reason, m_pendingTick.PreviousEngineTicks); }
+                if (PendingReason != reason) {
+                    var partitions = (reason == Puck.Hosting.Jobs.JobPool.JoinWait) ? Host.Jobs?.DescribeHeldPartitions() : null;
+                    var detail = string.IsNullOrEmpty(partitions) ? reason.ToString() : $"{reason} (held partitions {partitions})";
+                    m_tickBlock = new TickBlock(reason, m_pendingTick.PreviousEngineTicks, detail);
+                }
                 if (m_pendingTick.Stall.HasPassed) { FreezeStalledTick(reason); }
                 return pending;
             }
@@ -1092,7 +1097,7 @@ public sealed partial class WorldTick {
 
     private void FreezeStalledTick(WaitReason reason) {
         ExecutionInterrupted = true;
-        Host.Output.Narrate("world.tick", $"[world.tick {m_pendingTick.Context.Tick + 1}: authority stalled waiting for {reason}]");
+        Host.Output.Narrate("world.tick", $"[world.tick {m_pendingTick.Context.Tick + 1}: authority stalled waiting for {m_tickBlock?.Detail ?? reason.ToString()}]");
     }
 
     private WaitReason? ResumeTick(WaitDeadline deadline) {

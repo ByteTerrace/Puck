@@ -6,9 +6,9 @@ namespace Puck.World.Server;
 public sealed partial class WorldServer {
     /// <summary>Gets the document facade — the live definition, the journal and its base, the buffered live-edit
     /// ops, the compose and apply pipeline, the solid field, and the per-tick delivery decision.</summary>
-    public WorldDocument Document => m_document;
+    public WorldDocument Document { get { ThrowIfTickPending(); return m_document; } }
     /// <summary>Gets the per-entity snapshot scratch the tick's delivery fills.</summary>
-    public EntitySnapshot[] SnapshotEntries => m_tick.SnapshotEntries;
+    internal EntitySnapshot[] SnapshotEntries => m_tick.SnapshotEntries;
     /// <summary>Gets whether each tracked slot saw a second, different-principal write this tick.</summary>
     public bool[] TickCollided => m_tick.TickCollided;
     /// <summary>Gets the entity indices an allowed intent has already written this tick.</summary>

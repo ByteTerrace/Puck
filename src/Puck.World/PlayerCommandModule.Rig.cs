@@ -35,11 +35,11 @@ internal sealed partial class PlayerCommandModule {
             args: in args,
             at: 0,
             min: 0,
-            max: (m_population.Capacity - 1),
+            max: (Population.Capacity - 1),
             fallback: 0,
             value: out var index
         )) {
-            return CommandResult.Error(output: $"[body.rig: body index must be an integer 0..{(m_population.Capacity - 1)}]");
+            return CommandResult.Error(output: $"[body.rig: body index must be an integer 0..{(Population.Capacity - 1)}]");
         }
         var shapeName = ((instanceTarget.EffectiveCount == 2) ? args[1].ToString() : null);
         // The input half is the routed authority's own read-back of the body, under the asking principal's Observe

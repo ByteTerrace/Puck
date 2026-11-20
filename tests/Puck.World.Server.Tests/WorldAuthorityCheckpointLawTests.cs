@@ -28,6 +28,8 @@ public sealed class WorldAuthorityCheckpointLawTests {
         Assert.Equal(0UL, published);
         Assert.Equal(proxy.Wait, pending);
         Assert.Equal(0UL, server.CompletedTick);
+        Assert.Equal(0UL, server.CompletedEngineTicks);
+        Assert.Contains(proxy.Wait.ToString(), Assert.Throws<InvalidOperationException>(() => _ = server.Population).Message);
         Assert.Contains(proxy.Wait.ToString(), Assert.Throws<InvalidOperationException>(() => server.ReadView(default(CommandContext))).Message);
         Assert.Contains(proxy.Wait.ToString(), Assert.Throws<InvalidOperationException>(() => server.AttachSink(null!)).Message);
         Assert.Contains(proxy.Wait.ToString(), Assert.Throws<InvalidOperationException>(() => server.RestoreCheckpoint(null!)).Message);
@@ -40,6 +42,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         Assert.Null(pending);
         Assert.Equal(1UL, final);
         Assert.Equal(1UL, published);
+        Assert.Equal(Fixtures.StepTicks, server.CompletedEngineTicks);
         Assert.Equal(2, proxy.Attempts);
         baseline.Advance(Fixtures.StepTicks);
         Assert.Equal(WorldStateHashComposition.HashAuthoritative(baseline, 1UL), WorldStateHashComposition.HashAuthoritative(server, 1UL));

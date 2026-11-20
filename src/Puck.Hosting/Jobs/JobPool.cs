@@ -25,6 +25,7 @@ public sealed class JobPool : IDisposable {
     private const uint Closed = uint.MaxValue;
 
     private readonly Thread[] m_threads;
+    private readonly int[] m_workerPartitions;
     private readonly Semaphore m_wake = new(initialCount: 0, maximumCount: int.MaxValue);
     private readonly AutoResetEvent m_done = new(initialState: false);
     private readonly Lock m_faultGate = new();
@@ -48,8 +49,10 @@ public sealed class JobPool : IDisposable {
 
         Workers = workers;
         m_threads = new Thread[(workers.Count - 1)];
+        m_workerPartitions = new int[m_threads.Length];
         for (var index = 0; (index < m_threads.Length); index++) {
-            m_threads[index] = new Thread(start: Work) {
+            var workerIndex = index;
+            m_threads[index] = new Thread(start: () => Work(workerIndex)) {
                 IsBackground = true,
                 Name = $"Puck job worker {index}",
             };
@@ -124,8 +127,7 @@ public sealed class JobPool : IDisposable {
         fork = new ForkOperation(this, generation, Environment.CurrentManagedThreadId);
         Wake(wanted: (partitions - 1));
 
-        Drain();
-        return Join(ref fork, deadline);
+        return Drain(workerIndex: -1) ? Settle(ref fork) : Join(ref fork, deadline);
     }
 
     private WaitOutcome Join(ref ForkOperation fork, WaitDeadline deadline) {
@@ -133,6 +135,10 @@ public sealed class JobPool : IDisposable {
         if (outcome == WaitOutcome.DeadlinePassed) {
             return outcome;
         }
+        return Settle(ref fork);
+    }
+
+    private WaitOutcome Settle(ref ForkOperation fork) {
         try {
             m_body = null;
             fork = default;
@@ -141,6 +147,17 @@ public sealed class JobPool : IDisposable {
             Volatile.Write(location: ref m_busy, value: 0);
         }
         return WaitOutcome.Completed;
+    }
+
+    /// <summary>Names the partition indices workers are executing at the time of the read.</summary>
+    public string DescribeHeldPartitions() {
+        var held = new List<int>();
+        for (var index = 0; index < m_workerPartitions.Length; index++) {
+            var partition = Volatile.Read(ref m_workerPartitions[index]);
+            if (partition != 0) { held.Add(partition - 1); }
+        }
+        held.Sort();
+        return string.Join(", ", held);
     }
 
     /// <summary>The owning caller's handle for a fork whose partitions may still be running.</summary>
@@ -193,10 +210,18 @@ public sealed class JobPool : IDisposable {
             }
         }
     }
-    private void Drain() {
+    // The worker that completes the last partition signals the owner. An owner that finishes last settles inline.
+    private bool Drain(int workerIndex) {
         while (TryTake(body: out var body, partition: out var partition)) {
-            Complete(body: body, partition: partition);
+            if (workerIndex >= 0) { Volatile.Write(ref m_workerPartitions[workerIndex], partition + 1); }
+            RunPartition(body: body, partition: partition);
+            if (workerIndex >= 0) { Volatile.Write(ref m_workerPartitions[workerIndex], 0); }
+            if (Interlocked.Decrement(ref m_remaining) == 0) {
+                if (workerIndex >= 0) { _ = m_done.Set(); }
+                return true;
+            }
         }
+        return false;
     }
     private bool TryTake(out IJobPartitions body, out int partition) {
         while (true) {
@@ -217,17 +242,14 @@ public sealed class JobPool : IDisposable {
             }
         }
     }
-    private void Complete(IJobPartitions body, int partition) {
+    private void RunPartition(IJobPartitions body, int partition) {
         if (!PartitionFault.TryRun(body: body, error: out var error, partition: partition)) {
             lock (m_faultGate) {
                 m_fault.Record(error: error!, partition: partition);
             }
         }
-        if (Interlocked.Decrement(location: ref m_remaining) == 0) {
-            _ = m_done.Set();
-        }
     }
-    private void Work() {
+    private void Work(int workerIndex) {
         var consumer = HostWaits.ClaimConsumer(IdleWait);
         while (true) {
             HostWaits.Idle(m_wake, consumer);
@@ -235,7 +257,7 @@ public sealed class JobPool : IDisposable {
             if (m_stopping) {
                 return;
             }
-            Drain();
+            _ = Drain(workerIndex);
         }
     }
 

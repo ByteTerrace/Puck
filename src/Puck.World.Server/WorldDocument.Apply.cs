@@ -1051,11 +1051,12 @@ public sealed partial class WorldDocument {
     // "Observation and display" section). Stamped with the server's actual current tick/step width
     // (Host.CompletedTick/Host.LastStepTicks), which are still their default 0/0 before the very first Step has ever
     // run — the one case where 0/0 is the honest answer, preserved exactly.
-    internal WorldSnapshot BuildPrimerSnapshot() => BuildSnapshotCore(
-        consumeContinuity: false,
-        stepTicks: Host.LastStepTicks,
-        tick: Host.CompletedTick
-    );
+    internal WorldSnapshot BuildPrimerSnapshot() {
+        lock (Host.AuthorityGate) {
+            Host.ThrowIfTickPending();
+            return BuildSnapshotCore(Host.CompletedTick, Host.LastStepTicks, consumeContinuity: false);
+        }
+    }
     // Every live body's authoritative sim pose, color, archetype, and this tick's continuity hint, written into the
     // reused Host.SnapshotEntries array — the SAME borrowed-scratch shape as before the output hub: a typed subscriber
     // must fully consume (or copy) the returned WorldSnapshot before returning from DeliverSnapshot, because the next

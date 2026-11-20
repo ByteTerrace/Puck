@@ -546,7 +546,7 @@ public sealed partial class WorldPersistence {
         ArgumentNullException.ThrowIfNull(argument: hostRow);
 
         lock (Host.AuthorityGate) {
-            if (Host.Tick.BlockedReason is { } pending) {
+            if (Host.Tick.BlockedDetail is { } pending) {
                 checkpoint = null;
                 reason = $"authority tick is incomplete while waiting for {pending}";
                 return false;

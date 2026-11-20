@@ -46,6 +46,7 @@ public sealed class JobPoolLawTests {
             Assert.Equal(WaitOutcome.DeadlinePassed, pool.Fork(2, partitions, ref fork, default));
             Assert.Equal(WaitOutcome.DeadlinePassed, pool.Fork(2, partitions, ref fork, default));
             Assert.Equal([1, 1], runs);
+            Assert.Matches("^[01]$", pool.DescribeHeldPartitions());
         } finally {
             releaseWorker.Set();
         }

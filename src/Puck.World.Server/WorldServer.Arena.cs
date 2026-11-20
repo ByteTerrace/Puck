@@ -76,6 +76,7 @@ public sealed partial class WorldServer {
     /// <returns>The live admission or storage verdict. A refusal changes no cell.</returns>
     public WorldCellWriteVerdict WriteStateCell(Principal principal, StateHandle row, CellKey key, long operand,
         WorldDocumentWriteKind write = WorldDocumentWriteKind.Set, string? text = null) {
+        ThrowIfTickPending();
         if (!m_arena.Catalog.TryGetDescriptor(descriptor: out var descriptor, handle: row) || (descriptor.Lane != StateLane.Document)) {
             return WorldCellWriteVerdict.StaleAddress;
         }
