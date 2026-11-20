@@ -1073,11 +1073,6 @@ Remaining detailed findings and smaller cuts in this area:
   residencies under a too-small budget each admit one group past it
   (`SdfMeshPathBake`'s `TryTake`, the "admitted alone" branch); the
   process-wide rule is the job system's J1.
-- [low · unconfirmed] The bake indexes its `SdfBakeTaps[4]` by the `[loop]`
-  counter (`sdf-mesh-bake.comp.hlsl`), the shape the rendering skill's
-  local-array rule forbids. Read its local memory size in a Vulkan RenderDoc
-  capture of a baking frame; if it spills, pick each tap's signs from bits,
-  batched with the next bake-kernel change.
 - [low · unconfirmed] `SdfWorldTables.SameProgramGeometry` compares the stream
   outside the shading words, so a material flipping between glass and opaque
   reads as the same geometry though it moves the draw between passes. Confirm

@@ -64,7 +64,6 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
     SdfHit child;
     child.distance = SDF_FAR_DISTANCE;
     child.material = 0;
-    child.lanes = 0.0;
     child.instanceIndex = -1;
     child.frameSlot = SDF_TRANSFORM_SLOT_NONE;
 
@@ -81,7 +80,6 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
         uint4 shape = sdfProgramWord(SDF_PROGRAM_HEADER_VECTORS + code.x);
         uint4 binding = sdfProgramWord(part.y + leaf);
         float3 localPosition = worldPosition;
-        float4 lanes = 0.0;
         int slot = SDF_TRANSFORM_SLOT_NONE;
 #ifdef SDF_DYNAMIC_TRANSFORMS
         if (binding.x != SDF_TRANSFORM_SLOT_STATIC_WORD) {
@@ -90,7 +88,6 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
             float4 position = sdfDynamicTransformRow(3u * pose);
             float4 orientation = sdfDynamicTransformRow(3u * pose + 1u);
             localPosition = rotatePointByInverseQuaternion(worldPosition - position.xyz, orientation);
-            if (trackMaterial) lanes = sdfDynamicTransformRow(3u * pose + 2u);
         }
 #endif
 
@@ -121,12 +118,12 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
         float4 shapeData1 = asfloat(sdfProgramWord(dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x + 1u));
         float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shape), localPosition, shapeData0, shapeData1) * distanceScale;
         sdfComposeCandidate(child, candidate, SDF_INSTRUCTION_BLEND(shape), trackMaterial ? (int)binding.y : 0,
-            lanes, instanceIndex, slot, shapeData1.x, trackMaterial);
+            instanceIndex, slot, shapeData1.x, trackMaterial);
     }
 
     // Same hard-union PopField semantics as the generic scalar walk, through its baked candidate scale.
     float candidate = child.distance * asfloat(part.w);
-    sdfComposeCandidate(parent, candidate, SDF_BLEND_UNION, child.material, child.lanes, child.instanceIndex, child.frameSlot, 0.0, trackMaterial);
+    sdfComposeCandidate(parent, candidate, SDF_BLEND_UNION, child.material, child.instanceIndex, child.frameSlot, 0.0, trackMaterial);
 }
 
 #endif

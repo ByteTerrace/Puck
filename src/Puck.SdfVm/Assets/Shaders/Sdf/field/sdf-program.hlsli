@@ -184,8 +184,8 @@ uint sdfInstanceCountClamped() {
 // Per-frame dynamic entity transforms (the world render path only). Each moving entity (player/enemy/carried screen)
 // owns a slot of THREE rows: element 3*slot is its world position (xyz),
 // 3*slot+1 its orientation quaternion (xyzw), 3*slot+2 its Lanes carrier (components 0 through 3 —
-// Puck.SignedDistance.DynamicTransform.Lanes). The SDF_OP_TRANSFORM_DYNAMIC opcode reads the rigid transform AND the
-// lanes from here by slot index, so an entity moves and its anonymous state updates by writing this small
+// Puck.SignedDistance.DynamicTransform.Lanes). SDF_OP_TRANSFORM_DYNAMIC reads the rigid transform. LaneErode and Morph
+// read the active slot's lanes here, so an entity moves and its anonymous state updates by writing this small
 // buffer instead of re-uploading the static program — the same way the camera moves via the per-frame viewport
 // table. The kernels read it through sdfDynamicTransforms.
 
