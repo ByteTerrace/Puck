@@ -116,6 +116,7 @@ public sealed class DiscreteStateLawTests {
             maxVisits: 16
         );
         var values = new long[16];
+        var scratch = new ArenaScratch();
 
         BoardQueries.Read(
             row: row,
@@ -126,7 +127,8 @@ public sealed class DiscreteStateLawTests {
             query,
             values,
             1,
-            0
+            0,
+            scratch: scratch
         );
         Assert.Equal(
             0L,
@@ -142,7 +144,8 @@ public sealed class DiscreteStateLawTests {
                         query,
                         values,
                         1,
-                        0
+                        0,
+                        scratch: scratch
                     );
                 }
             })

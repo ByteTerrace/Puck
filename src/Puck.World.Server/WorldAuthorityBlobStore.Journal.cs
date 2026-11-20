@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using Puck.Assets;
 using Puck.Storage;
 using Puck.World.Protocol;
 
@@ -103,9 +104,9 @@ public sealed partial class WorldAuthorityBlobStore {
                 }
                 var name = key.AsSpan(address.Key.Length);
                 const int SequenceDigits = 20;
-                return name.Length == SequenceDigits + 1 + 64 + fileExtension.Length &&
+                return name.Length == SequenceDigits + 1 + AssetContentHash.HexLength + fileExtension.Length &&
                     name[SequenceDigits] == '-' &&
-                    !name.Slice(SequenceDigits + 1, 64).ContainsAnyExcept("0123456789abcdef") &&
+                    !name.Slice(SequenceDigits + 1, AssetContentHash.HexLength).ContainsAnyExcept("0123456789abcdef") &&
                     long.TryParse(name[..SequenceDigits], NumberStyles.None, CultureInfo.InvariantCulture, out var sequence) &&
                     sequence > 0 && sequence <= previous.Sequence;
             });

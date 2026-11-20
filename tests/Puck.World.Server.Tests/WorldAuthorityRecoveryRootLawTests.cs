@@ -260,9 +260,9 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
         );
         var key = Assert.Single(
             collection: keys,
-            predicate: candidate => candidate.Contains(
+            predicate: candidate => candidate.EndsWith(
                 comparisonType: StringComparison.Ordinal,
-                value: $"/recovery/{operation:D}/"
+                value: $"/recovery/{operation:D}/root.json"
             )
         );
         var path = Path.Combine(
@@ -344,9 +344,9 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
                 "private/puck/hosted",
                 cancellation
             ),
-            predicate: candidate => candidate.Contains(
+            predicate: candidate => candidate.EndsWith(
                 comparisonType: StringComparison.Ordinal,
-                value: $"/recovery/{operation:D}/"
+                value: $"/recovery/{operation:D}/root.json"
             )
         );
         var path = Path.Combine(

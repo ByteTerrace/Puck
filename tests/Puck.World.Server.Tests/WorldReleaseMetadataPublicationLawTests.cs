@@ -203,7 +203,7 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
         var path = Assert.Single(
             collection: paths,
             predicate: value => value.StartsWith(
-                $"{prefix}/{root.Root.CheckpointOrdinal:D12}-",
+                $"{prefix}/{root.Root.CheckpointStorageSequence:D20}-",
                 StringComparison.Ordinal
             )
         );
