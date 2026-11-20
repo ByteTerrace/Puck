@@ -281,7 +281,8 @@ places (must be zero), and geometry keys. `--pose '1=0,0,0,0,0.05,0,0.9987492'` 
 delta by member slot offset in the group frame and audits against the posed field. Compare both
 envelope extremes. A build cannot prove motion: request a 60-frame presented burst on both backends,
 with motion diagnostics on still parts, as the [moving-blends memo](../../../docs/plans/moving-blends.md) specifies.
-Material rest coordinates remain step 4 and the quiet cost window step 5.
+Opaque and glass shading share `sdfLayerFrame` for material coordinates and lanes.
+The striped-neck burst and quiet cost window remain lead readings.
 
 A retained separate bake group must still ride the newly planned `Slot`, even
 when its instance selector and local geometry stay unchanged. Rigid draw poses
@@ -845,14 +846,21 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   exposure for any before/after comparison. A view with no camera sample reads the
   open sky, so a closed room meters as daylight and a display in it reads black:
   `camera=none` names its `wait=` ([mesh GI](references/mesh-gi.md)).
-- **The irradiance volume is gathered once a cell and read once a pixel.** The
+- **Temporal views can share shading in smooth interiors.** The device table's
+  `viewsRate` chooses the coarsest spacing and classification tile. The resolve
+  publishes smooth axes in the existing history surface. `sdfRateTile` checks
+  that history against current geometry and ink and packs the agreed axes in the
+  probe record. The views entry packs each cell's representatives into adjacent
+  lanes and writes each pixel once. For the table fields and the four tile counts
+  see [temporal reconstruction](../../../docs/rendering/sdf/handbook/frame-rendering.md#temporal-reconstruction).
+- **The irradiance volume is gathered once a cell and read once per shading sample.** The
   probe lookup pass (`views-probes`) runs `sdfMeshProbesAt` at one representative
   pixel of each `SdfWorldPackage.ViewsProbeRate`-pixel cell, at its geometric
   normal; views reuses that gather where the pixel's receiver lies within the
   normal bias of the representative's, on its tangent plane and facing alike
   (`sdfViewsProbesAt`), and gathers for itself across a depth or crease edge, so
   the reuse never steps across a visibility edge the record shows. The cube reads
-  stay per pixel, along its shading normal and mirror direction. The gather
+  stay per shading sample, along its shading normal and mirror direction. The gather
   supplies indirect light, reflections and traced static-light visibility; glass
   gathers at its own pane (`passes/sdf-glass-stage.hlsli`), since a pane is lit
   apart from the surface behind it. `passes/sdf-views-split.hlsli` holds the

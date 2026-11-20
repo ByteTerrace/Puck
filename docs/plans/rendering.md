@@ -106,13 +106,14 @@ The steps, each after the one it names:
    the whole frame's 16.7 ms. Read its share on the table first, then capture
    the views kernel on this device (register count, spills and occupancy, and
    its walk over the lights) to name what limits it, with the surface pass,
-   which also shades by pixel, read in the same capture. The two planned cuts
-   to this pass, the probe lookup once per view
-   ([decision 13](rendering-research.md#13-shade-through-one-path-and-shrink-the-image-history))
-   and shading at the rate each tile needs
-   ([rank 1](rendering-research.md#gpu-capabilities-puck-does-not-use-yet)),
-   are sized by what they give the RTX 4070; this step says whether either
-   reaches the 2060's bar, and what else must if neither does.
+   which also shades by pixel, read in the same capture. Compare the 2060
+   table's `viewsRate.maxRate` at 1 and 2, keeping render scale and the other
+   rows fixed. Read `sdf.world$views`, `sdf.world$views-probes` (which
+   classifies the tiles) and `sdf.world$resolve` together. Pair the
+   [tile counts](../rendering/sdf/handbook/frame-rendering.md#temporal-reconstruction)
+   with gallery and valley stills and a pan past ink and specular detail.
+   The 4070 can run the same profile for the initial comparison. The player
+   build on the 2060 supplies the frame-bar reading.
 3. **The resolve.** After 1. It runs at the display's size whatever the render
    scale, since its history follows the display
    (`SdfWorldPackage.HistoryWindowWords`). Its window's memory traffic is not
@@ -687,8 +688,7 @@ no gain); at scales past the admitted ratios; and at a C# caller that writes
 `SdfProgramBuilder.Scale` itself.
 
 1. The record is corrected, and the exhibits and this design exist.
-2. **The spheroid, first to build.** It needs no new solve and no new
-   instruction.
+2. **The rendered spheroid uses the existing ellipse.**
    - `SdfProgramBuilder.Ellipse` keeps both radii as authored: its `1e-4`
      move of a near-circle goes, with the three places that carry it
      (`SdfSolidGeometry.GetLocalBounds`'s prism box, `LocalBox`'s factor

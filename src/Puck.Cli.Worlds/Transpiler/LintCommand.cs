@@ -18,8 +18,7 @@ public static class LintCommand {
         diagnostic.Span.Offset,
         diagnostic.Message
     );
-    private static int LintFile(string filePath, bool strict, WorldMachineCatalog machines, HashSet<string>? reported = null) {
-        var catalogFingerprint = Puck.Cli.CliWorldVocabulary.Fingerprint(catalog: machines);
+    private static int LintFile(string filePath, bool strict, WorldMachineCatalog machines, string catalogFingerprint, HashSet<string>? reported = null) {
         string sourceText;
 
         try {
@@ -92,6 +91,7 @@ public static class LintCommand {
     }
     public static int Execute(string path, bool strict) {
         var machines = CliWorldVocabulary.EnsureInstalled();
+        var catalogFingerprint = Puck.Cli.CliWorldVocabulary.Fingerprint(catalog: machines);
         var fullPath = Path.GetFullPath(path: path);
 
         if (Directory.Exists(path: fullPath)) {
@@ -110,6 +110,7 @@ public static class LintCommand {
 
             foreach (var file in files) {
                 var code = LintFile(
+                    catalogFingerprint: catalogFingerprint,
                     filePath: file,
                     machines: machines,
                     reported: reported,
@@ -133,6 +134,7 @@ public static class LintCommand {
             }
 
             return LintFile(
+                catalogFingerprint: catalogFingerprint,
                 filePath: fullPath,
                 machines: machines,
                 strict: strict

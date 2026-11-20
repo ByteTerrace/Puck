@@ -6,9 +6,9 @@ namespace Puck.World.Server;
 public sealed partial class WorldServer {
     /// <summary>Gets the document facade — the live definition, the journal and its base, the buffered live-edit
     /// ops, the compose and apply pipeline, the solid field, and the per-tick delivery decision.</summary>
-    public WorldDocument Document => m_document;
+    public WorldDocument Document { get { ThrowIfTickPending(); return m_document; } }
     /// <summary>Gets the per-entity snapshot scratch the tick's delivery fills.</summary>
-    public EntitySnapshot[] SnapshotEntries => m_tick.SnapshotEntries;
+    internal EntitySnapshot[] SnapshotEntries => m_tick.SnapshotEntries;
     /// <summary>Gets whether each tracked slot saw a second, different-principal write this tick.</summary>
     public bool[] TickCollided => m_tick.TickCollided;
     /// <summary>Gets the entity indices an allowed intent has already written this tick.</summary>
@@ -68,14 +68,14 @@ public sealed partial class WorldServer {
     /// <inheritdoc cref="WorldDocument.AttachAddons"/>
     public void AttachAddons(IWorldAddonHost runtime, WorldDocumentInputs? preparedFrom = null) => m_document.AttachAddons(preparedFrom: preparedFrom, runtime: runtime);
     /// <inheritdoc cref="WorldDocument.AttachSink(IClientSink)"/>
-    public IDisposable AttachSink(IClientSink sink) => m_document.AttachSink(sink: sink);
+    public IDisposable AttachSink(IClientSink sink) => ExecuteAuthorityOperation(() => m_document.AttachSink(sink: sink));
 
     /// <summary>Attaches the in-process presentation that serves every local seat. Bodies and the document arrive
     /// whole; each cue is admitted per seat through that seat's live read capability and carries the seats that may
     /// be told it (<see cref="WorldGameplayCue.Audience"/>).</summary>
     /// <param name="sink">The local presentation's sink.</param>
     /// <returns>A lease that detaches <paramref name="sink"/> when disposed.</returns>
-    public IDisposable AttachLocalPresentation(IClientSink sink) {
+    public IDisposable AttachLocalPresentation(IClientSink sink) => ExecuteAuthorityOperation(() => {
         WorldRecipientView[] views = [];
         return m_document.AttachSink(sink, WorldSinkDisclosure.Full, snapshot => {
             var seats = Math.Min(Definition.Population.LocalSeats, WorldGameplayCue.MaxAudienceSeats);
@@ -85,13 +85,14 @@ public sealed partial class WorldServer {
             }
             return Tick.PresentLocalCues(snapshot, views);
         });
-    }
+    });
     /// <summary>Attaches a sink with the supplied body disclosure policy.</summary>
-    public IDisposable AttachSink(IClientSink sink, in WorldSinkDisclosure disclosure) =>
-        m_document.AttachSink(
-            disclosure: in disclosure,
-            sink: sink
-        );
+    public IDisposable AttachSink(IClientSink sink, in WorldSinkDisclosure disclosure) {
+        lock (AuthorityGate) {
+            ThrowIfTickPending();
+            return m_document.AttachSink(sink, in disclosure);
+        }
+    }
     /// <inheritdoc cref="WorldDocument.EnqueueMutation"/>
     public void EnqueueMutation(WorldMutation mutation, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, long sourceAddonInstanceId = -1L, ushort actOrdinal = 0, Action<bool>? outcomeObserved = null, WorldMutationBinding? binding = null, Action<WorldSubmissionResult>? completion = null) =>
         m_document.EnqueueMutation(
@@ -106,13 +107,13 @@ public sealed partial class WorldServer {
         );
     /// <inheritdoc cref="WorldDocument.EnqueueRebuild"/>
     public void EnqueueRebuild(WorldRebuildRequest request, Principal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, string? expectedContentHash = null) =>
-        m_document.EnqueueRebuild(
+        ExecuteAuthorityOperation(() => m_document.EnqueueRebuild(
             connectionId: connectionId,
             correlationId: correlationId,
             expectedContentHash: expectedContentHash,
             principal: principal,
             request: request
-        );
+        ));
     /// <summary>Gets a task that completes once every rebuild this authority has started preparing off its tick has
     /// finished preparing. A prepared rebuild installs at the next drain; nothing on the tick waits for it.</summary>
     public Task RebuildPreparations => ExecuteAuthorityOperation(operation: () => m_document.RebuildPreparations);

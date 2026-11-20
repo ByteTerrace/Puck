@@ -117,7 +117,7 @@ correctness rests on an invariant is designed and reviewed before code
    a 16 GB machine, which no plan sets and which the 2060 ran out of; the
    2060's region refusals with its table applied; then the
    [streaming campaign](streaming-and-memory.md#the-build-order)'s next step.
-7. [high] [Engine job system](#engine-job-system): C0.5, then the pool's
+7. [high] [Engine job system](#engine-job-system): finish bounded waits, then the pool's
    design (J1), which folds in the bake's private worker pool; then rows as
    jobs (T4) for the silo. The frame thread still steps the authority and
    emits the whole program; the 2060 trace in item 3 sizes both.
@@ -424,7 +424,8 @@ a specialist builds · high · Next: the next step of
 [the memo's build order](engine-job-system.md#6-build-order), which states the
 order once: the scheduling stage's windowed reading, C0.3's and C0.4's, then
 [the control plane's](engine-job-system.md#the-control-planes-phase-and-bounded-waits)
-step C0.5 (C0.1 to C0.4 are built), then the pool's design (J1). The garbage-collection cuts
+device and present waits (C0.6), then the attach and live-request steps before
+the pool's design (J1). The garbage-collection cuts
 below and the replay burst's tick budget run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 Where the tick runs is an open design question this plan owns
@@ -443,10 +444,10 @@ costs.
   93 to 116 ms `simulate` is one step, and the Vulkan run stepped where
   Direct3D 12 held: its frames answered rendered between converging frames
   (inference, from the code; the reading has no per-iteration render
-  completion). C0.5 owns the step's joins and drains, which bound the control
-  gap once they run through the door; what the step does for 100 ms on Vulkan
-  is a measurement: `host.frames` with the tick lane and a `dotnet-trace` of the
-  pump over a stepping iteration during a convergence on Vulkan.
+  completion). Tick joins and drains now return to the control phase when
+  their wait slice expires. Use `host.frames` with the tick lane and a
+  `dotnet-trace` of a stepping iteration to identify the reported Vulkan
+  simulation work.
 - [medium] A rated item's phase is held by its own cadence, so a long frame
   that spans an interval for one item and not another (a hitch, a missed
   frame on a fixed signal) can land two items that took a tier half a period
@@ -1103,7 +1104,9 @@ Next: fill the engine gaps first
    apart (a carve's rim meets a face at up to 125 degrees); and a lattice at its
    tier's floor still refines the cells it cannot resolve at all
    (`SdfMeshPathBake.FactorOf`), so the swallow's streamer tips are no longer
-   lost. Still open, each read in the exhibit's own vertices: the junction
+   lost. A broad sheet can also take an extra split when the ordinary
+   refinement would still leave a coarse cell (`SdfMeshPathBake.ThinSplit`).
+   Still open, each read in the exhibit's own vertices: the junction
    where a groove's lips meet a box edge (`shape-groove-union`) and where a
    rounded rim fades into a sharp edge (`shape-smooth-subtraction`), where the
    field check moves solved vertices up to half a cell or refuses a kinked one;
@@ -1134,9 +1137,8 @@ Next: fill the engine gaps first
      criterion "may still contain intersecting polygons"). Not checked: that
      the refinement takes the finest split that fits and is never skipped
      silently (a reviewer's reading).
-2. **Non-uniform scale bounds (gap 11,** [rendering](rendering.md#bake-quality))
-   and **[moving blends](moving-blends.md#engine-gaps-first) step 4 (gap 10)**
-   beside it. Then the three kinds of triangle the lattice's facing does not
+2. **Non-uniform scale bounds (gap 11,** [rendering](rendering.md#bake-quality)).
+   Then the three kinds of triangle the lattice's facing does not
    judge, which the tour's remaining reds and the Moth's shin groups share
    (below).
 
@@ -1180,8 +1182,7 @@ Next: fill the engine gaps first
   defects. Inspect the contour's narrow triangles before changing its detail.
 - [high] The walkthrough tour is still red on its mesh audits:
   `puck mesh audit --cpu --prototype <id>` (`SweepMeshAudit`) finds flipped
-  triangles on six of the fourteen blend exhibits (`shape-groove-union` and
-  `shape-blend-subtraction` worst) and on none of the primitives. Those counts
+  triangles along several of the blend exhibits' rims. Earlier counts
   came from CPU taps wider than the kernel's; on the exhibits' tiers the CPU
   now places the kernel's taps, which turned `shape-chamfer-union` from 6 folds
   and 2 flipped to 0 and 0, as on the device, so the six are read again first.
@@ -1222,8 +1223,8 @@ Next: fill the engine gaps first
   sheet, or refine it), and the non-manifold edges on the shins' soles sit on
   the same edges. The one detail rule exposes the defect and does not cause
   it.
-- [high] [Moving blends](moving-blends.md) steps 4 and 5: paints, insets and
-  lanes across a blended seam, then the quiet-window cost of a skinned
+- [high] [Moving blends](moving-blends.md) steps 4 and 5 still need the lead's
+  presented striped-neck check and the quiet-window cost of a skinned
   close-up and a crowd on both backends.
 - [medium] The curvature gate refines sharp creases as turns (toes and soles
   about twice over): the samples cannot tell a crease from a fillet narrower
@@ -2017,7 +2018,7 @@ valley's walls wait on [the terrain pass](terrain-pass.md#order-of-work)'s
 steps 4, 3, 6 and 7 (gaps 1 to 4), the caldera water on
 [water](water.md#order)'s gaps 5, 6 and 9 and on
 [moving blends](moving-blends.md#engine-gaps-first)' gap 8, and the Moth and
-the swallow on its gap 10 and on [bake detail](#bake-detail)'s gap 7. Then
+the swallow on [bake detail](#bake-detail)'s gap 7. Then
 the caldera water's first proof, then the per-milestone review across every
 place. The bar and its judging are in
 [the art README](../game/art/README.md#the-visual-bar); each place's look
@@ -2327,6 +2328,20 @@ grow:
   step thread from a copy-on-write image, and make checkpoints incremental;
   the document a checkpoint carries twice is
   [delivery's item](#delivery-launcher-and-ci).
+- [high] A crossing record blocks the silo's one step thread on blob round
+  trips. `WorldSiloHost.RowCrossingLog.Append` waits on the row's publication
+  queue (`GetAwaiter().GetResult()`), which checkpoint uploads also join, and
+  it is reached from the step through `WorldInstanceHost.DrainPendingTransfers`
+  and every other synchronous `WorldServer.RecordCrossingHeld` caller
+  (`WorldTransferEscrow`, `WorldServer.Custody`, the companion, departure and
+  settlement paths in `WorldInstanceHost`). Make the record asynchronous the
+  way federated transfers resume at tick boundaries: `IWorldCrossingLog`
+  answers pending, the authority holds one in-flight record per crossing
+  sequence (the sequence must stay dense) together with the step that waits
+  on it, and the step resumes at the next drain once the record is durable;
+  an arrival lands only then. Retried steps rebuild their records (a
+  settlement's lists), so the in-flight record is kept by the transfer, never
+  matched by value.
 - [medium] Hard caps with no admission story: 4096 bodies a world
   (`WorldBodiesLimits.CapacityCeiling`), 256 authenticated federation
   connections a host (`WorldPeerHost.MaximumFederationConnections`), and one
@@ -2390,9 +2405,8 @@ State and server:
   instead of returning `StaleAddress`; the addon runtime's query handlers
   (`WorldAddonRuntime.ResolveBodyPoses` and the development queries that
   charge `ChargeHostFuel`) return without a reply when host fuel is exhausted;
-  `WorldStateDocumentValues` formats Bool as `1`/`0` in one path and
-  `true`/`false` in another, and `ValidateStateTransaction` validates the
-  unmaterialized definition; `RuleExpressions.Run` swallows an absent value
+  `ValidateStateTransaction` validates the unmaterialized definition for the
+  authority; `RuleExpressions.Run` swallows an absent value
   inside `not`, `and` and `or`; `StateSeedReader` builds a state section
   without lattices, spaces, enums or pools; `ArenaSnapshot` and `ArenaUndo`
   index rows by non-document lane ordinals and keep change-window state across
@@ -2552,16 +2566,19 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   `CollectReferencedRows`, transform indirections and unresolvable transforms,
   knowledge, witness and readers declarations, reverse relations beyond keyed
   rows, the empty-selection guard below `Replica`, the console row verbs'
-  pre-read). What remains is every check that reads past the declared relation,
-  which only [decision 3a's restricted transaction](disclosure.md#the-structural-write-footprint)
-  closes: whole-document validation of a unit the write does not name (a joint
-  check inside one placement or HUD element over a written row and a withheld
-  one), shared ceilings and the key table, rule firings that leave a hidden row
-  invalid (H2), and `world.parked` and `world.hud.template` on the read side
-  (D0d). D0a still owes the executed witnesses for H1 and H2. The coupling
-  refuses a recipient's write into a row a withheld declaration names (a live
-  audience, a knowledge source), which the token-domain relation alone admitted;
-  scoped input (D6) is where such a writer gets its route back.
+  pre-read). A recipient's state write is validated only as far as its written
+  rows reach ([checkpoint](disclosure.md#bound-write-validation-checkpoint)),
+  which closes H2 for those writes. What remains is every check that reads past
+  the declared relation, which only [decision 3a's restricted transaction](disclosure.md#the-structural-write-footprint)
+  closes: whole-document validation in a recipient's document write and in a
+  cell write into an identity-bound row, shared ceilings and the key table,
+  input selection, and `world.parked` and `world.hud.template` on the read side
+  (D0d). H1's board and search forms remain for D0a. The coupling refuses a
+  recipient's write into a row a withheld declaration names (a live audience, a
+  knowledge source), which the token-domain relation alone admitted; its route
+  back is an inbox a rule collects ([routes back](disclosure.md#routes-back-for-the-writers-the-derived-footprint-refuses)),
+  made structural by D4's scopes and migrated by D6, which follow D0b4, D2, D5,
+  D7 and D3.
 - [high] Hidden state is distinguishable from absent state at doors the
   door-by-door fixes did not reach. [The disclosure plan](disclosure.md#the-build-order)
   is the structural fix and owns the queue: D0b1–D0b4 and step 6, step 0's fuzzer,

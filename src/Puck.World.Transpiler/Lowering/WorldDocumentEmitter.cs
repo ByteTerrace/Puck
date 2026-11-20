@@ -180,29 +180,28 @@ public static partial class WorldDocumentEmitter {
         IndexStateFamilies(statements: document.Statements, scope: scope);
         IndexInheritedEnums(document: document, enums: (inheritedEnums ?? []), scope: scope);
         IndexTypesAndDerivedState(statements: document.Statements, scope: scope);
-        try {
-            _ = DocumentLowering.At(
-                context: typeof(WorldDefinition),
-                lower: () => {
-                    foreach (var statement in document.Statements) {
+        _ = DocumentLowering.At(
+            context: typeof(WorldDefinition),
+            lower: () => {
+                foreach (var statement in document.Statements) {
+                    try {
                         ProcessStatement(
                             scope: scope,
                             statement: statement,
                             target: root
                         );
+                    } catch (DocumentEvaluationException error) {
+                        diagnostics.Report(diagnostic: error.ToDiagnostic());
+                        if ((error.Code == PuckDiagnosticCodes.EvaluationLimit) && (scope.Budget.Work >= DocumentEvaluationBudget.WorkLimit)) {
+                            break;
+                        }
                     }
+                }
 
-                    return true;
-                },
-                scope: scope
-            );
-        } catch (DocumentEvaluationException error) {
-            diagnostics.ReportError(
-                code: error.Code,
-                message: error.Message,
-                span: error.Span
-            );
-        }
+                return true;
+            },
+            scope: scope
+        );
 
         // Every program the uses lowered to a key, once; each world a composition declares inherits the table with the
         // common document, and canonicalization keeps the rows a document's uses name (WorldDocumentMembers).
@@ -235,7 +234,7 @@ public static partial class WorldDocumentEmitter {
             var outputs = (worldOutputs ?? []);
             var rootTests = new List<WorldTestWorld>();
 
-            try { FinishComposition(common: root, composition: composition, outputs: outputs, rootTests: rootTests, scope: scope, stem: (testStem ?? "world")); } catch (DocumentEvaluationException error) { diagnostics.ReportError(code: error.Code, message: error.Message, span: error.Span); }
+            try { FinishComposition(common: root, composition: composition, outputs: outputs, rootTests: rootTests, scope: scope, stem: (testStem ?? "world")); } catch (DocumentEvaluationException error) { diagnostics.Report(diagnostic: error.ToDiagnostic()); }
             testWorlds = [
                 .. outputs.SelectMany(selector: static output => output.TestWorlds),
                 .. rootTests,
@@ -351,6 +350,16 @@ public static partial class WorldDocumentEmitter {
                     if (importNode.Alias is not null) {
                         entry["as"] = importNode.Alias;
                     }
+                    scope.SourceMap?.Register(
+                        jsonPointer: DocumentJsonPointer.Child(
+                            index: importsArray.Count,
+                            pointer: DocumentJsonPointer.Child(
+                                name: "imports",
+                                pointer: scope.CurrentPointer
+                            )
+                        ),
+                        span: importNode.Span
+                    );
                     importsArray.AppendNode(item: entry);
                     break;
                 }

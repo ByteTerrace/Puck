@@ -186,7 +186,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (hasMode) {
-            if (!m_population.SupportsSource(
+            if (!Population.SupportsSource(
                 index: index,
                 refusal: out var refusal,
                 source: source
@@ -382,11 +382,11 @@ internal sealed partial class PlayerCommandModule {
             args: in args,
             at: 3,
             min: 0,
-            max: (m_population.Capacity - 1),
+            max: (Population.Capacity - 1),
             fallback: 0,
             value: out var index
         )) {
-            return CommandResult.Error(output: $"[body.press: body index must be an integer 0..{(m_population.Capacity - 1)}]");
+            return CommandResult.Error(output: $"[body.press: body index must be an integer 0..{(Population.Capacity - 1)}]");
         }
 
         var value = FixedQ4816.One;
@@ -442,7 +442,7 @@ internal sealed partial class PlayerCommandModule {
         routed = false;
 
         WorldAuthorityRoute? routedLocation = null;
-        var targetChannels = (m_population.EntryBody(index: index)?.Channels ?? Channels);
+        var targetChannels = (Population.EntryBody(index: index)?.Channels ?? Channels);
 
         if (IsSeat(index: index)) {
             var rosterSlot = index;
@@ -544,7 +544,7 @@ internal sealed partial class PlayerCommandModule {
         // untimed paths (they share one refusal slot): WorldServer writes it from EVERY early return a
         // PressChannel command can take, so a non-empty refusal means nothing below was ever applied and must not
         // be echoed as an affirmative quoting some earlier, unrelated attempt's numbers.
-        var refusal = m_population.PressRefusal(bodyIndex: index);
+        var refusal = Population.PressRefusal(bodyIndex: index);
 
         if (refusal is { Length: > 0 }) {
             return new CommandResult(Output: $"[{verb}: {channelName}={((double)value):0.###} body:{index} refused → {refusal}]");
@@ -556,7 +556,7 @@ internal sealed partial class PlayerCommandModule {
             // binder from the effective value's magnitude — CapKind is computed server-side against the actual
             // clamp inputs, so it names the binder that structurally applied, not whichever one a coincidence of
             // numbers would suggest.
-            var outcome = m_population.LastPressOutcome(bodyIndex: index);
+            var outcome = Population.LastPressOutcome(bodyIndex: index);
 
             switch (outcome.CapKind) {
                 case PressHoldCapKind.Ignored:

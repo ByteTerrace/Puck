@@ -1361,7 +1361,8 @@ allocated scratch bytes separately, in operator diagnostics only. Target work
 is proportional to touched inputs and their affected checks, not total hidden
 cells or recipient count. A real global invariant may cost the section; the
 counter must say so. The baseline includes `MaterializeArena`'s per-edit full copy,
-`ValidateStateTransaction`'s whole validation for a HUD-bound value,
+`ValidateStateTransaction`'s whole validation for an authority's bound value
+(a recipient's is scoped to its written rows),
 `AdmitsSpatial`'s global traversal and `WorldContributionState.Declare`'s
 placement scan (M6). Each is counted explicitly, then routed to partitioned
 validation or declared reservations; no timing-only claim hides its work.
@@ -2231,15 +2232,102 @@ table lacks.
 
 Where it stops: the footprint is the declared relation. A check that reads past
 it stays a review obligation until the restricted transaction (D0b1 to D0c)
-makes every read go through admission: whole-document validation of a unit
-the write does not name (a joint check inside one placement or HUD element over
-a written row and a withheld one), shared ceilings and the key table, and a
-rule firing that leaves a hidden row invalid for the next recipient write (H2).
-Below `Replica`, the footprint still refuses by declarations the writer is not
-delivered ([security review](open-items.md#security-review)). The coupling also costs a capability: a
+makes every read go through admission: whole-document validation of a unit a
+document write does not name, shared ceilings and the key table, and input
+selection. A state write's binding validation is scoped already (the next
+checkpoint). Below `Replica`, the footprint still refuses by declarations the
+writer is not delivered ([security review](open-items.md#security-review)). The coupling also costs a capability: a
 recipient's write into a row that a withheld declaration names (a live
 audience row, a knowledge source) is refused, where the token-domain relation
-alone admitted it.
+alone admitted it. That writer's route back is below.
+
+### Bound-write validation checkpoint
+
+A recipient's state write is validated only as far as its written rows reach.
+Its invariant: the verdict on a recipient's state transaction reads the rows it
+wrote, the declarations, and the units whose bound values read a written row
+(each admitted whole first), and nothing else, so a unit the write does not name
+cannot refuse it (an identity-bound row aside, below). The enforcing place is
+`WorldServer.ValidateStateTransaction`,
+which every state write passes (the prepared mutation, the console's cell door,
+an addon's cell writes): for the authority it validates the whole document as
+before; for a recipient it runs `TryValidateWrittenBindings` through the
+transaction's `StateReadAccess`. Each written row a document value binds is
+acquired through that access (a row the recipient cannot read whole faults it,
+and `WorldPreparedMutation` publishes the neutral refusal);
+`WorldStateDocumentValues.TryCheckBound` checks every value bound to that row
+reads the cell the write left, reading no other row; and every placement whose
+values bind it is a unit validated whole: every row its values bind is admitted
+first, from declarations alone (`StateReadAccess.Refuse` faults the access
+otherwise), then `WorldDefinitionValidator.TryValidatePlacementGeometry` runs.
+A dealt child is judged by its template, since children exist only for members.
+The refusal names only the written row, never a document path, whose indices
+can count hidden placements.
+
+This closes H2 for state writes: a hidden unit an authority path leaves unable
+to read its row (a rule firing or a clock that skips binding validation)
+answers nothing to a recipient's write into another bound row, though the
+authority's whole-document validation sees it.
+`BoundWriteValidationNoninterferenceLawTests` holds it: it finds each hidden
+bound unit by the walk the server uses, leaves its row valid in one world and
+unreadable in the other, and requires the recipient's write into the public
+bound row to be applied alike in both, with the operator's write, still
+validated whole, refused in the second as the control that the hidden state is
+real.
+
+D0a's witnesses for this step, executed: **H2** at the door, recorded by that
+law (the hidden unit's invalidity is visible to whole-document validation and
+is now absent from the recipient's verdict). No production authority path was
+shown to leave a bound value unreadable: a rule firing writing a bound row runs
+the whole-document validation itself, so the law writes the hidden cell through
+the arena directly. **H1**, varying only a hidden row's membership while removing
+a key from the public domain it is keyed over:
+`WriteDoorNoninterferenceLawTests.ARemovalFromADomainAHiddenRowIsKeyedOverAnswersAlikeWhateverThatRowHolds`
+answers a cell removal, a cell set and a row removal alike for an empty hidden
+row, one holding the removed key and one holding another, with a public keyed
+row as the admitted control. The board and search forms of H1 remain for D0a.
+
+Where it stops: a write into a row an identity is bound to (a prototype's or a
+look's name, found by `WorldStateDocumentValues.BindsIdentity`) renames an
+entity every unit naming it refers to, so it is still validated whole for every
+writer, and H2 stays open there until D0b2 gives references a unit of their
+own. A document write (a placement, a HUD element, a row
+declaration) still runs whole-document validation in `TryStageDocument`, which
+reads units the write does not name; D0b2's partitioned validators own it.
+Input selection (`Input.TryPrepareAll`, `TryPrepareBodies`) still reads every
+owner's selection inside the same validation (D0b3). A unit's geometry is
+checked; its cross-unit checks (solids, the envelope) are D0b3's reservations.
+A recipient's bound write gets the parse and geometry checks only, not the
+whole document's; the authority keeps the whole-document check, so a unit
+check D0b2 has not yet partitioned is one a recipient's bound write skips.
+
+### Routes back for the writers the derived footprint refuses
+
+- **A write into a row a withheld declaration names** (a live audience, a
+  knowledge source, a witness). The lawful route is an inbox the writer reads
+  whole and nothing else declares over, collected by the authority's own rule
+  into the row the withheld declaration names: the standard package's
+  `sealedInbox` and `collectSealed` (`worlds/standard/sealed.puck`), which the
+  auction, deduction, shedding and skirmish games use. A rule is a program, not
+  a declaration, so the inbox's footprint is the inbox alone. D4's writable
+  scope makes that closure structural (the validator refuses an outside
+  declaration over a scope row), and D6 migrates these inboxes to scopes.
+- **A guard below `Replica` over state values** (named inputs or an expected
+  definition used to protect a read-modify-write). The lawful guard is
+  `ExpectedCells`, a cell expectation over a row the writer reads whole, which
+  the door answers by the writer's policy at every tier.
+- **A spatial read or named placement inputs below `Replica`**, which is what
+  `WorldServer.Reflow` builds for its requester. There is no route yet: the
+  census reads placement geometry, and the guard is fingerprinted over the
+  authority's document, not over what a `Presentation` session was delivered.
+  D3 answers an engine-built guard over the requester's delivered image (a
+  presentation projection carries placements); until then a reflow below
+  `Replica` is refused by its guard's shape, and a `Frames` session, delivered
+  no placements, has no route by design.
+
+D6 itself is not built: by this table it follows D7 and D3, and its writable
+scopes are D4's schema, closure and reservations, D5's proportional install
+and D7's rebuild preservation, none of which exists yet.
 
 ## Presentation and derived-product disclosure
 

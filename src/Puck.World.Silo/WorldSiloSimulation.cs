@@ -1,3 +1,4 @@
+using Puck.Abstractions.Waiting;
 using Puck.Commands;
 using Puck.Hosting;
 
@@ -7,6 +8,8 @@ namespace Puck.World.Silo;
 /// draining activation work, outbound peer traffic, every row's own step, and every row's extension runtime in that
 /// order.</summary>
 public sealed class WorldSiloSimulation(WorldSiloHost host) : IFixedStepSimulation {
+    private bool m_resumingRows;
+
     /// <inheritdoc/>
     public uint RatePerSecond => host.MasterRateHz;
     /// <inheritdoc/>
@@ -18,19 +21,26 @@ public sealed class WorldSiloSimulation(WorldSiloHost host) : IFixedStepSimulati
     public void SettleOwedFrames() { }
     /// <inheritdoc/>
     public void Step(in FixedStepContext context, in CommandSnapshot commands) {
+        if (!TryStep(in context, in commands)) { throw new InvalidOperationException("The silo must resume the pending step."); }
+    }
+
+    /// <inheritdoc/>
+    public bool TryStep(in FixedStepContext context, in CommandSnapshot commands) {
         host.DrainActivationMailbox();
-        if (host.IsDraining) { return; }
-        if (!host.ReleaseAdmissionOpen) {
-            // A candidate still receives pump heartbeats for private health, but no simulation step, transfer drain,
-            // forwarding, or external effect may run before the durable group barrier opens.
-            host.NoteMasterStep(stepTicks: context.StepTicks);
-            return;
+        if (!m_resumingRows) {
+            if (host.IsDraining) { return true; }
+            if (!host.ReleaseAdmissionOpen) {
+                // A candidate receives pump heartbeats for private health while the durable group barrier is closed.
+                host.NoteMasterStep(stepTicks: context.StepTicks);
+                return true;
+            }
+            host.Instances.DrainPendingTransfers();
         }
-        // A managed candidate may pump privately while its durable group remains closed. Pending transfers and
-        // forwarding are external effects, so they stay frozen until the same publication gate opens the row door.
-        if (host.ReleaseAdmissionOpen) { host.Instances.DrainPendingTransfers(); }
-        host.Instances.StepInstances(masterDeltaTicks: context.StepTicks);
+        var deadline = WaitDeadline.In(HostWaits.PumpAllowance ?? TimeSpan.FromSeconds(30));
+        m_resumingRows = host.Instances.TryStepInstances(context.StepTicks, deadline) is not null;
+        if (m_resumingRows) { return false; }
         host.PumpExtensions();
         host.NoteMasterStep(stepTicks: context.StepTicks);
+        return true;
     }
 }

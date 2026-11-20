@@ -1385,7 +1385,7 @@ public static partial class PuckParser {
                     diagnostics,
                     allowText: false,
                     allowSeconds: true,
-                    ownerForDiagnostic: "addState"
+                    ownerForDiagnostic: "+="
                 );
                 var len = (cursor.Offset - startOffset);
 
@@ -1410,7 +1410,7 @@ public static partial class PuckParser {
                     diagnostics,
                     allowText: true,
                     allowSeconds: true,
-                    ownerForDiagnostic: "setState"
+                    ownerForDiagnostic: "="
                 );
                 var len = (cursor.Offset - startOffset);
 
@@ -1438,8 +1438,8 @@ public static partial class PuckParser {
                     context,
                     diagnostics,
                     allowText: false,
-                    allowSeconds: false,
-                    ownerForDiagnostic: "compound assignment"
+                    allowSeconds: (compound == "-="),
+                    ownerForDiagnostic: compound
                 );
                 var len = (cursor.Offset - startOffset);
 
@@ -1850,9 +1850,13 @@ public static partial class PuckParser {
             );
 
             if (!allowText) {
+                var textMessage = ((ownerForDiagnostic == "push")
+                    ? "a string literal cannot be used with 'push'; push takes a numeric expression"
+                    : $"a string literal cannot be used with '{ownerForDiagnostic}'; text cells are assigned with '='");
+
                 diagnostics?.ReportError(
                     code: PuckDiagnosticCodes.EffectRhsShape,
-                    message: $"a string literal is not valid here — '{ownerForDiagnostic}' carries no Text field",
+                    message: textMessage,
                     span: span
                 );
             }
@@ -1876,11 +1880,23 @@ public static partial class PuckParser {
                 buffer: context.Scanner.Buffer,
                 offset: cursor.Offset
             )) {
-                if (literal.Unit == "s") {
+                if (
+                    (literal.Unit is not null) &&
+                    Units.UnitConversion.TryConvertExact(
+                        converted: out var seconds,
+                        dimension: Units.UnitDimension.Seconds,
+                        unit: literal.Unit,
+                        value: DecimalValues.FromLiteral(literal: literal)
+                    )
+                ) {
                     if (!allowSeconds) {
+                        var durationMessage = ((ownerForDiagnostic == "push")
+                            ? "a duration literal cannot be used with 'push'; push takes a numeric expression"
+                            : $"a duration literal cannot be used with '{ownerForDiagnostic}'; write '=', '+=' or '-=' for duration values");
+
                         diagnostics?.ReportError(
                             code: PuckDiagnosticCodes.EffectRhsShape,
-                            message: $"a seconds literal is not valid here — '{ownerForDiagnostic}' carries no ValueSeconds field",
+                            message: durationMessage,
                             span: new SourceSpan(
                                 literal.Offset,
                                 literal.Length,
@@ -1890,7 +1906,7 @@ public static partial class PuckParser {
                         );
                     }
                     return new RhsSecondsNode(
-                        DecimalValues.FromLiteral(literal: literal),
+                        seconds,
                         literal.Offset,
                         literal.Length,
                         literal.Line,

@@ -31,16 +31,11 @@ public sealed class WorldSiloReleaseRuntime : IWorldReleaseRuntime {
 
     private async Task<WorldReleaseRuntimeResult> ActivateAndVerifyAsync(WorldSiloHost host, CancellationToken cancellationToken) {
         foreach (var identity in m_identities) {
-            if (
-                !await host.ActivateAsync(
+            // A successful activation already holds a landed checkpoint covering its whole recovered state.
+            if (!await host.ActivateAsync(
                 ct: cancellationToken,
                 identity: identity
-            ).ConfigureAwait(continueOnCapturedContext: false) ||
-                !await host.CheckpointNowAsync(
-                ct: cancellationToken,
-                identity: identity
-            ).ConfigureAwait(continueOnCapturedContext: false)
-            ) {
+            ).ConfigureAwait(continueOnCapturedContext: false)) {
                 return new(
                     false,
                     $"'{identity.World}' did not activate and checkpoint"

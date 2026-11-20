@@ -44,6 +44,13 @@ public sealed partial class WorldServer {
     // a revoked grant refuse here, the same decision the query door makes, so no read answers a session that the
     // query door refuses, and an admitted session reads at its own delivery ceiling.
     internal WorldRecipientView ReadView(Principal? recipient) {
+        lock (AuthorityGate) {
+            ThrowIfTickPending();
+            return ReadSettledView(recipient);
+        }
+    }
+
+    private WorldRecipientView ReadSettledView(Principal? recipient) {
         if (recipient is { Kind: PrincipalKind.Session } session) {
             if (!AllowsSessionQuery(session, StateObservationsQuery) || !m_sessionSinks.TryGetValue(session, out var attached)) {
                 throw new InvalidOperationException(WorldSessionObservation.QueryRefusal);

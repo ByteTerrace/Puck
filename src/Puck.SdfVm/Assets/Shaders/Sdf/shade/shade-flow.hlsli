@@ -5,24 +5,84 @@
 #define SDF_SHADE_FLOW_HLSLI
 #include "../field/sdf-noise.hlsli"
 #include "../frame/sdf-mesh.hlsli"
+#include "../frame/sdf-visibility.hlsli"
 #include "sdf-material.hlsli"
 #include "shade-weathering.hlsli"
 
-// A surface's layer frame: the winning instance frame its material layers read, the frame slot's (its origin, its turn
-// and its root scale) for a surface riding one, world space for one with none. `layerRotation` is the slot's turn, the
-// identity with no slot.
-void sdfLayerFrame(int frameSlot, float3 surfacePoint, float3 normal, float3 rayDirection, out float3 layerPoint, out float3 layerNormal,
-    out float3 layerRay, out float4 layerRotation) {
+float3 sdfLayerRestPoint(uint member, float3 restPoint) {
+    if (member == 0u) return restPoint;
+    float3 origin;
+    float4 rotation;
+    sdfMeshMemberRest(member, origin, rotation);
+    return rotatePointByInverseQuaternion(restPoint - origin, rotation);
+}
+float4 sdfLayerSkinRotation(uint slot, float4 reference) {
+    float4 rotation = sdfDynamicTransforms[3u * slot + 1u];
+    return dot(rotation, reference) < 0.0 ? -rotation : rotation;
+}
+// Material coordinates on a skin interpolate the baked point and each vertex's two parent frames. Inside a rigid
+// member the live inverse gives the same result. Across a seam the rest point and lanes use the same weights on both
+// sides of every shared edge, independently of the nearest vertex.
+bool sdfLayerSkinFrame(SdfMeshHit hit, float3 surfacePoint, out float3 restPoint, out float4 rotation, out float4 lanes) {
+    uint record = hit.record;
+    uint first = 3u * hit.triangleIndex;
+    SdfMeshSkinSlots a = sdfMeshSkinSlotsOf(record, sdfMeshIndexAt(record, first));
+    SdfMeshSkinSlots b = sdfMeshSkinSlotsOf(record, sdfMeshIndexAt(record, first + 1u));
+    SdfMeshSkinSlots c = sdfMeshSkinSlotsOf(record, sdfMeshIndexAt(record, first + 2u));
+    restPoint = 0.0;
+    lanes = 0.0;
+    rotation = 0.0;
+    if (a.w == 0.0 && b.w == 0.0 && c.w == 0.0 && a.first == b.first && a.first == c.first) return false;
+
+    float3 weights;
+    if (!sdfMeshBarycentric(sdfMeshWorldPosition(record, first), sdfMeshWorldPosition(record, first + 1u),
+        sdfMeshWorldPosition(record, first + 2u), surfacePoint, weights)) return false;
+
+    // Any participating owner can fix the hemisphere for an admitted two-owner seam.
+    float4 reference = sdfDynamicTransforms[3u * a.s0 + 1u];
+    SdfMeshSkinSlots corners[3] = { a, b, c };
+    [unroll]
+    for (uint i = 0u; i < 3u; i++) {
+        SdfMeshSkinSlots slots = corners[i];
+        float3 rest = sdfMeshObjectPosition(record, first + i);
+        float3 cornerPoint = sdfLayerRestPoint(slots.first, rest);
+        float4 cornerRotation = sdfLayerSkinRotation(slots.s0, reference);
+        float4 cornerLanes = sdfFrameLanes(asint(slots.s0));
+        if (slots.w > 0.0) {
+            cornerPoint = lerp(cornerPoint, sdfLayerRestPoint(slots.second, rest), slots.w);
+            cornerRotation = lerp(cornerRotation, sdfLayerSkinRotation(slots.s1, reference), slots.w);
+            cornerLanes = lerp(cornerLanes, sdfFrameLanes(asint(slots.s1)), slots.w);
+        }
+        restPoint += weights[i] * cornerPoint;
+        rotation += weights[i] * cornerRotation;
+        lanes += weights[i] * cornerLanes;
+    }
+    rotation = dot(rotation, rotation) > 1.0e-12 ? normalize(rotation) : reference;
+    return true;
+}
+// The material frame is shared by opaque and glass shading. World-space materials bypass the instance frame.
+void sdfLayerFrame(SdfMeshHit hit, int frameSlot, float3 surfacePoint, float3 normal, float3 rayDirection,
+    out float3 layerPoint, out float3 layerNormal, out float3 layerRay, out float4 layerRotation, out float4 lanes) {
     layerPoint = surfacePoint;
     layerNormal = normal;
     layerRay = rayDirection;
     layerRotation = float4(0.0, 0.0, 0.0, 1.0);
+    lanes = sdfFrameLanes(frameSlot);
     if (frameSlot != SDF_TRANSFORM_SLOT_NONE) {
-        float4 origin = sdfDynamicTransforms[3u * (uint)frameSlot];
-        layerRotation = sdfDynamicTransforms[(3u * (uint)frameSlot) + 1u];
-        layerPoint = rotatePointByInverseQuaternion((surfacePoint - origin.xyz), layerRotation);
-        // Rigid copies share unit-space palette layers; scale belongs to their root, not a palette copy.
-        layerPoint /= ((origin.w > 0.0) ? origin.w : 1.0);
+        float3 restPoint;
+        float4 skinRotation, skinLanes;
+        if ((sdfMeshRecordWord(hit.record + SDF_MESH_FLAGS_WORD) & SDF_MESH_SKIN_FLAG) != 0u &&
+            sdfLayerSkinFrame(hit, surfacePoint, restPoint, skinRotation, skinLanes)) {
+            layerPoint = restPoint;
+            layerRotation = skinRotation;
+            lanes = skinLanes;
+        } else {
+            float4 origin = sdfDynamicTransforms[3u * (uint)frameSlot];
+            layerRotation = sdfDynamicTransforms[(3u * (uint)frameSlot) + 1u];
+            layerPoint = rotatePointByInverseQuaternion(surfacePoint - origin.xyz, layerRotation);
+            // Rigid copies share unit-space palette layers. Scale belongs to their root.
+            layerPoint /= ((origin.w > 0.0) ? origin.w : 1.0);
+        }
         layerNormal = rotatePointByInverseQuaternion(normal, layerRotation);
         layerRay = rotatePointByInverseQuaternion(rayDirection, layerRotation);
     }

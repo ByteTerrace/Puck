@@ -22,12 +22,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // a row for every bin a plan gives a width (SdfShadeDispatch.PlanBins).
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part switch {
         SdfWorldPackage.Parts.Views => m_view.Residency.SkyDetails.Labels,
+        SdfWorldPackage.Parts.ViewsProbes => RateDetails,
         SdfWorldPackage.Parts.ShadowFar => CasterDetails,
         SdfWorldPackage.Parts.ViewsBins => BinDetails,
         _ => [],
     };
 
     private static readonly string[] CasterDetails = ["receiver-rejected", "entry-rejected"];
+    private static readonly string[] RateDetails = ["tiles-1x1", "tiles-2x1", "tiles-1x2", "tiles-2x2"];
     private static readonly string[] BinDetails = ["no-program", "program"];
     // The world interface's scratch buffer members, each bound to the dummy unless a port binds it.
     private static readonly string[] ScratchMembers = [
@@ -46,6 +48,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.ShadeTiles,
         SdfWorldPackage.ShadeTilesWritten,
         SdfWorldPackage.ShadeArgumentsWritten,
+        SdfWorldPackage.HistorySurface,
     ];
     // Each cascade layer's storage and the binding the surface pass samples it at.
     private static readonly (string Version, uint Binding)[] CascadeBindings = [
@@ -65,6 +68,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly string[] m_inputs;
     private readonly string[] m_outputs;
+    private readonly int m_rateHistoryPort;
+    private readonly IGpuBuffer?[] m_boundRateHistory;
     private readonly SdfWorldPasses m_owner;
     private readonly string m_part;
     // Whether the pass belongs to the temporal fragment (SdfWorldPackage.TemporalFragment).
@@ -200,6 +205,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             ? resource.Name[prefix.Length..] : resource.Name);
 
         m_inputs = [.. context.Inputs.Select(selector: LocalName)];
+        m_rateHistoryPort = Array.IndexOf(m_inputs, SdfWorldPackage.Parts.HistorySurface);
         m_outputs = [.. context.Outputs.Select(selector: LocalName)];
         var fragment = owner.FragmentOf(instance: context.Instance)!;
 
@@ -214,6 +220,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         m_portTables = new SdfWorldTables?[slots];
         m_boundCounters = new IGpuBuffer?[slots];
+        m_boundRateHistory = m_rateHistoryPort >= 0 ? new IGpuBuffer?[slots] : [];
         m_screens = new nint[slots][];
 
         for (var slot = 0; (slot < slots); slot++) {
@@ -688,6 +695,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
         SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
 
+        if (m_rateHistoryPort >= 0) {
+            // The history planes follow the output extent. The visibility and probe cells follow the render grid.
+            ShaderParameterWriter.WriteUInt32(recording.PassBlock, SdfFrameBlock.ViewsRate + 2 * sizeof(uint), recording.FrameWidth);
+            ShaderParameterWriter.WriteUInt32(recording.PassBlock, SdfFrameBlock.ViewsRate + 3 * sizeof(uint), recording.FrameHeight);
+        }
         SdfFrameBlock.WriteWorkCounterRow(
             block: recording.PassBlock,
             row: WorkCountersOf(recording: in recording).Row
@@ -891,6 +903,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             set: set,
             tables: tables
         );
+        if (m_rateHistoryPort >= 0) {
+            // History follows the last writer across submissions, independently of this descriptor set's slot.
+            var history = recording.Inputs[m_rateHistoryPort].Buffer!;
+            if (!ReferenceEquals(history, m_boundRateHistory[slot])) {
+                tables.WriteInterfaceBuffer(buffer: history, layout: PassLayout, member: SdfWorldPackage.HistorySurface, set: set);
+                m_boundRateHistory[slot] = history;
+            }
+        }
         BindCounters(
             recording: in recording,
             set: set,
@@ -1363,6 +1383,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
 
         m_boundCounters[slot] = null;
+        if (m_rateHistoryPort >= 0) { m_boundRateHistory[slot] = null; }
         m_portTables[slot] = tables;
 
         bindings.WriteStorageImage(

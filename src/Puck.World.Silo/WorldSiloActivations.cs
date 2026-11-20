@@ -24,13 +24,8 @@ internal sealed class WorldSiloActivations(WorldSiloDefinition definition, IGrai
                     primaryKey: world.Owner,
                     keyExtension: world.World.Value
                 );
-                var activated = await grain.ActivateAsync();
-
-                // Establish a durable baseline before reporting startup success: journals require a checkpoint.
-                if (
-                    !activated ||
-                    !await grain.CheckpointNowAsync()
-                ) {
+                // A successful activation already holds a landed checkpoint covering its whole recovered state.
+                if (!await grain.ActivateAsync()) {
                     Environment.ExitCode = 1;
                     throw new InvalidOperationException(message: $"Pinned row 'owner/{world.Owner:D}/{world.World}' did not activate and checkpoint.");
                 }

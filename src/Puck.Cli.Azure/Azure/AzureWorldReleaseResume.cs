@@ -91,9 +91,9 @@ public static partial class AzureCommand {
         }
     }
 
-    /// <summary>Publishes each definition of a first release through an unowned authority root, after proving it admits
-    /// beside the asset layout it runs in. A retry compares exact published bytes and refuses a different definition or
-    /// any existing gameplay state.</summary>
+    /// <summary>Publishes each definition of a first release, as the exact bytes the archive retains, through an unowned
+    /// authority root, after proving it admits beside the asset layout it runs in. A retry compares exact published bytes
+    /// and refuses a different definition or any existing gameplay state.</summary>
     /// <param name="manifest">The release whose definitions are published.</param>
     /// <param name="archive">The archive retaining the release's files.</param>
     /// <param name="authority">The authority store the definitions are published into.</param>
@@ -108,7 +108,7 @@ public static partial class AzureCommand {
     public static async Task InitializeWorldReleaseBootstrapAsync(WorldReleaseManifest manifest, WorldReleaseArchive archive,
         WorldAuthorityBlobStore authority, Guid owner, string? documentDirectory, CancellationToken cancellationToken) {
         _ = CliWorldVocabulary.EnsureInstalled();
-        var definitions = new List<(WorldAuthorityIdentity Identity, WorldDefinition Definition)>();
+        var definitions = new List<(WorldAuthorityIdentity Identity, ReadOnlyMemory<byte> Bytes)>();
 
         foreach (var row in manifest.DefinitionFiles) {
             var parts = row.Key.Split('/');
@@ -128,7 +128,7 @@ public static partial class AzureCommand {
             ).ConfigureAwait(continueOnCapturedContext: false);
 
             if (!WorldDefinitionLoader.TryReadPublishable(
-                definition: out var definition,
+                definition: out _,
                 documentDirectory: documentDirectory,
                 json: System.Text.Encoding.UTF8.GetString(bytes: bytes.Span),
                 reason: out var reason,
@@ -153,12 +153,12 @@ public static partial class AzureCommand {
             ) {
                 throw new InvalidDataException(message: "bootstrap cannot replace an existing different world definition");
             }
-            definitions.Add(item: (identity, definition!));
+            definitions.Add(item: (identity, bytes));
         }
         foreach (var row in definitions) {
-            var published = await authority.PublishDefinitionAsync(
+            var published = await authority.PublishDefinitionBytesAsync(
                 row.Identity,
-                row.Definition,
+                row.Bytes,
                 cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false);
 

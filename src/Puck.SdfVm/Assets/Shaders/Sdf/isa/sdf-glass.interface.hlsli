@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-glass' (sha256/3757218944ee8c71cd7df3f6e46867766da7f59b7429596ddbb6340554adbe5c). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-glass' (sha256/9c204b1152f4c3507384dc7f15780c7b925e6df4c76c5e0a9ab8925b89d47238). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_GLASS
 #define PUCK_SHADER_INTERFACE_SDF_GLASS
 
@@ -242,11 +242,12 @@ struct SdfGlassPass {
     [[vk::offset(1356)]] uint _pad1356;
     [[vk::offset(1360)]] float3 viewUp;
     [[vk::offset(1372)]] uint viewportCount;
-    [[vk::offset(1376)]] uint workCounterRow;
-    [[vk::offset(1380)]] uint workCounterRowDetail;
-    [[vk::offset(1384)]] uint _pad1384;
-    [[vk::offset(1388)]] uint _pad1388;
-    [[vk::offset(1392)]] float4 worldLanes;
+    [[vk::offset(1376)]] uint4 viewsRate;
+    [[vk::offset(1392)]] uint workCounterRow;
+    [[vk::offset(1396)]] uint workCounterRowDetail;
+    [[vk::offset(1400)]] uint _pad1400;
+    [[vk::offset(1404)]] uint _pad1404;
+    [[vk::offset(1408)]] float4 worldLanes;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfGlassPass> passGroupIsaE29704FA : register(b0, space3);
 #define passGroup passGroupIsaE29704FA

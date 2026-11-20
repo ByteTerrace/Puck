@@ -844,26 +844,14 @@ public sealed partial class SdfMeshPathBake {
                 // A slice samples any instance, so it reads every field at the bake's set.
                 for (var handle = 0; (handle < m_sampled.Count); handle++) { m_takenSampled[handle] = m_sampled[handle]; }
             }
-            var pending = false;
-            var waiting = 0;
-            var flying = 0;
-            var working = 0;
-            var admitted = 0;
-            // The groups admitted whose first stage has not reached the pool's queue: stages on their way.
-            var awaiting = 0;
             var from = DoneThrough();
+            // The groups still baking are the ones from the done cursor on; their counts are kept as they change
+            // (GroupTally), so a take walks no group for them. `awaiting` is the groups admitted whose first stage has not
+            // reached the pool's queue: stages on their way. `waiting` counts the groups holding a lattice no dispatch has
+            // taken, whether or not an owed take could take it.
+            var pending = (from < m_groups.Count);
+            var (flying, working, admitted, awaiting, waiting) = (pending ? m_tally.Read() : default);
 
-            // Every group before the done cursor is done and offers nothing, so a settled bake takes without a walk.
-            for (var index = from; (index < m_groups.Count); index++) {
-                var group = m_groups[index];
-
-                pending |= !group.Done;
-                flying += ((!group.Done && group.InFlight) ? 1 : 0);
-                working += ((!group.Done && group.Contouring) ? 1 : 0);
-                admitted += ((!group.Done && group.Admitted) ? 1 : 0);
-                awaiting += ((!group.Done && group.AwaitsStage) ? 1 : 0);
-                waiting += (Offers(group: group, owedOnly: owedOnly) ? 1 : 0);
-            }
             if (pending) {
                 m_accounts.Takes++;
                 m_accounts.WaitingGroups += waiting;
@@ -1630,7 +1618,7 @@ public sealed partial class SdfMeshPathBake {
         }
         group.Identity = Identity.Value;
         if (Identity.HasParts && Library.Disk is { } disk) { KeyCheckpoints(group, disk); }
-        if (!Library.Holds(geometry: group.Sealed, identity: group.Identity) && !HoldsCheckpoint(group)) { return false; }
+        if (!Library.MayHold(geometry: group.Sealed, identity: group.Identity) && !MayHoldCheckpoint(group)) { return false; }
         group.Deferred = group.Next;
         group.Next = null;
         group.Contouring = true;
@@ -1983,7 +1971,7 @@ public sealed partial class SdfMeshPathBake {
             var factor = FactorOf(final: final);
 
             if (factor >= 2) {
-                points = final.Sampled.Refine(factor: factor, regions: final.Regions);
+                points = final.Sampled.Refine(factor: factor, regions: final.Regions, thinFactor: ThinSplit(final: final, factor: factor));
             }
             if (points.Length == 0) {
                 points = ChooseCrossingPoints(final: final);
@@ -2044,11 +2032,23 @@ public sealed partial class SdfMeshPathBake {
     // buffers, so an admitted group's charges stay within its reservation.
     private const long WorkspaceBytesPerSample = 96;
 
+    // Let detected sheets use a finer split when a part's ordinary grid still leaves room above the bake's fine spacing.
+    // A finer virtual grid also subdivides transition cells, so keep a lattice already near that spacing on its own grid.
+    private static int ThinSplit(FinalLattice final, int factor) {
+        var cell = final.Lattice.Cell;
+        var shortest = MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z));
+
+        while ((factor <= (MaxDetailRefinement / 2)) && (shortest >= (2 * factor * FineCell))) { factor *= 2; }
+
+        return factor;
+    }
+
     // A final lattice's simultaneous peak: its own samples, and the fine samples its refinement measures, at most the
     // bound its spacing and factor allow (SdfSampledLattice.FineSampleBound) until the refinement names them.
     private static long PeakOf(FinalLattice final, int? fineSamples = null) {
         var (x, y, z) = final.Lattice.Dims;
-        var fine = (fineSamples ?? SdfSampledLattice.FineSampleBound(factor: FactorOf(final: final), samplesX: x, samplesY: y, samplesZ: z));
+        var factor = FactorOf(final: final);
+        var fine = (fineSamples ?? SdfSampledLattice.FineSampleBound(factor: ThinSplit(final: final, factor: factor), samplesX: x, samplesY: y, samplesZ: z));
 
         return checked(((((long)final.Lattice.Samples) + fine) * WorkspaceBytesPerSample));
     }
@@ -2665,19 +2665,47 @@ public sealed partial class SdfMeshPathBake {
     }
     // One bake group as the plan formed it (SdfMeshBakeGroup), and where its bake stands.
     private sealed class Group(int selector, bool dynamic) : SdfMeshBakeGroup(dynamic: dynamic, selector: selector) {
-        public bool Contouring { get; set; }
+        public bool Contouring { get => m_contouring; set { m_contouring = value; Settle(); } }
         // Whether the group stands at an index of its bake's group list (GroupList, its one writer).
-        public bool Listed { get; set; }
+        public bool Listed {
+            get => m_listed;
+            set {
+                m_listed = value;
+                Settle();
+                if (value) { AwaitResidency(); }
+            }
+        }
 
+        private bool m_contouring;
         private bool m_done;
         private bool m_inFlight;
+        private bool m_listed;
+        private long m_residentAt;
+        private int m_awaitsResidency;
+
+        // What the group adds to its bake's counts (GroupTally), as recorded under the tally's lock.
+        public int Tallied { get; set; }
+
+        public int TallyOf() => GroupTally.Of(admitted: Admitted, awaiting: AwaitsStage, contouring: m_contouring, done: m_done, hasNext: (Next is not null), inFlight: m_inFlight, listed: m_listed);
+        // Moves the group's contribution to its bake's counts to what its state now is; a group no bake owns yet adds none.
+        private void Settle() => Owner?.m_tally.Settle(group: this);
+        // Hands a landed group whose mesh has not stood in the mesh region to its bake's observer (ObserveResidency): the
+        // one door by which a group joins the set it walks, from every change that can make a listed group owe it (done,
+        // listed, or drawn again). The observer drops it once it stands.
+        private void AwaitResidency() {
+            if (m_done && (m_residentAt == 0) && (Owner is { } owner) && (Interlocked.CompareExchange(location1: ref m_awaitsResidency, value: 1, comparand: 0) == 0)) { owner.m_landed.Enqueue(item: this); }
+        }
+        // Lets go of the group once the observer has dropped it, so a later change can hand it over again.
+        public void StoodOrLeft() => Volatile.Write(location: ref m_awaitsResidency, value: 0);
 
         public IAllocator? Allocator { get; set; }
         public bool Done {
             get => m_done;
             set {
                 m_done = value;
+                Settle();
                 if (value) {
+                    AwaitResidency();
                     Memory.ReleaseReservation();
                     EndShare();
                     // Its followers are finished at the next Follow, which visits only the leaders done since it last ran.
@@ -2686,7 +2714,7 @@ public sealed partial class SdfMeshPathBake {
                 TryRelease();
             }
         }
-        public bool InFlight { get => m_inFlight; set { m_inFlight = value; TryRelease(); } }
+        public bool InFlight { get => m_inFlight; set { m_inFlight = value; TryRelease(); Settle(); } }
 
         public MemoryAccount.Owner Memory { get; } = MemoryAccount.Shared.CreateOwner(memoryClass: MemoryClass.Workspace, name: "mesh-bake-group");
 
@@ -2768,7 +2796,9 @@ public sealed partial class SdfMeshPathBake {
         // comparison and cleared once the stand-in no longer draws, so it never keeps a released mesh reachable.
         private SdfMesh? m_standIn;
 
-        public SdfMeshBakeRequest? Next { get; set; }
+        public SdfMeshBakeRequest? Next { get => m_next; set { m_next = value; Settle(); } }
+
+        private SdfMeshBakeRequest? m_next;
         public int Refinements { get; set; }
         // The final lattice's contour, its material cut, the points the cut's round samples, and their answers so far.
         public SdfContour? Contour { get; set; }
@@ -2815,15 +2845,26 @@ public sealed partial class SdfMeshPathBake {
         // Whether the mesh came from the library or its store rather than a bake of this group.
         public bool Stored { get; set; }
         // Whether the group has reserved its final lattice and result peak.
-        public bool Admitted { get; set; }
+        public bool Admitted { get => m_admitted; set { m_admitted = value; Settle(); } }
+
+        private bool m_admitted;
         // When the group was admitted (a Stopwatch timestamp), until its first stage is queued: its lead, which the
         // pool's backlog measures, and the mark of a group still on its way to the workers. Zero otherwise.
         private long m_admittedAt;
 
         public bool AwaitsStage => (Volatile.Read(location: ref m_admittedAt) != 0L);
 
-        public void MarkAdmitted(long timestamp) => Volatile.Write(location: ref m_admittedAt, value: timestamp);
-        public long TakeAdmittedAt() => Interlocked.Exchange(location1: ref m_admittedAt, value: 0L);
+        public void MarkAdmitted(long timestamp) {
+            Volatile.Write(location: ref m_admittedAt, value: timestamp);
+            Settle();
+        }
+        public long TakeAdmittedAt() {
+            var at = Interlocked.Exchange(location1: ref m_admittedAt, value: 0L);
+
+            Settle();
+
+            return at;
+        }
         public bool DeferredReported { get; set; }
         // Whether a stage of the group threw (Fail), so no later program keeps it.
         public bool Failed { get; set; }
@@ -2936,7 +2977,13 @@ public sealed partial class SdfMeshPathBake {
         // When the frame thread first saw the group done, and its mesh's words in the mesh region (Stopwatch timestamps;
         // zero not yet).
         public long LandedAt { get; set; }
-        public long ResidentAt { get; set; }
+        public long ResidentAt {
+            get => m_residentAt;
+            set {
+                m_residentAt = value;
+                if (value == 0) { AwaitResidency(); }
+            }
+        }
         // The display pixels its demand box projects at the demand point that sees it largest, as of the latest frame
         // that measured it (SdfMeshDemand.Priority); zero with no demand point.
         public float Priority { get; set; }

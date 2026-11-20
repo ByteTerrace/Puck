@@ -79,14 +79,13 @@ public sealed partial class WorldSiloHost {
                         throw new InvalidOperationException(message: "fixture export found an unavailable managed row");
                     }
                     if (!TryCaptureRow(
-                        capturedJournalSequence: out _,
-                        encoded: out var bytes,
+                        capture: out var capture,
                         outcome: out var reason,
-                        row: row,
-                        tick: out var tick
+                        row: row
                     )) {
                         throw new InvalidOperationException(message: $"fixture capture refused for '{declared.World}': {reason}");
                     }
+                    var (bytes, tick) = (capture!.Encoded, capture.Tick);
                     if (ClosedGroupRewind) {
                         if (!WorldAuthorityCheckpointCodec.TryDecode(
                             bytes: bytes,

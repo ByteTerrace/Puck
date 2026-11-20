@@ -10,9 +10,9 @@ namespace Puck.World.Transpiler.Validation;
 
 // Symbol resolution over the LOWERED JSON, not the AST: it sees exactly what ships, template-expanded and ready to
 // compose. Four reference families — state row, prototypeId, placement parent, camera/spawn-point — plus a
-// best-effort `$`-prefix typo check and a shape-parent check, each Information severity except shape-parent
-// (Warning). Zero false positives is the bar: a `$`-prefixed name is never checked against a declared-row set, and a
-// cell key's reserved spellings are read only where they hold an expression.
+// shape-parent check (each Warning in a root document, with nearest-name suggestions) and a best-effort `$`-prefix
+// typo check (Information). Zero false positives is the bar: a `$`-prefixed name is never checked against a
+// declared-row set, and a cell key's reserved spellings are read only where they hold an expression.
 //
 // The state-row family is found by WorldNameRegistry, not listed here: WorldModuleNamespace.Visit walks the tree
 // type-directed and hands back every registered site, the same sites an aliased import rewrites, so a member
@@ -296,7 +296,7 @@ public static partial class PuckLinter {
                 Report(
                     code: PuckDiagnosticCodes.UnresolvedParent,
                     diagnostics: diagnostics,
-                    message: $"Shape parent '{parentName}' does not resolve to a sibling shape name in this collection.",
+                    message: $"Shape parent '{parentName}' does not resolve to a sibling shape name in this collection{DocumentNearestNames.Suggestion(candidates: siblingNames, name: parentName)}.",
                     pointer: DocumentJsonPointer.Child(name: "parent", pointer: DocumentJsonPointer.Child(index: index, pointer: pointer)),
                     severity: DiagnosticSeverity.Warning,
                     sourceMap: sourceMap
@@ -318,9 +318,9 @@ public static partial class PuckLinter {
                 Report(
                     code: PuckDiagnosticCodes.LintUnresolvedPrototype,
                     diagnostics: diagnostics,
-                    message: $"Unresolved prototypeId '{prototypeId}'.",
+                    message: $"Unresolved prototypeId '{prototypeId}'{DocumentNearestNames.Suggestion(candidates: catalog.Prototypes, name: prototypeId)}.",
                     pointer: DocumentJsonPointer.Child(name: "prototypeId", pointer: pointer),
-                    severity: DiagnosticSeverity.Information,
+                    severity: DiagnosticSeverity.Warning,
                     sourceMap: sourceMap
                 );
             }
@@ -335,9 +335,9 @@ public static partial class PuckLinter {
                 Report(
                     code: PuckDiagnosticCodes.LintUnresolvedPlacementParent,
                     diagnostics: diagnostics,
-                    message: $"Unresolved placement parent '{placementParent}'.",
+                    message: $"Unresolved placement parent '{placementParent}'{DocumentNearestNames.Suggestion(candidates: catalog.Placements, name: placementParent)}.",
                     pointer: DocumentJsonPointer.Child(name: "parent", pointer: pointer),
-                    severity: DiagnosticSeverity.Information,
+                    severity: DiagnosticSeverity.Warning,
                     sourceMap: sourceMap
                 );
             }
@@ -387,9 +387,9 @@ public static partial class PuckLinter {
                 Report(
                     code: PuckDiagnosticCodes.LintUnresolvedView,
                     diagnostics: diagnostics,
-                    message: $"Unresolved camera reference '{cameraName}'.",
+                    message: $"Unresolved camera reference '{cameraName}'{DocumentNearestNames.Suggestion(candidates: catalog.Cameras, name: cameraName)}.",
                     pointer: DocumentJsonPointer.Child(name: "camera", pointer: pointer),
-                    severity: DiagnosticSeverity.Information,
+                    severity: DiagnosticSeverity.Warning,
                     sourceMap: sourceMap
                 );
             }
@@ -404,9 +404,9 @@ public static partial class PuckLinter {
                 Report(
                     code: PuckDiagnosticCodes.LintUnresolvedView,
                     diagnostics: diagnostics,
-                    message: $"Unresolved spawn point reference '{spawnPointId}'.",
+                    message: $"Unresolved spawn point reference '{spawnPointId}'{DocumentNearestNames.Suggestion(candidates: catalog.SpawnPoints, name: spawnPointId)}.",
                     pointer: DocumentJsonPointer.Child(name: "spawnPoint", pointer: pointer),
-                    severity: DiagnosticSeverity.Information,
+                    severity: DiagnosticSeverity.Warning,
                     sourceMap: sourceMap
                 );
             }
@@ -430,9 +430,9 @@ public static partial class PuckLinter {
         Report(
             code: PuckDiagnosticCodes.LintUnresolvedState,
             diagnostics: diagnostics,
-            message: $"Unresolved state row '{name}'.",
+            message: $"Unresolved state row '{name}'{DocumentNearestNames.Suggestion(candidates: catalog.State, name: name)}.",
             pointer: DocumentJsonPointer.Child(name: field, pointer: pointer),
-            severity: DiagnosticSeverity.Information,
+            severity: DiagnosticSeverity.Warning,
             sourceMap: sourceMap
         );
     }
@@ -488,9 +488,9 @@ public static partial class PuckLinter {
                 Report(
                     code: PuckDiagnosticCodes.LintUnresolvedPlacementParent,
                     diagnostics: diagnostics,
-                    message: $"Unresolved region placement '{placementId}'.",
+                    message: $"Unresolved region placement '{placementId}'{DocumentNearestNames.Suggestion(candidates: catalog.Placements, name: placementId)}.",
                     pointer: DocumentJsonPointer.Child(name: member, pointer: PointerOf(node: holder)),
-                    severity: DiagnosticSeverity.Information,
+                    severity: DiagnosticSeverity.Warning,
                     sourceMap: sourceMap
                 );
             }
@@ -704,9 +704,9 @@ public static partial class PuckLinter {
             Report(
                 code: PuckDiagnosticCodes.LintUnresolvedState,
                 diagnostics: diagnostics,
-                message: $"Unresolved state row '{name}'.",
+                message: $"Unresolved state row '{name}'{DocumentNearestNames.Suggestion(candidates: catalog.State, name: name)}.",
                 pointer: pointer(),
-                severity: DiagnosticSeverity.Information,
+                severity: DiagnosticSeverity.Warning,
                 sourceMap: sourceMap
             );
         }

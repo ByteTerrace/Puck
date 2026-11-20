@@ -261,15 +261,17 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         ).ConfigureAwait(continueOnCapturedContext: false);
 
         if (result.Succeeded) return WorldAuthorityStoreOutcome.Success();
-        var current = await ReadAsync(
-            address: address,
-            cancellationToken: cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
-        if (
-            (current is { } found) &&
-            found.Content.Span.SequenceEqual(other: bytes.Span)
-        ) return WorldAuthorityStoreOutcome.Success("already present");
+        // An earlier attempt whose answer was lost may have landed these very bytes; the store compares without
+        // buffering a second copy of a payload that can reach MaximumBlobBytes.
+        if (await UnderTimeoutAsync(
+            cancellationToken: cancellationToken,
+            op: ct => m_store.ContentEqualsAsync(
+                address: address,
+                cancellationToken: ct,
+                expected: bytes,
+                target: m_target
+            )
+        ).ConfigureAwait(continueOnCapturedContext: false)) return WorldAuthorityStoreOutcome.Success("already present");
         return WorldAuthorityStoreOutcome.AlreadyExists(detail: $"'{address.Key}' exists with different content");
     }
 

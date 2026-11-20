@@ -874,8 +874,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// <paramref name="regions"/> and whose samples show the surface turning (a plane's field is affine and contours
     /// exactly), split no finer than its turn needs to contour smooth (<see cref="RoundCell"/>) or its regions ask; in a
     /// region whose field is a bound (<see cref="SdfLatticeRegion.Bound"/>), every such cell, split as the region asks.
-    /// <para>The essential cells split <paramref name="factor"/> times; a region cell splits the fewest times
-    /// <paramref name="factor"/> divides into by a power of two that reach what it needs, so each split divides the
+    /// <para>The essential cells split <paramref name="factor"/> times. Detected thin sheets and gaps can split more
+    /// finely. A region cell splits the fewest times the finest split divides into by a power of two that reach
+    /// what it needs, so each split divides the
     /// finest. A cell of a coarser split measures the fine samples on its stride's grid and interpolates the rest inside
     /// each stride cell, and its contour merges each stride cell's fine vertices per connected piece, so its triangles
     /// follow its own split.</para>
@@ -887,14 +888,19 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// detail is finer than the lattice. Empty for none. Where every region's cells would measure more fine samples than
     /// the refinement's budget, the regions covering the fewest cells are refined and the rest contour at the lattice's
     /// own spacing.</param>
+    /// <param name="thinFactor">An optional finer split for detected sheets and gaps, a power-of-two multiple of
+    /// <paramref name="factor"/>.</param>
     /// <returns>The fine samples to measure, in the lattice's frame, with weight one, in the order
     /// <see cref="AnswerRefinement"/> takes their answers; empty when no cell needs refining or even two fine cells a
     /// side would measure too many, and the lattice then contours at its own spacing. The memory is the lattice's, valid
     /// until the next round of points is asked for or the lattice is disposed.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="factor"/> is less than two.</exception>
     /// <exception cref="InvalidOperationException">The lattice is already refined.</exception>
-    public ReadOnlyMemory<Vector4> Refine(int factor, ReadOnlySpan<SdfLatticeRegion> regions = default) {
+    public ReadOnlyMemory<Vector4> Refine(int factor, ReadOnlySpan<SdfLatticeRegion> regions = default, int? thinFactor = null) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: factor, other: 2);
+        if (thinFactor is int finer && ((finer % factor != 0) || !BitOperations.IsPow2(finer / factor))) {
+            throw new ArgumentOutOfRangeException(nameof(thinFactor), "The thin split must be a power-of-two multiple of the ordinary split.");
+        }
 
         if (m_factor != 1) {
             throw new InvalidOperationException(message: "The lattice is already refined.");
@@ -917,6 +923,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         float[] spacing = [m_cell.X, m_cell.Y, m_cell.Z];
         var at = new int[3];
         var any = false;
+        var hasThin = false;
 
         int CellIndex(int x, int y, int z) => (x + (cellsX * (y + (cellsY * z))));
         // Whether one of the four lattice lines beside sample `at`'s line along `axis` holds two neighbouring samples
@@ -1036,6 +1043,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                     measured[CellIndex(x: cell[0], y: cell[1], z: cell[2])] = true;
                     thin[CellIndex(x: cell[0], y: cell[1], z: cell[2])] = true;
                     any = true;
+                    hasThin = true;
                 }
             }
         }
@@ -1237,7 +1245,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var counted = 0L;
         var addedCells = new List<int>();
 
-        for (var split = factor; (split >= 2); split--) {
+        var finest = (hasThin ? (thinFactor ?? factor) : factor);
+        m_asked = finest;
+        // Try the finer thin cells on a grid which still divides into the original cells. If this costs too much,
+        // all candidates below it follow the ordinary budget and split rules.
+        for (var split = finest; (split >= 2); split = ((split > factor) ? (split / 2) : (split - 1))) {
             essential.AsSpan(length: cellCount, start: 0).CopyTo(destination: trial);
 
             var fits = true;
@@ -1322,7 +1334,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // cell an essential test measures or no region holds, else the fewest `refinement` divides into by a power of two
         // that still reach the most its regions ask for (wanted), so every split a lattice holds divides the next finer.
         int CellSplit(int cell, int refinement) {
-            if (essential[cell] || (wanted[cell] == 0)) { return refinement; }
+            if (refinement > factor && thin[cell]) { return refinement; }
+            if (essential[cell] || (wanted[cell] == 0)) { return Math.Min(val1: factor, val2: refinement); }
 
             var reach = Math.Min(val1: wanted[cell], val2: refinement);
             var stride = 1;

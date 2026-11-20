@@ -264,11 +264,12 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     public bool HoldsEmpty(SdfMeshGeometry geometry, UInt128 identity = default) {
         lock (m_gate) { return (m_held.TryPeek(hash: (identity, geometry), value: out var held) && (held.Variants.Count == 0)); }
     }
-    /// <summary>Returns whether <see cref="Disk"/> holds a geometry's mesh under a bake's identity, without reading it.</summary>
+    /// <summary>Returns whether <see cref="Disk"/> may hold a geometry's mesh under a bake's identity, as
+    /// <see cref="SdfMeshStore.MayHold"/> answers it: from the store's known entries, with no file read.</summary>
     /// <param name="identity">The bake's identity.</param>
     /// <param name="geometry">The geometry.</param>
-    /// <returns><see langword="true"/> when the store holds an entry for it.</returns>
-    public bool Holds(UInt128 identity, SdfMeshGeometry geometry) => (Disk?.Contains(geometry: geometry, identity: identity) ?? false);
+    /// <returns><see langword="false"/> when the store is known to hold no entry for it.</returns>
+    public bool MayHold(UInt128 identity, SdfMeshGeometry geometry) => (Disk?.MayHold(geometry: geometry, identity: identity) ?? false);
     /// <summary>Takes a geometry's mesh from <see cref="Disk"/> for a group whose shapes carry <paramref name="materials"/>,
     /// holding it for the run as <see cref="Store"/> would, then taking it as <see cref="TryTake"/> does. Groups share
     /// one decode per identity and geometry until the library empties; a failed read is retried next time.</summary>
