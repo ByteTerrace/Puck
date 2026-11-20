@@ -196,7 +196,7 @@ public static class WorldAdmissionDoor {
             );
         }
 
-        return AdmissionOutcome.Admit(verdict: matched);
+        return AdmissionOutcome.Admit(verdict: matched) with { ValidThrough = result.ValidThrough };
     }
     /// <summary>Decides what a traveler handed over by an already-authenticated federation authority is minted.</summary>
     /// <remarks>Performs no cryptographic verification: the caller must already have completed
@@ -413,6 +413,8 @@ public static class WorldAdmissionDoor {
     /// <param name="Detail">Narration only — never used for control flow.</param>
     /// <param name="Verdict">What the admission authorizes, when admitted; <see langword="null"/> on refusal.</param>
     public readonly record struct AdmissionOutcome(bool Admitted, WorldAdmissionRefusal? Refusal, string Detail, WorldAdmissionVerdict? Verdict) {
+        /// <summary>Last inclusive Unix second verified across the claim and its chain.</summary>
+        public long ValidThrough { get; init; }
         /// <summary>Gets the verified identity's domain, when admitted.</summary>
         public string? Domain => Verdict?.IdentityDomain;
         /// <summary>Gets the admitting entry's own authored grant templates, when admitted.</summary>

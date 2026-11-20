@@ -23,6 +23,12 @@ public sealed partial class WorldInstanceHost {
         if (!m_instances.TryGetValue(key: pending.Transfer.SourceInstance, value: out var source)) { return false; }
         try {
             var transfer = pending.Transfer;
+            if (pending.TargetAuthority?.Remote is { } remote) {
+                pending.RouteSeeds ??= pending.Landed.Where(member => member.FollowedSeatMask != 0)
+                    .ToDictionary(member => member.TargetSlot, member => remote.DescribeRouteAsync(
+                        new WorldRemoteRouteCredential(member.TargetSlot, pending.SourceAuthority, member.Mobility.Advance())).AsTask());
+                if (pending.RouteSeeds.Values.Any(task => !task.IsCompleted)) { return false; }
+            }
 
             // The destination may have left a companion out of the commit: the settlement names who landed, and every
             // other member is restored here after the landed members' routes are made durable.
@@ -49,7 +55,7 @@ public sealed partial class WorldInstanceHost {
                             .Where(predicate: ordinal => landedIds.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))).ToArray();
 
                         PublishCommittedTransfer(
-                            in transfer,
+                            pending,
                             pending.TargetAuthority!.Value,
                             pending.TargetName,
                             [.. landedOrdinals.Select(selector: ordinal => pending.Landed[ordinal])],
@@ -79,7 +85,7 @@ public sealed partial class WorldInstanceHost {
             }
 
             PublishCommittedTransfer(
-                in transfer,
+                pending,
                 pending.TargetAuthority!.Value,
                 pending.TargetName,
                 pending.Landed,
@@ -103,9 +109,10 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
     }
-    private void PublishCommittedTransfer(in PendingTransfer transfer, WorldPeerCall targetAuthority, string targetName, List<LandedMember> landed, List<WorldTransferCommitMember> commits) {
+    private void PublishCommittedTransfer(InDoubtTransfer pending, WorldPeerCall targetAuthority, string targetName, List<LandedMember> landed, List<WorldTransferCommitMember> commits) {
         // Copied for the same reason ApplyTransfer copies it — an `in` parameter cannot be captured into Narrate's
         // deferred formatter.
+        var transfer = pending.Transfer;
         var transferId = transfer.TransferId;
 
         _ = m_instances.TryGetValue(
@@ -234,28 +241,11 @@ public sealed partial class WorldInstanceHost {
                         Mobility: member.Mobility.Advance()
                     );
 
-                    try {
-                        if (remoteTarget.TryDescribeRoute(
-                            credential: in routeCredential,
-                            reason: out var routeReason,
-                            route: out var describedRoute
-                        )) {
-                            initialRoute = describedRoute;
-                        } else {
-                            if (m_narration.HasNarrationSink) {
-                                m_narration.Narrate(
-                                    channel: "world.continuum",
-                                    text: $"[world.continuum: committed transfer={transferId} route seed unavailable for body:{member.TargetSlot} ({routeReason})]"
-                                );
-                            }
-                        }
-                    } catch (Exception exception) when ((exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException)) {
-                        if (m_narration.HasNarrationSink) {
-                            m_narration.Narrate(
-                                channel: "world.continuum",
-                                text: $"[world.continuum: committed transfer={transferId} route seed transport failed for body:{member.TargetSlot} ({exception.GetType().Name}: {exception.Message})]"
-                            );
-                        }
+                    var seed = pending.RouteSeeds![member.TargetSlot];
+                    initialRoute = seed.IsCompletedSuccessfully ? seed.Result.Route : null;
+                    if (initialRoute is null && m_narration.HasNarrationSink) {
+                        m_narration.Narrate(channel: "world.continuum",
+                            text: $"[world.continuum: committed transfer={transferId} route seed unavailable for body:{member.TargetSlot}]");
                     }
 
                     var trackedSlot = followedSlot;

@@ -377,14 +377,7 @@ internal static class PeerHandshake {
             ).ConfigureAwait(continueOnCapturedContext: false));
         }
 
-        if (
-            !authenticator.TryVerify(
-            challenge: ownChallenge,
-            proof: peerProof,
-            sourceAuthority: out var peerFingerprint
-        ) ||
-            (peerFingerprint is null)
-        ) {
+        if (await authenticator.VerifyAsync(ownChallenge, peerProof.ToArray(), ct).ConfigureAwait(false) is not { Authority: var peerFingerprint }) {
             return (null, await RefuseAsync(
                 ct: ct,
                 failure: new PeerFailure(

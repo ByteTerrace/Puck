@@ -19,6 +19,7 @@ public sealed partial class WorldSiloHost {
                 Kind: WorldAuthorityJournalEntryKind.Crossing,
                 Tick: entry.Tick
             );
+            host.FlushJournal(bookkeeping);
             Task<(WorldCrossingDurability Durability, string Reason)> append;
 
             lock (bookkeeping.TailGate) {

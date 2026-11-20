@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Puck.Storage;
 
 namespace Puck.World.Testing;
@@ -7,7 +8,7 @@ namespace Puck.World.Testing;
 /// guards in <c>Puck.World.Server</c>'s storage engine, with read/write counters (overall and per-key) so a test can
 /// prove a refusal happened BEFORE any network call, and that a shared blob was written exactly once.</summary>
 public sealed class FakeObjectBlobStore : IObjectBlobStore {
-    private readonly Dictionary<(Guid ObjectId, string Key), (byte[] Bytes, string Token)> m_blobs = [];
+    private readonly ConcurrentDictionary<(Guid ObjectId, string Key), (byte[] Bytes, string Token)> m_blobs = new();
     private readonly Dictionary<(Guid ObjectId, string Key), Action> m_afterReads = [];
     private readonly Dictionary<(Guid ObjectId, string Key), int> m_writeCounts = [];
 
@@ -17,6 +18,12 @@ public sealed class FakeObjectBlobStore : IObjectBlobStore {
     public int ReadCount { get; private set; }
     /// <summary>Gets the total number of <see cref="WriteAsync"/> calls made, across every key.</summary>
     public int WriteCount { get; private set; }
+
+    /// <inheritdoc/>
+    public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(m_blobs.TryRemove((address.ObjectId, address.Key), out _));
+    }
 
     private string NextToken() => $"t{++m_nextToken}";
 

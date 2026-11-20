@@ -525,19 +525,19 @@ public sealed record FunctionExpressionNode(
     Line,
     Column
 );
-/// <summary>A record derived from another: <c>base with { member: value }</c>. It evaluates to <paramref name="Base"/>'s
-/// object with each member <paramref name="Overrides"/> names replaced, and those it does not have added; shallow, so a
-/// nested override is spelled by nesting (<c>weathering: plate.weathering with { seed: 72 }</c>). It lowers to the
-/// object written out.</summary>
+/// <summary>A record derived from another: <c>base with { member: value }</c> or <c>base with overrides</c>. It
+/// evaluates to <paramref name="Base"/>'s object with each member <paramref name="Overrides"/> carries replaced, and
+/// those it does not have added; shallow, so a nested override is spelled by nesting
+/// (<c>weathering: plate.weathering with { seed: 72 }</c>). It lowers to the object written out.</summary>
 /// <param name="Base">The record derived from; it evaluates to an object at compile time.</param>
-/// <param name="Overrides">The members that replace or join the base's.</param>
+/// <param name="Overrides">The object expression whose members replace or join the base's.</param>
 /// <param name="Offset">The character offset within the source text.</param>
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
 public sealed record WithExpressionNode(
     ExpressionNode Base,
-    ObjectExpressionNode Overrides,
+    ExpressionNode Overrides,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -548,6 +548,36 @@ public sealed record WithExpressionNode(
     Line,
     Column
 );
+/// <summary>A compile-time <c>for</c> loop producing elements directly inside an array literal:
+/// <c>[for item in sequence { expr }]</c> or <c>[for (item, index) in sequence { expr }]</c>. Lowers to the flattened
+/// sequence of element values across every iteration, identical to <c>map</c>/<c>flatMap</c> or writing the elements
+/// out.</summary>
+/// <param name="Item">The per-element loop variable name.</param>
+/// <param name="Index">Optional 0-based iteration index variable name.</param>
+/// <param name="Sequence">The compile-time array expression iterated over.</param>
+/// <param name="Body">The element expressions produced on each iteration.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record ForExpressionNode(
+    string Item,
+    string? Index,
+    ExpressionNode Sequence,
+    IReadOnlyList<ExpressionNode> Body,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : ExpressionNode(
+    Offset,
+    Length,
+    Line,
+    Column
+) {
+    /// <summary>Gets optional <c>let</c> declarations scoped to each iteration before <see cref="Body"/> evaluates.</summary>
+    public IReadOnlyList<LetNode> Bindings { get; init; } = [];
+}
 /// <summary>A prefix operator expression: <c>-operand</c> or <c>~operand</c>, the rule language's two prefix
 /// operators. A negative NUMERIC LITERAL never reaches this node — the primary reader folds the sign into the literal
 /// so a unit suffix still reads against the value it signs (<c>-1.5m</c>) — so a <c>-</c> node's operand is always an

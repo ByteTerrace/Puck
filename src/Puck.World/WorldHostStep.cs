@@ -8,12 +8,11 @@ namespace Puck.World;
 /// The fixed step every boot shape runs: seat route changes, boot scheduling, authority and instance steps,
 /// the composition's post-step, then seat intent completion. The host-work clock a world.wait counts lives here.
 /// </summary>
-internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTestRun scheduleRunner, WorldTickScript tickScript, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, WorldReload reload, HostPacing pacing) {
+internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTestRun scheduleRunner, WorldTickScript tickScript, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, WorldReload reload, HostPacing pacing) {
     private readonly WorldCaptureScheduler m_captureScheduler = captureScheduler;
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
     private readonly WorldConsoleWaitGate m_waitGate = waitGate;
-    private readonly WorldPeerHost m_peerHost = peerHost;
     private readonly WorldInstanceHost m_instances = instances;
     private readonly WorldSeatAuthorityRouter m_seatRouter = seatRouter;
     // Test exports publish LAST, before world.at drains this tick's lines: captures and exports both describe
@@ -66,7 +65,6 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
             var stepTick = WorldServerStepShell.Step(
                 context: in bootContext,
                 pacing: pacing,
-                peerHost: m_peerHost,
                 publishTick: m_publishStep,
                 server: m_server,
                 tape: m_replayTape

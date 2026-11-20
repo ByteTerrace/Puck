@@ -312,7 +312,7 @@ A failed mutation journal append blocks the activation's later publications,
 so no crossing commits against a document edit recovery cannot reproduce.
 
 An `Uncertain` arrival record lands nothing and is neither a refusal nor a
-commit. The commit door (`WorldServer.CommitTransfer`, `IWorldPeerCall.Commit`,
+commit. The commit door (`WorldServer.CommitTransferAsync`, `IWorldPeerCall.Commit`,
 the federation commit reply) answers a `WorldTransferStatus`: `Committed`,
 `Missing` for a refusal, or `Uncertain`. The escrow keeps the uncertain arrival
 (`WorldTransferEscrow.Uncertain.cs`), answers `Uncertain` to the status query
@@ -374,10 +374,10 @@ request-local `MemberId`; a companion carries `WorldTransferCompanion` (role,
 followed member id, home, driver, ticket). Before the reservation the source
 asks the title authority for each hop: home records one `Hop` for its own
 companions (`WorldServer.AuthorizeOwnHop`), a custodian asks home through
-`IWorldCustodyPeer.RequestHop`; only a granted companion carries a ticket.
-`WorldServer.ReserveTransfer` and `CommitTransfer` ask home, off the gate and
+`IWorldCustodyPeer.RequestHopAsync`; only a granted companion carries a ticket.
+`WorldServer.ReserveTransferAsync` and `CommitTransferAsync` ask home asynchronously,
 once per call, whether each companion's grant is current
-(`IWorldCustodyPeer.ConfirmHops`, resolved by `WorldServer.CustodyPeers`), so an
+(`IWorldCustodyPeer.ConfirmHopsAsync`, resolved by `WorldServer.CustodyPeers`), so an
 answer never outlives the decision it was asked for; a latched home confirms
 nothing. The escrow decides companions member by member (`Role`, `Duplicate`,
 `Full`, `Unverified` in `WorldTransferReservationReply.Refusals`, the leased

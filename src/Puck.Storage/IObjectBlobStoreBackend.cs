@@ -6,6 +6,8 @@ namespace Puck.Storage;
 /// <see cref="IObjectBlobStore"/>. The semantics every backend keeps are <see cref="IObjectBlobStore"/>'s.
 /// </summary>
 public interface IObjectBlobStoreBackend {
+    /// <summary>See <see cref="IObjectBlobStore.DeleteAsync"/>.</summary>
+    ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default);
     /// <summary>See <see cref="IObjectBlobStore.ReadAsync"/>.</summary>
     /// <param name="target">The backend's own target.</param>
     /// <param name="address">The blob address.</param>

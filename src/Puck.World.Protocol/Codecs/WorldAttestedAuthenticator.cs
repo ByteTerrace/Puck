@@ -9,7 +9,7 @@ namespace Puck.World.Protocol;
 /// challenge nonce, verified with <see cref="Puck.Attestation"/> against the reading world's own <c>admission</c>
 /// trust list — <see cref="AttestationTrustMode.SignsDirectly"/> (a pinned per-authority key) or
 /// <see cref="AttestationTrustMode.Vouches"/> (root-issuing-subject, subject an owner id). The verified identity
-/// <see cref="TryVerify"/> returns is the claim's own chain-authenticated subject — never the bytes a caller
+/// <see cref="VerifyAsync"/> returns is the claim's own chain-authenticated subject — never the bytes a caller
 /// presented alongside it — so the connection this authenticates can never be steered onto a namespace its
 /// signature does not actually name.
 /// </summary>
@@ -76,16 +76,15 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator {
         );
     }
     /// <inheritdoc/>
-    public bool TryVerify(ReadOnlySpan<byte> challenge, ReadOnlySpan<byte> proof, out string? sourceAuthority) {
-        sourceAuthority = null;
-
+    public ValueTask<VerifiedPeerIdentity?> VerifyAsync(ReadOnlyMemory<byte> challenge, ReadOnlyMemory<byte> proof, CancellationToken ct) {
+        var entries = m_trustEntries?.Invoke();
         if (!WorldAdmissionDoor.TryBuildTrustList(
             defaultMaximumAge: MaximumClaimAge,
-            entries: m_trustEntries?.Invoke(),
+            entries: entries,
             reason: out _,
             trustList: out var trustList
         )) {
-            return false;
+            return new((VerifiedPeerIdentity?)null);
         }
 
         if (
@@ -93,12 +92,12 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator {
             chain: out var chainBytes,
             claim: out var claimBytes,
             reason: out _,
-            wire: proof
+            wire: proof.Span
         ) ||
             (claimBytes is null) ||
             (chainBytes is null)
         ) {
-            return false;
+            return new((VerifiedPeerIdentity?)null);
         }
 
         SignedAttestation claim;
@@ -117,7 +116,7 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator {
                 );
             }
         } catch (FormatException) {
-            return false;
+            return new((VerifiedPeerIdentity?)null);
         }
 
         var result = AttestationProfile.Base.VerifyChain(
@@ -134,18 +133,20 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator {
             !result.Verified ||
             result.RequiresReplayCommit
         ) {
-            return false;
+            return new((VerifiedPeerIdentity?)null);
         }
 
         if (
             (claim.PayloadKind != AttestationPayloadKind.Opaque) ||
-            !challenge.SequenceEqual(other: claim.PayloadBytes.Span)
+            !challenge.Span.SequenceEqual(other: claim.PayloadBytes.Span)
         ) {
-            return false;
+            return new((VerifiedPeerIdentity?)null);
         }
 
-        sourceAuthority = claim.Header.Subject;
-
-        return (sourceAuthority is not null);
+        bool TrustIsCurrent() {
+            var current = m_trustEntries?.Invoke();
+            return ReferenceEquals(current, entries) || (current is not null && entries is not null && current.SequenceEqual(entries));
+        }
+        return new(claim.Header.Subject is { } subject ? new VerifiedPeerIdentity(subject, result.ValidThrough, TrustIsCurrent) : null);
     }
 }

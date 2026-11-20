@@ -31,10 +31,8 @@ public interface IWorldRoutedRequests {
     /// <returns><see langword="true"/> when the intent was accepted.</returns>
     bool TryForwardIntent(int bodyIndex, in IntentSubmission submission, out string reason);
 }
-/// <summary>An <see cref="IServerLink"/> whose authority is a body committed by federated transfer. A mutation that
-/// carries a completion is submitted without waiting: the call returns at once and the destination's verdict, or the
-/// routed deadline's named refusal, reaches the completion on whatever thread the lane answers on. Every other
-/// submission waits, bounded by the routed deadline, for the answer it hands back.</summary>
+/// <summary>Routes inputs and submissions for a committed traveler. Each completion receives the destination's
+/// verdict or the transport refusal when the ordered lane answers.</summary>
 /// <param name="authority">The routed-request door.</param>
 public sealed class WorldFederatedServerLink(IWorldRoutedRequests authority) : IServerLink {
     /// <summary>The refusal code a mutation's completion carries when no verdict came back.</summary>
@@ -140,24 +138,6 @@ public sealed class WorldFederatedServerLink(IWorldRoutedRequests authority) : I
             Detail: reason
         );
     }
-    private (WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? Submit(int bodyIndex, WorldSubmissionPayload payload, Guid operationId = default) {
-        if (Request(
-            bodyIndex: bodyIndex,
-            operationId: operationId,
-            payload: payload
-        ) is not { } request) {
-            return null;
-        }
-
-        return Read(
-            bodyIndex: bodyIndex,
-            response: m_authority.AnswerAsync(
-                body: request.Body,
-                kind: WorldFederationRequest.Submission,
-                sourceAuthority: request.SourceAuthority
-            ).GetAwaiter().GetResult()
-        );
-    }
     // Sends one submission without waiting: its answer reaches the completion when the lane delivers it, or the named
     // refusal when there is none. The routed lane is ordered, so submissions keep their order.
     private void SubmitWithoutWaiting(int bodyIndex, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion) {
@@ -216,35 +196,9 @@ public sealed class WorldFederatedServerLink(IWorldRoutedRequests authority) : I
             WorldQuery.InstrumentState instrument => (instrument.Index - 1),
             _ => -1,
         };
-        var reply = Submit(
-            bodyIndex: bodyIndex,
-            payload: new WorldSubmissionPayload.Query(Value: query)
-        );
-
-        if (reply is null) {
-            completion(new QueryAnswer(
-                Text: "remote transfer credential is unavailable",
-                Refused: true
-            ));
-            return;
-        }
-        if (!WorldPeerWireFormat.TryReadResult(
-            body: reply.Value.Body.Span,
-            kind: reply.Value.Kind,
-            reason: out var reason,
-            result: out var result
-        )) {
-            completion(new QueryAnswer(
-                Refused: true,
-                Text: reason
-            ));
-            return;
-        }
-
-        completion(((result as WorldSubmissionResult.Query)?.Answer ?? new QueryAnswer(
-            Refused: true,
-            Text: $"remote authority returned unsupported completion {reply.Value.Kind} for a query"
-        )));
+        SubmitWithoutWaiting(bodyIndex, new WorldSubmissionPayload.Query(query), Guid.Empty, result =>
+            completion(result is WorldSubmissionResult.Query answered ? answered.Answer :
+                new QueryAnswer((result as WorldSubmissionResult.Refusal)?.Detail ?? "unexpected remote query completion", Refused: true)));
     }
     // The one abstract member every fire-and-forget Submit* interface default forwards to. A forwarded submission
     // routes by BODY, never by principal (the credential IS the authority — see TryCredential); Command/Designation
@@ -272,27 +226,7 @@ public sealed class WorldFederatedServerLink(IWorldRoutedRequests authority) : I
             _ => -1,
         };
 
-        // A mutation's verdict is its destination's tick-boundary answer: the caller holds a completion for it, so the
-        // submitting thread never waits for that tick.
-        if ((payload is WorldSubmissionPayload.Mutation) && (completion is not null)) {
-            SubmitWithoutWaiting(
-                bodyIndex: bodyIndex,
-                completion: completion,
-                operationId: operationId,
-                payload: payload
-            );
-
-            return 0;
-        }
-
-        var reply = Submit(
-            bodyIndex: bodyIndex,
-            operationId: operationId,
-            payload: payload
-        );
-
-        completion?.Invoke(obj: Result(reply: reply));
-
+        SubmitWithoutWaiting(bodyIndex, payload, operationId, completion ?? (static _ => { }));
         return 0;
     }
     public void SubmitIntent(in IntentSubmission submission) {
@@ -312,40 +246,8 @@ public sealed class WorldFederatedServerLink(IWorldRoutedRequests authority) : I
     public void SubmitSession(SessionRequest request, Action<SessionReply> completion) {
         ArgumentNullException.ThrowIfNull(completion);
         var bodyIndex = request switch { SessionRequest.Join join => join.Slot, SessionRequest.Leave leave => leave.Slot, SessionRequest.SetIdentity identity => identity.Slot, _ => -1 };
-        var reply = Submit(
-            bodyIndex: bodyIndex,
-            payload: new WorldSubmissionPayload.Session(Value: request)
-        );
-
-        if (reply is null) {
-            completion(new SessionReply(
-                Accepted: false,
-                AssignedIndex: -1,
-                Reason: "remote transfer credential is unavailable",
-                RosterEcho: string.Empty
-            ));
-            return;
-        }
-        if (!WorldPeerWireFormat.TryReadResult(
-            body: reply.Value.Body.Span,
-            kind: reply.Value.Kind,
-            reason: out var reason,
-            result: out var result
-        )) {
-            completion(new SessionReply(
-                Accepted: false,
-                AssignedIndex: -1,
-                Reason: reason,
-                RosterEcho: string.Empty
-            ));
-            return;
-        }
-
-        completion(((result as WorldSubmissionResult.Session)?.Reply ?? new SessionReply(
-            false,
-            -1,
-            string.Empty,
-            $"remote authority returned unsupported completion {reply.Value.Kind} for a session request"
-        )));
+        SubmitWithoutWaiting(bodyIndex, new WorldSubmissionPayload.Session(request), Guid.Empty, result =>
+            completion(result is WorldSubmissionResult.Session answered ? answered.Reply :
+                new SessionReply(false, -1, string.Empty, (result as WorldSubmissionResult.Refusal)?.Detail ?? "unexpected remote session completion")));
     }
 }

@@ -1163,7 +1163,7 @@ public static partial class PuckParser {
         }
         SkipWhiteSpace(context: context);
     }
-    private static ExpressionNode ParsePostfixExpression(ParseContext context) {
+    private static ExpressionNode ParsePostfixExpression(ParseContext context, bool allowWith = true) {
         var expr = ParsePrimaryExpression(context: context);
 
         while (true) {
@@ -1215,19 +1215,18 @@ public static partial class PuckParser {
                 continue;
             }
 
-            // A derived record: `base with { member: value }`. Only a block after the keyword reads as one, so a
-            // statement's own `with` (`shuffle deck with stream`) is never taken for it.
-            if (!separated && (cur == 'w')) {
+            // A derived record: `base with { member: value }` or `base with overrides`. Left-associative:
+            // `a with b with c` reads as `(a with b) with c`, while `a with b.c` reads as `a with (b.c)`.
+            if (allowWith && !separated && (cur == 'w')) {
                 var before = context.Scanner.Cursor.Position;
 
                 if (TryMatchKeyword(context: context, keyword: "with")) {
                     SkipWhiteSpace(context: context);
-                    if (context.Scanner.Cursor.Current == '{') {
-                        var overrides = ParseObjectExpression(context: context);
+                    var overrides = ParsePostfixExpression(context: context, allowWith: false);
+                    var withLength = ((overrides.Offset + overrides.Length) - expr.Offset);
 
-                        expr = new WithExpressionNode(Base: expr, Overrides: overrides, Offset: expr.Offset, Length: (context.Scanner.Cursor.Offset - expr.Offset), Line: expr.Line, Column: expr.Column);
-                        continue;
-                    }
+                    expr = new WithExpressionNode(Base: expr, Overrides: overrides, Offset: expr.Offset, Length: withLength, Line: expr.Line, Column: expr.Column);
+                    continue;
                 }
                 context.Scanner.Cursor.ResetPosition(position: before);
             }
@@ -1480,14 +1479,48 @@ public static partial class PuckParser {
         var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
 
         cursor.Advance(); // consume '['
+        var elements = ParseArrayElements(context: context, terminator: ']');
+
+        SkipWhiteSpace(context: context);
+        if (!TryConsume(c: ']', context: context)) {
+            throw CreateException(context: context, message: "Expected ']' closing array");
+        }
+
+        return new ArrayExpressionNode(Elements: elements, Offset: startOffset, Length: (cursor.Offset - startOffset), Line: line, Column: col);
+    }
+    private static List<ExpressionNode> ParseArrayElements(ParseContext context, char terminator, List<LetNode>? bindings = null) {
+        var cursor = context.Scanner.Cursor;
         var elements = new List<ExpressionNode>();
 
         SkipWhiteSpace(context: context);
 
-        while (!cursor.Eof && (cursor.Current != ']')) {
-            var elem = ParseExpression(context: context);
+        while (!cursor.Eof && (cursor.Current != terminator)) {
+            if ((bindings is not null) && (elements.Count == 0) && TryMatchStatementKeyword(context: context, keyword: "let")) {
+                var letStart = (cursor.Offset - "let".Length);
+                var (letLine, letCol) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: letStart);
 
-            elements.Add(item: elem);
+                SkipWhiteSpace(context: context);
+                if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var varName)) {
+                    throw CreateException(context: context, message: "Expected identifier after 'let'");
+                }
+                SkipWhiteSpace(context: context);
+                if (!TryConsume(c: '=', context: context) && !TryConsume(c: ':', context: context)) {
+                    throw CreateException(context: context, message: $"Expected '=' or ':' after variable name '{varName}'");
+                }
+                var val = ParseExpression(context: context);
+                var letLength = ((val.Offset + val.Length) - letStart);
+
+                bindings.Add(item: new LetNode(Column: letCol, Length: letLength, Line: letLine, Name: varName, Offset: letStart, Value: val));
+                ConsumeSeparator(context: context);
+                SkipWhiteSpace(context: context);
+                continue;
+            }
+
+            if (TryParseForExpression(context: context, loop: out var loop)) {
+                elements.Add(item: loop);
+            } else {
+                elements.Add(item: ParseExpression(context: context));
+            }
 
             SkipWhiteSpace(context: context);
             if (cursor.Current == ',') {
@@ -1496,12 +1529,39 @@ public static partial class PuckParser {
             }
         }
 
-        SkipWhiteSpace(context: context);
-        if (!TryConsume(c: ']', context: context)) {
-            throw CreateException(context: context, message: "Expected ']' closing array");
+        return elements;
+    }
+    private static bool TryParseForExpression(ParseContext context, out ForExpressionNode loop) {
+        loop = null!;
+        var cursor = context.Scanner.Cursor;
+        var startOffset = cursor.Offset;
+
+        if (!TryMatchStatementKeyword(context: context, keyword: "for")) {
+            return false;
         }
 
-        return new ArrayExpressionNode(Elements: elements, Offset: startOffset, Length: (cursor.Offset - startOffset), Line: line, Column: col);
+        var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: startOffset);
+        var (item, index, sequence) = ParseForHead(context: context);
+        var bindings = new List<LetNode>();
+        var body = ParseArrayElements(bindings: bindings, context: context, terminator: '}');
+
+        SkipWhiteSpace(context: context);
+        if (!TryConsume(c: '}', context: context)) {
+            throw CreateException(context: context, message: "Expected '}' closing a 'for' expression");
+        }
+
+        loop = new ForExpressionNode(
+            Body: body,
+            Column: col,
+            Index: index,
+            Item: item,
+            Length: (cursor.Offset - startOffset),
+            Line: line,
+            Offset: startOffset,
+            Sequence: sequence
+        ) { Bindings = bindings };
+
+        return true;
     }
     private static ObjectExpressionNode ParseObjectExpression(ParseContext context) {
         var cursor = context.Scanner.Cursor;

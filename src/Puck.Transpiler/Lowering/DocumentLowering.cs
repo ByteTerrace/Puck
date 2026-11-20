@@ -230,14 +230,25 @@ public static partial class DocumentLowering {
                     );
                     var jsonArr = new JsonArray();
 
-                    for (var index = 0; (index < arr.Elements.Count); index++) {
-                        jsonArr.AppendNode(item: LowerElement(
-                            element: arr.Elements[index],
-                            index: index,
-                            fieldKey: fieldKey,
-                            scope: scope
-                        ));
-                    }
+                    AppendArrayElements(
+                        elements: arr.Elements,
+                        fieldKey: fieldKey,
+                        into: jsonArr,
+                        scope: scope
+                    );
+
+                    return jsonArr;
+                }
+
+            case ForExpressionNode loop: {
+                    var jsonArr = new JsonArray();
+
+                    AppendForExpression(
+                        fieldKey: fieldKey,
+                        into: jsonArr,
+                        loop: loop,
+                        scope: scope
+                    );
 
                     return jsonArr;
                 }
@@ -295,6 +306,14 @@ public static partial class DocumentLowering {
                         foreach (var (key, value) in overrides.ToArray()) {
                             result[key] = value?.DeepClone();
                         }
+                    } else {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.InvalidValue,
+                            message: "'with' derives a record with an object of overrides; the right-hand side is not one",
+                            span: derived.Overrides.Span
+                        );
+
+                        return null;
                     }
 
                     return result;
@@ -1422,14 +1441,16 @@ public static partial class DocumentLowering {
     /// <param name="target">The object the body's statements land in.</param>
     /// <param name="scope">The enclosing scope.</param>
     /// <param name="sink">The vocabulary's own statement processor.</param>
+    /// <param name="bindLets">Whether to evaluate and bind compile-time <c>let</c> statements inside the loop body.</param>
     /// <remarks>Compile-time: the document carries the statements produced, never the loop. The bound names are
     /// locals, so they shadow a constant of the same name for the length of one iteration and are gone after.</remarks>
-    public static void ExpandFor(ForStatementNode loop, JsonObject target, DocumentScope scope, Action<StatementNode, JsonObject, DocumentScope> sink) {
+    public static void ExpandFor(ForStatementNode loop, JsonObject target, DocumentScope scope, Action<StatementNode, JsonObject, DocumentScope> sink, bool bindLets = false) {
         ArgumentNullException.ThrowIfNull(loop);
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(sink);
 
         foreach (var (statement, iteration) in ExpandForStatements(
+            bindLets: bindLets,
             loop: loop,
             scope: scope
         )) {
@@ -1444,8 +1465,11 @@ public static partial class DocumentLowering {
     /// live in, for a section whose rows a dedicated dispatcher reads.</summary>
     /// <param name="loop">The loop as written.</param>
     /// <param name="scope">The enclosing scope.</param>
+    /// <param name="bindLets">Whether to evaluate and bind compile-time <c>let</c> statements inside the loop body
+    /// rather than yielding them (false for vocabularies such as <c>shade</c> whose <c>let</c>s hold runtime
+    /// expressions).</param>
     /// <returns>Each produced statement and the scope to lower it under.</returns>
-    public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandForStatements(ForStatementNode loop, DocumentScope scope) {
+    public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandForStatements(ForStatementNode loop, DocumentScope scope, bool bindLets = false) {
         ArgumentNullException.ThrowIfNull(loop);
         ArgumentNullException.ThrowIfNull(scope);
         using var expansion = scope.Budget.Enter(span: loop.Span);
@@ -1457,40 +1481,136 @@ public static partial class DocumentLowering {
             yield break;
         }
 
-        if (EvaluateValue(
-            expr: loop.Sequence,
-            scope: scope
-        ) is not JsonArray sequence) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.ForSequenceRefused,
-                message: "a 'for' walks an array known at compile time",
-                span: loop.Sequence.Span
-            );
-
-            yield break;
-        }
-
-        for (var index = 0; (index < sequence.Count); ++index) {
-            var locals = new Dictionary<string, JsonNode?>(
-                dictionary: scope.Locals,
-                comparer: StringComparer.Ordinal
-            ) {
-                [loop.Item] = sequence[index],
-            };
-
-            if (loop.Index is { } ordinal) {
-                locals[ordinal] = JsonValue.Create(value: ((long)index));
-            }
-
-            var iteration = scope.WithLocals(lambdaLocals: locals);
+        foreach (var iteration in IterateForSequence(
+            indexName: loop.Index,
+            itemName: loop.Item,
+            scope: scope,
+            sequenceExpr: loop.Sequence,
+            span: loop.Span
+        )) {
+            var active = iteration;
 
             foreach (var statement in loop.Body) {
                 scope.Budget.Spend(
                     count: 1,
                     span: statement.Span
                 );
-                yield return (statement, iteration);
+                if (bindLets && (statement is LetNode binding)) {
+                    active = BindLocalLet(binding: binding, scope: active);
+                    continue;
+                }
+                yield return (statement, active);
             }
+        }
+    }
+    // The one iteration walk shared by statement `for` (`ExpandForStatements`) and list `for` (`AppendForExpression`).
+    private static IEnumerable<DocumentScope> IterateForSequence(ExpressionNode sequenceExpr, string itemName, string? indexName, SourceSpan span, DocumentScope scope) {
+        if (EvaluateValue(
+            expr: sequenceExpr,
+            scope: scope
+        ) is not JsonArray sequence) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.ForSequenceRefused,
+                message: "a 'for' walks an array known at compile time",
+                span: sequenceExpr.Span
+            );
+
+            yield break;
+        }
+
+        for (var index = 0; (index < sequence.Count); ++index) {
+            scope.Budget.Spend(
+                count: 1,
+                span: span
+            );
+
+            var locals = new Dictionary<string, JsonNode?>(
+                dictionary: scope.Locals,
+                comparer: StringComparer.Ordinal
+            ) {
+                [itemName] = sequence[index],
+            };
+
+            if (indexName is { } ordinal) {
+                locals[ordinal] = JsonValue.Create(value: ((long)index));
+            }
+
+            yield return scope.WithLocals(lambdaLocals: locals);
+        }
+    }
+    /// <summary>Binds one block- or loop-scoped <c>let</c> into a derived child scope: a function goes into
+    /// <see cref="DocumentScope.Constants"/>, while a value binding evaluates immediately in <paramref name="scope"/>
+    /// into <see cref="DocumentScope.Locals"/> so loop variables in flight are captured once per iteration.</summary>
+    /// <param name="binding">The <c>let</c> declaration.</param>
+    /// <param name="scope">The enclosing scope.</param>
+    /// <returns>The child scope carrying the binding.</returns>
+    public static DocumentScope BindLocalLet(LetNode binding, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(binding);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        if (binding.Value is FunctionExpressionNode) {
+            var constants = new Dictionary<string, ExpressionNode>(dictionary: scope.Constants, comparer: StringComparer.Ordinal) {
+                [binding.Name] = binding.Value,
+            };
+
+            return scope.WithConstants(invocationConstants: constants);
+        }
+
+        var value = EvaluateValue(expr: binding.Value, scope: scope);
+        var locals = new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal) {
+            [binding.Name] = value,
+        };
+
+        return scope.WithLocals(lambdaLocals: locals);
+    }
+    private static void AppendArrayElements(IReadOnlyList<ExpressionNode> elements, JsonArray into, string? fieldKey, DocumentScope scope) {
+        for (var index = 0; (index < elements.Count); index++) {
+            var element = elements[index];
+
+            if (element is ForExpressionNode loop) {
+                AppendForExpression(
+                    fieldKey: fieldKey,
+                    into: into,
+                    loop: loop,
+                    scope: scope
+                );
+                continue;
+            }
+
+            into.AppendNode(item: LowerElement(
+                element: element,
+                fieldKey: fieldKey,
+                index: into.Count,
+                scope: scope
+            ));
+        }
+    }
+    private static void AppendForExpression(ForExpressionNode loop, JsonArray into, string? fieldKey, DocumentScope scope) {
+        using var expansion = scope.Budget.Enter(span: loop.Span);
+
+        foreach (var iteration in IterateForSequence(
+            indexName: loop.Index,
+            itemName: loop.Item,
+            scope: scope,
+            sequenceExpr: loop.Sequence,
+            span: loop.Span
+        )) {
+            var active = iteration;
+
+            foreach (var binding in loop.Bindings) {
+                scope.Budget.Spend(
+                    count: 1,
+                    span: binding.Span
+                );
+                active = BindLocalLet(binding: binding, scope: active);
+            }
+
+            AppendArrayElements(
+                elements: loop.Body,
+                fieldKey: fieldKey,
+                into: into,
+                scope: active
+            );
         }
     }
     /// <summary>Expands a template invocation, binding its arguments and feeding each statement of its body to

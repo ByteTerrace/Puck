@@ -57,6 +57,7 @@ public sealed partial class FederationTransferLawTests {
             timeProvider: new VirtualClock(), transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
 
         PeerTestClient.StartOrSkip(host: host);
+        await using var mailbox = AdmissionWireFixture.StartMailboxPump(host);
         using var network = new WorldPeerNetwork(timeProvider: new VirtualClock(),
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
         using var remote = new WorldRemoteAuthority(endpoint: host.ListenEndpoint!, placeholder: fixture.Server.Definition,
@@ -95,8 +96,8 @@ public sealed partial class FederationTransferLawTests {
 
         public byte[] NewChallenge() => inner.NewChallenge();
         public byte[] Prove(ReadOnlySpan<byte> challenge) => (m_proof ??= inner.Prove(challenge: challenge));
-        public bool TryVerify(ReadOnlySpan<byte> challenge, ReadOnlySpan<byte> proof, out string? sourceAuthority) =>
-            inner.TryVerify(challenge: challenge, proof: proof, sourceAuthority: out sourceAuthority);
+        public ValueTask<VerifiedPeerIdentity?> VerifyAsync(ReadOnlyMemory<byte> challenge, ReadOnlyMemory<byte> proof, CancellationToken ct) =>
+            inner.VerifyAsync(challenge: challenge, proof: proof, ct: ct);
     }
     private sealed class VerifierWithoutPin(IAuthenticator inner) : IAuthenticator, IRemoteIdentityVerifier {
         public int ChallengeBytes => inner.ChallengeBytes;
@@ -108,8 +109,8 @@ public sealed partial class FederationTransferLawTests {
         public bool AcceptsRemoteIdentity(string keyHash) => true;
         public byte[] NewChallenge() => inner.NewChallenge();
         public byte[] Prove(ReadOnlySpan<byte> challenge) => inner.Prove(challenge: challenge);
-        public bool TryVerify(ReadOnlySpan<byte> challenge, ReadOnlySpan<byte> proof, out string? sourceAuthority) =>
-            inner.TryVerify(challenge: challenge, proof: proof, sourceAuthority: out sourceAuthority);
+        public ValueTask<VerifiedPeerIdentity?> VerifyAsync(ReadOnlyMemory<byte> challenge, ReadOnlyMemory<byte> proof, CancellationToken ct) =>
+            inner.VerifyAsync(challenge: challenge, proof: proof, ct: ct);
     }
 
     /// <summary>A trusted source's proof elicited on another peer transport cannot be relayed to this door, even
@@ -131,6 +132,7 @@ public sealed partial class FederationTransferLawTests {
             timeProvider: new VirtualClock(), transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
 
         PeerTestClient.StartOrSkip(host: host);
+        await using var mailbox = AdmissionWireFixture.StartMailboxPump(host);
         using var client = new PeerTestClient();
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var ct = TestContext.Current.CancellationToken;

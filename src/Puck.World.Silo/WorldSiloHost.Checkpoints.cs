@@ -64,15 +64,23 @@ public sealed partial class WorldSiloHost {
                 capturedJournalSequence = Task.FromResult(result: -1L);
                 return false;
             }
+            try {
+                encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint!);
+            } catch (InvalidDataException error) {
+                encoded = [];
+                outcome = error.Message;
+                tick = 0;
+                capturedJournalSequence = Task.FromResult(-1L);
+                return false;
+            }
             var bookkeeping = m_rows[row.Name];
-
+            FlushJournal(bookkeeping);
             lock (bookkeeping.TailGate) {
                 capturedJournalSequence = CaptureJournalCoverageAsync(bookkeeping: bookkeeping, previous: bookkeeping.JournalTail);
                 bookkeeping.JournalTail = capturedJournalSequence;
             }
         }
 
-        encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!);
         outcome = "ok";
         tick = row.CompletedTicks;
 
@@ -115,6 +123,9 @@ public sealed partial class WorldSiloHost {
 
             bookkeeping.JournalTail = queued;
             bookkeeping.CheckpointUpload = queued;
+            if (bookkeeping.CadenceRequested) {
+                bookkeeping.CadenceUpload = queued;
+            }
             return queued;
         }
     }
@@ -157,6 +168,10 @@ public sealed partial class WorldSiloHost {
                     );
 
                     if (outcome.PublishedRoot is { } published) {
+                        bookkeeping.RetiredObjects += outcome.RetiredObjects;
+                        if (outcome.RetentionFailure is { } failure) {
+                            bookkeeping.LastCheckpointOutcome = $"ok (retention will retry: {failure})";
+                        }
                         bookkeeping.CheckpointTimestamp = m_clock.GetTimestamp();
                         bookkeeping.LastCheckpointOrdinal = published.Root.CheckpointOrdinal;
                         bookkeeping.LastCheckpointTick = published.Root.CheckpointTick;

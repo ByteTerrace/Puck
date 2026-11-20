@@ -6,7 +6,7 @@ not bypass the document's rules.
 
 | Task | Guide and example |
 |---|---|
-| Author a world in the Puck DSL | [World vocabulary](../../src/Puck.World.Transpiler/README.md) and its [generated construct table](../reference/world-vocabulary.md), with [language syntax](../../src/Puck.Transpiler/README.md) for expressions, templates and collections. |
+| Author a world in the Puck DSL | [World vocabulary](../../src/Puck.World.Transpiler/README.md) and its [generated construct table](../reference/world-vocabulary.md), with [language syntax](../../src/Puck.Transpiler/README.md) for expressions, templates and collections, and the [author walls log](author-walls.md). |
 | Test a world's or a module's behaviour in its own language | [Testing a world](testing-a-world.md) — `test [with module(arguments)] { given when expect }` and `puck test`. |
 | Inspect or edit a running world | [World console](../../src/Puck.World/README.md), including document mutations, reload and saved state. |
 | Understand document fields | [World schema](../../src/Puck.World.Schema/README.md). |

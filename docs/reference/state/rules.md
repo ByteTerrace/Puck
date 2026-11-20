@@ -712,17 +712,20 @@ interned at compile time, so it always names a cell. A dynamic key is a
 | `.puck` spelling | Document spelling | Resolves to |
 |---|---|---|
 | `row[$each]` | `$each` | The bound iteration key. |
-| `row[cell(selected, piece)]` | `$cell:selected:piece` | The key whose name is the value of another cell: an `Int` cell's number, or a `Text` cell's text. |
-| `row[local(seat)]` | `$local:seat` | The key whose name is an `Int` local's value. |
-| `row[(turn + 1)]` | `$expr:…` | An expression's integer, compiled into an implicit local. |
+| `row[selected.piece]` or `row[selected["piece"]]` | `$cell:selected:piece` | The key whose name is the value of another cell: an `Int` cell's number, or a `Text` cell's text. |
+| `row[seat]` (where `seat` is a rule `local`) | `$local:seat` | The key whose name is an `Int` local's value. |
+| `row[turn + 1]` | `$expr:…` | An expression's integer, evaluated where the address is read or written. |
 | `row[zone(hand, last)]` | `$zone:hand:last` | A pile endpoint's member key. |
 
-A bare name in key position is a literal key: `seatScore[seat]` addresses the
-cell named `seat`. To address the cell a local names, write `local(seat)` or
-`(seat)`. The compiler reuses one implicit local for a repeated `$expr:` spelling,
-and implicit locals count against the 64-local ceiling together with declared
-ones. A document project adds key spellings through a `KeyFamily`; see [Host
-and extend the state engine](hosting.md).
+Brackets evaluate their contents: write a literal key as a string (`seatScore["seat"]`),
+an integer (`cards[0]`), or dot access (`seatScore.seat`), and write a live key
+directly (`row[seat]`, `row[turn + 1]`). A bare rule `local` in key position lowers
+to `$local:<name>` (`LocalKeyFact`), costing nothing beyond the local's own
+expression. An `$expr:` key is lowered as a feed program evaluated where the read or
+write runs; repeated spellings in the same binding scope share compiled code, never a
+pre-gate local, so they never count against the 64-local ceiling. A document project
+adds key spellings through a `KeyFamily`; see [Host and extend the state
+engine](hosting.md).
 
 A key that names a cell no key table has interned reads zero. A key that names
 nothing, such as an empty pile's endpoint or a `Text` pointer holding no valid

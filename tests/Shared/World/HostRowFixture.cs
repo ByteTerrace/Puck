@@ -5,6 +5,22 @@ using Puck.Testing;
 
 namespace Puck.World.Testing;
 
+internal static class LocalTransferCalls {
+    public static WorldTransferReservationReply ReserveTransfer(this WorldServer server, WorldTransferReservationRequest request) =>
+        server.ReserveTransferAsync(request).GetAwaiter().GetResult();
+
+    public static WorldTransferStatus CommitTransfer(this WorldServer server, string sourceAuthority, ulong transferId,
+        IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+        var answer = server.CommitTransferAsync(sourceAuthority, transferId, members).GetAwaiter().GetResult();
+        reason = answer.Reason;
+        return answer.Status;
+    }
+    public static IReadOnlyList<ulong?>? ConfirmHops(this IWorldCustodyPeer peer, WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) =>
+        peer.ConfirmHopsAsync(key, incarnations, destination, phase).Result;
+    public static IReadOnlyList<WorldHopAnswer> RequestHop(this IWorldCustodyPeer peer, WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) =>
+        peer.RequestHopAsync(key, source, destination, members).Result;
+}
+
 /// <summary>An <see cref="IAuthenticator"/> that never authenticates — test furniture for a row whose federation
 /// identity is constructed but never exercised (no remote peer call crosses this suite's in-process host).</summary>
 internal sealed class InertAuthenticator : IAuthenticator {
@@ -13,11 +29,7 @@ internal sealed class InertAuthenticator : IAuthenticator {
 
     public byte[] NewChallenge() => [];
     public byte[] Prove(ReadOnlySpan<byte> challenge) => throw new NotSupportedException();
-    public bool TryVerify(ReadOnlySpan<byte> challenge, ReadOnlySpan<byte> proof, out string? sourceAuthority) {
-        sourceAuthority = null;
-
-        return false;
-    }
+    public ValueTask<VerifiedPeerIdentity?> VerifyAsync(ReadOnlyMemory<byte> challenge, ReadOnlyMemory<byte> proof, CancellationToken ct) => new((VerifiedPeerIdentity?)null);
 }
 /// <summary>One admitted, non-boot <see cref="WorldInstance"/> row plus the resources its construction owns —
 /// bundled so a two-row host law drives the row without hand-wiring the desktop's own boot-composition sequence

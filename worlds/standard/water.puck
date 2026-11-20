@@ -53,27 +53,35 @@ let waterMaterial = flowed(
 
 // A spatial view of a scalar store. The authoritative store remains the caller's row; these cells supply the
 // ordinary surface and medium queries at the place where visitors meet it. The drawn surface follows the full value as
-// it drifts with the cycle, with no rebake, and bodies float on it. A view's `material` is its surface's look
-// (`waterMaterial`, or a stream's `streamMaterial`).
+// it drifts with the cycle, with no rebake, and bodies float on it. A view's `material` defaults to `waterMaterial`,
+// and a stream overrides it with its own (such as `streamMaterial`).
 template waterViews(views) {
+  let defaultView = { material: waterMaterial }
+
   state {
-    lattices: map(views, view => field(
-      name: view.name,
-      origin: [view.hole[0], view.floorY, view.hole[1]],
-      cellSize: view.cell,
-      width: floor((view.hole[2] - view.hole[0]) / view.cell),
-      depth: floor((view.hole[3] - view.hole[1]) / view.cell),
-      layers: 1,
-      stepEveryTicks: 8,
-      reactions: [
-        transform(
-          when: [{ field: view.rowName, comparison: GreaterOrEqual, value: 0 }],
-          then: [{ field: view.rowName, op: Set, value { row: view.gauge } }]
+    lattices [
+      for raw in views {
+        let view = defaultView with raw
+        field(
+          name: view.name,
+          origin: [view.hole[0], view.floorY, view.hole[1]],
+          cellSize: view.cell,
+          width: floor((view.hole[2] - view.hole[0]) / view.cell),
+          depth: floor((view.hole[3] - view.hole[1]) / view.cell),
+          layers: 1,
+          stepEveryTicks: 8,
+          reactions: [
+            transform(
+              when: [{ field: view.rowName, comparison: GreaterOrEqual, value: 0 }],
+              then: [{ field: view.rowName, op: Set, value { row: view.gauge } }]
+            )
+          ]
         )
-      ]
-    ))
+      }
+    ]
     world {
-      for view in views {
+      for raw in views {
+        let view = defaultView with raw
         row {
           name: view.rowName
           kind: "Fixed"
@@ -254,17 +262,6 @@ let stonePalette = [
   { color: "#B3A482", roughness: 0.92, specular: 0.02 }
 ]
 
-// The length of a line from `a` to `b`, points [x, z].
-function channelLength(a, b) = squareRoot((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]))
-// The cosine of the bearing of the line from `a` to `b`, taken eastward (the line is the same either way): the bearing
-// in [0, 180] whose half-turn about +Y orients a shape's +Z along the line.
-function channelCosine(a, b) = ((b[0] < a[0]) ? -1 : 1) * (b[1] - a[1]) / channelLength(a, b)
-
-// The half width of a channel's cutter at its top, `reach` over the ground's top: the profile widens from `bedHalf` at the
-// bed to `bankHalf` at the ground, and the cutter runs on past the ground at the same slope.
-function channelTopHalf(top, bed, reach, bedHalf, bankHalf) = bedHalf +
-  (bankHalf - bedHalf) * (top + reach - bed) / (top - bed)
-
 // A patch of ground with a river's channel cut in it: the ground between `region` ([minX, minZ, maxX, maxZ] in world X/Z,
 // the floor opening that holds it), `depth` thick under its top at `top`, and one authored channel profile cut along the
 // course `points` (world X/Z vertices): a flat bed `bedHalf` out from the course at `bed`, banks rising to `bankHalf` at the
@@ -275,6 +272,8 @@ function channelTopHalf(top, bed, reach, bedHalf, bankHalf) = bedHalf +
 // is drawn, and the author frame's half turn makes each world position the negated one. The water is the caller's: a
 // `waterViews` field over the region, its datum the bed.
 template riverChannel(id, region, points, ground, top = 0, bed = -0.9, bedHalf = 1.8, bankHalf = 3, depth = 1.5, reach = 0.4, join = 0.5, stones = [], palette = stonePalette) {
+  let topHalf = bedHalf + (bankHalf - bedHalf) * (top + reach - bed) / (top - bed)
+
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -286,26 +285,21 @@ template riverChannel(id, region, points, ground, top = 0, bed = -0.9, bedHalf =
         scale [(region[2] - region[0]) / 2, depth, (region[3] - region[1]) / 2]
       }
       for i in range(0, length(points) - 1) {
+        let a = points[i]
+        let b = points[i + 1]
+        let legLength = squareRoot((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]))
+        let legCosine = ((b[0] < a[0]) ? -1 : 1) * (b[1] - a[1]) / legLength
         shape Prism $"cut-{i}" {
           blend: Subtraction
           material: 2
           position [
-            0 - (points[i][0] + points[i + 1][0]) / 2,
+            0 - (a[0] + b[0]) / 2,
             (bed + top + reach) / 2,
-            0 - (points[i][1] + points[i + 1][1]) / 2
+            0 - (a[1] + b[1]) / 2
           ]
-          scale [
-            channelTopHalf(top, bed, reach, bedHalf, bankHalf),
-            (top + reach - bed) / 2,
-            channelLength(points[i], points[i + 1]) / 2 + join
-          ]
-          taper: bedHalf / channelTopHalf(top, bed, reach, bedHalf, bankHalf)
-          rotation [
-            halfTurnSine(channelCosine(points[i], points[i + 1]))
-            0
-            halfTurnCosine(channelCosine(points[i], points[i + 1]))
-            0
-          ]
+          scale [topHalf, (top + reach - bed) / 2, legLength / 2 + join]
+          taper: bedHalf / topHalf
+          rotation [halfTurnSine(legCosine), 0, halfTurnCosine(legCosine), 0]
         }
       }
       for (stone, i) in stones {

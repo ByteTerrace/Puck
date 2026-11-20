@@ -87,6 +87,9 @@ public sealed class WorldAuthorityRecoveryLawTests {
     }
 
     private sealed class SwapAfterRootReadStore : IObjectBlobStore {
+        public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
+            m_inner.DeleteAsync(target, address, cancellationToken);
+
         private readonly FakeObjectBlobStore m_inner = new();
 
         public Func<Task>? AfterNextRootRead { get; set; }

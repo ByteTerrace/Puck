@@ -299,9 +299,12 @@ public static partial class WorldDocumentEmitter {
                 break;
             case LetNode:
             case TemplateNode:
-            case EnumDeclarationNode:
             case DerivedStateNode:
                 // Already indexed in pre-scan
+                break;
+
+            case EnumDeclarationNode enumNode:
+                EnsureEnumRegistered(enumNode: enumNode, scope: scope);
                 break;
 
             case FlagStatementNode { Name: "solid" }:
@@ -353,11 +356,6 @@ public static partial class WorldDocumentEmitter {
                 }
 
             case ExportNode exportNode: {
-                    if (target["exports"] is not JsonObject exportsObj) {
-                        exportsObj = [];
-                        target["exports"] = exportsObj;
-                    }
-
                     var facet = exportNode.Facet.ToLowerInvariant();
                     var facetKey = facet switch {
                         "read" or "reads" => "reads",
@@ -366,15 +364,12 @@ public static partial class WorldDocumentEmitter {
                         _ => facet
                     };
 
-                    if (exportsObj[facetKey] is not JsonArray facetArr) {
-                        facetArr = [];
-                        exportsObj[facetKey] = facetArr;
-                    }
-
                     // A re-export names what a module instance of this scope declares, `child.score`.
-                    foreach (var name in exportNode.Names) {
-                        facetArr.AppendNode(item: JsonValue.Create((scope.TryQualify(qualified: out var instanceName, reference: name) ? instanceName : name)));
-                    }
+                    AppendExportFacet(
+                        facetKey: facetKey,
+                        names: exportNode.Names.Select(selector: name => (scope.TryQualify(qualified: out var instanceName, reference: name) ? instanceName : name)),
+                        target: target
+                    );
                     break;
                 }
 
@@ -397,6 +392,7 @@ public static partial class WorldDocumentEmitter {
 
             case ForStatementNode loop:
                 DocumentLowering.ExpandFor(
+                    bindLets: true,
                     loop: loop,
                     scope: scope,
                     sink: ProcessStatement,
@@ -448,6 +444,7 @@ public static partial class WorldDocumentEmitter {
                     // lands on once appended to whatever the member already held.
                     if (
                         (propNode.Value is ArrayExpressionNode authored) &&
+                        !authored.Elements.Any(predicate: static element => (element is ForExpressionNode)) &&
                         (lowered is JsonArray elements) &&
                         (elements.Count == authored.Elements.Count)
                     ) {
@@ -754,7 +751,65 @@ public static partial class WorldDocumentEmitter {
             blockObj["target"] = block.Target;
         }
 
+        if (
+            string.Equals(a: id, b: "exports", comparisonType: StringComparison.Ordinal) &&
+            ReferenceEquals(objA: parent, objB: scope.Annotations.GetValueOrDefault(key: "WorldDocumentRoot"))
+        ) {
+            MergeExportsObject(incoming: blockObj, target: parent);
+            return;
+        }
+
         parent[id] = blockObj;
+    }
+    // Appends one facet's exported names into `target["exports"][facetKey]`. Names already exported by an earlier
+    // `export` statement or `exports { }` block are not duplicated (so two templates exporting the same binding compose
+    // cleanly), while duplicates authored within a single statement or block are preserved for schema validation.
+    private static void AppendExportFacet(JsonObject target, string facetKey, IEnumerable<string> names) {
+        if (target["exports"] is not JsonObject exportsObj) {
+            exportsObj = [];
+            target["exports"] = exportsObj;
+        }
+        if (exportsObj[facetKey] is not JsonArray facetArr) {
+            facetArr = [];
+            exportsObj[facetKey] = facetArr;
+        }
+
+        var existing = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var entry in facetArr) {
+            if ((entry is JsonValue value) && value.TryGetValue<string>(value: out var text)) {
+                _ = existing.Add(item: text);
+            }
+        }
+
+        foreach (var name in names) {
+            if (!existing.Contains(item: name)) {
+                facetArr.AppendNode(item: JsonValue.Create(value: name));
+            }
+        }
+    }
+    // Merges an `exports { ... }` block into `target["exports"]`, appending each facet list onto any earlier `exports`
+    // block or `export` statement rather than overwriting it.
+    private static void MergeExportsObject(JsonObject target, JsonObject incoming) {
+        if (target["exports"] is not JsonObject exportsObj) {
+            target["exports"] = incoming;
+            return;
+        }
+
+        foreach (var (facetKey, node) in incoming.ToArray()) {
+            if (node is JsonArray incomingArr) {
+                var names = new List<string>(capacity: incomingArr.Count);
+
+                foreach (var entry in incomingArr) {
+                    if ((entry is JsonValue value) && value.TryGetValue<string>(value: out var text)) {
+                        names.Add(item: text);
+                    }
+                }
+                AppendExportFacet(facetKey: facetKey, names: names, target: target);
+            } else {
+                exportsObj[facetKey] = node?.DeepClone();
+            }
+        }
     }
     // `views { layout … pipeline … seatRig … seatControl { … } }` — each child has its own semantic mapping, so
     // the section's body is walked rather than lowered key by key.
@@ -972,10 +1027,15 @@ public static partial class WorldDocumentEmitter {
         }
 
         var obj = new JsonObject();
+        var active = scope;
 
         foreach (var stmt in block.Statements) {
+            if (stmt is LetNode binding) {
+                active = DocumentLowering.BindLocalLet(binding: binding, scope: active);
+                continue;
+            }
             ProcessStatement(
-                scope: scope,
+                scope: active,
                 statement: stmt,
                 target: obj
             );
@@ -991,6 +1051,7 @@ public static partial class WorldDocumentEmitter {
     private static void ExpandTemplateInvocation(CallExpressionNode call, JsonObject target, DocumentScope scope, bool isViewsContext = false) {
         DocumentLowering.ExpandTemplate(
             call: call,
+            initializeInvocation: (invocationScope, statements) => IndexTypesAndDerivedState(scope: invocationScope, statements: statements),
             scope: scope,
             sink: (isViewsContext
             ? ProcessViewsStatement
@@ -1024,6 +1085,7 @@ public static partial class WorldDocumentEmitter {
             );
             if (expansionScope is not null) {
                 EmitStateFamilies(root: expanded, scope: expansionScope);
+                MaterializeDeclaredEnums(root: expanded, scope: expansionScope);
             }
             expandedSpans = CaptureExpandedSpans(node: expanded, sourceMap: scope.SourceMap);
         }

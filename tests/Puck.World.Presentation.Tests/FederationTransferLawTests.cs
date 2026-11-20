@@ -866,6 +866,7 @@ public sealed partial class FederationTransferLawTests {
         );
 
         PeerTestClient.StartOrSkip(host: host);
+        await using var mailbox = AdmissionWireFixture.StartMailboxPump(host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
         using var client = new PeerTestClient();
@@ -1067,6 +1068,7 @@ public sealed partial class FederationTransferLawTests {
         );
 
         PeerTestClient.StartOrSkip(host: host);
+        await using var mailbox = AdmissionWireFixture.StartMailboxPump(host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
         using var client = new PeerTestClient();
@@ -1143,6 +1145,7 @@ public sealed partial class FederationTransferLawTests {
         );
 
         PeerTestClient.StartOrSkip(host: host);
+        await using var mailbox = AdmissionWireFixture.StartMailboxPump(host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
         using var client = new PeerTestClient();
@@ -1246,6 +1249,7 @@ public sealed partial class FederationTransferLawTests {
         );
 
         PeerTestClient.StartOrSkip(host: host);
+        await using var mailbox = AdmissionWireFixture.StartMailboxPump(host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
         byte[] capturedProof;
@@ -1341,6 +1345,7 @@ public sealed partial class FederationTransferLawTests {
         );
 
         PeerTestClient.StartOrSkip(host: host);
+        await using var mailbox = AdmissionWireFixture.StartMailboxPump(host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
 
@@ -1896,6 +1901,7 @@ public sealed partial class FederationTransferLawTests {
         );
 
         PeerTestClient.StartOrSkip(host: host);
+        await using var mailbox = AdmissionWireFixture.StartMailboxPump(host);
         var verifyOnly = Authenticator(trustEntries: () => [TrustEntryFor(oracle: oracle)]);
 
         Assert.True(condition: verifyOnly.IsConfigured);
@@ -1916,16 +1922,7 @@ public sealed partial class FederationTransferLawTests {
             sourceAuthority: "machine-b/boot",
             transferId: 17
         );
-        // AwaitAnswer blocks its caller for the answer, as the tick thread does, so it runs off the law's thread
-        // while the law drives the clock.
-        var pending = Task.Run(
-            cancellationToken: testToken,
-            function: () => remote.AwaitAnswer(
-                body: body,
-                kind: WorldFederationRequest.Status,
-                sourceAuthority: "machine-b/boot"
-            )
-        );
+        var pending = remote.AnswerAsync("machine-b/boot", WorldFederationRequest.Status, body);
 
         await clock.ExpireAsync(
             ct: testToken,
@@ -1950,7 +1947,7 @@ public sealed partial class FederationTransferLawTests {
             comparisonType: StringComparison.Ordinal
         );
 
-        var second = remote.AwaitAnswer(
+        var second = await remote.AnswerAsync(
             body: body,
             kind: WorldFederationRequest.Status,
             sourceAuthority: "machine-b/boot"
@@ -2362,16 +2359,12 @@ file sealed class OddWidthAuthenticator : IAuthenticator {
 
     public byte[] NewChallenge() => [1, 2, 3, 4, 5];
     public byte[] Prove(ReadOnlySpan<byte> challenge) => Compute(challenge: challenge);
-    public bool TryVerify(ReadOnlySpan<byte> challenge, ReadOnlySpan<byte> proof, out string? sourceAuthority) {
-        sourceAuthority = null;
-
-        if (!proof.SequenceEqual(other: Compute(challenge: challenge))) {
-            return false;
+    public ValueTask<VerifiedPeerIdentity?> VerifyAsync(ReadOnlyMemory<byte> challenge, ReadOnlyMemory<byte> proof, CancellationToken ct) {
+        if (!proof.Span.SequenceEqual(other: Compute(challenge: challenge.Span))) {
+            return new((VerifiedPeerIdentity?)null);
         }
 
-        sourceAuthority = Subject;
-
-        return true;
+        return new(new VerifiedPeerIdentity(Subject, long.MaxValue));
     }
 
     public int ChallengeBytes => ChallengeWidth;

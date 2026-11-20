@@ -941,14 +941,14 @@ One statement writes `state.world[]`, `state.lattices[]`.
 ### `pile`
 
 ```puck
-pile name[family] of tokenRow [capacity(n)] { token … }
+pile name[family] of tokenRow [capacity(n | auto)] { token … }
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
 | `name` (required) | header | name | — | `name` | — | The row's name, which every rule and binding reads it by. |
 | `of` (required) | header | reference | — | `domain` | — | The plain token-domain row supplying the keys this pile holds membership over. |
-| `capacity(…)` | modifier | number | — | `capacity` | — | The pile's member ceiling, never past its token domain's own. |
+| `capacity(…)` | modifier | number | — | `capacity` | — | The pile's member ceiling (`auto` lowers to its authored tokens' count), never past its token domain's own. |
 | `tokens` | body | tokens | — | `cells` | — | The tokens the pile starts holding, in written order; a repeat is refused. |
 
 Printed back as `pile` when the node carries `domain`, `name`, and it carries no key outside `capacity`, `cells`, `domain`, `kind`, `name`, and its kind is Bool, its domain is the ordered `keysOf` shape with nothing else on it, and every cell is a bare key holding `true`; otherwise `row { }`, the explicit form.
@@ -981,14 +981,14 @@ Printed back as `slot` when the node carries `name`, and it carries no key outsi
 ### `table`
 
 ```puck
-table name[family] [: Enum] [capacity(n)] [bounds([minimum]..[maximum], overflow:)] [advance(perSecond:)] [evicts] [space(name)] [embeds(row)] { key = value [advance(perSecond:)] [behavior(none)] }
+table name[family] [: Enum] [capacity(n | auto)] [bounds([minimum]..[maximum], overflow:)] [advance(perSecond:)] [evicts] [space(name)] [embeds(row)] { key = value [advance(perSecond:)] [behavior(none)] }
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
 | `name` (required) | header | name | — | `name` | — | The row's name, which every rule and binding reads it by. |
 | `enum` | header | reference | — | `enum` | — | The declared enum the row's cells are drawn from, written `: Enum` after the name; the row is then Int. |
-| `capacity(…)` | modifier | number | — | `capacity` | — | The row's cell-count ceiling; smaller than its own authored cells is refused. |
+| `capacity(…)` | modifier | number | — | `capacity` | — | The row's cell-count ceiling; `auto` lowers to the authored cells' count, and a number smaller than them is refused. |
 | `bounds(…)` | modifier | value | `Int`, `Fixed` | `min`, `max`, `overflow` | — | The row's range and what a write past it does; only where the row's kind is Int or Fixed. |
 | `advance(…)` | modifier | rate | `Int`, `Fixed` | `advance` | — | Per-second continuous accumulation, its sign carrying the direction; only where the row's kind is Int or Fixed. |
 | `evicts(…)` | modifier | flag | — | `evicts` | — | Drops the oldest cell instead of refusing a write at capacity. |

@@ -2,7 +2,7 @@ namespace Puck.World.Server;
 
 /// <summary>
 /// The federation peer-call seam, in Puck's own typed vocabulary — never <c>byte[]</c>. Synchronous throughout,
-/// matching every member it wraps (<see cref="WorldServer.ReserveTransfer"/>/<see cref="WorldServer.CommitTransfer"/>/
+/// matching every member it wraps (<see cref="WorldServer.ReserveTransferAsync"/>/<see cref="WorldServer.CommitTransferAsync"/>/
 /// <see cref="WorldServer.AbortTransfer"/>/<see cref="WorldServer.AcknowledgeTransfer"/>/
 /// <see cref="WorldServer.TransferStatus"/> are all plain synchronous calls under the server's own authority gate,
 /// never <c>Task</c>-shaped) and matching the one thing a tick's own outbound continuation resolution can tolerate
@@ -12,7 +12,7 @@ namespace Puck.World.Server;
 /// </summary>
 public interface IWorldPeerCall {
     /// <summary>Reserves a transfer on the peer this call addresses.</summary>
-    /// <param name="request">The reservation request, matching <see cref="WorldServer.ReserveTransfer"/>'s own
+    /// <param name="request">The reservation request, matching <see cref="WorldServer.ReserveTransferAsync"/>'s own
     /// parameter shape.</param>
     /// <returns>The peer's reservation reply.</returns>
     WorldTransferReservationReply Reserve(WorldTransferReservationRequest request);

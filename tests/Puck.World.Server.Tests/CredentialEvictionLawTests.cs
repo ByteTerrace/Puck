@@ -93,7 +93,7 @@ public sealed class CredentialEvictionLawTests {
 
         if (removeAdmission) {
             InstallDefinition(fixture: fixture, candidate: fixture.Server.Definition with { Admission = [] });
-            host.DrainPending();
+            clock.Advance(WorldPeerHost.CredentialSweepInterval);
         } else {
             // The fixture signs through second +1, inclusively. The host's idle sweep reaches the first expired
             // second without any client request or simulation step waking it.
@@ -147,7 +147,7 @@ public sealed class CredentialEvictionLawTests {
 
         if (revocation != 0) {
             InstallDefinition(fixture: fixture, candidate: fixture.Server.Definition with { Admission = ((revocation == 1) ? [] : [signingEntry]) });
-            host.DrainPending();
+            clock.Advance(WorldPeerHost.CredentialSweepInterval);
         } else {
             clock.Advance(by: TimeSpan.FromSeconds(value: 2));
         }

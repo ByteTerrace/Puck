@@ -171,24 +171,15 @@ public sealed partial class WorldAuthorityBlobStore {
         ) {
             return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "authority root changed after the protected drain; no state was replaced");
         }
-        var content = await ReadAsync(
-            address: CheckpointCandidateAddress(
-                identity,
-                protectedRoot.Root.CheckpointOrdinal,
-                protectedRoot.Root.CheckpointHash
-            ),
-            cancellationToken: cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        var checkpointBytes = await ReadPinnedPayloadAsync(identity, operationId,
+            CheckpointCandidateAddress(identity, protectedRoot.Root.CheckpointStorageSequence, protectedRoot.Root.CheckpointHash),
+            protectedRoot.Root.CheckpointHash, cancellationToken, archiveOnly: true).ConfigureAwait(false);
 
-        if (
-            (content is not { } checkpointBytes) ||
-            (WorldDefinitionFileSource.ComputeContentHash(content: checkpointBytes.Content.Span) != protectedRoot.Root.CheckpointHash) ||
-            !WorldAuthorityCheckpointCodec.TryDecode(
-            bytes: checkpointBytes.Content.Span,
+        if (!WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: checkpointBytes.Span,
             checkpoint: out var checkpoint,
             reason: out reason
-        )
-        ) {
+        )) {
             return WorldAuthorityStoreOutcome.Failed(detail: "protected checkpoint cannot be decoded for release publication");
         }
         if (checkpoint!.Server.LastCompletedTick != protectedRoot.Root.CheckpointTick) {
@@ -237,7 +228,7 @@ public sealed partial class WorldAuthorityBlobStore {
             address: CheckpointCandidateAddress(
                 hash: checkpointHash,
                 identity: identity,
-                ordinal: ordinal
+                sequence: checked(protectedRoot.Root.Sequence + 1)
             ),
             bytes: encoded,
             cancellationToken: cancellationToken
@@ -256,6 +247,7 @@ public sealed partial class WorldAuthorityBlobStore {
         var next = currentRoot.Root with {
             DefinitionHash = definitionHash,
             CheckpointHash = checkpointHash,
+            CheckpointStorageSequence = checked(protectedRoot.Root.Sequence + 1),
             CheckpointOrdinal = ordinal,
             DurableOrdinal = ordinal,
             ReceiptHash = prepared.ReceiptHash,

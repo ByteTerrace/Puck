@@ -2334,11 +2334,14 @@ public static partial class ExpressionSpelling {
 
             var node = ParseExpression();
 
-            // A channel written as a call in key position is the key (`zone(deck, first)`), not an expression of it.
+            // A channel written as a call in key position (`zone(deck, first)`), or a bare local read (`cards[k]`
+            // lowered through `cards[(k)]`), is the key itself rather than an expression wrapping it.
             if (
-                m_calledChannel &&
                 (node is StateRead { Key: null, Quoted: false } read) &&
-                ChannelSpelling.IsChannel(text: read.Name)
+                (
+                    (m_calledChannel && ChannelSpelling.IsChannel(text: read.Name)) ||
+                    read.Name.StartsWith(value: RuleFacts.LocalPrefix, comparisonType: StringComparison.Ordinal)
+                )
             ) {
                 return read.Name;
             }

@@ -60,7 +60,7 @@ public sealed record WorldSiloReleaseManagement(string Group, Guid Owner, string
 /// <param name="ProgressTimeoutSeconds">Maximum age, on the silo's clock, of a completed simulation step before liveness fails; also bounds each health request.</param>
 /// <param name="CheckpointTimeoutSeconds">Maximum age, on the silo's clock, of a successful checkpoint before readiness fails.</param>
 /// <param name="JournalTimeoutSeconds">Maximum interval, on the silo's clock, without journal progress while appends are pending.</param>
-/// <param name="JournalBacklogLimit">Maximum outstanding journal appends admitted as healthy.</param>
+/// <param name="JournalBacklogLimit">Maximum external mutations waiting for durable journal publication, per row.</param>
 public sealed record WorldSiloLifecycle(
     int ShutdownSeconds,
     int HealthPort,
@@ -69,8 +69,10 @@ public sealed record WorldSiloLifecycle(
     int ProgressTimeoutSeconds = 30,
     int CheckpointTimeoutSeconds = 180,
     int JournalTimeoutSeconds = 30,
-    int JournalBacklogLimit = 1024
+    int JournalBacklogLimit = WorldSiloLifecycle.DefaultJournalBacklogLimit
 ) {
+    /// <summary>The outstanding external mutation limit when the deployment omits it.</summary>
+    public const int DefaultJournalBacklogLimit = 1024;
     /// <summary>The health listener's default address: IPv4 loopback.</summary>
     public const string LoopbackHealthAddress = "127.0.0.1";
 }

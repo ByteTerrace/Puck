@@ -129,7 +129,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
             sourceInstance: WorldInstanceHost.BootInstanceName,
             sourceSlot: 0
         );
-        hosts.Source.DrainPendingTransfers();
+        hosts.DrainCrossing(0);
 
         AssertArrivedAsProjection(
             arrived: hosts.DestinationRow.Server.ExecuteAuthorityOperation(operation: () => ArrivedAt(id: OwnerId, server: hosts.DestinationRow.Server)),

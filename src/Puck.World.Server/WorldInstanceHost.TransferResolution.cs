@@ -65,7 +65,14 @@ public sealed partial class WorldInstanceHost {
                 // the destination's word. A prior confirmed commit still fences restoration.
                 var status = WorldTransferStatus.Committed;
 
-                if (
+                if (pending.CommitAnswer is { } commit) {
+                    if (!commit.IsCompleted) { index++; continue; }
+                    pending = pending with { CommitAnswer = null };
+                    m_inDoubtTransfers[index] = pending;
+                    if (!commit.IsCompletedSuccessfully || commit.Result.Step != WorldTransferStep.Answered) { index++; continue; }
+                    status = commit.Result.Status;
+                    if (status == WorldTransferStatus.Uncertain) { index++; continue; }
+                } else if (
                     !targetAuthority.TryStatus(
                     sourceAuthority: pending.SourceAuthority,
                     transferId: pending.Transfer.TransferId,
@@ -101,14 +108,14 @@ public sealed partial class WorldInstanceHost {
                             continue;
                         }
                     } else {
-                        var step = targetAuthority.PollCommit(
-                            sourceAuthority: pending.SourceAuthority,
-                            transferId: pending.Transfer.TransferId,
-                            members: pending.CommitMembers,
-                            status: out var verdict,
-                            reason: out _
-                        );
-
+                        var answer = targetAuthority.CommitAsync(pending.SourceAuthority, transfer.TransferId, pending.CommitMembers);
+                        if (!answer.IsCompleted) {
+                            m_inDoubtTransfers[index] = pending with { CommitAnswer = answer };
+                            index++;
+                            continue;
+                        }
+                        if (!answer.IsCompletedSuccessfully) { index++; continue; }
+                        var (step, verdict, _) = answer.Result;
                         if (
                             (step == WorldTransferStep.Answered) &&
                             (verdict == WorldTransferStatus.Committed)
@@ -1100,7 +1107,7 @@ public sealed partial class WorldInstanceHost {
     // substitutes every interface member below for a row SetPeerCallFault named — see that method's own remarks;
     // Local/Remote/Definition/IsRemote stay pointed at the real destination either way, since narration and
     // post-commit address resolution must still read the row a fault decorates, not the decorator.
-    private readonly record struct WorldPeerCall(WorldInstance? Local, WorldRemoteAuthority? Remote, IWorldPeerCall? Fault = null) : IWorldPeerCall {
+    private readonly record struct WorldPeerCall(WorldInstance? Local, WorldRemoteAuthority? Remote, IWorldPeerCall? Fault = null) {
         public WorldDefinition Definition => (Local?.Server.Definition ?? Remote!.Definition);
         public bool IsRemote => (Remote is not null);
 
@@ -1140,62 +1147,23 @@ public sealed partial class WorldInstanceHost {
                 );
             }
         }
-        public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason) {
+        public async Task<(WorldTransferStep Step, WorldTransferStatus Status, string Reason)> CommitAsync(string sourceAuthority,
+            ulong transferId, IReadOnlyList<WorldTransferCommitMember> members) {
             if (Fault is not null) {
-                return Fault.Commit(
-                    members: members,
-                    reason: out reason,
-                    sourceAuthority: sourceAuthority,
-                    status: out status,
-                    transferId: transferId
-                );
+                var step = Fault.Commit(sourceAuthority, transferId, members, out var status, out var reason);
+                return (step, status, reason);
             }
             if (Local is not null) {
-                status = Local.Server.CommitTransfer(
-                    members: members,
-                    reason: out reason,
-                    sourceAuthority: sourceAuthority,
-                    transferId: transferId
-                );
-
-                return WorldTransferStep.Answered;
+                var (status, reason) = await Local.Server.CommitTransferAsync(sourceAuthority, transferId, members).ConfigureAwait(false);
+                return (WorldTransferStep.Answered, status, reason);
             }
-
-            return Remote!.Commit(
-                members: members,
-                reason: out reason,
-                sourceAuthority: sourceAuthority,
-                status: out status,
-                transferId: transferId
-            );
+            return await Remote!.CommitAsync(sourceAuthority, transferId, members).ConfigureAwait(false);
         }
-        public WorldTransferStep PollCommit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason) =>
-            (((Remote is not null) && (Fault is null))
-                ? Remote.PollCommit(
-                    members: members,
-                    reason: out reason,
-                    sourceAuthority: sourceAuthority,
-                    status: out status,
-                    transferId: transferId
-                )
-                : Commit(
-                    members: members,
-                    reason: out reason,
-                    sourceAuthority: sourceAuthority,
-                    status: out status,
-                    transferId: transferId
-                )
-            );
-        // A colocated row answers inline; a remote row answers over its persistent lane, and a lane that could not
-        // deliver the step answers a named refusal rather than nothing. Every step here always answers: a caller
-        // told "not yet" would leave this transfer queued while the adjacency scan minted a second crossing for the
-        // same seat.
-        public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) => ((Fault is not null)
-            ? Fault.Reserve(request: request)
-            : ((Local is not null)
-                ? Local.Server.ReserveTransfer(request: request)
-                : Remote!.Reserve(request: request with { PeerAdmission = true })
-        ));
+        public Task<WorldTransferReservationReply> ReserveAsync(WorldTransferReservationRequest request) {
+            if (Fault is not null) { return Task.FromResult(Fault.Reserve(request)); }
+            return Local is not null ? Local.Server.ReserveTransferAsync(request) :
+                Remote!.ReserveAsync(request with { PeerAdmission = true });
+        }
         public bool TryLanded(string sourceAuthority, ulong transferId, out IReadOnlyList<int>? landed) {
             if (Fault is not null) {
                 return Fault.TryLanded(
@@ -1234,7 +1202,7 @@ public sealed partial class WorldInstanceHost {
                 return true;
             }
 
-            return Remote!.PollStatus(
+            return Remote!.TryStatus(
                 sourceAuthority: sourceAuthority,
                 status: out status,
                 transferId: transferId

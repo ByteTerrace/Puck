@@ -24,25 +24,30 @@ public enum WorldAuthorityJournalEntryKind : byte {
 /// <param name="Encoded">The entry's own encoded bytes.</param>
 /// <param name="Kind">What the entry records.</param>
 public readonly record struct WorldAuthorityJournalEntry(ulong Tick, ulong EngineTick, ReadOnlyMemory<byte> Encoded, WorldAuthorityJournalEntryKind Kind = WorldAuthorityJournalEntryKind.Mutation);
-/// <summary>Encodes and decodes the journal page <c>Puck.World.Server.WorldAuthorityBlobStore</c> writes beside the
-/// checkpoint blob and names from its authority root: one page's sequence of entries. It uses the same bounded
+/// <summary>Encodes and decodes the journal segment <c>Puck.World.Server.WorldAuthorityBlobStore</c> writes beside the
+/// checkpoint blob and names from its authority root: one segment's sequence of entries. It uses the same bounded
 /// <see cref="WireWriter"/>/<see cref="WireReader"/> discipline every peer decoder in this engine follows; its
 /// magic-and-version pair refuses a foreign or future blob by name rather than misreading it.</summary>
 public static class WorldAuthorityStoreWireCodec {
     // "PJNL" — Puck Journal.
     private const uint JournalMagic = 0x4C4E4A50U;
-    // Raise it whenever the page layout changes; never reuse an earlier value.
-    private const ushort JournalVersion = 3;
-    private const int MaxEntryBytes = ((8 * 1024) * 1024);
+    // Raise it whenever the segment layout changes; never reuse an earlier value.
+    private const ushort JournalVersion = 4;
+    /// <summary>Largest payload one journal entry can carry.</summary>
+    public const int MaxEntryBytes = ((8 * 1024) * 1024);
 
-    /// <summary>Encodes one journal page's whole entry sequence.</summary>
+    /// <summary>Encodes one journal segment's whole entry sequence.</summary>
     /// <param name="entries">The entries, in append order.</param>
-    /// <returns>The page's raw bytes.</returns>
-    public static byte[] EncodeJournalPage(IReadOnlyList<WorldAuthorityJournalEntry> entries) {
+    /// <param name="previousSequence">Storage sequence of the preceding segment, or zero for the first.</param>
+    /// <param name="previousHash">Content pin of the preceding segment, or null for the first.</param>
+    /// <returns>The segment's raw bytes.</returns>
+    public static byte[] EncodeJournalSegment(IReadOnlyList<WorldAuthorityJournalEntry> entries, long previousSequence = 0, string? previousHash = null) {
         var writer = new WireWriter();
 
         writer.WriteUInt32(value: JournalMagic);
         writer.WriteUInt32(value: JournalVersion);
+        writer.WriteUInt64(checked((ulong)previousSequence));
+        writer.WriteNullableString(previousHash);
         writer.WriteInt32(value: entries.Count);
 
         foreach (var entry in entries) {
@@ -54,12 +59,14 @@ public static class WorldAuthorityStoreWireCodec {
 
         return writer.ToArray();
     }
-    /// <summary>Decodes one journal page's whole entry sequence.</summary>
-    /// <param name="bytes">The page's raw bytes.</param>
+    /// <summary>Decodes one journal segment's whole entry sequence.</summary>
+    /// <param name="bytes">The segment's raw bytes.</param>
     /// <param name="entries">The decoded entries on success.</param>
+    /// <param name="previousSequence">Storage sequence of the preceding segment.</param>
+    /// <param name="previousHash">Content pin of the preceding segment.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the page decoded exactly.</returns>
-    public static bool TryDecodeJournalPage(ReadOnlySpan<byte> bytes, out IReadOnlyList<WorldAuthorityJournalEntry> entries, out string reason) {
+    public static bool TryDecodeJournalSegment(ReadOnlySpan<byte> bytes, out IReadOnlyList<WorldAuthorityJournalEntry> entries, out long previousSequence, out string? previousHash, out string reason) {
         var reader = new WireReader(bytes: bytes);
         var magic = reader.ReadUInt32();
         var version = reader.ReadUInt32();
@@ -83,10 +90,15 @@ public static class WorldAuthorityStoreWireCodec {
             );
         }
 
+        previousSequence = reader.ReadInt64();
+        previousHash = reader.ReadNullableString(field: "previous journal pin", maxBytes: 80);
+        if (previousSequence < 0 || ((previousSequence == 0) != (previousHash is null))) {
+            reader.Fail(WireRefusal.PayloadMalformed, "journal predecessor is invalid");
+        }
         var count = reader.ReadCount(
             field: "entry count",
-            maximum: int.MaxValue,
-            minimum: 0
+            maximum: reader.Remaining / (sizeof(ulong) * 2 + sizeof(byte) + sizeof(int)),
+            minimum: 1
         );
         var decoded = new WorldAuthorityJournalEntry[count];
 

@@ -65,18 +65,16 @@ internal sealed class PeerAuthenticator : IAuthenticator {
         return PeerWireProtocol.Codec.EncodeAttestation(attestation: claim);
     }
     /// <inheritdoc/>
-    public bool TryVerify(ReadOnlySpan<byte> challenge, ReadOnlySpan<byte> proof, out string? sourceAuthority) {
-        sourceAuthority = null;
-
+    public ValueTask<VerifiedPeerIdentity?> VerifyAsync(ReadOnlyMemory<byte> challenge, ReadOnlyMemory<byte> proof, CancellationToken ct) {
         SignedAttestation claim;
 
         try {
             claim = PeerWireProtocol.Profile.DecodeAttestation(
                 codec: PeerWireProtocol.Codec,
-                wire: proof
+                wire: proof.Span
             );
         } catch (FormatException) {
-            return false;
+            return new((VerifiedPeerIdentity?)null);
         }
 
         if (
@@ -91,7 +89,7 @@ internal sealed class PeerAuthenticator : IAuthenticator {
             comparisonType: StringComparison.Ordinal
         )
         ) {
-            return false;
+            return new((VerifiedPeerIdentity?)null);
         }
 
         var result = PeerWireProtocol.Profile.VerifyChain(
@@ -106,13 +104,11 @@ internal sealed class PeerAuthenticator : IAuthenticator {
 
         if (
             !result.Admits(slot: "identity") ||
-            !challenge.SequenceEqual(other: claim.PayloadBytes.Span)
+            !challenge.Span.SequenceEqual(other: claim.PayloadBytes.Span)
         ) {
-            return false;
+            return new((VerifiedPeerIdentity?)null);
         }
 
-        sourceAuthority = m_expectedDomain;
-
-        return true;
+        return new(new VerifiedPeerIdentity(m_expectedDomain, result.ValidThrough));
     }
 }

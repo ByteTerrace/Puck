@@ -253,6 +253,9 @@ public sealed class WorldReleaseArchiveLawTests {
     }
 
     private sealed class InterruptedStore(IObjectBlobStore inner) : IObjectBlobStore {
+        public ValueTask<bool> DeleteAsync(ObjectStorageTarget target, ObjectBlobAddress address, CancellationToken cancellationToken = default) =>
+            inner.DeleteAsync(target, address, cancellationToken);
+
         public ValueTask<IReadOnlyList<string>> ListAsync(ObjectStorageTarget target, Guid objectId, string keyPrefix, CancellationToken cancellationToken = default) => inner.ListAsync(
             cancellationToken: cancellationToken,
             keyPrefix: keyPrefix,

@@ -299,13 +299,7 @@ record kinds the codec decodes and nothing mints **[opened]**
 ```
 
 The durable crossing log exists on the silo alone **[opened]**
-(`src/Puck.World.Silo/WorldSiloHost.cs:1474`):
-
-```csharp
-                    server.InstallCrossingLog(log: new RowCrossingLog(
-```
-
-and a desktop writes no durable image: `DurableImages` is declared and never
+(`WorldSiloHost.ActivateCoreAsync`), and a desktop writes no durable image: `DurableImages` is declared and never
 assigned (a search for `DurableImages =` over `src/` finds nothing) **[opened]**
 (`src/Puck.World.Server/WorldInstanceHost.Stop.cs:33`):
 
@@ -713,7 +707,7 @@ with a retry ceiling of eight ticks **[opened]**
     public const string GlobalScopeKey = "global";
 ```
 
-and (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:613-614`):
+and (`src/Puck.World.Server/WorldInstanceHost.Transfers.cs:644-645`):
 
 ```csharp
             if (!standing.Allowed) {

@@ -1,0 +1,8 @@
+// `base with expr` where expr is an object binding lowers to the same object as `base with { ... }`.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let baseSpawn = { id: "start", position [0, 0, 0], yawDegrees: 0 }
+let overrides = { yawDegrees: 90 }
+
+spawnPoints [baseSpawn with overrides]

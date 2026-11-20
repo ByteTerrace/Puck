@@ -441,6 +441,29 @@ world one can open, and the same test through both hosts is the parity check.
 C# keeps the engine laws; a shipped game's behavior is pinned in its own
 language.
 
+**An import's export surface is its own, never transitive.** A document that
+imports another does not automatically re-export what that inner import
+exported: the inner document's `exports` are consumed and stripped when the
+outer document composes (`WorldModuleExports.TryTake`), so the outer document's
+host binds only what the outer document explicitly names in its own `exports`
+(or `export` statements, which merge with `exports { … }` blocks).
+
+- *Options weighed.* (1) **Explicit surface** (chosen): an import exposes only
+  what it exports itself; forwarding an inner import's name is an explicit
+  re-export (such as `worlds/debug/noclip.puck` re-exporting `suit`'s
+  `pilotHold`, or `worlds/standard/standard.puck` re-exporting `skin`'s `crt`).
+  (2) **Transitive surface**: an import automatically unions its own imports'
+  `exports` into its own.
+- *Attack closed.* Transitive authority leakage (confused deputy across module
+  boundaries). At MMO scale, a district or casino kit imports internal helpers
+  (locks, timers, bank ledgers, camera springs) that export `actions` or `reads`
+  so the kit itself can drive them. Making exports transitive would hand every
+  host and sibling import write authority over those internal helpers with no
+  way for the kit to encapsulate them. Explicit re-export keeps every import a
+  capability boundary; merging repeated `exports { … }` blocks and admitting
+  `export` inside templates removes the intra-document boilerplate without
+  weakening the cross-import boundary.
+
 Author-facing work belongs to the existing language packages. Their remaining
 cross-host and scenario gaps live in the [state plan's open items](../plans/state-and-language.md#open-items).
 

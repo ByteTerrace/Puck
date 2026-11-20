@@ -251,8 +251,8 @@ public enum WorldHostPresentation : byte {
 /// executable's own icon resource instead, which no world has to ship. Shape-only validation (null or
 /// non-whitespace); the platform window backend is what reads the file.</param>
 /// <param name="JournalDepth">The undo horizon, in journal entries: <c>world.undo</c> can never reach past this many
-/// trailing entries. <c>0</c> is unbounded — every world authored before this field existed keeps growing its journal
-/// for the life of the process, exactly as before. A positive depth bounds it: once the journal holds more than this
+/// trailing entries. Omission uses the bounded <see cref="DefaultJournalDepth"/>. Explicit <c>0</c> opts into
+/// unbounded history. At a positive depth, once the journal holds more than this
 /// many entries, the oldest ones fold forward into the base the journal already keeps (the same document-level
 /// replay <c>WorldServer.ApplyUndo</c> performs, run forward), so a checkpoint restore and a replay from the new base
 /// plus the retained tail still reproduce the live definition bit-identically. <c>world.status</c> echoes the
@@ -285,12 +285,15 @@ public sealed record WorldHostDefaults(
     // WorldHostDefaults is a CLASS, so a null Backend is honestly distinguishable from an authored one and declaring
     // both is refused BY NAME. (the capacity-row site needs no such guard — see its own remarks.)
     [property: JsonPropertyName("backendRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BackendRow = null,
-    int JournalDepth = 0,
+    int JournalDepth = WorldHostDefaults.DefaultJournalDepth,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Title = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Icon = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] DisplayColorSpace ColorSpace = DisplayColorSpace.Srgb,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? PaperWhiteNits = null
 ) {
+    /// <summary>The default number of document edits retained for undo.</summary>
+    public const int DefaultJournalDepth = 128;
+
     /// <summary>The largest display width or height, in pixels, a host document or a live resize may name: the
     /// largest two-dimensional texture Direct3D 12 holds.</summary>
     public const int MaxDisplayExtent = 16384;
@@ -311,7 +314,6 @@ public sealed record WorldHostDefaults(
         Genlock: null,
         Listen: null,
         Authority: null,
-        JournalDepth: 0,
         Title: null,
         Icon: null
     );

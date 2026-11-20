@@ -119,6 +119,11 @@ public sealed partial class CompanionCrossingLawTests {
     }
 
     private sealed class ForgingHome : IWorldCustodyPeer {
+        public ValueTask<IReadOnlyList<ulong?>?> ConfirmHopsAsync(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) =>
+            new(ConfirmHops(key, incarnations, destination, phase));
+        public ValueTask<IReadOnlyList<WorldHopAnswer>> RequestHopAsync(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) =>
+            new(RequestHop(key, source, destination, members));
+
         public IReadOnlyList<ulong?> ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) => incarnations.Select(_ => (ulong?)1UL).ToArray();
         public IReadOnlyList<WorldHopAnswer> RequestHop(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) => [];
         public WorldCustodyAnswer QueryCustody(WorldTransferKey key, WorldEntityAddress incarnation, string asker) => WorldCustodyAnswer.Uncertain;

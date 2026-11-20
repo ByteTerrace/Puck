@@ -43,9 +43,7 @@ function lookCamera(name, eye, target, fov, focusDistance = 6, width = 1280, hei
 
 // The shared look feel and the `camera-boom` response a chase rig eases on.
 template cameraResponse() {
-  exports {
-    bindings [`camera-boom`]
-  }
+  export binding `camera-boom`
 
   seatDefaults {
     seatCameraFeel {
@@ -100,15 +98,13 @@ template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0
 ], distance = 4.2, pitch = 0.3, fieldOfView = 0.96, minPitch = -0.5, maxPitch = 1.2, yawReference = "World", clearance = 0, fadeMaxRise = 0.35, cutawayMaxRise = 1.1, eyeRadius = 0.3, surfaceSkin = 0.1, closeTargetStart = 0.6, closeTargetFull = 0.2, fadeStart = 1.25, fadeEnd = 0.45, minimumBoom = 0.35, nearMargin = 0.05, retractionSkin = 0.05, obstructedTargetSkin = 1.1, hideRadius = 0.45, transitionSeconds = 0.5, autoFirstPerson = false, autoEntryDistance = 0.85, autoEntrySeconds = 0.2, autoExitDistance = 1.35, autoExitSeconds = 0.15) {
   cameraResponse()
 
-  exports {
-    bindings [`camera-boom`, cameraClearance]
-  }
+  export binding cameraClearance
 
   state {
-    // Written as a row: an `enum` a template expands is not carried into the document.
-    enums [
-      { name: "CameraClearance", members ["Fade", "Cutaway"] }
-    ]
+    enum CameraClearance {
+      Fade
+      Cutaway
+    }
 
     world {
       // The player's tight-space preference: the seat rig selects its fade or cutaway case by it.

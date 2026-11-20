@@ -462,10 +462,77 @@ public static partial class PuckPrinter {
                             parenthesize: ((derived.Base is UnaryExpressionNode) || (Precedence(@operator: derived.Base) < PuckParser.PrimaryLevel))
                         );
                         m_builder.Append(value: " with ");
-                        Object(
-                            level: level,
-                            @object: derived.Overrides
+                        if (derived.Overrides is ObjectExpressionNode overridesObject) {
+                            Object(
+                                level: level,
+                                @object: overridesObject
+                            );
+                        } else {
+                            Operand(
+                                level: level,
+                                operand: derived.Overrides,
+                                parenthesize: ((derived.Overrides is UnaryExpressionNode or WithExpressionNode) || (Precedence(@operator: derived.Overrides) < PuckParser.PrimaryLevel))
+                            );
+                        }
+
+                        break;
+                    }
+                case ForExpressionNode loop: {
+                        m_builder.Append(value: "for ");
+                        if (loop.Index is { } indexName) {
+                            m_builder.Append(value: '(').Append(value: loop.Item).Append(value: ", ").Append(value: indexName).Append(value: ')');
+                        } else {
+                            m_builder.Append(value: loop.Item);
+                        }
+                        m_builder.Append(value: " in ");
+                        Expression(
+                            expression: loop.Sequence,
+                            level: level
                         );
+                        m_builder.Append(value: " {");
+                        if ((loop.Bindings.Count == 0) && (loop.Body.Count == 0) && (loop.Trivia.Inner.Count == 0)) {
+                            m_builder.Append(value: '}');
+                            break;
+                        }
+                        var singleLine = (
+                            !loop.Trivia.MultiLine &&
+                            (loop.Bindings.Count == 0) &&
+                            (loop.Body.Count == 1) &&
+                            (loop.Trivia.Inner.Count == 0) &&
+                            (loop.Trivia.Opening is null) &&
+                            (loop.Body[0].Trivia.Leading.Count == 0) &&
+                            (loop.Body[0].Trivia.Trailing is null) &&
+                            FitsOnOneLine(print: () => Expression(expression: loop.Body[0], level: level))
+                        );
+
+                        if (singleLine) {
+                            m_builder.Append(value: ' ');
+                            Expression(
+                                expression: loop.Body[0],
+                                level: level
+                            );
+                            m_builder.Append(value: " }");
+                            break;
+                        }
+
+                        if (loop.Trivia.Opening is not null) { m_builder.Append(value: ' ').Append(value: loop.Trivia.Opening); }
+                        EndLine();
+                        Statements(level: (level + 1), statements: loop.Bindings);
+                        for (var index = 0; (index < loop.Body.Count); index++) {
+                            var element = loop.Body[index];
+
+                            Leading(level: (level + 1), trivia: element.Trivia);
+                            Indent(level: (level + 1));
+                            Expression(expression: element, level: (level + 1));
+                            if (((index + 1) < loop.Body.Count) && ContinuesPreviousElement(element: loop.Body[(index + 1)], level: (level + 1))) {
+                                m_builder.Append(value: ',');
+                            }
+                            if (element.Trivia.Trailing is not null) { m_builder.Append(value: ' ').Append(value: element.Trivia.Trailing); }
+                            EndLine();
+                        }
+                        Inner(level: (level + 1), trivia: loop.Trivia);
+                        Indent(level: level);
+                        m_builder.Append(value: '}');
 
                         break;
                     }

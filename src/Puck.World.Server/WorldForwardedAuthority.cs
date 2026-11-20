@@ -35,16 +35,14 @@ public interface IWorldForwardedAuthority {
     /// <paramref name="completion"/> uncalled.</returns>
     bool TryForwardSubmission(WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason);
     /// <summary>Resolves the traveler's current observable authority epoch.</summary>
-    /// <param name="route">The route description on success.</param>
-    /// <param name="reason">The named refusal on failure.</param>
-    /// <returns><see langword="true"/> when a route was described.</returns>
-    bool TryDescribeRoute(out WorldAuthorityRouteDescription route, out string reason);
+    /// <returns>The resolved route or its refusal.</returns>
+    ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeRouteAsync();
     /// <summary>Returns the destination hop and source-scoped credential without network I/O. Remote hops also
     /// carry their endpoint and a definition for reconnecting; no live stream or held-input lease is persisted.</summary>
     /// <returns>The destination descriptor, independent of connection availability.</returns>
     WorldForwardingDestination DescribeForCheckpoint();
     /// <summary>Fetches a prototype disclosed through this authenticated hop.</summary>
-    byte[]? FetchPrototype(Puck.Assets.ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops);
+    ValueTask<byte[]?> FetchPrototypeAsync(Puck.Assets.ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops);
     /// <summary>Streams the current owner's projection through this authenticated hop without closing the output stream.</summary>
     /// <param name="output">The caller-owned downstream stream.</param>
     /// <param name="ceiling">The maximum document disclosure admitted upstream.</param>
@@ -109,46 +107,13 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
     /// <summary>Gets the destination authority this arm forwards to.</summary>
     public WorldServer Server => m_server;
 
-    private bool TryDescribeRouteCore(out WorldAuthorityRouteDescription route, out string reason) {
-        route = default;
-
-        if (!TryResolvePrincipal(
-            principal: out var principal,
-            reason: out reason
-        )) {
-            return false;
-        }
-
-        var described = m_server.ExecuteAuthorityOperation(operation: () =>
-            (IsLiveTransferredPrincipal(
-            principal: principal,
-            server: m_server
-        )
-            ? DescribeRoute(
-                endpoint: m_endpoint,
-                principal: principal,
-                server: m_server
-            )
-            : (WorldAuthorityRouteDescription?)null));
-
-        if (described is not { } resolved) {
-            if (m_server.TransferForwarder is { } forwarder) {
-                return forwarder.TryDescribeForwarding(
-                    mobility: in m_mobility,
-                    reason: out reason,
-                    route: out route,
-                    source: m_server
-                );
-            }
-            reason = "the traveler is no longer live at this authority";
-
-            return false;
-        }
-
-        route = resolved;
-        reason = string.Empty;
-
-        return true;
+    private ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeRouteCoreAsync() {
+        if (!TryResolvePrincipal(out var principal, out var reason)) { return new((null, reason)); }
+        var local = m_server.ExecuteAuthorityOperation(() => IsLiveTransferredPrincipal(server: m_server, principal: principal)
+            ? DescribeRoute(m_server, m_endpoint, principal) : (WorldAuthorityRouteDescription?)null);
+        if (local.HasValue) { return new((local, string.Empty)); }
+        return m_server.TransferForwarder?.DescribeForwardingAsync(m_server, m_mobility) ??
+            new((null, "the traveler is no longer live at this authority"));
     }
     private bool TryForwardIntentCore(in IntentSubmission submission, out string reason) {
         if (!TryResolvePrincipal(
@@ -312,8 +277,8 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
     };
 
     /// <inheritdoc/>
-    public byte[]? FetchPrototype(Puck.Assets.ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
-        WorldProjectionPrototypeFetch.Fetch(server: m_server, pin: pin, sourceAuthority: m_sourceAuthority, ceiling: ceiling,
+    public ValueTask<byte[]?> FetchPrototypeAsync(Puck.Assets.ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
+        WorldProjectionPrototypeFetch.FetchAsync(server: m_server, pin: pin, sourceAuthority: m_sourceAuthority, ceiling: ceiling,
             traveler: new WorldTravelerObservation(Ceiling: ceiling, Mobility: m_mobility, RemainingHops: remainingHops, SourceAuthority: m_sourceAuthority));
     /// <inheritdoc/>
     public Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
@@ -428,17 +393,9 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
 
         return true;
     }    /// <inheritdoc/>
-    public bool TryDescribeRoute(out WorldAuthorityRouteDescription route, out string reason) {
-        if (!WorldForwardingScope.TryEnter(
-            reason: out reason,
-            scope: out var scope
-        )) { route = default; return false; }
-        using (scope) {
-            return TryDescribeRouteCore(
-            reason: out reason,
-            route: out route
-        );
-        }
+    public ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeRouteAsync() {
+        if (!WorldForwardingScope.TryEnter(scope: out var scope, reason: out var reason)) { return new((null, reason)); }
+        using (scope) { return DescribeRouteCoreAsync(); }
     }
     /// <inheritdoc/>
     public bool TryForwardIntent(in IntentSubmission submission, out string reason) {
@@ -477,7 +434,11 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
                     (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
                     (result is WorldSubmissionResult.Session { Reply.Accepted: true })
                 ) {
-                    server.RetireTransferredMobility(mobility: in mobility);
+                    if (server.AuthorityGate.IsHeldByCurrentThread) {
+                        server.RetireTransferredMobility(in mobility);
+                    } else {
+                        _ = server.RunOnTickThreadAsync(() => { server.RetireTransferredMobility(in mobility); return true; });
+                    }
                 }
 
                 completion(obj: result);

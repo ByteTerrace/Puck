@@ -111,7 +111,7 @@ cover missing pins and a trusted substitute proving its own namespace.
 
 Public federation disclosure requires an explicit federated-authority admission
 row. `WorldPeerHost.StreamProjectionAsync` invalidates a public stream when its
-admission policy changes; `WorldProjectionPrototypeFetch.Fetch` refuses unmatched
+admission policy changes; `WorldProjectionPrototypeFetch.FetchAsync` refuses unmatched
 authorities. `FederationTransferLawTests.PublicObservationRequiresExplicitFederationDisclosure`
 and `FederationTransferLawTests.PublicReplicaObservationEndsWhenItsAdmissionTierChanges`
 exercise the public wire paths. Invalidation itself remains observable; the

@@ -425,6 +425,7 @@ public static partial class WorldDocumentEmitter {
         }
 
         ApplyStateRowModifiers(
+            authoredCellCount: cellsArr.Count,
             keyword: "table",
             kind: table.Kind,
             modifiers: table.Modifiers,
@@ -646,6 +647,7 @@ public static partial class WorldDocumentEmitter {
             sawCapacity = true;
 
             var capNode = LowerStateCapacityModifier(
+                authoredCellCount: cellsArr.Count,
                 modifier: modifier,
                 rowName: pile.Name,
                 scope: scope
@@ -1365,7 +1367,7 @@ public static partial class WorldDocumentEmitter {
             );
         }
     }
-    private static void ApplyStateRowModifiers(JsonObject rowObj, IReadOnlyList<StateModifierNode> modifiers, string kind, string keyword, string rowName, DocumentScope scope) {
+    private static void ApplyStateRowModifiers(JsonObject rowObj, IReadOnlyList<StateModifierNode> modifiers, string kind, string keyword, string rowName, DocumentScope scope, int authoredCellCount = -1) {
         var admitted = ModifiersOf(
             enclosing: "world",
             keyword: keyword,
@@ -1427,6 +1429,7 @@ public static partial class WorldDocumentEmitter {
 
                     sawCapacity = true;
                     rowObj["capacity"] = LowerStateCapacityModifier(
+                        authoredCellCount: authoredCellCount,
                         modifier: modifier,
                         rowName: rowName,
                         scope: scope
@@ -1624,7 +1627,24 @@ public static partial class WorldDocumentEmitter {
             );
         }
     }
-    private static JsonNode LowerStateCapacityModifier(StateModifierNode modifier, string rowName, DocumentScope scope) {
+    private static JsonNode LowerStateCapacityModifier(StateModifierNode modifier, string rowName, DocumentScope scope, int authoredCellCount = -1) {
+        if (
+            (modifier.Arguments.Count == 1) &&
+            (modifier.Arguments[0].Name is null) &&
+            (modifier.Arguments[0].Value is IdentifierExpressionNode { Name: "auto" })
+        ) {
+            if (authoredCellCount > 0) {
+                return JsonValue.Create(value: authoredCellCount)!;
+            }
+
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
+                message: $"'capacity(auto)' on '{rowName}' requires at least one authored cell to count",
+                span: modifier.Span
+            );
+
+            return JsonValue.Create(value: 1)!;
+        }
         if (
             (modifier.Arguments.Count == 1) &&
             (modifier.Arguments[0].Name is null) &&
@@ -1640,7 +1660,7 @@ public static partial class WorldDocumentEmitter {
 
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-            message: $"'capacity' on '{rowName}' takes one positive whole-number argument",
+            message: $"'capacity' on '{rowName}' takes one positive whole-number argument or 'auto'",
             span: modifier.Span
         );
 

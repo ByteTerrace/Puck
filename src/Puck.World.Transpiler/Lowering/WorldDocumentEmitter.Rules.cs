@@ -1191,16 +1191,30 @@ public static partial class WorldDocumentEmitter {
         )));
     }
     // An expression key is read again after the rule's locals leave scope, so a local keeps its explicit spelling in it
-    // rather than the bare name the source dialect gives it, which would then read a row of that name.
+    // rather than the bare name the source dialect gives it, which would then read a row of that name. A single-local
+    // expression lowers directly to `$local:<name>`, matching `row[local]`.
     private static string ExplicitLocalsKey(string key) {
         if (!key.StartsWith(comparisonType: StringComparison.Ordinal, value: RuleFacts.ExpressionKeyPrefix)) {
             return key;
         }
         var expression = key[RuleFacts.ExpressionKeyPrefix.Length..];
 
-        return (RuleFacts.ExpressionKeyPrefix + ((ExpressionSpelling.TryParse(error: out _, program: out var program, text: expression) && ExpressionSpelling.TryPrint(program: program, text: out var printed))
-            ? printed
-            : expression));
+        if (
+            ExpressionSpelling.TryParse(error: out _, program: out var program, text: expression) &&
+            ExpressionSpelling.TryPrint(program: program, text: out var printed)
+        ) {
+            if (
+                (program.Instructions.Count == 1) &&
+                (program.Instructions[0].Operation == ExpressionOp.Operand) &&
+                printed.StartsWith(value: RuleFacts.LocalPrefix, comparisonType: StringComparison.Ordinal)
+            ) {
+                return printed;
+            }
+
+            return (RuleFacts.ExpressionKeyPrefix + printed);
+        }
+
+        return (RuleFacts.ExpressionKeyPrefix + expression);
     }
     // `allowText` gates whether an RhsTextNode's Text lands on the object — AddState carries no Text field at all;
     // a string RHS reaching it is already PUCK009 from the parser, and best-effort lowering here emits nothing for

@@ -478,11 +478,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
 
         public byte[] NewChallenge() => [];
         public byte[] Prove(ReadOnlySpan<byte> challenge) => throw new NotSupportedException();
-        public bool TryVerify(ReadOnlySpan<byte> challenge, ReadOnlySpan<byte> proof, out string? sourceAuthority) {
-            sourceAuthority = null;
-
-            return false;
-        }
+        public ValueTask<VerifiedPeerIdentity?> VerifyAsync(ReadOnlyMemory<byte> challenge, ReadOnlyMemory<byte> proof, CancellationToken ct) => new((VerifiedPeerIdentity?)null);
     }
     // Outermost in the pipeline, so a request has released every limiter lease it held before it signals.
     private sealed class RequestSignal(RemoteMcpFixture owner) : IStartupFilter {
