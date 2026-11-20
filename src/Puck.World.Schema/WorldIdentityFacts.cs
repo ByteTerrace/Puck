@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Globalization;
 using System.Text.Json.Serialization;
 
@@ -10,7 +11,7 @@ namespace Puck.World;
 /// <param name="State">The keyed <see cref="CellKind.Int"/> row on the identity's document holding the facts.</param>
 /// <param name="Capacity">How many distinct facts the row holds; a write past it refuses by name.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldIdentityFacts(CellName State, int Capacity) {
+public sealed record WorldIdentityFacts([property: DocumentText("an identity-lane row name")] CellName State, int Capacity) {
     /// <summary>The shape an identity section authoring no <c>facts</c> member carries.</summary>
     public static WorldIdentityFacts Default { get; } = new(
         State: CellName.Parse(candidate: "identity-facts"),

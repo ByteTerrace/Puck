@@ -41,6 +41,8 @@ public static class WorldModelShapeSource {
         var pending = new Stack<Type>();
 
         pending.Push(item: typeof(WorldDefinition));
+        // A keyed bindable serializes the clock from this interface through its converter.
+        pending.Push(item: typeof(IWorldKeyTrack));
         while (pending.TryPop(result: out var type)) {
             type = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
             if (type.IsPrimitive || type.IsEnum || (type == typeof(string)) || (type == typeof(decimal)) || type.IsGenericParameter || !visited.Add(item: type)) {
@@ -52,6 +54,13 @@ public static class WorldModelShapeSource {
             if (type.IsGenericType) {
                 foreach (var argument in type.GetGenericArguments()) {
                     pending.Push(item: argument);
+                }
+            }
+
+            if (type == typeof(ExpressionProgram)) {
+                // The expression converter flattens both payload unions onto instructions.
+                foreach (var arm in typeof(InstructionPayload).GetNestedTypes().Concat(typeof(VectorOperand).GetNestedTypes())) {
+                    pending.Push(arm);
                 }
             }
 
@@ -74,13 +83,13 @@ public static class WorldModelShapeSource {
                 foreach (var property in info.Properties) {
                     var (declaringType, member) = WorldNameRegistry.ResolveMember(property: property);
 
-                    members.Add(item: new WorldModelMember(
+                    members.Add(item: WorldNameRegistry.Describe(new WorldModelMember(
                         Access: (((property.Get is null) ? WorldModelAccess.None : WorldModelAccess.Read) | ((property.Set is null) ? WorldModelAccess.None : WorldModelAccess.Write)) | (property.IsExtensionData ? WorldModelAccess.ExtensionData : WorldModelAccess.None) | (property.IsRequired ? WorldModelAccess.Required : WorldModelAccess.None),
                         DeclaringType: declaringType,
                         Member: member,
                         Name: property.Name,
                         Type: property.PropertyType
-                    ));
+                    )));
                     pending.Push(item: property.PropertyType);
                 }
             } else if (!systemLeaf && !type.IsGenericType && !type.IsArray) {
@@ -89,13 +98,13 @@ public static class WorldModelShapeSource {
                         continue;
                     }
 
-                    properties.Add(item: new WorldModelMember(
+                    properties.Add(item: WorldNameRegistry.Describe(new WorldModelMember(
                         Access: (((property.GetMethod is null) ? WorldModelAccess.None : WorldModelAccess.Read) | ((property.SetMethod is null) ? WorldModelAccess.None : WorldModelAccess.Write)) | ((property.GetCustomAttribute<JsonIgnoreAttribute>() is { Condition: JsonIgnoreCondition.Always }) ? WorldModelAccess.Ignored : WorldModelAccess.None),
                         DeclaringType: (property.DeclaringType ?? type),
                         Member: property.Name,
                         Name: JsonNamingPolicy.CamelCase.ConvertName(name: property.Name),
                         Type: property.PropertyType
-                    ));
+                    )));
                     pending.Push(item: property.PropertyType);
                 }
             }
@@ -138,6 +147,7 @@ public static class WorldModelShapeSource {
         _ = text.Append(value: "// do not hand-edit. `puck schema --check` fails when this table disagrees with the model.\n");
         _ = text.Append(value: "#nullable enable\n\n");
         _ = text.Append(value: "using System.Text.Json.Serialization.Metadata;\n\n");
+        _ = text.Append(value: "using Puck.Abstractions.Documents;\n");
         _ = text.Append(value: "using static Puck.World.WorldModelAccess;\n\n");
         _ = text.Append(value: "namespace Puck.World;\n\n");
         _ = text.Append(value: "public static partial class WorldModelShape {\n");
@@ -181,7 +191,10 @@ public static class WorldModelShapeSource {
                 ? $", static value => (({CSharpName(type: member.DeclaringType)})value).{member.Member}"
                 : string.Empty);
 
-            _ = text.Append(value: $"                M({Literal(text: member.Name)}, typeof({CSharpName(type: member.Type)}), typeof({CSharpName(type: member.DeclaringType)}), {Literal(text: member.Member)}, {AccessText(access: member.Access)}{getter}),\n");
+            var spelling = member.NameField is { } field
+                ? $", kind: WorldNameKind.{field.Kind}, role: WorldNameRole.{field.Role}, facet: WorldExportFacet.{field.Facet}"
+                : member.TextPurpose is { } purpose ? $", text: {Literal(purpose)}" : string.Empty;
+            _ = text.Append(value: $"                M({Literal(text: member.Name)}, typeof({CSharpName(type: member.Type)}), typeof({CSharpName(type: member.DeclaringType)}), {Literal(text: member.Member)}, {AccessText(access: member.Access)}{getter}{spelling}),\n");
         }
         _ = text.Append(value: "            ]");
     }

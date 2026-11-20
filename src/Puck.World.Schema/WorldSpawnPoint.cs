@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Numerics;
 using Puck.Assets.Documents;
 using Puck.Maths;
@@ -8,7 +9,7 @@ namespace Puck.World;
 /// <param name="Id">The stable spawn name, unique within the definition.</param>
 /// <param name="Position">The seat's spawn position.</param>
 /// <param name="YawDegrees">The spawn yaw about +Y, in degrees.</param>
-public readonly record struct WorldSpawnPoint(string Id, DocumentVector3 Position, float YawDegrees = 0f);
+public readonly record struct WorldSpawnPoint([property: DocumentText("a spawn point id")] string Id, DocumentVector3 Position, float YawDegrees = 0f);
 /// <summary>The implicit spawn point every world with no authored <c>spawnPoints</c> section resolves against.</summary>
 public static class WorldSpawnPointDefaults {
     /// <summary>The spawn-point id an absent <c>population.seatSpawns</c> derives for every seat.</summary>

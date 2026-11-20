@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -12,6 +13,7 @@ namespace Puck.World;
 /// <param name="Name">The program's name, unique within the document, which a route names.</param>
 /// <param name="Operations">The operations, evaluated in order each tick; each drives the input sources it names.</param>
 public sealed record WorldSeatProgram(
+    [property: DocumentText("a seat program's name, which only a route's program member reads")]
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("operations")] IReadOnlyList<WorldSeatProgramOp> Operations
 );
@@ -54,6 +56,7 @@ public abstract record WorldSeatProgramOp {
     /// <param name="CornerDegrees">The turn, in degrees, from which a corner is sharp.</param>
     /// <param name="Least">The least deflection the stick keeps while the body is still short of its point.</param>
     public sealed record Move(
+        [property: DocumentText("an input-source id, in the input vocabulary")]
         [property: JsonPropertyName("source")] string Source,
         [property: JsonPropertyName("brake")] float Brake = 30f,
         [property: JsonPropertyName("cornerSpeed")] float CornerSpeed = 4f,
@@ -71,6 +74,7 @@ public abstract record WorldSeatProgramOp {
     /// <param name="Gain">The fraction of the remaining turn taken each tick, in (0, 1].</param>
     /// <param name="DeadbandDegrees">The turn, in degrees, inside which the stick stays centred.</param>
     public sealed record Turn(
+        [property: DocumentText("an input-source id, in the input vocabulary")]
         [property: JsonPropertyName("source")] string Source,
         [property: JsonPropertyName("gain")] float Gain = 0.5f,
         [property: JsonPropertyName("deadbandDegrees")] float DeadbandDegrees = 1f
@@ -83,7 +87,9 @@ public abstract record WorldSeatProgramOp {
     /// <param name="Source">The button source.</param>
     /// <param name="Paces">The paces, the route's own words, the button is held through.</param>
     public sealed record Hold(
+        [property: DocumentText("an input-source id, in the input vocabulary")]
         [property: JsonPropertyName("source")] string Source,
+        [property: DocumentText("a route pace")]
         [property: JsonPropertyName("paces")] IReadOnlyList<string> Paces
     ) : WorldSeatProgramOp {
         /// <inheritdoc/>
@@ -95,7 +101,9 @@ public abstract record WorldSeatProgramOp {
     /// <param name="Paces">The paces the button is tapped through.</param>
     /// <param name="PeriodSeconds">The time from one tap to the next.</param>
     public sealed record Pulse(
+        [property: DocumentText("an input-source id, in the input vocabulary")]
         [property: JsonPropertyName("source")] string Source,
+        [property: DocumentText("a route pace")]
         [property: JsonPropertyName("paces")] IReadOnlyList<string> Paces,
         [property: JsonPropertyName("periodSeconds")] float PeriodSeconds
     ) : WorldSeatProgramOp {
@@ -107,7 +115,9 @@ public abstract record WorldSeatProgramOp {
     /// <param name="Action">The action, the route's own word, this button answers.</param>
     /// <param name="Source">The button source.</param>
     public sealed record Tap(
+        [property: DocumentText("a seat program action")]
         [property: JsonPropertyName("action")] string Action,
+        [property: DocumentText("an input-source id, in the input vocabulary")]
         [property: JsonPropertyName("source")] string Source
     ) : WorldSeatProgramOp {
         /// <inheritdoc/>

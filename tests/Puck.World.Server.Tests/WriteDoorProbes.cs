@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -185,12 +186,14 @@ internal static partial class WriteDoorProbes {
         ?.GetGenericArguments()[1];
 
     private static JsonNode Leaf(WorldNameField field, Type leafType, string name) {
+        if (DictionaryValue(leafType) is { } valueType) { return new JsonObject { ["k"] = Leaf(field, valueType, name) }; }
         var element = ElementOf(leafType);
         var scalarType = Nullable.GetUnderlyingType(element ?? leafType) ?? element ?? leafType;
         var spelled = field.Role switch {
             WorldNameRole.Binding => $"state.{name}",
             WorldNameRole.Template => $"{{state.{name}}}",
             WorldNameRole.Key => $"$cell:{name}:a",
+            WorldNameRole.BodyReference => $"cell:{name}:a",
             _ => name,
         };
         var one = (scalarType == typeof(ExpressionProgram))

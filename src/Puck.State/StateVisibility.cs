@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Abstractions.Collections;
 using System.Text.Json.Serialization;
 using Puck.Maths;
@@ -27,12 +28,14 @@ public sealed record StateVisibility(IReadOnlyList<string>? Readers = null, Hidd
     string? ReadersFrom = null) {
     /// <summary>Canonical authenticated principal tokens; no seat or peer identity comes from the request payload.
     /// </summary>
+    [DocumentText("a principal identifier")]
     public IReadOnlyList<string>? Readers { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: Readers);
     /// <summary>What an observer who may read the row learns about the cells it may not.</summary>
     public HiddenCells Hidden { get; init; } = Hidden;
     /// <summary>A keyed text row whose cell texts are principal tokens admitted beside <see cref="Readers"/>: the
     /// live audience a rule widens by writing a token (a showdown reveals a hand) or narrows by clearing one. Either
     /// list alone, or both, keeps the row private; neither makes it public.</summary>
+    [DocumentName(WorldNameKind.State, WorldNameRole.Names)]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ReadersFrom { get; init; } = ReadersFrom;
 
@@ -256,7 +259,11 @@ internal static class StateVisibilityStorage {
 /// topology. Several tokens may occupy one cell. Null selects the direct board projection where source, mask, and
 /// knowledge share a topology.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record StateKnowledge(string Source, string Mask, string? Positions = null);
+public sealed record StateKnowledge(
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string Source,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string Mask,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Positions = null
+);
 /// <summary>When a stored token property was last seen and whether the latest observation still sees it.</summary>
 /// <param name="Tick">The last observation tick.</param>
 /// <param name="Visible">Whether the latest explicit refresh sees this token.</param>

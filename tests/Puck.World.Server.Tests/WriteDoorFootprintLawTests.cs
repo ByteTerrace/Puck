@@ -195,7 +195,7 @@ public sealed class WriteDoorFootprintLawTests {
     // whatever id the write spells.
     [Fact]
     public void ARowWhoseKeyIsBoundIsAFootprintOfEveryWriteToItsSection() {
-        var position = WriteDoorProbes.StatePositions(typeof(WorldPrototype)).First();
+        var position = Assert.Single(WriteDoorProbes.StatePositions(typeof(WorldPrototype)), site => site.Field == WorldNameRegistry.CreationBinding);
         var node = JsonSerializer.SerializeToNode(WriteDoorProbes.Build(typeof(WorldPrototype), position, Probe, out var reason), WorldJsonContext.Default.WorldPrototype)!;
         Assert.True(node is not null, reason);
         node["id"] = "state.pub";

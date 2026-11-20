@@ -34,7 +34,10 @@ public abstract record WorldScreenSource {
     /// advanced, and retired by the world's machine host independently of every display that samples it.</summary>
     /// <param name="Instance">The declared <see cref="WorldMachine.Name"/> instance.</param>
     /// <param name="Output">The provider video output name exposed by that instance.</param>
-    public sealed record Machine(string Instance, string Output) : WorldScreenSource;
+    public sealed record Machine(
+        [property: DocumentName(WorldNameKind.Machine, WorldNameRole.Names)] string Instance,
+        [property: DocumentText("a selector in the machine provider vocabulary")] string Output
+    ) : WorldScreenSource;
     /// <summary>An image a registered producer makes, such as the test pattern, a QR code, a camera or a desktop
     /// capture, named by the producer's id rather than by a document kind, so a new producer needs no change here. The
     /// producer binds <paramref name="Settings"/> through its own settings shape and refuses a member it does not
@@ -45,7 +48,7 @@ public abstract record WorldScreenSource {
     /// <param name="Settings">The producer's settings object, or <see langword="null"/> for its defaults. Omitted from
     /// the wire when null.</param>
     public sealed record Producer(
-        string Id,
+        [property: DocumentText("an image producer id")] string Id,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, JsonElement>? Settings = null
     ) : WorldFrameSource {
         /// <inheritdoc/>
@@ -81,12 +84,12 @@ public abstract record WorldScreenSource {
     }
     /// <summary>A named view from the presentation view stack, such as a monitor showing another camera's output.</summary>
     /// <param name="CameraName">The registered view name this slot samples.</param>
-    public sealed record View(string CameraName) : WorldFrameSource;
+    public sealed record View([property: DocumentText("a camera name")] string CameraName) : WorldFrameSource;
     /// <summary>A declared probe's texture output — the frame a kind that declares an <c>output</c> writes each cycle
     /// (a relit camera frame, a mask), published like a camera feed. The probe must be a <c>probes</c> row of this
     /// document; whether its kind writes a texture is checked at boot against the kind's manifest.</summary>
     /// <param name="Id">The <c>probes[].id</c> whose output this slot shows.</param>
-    public sealed record Probe(string Id) : WorldFrameSource;
+    public sealed record Probe([property: DocumentText("a probe id")] string Id) : WorldFrameSource;
     /// <summary>
     /// A live rendered view of another world, resolved through a <c>destinations</c> row (docs/architecture/worlds.md,
     /// "Observation and display"). The face/screen resolves the same resolver-owned identity a
@@ -142,10 +145,12 @@ public abstract record WorldScreenSource {
     /// contact and the clock; nothing in the simulation depends on it). Requires <see cref="WorldScreenProjection.Window"/>.
     /// Omitted from the wire when false.</param>
     public sealed record Session(
-        string Destination,
+        [property: DocumentText("a destination name")] string Destination,
+        [property: DocumentText("a camera name")]
         [property: JsonPropertyName("camera"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CameraName = null,
         WorldScreenProjection Projection = WorldScreenProjection.Camera,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenResolution? Resolution = null,
+        [property: DocumentText("a fallback color")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fallback = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Ripple = false
     ) : WorldScreenSource;
@@ -168,11 +173,14 @@ public abstract record WorldScreenSource {
     /// <param name="Foreground">The letter color as <c>#RRGGBB</c>, or <see langword="null"/> for white.</param>
     /// <param name="Background">The cell background color as <c>#RRGGBB</c>, or <see langword="null"/> for black.</param>
     public sealed record Text(
-        IReadOnlyList<string> Lines,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Template, WorldExportFacet.Binding)] IReadOnlyList<string> Lines,
+        [property: DocumentText("a font name")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Font = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Columns = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Rows = null,
+        [property: DocumentText("a color literal")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Foreground = null,
+        [property: DocumentText("a color literal")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Background = null
     ) : WorldScreenSource;
 }
@@ -209,7 +217,7 @@ public sealed record WorldScreenMagazine(IReadOnlyList<WorldScreenSource> Entrie
 /// <param name="Name">The cable's stable kebab-case name, shared by every plugged port.</param>
 /// <param name="Position">This machine's 0-based place in cable order — contiguous across the cable's ports
 /// (validated), and what decides the linking engine's deterministic player order.</param>
-public sealed record WorldMachineCable(string Name, int Position);
+public sealed record WorldMachineCable([property: DocumentText("a link-cable name")] string Name, int Position);
 /// <summary>A cable-linked group of screens whose machines advance as one interleaved unit — derived from the
 /// declared machine sources' cable ports (<see cref="WorldDefinition.MachineCableGroups"/>), never authored as a row
 /// of its own. The binder steps the group,
@@ -375,15 +383,24 @@ public enum WorldPadElement : byte {
 /// engaged on it frames a window capture (<see cref="WorldScreenPadPointer"/>). Only an engageable screen showing a
 /// window capture may author it. <see langword="null"/> (the default) moves and scrolls nothing from a stick; a pad's
 /// buttons still click and press keys. Omitted from the wire when null.</param>
-public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadius, bool AutoInsert = false,
+public readonly record struct WorldScreenRoute(
+    bool Engageable,
+    float EngageRadius,
+    bool AutoInsert = false,
+    [property: DocumentText("logical input channels")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EngageChannel = null,
+    [property: DocumentText("logical input channels")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CycleChannel = null,
+    [property: DocumentText("logical input channels")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Channels = null,
+    [property: DocumentText("a kit in the composed world")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kit = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Commands.SourceDestination? Input = null,
+    [property: DocumentText("a selector in the machine provider vocabulary")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Port = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenDisplay? Display = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenPadPointer? PadPointer = null) {
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenPadPointer? PadPointer = null
+) {
     /// <summary>Gets a screen no player engages (the default for a passive display).</summary>
     public static WorldScreenRoute Passive { get; } = new WorldScreenRoute(
         Engageable: false,
@@ -399,7 +416,9 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
 /// <param name="Fill">The matte colour around the framed picture, as <c>#RRGGBB</c>, or <see langword="null"/> for
 /// black.</param>
 public sealed record WorldScreenDisplay(
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fill = null) {
+    [property: DocumentText("a color literal")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fill = null
+) {
     /// <summary>The fill colour an unauthored <see cref="Fill"/> shows.</summary>
     public const string DefaultFill = "#000000";
 
@@ -439,7 +458,13 @@ public sealed record WorldScreenPadPointer(float Speed, float Curve = 1f, float 
 /// at any device). The rig runs against an anchor at the picture's front face whose axes are the picture's: +X its
 /// right, +Y its up and +Z its normal, toward the body looking at it (<c>offset</c> and <c>lookAt</c> without
 /// <c>worldAxes</c> read in those axes).</param>
-public sealed record WorldScreenCarry(string Look, string Pose, string Shape, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Camera = null);
+public sealed record WorldScreenCarry(
+    [property: DocumentText("a look in the composed world")] string Look,
+    [property: DocumentText("a creation frame")] string Pose,
+    [property: DocumentText("a creation shape")] string Shape,
+    [property: DocumentText("a camera name")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Camera = null
+);
 /// <summary>One diegetic screen in the world — a screen slab emitted by
 /// <see cref="Puck.SignedDistance.SdfProgramBuilder"/> whose lit face
 /// samples a bound source (or shades as dark glass when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/
@@ -499,6 +524,7 @@ public sealed record WorldScreen(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Luminance = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenCarry? Carry = null,
+    [property: DocumentName(WorldNameKind.ScreenMaterial, WorldNameRole.Names, WorldExportFacet.Binding)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Material = null
 );
 /// <summary>
@@ -519,7 +545,7 @@ public sealed record WorldScreen(
 /// <param name="CornerRadius">The face's corner rounding, as a fraction of the face, in [0, 0.5).</param>
 /// <param name="EdgeSoftness">The width over which the face's edge fades to black, as a fraction of the face, in [0, 0.5).</param>
 public sealed record WorldScreenMaterial(
-    string Id,
+    [property: DocumentName(WorldNameKind.ScreenMaterial, WorldNameRole.Declares)] string Id,
     float Scanlines = 0f,
     float SubpixelStripes = 0f,
     float Vignette = 0f,

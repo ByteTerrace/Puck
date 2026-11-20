@@ -39,7 +39,10 @@ public abstract record OverlaySubject {
     /// bar, or camera is being evaluated), an explicit number is 1-based like <c>Camera.Seat</c>.</summary>
     public sealed record Seat([property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Number = null) : OverlaySubject;
     /// <summary>A placement instance, optionally one of its shapes.</summary>
-    public sealed record Placement(string PlacementId, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ShapeId = null) : OverlaySubject;
+    public sealed record Placement(
+        [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)] string PlacementId,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ShapeId = null
+    ) : OverlaySubject;
     /// <summary>A population entity by 0-based index.</summary>
     public sealed record Entity(int Index) : OverlaySubject;
     /// <summary>Any joined local seat's avatar — the predicate holds when it holds for at least one.</summary>
@@ -64,7 +67,7 @@ public abstract record OverlayPredicate {
     /// <summary>A named presentation reading is present and nonzero (or has nonempty text). Missing and
     /// unmeasured sources do not hold. This predicate never reads simulation state.</summary>
     /// <param name="Name">The registered source name.</param>
-    public sealed record Reading(string Name) : OverlayPredicate;
+    public sealed record Reading([property: DocumentText("a presentation reading's source name, in the readings vocabulary")] string Name) : OverlayPredicate;
     /// <summary>The fact holds this frame.</summary>
     public sealed record Now(OverlayFact Fact) : OverlayPredicate;
     /// <summary>The fact held within the last <paramref name="WindowSeconds"/>.</summary>
@@ -94,9 +97,10 @@ public abstract record OverlayPredicate {
     /// ordinally; only <see cref="ExpressionOp.Equal"/>/<see cref="ExpressionOp.NotEqual"/>) is
     /// authored. The same cell a bar's <c>layoutCell</c> or a wheel sector writes.</summary>
     public sealed record State(
-        string Binding,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Binding, WorldExportFacet.Binding)] string Binding,
         [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison = ExpressionOp.Equal,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Value = null,
+        [property: DocumentText("literal text")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null
     ) : OverlayPredicate;
 }

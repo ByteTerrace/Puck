@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Nodes;
 
 using Xunit;
@@ -341,71 +342,68 @@ public sealed class WorldExportsLawTests {
     }
     [Fact]
     public void TheRegistryAssignsTheFacetsHostBindingsBindThrough() {
-        var facets = WorldNameRegistry.Sites.Where(predicate: static site => (site.Field.Member.Length > 0)).ToDictionary(
-            keySelector: static site => site.Path,
-            elementSelector: static site => site.Field.Facet,
-            comparer: StringComparer.Ordinal
-        );
+        var facets = WorldNameRegistry.Sites.ToLookup(site => site.Path, site => site.Field.Facet, StringComparer.Ordinal);
+        Assert.Contains(WorldExportFacet.Binding, facets["prototypes[].id"]);
 
         Assert.Equal(
             expected: WorldExportFacet.Action,
-            actual: facets["interactions.interactions[].effects[][setState].state"]
+            actual: Assert.Single(facets["interactions.interactions[].effects[][setState].state"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Read,
-            actual: facets["interactions.interactions[].effects[][setState].fromState"]
+            actual: Assert.Single(facets["interactions.interactions[].effects[][setState].fromState"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Read,
-            actual: facets["interactions.interactions[].effects[][setState].key"]
+            actual: Assert.Single(facets["interactions.interactions[].effects[][setState].key"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Action,
-            actual: facets["kits.rows[].actions{*}.onPress.effects[][setState].state"]
+            actual: Assert.Single(facets["kits.rows[].actions{*}.onPress.effects[][setState].state"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Action,
-            actual: facets["placements.rows[].board.occupancy"]
+            actual: Assert.Single(facets["placements.rows[].board.occupancy"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Read,
-            actual: facets["placements.rows[].board.topology"]
+            actual: Assert.Single(facets["placements.rows[].board.topology"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Read,
-            actual: facets["placements.rows[].board.move"]
+            actual: Assert.Single(facets["placements.rows[].board.move"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Read,
-            actual: facets["rules[].gate[compareState].state"]
+            actual: Assert.Single(facets["rules[].gate[compareState].state"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Action,
-            actual: facets["rules[].effects[][generate].row"]
+            actual: Assert.Single(facets["rules[].effects[][generate].row"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Binding,
-            actual: facets["hud.panels[].elements[].binding"]
+            actual: Assert.Single(facets["hud.panels[].elements[].binding"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Binding,
-            actual: facets["hud.panels[].elements[].template"]
+            actual: Assert.Single(facets["hud.panels[].elements[].template"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Binding,
-            actual: facets["views.seatRig.operations[][selectProgram].key"]
+            actual: Assert.Single(facets["views.seatRig.operations[][selectProgram].key"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Read,
-            actual: facets["exports.reads"]
+            actual: Assert.Single(facets["exports.reads"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Action,
-            actual: facets["exports.actions"]
+            actual: Assert.Single(facets["exports.actions"])
         );
         Assert.Equal(
             expected: WorldExportFacet.Binding,
-            actual: facets["exports.bindings"]
+            actual: Assert.Single(facets["exports.bindings"])
         );
 
         // Every binding-token and template site binds; every declaration site carries no facet of its own.

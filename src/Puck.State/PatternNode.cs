@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.State;
@@ -22,11 +23,11 @@ namespace Puck.State;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public abstract record PatternNode {
     /// <summary>One token whose value falls in the named symbol.</summary>
-    public sealed record Symbol(string Name) : PatternNode;
+    public sealed record Symbol([property: DocumentText("a symbol name is local to its pattern")] string Name) : PatternNode;
     /// <summary>One token of any value, named symbols and the unnamed remainder alike.</summary>
     public sealed record AnySymbol : PatternNode;
     /// <summary>One token whose value falls outside the named symbol.</summary>
-    public sealed record Except(string Name) : PatternNode;
+    public sealed record Except([property: DocumentText("a symbol name is local to its pattern")] string Name) : PatternNode;
     /// <summary>The empty word.</summary>
     public sealed record Nothing : PatternNode;
     /// <summary>The empty language: no word at all, the zero of choice and the annihilator of sequence.</summary>

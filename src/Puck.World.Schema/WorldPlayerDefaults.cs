@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using System.Collections.Immutable;
 
@@ -12,6 +13,7 @@ public sealed record WorldPlayerDefaults(
     // ABSENT semantics below hold for every raw field: the document declares only what it wants to state; a raw
     // field's resolved sibling property (same name, no "Raw" suffix) is what every consumer reads.
     [property: JsonPropertyName("identities"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldIdentitySeed>? IdentitiesRaw = null,
+    [property: DocumentText("a color literal")]
     [property: JsonPropertyName("neutralColor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? NeutralColorRaw = null,
     [property: JsonPropertyName("colorSequence"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSequence? ColorSequenceRaw = null,
     float Saturation = 0f,
@@ -19,6 +21,7 @@ public sealed record WorldPlayerDefaults(
     int ColorSearchLimit = 1,
     float NoseFactor = 0f,
     float PickerThreshold = 0f,
+    [property: DocumentText("a color literal")]
     [property: JsonPropertyName("pickerNeutralColor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PickerNeutralColorRaw = null,
     float PickerNeutralBlend = 0f,
     [property: JsonPropertyName("seatCameraFeel"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSeatCameraFeel? SeatLookRaw = null
@@ -53,7 +56,11 @@ public sealed record WorldPlayerDefaults(
 /// <param name="Name">The display name.</param>
 /// <param name="Color">The body color as <c>#RRGGBB</c>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldIdentitySeed(SafeName Id, string Name, string Color);
+public sealed record WorldIdentitySeed(
+    SafeName Id,
+    [property: DocumentText("an identity display name")] string Name,
+    [property: DocumentText("a color literal")] string Color
+);
 /// <summary>The person or character identity an owned world represents.</summary>
 /// <param name="Id">The stable owned-world id.</param>
 /// <param name="Name">The display name.</param>
@@ -69,16 +76,17 @@ public sealed record WorldIdentitySeed(SafeName Id, string Name, string Color);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldIdentityDefinition(
     SafeName Id,
-    string Name,
-    string Color,
-    CellName MoveSpeedState,
-    CellName TurnSpeedState,
+    [property: DocumentText("an identity display name")] string Name,
+    [property: DocumentText("a color literal")] string Color,
+    [property: DocumentText("an identity-lane slot name")] CellName MoveSpeedState,
+    [property: DocumentText("an identity-lane slot name")] CellName TurnSpeedState,
     IReadOnlyList<WorldControllerStateSlots>? Controllers = null,
     WorldVoiceProfile? Voice = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIdentityFacts? Facts = null,
     IReadOnlyList<CellName>? Records = null
 ) {
     /// <summary>Gets the immutable selection of identity-owned record pools.</summary>
+    [DocumentName(WorldNameKind.Pool, WorldNameRole.Names)]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<CellName>? Records { get => field; init => field = value?.ToImmutableArray(); } = Records?.ToImmutableArray();
     /// <summary>Gets the facts row and capacity — <see cref="Facts"/>, or <see cref="WorldIdentityFacts.Default"/>
@@ -90,7 +98,10 @@ public sealed record WorldIdentityDefinition(
 /// <param name="MachineState">The row containing the machine id.</param>
 /// <param name="DeviceState">The row containing the device id.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldControllerStateSlots(CellName MachineState, CellName DeviceState);
+public sealed record WorldControllerStateSlots(
+    [property: DocumentText("an identity-lane slot name")] CellName MachineState,
+    [property: DocumentText("an identity-lane slot name")] CellName DeviceState
+);
 /// <summary>A character voice over an existing synth patch or an authored syllable sample set. HUD Text elements speak their resolved text on visible
 /// arrival or change. Pitch and formant scales distinguish speakers; cadence and pace determine the integer audio-frame
 /// schedule. Identity babble also uses the patch and cadence selectors; absent selectors mean no identity babble.</summary>
@@ -102,4 +113,11 @@ public sealed record WorldControllerStateSlots(CellName MachineState, CellName D
 /// <param name="PaceThousandths">Speech speed, 250..4000; 2000 halves each character's interval.</param>
 /// <param name="SampleSet">Optional syllable-bank document path, replacing synthesis for HUD text.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldVoiceProfile(string? PatchId = null, int? CadenceTicks = null, int PitchThousandths = 1000, int FormantThousandths = 1000, int PaceThousandths = 1000, string? SampleSet = null);
+public sealed record WorldVoiceProfile(
+    [property: DocumentText("a synth patch id")] string? PatchId = null,
+    int? CadenceTicks = null,
+    int PitchThousandths = 1000,
+    int FormantThousandths = 1000,
+    int PaceThousandths = 1000,
+    [property: DocumentText("a sample set id")] string? SampleSet = null
+);

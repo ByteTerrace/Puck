@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Numerics;
 using System.Text.Json.Serialization;
 using Puck.Maths;
@@ -60,7 +61,7 @@ public enum WorldNavigationConnectivity : byte {
 /// probes remain vertical. The frame must be undistributed and unit scale.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldNavigationDomain(
-    string Name,
+    [property: DocumentText("a navigation domain name")] string Name,
     WorldNavigationKind Kind,
     Vector3 Origin,
     float CellSize,
@@ -77,8 +78,10 @@ public sealed record WorldNavigationDomain(
     float AgentHeight = 0f,
     float MaxStepHeight = 0f,
     float MaxSlopeDegrees = 0f,
+    [property: DocumentName(WorldNameKind.Field, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Medium = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSharing? Shared = null,
+    [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null
 );
 /// <summary>Bounds reusable destination trees and their aggregate expansion work in one navigation domain.</summary>

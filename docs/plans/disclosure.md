@@ -2208,7 +2208,9 @@ they submit). What makes it structural is where the names come from:
   (`WorldModuleNamespace.RespellMachineReferences`, the provider's
   `MachineFieldRole` reference fields), which the server hands every write
   capability it mints (`WorldRecipientView.MachineCatalog`). `puck registry
-  --check` names any name-shaped model member the registry does not hold.
+  --check` reports each unclassified text position. The schema generator reads each property’s
+  declared namespace and spelling or its literal or local meaning. Both runtime doors
+  read that classification from the generated model shape.
 - A row's declared relations are `WorldRowDeclarationNames`: every state name
   each row's declaration spells, its cells' own audience policies included
   (values and keys removed), and the reverse. It extends

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.State;
@@ -31,4 +32,7 @@ namespace Puck.State;
 /// <param name="Codes">The row giving each token's code, keyed the same as <see cref="Tokens"/> — the same cell
 /// keys, in the same order, so index <c>i</c> of one names the same token as index <c>i</c> of the other.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record StateInverse(CellName Tokens, CellName Codes);
+public sealed record StateInverse(
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] CellName Tokens,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] CellName Codes
+);

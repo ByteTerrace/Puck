@@ -27,8 +27,9 @@ namespace Puck.World;
 /// <param name="Mesh">Opaque triangles every static placement of the prototype draws beside its field, or
 /// <see langword="null"/> for none.</param>
 public sealed record WorldPrototype(
-    DocumentIdentifier Id,
+    [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Declares)] DocumentIdentifier Id,
     CreationDocument Document,
+    [property: DocumentText("a content digest")]
     [property: JsonPropertyName("hash"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? HashRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPrototypeMesh? Mesh = null
 ) {
@@ -176,11 +177,12 @@ public sealed record WorldPlacementMirror(DocumentVector3 Normal, float Offset);
 /// <param name="Follows">The 0-based local seat whose player the role's body follows. Required with
 /// <paramref name="Role"/> and refused without it.</param>
 public sealed record WorldPlacementInhabit(
-    string? Kit,
-    string? Look,
+    [property: DocumentText("a kit in the composed world")] string? Kit,
+    [property: DocumentText("a look in the composed world")] string? Look,
     Puck.World.Protocol.IntentSource Source,
     WorldPlacementInhabitCount? Count = null,
     WorldDistribution? Distribution = null,
+    [property: DocumentText("a role name")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Role = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Follows = null
 ) {
@@ -224,7 +226,11 @@ public sealed record WorldPlacementInhabit(
 /// <param name="Key">The cell inside <see cref="Row"/>, or <see langword="null"/> for its slot cell. Meaningless
 /// alongside <see cref="Literal"/>.</param>
 [JsonConverter(typeof(WorldPlacementInhabitCountJsonConverter))]
-public sealed record WorldPlacementInhabitCount(int? Literal = null, string? Row = null, string? Key = null) {
+public sealed record WorldPlacementInhabitCount(
+    int? Literal = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Row = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] string? Key = null
+) {
     /// <summary>The refusal every inhabit count field shares.</summary>
     public const string Grammar = "must be an integer, or {\"row\": \"<row>\"[, \"key\": \"<key>\"]} naming an Int cell";
 
@@ -366,10 +372,11 @@ public sealed class WorldPlacementInhabitCountJsonConverter : JsonConverter<Worl
 /// <see cref="WorldScreen.Material"/> does, or <see langword="null"/> for none. Refused on a window. Omitted from the
 /// wire when null.</param>
 public sealed record WorldPlacementFace(
-    string Face,
+    [property: DocumentText("a creation face name")] string Face,
     WorldScreenSource Source,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementPortal? Portal = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest,
+    [property: DocumentName(WorldNameKind.ScreenMaterial, WorldNameRole.Names, WorldExportFacet.Binding)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Material = null
 );
 /// <summary>A placement's region facet — a named volume row, not a trigger system: any placement may carry one,
@@ -462,9 +469,17 @@ public enum WorldBoardEnforcement : byte {
 /// <param name="Engage">How a seat sits down at the table, or <see langword="null"/> for a table no seat engages:
 /// the context button that engages and leaves it, how near a seat must stand, the board view its camera eases to, and
 /// the surface the seat's pointer meets.</param>
-public sealed record WorldPlacementBoard(string Topology, string Occupancy, string? Turn = null, string? Verdict = null,
-    string? Move = null, string? Plan = null, WorldBoardEnforcement Enforcement = WorldBoardEnforcement.Record, long Accept = 1L,
-    WorldTabletopEngage? Engage = null);
+public sealed record WorldPlacementBoard(
+    [property: DocumentName(WorldNameKind.Topology, WorldNameRole.Names)] string Topology,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] string Occupancy,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Turn = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Verdict = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Move = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string? Plan = null,
+    WorldBoardEnforcement Enforcement = WorldBoardEnforcement.Record,
+    long Accept = 1L,
+    WorldTabletopEngage? Engage = null
+);
 /// <summary>A tabletop's engagement: a seat standing within <paramref name="Radius"/> of the board's centre presses
 /// <paramref name="Channel"/> (its context button) and sits down at the table, in the authored chair nearest it
 /// (<paramref name="Seats"/>). The seat is captured (its avatar stands still) on a <c>control placement:&lt;id&gt;</c>
@@ -485,8 +500,14 @@ public sealed record WorldPlacementBoard(string Topology, string Occupancy, stri
 /// the one nearest where it stands (<see cref="WorldTabletopFrame.SeatSide"/>). Absent, the table has a chair at each
 /// of its four edges. A board laid out for one player's view (a solitaire tableau, a lectern behind the board) names
 /// the chair it is laid out for, so its layout and controls read the right way round wherever the player walks up.</param>
-public sealed record WorldTabletopEngage(string Channel, double Radius = 2.5, double Pitch = 60, double Margin = 0.1,
-    double Surface = 0, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTabletopSeat>? Seats = null);
+public sealed record WorldTabletopEngage(
+    [property: DocumentText("logical input channels")] string Channel,
+    double Radius = 2.5,
+    double Pitch = 60,
+    double Margin = 0.1,
+    double Surface = 0,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTabletopSeat>? Seats = null
+);
 /// <summary>One chair at a tabletop: the edge of the board a seat sits at, given as the way it faces.</summary>
 /// <param name="YawDegrees">The chair's facing, in the convention of a spawn point's and a body's yaw: 0 faces -Z (the
 /// chair stands at the board's +Z edge), 90 faces -X, 180 faces +Z and 270 faces +X. A board's topology is
@@ -638,8 +659,8 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// entry reads is handed the mask without that entry's bit (<see cref="WorldPlacementResponse.Disclosed"/>). Omitted
 /// from the wire when 0.</param>
 public sealed record WorldPlacement(
-    string Id,
-    string PrototypeId,
+    [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Declares)] string Id,
+    [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Names)] string PrototypeId,
     WorldPlacementTranslation Position,
     float YawDegrees,
     float Scale,
@@ -655,6 +676,7 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementResponse>? Respond = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementGrip? Grip = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementBoard? Board = null,
+    [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDeal? Deal = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? DealSlot = null,

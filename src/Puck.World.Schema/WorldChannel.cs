@@ -392,7 +392,7 @@ public sealed class WorldChannelTable {
 /// <see cref="ChannelFrame.World"/>. Omitted from a saved document at that default.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldChannel(
-    string Name,
+    [property: DocumentText("an input channel name")] string Name,
     ChannelShape Shape,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChannelRole? Role = null,
     bool Composition = false,
@@ -405,7 +405,7 @@ public sealed record WorldChannel(
 /// <param name="Sensitivity">Units per device sample, applied before host quantization.</param>
 /// <param name="MaximumPerStep">The positive absolute displacement limit in authored units.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldRelativeChannel(string Unit, double Sensitivity, double MaximumPerStep);
+public sealed record WorldRelativeChannel([property: DocumentText("a relative channel unit")] string Unit, double Sensitivity, double MaximumPerStep);
 /// <summary>The frame a movement contribution to the MoveAdvance/MoveStrafe pair is authored in — composed by the
 /// seat's client into world axes before it reaches the wire, so the sim never reads a camera pose. A world declares
 /// it once on the pair; the stick's <c>player.move</c> is camera-framed by its own definition, so a world (or a

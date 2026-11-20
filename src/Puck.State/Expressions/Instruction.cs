@@ -1,3 +1,5 @@
+using Puck.Abstractions.Documents;
+
 namespace Puck.State;
 
 /// <summary>One instruction of an <see cref="ExpressionProgram"/>: an <see cref="ExpressionOp"/> and, for the
@@ -124,7 +126,10 @@ public abstract record InstructionPayload {
     /// <summary>A topology and one of its directions or symmetry elements, for a board mask operation.</summary>
     /// <param name="Topology">A discrete topology of <c>state.lattices</c> with at most 64 cells.</param>
     /// <param name="Index">A direction of that topology, or a symmetry element for <see cref="ExpressionOp.BoardImage"/>.</param>
-    public sealed record Board(string Topology, string Index) : InstructionPayload;
+    public sealed record Board(
+        [property: DocumentName(WorldNameKind.Topology, WorldNameRole.Names)] string Topology,
+        [property: DocumentText("a direction or symmetry element local to its topology")] string Index
+    ) : InstructionPayload;
     /// <summary>A call site into the program's shared subprogram table.</summary>
     /// <param name="Subprogram">The subprogram's index in <see cref="ExpressionProgram.Subprograms"/>.</param>
     public sealed record Call(int Subprogram) : InstructionPayload;
@@ -136,11 +141,18 @@ public abstract record InstructionPayload {
     /// <param name="Binder">The name the subprogram reads the current member by, kept so the fold prints back
     /// in the spelling it was authored in.</param>
     /// <param name="Subprogram">The subprogram's index in <see cref="ExpressionProgram.Subprograms"/>.</param>
-    public sealed record Fold(string Family, string Binder, int Subprogram) : InstructionPayload;
+    public sealed record Fold(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string Family,
+        [property: DocumentText("a lexical fold binding")] string Binder,
+        int Subprogram
+    ) : InstructionPayload;
     /// <summary>A live state cell or reserved rule channel.</summary>
     /// <param name="Name">The state row or reserved-channel name.</param>
     /// <param name="Key">The keyed-row cell, or <see langword="null"/>.</param>
-    public sealed record State(StateChannelRef Name, StateChannelRef? Key = null) : InstructionPayload;
+    public sealed record State(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] StateChannelRef Name,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef? Key = null
+    ) : InstructionPayload;
     /// <summary>The two operands of a vector function.</summary>
     /// <param name="Left">The left vector operand.</param>
     /// <param name="Right">The right vector operand.</param>
@@ -154,14 +166,20 @@ public abstract record VectorOperand {
     /// <summary>A vector state cell operand.</summary>
     /// <param name="Name">The state row name.</param>
     /// <param name="Key">The key or key indirection, or <see langword="null"/>.</param>
-    public sealed record Cell(StateChannelRef Name, StateChannelRef? Key = null) : VectorOperand;
+    public sealed record Cell(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] StateChannelRef Name,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef? Key = null
+    ) : VectorOperand;
     /// <summary>An unlowered authored text embedding literal operand.</summary>
     /// <param name="Text">The text to embed.</param>
     /// <param name="Space">The space name, or <see langword="null"/> for the document's default.</param>
-    public sealed record Embed(string Text, string? Space = null) : VectorOperand;
+    public sealed record Embed(
+        [property: DocumentText("embedding input text")] string Text,
+        [property: DocumentText("an embedding space")] string? Space = null
+    ) : VectorOperand;
     /// <summary>A base64url encoded vector literal operand.</summary>
     /// <param name="Value">The base64url encoded component bytes.</param>
-    public sealed record Literal(string Value) : VectorOperand;
+    public sealed record Literal([property: DocumentText("encoded vector components")] string Value) : VectorOperand;
 }
 /// <summary>Which payload case an <see cref="ExpressionOp"/> requires of its instruction.</summary>
 public enum PayloadShape : byte {

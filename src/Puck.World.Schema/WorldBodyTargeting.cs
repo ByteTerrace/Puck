@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Maths;
 using Puck.Physics.Motion;
@@ -10,7 +11,7 @@ namespace Puck.World;
 /// <param name="Flock">Bounded perception and steering arguments for ProduceFlockIntent, absent otherwise.</param>
 public sealed record BodyProgramParameters(
     IReadOnlyDictionary<string, float> Scalars,
-    IReadOnlyDictionary<string, string> Channels,
+    [property: DocumentText("logical input channels")] IReadOnlyDictionary<string, string> Channels,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFlockProfile? Flock = null
 );
 /// <summary>One authored per-body target register and the envelope a designation into it must satisfy.</summary>
@@ -22,11 +23,13 @@ public sealed record BodyProgramParameters(
 /// <param name="HalfAngleState">An optional durable counter slot supplying the player's requested cone half-angle.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldTargetRegister(
-    string Name,
+    [property: DocumentText("a target register name")] string Name,
     float MaximumRange,
     float MaximumHalfAngleDegrees,
     bool RequiresLineOfSight,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? RangeState = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? HalfAngleState = null
 );
 /// <summary>Target-register names and their independent Drive-reach bank.</summary>

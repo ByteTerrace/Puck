@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Abstractions;
 using Puck.Assets;
 

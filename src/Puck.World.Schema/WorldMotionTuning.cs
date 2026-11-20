@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Maths;
 using Puck.Physics.Motion;
@@ -163,7 +164,7 @@ public sealed record WorldSpeed(
 /// <paramref name="Multiplier"/>.</summary>
 /// <param name="Channel">The declared composition channel name read while held.</param>
 /// <param name="Multiplier">The speed multiplier while the channel reads held. Required positive.</param>
-public sealed record WorldSpeedHeld(string Channel, float Multiplier);
+public sealed record WorldSpeedHeld([property: DocumentText("logical input channels")] string Channel, float Multiplier);
 /// <summary>A kit's steering rate. Replaces the old top-level <c>turnSpeed</c> and a <c>drive</c> row's own
 /// <c>steerReferenceSpeed</c>/<c>steerFalloff</c>/<c>pitchRate</c> with one row every yaw-writing motion operation
 /// reads.</summary>
@@ -241,7 +242,7 @@ public sealed record WorldShaping(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? When = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldShapingAlong? Along = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldShapingAcross? Across = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null,
+    [property: DocumentName(WorldNameKind.Dynamics, WorldNameRole.Names)] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null,
     float TurnScale = 1f
 );
 /// <summary>The document intake for the engine's compiled motion tunings — the one place an authored

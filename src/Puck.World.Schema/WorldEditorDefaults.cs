@@ -57,5 +57,11 @@ public sealed record WorldEditorCamera(float OrbitRate, float PanRate, float Zoo
 /// shows.</param>
 /// <param name="ReadOnlyLabel">The page label a building seat's bar shows in place of its page's own when the seat's
 /// principal may not edit placements.</param>
-public sealed record WorldEditorDefaults(WorldEditorGrid Grid, WorldEditorSnap Snap, WorldEditorCamera Camera,
-    BindingPageEntryDefinition Toggle, WorldBindingBarAuthoring Bar, string ReadOnlyLabel);
+public sealed record WorldEditorDefaults(
+    WorldEditorGrid Grid,
+    WorldEditorSnap Snap,
+    WorldEditorCamera Camera,
+    BindingPageEntryDefinition Toggle,
+    WorldBindingBarAuthoring Bar,
+    [property: DocumentText("literal text")] string ReadOnlyLabel
+);

@@ -1,3 +1,5 @@
+using Puck.Abstractions.Documents;
+
 namespace Puck.World;
 
 /// <summary>
@@ -18,7 +20,10 @@ namespace Puck.World;
 /// <see cref="WorldVerdict.MaxGateLength"/> characters. A <c>.puck</c> <c>expect</c> clause lowers its own source
 /// text here.</param>
 /// <param name="Status">The cell key carrying the status code. Must be a declared cell of the same row.</param>
-public sealed record WorldVerdictTrait(string Gate, CellName Status);
+public sealed record WorldVerdictTrait(
+    [property: DocumentText("literal text")] string Gate,
+    [property: DocumentText("a verdict's status cell key is local to its own row")] CellName Status
+);
 /// <summary>The status codes a <see cref="WorldVerdictTrait.Status"/> cell carries, and the trait's ceilings.</summary>
 public static class WorldVerdict {
     /// <summary>The status code a rule writes when its gate did not hold. A verdict fails on this value.</summary>

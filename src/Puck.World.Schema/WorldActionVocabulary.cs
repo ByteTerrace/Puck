@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
 using Puck.Physics.Motion;
@@ -18,12 +19,12 @@ public static class WorldPredicate {
     public sealed record Recently(ActionFact Fact, float WindowSeconds) : ActionPredicate;
     /// <summary>Whether a named timer slot has drained.</summary>
     /// <param name="State">The timer slot.</param>
-    public sealed record TimerElapsed(string State) : ActionPredicate;
+    public sealed record TimerElapsed([property: DocumentText("a per-body slot name")] string State) : ActionPredicate;
     /// <summary>The named composition channel's own live read is at or above its declared threshold. Legitimate
     /// only inside a kit's <c>shaping</c>-row gate, where the world's channel table resolves
     /// <paramref name="Channel"/> to an ordinal at kit-compile time.</summary>
     /// <param name="Channel">The declared composition channel name.</param>
-    public sealed record Held(string Channel) : ActionPredicate;
+    public sealed record Held([property: DocumentText("logical input channels")] string Channel) : ActionPredicate;
 }
 /// <summary>The effect arms the world adds to <see cref="ActionEffect"/>, registered by
 /// <see cref="WorldFactsVocabulary"/>. The body-motion arms (<see cref="SetVerticalVelocity"/>,
@@ -34,7 +35,10 @@ public static class WorldPredicate {
 /// arms belong to world rules and refuse in a kit.</summary>
 public static class WorldEffect {
     /// <summary>Consumes the named matched event range only when the enclosing rule commits.</summary>
-    public sealed record ConsumeInput(string Owner, string Pattern) : ActionEffect;
+    public sealed record ConsumeInput(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.BodyReference)] string Owner,
+        [property: DocumentText("a shared semantic input-pattern name")] string Pattern
+    ) : ActionEffect;
     /// <summary>Writes a body's vertical-velocity channel (the jump launch / the surge).</summary>
     /// <param name="Velocity">The vertical velocity, in world units per second at the body's authored size; a body
     /// whose live scale (<c>bodies.scale</c>) is not one launches at this times its scale, so under the gravity
@@ -44,6 +48,7 @@ public static class WorldEffect {
     /// <param name="Target">The participant a kit's action addresses; a world rule refuses any but the default.</param>
     public sealed record SetVerticalVelocity(
         decimal Velocity,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
         ActionTarget Target = ActionTarget.Self
     ) : ActionEffect;
@@ -53,6 +58,7 @@ public static class WorldEffect {
     /// <param name="Target">The participant a kit's action addresses — see <see cref="SetVerticalVelocity.Target"/>.</param>
     public sealed record ScaleVerticalVelocity(
         decimal Factor,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
         ActionTarget Target = ActionTarget.Self
     ) : ActionEffect;
@@ -70,6 +76,7 @@ public static class WorldEffect {
         DocumentVector3 BodyDirection,
         decimal Speed,
         decimal DurationSeconds,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
         ActionTarget Target = ActionTarget.Self,
         bool UseMoveDirection = false
@@ -87,10 +94,15 @@ public static class WorldEffect {
         decimal YawDegrees,
         decimal DurationSeconds,
         BodyMotionCurve Curve = BodyMotionCurve.Linear,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null
     ) : ActionEffect;
     /// <summary>Starts a named timer slot with an authored duration.</summary>
-    public sealed record StartTimer(string State, float Seconds, ActionTarget Target = ActionTarget.Self) : ActionEffect;
+    public sealed record StartTimer(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] string State,
+        float Seconds,
+        ActionTarget Target = ActionTarget.Self
+    ) : ActionEffect;
     /// <summary>Designates a subject into a body's named target register, or clears the register. A kit's action
     /// designates into its own body the participant that last affected it; a world rule names the body with
     /// <paramref name="Key"/> and the subject with <paramref name="TargetKey"/>.</summary>
@@ -101,9 +113,11 @@ public static class WorldEffect {
     /// <see cref="WorldBodyDesignationKind.Body"/> and refused when it is <see cref="WorldBodyDesignationKind.Clear"/>.
     /// A kit's action names none.</param>
     public sealed record Designate(
-        string Register,
+        [property: DocumentText("a target register name")] string Register,
         WorldBodyDesignationKind Kind = WorldBodyDesignationKind.Body,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? TargetKey = null
     ) : ActionEffect;
     /// <summary>Emits a deterministic presentation-neutral cue (<see cref="WorldGameplayCue"/>).</summary>
@@ -112,9 +126,12 @@ public static class WorldEffect {
     /// <param name="Key">The body the cue is about — a body index, a <c>$cell:</c> indirection, or a bound key.</param>
     /// <param name="Argument">An optional integer expression, interpreted by the cue's consumer.</param>
     public sealed record EmitCue(
-        string Name,
+        [property: DocumentText("a cue name")] string Name,
+        [property: DocumentText("literal text")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Payload = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Argument = null
     ) : ActionEffect;
     /// <summary>Applies the same instantaneous world-space rigid impulse <c>body.impulse</c> fires (Δv = impulse /
@@ -133,14 +150,15 @@ public static class WorldEffect {
     /// <param name="MagnitudeState">The declared kind=Fixed row naming the impulse's magnitude.</param>
     /// <param name="MagnitudeKey">The row's cell key, or <see langword="null"/> for an unkeyed row.</param>
     public sealed record ApplyRigidImpulse(
-        string Key,
-        string HeadingKey,
-        StateChannelRef MagnitudeState,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] string Key,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] string HeadingKey,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] StateChannelRef MagnitudeState,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? MagnitudeKey = null
     ) : ActionEffect;
     /// <summary>Paints one lattice field cell, or the cube of <paramref name="Radius"/> around it.</summary>
     public sealed record PaintField(
-        string Field,
+        [property: DocumentName(WorldNameKind.Field, WorldNameRole.Names, WorldExportFacet.Action)] string Field,
         int X,
         int Y,
         int Z,
@@ -151,11 +169,11 @@ public static class WorldEffect {
     /// <summary>Upserts a HUD panel document row.</summary>
     public sealed record UpsertHudPanel(WorldHudPanel Panel) : ActionEffect;
     /// <summary>Removes a HUD panel document row by id.</summary>
-    public sealed record RemoveHudPanel(string Id) : ActionEffect;
+    public sealed record RemoveHudPanel([property: DocumentText("a HUD panel id")] string Id) : ActionEffect;
     /// <summary>Upserts a placement document row; inside a transaction it must sit in the closing suffix.</summary>
     public sealed record UpsertPlacement(WorldPlacement Placement) : ActionEffect;
     /// <summary>Removes a placement document row by id; inside a transaction it must sit in the closing suffix.</summary>
-    public sealed record RemovePlacement(string Id) : ActionEffect;
+    public sealed record RemovePlacement([property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names, WorldExportFacet.Action)] string Id) : ActionEffect;
     /// <summary>Saves the world through the host's save tap.</summary>
     public sealed record Save : ActionEffect;
     /// <summary>Writes one fact on the identity a world-addressed body drives under: the body's cell in the world's
@@ -168,9 +186,10 @@ public static class WorldEffect {
     /// <param name="Value">The integer literal.</param>
     /// <param name="Expression">A bounded integer expression evaluated at fire time.</param>
     public sealed record SetIdentityFact(
-        StateChannelRef Key,
-        string Fact,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef Key,
+        [property: DocumentText("a fact key on the identity's own row, outside every world namespace")] string Fact,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
     ) : ActionEffect;
     /// <summary>Writes one <c>state.body</c> counter of a world-addressed body: the register a kit's own
@@ -183,9 +202,10 @@ public static class WorldEffect {
     /// <param name="Value">The literal value.</param>
     /// <param name="Expression">A bounded fixed-point expression evaluated at fire time.</param>
     public sealed record SetBodyState(
-        StateChannelRef Key,
-        string State,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef Key,
+        [property: DocumentText("a per-body slot name")] string State,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
     ) : ActionEffect;
     /// <summary>Places a body at a live cell of an anchored topology, plus an authored offset, upright or rolled.</summary>
@@ -201,13 +221,19 @@ public static class WorldEffect {
     /// <param name="PitchDegrees">The pitch a teleport stands the body at, about its right axis: a creation authored
     /// standing on its edge (a playing card, whose face looks along its forward axis) is laid flat at 90 or -90. A glide
     /// keeps the body's attitude and ignores it.</param>
-    public sealed record PoseCell(string Key, string Topology, ExpressionProgram Expression, DocumentVector3 Offset,
+    public sealed record PoseCell(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] string Key,
+        [property: DocumentName(WorldNameKind.Topology, WorldNameRole.Names)] string Topology,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)] ExpressionProgram Expression,
+        DocumentVector3 Offset,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Glide = false,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float RollDegrees = 0f,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float PitchDegrees = 0f) : ActionEffect;
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float PitchDegrees = 0f
+    ) : ActionEffect;
     /// <summary>Teleports a world-addressed body to a spawn point or a literal position.</summary>
     public sealed record Pose(
-        StateChannelRef Key,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef Key,
+        [property: DocumentText("a spawn point id")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SpawnPoint = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Position = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float YawDegrees = 0f,

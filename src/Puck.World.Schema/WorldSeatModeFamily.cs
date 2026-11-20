@@ -1,3 +1,5 @@
+using Puck.Abstractions.Documents;
+
 namespace Puck.World;
 
 /// <summary>One state of a <see cref="WorldSeatModeFamily"/>.</summary>
@@ -9,7 +11,10 @@ namespace Puck.World;
 /// and ordinary Engage door, diverting the seat's own body intent to
 /// <see cref="Puck.World.Protocol.IntentSource.Idle"/> and resolving its view through <c>views.cameraRig</c>
 /// instead.</param>
-public sealed record WorldSeatModeState(string Name, string? Target = null) {
+public sealed record WorldSeatModeState(
+    [property: DocumentText("a seat mode state token")] string Name,
+    [property: DocumentText("a seat control target")] string? Target = null
+) {
     /// <summary>The inhabited placement id prefix a camera control application possesses — a world authors one
     /// <c>"{CameraPlacementIdPrefix}&lt;0-based seat slot&gt;"</c> row per local seat it wants Free Cam over.</summary>
     public const string CameraPlacementIdPrefix = "camera-seat-";
@@ -25,7 +30,11 @@ public sealed record WorldSeatModeState(string Name, string? Target = null) {
 /// <param name="States">The family's non-empty, uniquely named admitted states.</param>
 /// <param name="DefaultState">The state a seat publishes before any <c>player.mode</c> flip — one of
 /// <see cref="States"/>.</param>
-public sealed record WorldSeatModeFamily(string Name, IReadOnlyList<WorldSeatModeState> States, string DefaultState) {
+public sealed record WorldSeatModeFamily(
+    [property: DocumentText("a seat mode family name")] string Name,
+    IReadOnlyList<WorldSeatModeState> States,
+    [property: DocumentText("a seat mode state token")] string DefaultState
+) {
     private readonly IReadOnlyList<WorldSeatModeState> m_states = (States ?? []);
 
     /// <summary>Gets the family's admitted states. The absence-coalesce lives in the accessor for the same reason

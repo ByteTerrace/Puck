@@ -23,12 +23,21 @@ public enum WorldMachineMemoryDirection : byte {
 /// <param name="Access">inspect for reads; patch or bus for writes.</param>
 /// <param name="Update">onChange or everyTick. Repeating a hardware-visible write requires explicit everyTick authoring.</param>
 /// <param name="Conversion">checked by default; truncate explicitly admits narrowing and bit reinterpretation.</param>
-public sealed record WorldMachineMemory(string Name, WorldMachineMemoryDirection Direction, string Space,
-    string Format, string Row,
+public sealed record WorldMachineMemory(
+    [property: DocumentName(WorldNameKind.MachineBinding, WorldNameRole.Declares)] string Name,
+    WorldMachineMemoryDirection Direction,
+    [property: DocumentText("a selector in the machine provider vocabulary")] string Space,
+    [property: DocumentText("a selector in the machine provider vocabulary")] string Format,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string Row,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ulong? Address = null,
+    [property: DocumentText("a selector in the machine provider vocabulary")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Symbol = null,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
-    string Access = "inspect", string Update = "onChange", string Conversion = "checked") {
+    [property: DocumentText("a selector in the machine provider vocabulary")] string Access = "inspect",
+    [property: DocumentText("a selector in the machine provider vocabulary")] string Update = "onChange",
+    [property: DocumentText("a selector in the machine provider vocabulary")] string Conversion = "checked"
+) {
     /// <summary>Gets the scalar's byte width, or zero for an unsupported format.</summary>
     [JsonIgnore]
     public int Width => Format switch {

@@ -12,14 +12,18 @@ namespace Puck.World;
 /// <param name="PlacementId">The <c>placements</c> row whose position the source sits at. The row need not be solid or
 /// visible; only its transform is read.</param>
 /// <param name="Mass">The source's non-negative gravitational mass.</param>
-public sealed record WorldGravityAttractor(string PlacementId, float Mass);
+public sealed record WorldGravityAttractor([property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)] string PlacementId, float Mass);
 /// <summary>A point-gravity preset riding a placement, authored in the quantities a world designer observes.</summary>
 /// <param name="PlacementId">The <c>placements</c> row at the point source's centre.</param>
 /// <param name="SurfaceGravity">The positive acceleration magnitude, in world units per second squared, promised at
 /// <paramref name="ReferenceRadius"/> after the world's authored softening is applied.</param>
 /// <param name="ReferenceRadius">The positive distance from the source centre at which <paramref name="SurfaceGravity"/>
 /// is promised. For a planet this is its surface radius; a source need not carry geometry.</param>
-public sealed record WorldGravityPoint(string PlacementId, float SurfaceGravity, float ReferenceRadius);
+public sealed record WorldGravityPoint(
+    [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)] string PlacementId,
+    float SurfaceGravity,
+    float ReferenceRadius
+);
 /// <summary>How a matching local gravity area composes its acceleration with the answer accumulated so far.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldGravityAreaMode>))]
 public enum WorldGravityAreaMode : byte {
@@ -67,7 +71,7 @@ public abstract record WorldGravityAreaAcceleration {
 /// <param name="Bounds">The placement-relative analytic bound. Boundary points are included.</param>
 /// <param name="Acceleration">The placement-relative acceleration form.</param>
 public sealed record WorldGravityArea(
-    string PlacementId,
+    [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)] string PlacementId,
     int Priority,
     WorldGravityAreaMode Mode,
     WorldGravityAreaBounds Bounds,

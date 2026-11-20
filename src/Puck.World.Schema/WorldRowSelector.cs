@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -13,9 +14,9 @@ namespace Puck.World;
 /// <param name="BodyState">The <c>state.body</c> counter whose value selects.</param>
 /// <param name="Cases">The value-to-row mapping, each value at most once.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldRowSelector(string BodyState, IReadOnlyList<WorldRowSelectorCase> Cases);
+public sealed record WorldRowSelector([property: DocumentText("a per-body slot name")] string BodyState, IReadOnlyList<WorldRowSelectorCase> Cases);
 /// <summary>One case of a <see cref="WorldRowSelector"/>: the row a body's register value selects.</summary>
 /// <param name="Value">The register value, a whole number; a counter holding a fraction matches no case.</param>
 /// <param name="Row">The kit or look row name the value selects.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldRowSelectorCase(long Value, string Row);
+public sealed record WorldRowSelectorCase(long Value, [property: DocumentText("a kit or look row name")] string Row);

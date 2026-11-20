@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Maths;
 
@@ -30,17 +31,17 @@ public abstract record CellSetExpression {
     /// <param name="Row">The lattice row.</param>
     /// <param name="Low">The least value a member carries.</param>
     /// <param name="High">The greatest value a member carries.</param>
-    public sealed record Board(CellName Row, long Low, long High) : CellSetExpression;
+    public sealed record Board([property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] CellName Row, long Low, long High) : CellSetExpression;
     /// <summary>The member rows of a family whose slot value falls in an inclusive range.</summary>
     /// <param name="Name">The family.</param>
     /// <param name="Low">The least value a member carries.</param>
     /// <param name="High">The greatest value a member carries.</param>
-    public sealed record Family(CellName Name, long Low, long High) : CellSetExpression;
+    public sealed record Family([property: DocumentText("a family name is local to the document that declares the range")] CellName Name, long Low, long High) : CellSetExpression;
     /// <summary>The pile positions of an ordered or keyed row whose value falls in an inclusive range.</summary>
     /// <param name="Row">The row.</param>
     /// <param name="Low">The least value a member carries.</param>
     /// <param name="High">The greatest value a member carries.</param>
-    public sealed record Zone(CellName Row, long Low, long High) : CellSetExpression;
+    public sealed record Zone([property: DocumentName(WorldNameKind.Zone, WorldNameRole.Names)] CellName Row, long Low, long High) : CellSetExpression;
     /// <summary>Every position of the carrier.</summary>
     public sealed record Everything : CellSetExpression;
     /// <summary>No position at all.</summary>
@@ -750,4 +751,4 @@ public static class CellSetLowering {
 /// <param name="Name">The set's stable name — unique within the document.</param>
 /// <param name="Set">The expression the name stands for.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CellSetRow(CellName Name, CellSetExpression Set);
+public sealed record CellSetRow([property: DocumentName(WorldNameKind.CellSet, WorldNameRole.Declares)] CellName Name, CellSetExpression Set);

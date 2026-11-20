@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
 
@@ -15,7 +16,9 @@ namespace Puck.World;
 /// <param name="Margin">The clearance, in metres, a straightened path keeps from the edge of the walkable ground on top
 /// of the walker's own radius the navigation domains already keep.</param>
 public sealed record WorldRoute(
+    [property: DocumentText("a route's name, which world.benchmark and puck benchmark take")]
     [property: JsonPropertyName("name")] string Name,
+    [property: DocumentText("a seat program name")]
     [property: JsonPropertyName("program")] string Program,
     [property: JsonPropertyName("chapters")] IReadOnlyList<WorldRouteChapter> Chapters,
     [property: JsonPropertyName("seat")] int Seat = 1,
@@ -26,6 +29,7 @@ public sealed record WorldRoute(
 /// <param name="Steps">The steps.</param>
 /// <param name="TimeoutSeconds">The simulated time after which an unfinished chapter fails.</param>
 public sealed record WorldRouteChapter(
+    [property: DocumentText("a chapter's name, local to its route")]
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("steps")] IReadOnlyList<WorldRouteStep> Steps,
     [property: JsonPropertyName("timeoutSeconds")] float TimeoutSeconds = 120f
@@ -61,6 +65,7 @@ public abstract record WorldRouteStep {
     /// <param name="Point">The point, or <see langword="null"/> for <paramref name="Spawn"/>.</param>
     /// <param name="YawDegrees">The heading a point pose faces.</param>
     public sealed record PoseBody(
+        [property: DocumentText("a spawn point id")]
         [property: JsonPropertyName("spawn"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Spawn = null,
         [property: JsonPropertyName("point"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Point = null,
         [property: JsonPropertyName("yawDegrees")] float YawDegrees = 0f
@@ -68,6 +73,7 @@ public abstract record WorldRouteStep {
     /// <summary>Submits one console line as the seat (a view choice, <c>player.camera.view first</c>).</summary>
     /// <param name="Text">The line.</param>
     public sealed record Line(
+        [property: DocumentText("console command text")]
         [property: JsonPropertyName("text")] string Text
     ) : WorldRouteStep;
     /// <summary>Travels to a place or a point at a pace. Unless <paramref name="Direct"/>, the path is the navigation
@@ -83,11 +89,14 @@ public abstract record WorldRouteStep {
     /// <param name="Within">The distance, in metres, at which a point is reached.</param>
     /// <param name="Corridor">Places the body may also stand in on the way.</param>
     public sealed record Go(
+        [property: DocumentText("a route place or corridor")]
         [property: JsonPropertyName("place"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Place = null,
         [property: JsonPropertyName("point"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Point = null,
+        [property: DocumentText("a route pace")]
         [property: JsonPropertyName("pace")] string Pace = "",
         [property: JsonPropertyName("direct")] bool Direct = false,
         [property: JsonPropertyName("within")] float Within = 0.5f,
+        [property: DocumentText("a route place or corridor")]
         [property: JsonPropertyName("corridor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Corridor = null
     ) : WorldRouteStep;
     /// <summary>Crosses a threshold no navigation domain joins (a portal) or walks where no domain reaches (a world it
@@ -104,7 +113,9 @@ public abstract record WorldRouteStep {
     /// <param name="Relative">Whether <paramref name="HeadingDegrees"/> turns from the step's starting facing.</param>
     public sealed record Cross(
         [property: JsonPropertyName("headingDegrees")] float HeadingDegrees,
+        [property: DocumentText("a route place or corridor")]
         [property: JsonPropertyName("until"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Until = null,
+        [property: DocumentText("a route pace")]
         [property: JsonPropertyName("pace")] string Pace = "",
         [property: JsonPropertyName("metres")] float Metres = 30f,
         [property: JsonPropertyName("relative")] bool Relative = false
@@ -126,7 +137,9 @@ public abstract record WorldRouteStep {
     /// <param name="Seconds">The time stood after the press with no <paramref name="Until"/>, or the time past which
     /// the wait for it fails.</param>
     public sealed record PressAction(
+        [property: DocumentText("a seat program action")]
         [property: JsonPropertyName("action")] string Action,
+        [property: DocumentText("a route place or corridor")]
         [property: JsonPropertyName("until"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Until = null,
         [property: JsonPropertyName("seconds")] float Seconds = 1f
     ) : WorldRouteStep;

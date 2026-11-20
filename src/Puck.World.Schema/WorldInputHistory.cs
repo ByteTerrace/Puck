@@ -54,8 +54,14 @@ public enum WorldInputJudgement : byte {
 /// <param name="FacingState">Optional authoritative body counter whose sign orients this axis at admission.
 /// Zero has no facing and cannot enter the crossing. History retains the resolved crossing, not a later counter read.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldInputCrossing(string Name, string Channel, decimal Press, decimal Release, int Direction = 1,
-    string? FacingState = null);
+public sealed record WorldInputCrossing(
+    [property: DocumentText("a shared semantic crossing in the world's input history")] string Name,
+    [property: DocumentText("logical input channels")] string Channel,
+    decimal Press,
+    decimal Release,
+    int Direction = 1,
+    [property: DocumentText("a per-body counter name in the body-state lane's namespace")] string? FacingState = null
+);
 /// <summary>A captured gameplay interval. Rate changes retain these exact engine coordinates.</summary>
 /// <param name="Tick">Assigned simulation tick.</param>
 /// <param name="EngineStart">Exact interval start on the engine clock.</param>

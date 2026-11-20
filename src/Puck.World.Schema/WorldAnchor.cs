@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -26,14 +27,14 @@ public abstract record WorldAnchor {
     /// the mapping from <paramref name="PartId"/> to its packed transform slot; the slot remains an engine detail.</summary>
     /// <param name="Index">The 0-based entity index.</param>
     /// <param name="PartId">The ordinal, case-sensitive part identifier published by the entity's active look.</param>
-    public sealed record EntityPart(int Index, string PartId) : WorldAnchor;
+    public sealed record EntityPart(int Index, [property: DocumentText("a part id local to a creation")] string PartId) : WorldAnchor;
     /// <summary>Rides a placement INSTANCE's stamped transform — a creation stamped into the world by reference (the
     /// same placement-reference shape <see cref="Puck.World.Authoring.CreationCameraDocument"/> uses), optionally narrowed
     /// to one of its own authored shapes rather than the stamp's root.</summary>
     /// <param name="PlacementId">The referenced <see cref="WorldPlacement.Id"/> (must resolve).</param>
     /// <param name="ShapeId">The referenced creation's <c>ShapeDocument.Id</c> to ride, or <see langword="null"/> for
     /// the placement's own stamped root transform.</param>
-    public sealed record Placement(string PlacementId, int? ShapeId) : WorldAnchor;
+    public sealed record Placement([property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)] string PlacementId, int? ShapeId) : WorldAnchor;
     /// <summary>Rides the smoothed CENTROID of a set of population entities — the establishing-shot anchor. Also
     /// publishes the set's SPREAD (mean distance from the centroid), which a camera program's
     /// <see cref="WorldCameraProgramOp.Offset"/> consumes through its
@@ -50,9 +51,13 @@ public abstract record WorldAnchor {
     /// speaker on this anchor is resolved per seat.</summary>
     public sealed record Seat(
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Number = null,
+        [property: DocumentText("a part id local to a creation")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PartId = null
     ) : WorldAnchor;
     /// <summary>Rides the body that most recently spoke (see <c>OverlayPredicate.Speaking</c>), at its root or a named
     /// part; resolves nothing until something has spoken.</summary>
-    public sealed record RecentSpeaker([property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PartId = null) : WorldAnchor;
+    public sealed record RecentSpeaker(
+        [property: DocumentText("a part id local to a creation")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PartId = null
+    ) : WorldAnchor;
 }
