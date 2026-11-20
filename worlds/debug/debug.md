@@ -262,6 +262,7 @@ case, `stage` when omitted:
 | `deduction`, `skirmish` | (55, 9.05, 38.1) and (67, 9.05, 38.1), north of the social-deduction and fog-of-war skirmish tables in the board game room ([`deduction.puck`](deduction.puck), [`skirmish.puck`](skirmish.puck)) | -Z, across the table |
 | `chess`, `go`, `reversi`, `alchemy`, `granaries` | (56.5, 9.05, 21), (56.5, 9.05, 29), (65, 9.05, 21), (65, 9.05, 29) and (65, 9.05, 13), at White's edge of the chess table, Black's of the Go and Reversi tables, and the south edge of the Alchemy and granary tables in the board game room ([`chess.md`](chess.md), [`go.md`](go.md), [`reversi.md`](reversi.md), [`alchemy.md`](alchemy.md), [`granaries.md`](granaries.md)), close enough to sit | +Z, across the board |
 | `desktop` | (12.4, 0.05, 23.7), behind the chair at the desktop computer in the gallery lobby | -X, toward the monitor |
+| `press` | (12.65, 0.05, 17), before the typesetter's bench against the lobby's west wall ([`press.md`](press.md)), close enough to sit | -X, toward the bench |
 | `painting-room` | (55, 0.05, 26), just inside the painting wing's doorway | East-north-east, across the room: the garden and night paintings left of her, the linked pair's east painting right |
 | `portals` | (57.5, 0.05, 31), before the painting wing's north wall | A little east of +Z: the garden painting left of her, the night painting right |
 | `portal-garden`, `portal-night` | (57, 0.05, 36.3) and (64, 0.05, 36.3), before the garden and night paintings | +Z; walk ahead to cross |

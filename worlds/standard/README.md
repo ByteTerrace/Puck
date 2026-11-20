@@ -118,6 +118,16 @@ the input family a world lists in its `inputModes` so the vents are accepted onl
 world's [`bard.puck`](../debug/bard.puck) expands it against its [score](../debug/score.puck), with the breath on Y
 because its trigger pages are all spoken for.
 
+`typing.puck` is a library: `typingPlay(...)` authors a typing game with no place or look in it. Words come down lanes
+toward a seat on its world's beat, the seat types one to clear it, and one that arrives costs a life. It authors the
+`typed` text channel, the page a seated player's keys switch to, the rules that sit and stand the seat at a bench,
+judge every typed character at the time it was typed, step the lanes, turn the waves and end the run, and the state
+a world's panel, keyboard lamps, looks and score read (the run, each lane's word and progress, the characters to
+light, the name of the text effect each word is drawn with). The words are tiers of strings the importing world
+passes, turned into the letters the rules compare by `scalars`. `typingFamily(...)` is the input family a world lists
+in its `inputModes` so typed text is accepted only while the seat sits. The debug world's
+[`press.puck`](../debug/press.puck) expands it as a typesetter's bench.
+
 `terrain.puck` and `foliage.puck` are optional libraries. Foliage supplies
 `broadleafTree`, `mossyRock`, `grassTuft`, `sceneryPatch`, `sceneryScatter` and
 `windMeadowTile`; import it with `import "../standard/foliage"` and expand its

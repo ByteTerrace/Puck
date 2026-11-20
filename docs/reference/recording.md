@@ -171,6 +171,16 @@ dependency. `Rgba32` parses and carries the document's `#RRGGBBAA` /
 `#RRGGBB` colors, shared by the validator (to reject malformed colors at the
 boundary) and the compositor (to blend them).
 
+A World arms `CaptureSink` two ways. `capture.start frames <name> [<count>]`
+writes the next presented frames as PNG images named for `<name>` under the
+host's highlight directory (`captures/highlights` under the state root, or
+under `--capture-dir`) and stops by itself. A world's `highlights` rows do the
+same from state: each row names a signal, a frame count and a delay, and
+`WorldHighlightDirector` arms the sink each time the signal changes. A document
+names no path, and a highlight that comes due while a recording or another
+highlight holds the frame-capture controller is passed over and counted in
+`capture.status`.
+
 ## Core types
 
 | Area | Types | Role |

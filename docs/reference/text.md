@@ -225,10 +225,24 @@ foreach (TextGlyphPlacement p in layout.Placements) {
 |------|------|
 | `TextEnrichmentTags` | The control-char grammar + single-pass `Stack<TextEffect>` scan (start pushes, a matching end pops, `reset` clears, innermost **shadows**; malformed or unknown tags are dropped). |
 | `BbCodeTextMarkup` | The human front-end: compiles `[wave]…[/wave]` / `[color=#f00]…[/color]` BBCode down to the control-char stream. |
-| `TextEffect` / `TextEffectKind` | An effect kind + its (late-bindable) parameters. Motion: `Shake`/`Wave`/`Pulse`/`Jitter`/`Dissolve`; static delight: `Color`/`Weight`; pacing: `Reveal`. `IsMotion` classifies. |
+| `TextEffect` / `TextEffectKind` | An effect kind + its (late-bindable) parameters. Motion: `Shake`/`Wave`/`Pulse`/`Jitter`/`Dissolve`; static delight: `Color`/`Weight`; pacing: `Reveal`; position: `Caret`. `IsMotion` classifies. |
 | `TextEffectParameter` / `TextEnrichmentVariable` | Numeric params that may late-bind a named **content-time channel** (additive/multiplicative/replacement)—no wall clock, no RNG. |
 | `TextGlyphChannel` | The tier-agnostic per-glyph output (offset/scale/coverage/weight/tint). `Resolve(...)` turns an effect + content tick into one. |
 | `TextEffectRune` | A visible rune paired with the effect in force at it—the enrichment-aware layout input. |
+
+`Caret` is the one kind that reads a position: `[caret at=3]` dims the span's
+first three glyphs to its `settled` coverage, lifts the fourth by `lift` pixels
+and grows it by the fraction `grow`, and leaves the rest alone, for text a
+reader works through a glyph at a time.
+
+The World's HUD is a consumer. A `Text` element that authors `markup: true` has
+its resolved text compiled through `BbCodeTextMarkup`, and the HUD writer draws
+one fixed-cell run for each stretch of glyphs that share a channel that frame:
+the offset moves the run's pen, the scale sizes its cell about the glyph's
+centre, and the coverage is its alpha. The fixed-cell tier has no per-glyph
+tint or weight, so it does not draw those two fields. A template's placeholders
+are substituted before the markup is read, so a state cell can supply a tag's
+name or a parameter's value.
 
 `TextGlyphChannel.Resolve` is a pure function of the caller's content tick.
 Motion kinds are gated by `motionEnabled` (settling to rest when off; reveals

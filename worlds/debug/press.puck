@@ -29,7 +29,10 @@ let pressOut = [0, 0.965926, 0.258819]
 let pressWords = [
   ["ink", "nib", "pen", "tin", "rag", "die", "set", "bed", "cap", "dot", "rule", "pica"]
   ["press", "quill", "stamp", "paper", "glyph", "serif", "proof", "plate", "wedge", "forme", "spine", "vellum"]
-  ["typeface", "ligature", "colophon", "baseline", "foundry", "kerning", "pressman", "imprint", "margins", "woodcut", "almanac", "broadside"]
+  [
+    "typeface", "ligature", "colophon", "baseline", "foundry", "kerning", "pressman", "imprint", "margins", "woodcut",
+    "almanac", "broadside"
+  ]
 ]
 
 typingPlay(music: score, bench: pressStand, words: pressWords, steps: pressSteps, radius: 1.5)
@@ -193,7 +196,10 @@ hud {
 // each waiting word's first letter and the key that stands her up. Standing in reach, the context button's own key
 // glows instead.
 let pressLetters = map(
-  ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"],
+  [
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w",
+    "x", "y", "z"
+  ],
   letter => $"keyboard.{letter}"
 )
 
@@ -215,8 +221,20 @@ keyLights {
       lit: "state.typingSeat"
     }),
     [
-      { id: "press-after-2", character: "state.typingKeys.next2", color: "#E8B04A", lit: "state.typingSeat", available: 0 }
-      { id: "press-after-1", character: "state.typingKeys.next1", color: "#E8B04A", lit: "state.typingSeat", available: 0 }
+      {
+        id: "press-after-2"
+        character: "state.typingKeys.next2"
+        color: "#E8B04A"
+        lit: "state.typingSeat"
+        available: 0
+      }
+      {
+        id: "press-after-1"
+        character: "state.typingKeys.next1"
+        color: "#E8B04A"
+        lit: "state.typingSeat"
+        available: 0
+      }
       { id: "press-next", character: "state.typingKeys.next0", color: "#FFC857", lit: "state.typingSeat" }
       // The three flashes paint nothing of their own: the struck key on a hit, every letter on a miss or a lost slug.
       {
@@ -227,8 +245,22 @@ keyLights {
         flashSignal: "state.typing.hits"
         flashColor: "#FFFFFF"
       }
-      { id: "press-miss", keys: pressLetters, color: "#D0453A", lit: 0, flashSignal: "state.typing.misses", flashColor: "#D0453A" }
-      { id: "press-lost", keys: pressLetters, color: "#7A1F1A", lit: 0, flashSignal: "state.typing.lands", flashColor: "#FF3B30" }
+      {
+        id: "press-miss"
+        keys: pressLetters
+        color: "#D0453A"
+        lit: 0
+        flashSignal: "state.typing.misses"
+        flashColor: "#D0453A"
+      }
+      {
+        id: "press-lost"
+        keys: pressLetters
+        color: "#7A1F1A"
+        lit: 0
+        flashSignal: "state.typing.lands"
+        flashColor: "#FF3B30"
+      }
     ]
   )
 }

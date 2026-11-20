@@ -40,6 +40,17 @@ them and `0` hides them. A new addon panel takes the same gate.
 
 ## Schema and caps
 
+A Text element's `markup: true` reads its resolved text as `Puck.Text` markup (`[wave]`, `[shake]`,
+`[caret at=3]`, `[reveal]`, with `key=value` parameters) and draws each glyph through its
+`TextGlyphChannel`: `HudWriter.EmitStyledText` splits the text into one fixed-cell run per stretch of glyphs
+sharing a channel that frame (offset, scale and coverage; the tier draws no per-glyph tint or weight). The
+template is substituted first, so a placeholder can be a tag's name or a parameter's value
+(`"[{state.typingStyle.0} at={state.typingTyped.0}]{state.typingShown.0}[/{state.typingStyle.0}]"`, the
+press's lanes in `worlds/debug/press.puck`). A panel's marked-up text may add
+`WorldHudCapacity.MaxStyledRunsPerPanel` runs beyond one per element; past it the rest of a text draws
+unstyled. The compiled markup is cached by resolved text, so a frame that only advances the effects' clock
+parses nothing. Absent `markup`, brackets are ordinary text.
+
 `WorldHudSection(Defaults, Panels)`; `WorldHudDefaults(Enabled, Cursor?)` is
 a world-level kill switch plus the drawn pointer cursor's per-world policy —
 `WorldHudCursor(HoverRadius, SizePx, Role, Visible?)` (hover reach in world
@@ -73,7 +84,7 @@ units and articulation; `worlds/debug/guide.puck` authors the synthesized guide
 and sampled map sign. `WorldVoiceSampleLoader` loads six vowel/consonant WAV
 classes relative to their set; both sources share `TextSpeechSource`'s schedule.
 
-`WorldHudCapacity` (the DOCUMENT contract): `MaxWorldPanels = 5`,
+`WorldHudCapacity` (the DOCUMENT contract): `MaxWorldPanels = 8`,
 `MaxElementsPerPanel = 24`, `MaxSeatPanels = 1`, `MaxElementsPerSeatPanel =
 12`, and `MaxFrameSources = 8` structurally unique `Frame` sources per HUD
 document (repeated elements naming the same source share one slot). World and

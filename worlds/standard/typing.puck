@@ -61,8 +61,7 @@ function typingFamily(suspendedBy = []) = {
 // `words` is the tiers of the word list, easiest first, every tier the same length and every word lower-case letters no
 // longer than `typingSpan`. `seat` is the local seat that plays (its body is its number minus one).
 template typingPlay(music, bench, words, seat = 1, radius = 1.8, lanes = 3, steps = 10, lives = 3, perWave = 6, streakCap = 10, heats = [
-  3
-  6
+  3, 6
 ], respawnSeconds = 1.5, overSeconds = 6, missSeconds = 0.3, keysPerStep = 8, leaveSources = [
   "keyboard.tab"
   "gamepad.buttonEast"
@@ -111,7 +110,10 @@ template typingPlay(music, bench, words, seat = 1, radius = 1.8, lanes = 3, step
         name: "typingLetters"
         kind: Int
         capacity: length(list) * typingSpan
-        cells: flatMap(list, (word, w) => map(scalars(word), (scalar, i) => { key: $"{w * typingSpan + i}", value: scalar }))
+        cells: flatMap(
+          list,
+          (word, w) => map(scalars(word), (scalar, i) => { key: $"{w * typingSpan + i}", value: scalar })
+        )
       }
       row {
         name: "typingLength"
@@ -150,7 +152,12 @@ template typingPlay(music, bench, words, seat = 1, radius = 1.8, lanes = 3, step
         kind: Int
         capacity: lanes + 4
         cells: concat(
-          [{ key: "next0", value: 0 }, { key: "next1", value: 0 }, { key: "next2", value: 0 }, { key: "last", value: 0 }],
+          [
+            { key: "next0", value: 0 }
+            { key: "next1", value: 0 }
+            { key: "next2", value: 0 }
+            { key: "last", value: 0 }
+          ],
           map(laneKeys, lane => { key: $"first{lane}", value: 0 })
         )
       }
@@ -223,7 +230,7 @@ template typingPlay(music, bench, words, seat = 1, radius = 1.8, lanes = 3, step
 
   // Sitting down starts a run from nothing; standing up mid-run abandons it.
   rule "typing-start" {
-    when typingSeat == 1 and typing.phase != 1 and ($tick >= typing.overAt)
+    when typingSeat == 1 and typing.phase != 1 and $tick >= typing.overAt
     mode: Edge
     typing.phase = 1
     typing.score = 0
@@ -244,7 +251,7 @@ template typingPlay(music, bench, words, seat = 1, radius = 1.8, lanes = 3, step
     emitCue(name: "typing.start")
   }
   rule "typing-abandon" {
-    when typingSeat == 0 and typing.phase != 0
+    when typingSeat == 0 and typing.phase
     mode: Level
     typing.phase = 0
     typing.target = -1
@@ -308,7 +315,7 @@ template typingPlay(music, bench, words, seat = 1, radius = 1.8, lanes = 3, step
     local size = typingLength[word] ?? 0
     local done = hit and (at + 1 >= size)
     local streak = typing.streak
-    when inputEdge(seat, typed, Text, each) and typing.phase == 1 and (key >= 97) and (key <= 122)
+    when inputEdge(seat, typed, Text, each) and typing.phase == 1 and key >= 97 and key <= 122
     mode: Level
     if hit {
       typingTyped[aim] = at + 1
@@ -339,7 +346,7 @@ template typingPlay(music, bench, words, seat = 1, radius = 1.8, lanes = 3, step
     mode: Level
     typing.beat = beat
     for lane in laneKeys {
-      if (typingLive[$"{lane}"] == 1) and (beat % typing.stride == 0) {
+      if typingLive[$"{lane}"] == 1 and (beat % typing.stride) == 0 {
         typingStep[$"{lane}"] += 1
       }
     }
@@ -363,7 +370,7 @@ template typingPlay(music, bench, words, seat = 1, radius = 1.8, lanes = 3, step
 
   rule "typing-wave" {
     local next = typing.wave + 1
-    when typing.phase == 1 and typing.cleared >= typing.wave * perWave
+    when typing.phase == 1 and typing.cleared >= (typing.wave * perWave)
     mode: Level
     typing.wave = next
     typing.stride = (next >= 3) ? 1 : 2
@@ -408,7 +415,7 @@ template typingPlay(music, bench, words, seat = 1, radius = 1.8, lanes = 3, step
       if typingLive[$"{lane}"] == 0 {
         typingShown[$"{lane}"] = ""
       }
-      if (aim == lane) and ($tick < typing.missUntil) {
+      if aim == lane and $tick < typing.missUntil {
         setState(state: typingStyle, key: $"{lane}", text: missEffect)
       } else {
         setState(state: typingStyle, key: $"{lane}", text: restEffect)

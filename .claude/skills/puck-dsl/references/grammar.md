@@ -266,6 +266,7 @@ else; a lambda anywhere else is **PUCK042**, an unevaluable call is **PUCK041**.
 |---|---|---|
 | `range(start, count)` | two whole numbers | — |
 | `length(value)` | array, object, or string | — |
+| `scalars(text)` | a string | —; its Unicode scalar values in order, the numbers a `Text` input event carries, so a word a rule judges a character at a time is authored as the word |
 | `concat(a, b, ...)` | any number of arrays/values | — |
 | `map(array, lambda)` | an array | item, or item+index |
 | `flatMap(array, lambda)` | an array | item, or item+index; an array result is spliced in, anything else is one item (the `reduce(array, [], (all, x) => concat(all, …))` fold without recopying) |

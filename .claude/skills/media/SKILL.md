@@ -35,7 +35,8 @@ this file is corrected in the same change.
 | A one-shot sound on an event (a stinger, an edit echo) | an `audio.cues` row (`WorldAudioCue`) naming an event token and a `patches` row; `WorldAudioDirector.SubmitCue` | [audio reference](../../../docs/reference/audio.md) |
 | A rule fires a sound, pose, or score condition | `WorldRuleDisclosure` classifies the rule's dependencies from each fact's own `IWorldDisclosedFact`, `WorldTick.PresentCues` (or `PresentLocalCues`, per local seat) admits each cue against the recipient view, and the delivered snapshot drives `WorldCreationInstances.TriggerCue` and the listener's `MusicDirector` | [delivered rule cues](../../../docs/reference/audio.md#delivered-rule-cues) |
 | A synthesized instrument voice | a `puck.synthesizer-patch.v1` document, crossed into `VoicePatch` by `WorldVoicePatchFactory.FromDocument`, played by `VoiceSynth` | [World audio README](../../../src/Puck.World/Audio/README.md#document-intake-worldvoicepatchfactorycs) |
-| Background music that changes with play: segments, layers, embellishments, a beat clock | `music` rows (`WorldMusicRow`) compiled by `MusicDirectorFactory` into `MusicDirector` and `MusicClock`; edges from `WorldEventFeed` become `MusicSenseEdge`s | [audio reference](../../../docs/reference/audio.md) |
+| Background music that changes with play: segments, layers, embellishments, a beat clock | `music` rows (`WorldMusicRow`) compiled by `MusicDirectorFactory` into `MusicDirector` and `MusicClock`; edges from `WorldEventFeed` become `MusicSenseEdge`s. A rule drives it with `emitCue` and a score's `when: "cue:<name>"`: a transition arms on the cue, a layer plays on the ticks the cue is delivered (a `Level` rule holds it), an embellishment fires on it. The press's score (`worlds/debug/score.music.json`) is the live example | [audio reference](../../../docs/reference/audio.md#delivered-rule-cues) |
+| What the mixer was last handed: emitters in the mix, triggers, live cues, whether a mixer is attached | `audio.mix` (`WorldAudioDirector.TrySnapshot`, `LiveCueCount`, `MixerAttached`) | [audio reference](../../../docs/reference/audio.md#verifying) |
 | A graded press or a phrase on the beat | the standard's `rhythmJudge` (`worlds/standard/rhythm.puck`): authored rules over the clock operands below, with windows, grades and a phrase as data | [rhythm judge](../../../worlds/standard/README.md) |
 | A rhythm hit window | a range over a `$clock:<music>` operand; no dedicated grader. `phaseError` is the integer tick distance to the nearest beat at the clock's current position, and `phaseErrorAt:<owner>:<channel>:<kind>:<occurrence>` is the fixed-point seconds distance from a press, at its captured time and calibration, to the nearest beat. `beat`, `bar` and `beatInBar` read the current position's indices, and `beatAt`, `barAt` and `beatInBarAt` read a press's nearest beat | [audio reference](../../../docs/reference/audio.md#clock-operands) |
 | A tune or a playable instrument | `tunes` rows (`WorldTune`, `puck.tune.v1`): `TuneMachineSource` for a passive tune, `TuneInstrumentEngine` for an engageable screen machine whose tempo folds into the music clock through `WorldServer.InstrumentClockBoundary` | [World audio README](../../../src/Puck.World/Audio/README.md#the-diegetic-instrument-puckhumblegamingbrickforgetunetuneinstrumentenginetuneinstrumentmachine) |
@@ -45,13 +46,21 @@ this file is corrected in the same change.
 | Speaker gain bound to state | the shared bindable scalar grammar, resolved through the state mirror each publication | [speaker gain](../../../docs/reference/audio.md#speaker-gain) |
 | The output device, its faults and rebinds | `WorldAudioRenderService` over `IAudioRenderDeviceFactory` (Windows: `WasapiAudioRenderDeviceFactory`) | [World audio README](../../../src/Puck.World/Audio/README.md#the-device-worldaudiorenderservicecs) |
 | A gameplay clip with game audio and microphone | `capture.start/status/stop` (`WorldRecordingCommandModule`) or `--recording`, loading a `RecordingDocument` and arming a `RecordingSession` on the host's `FrameCaptureController` | [recording](../../../docs/reference/recording.md#how-a-session-is-assembled) |
-| A still frame to PNG from a host | `CaptureSink` (and `ICaptureFrameObserver`), an `ICaptureSink`; a World's own stills are `world.screenshot` (`puck-world` console) | [frame capture](../../../docs/reference/recording.md#frame-capture-and-overlays) |
+| A run of presented frames kept as images when the world says so (a best score, a finish) | `highlights` rows (`WorldHighlightRow`: a signal, a frame count, a delay) → `WorldHighlightDirector` arms `CaptureSink` on the `FrameCaptureController`; by hand, `capture.start frames <name> [<count>]` | [frame capture](../../../docs/reference/recording.md#frame-capture-and-overlays) |
+| One exact still for evidence | `world.screenshot`, or a tick-scheduled `captures` station (`puck-world` console); neither goes through `CaptureSink` | [console](../puck-world/references/console.md) |
 | Text, boxes or a timecode burnt into the recording only | `OverlayCompositor` over the document's overlay rows | [frame capture](../../../docs/reference/recording.md#frame-capture-and-overlays) |
 | A container, codec or track question | `MatroskaMuxer` and `EbmlWriter`; `OpusAudioLane`, `OpusStreamEncoder`, `LinearResampler`; `Av1TemporalDelimiterFilter` | [muxing and codecs](../../../docs/reference/recording.md#muxing-and-codecs) |
 | A deterministic re-run of a session | `replay.*` and the replay tape (`puck-world`), not a recording | [replay](../puck-world/references/replay.md) |
 
 ## Contracts that bite
 
+- **The listener steps its own music director.** The authority's director is
+  simulation state; what a player hears comes from a second director the audio
+  director steps from each delivered cue tick
+  (`WorldAudioDirector.PresentLocalCues`, `PresentRoutedAudio`), so a remote
+  listener hears what a local one does. The server calls out to no audio code:
+  a new music event is sounded by teaching that delivered path, never by a
+  callback from the tick.
 - **Sound decides nothing.** The mixer, synth and emitter table are
   presentation: no simulation read depends on them. `MusicClock`,
   `MusicDirector` and `VoiceBabbler` are the exception, simulation state
@@ -105,6 +114,11 @@ this file is corrected in the same change.
 - **Music layer and embellishment `gainThousandths` do not reach presentation
   gain** (`MusicLayerDocument.GainThousandths`).
 - **Nothing proves a region crossing's `music.transition` cue end to end.**
+- **A layer starts when its cue arrives, not on a boundary**, so a voice can
+  enter off the beat; and each layer's tune runs its own clock, not the
+  score's.
+- **Highlights and `capture.start frames` are unproven on a window**: the
+  press's row has not been watched writing a file.
 - **`LinearResampler` is linear**, not polyphase or anti-aliased.
 - **AV1 OBU framing has one home.** `Av1Obu.TryRead` (`Puck.Abstractions`)
   frames a header, extension and size and refuses a set forbidden bit;
@@ -123,8 +137,9 @@ this file is corrected in the same change.
   and the map sign in `worlds/debug/guide.puck` are the live examples.
 - Live sound needs a windowed World with an audio device, which is a GPU leg
   (`verification`): read `audio.state` (device, frames, faults, `peak`),
-  `audio.emitters`, `speaker.state` (including `lastCue:<token>`),
-  `voice.state`, `music.state` and `instrument.state` over stdin.
+  `audio.emitters`, `audio.mix`, `speaker.state` (including `lastCue:<token>`),
+  `voice.state`, `music.state` and `instrument.state` over stdin. `music.state`
+  answers headless too, which is how a scenario reads the press's segment.
 - A clip: `capture.start`, `capture.status`, `capture.stop` on a windowed
   World, then inspect the file; a lane that declined reports its reason
   rather than failing the session.

@@ -5,6 +5,7 @@ using System.Text;
 using Puck.Abstractions.Lighting;
 using Puck.Commands;
 using Puck.Input.Lighting;
+using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -313,12 +314,11 @@ public sealed class WorldKeyLightDirector {
         value: "keyboard."
     );
     private static LampColor ToLamp(Vector4 color) => new(
-        Blue: Channel(value: color.Z),
-        Green: Channel(value: color.Y),
+        Blue: VectorFunctions.ToUnorm8(value: color.Z),
+        Green: VectorFunctions.ToUnorm8(value: color.Y),
         Intensity: 255,
-        Red: Channel(value: color.X)
+        Red: VectorFunctions.ToUnorm8(value: color.X)
     );
-    private static byte Channel(float value) => ((byte)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: value) * 255f)));
 
     private sealed class SeatSlot {
         public readonly LightLegendState Legend = new();
