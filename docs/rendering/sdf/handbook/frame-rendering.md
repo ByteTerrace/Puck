@@ -893,6 +893,18 @@ never reconstructs (its quality restriction,
 view. Beyond that a nested view gives up only what the world's `render.nested`
 table says at its presented share of the display.
 
+A device or quality table can set `viewsRate { maxRate: 2, tileSize: 4 }`.
+`tileSize` is the edge of the region that must qualify together, in render
+pixels (2, 4 or 8). `maxRate` is the largest spacing between shading samples
+along either axis (1 or 2). Full rate is the default. At spacing 2, a temporal
+view checks the preceding resolve's contrast along each axis and its remembered
+features against the current material, receiver, tangent plane and ink. A tile
+can share pairs horizontally or vertically, or one sample across a 2×2 cell.
+The sample rotates with the jitter. A cut, disocclusion or partial tile shades
+at full rate, as do screens and draws that moved or deformed. For the tile counts
+at each rate, read `world.counters gpu pass sdf.world$views-probes` and the
+`steps` for `tiles-1x1`, `tiles-2x1`, `tiles-1x2` and `tiles-2x2`.
+
 Each view's history is its own fragment's: two versions at the output extent,
 two allocations each, the one the next frame reads through
 `ResourceReference.PreviousFrame` and the one it writes. A resize carries a history buffer only when
