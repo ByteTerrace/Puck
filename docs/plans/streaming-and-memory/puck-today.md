@@ -160,10 +160,10 @@ All paths are under `src/` unless stated.
 - **Driven by:** every static draw of the frame, not the window: `StaticKey` folds `frame.MeshDraws` (:1290-1335) and
   `StartSceneBuild` snapshots every static draw (:1363-1374) **[opened]**. While the bake is pending, a scene is built
   from what landed at most every `PendingSceneInterval = 4 s` (:270, `ScenePendingDue` :1267-1269) **[opened]**.
-- **Bound:** retained geometry up to `RetainedTriangles = 8_000_000L` (SdfMeshIrradianceScene.cs:116) **[opened]**;
-  arrays rented from `ArrayPool<T>.Shared` (`RentedArrays.Rent`, Puck.Abstractions/Memory/RentedArrays.cs:17-21;
-  `Content.Release`, src/Puck.SdfVm/SdfMeshIrradianceScene.cs:82-95) **[opened]**; not charged to `MemoryAccount` (no account call in the scene files,
-  grep **[opened]**). GPU side: `GpuArena` over a `GpuRangeAllocator` that throws "The probe scene exceeds its packed
+- **Bound:** `SdfMeshIrradianceScene.RetainedTriangles` caps the geometry kept for later builds. `Content.Release` hands
+  back its arrays through `RentedArrays`, which returns only eligible buckets to the shared pool.
+  `SdfMeshIrradiance` reports the active hierarchy to `MemoryAccount` through its sampled scene owner. GPU side:
+  `GpuArena` over a `GpuRangeAllocator` that throws "The probe scene exceeds its packed
   node address space." (src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:187-201) **[opened]**, in a region from `CreateProbeRegion`
   (MeshRegion.cs:35-38) **[opened]**.
 - The scene holds mesh claims (`m_meshClaims`, src/Puck.SdfVm/SdfMeshIrradianceScene.cs:22), which keep the static meshes' CPU payloads alive

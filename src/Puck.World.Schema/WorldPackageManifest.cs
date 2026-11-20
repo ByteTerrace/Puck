@@ -30,6 +30,22 @@ public sealed record WorldPackageManifest(string Id, string Name, string Entry) 
         b: FileName,
         comparisonType: StringComparison.OrdinalIgnoreCase
     ));
+    /// <summary>Resolves a world path to the file a boot reads: a package folder or manifest (<see cref="IsPackagePath"/>)
+    /// to the file carrying its entry document (<see cref="TryResolveEntry"/>), and any other path to itself.</summary>
+    /// <param name="path">A full path: a package folder or manifest, a <c>.puck</c> source or a world document.</param>
+    /// <param name="manifest">The read manifest when the path names a package, else <see langword="null"/>.</param>
+    /// <param name="worldPath">The file a boot reads, or empty when a package's entry did not resolve.</param>
+    /// <param name="reason">The package's named refusal, or empty.</param>
+    /// <returns><see langword="false"/> only when the path names a package whose entry did not resolve.</returns>
+    public static bool TryResolveWorld(string path, out WorldPackageManifest? manifest, out string worldPath, out string reason) {
+        if (!IsPackagePath(path: path)) {
+            manifest = null;
+            worldPath = path;
+            reason = string.Empty;
+            return true;
+        }
+        return TryResolveEntry(entryPath: out worldPath, manifest: out manifest, path: path, reason: out reason);
+    }
     /// <summary>Reads a package's manifest and resolves the file carrying its entry document: the entry's
     /// <c>.puck</c> source where one lies beside the manifest, else its <c>.world.json</c> document.</summary>
     /// <param name="path">The package folder, or its manifest file.</param>

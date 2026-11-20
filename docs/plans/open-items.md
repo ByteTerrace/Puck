@@ -109,7 +109,9 @@ The next lead rewrites this section when it hands off in turn.
   toolchain, the TraceEvent version, the registry) are on `main`, and each
   push to `main` runs Release Azure. Read the latest run on `main` before the
   owner pushes `lead/rendering`'s work there, and fix what it shows on
-  `lead/rendering`.
+  `lead/rendering`. The RTX 2060 consumer machine runs a folder
+  `puck world player` assembles (a self-contained engine, the compiled package
+  and its prewarmed caches); it is not yet produced by CI.
 - **Before the owner pushes `main`:** the owner deferred the
   [security review](#security-review)'s write-door leaks for this push, as
   AGENTS.md allows for a high finding; they stay high work, ranked first in
@@ -1749,8 +1751,32 @@ migrated to standard programs.
   `shaders.compiler.runs.dxc` rose by 4 per edit on both backends where views
   and glass make 2, likely a requested set overtaken while the active and
   declared sets move on different frames.
-- [low] A Direct3D 12 player without `dxcompiler.dll` refuses a prewarmed
-  kernel at the reflection check (`SdfShadePipelines.BuildAsync`), and a frame
+- [high] The mesh store's bake intermediates evict finished meshes. Its checkpoint
+  (`.bake`) and sample (`.samples`) sets share `SdfMeshStore.CapacityBytes` and
+  one least-recently-used retention (`CacheRetention.EnforceSetsOnWrite`) with
+  the mesh sets, and one cold debug-world boot writes about 3.7 GiB of samples:
+  in a fresh cache root, a Vulkan bake after a Direct3D 12 one evicted the
+  Direct3D 12 mesh set, so the next Direct3D 12 boot baked all 1231 groups again
+  (`[sdf.mesh-bake] miss ... identity a8168993... unchanged: its set was
+  evicted`). On a developer's per-user store the same eviction re-bakes meshes an
+  edit did not invalidate. Intermediates need their own bound, or eviction order
+  that takes them before any mesh set. `puck world player` removes them after
+  each boot meanwhile.
+- [medium · unconfirmed] Under the `rtx2060` device profile at 1920 by 1080, a
+  paused Direct3D 12 boot of the debug world at spawn never reports its bakes
+  settled (the Vulkan boot of the same target settled at tick 0): every
+  bake lands (`pending=0`), but `world.wait bakes` answers "still moving to the
+  detail their demand asks" for the whole wait, where the `rtx4070` profile at
+  2560 by 1440 settles at tick 0. Likely the mesh budget under the 4608 MiB bar
+  keeps the tier bias moving (`SdfMeshTier.Biased`); read the bias and the mesh
+  region's budget on the RTX 2060 itself, since a detail that never settles
+  re-bakes tiers in play.
+- [medium] A Direct3D 12 player without `dxcompiler.dll` refuses a prewarmed
+  kernel at the reflection check (`SdfShadePipelines.BuildAsync`), so a
+  `puck world player` folder on a consumer machine (no DXC installed) shades
+  through the interpreter on Direct3D 12 while Vulkan, whose SPIR-V the managed
+  reader reflects, takes the specialized kernels. A managed reader of the DXIL
+  container's own binding data would remove the dependency. A frame
   holding a program its document does not declare requests a set the prewarm
   did not compile.
 - [low] `SdfWorldPipelines.Acquire` leases `ViewsPlain` and `GlassPlain` up
@@ -3682,7 +3708,7 @@ proves itself with `puck compile` lowering to the same document.
     `Comparison` lambdas beside them (`SdfMeshIrradiance`'s candidate order,
     the path bake's tiers) move the same way if a profile shows them hot.
   - **SdfVm and Assets: zlib through stream adapters.** [medium]
-    `SdfMeshStoreCodec.TryDecode` expands every store entry through a `fixed`
+    `SdfMeshStoreDecoder.TryDecode` expands every store entry through a `fixed`
     block, an `UnmanagedMemoryStream`, a `ZLibStream` and an end-of-stream
     probe, though the expanded length is in the header. One
     `ZLibDecoder.TryDecompress` into the buffer it already owns replaces all

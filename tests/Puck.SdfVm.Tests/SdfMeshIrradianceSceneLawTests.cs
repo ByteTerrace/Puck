@@ -140,7 +140,7 @@ public sealed class SdfMeshIrradianceSceneLawTests {
 
         using var empty = SdfMeshIrradianceScene.Build(draws: []);
 
-        Assert.Equal(expected: [0u, 0u], actual: empty.ExportGpu(placements: placements));
+        Assert.Equal(expected: [0u, SdfMeshProbeTrace.RootWords, 0u], actual: empty.ExportGpu(placements: placements));
     }
     private delegate void WordReader(int word, Span<uint> destination);
     // A rippled sheet of quads, wide enough that its hierarchy and preparation run in parallel.

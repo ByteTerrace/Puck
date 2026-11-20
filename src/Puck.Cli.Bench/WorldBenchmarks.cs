@@ -664,20 +664,12 @@ internal static class WorldBenchmarks {
             return 2;
         }
 
-        if (Puck.World.WorldPackageManifest.IsPackagePath(path: path)) {
-            if (!Puck.World.WorldPackageManifest.TryResolveEntry(
-                entryPath: out var entryPath,
-                manifest: out _,
-                path: path,
-                reason: out var reason
-            )) {
-                Console.Error.WriteLine(value: $"ERROR: {reason}");
+        if (!Puck.World.WorldPackageManifest.TryResolveWorld(manifest: out _, path: path, reason: out var reason, worldPath: out var resolved)) {
+            Console.Error.WriteLine(value: $"ERROR: {reason}");
 
-                return 2;
-            }
-
-            path = entryPath;
+            return 2;
         }
+        path = resolved;
 
         var build = BenchBuild.Of(entryAssembly: (artifact ?? CliPaths.Tool));
         var start = BenchReport.Start(build: build, repeats: repeats, settings: new Dictionary<string, string> {

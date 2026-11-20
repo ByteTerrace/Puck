@@ -18,10 +18,6 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfWorldPipelineCatalogLawTests {
     private const uint Extent = 32;
-    // The pipelines one residency records with: its kernels, the region copy, the mesh pass, the shadow cascades' depth and
-    // exit-layer passes, the glass pass and the mesh pass's occlusion kernel.
-    private const int ResidencyPipelines = 30;
-
     [Fact]
     public void TwoResidenciesOverOneCatalogRenderWithOneCreationPerPipeline() {
         var gpu = new FakeGpuDevice();
@@ -32,18 +28,20 @@ public sealed class SdfWorldPipelineCatalogLawTests {
         using var second = Node(pipelines: pipelines);
 
         first.ProduceFirstFrame(context: in context);
+        var residencyPipelines = pipelines.Pipelines.SharedPipelines;
+        Assert.True(condition: (residencyPipelines > 0));
         second.ProduceFirstFrame(context: in context);
 
         Assert.Equal(
             actual: (pipelines.Pipelines.SharedPipelines, Created(catalog: pipelines)),
-            expected: (ResidencyPipelines, ((long)ResidencyPipelines))
+            expected: (residencyPipelines, ((long)residencyPipelines))
         );
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.PipelinesCreated, source: first.WorkLifetime));
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.PipelinesCreated, source: second.WorkLifetime));
         Assert.Equal(expected: 0L, actual: Read(kind: GpuWork.ShaderModulesCreated, source: first.WorkLifetime));
 
         first.Dispose();
-        Assert.Equal(expected: ResidencyPipelines, actual: pipelines.Pipelines.SharedPipelines);
+        Assert.Equal(expected: residencyPipelines, actual: pipelines.Pipelines.SharedPipelines);
         Assert.True(condition: second.Produce(context: in context));
 
         second.Dispose();

@@ -41,15 +41,16 @@ float3 worldPointLightPosition(SdfLight light) {
 // The light that holds a shadow role (SdfLights.RoleLight): the stable slot passGroup.shadowRoles names for it, or -1 when
 // no slot holds it.
 int worldShadowRoleLight(uint role) {
-    int slot = sdfComponent(passGroup.shadowRoles, role);
+    uint slot = (uint)sdfComponent(passGroup.shadowRoles, role);
 
-    return (((slot >= 0) && ((uint)slot < worldShadowStableCount())) ? sdfComponent(passGroup.shadowSlots, (uint)slot) : -1);
+    return ((slot < worldShadowStableCount()) ? sdfComponent(passGroup.shadowSlots, slot) : -1);
 }
 // The shadow role a stable slot holds, or -1 for a slot that holds none (its light takes the probes' answer).
 int worldShadowRoleOfSlot(int slot) {
+    if ((uint)slot >= worldShadowStableCount()) { return -1; }
     [unroll]
     for (uint role = 0u; (role < SDF_SHADOW_ROLES); role++) {
-        if ((slot >= 0) && (sdfComponent(passGroup.shadowRoles, role) == slot)) {
+        if (sdfComponent(passGroup.shadowRoles, role) == slot) {
             return (int)role;
         }
     }

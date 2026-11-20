@@ -37,13 +37,10 @@ public static class CliWorldDocuments {
         _ = CliWorldVocabulary.EnsureInstalled();
 
         // A package reads as the document its manifest names, as a boot of the package does.
-        if (WorldPackageManifest.IsPackagePath(path: fullPath)) {
-            if (!WorldPackageManifest.TryResolveEntry(entryPath: out var entry, manifest: out _, path: fullPath, reason: out reason)) {
-                return false;
-            }
-
-            fullPath = entry;
+        if (!WorldPackageManifest.TryResolveWorld(manifest: out _, path: fullPath, reason: out reason, worldPath: out var world)) {
+            return false;
         }
+        fullPath = world;
 
         if (!WorldDefinitionLoader.TryLoadFileForAdmission(admission: out var admission, contentHash: out _, documents: WorldCompileSession.Shared, path: fullPath, proveNeighbours: false, reason: out var failure)) {
             reason = $"failed to load: {failure}";
