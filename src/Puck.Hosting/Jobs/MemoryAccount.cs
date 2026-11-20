@@ -954,14 +954,26 @@ public sealed class MemoryAccount {
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
         /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
         /// <exception cref="InvalidOperationException">The owner is a device family or a segment's row.</exception>
-        public bool TryReserve(long peak) {
+        public bool TryReserve(long peak) => Reserve(peak: peak, progress: false);
+        // The one door of TryReserve and TryReserveProgress: a reservation within the pool's room, or, for a progress
+        // floor, within the host bar on what the owners hold and are promised, counted as an over-limit grant.
+        private bool Reserve(long peak, bool progress) {
             ArgumentOutOfRangeException.ThrowIfNegative(peak);
             m_account.RefreshAvailable();
             lock (m_account.m_gate) {
                 ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
                 ThrowIfNotAdmitted();
-                if (!m_account.Fits(extra: (Math.Max(val1: 0, val2: (peak - m_bytes)) - Promise), pool: PhysicalMemory.Host)) {
-                    return RefusePeak(peak);
+
+                var extra = (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise);
+
+                if (!m_account.Fits(extra: extra, pool: PhysicalMemory.Host)) {
+                    if (!progress || !m_account.FitsChargedHostBar(extra: extra)) { return RefusePeak(peak); }
+
+                    var state = m_account.m_pools[((int)PhysicalMemory.Host)];
+
+                    state.OverLimitGrants++;
+                    state.OverLimitBytes += extra;
+                    m_account.m_pressure = 1;
                 }
                 m_refusedPeak = -1L;
                 SetPeak(peak: peak);
@@ -1016,29 +1028,7 @@ public sealed class MemoryAccount {
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
         /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
         /// <exception cref="InvalidOperationException">The owner is a device family or a segment's row.</exception>
-        public bool TryReserveProgress(long peak) {
-            ArgumentOutOfRangeException.ThrowIfNegative(peak);
-            m_account.RefreshAvailable();
-            lock (m_account.m_gate) {
-                ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
-                ThrowIfNotAdmitted();
-
-                var extra = (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise);
-
-                if (!m_account.Fits(extra: extra, pool: PhysicalMemory.Host)) {
-                    if (!m_account.FitsChargedHostBar(extra: extra)) { return RefusePeak(peak); }
-
-                    var state = m_account.m_pools[((int)PhysicalMemory.Host)];
-
-                    state.OverLimitGrants++;
-                    state.OverLimitBytes += extra;
-                    m_account.m_pressure = 1;
-                }
-                m_refusedPeak = -1L;
-                SetPeak(peak: peak);
-                return true;
-            }
-        }
+        public bool TryReserveProgress(long peak) => Reserve(peak: peak, progress: true);
         /// <summary>Releases the future promise after work ends, and the forced allowance if the owner holds it; any
         /// still-owned storage remains accounted.</summary>
         public void ReleaseReservation() {
