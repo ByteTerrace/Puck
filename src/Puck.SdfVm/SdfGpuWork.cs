@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.ExceptionServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Waiting;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -1219,7 +1220,7 @@ public sealed class SdfGpuWork : IDisposable {
     public static ulong Granule(ulong bytes) {
         const ulong Bytes = (4UL << 20);
 
-        return (((Math.Max(val1: bytes, val2: 1UL) + (Bytes - 1UL)) / Bytes) * Bytes);
+        return Math.Max(val1: bytes, val2: 1UL).AlignUp(alignment: Bytes);
     }
 
     // What stopped a refill short of a free slot's job that waiting lifts: the budget's credit, the step's share of

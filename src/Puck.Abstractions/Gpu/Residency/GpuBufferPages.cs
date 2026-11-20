@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.Abstractions.Gpu;
 
 /// <summary>A buffer whose destination owns page admission. Mapping implementations publish writable pages only
@@ -28,7 +30,7 @@ public sealed class GpuBufferPages {
         if (((bytes % 4) != 0) || ((pageBytes % 4) != 0)) { throw new ArgumentException(message: "Page extents use whole words."); }
         PageBytes = pageBytes;
         m_bytes = bytes;
-        m_generations = new ulong[checked((int)(((bytes + pageBytes) - 1) / pageBytes))];
+        m_generations = new ulong[checked((int)bytes.CeilingDivide(divisor: pageBytes))];
         m_writable = new bool[m_generations.Length];
         Array.Fill(array: m_generations, value: m_generation);
         Array.Fill(array: m_writable, value: writable);
@@ -88,7 +90,7 @@ public sealed class GpuBufferPages {
     // Contiguous replacement preserves old words through an ordered carry; only its newly backed tail changes.
     internal void GrowCarried(long bytes) {
         var old = m_writable.Length;
-        var count = Math.Max(val1: old, val2: checked((int)(((bytes + PageBytes) - 1) / PageBytes)));
+        var count = Math.Max(val1: old, val2: checked((int)bytes.CeilingDivide(divisor: PageBytes)));
 
         Array.Resize(array: ref m_writable, newSize: count);
         Array.Resize(array: ref m_generations, newSize: count);
