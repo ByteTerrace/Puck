@@ -635,7 +635,9 @@ public sealed class MemoryAccount {
     }
     // Under m_gate.
     private long Named(PhysicalMemory pool, MemoryBacking backing) => m_named[((((int)pool) * Backings) + ((int)backing))];
-    private static int ClassIndex(PhysicalMemory pool, MemoryClass memoryClass) => ((((int)pool) * MemoryClasses.Count) + ((int)memoryClass));
+    private static int ClassIndex(PhysicalMemory pool, MemoryClass memoryClass) => ByClass(major: ((int)pool), memoryClass: memoryClass);
+    // The index of a class within one row of an array kept by row (a pool, an allowance) and class.
+    private static int ByClass(int major, MemoryClass memoryClass) => ((major * MemoryClasses.Count) + ((int)memoryClass));
     // Under m_gate: a row and what its owners name in it; a residual skew makes negative is counted.
     private MemoryRowReading Row(string name, PhysicalMemory pool, MemoryBacking backing, long? bytes, bool measured) {
         var named = Named(backing: backing, pool: pool);
@@ -665,7 +667,7 @@ public sealed class MemoryAccount {
         return sum;
     }
     // An owner's index in the by-allowance-and-class arrays.
-    private static int OwnerIndexOf(MemoryAllowance allowance, MemoryClass memoryClass) => ((((int)allowance) * MemoryClasses.Count) + ((int)memoryClass));
+    private static int OwnerIndexOf(MemoryAllowance allowance, MemoryClass memoryClass) => ByClass(major: ((int)allowance), memoryClass: memoryClass);
     // Under m_gate: whether an owner's allowance draws on the machine's room apart from the play bar.
     private bool Apart(MemoryAllowance allowance) => ((allowance == MemoryAllowance.Authoring) && !m_authoringOnPlayBar);
     // Under m_gate: what play holds and has promised in a pool: everything but authoring's.
