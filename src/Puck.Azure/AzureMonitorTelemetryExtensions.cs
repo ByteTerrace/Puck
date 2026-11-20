@@ -26,10 +26,15 @@ public static class AzureMonitorTelemetryExtensions {
     /// host's thirty-second default shutdown timeout, which bounds the whole stop, and far inside the ten minutes Flex
     /// Consumption gives an instance to drain before a platform update.</summary>
     public static readonly TimeSpan ShutdownBudget = TimeSpan.FromSeconds(seconds: 20);
+    /// <summary>The most traces per second the exporter keeps, per process. Beyond it the exporter's rate-limited
+    /// sampler drops whole traces, so a burst of requests (or a probe storm) cannot flood the workspace, while logs
+    /// (every warning and error) are not sampled.</summary>
+    public const double TracesPerSecond = 1.0;
 
     /// <summary>Exports this builder's telemetry to Azure Monitor, every transmission bounded by
-    /// <see cref="NetworkTimeout"/>, and shuts the providers down within <see cref="ShutdownBudget"/> once the host's
-    /// services have stopped. Telemetry recorded after that, while the container is disposed, is not exported.</summary>
+    /// <see cref="NetworkTimeout"/>, traces rate-limited to <see cref="TracesPerSecond"/>, and shuts the providers down
+    /// within <see cref="ShutdownBudget"/> once the host's services have stopped. Telemetry recorded after that, while
+    /// the container is disposed, is not exported.</summary>
     /// <typeparam name="TBuilder">The builder's type, kept so the caller's chain continues on it.</typeparam>
     /// <param name="builder">The host's OpenTelemetry builder.</param>
     /// <param name="configure">Configures the exporter (credential, connection string, transport). It runs before the
@@ -44,6 +49,7 @@ public static class AzureMonitorTelemetryExtensions {
         builder.UseAzureMonitorExporter(configureAzureMonitor: options => {
             configure(obj: options);
             options.Retry.NetworkTimeout = NetworkTimeout;
+            options.TracesPerSecond = TracesPerSecond;
         });
         builder.Services.AddHostedService<TelemetryShutdown>();
 

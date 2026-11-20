@@ -1202,6 +1202,51 @@ removes the preview environment-agent settings from the stable API. The
 still describes the preview API and requires local authentication for its
 Application Insights destination; our direct exporter uses Entra authentication.
 
+The Log Analytics workspace is billed per ingested gigabyte, so what reaches it
+is chosen:
+
+- **Storage diagnostics send writes and deletes, not reads.** A storage
+  account's `audit` category group includes `StorageRead`, so the blob, queue,
+  table and file services in `public-flex-api` name `StorageWrite` and
+  `StorageDelete` instead. Every read by a poller (Front Door's origin probes,
+  the Functions host's lease and property checks, Orleans membership) would
+  otherwise be a row.
+- **Front Door probes at its longest interval** (`frontDoorProbeIntervalInSeconds`
+  in `main.bicep`). Each edge location probes each origin on that interval, so
+  the static site's blob origin takes about 100 `GetBlobProperties` requests a
+  minute at 127 seconds; the longest interval Front Door accepts is 255.
+- **Logs default to `Warning`** in the Functions host (`host.json`), the worker
+  and the silo (the `Logging:LogLevel` keys in the shared configuration store and
+  `appsettings.json`), with `Puck` at `Information`. The Azure SDK's
+  per-request information logs and ASP.NET Core's per-request hosting logs are
+  not kept.
+- **Traces are rate-limited** to `AzureMonitorTelemetryExtensions.TracesPerSecond`
+  per process; logs are not sampled, so every warning and error is kept. The silo
+  does not trace `/healthz` and drops the Orleans request-latency histogram.
+- **The workspace drops the Functions host's own runtime metrics at ingestion.**
+  The host exports OpenTelemetry metrics under its own SDK version
+  (`azurefunctions:...`): .NET runtime and process counters (`dotnet.*`,
+  `process.*`), Kestrel, ASP.NET Core and
+  `azure.functions.health_check.reports`. Nothing in the app or `host.json`
+  reaches them, and they were about 2.9 GB of the roughly 4.7 GB a month left
+  after the cuts above. A workspace transformation (a data collection rule of
+  kind `WorkspaceTransforms`, named by the workspace's default rule) removes
+  them from `AppMetrics` before they are billed, about 2.6 GB a month, which
+  leaves an expected 2 GB or so a month. The rule matches the host's SDK version
+  as well as the name, so our worker's and the silo's metrics, the host's
+  `faas.invoke_duration`, `http.server.*` and
+  `azure.functions.health_check.unhealthy_checks`, and every log table are
+  untouched. The prefixes are `hostRuntimeMetricNamePrefixes` in `main.bicep`.
+  The rule's destination is the workspace, so a fresh environment deploys in
+  three steps within one run: `logAnalyticsWorkspace` creates the workspace,
+  `logAnalyticsWorkspaceTransformRule` creates the rule, and
+  `logAnalyticsWorkspaceDefaultRule` deploys the workspace again (both from
+  `logAnalyticsWorkspace.bicep`) with the rule as its default. On an existing
+  environment, step 1 briefly leaves the default unset until step 3 sets it.
+- **`logAnalyticsWorkspace.dailyQuotaGb`** in `main.bicepparam` caps a day's ingestion as a
+  safety net. It is set far above the expected volume, because ingestion stops
+  until the daily reset once it is reached.
+
 ACR uses `AbacRepositoryPermissions`. CI publishes through Repository Contributor;
 Actors reads only `web-actors`, the marketplace only its image, and the silo only
 `world-silo`. Runtime identities receive no Catalog Lister. Existing broad grants

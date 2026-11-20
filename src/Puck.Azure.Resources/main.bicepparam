@@ -403,7 +403,11 @@ param resources = {
     name: '${prefix}aksp000'
   }
   logAnalyticsWorkspace: {
+    dailyQuotaGb: 1
     name: '${prefix}logp000'
+    workspaceTransformRule: {
+      name: '${prefix}dcrp000'
+    }
   }
   monitorPrivateLinkScope: {
     name: '${prefix}mplsp000'
