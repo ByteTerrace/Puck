@@ -126,6 +126,8 @@ public sealed partial class SdfFieldEvaluator {
         var cullBounds = m_cullBounds;
         var segmentSlots = m_segmentSlots;
         var localPosition = worldPosition;
+        var frames = m_rootFrames.Span;
+        var root = new PointFrame<FixedVector3, FixedQ4816>();
         var distanceScale = FixedQ4816.One;
         // The render reading's chain state beside the point: a fold's material stride (mapCore's parityMaterialDelta)
         // and a LaneErode's effect on the next shape (laneErodeSkipShape, laneErodeAmount), each cleared by ResetPoint.
@@ -190,6 +192,7 @@ public sealed partial class SdfFieldEvaluator {
                 }
             }
 
+            root.Capture(index: index, point: localPosition, scale: distanceScale);
             ref readonly var instruction = ref instructions[index];
 
             ++visited;
@@ -205,6 +208,8 @@ public sealed partial class SdfFieldEvaluator {
 
                         if ((influence is null) && (segment >= 0) && (SkippedChainsEnd(answer: resultDistance, segment: segment, worldPosition: worldPosition) is var skipped and >= 0)) {
                             index = (skipped - 1);
+                        } else if (!frames.IsEmpty) {
+                            root.Reset(frame: frames[index], index: ref index, point: ref localPosition, scale: ref distanceScale);
                         }
 
                         break;
@@ -319,6 +324,7 @@ public sealed partial class SdfFieldEvaluator {
                             p: localPosition,
                             powerWork: ref powerWork
                         ) * distanceScale) + erosion);
+                        if (instruction.ScopeScale > 0L) { candidateDistance = ScaleScope(candidate: candidateDistance, scale: instruction.ScopeScale); }
                         // A fold's stride recolours the shape below the screen sentinels, as mapCore applies it.
                         var candidateMaterial = (((materialDelta != 0) && (instruction.Material < SdfProgramBuilder.ScreenMaterialId))
                             ? (instruction.Material + materialDelta)

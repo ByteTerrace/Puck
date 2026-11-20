@@ -247,6 +247,9 @@ public static partial class CreationShapeLaws {
         var lowered = Lowering(program: unposed);
         var gain = (string.Equals(a: lowered, b: nameof(SdfShapeType.Plane), comparisonType: StringComparison.Ordinal) ? 1f : posed.InstanceDistanceGain(index: 0));
         var stepScale = posed.FieldScopeClamps.Aggregate(seed: posed.StepScale, func: static (smallest, clamp) => MathF.Min(x: smallest, y: clamp.StepScale));
+        for (var instruction = 0; instruction < posed.Instructions.Count; instruction++) {
+            stepScale = MathF.Min(x: stepScale, y: posed.ShapeStepScaleAt(instructionIndex: instruction));
+        }
         var distance = (((gain >= ExactGain) && (stepScale >= 1f))
             ? CreationShapeDistance.Exact
             : ((gain > 0f) ? CreationShapeDistance.Bound : CreationShapeDistance.Uncertified));

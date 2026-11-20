@@ -47,9 +47,10 @@ public sealed class SdfFieldRenderReadingLawTests {
     }
     private static void AssertAnswers(SdfProgram program, Func<Vector3, float> reference) {
         var field = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render);
+        var scale = program.ShapeStepScaleAt(instructionIndex: (program.InstructionCount - 1));
 
         foreach (var point in Points()) {
-            var expected = reference(arg: point);
+            var expected = (reference(arg: point) * scale);
             var actual = Read(field: field, point: point);
 
             Assert.True(condition: (MathF.Abs(x: (actual - expected)) <= Tolerance), userMessage: $"at {point}: the render reading answers {actual}, the kernel's formula {expected}");

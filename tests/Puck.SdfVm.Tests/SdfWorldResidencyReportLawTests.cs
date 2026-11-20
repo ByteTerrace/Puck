@@ -47,7 +47,7 @@ public sealed class SdfWorldResidencyReportLawTests {
         _ = builder.ResetPoint().Translate(offset: new Vector3(x: 3f, y: 0f, z: 0f)).TwistY(rate: 2f).Sphere(
             material: material,
             radius: 1f
-        );
+          ).Dilate(radius: 0.01f);
         builder.EndInstance();
 
         return builder.Build();

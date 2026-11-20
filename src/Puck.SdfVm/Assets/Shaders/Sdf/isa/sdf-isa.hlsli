@@ -138,7 +138,9 @@
 #define SDF_BOUND_RECORD_VECTORS         2u
 #define SDF_DIRECTORY_HEADER_VECTORS     1u
 #define SDF_SEGMENT_COUNT(v)             ((v).x)
-#define SDF_SEGMENT_STEP_SCALE(v)        ((v).y)
+#define SDF_SHAPE_STEP_SCALE(v)          ((v).z)
+#define SDF_RESET_FRAME_LENGTH(v)        ((v).y)
+#define SDF_RESET_FRAME_KEY(v)           ((v).z)
 #define SDF_SEGMENT_RIGID_PLAN_OFFSET(v) ((v).z)
 #define SDF_PART_LEAF_COUNT_MASK         0x0000FFFFu
 #define SDF_PART_DISTANCE_GAIN_SHIFT     16u

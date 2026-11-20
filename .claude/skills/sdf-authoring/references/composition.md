@@ -165,11 +165,11 @@ flattening independent groups.
 `panel`, `flare`, `shear`, `bumps`, `erode`, or `cells`. Squashing a sphere or
 ellipsoid never does: every ellipsoid is the 1-Lipschitz exponent-2
 superellipsoid gauge, whatever its scale, a bound that never oversteps. The scope clamps that shape's Lipschitz factor onto
-its own candidate at the pop. If that shape is already inside a group or
-creation scope, the enclosing pop owns the bound and its other members share
-the clamp. Only an unscoped chain contributes to the program-wide step scale.
-Shorter steps can affect convergence and the apparent hit threshold; the
-symptom alone does not establish the cause.
+its own candidate. A hard field can clamp each shape at the blend. When a
+smooth blend or relief reads the candidate's magnitude, its enclosing pop
+owns the bound and all of the scope's members share the clamp. An unscoped
+magnitude-reading field keeps a residual CPU query bound. Shorter steps can
+affect convergence and the apparent hit threshold.
 
 **2. A group takes one scope for all its members** when any member wants one.
 The creation emitter does not lower `panel`, `trims`, or `cells` as grouped
