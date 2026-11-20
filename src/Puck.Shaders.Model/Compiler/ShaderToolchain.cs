@@ -1,6 +1,6 @@
 using Puck.Abstractions;
-using System.Security.Cryptography;
 using System.Text;
+using Puck.Assets;
 
 namespace Puck.Shaders;
 
@@ -145,7 +145,7 @@ public sealed class ShaderToolchain {
         try {
             using var stream = new FileStream(access: FileAccess.Read, bufferSize: 81920, mode: FileMode.Open, options: FileOptions.SequentialScan, path: path, share: FileShare.Read | FileShare.Delete);
 
-            return Convert.ToHexStringLower(inArray: SHA256.HashData(source: stream));
+            return ContentPin.Compute(content: stream).Hex;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             throw new IOException(message: $"The shader toolchain file '{path}' cannot be read: {exception.Message}", innerException: exception);
         }

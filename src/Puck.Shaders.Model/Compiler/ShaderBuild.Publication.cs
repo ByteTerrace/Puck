@@ -1,6 +1,6 @@
+using Puck.Assets;
 using Puck.Confinement;
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text;
 using Puck.Abstractions;
 
@@ -23,7 +23,7 @@ public sealed partial class ShaderBuild {
     public static string SidecarOf(ShaderOutputPlan plan, ReadOnlySpan<byte> bytecode) {
         ArgumentNullException.ThrowIfNull(argument: plan);
 
-        return $"inputs:{plan.Inputs}\nkey:{plan.Key}\nbytecode:{Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytecode))}\n";
+        return $"inputs:{plan.Inputs}\nkey:{plan.Key}\nbytecode:{ContentPin.Compute(content: bytecode).Hex}\n";
     }
 
     // Takes the project's publication lock: within this process a lock, so concurrent compiles publish in turn, and
@@ -168,6 +168,6 @@ public sealed partial class ShaderBuild {
         ) ? (inputs, key, bytecode) : null);
     }
     private static bool IsHash(string value) =>
-        ((value.Length == 64) && value.All(predicate: static c => (c is (>= '0' and <= '9') or (>= 'a' and <= 'f'))));
-    private static string HashFile(string path) => Convert.ToHexStringLower(inArray: SHA256.HashData(source: AtomicFile.ReadAllBytes(path: path)));
+        ContentPin.TryParseHex(hex: value, pin: out _);
+    private static string HashFile(string path) => ContentPin.Compute(content: AtomicFile.ReadAllBytes(path: path)).Hex;
 }
