@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.SignedDistance;
+using Puck.SignedDistance.Queries;
 using Puck.Testing;
 using Xunit;
 
@@ -74,13 +75,10 @@ public sealed partial class SdfFieldDeviceLawTests {
             var worstPoint = 0;
             var materialMisses = 0;
             var instanceMisses = 0;
-            var stepScale = 1f;
 
             for (var point = 0; (point < Points.Length); point++) {
                 var result = results[((index * Points.Length) + point)];
-                var miss = MathF.Abs(x: ((result.X / result.W) - leg.Field.Distances[point]));
-
-                stepScale = result.W;
+                var miss = MathF.Abs(x: (result.X - leg.Field.Distances[point]));
                 if (!(miss <= worst)) {
                     worst = miss;
                     worstPoint = point;
@@ -100,9 +98,6 @@ public sealed partial class SdfFieldDeviceLawTests {
             } else if (!(worst <= Tolerance) || (materialMisses != 0) || (instanceMisses != 0)) {
                 failures.Add(item: $"{leg.Field.Name}: worst distance miss {worst} at {Points[worstPoint]} (reference {leg.Field.Distances[worstPoint]}), {materialMisses} material miss(es), {instanceMisses} answer(s) from another instance");
             }
-            if (leg.Warped && !(stepScale < 1f)) {
-                failures.Add(item: $"{leg.Field.Name}: the warped instance left the program's step scale at {stepScale}");
-            }
         }
 
         Assert.True(
@@ -121,27 +116,21 @@ public sealed partial class SdfFieldDeviceLawTests {
     private static List<SdfInstanceLeg> InstanceLegs() {
         var legs = new List<SdfInstanceLeg>();
 
-        foreach (var (name, instances, warped) in InstancePrograms()) {
+        foreach (var (name, instances) in InstancePrograms()) {
             var device = BuildInstances(instances: instances, posed: false, selected: null);
 
             for (var selected = 0; (selected < instances.Length); selected++) {
-                if (instances[selected].Refused) {
-                    continue;
-                }
-
-                var reference = Evaluator(program: BuildInstances(instances: instances, posed: true, selected: selected))
-                    ?? throw new InvalidOperationException(message: $"{name}: the evaluator refuses instance {selected} alone.");
+                var reference = new SdfFieldEvaluator(program: BuildInstances(instances: instances, posed: true, selected: selected), reading: SdfFieldReading.Render);
                 var (distances, materials) = Reference(evaluator: reference);
 
                 legs.Add(item: new SdfInstanceLeg(
                     Field: new SdfFieldLeg(Distances: distances, Materials: materials, Name: $"{name} instance {selected}", Words: device.Words.ToArray()),
                     Mask: (1U << selected),
-                    Selected: selected,
-                    Warped: warped
+                    Selected: selected
                 ));
             }
 
-            var first = legs[^instances.Count(predicate: static instance => !instance.Refused)];
+            var first = legs[^instances.Length];
 
             legs.Add(item: first with {
                 Field = first.Field with { Name = $"{name} every instance", Swapped = true },
@@ -153,34 +142,49 @@ public sealed partial class SdfFieldDeviceLawTests {
     }
     // The programs: each instance emits itself into a builder with a material, posed either by its dynamic slot (the
     // device's program) or by the translation and rotation that slot holds (the reference's).
-    private static IEnumerable<(string Name, SdfInstanceSpec[] Instances, bool Warped)> InstancePrograms() {
+    private static IEnumerable<(string Name, SdfInstanceSpec[] Instances)> InstancePrograms() {
         var plate = new Vector3(x: 0.35f, y: 0.3f, z: 0.25f);
 
         yield return ("rigid", [
             Static(center: new Vector3(x: -0.45f, y: 0f, z: 0f), radius: 0.6f, emit: (b, m) => b.Translate(offset: new Vector3(x: -0.45f, y: 0f, z: 0f)).Rotate(rotation: Slots[0].Orientation).Box(halfExtents: plate, material: m, round: 0.05f)),
             Static(center: new Vector3(x: 0.45f, y: 0.1f, z: 0f), radius: 0.45f, emit: (b, m) => b.Translate(offset: new Vector3(x: 0.45f, y: 0.1f, z: 0f)).Sphere(material: m, radius: 0.4f)),
             Static(center: new Vector3(x: 0f, y: 0.55f, z: 0.3f), radius: 0.6f, emit: (b, m) => b.Translate(offset: new Vector3(x: 0f, y: 0.55f, z: 0.3f)).Rotate(rotation: Slots[1].Orientation).Box(halfExtents: new Vector3(x: 0.5f, y: 0.1f, z: 0.2f), material: m, round: 0.02f)),
-        ], false);
+        ]);
         yield return ("static-parts", [
             Part(center: Vector3.Zero, radius: 0.6f, emit: (b, m) => b.Box(halfExtents: plate, material: m, round: 0.05f)),
             Part(center: Vector3.Zero, radius: 0.65f, emit: (b, m) => b.Sphere(material: m, radius: 0.6f)),
             Part(center: Vector3.Zero, radius: 0.6f, emit: (b, m) => b.Box(halfExtents: plate, material: m, round: 0.05f)),
-        ], false);
+        ]);
         yield return ("dynamic-parts", [
             Dynamic(slot: 0, radius: 0.6f, emit: (b, m) => b.Box(halfExtents: plate, material: m, round: 0.05f)),
             Dynamic(slot: 1, radius: 0.6f, emit: (b, m) => b.Box(halfExtents: plate, material: m, round: 0.05f)),
             Dynamic(slot: 2, radius: 0.5f, emit: (b, m) => b.Sphere(material: m, radius: 0.45f)),
-        ], false);
+        ]);
         yield return ("beside-a-warp", [
             Static(center: new Vector3(x: -0.45f, y: 0f, z: 0f), radius: 0.6f, emit: (b, m) => b.Translate(offset: new Vector3(x: -0.45f, y: 0f, z: 0f)).Box(halfExtents: plate, material: m, round: 0.05f)),
             Dynamic(slot: 1, radius: 0.6f, emit: (b, m) => b.Box(halfExtents: plate, material: m, round: 0.05f)),
             new SdfInstanceSpec(
                 Emit: (b, m, _) => b.BeginInstance(boundCenter: new Vector3(x: 0.3f, y: -0.6f, z: 0f), boundRadius: 0.7f).ResetPoint()
                     .Translate(offset: new Vector3(x: 0.3f, y: -0.6f, z: 0f)).DomainWarp(amplitude: 0.12f, frequency: new Vector3(value: 2.5f))
-                    .Box(halfExtents: plate, material: m, round: 0.05f).EndInstance(),
-                Refused: true
+                    .Box(halfExtents: plate, material: m, round: 0.05f).EndInstance()
             ),
-        ], true);
+        ]);
+        yield return ("shared-mirrored-root", [
+            new SdfInstanceSpec(Emit: (b, m, posed) => {
+                var pose = Slots[0];
+                _ = b.BeginInstance(boundCenter: pose.Position, boundRadius: 1.5f).PushField();
+                _ = MirrorRoot().Translate(offset: new Vector3(x: -0.5f, y: 0f, z: 0f)).Box(halfExtents: plate, material: m, round: 0f);
+                _ = MirrorRoot().Translate(offset: new Vector3(x: 0.5f, y: 0f, z: 0f)).Sphere(radius: 0.3f, material: m);
+                return b.PopField().EndInstance();
+
+                SdfProgramBuilder MirrorRoot() {
+                    _ = b.ResetPoint();
+                    _ = posed ? b.Translate(offset: pose.Position).Rotate(rotation: pose.Orientation) : b.TransformDynamic(slot: 0);
+                    return b.Scale(scale: new Vector3(value: 1.2f)).MirrorX();
+                }
+            }),
+            Static(center: Vector3.Zero, radius: 0.65f, emit: (b, m) => b.Sphere(material: m, radius: 0.6f)),
+        ]);
     }
     private static SdfInstanceSpec Static(Vector3 center, float radius, Func<SdfProgramBuilder, int, SdfProgramBuilder> emit) => new(
         Emit: (b, m, _) => emit(arg1: b.BeginInstance(boundCenter: center, boundRadius: radius).ResetPoint(), arg2: m).EndInstance()
@@ -213,9 +217,8 @@ public sealed partial class SdfFieldDeviceLawTests {
         return builder.Build();
     }
 
-    // One instance of a program: how it emits itself, and whether the evaluator refuses it alone.
-    private sealed record SdfInstanceSpec(Func<SdfProgramBuilder, int, bool, SdfProgramBuilder> Emit, bool Refused = false);
-    // One masked walk: the program and the reference of its selected instance alone, the mask, and whether the program
-    // carries a warp that lowers its step scale.
-    private sealed record SdfInstanceLeg(SdfFieldLeg Field, uint Mask, int Selected, bool Warped);
+    // One instance of a program and how it emits itself.
+    private sealed record SdfInstanceSpec(Func<SdfProgramBuilder, int, bool, SdfProgramBuilder> Emit);
+    // One masked walk: the program, its selected instance alone, and the mask.
+    private sealed record SdfInstanceLeg(SdfFieldLeg Field, uint Mask, int Selected);
 }

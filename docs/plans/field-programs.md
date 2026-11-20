@@ -242,134 +242,49 @@ edge-case counterexample checks.
 
 ### 2. Local Lipschitz clamps and scale-aware bake refinement
 
-Today two coarse clamps degrade both iteration speed and mesh quality:
+`SdfProgram.AnalyzeLipschitz` clamps each shape before it joins a hard field
+when no enclosing field reads its magnitude. Positive scaling preserves the
+signs that union, subtraction, intersection and XOR compose. Smooth blends,
+seams and field edits read magnitudes, so their candidates keep their original
+units. A completed field scope keeps its bound at `PopField`. An unscoped
+magnitude-reading field retains a residual certificate for CPU queries.
 
-- **The program-wide `SdfProgram.StepScale`** folds any unscoped warp, relief,
-  or chamfer into one multiplier applied at the exit of `mapCore`
-  (`sdf-map.hlsli`) and immediately divided back out in
-  `sdf-mesh-bake.comp.hlsl`. Because multiplying and dividing in float can
-  round by one unit in the last place, `SdfMeshBakeGroup.Seal`
-  (`src/Puck.SdfVm/SdfMeshBakeGroup.cs`) hashes `program.StepScale` into every
-  bake group's geometry key (`SdfMeshGeometryBuilder.AppendStepScale`). Editing
-  one unscoped relief or warp anywhere in the world therefore invalidates every
-  bake group's key and rebakes the world.
-- **The scope-wide `PopField` clamp (`Data1.Y`)** applies the worst bound in a
-  creation scope to every shape inside it (`0.159` across all 208 shapes of the
-  glacier; `0.387` across the north valley sector). That keeps marches safe,
-  but it makes `SdfSampledLattice.Refine` and `SdfMeshPathBake.Refine` admit
-  empty cells up to $L$ times too far away and makes
-  `SdfSampledLattice.CurvedSplit` underestimate curvature by $L$.
+The GPU bake samples the selected instances or world segments with their own
+clamps. `SdfMeshGeometryBuilder` keys the shape clamp with the shape and the
+scope clamp with its pop. The bake has no root-wide multiply and divide, so an
+edit can change a query's residual certificate and still reuse every group
+whose sampled field stands.
 
-A subtle mathematical boundary governs where a clamp can move: scaling an
-operand by $1/L \in (0, 1]$ before a hard boolean (`Union`, `Subtraction`,
-`Intersection`, `Xor`) preserves the zero set and surface material exactly and
-makes $\min_i(d_i / L_i)$ 1-Lipschitz everywhere, because each candidate is
-1-Lipschitz on its own. Scaling an operand before a smooth, chamfer, groove,
-pipe, or stairs blend—or before `Dilate`, `Onion`, `Displace`, `NoiseDisplace`,
-or `CellDisplace`—does **not** preserve the zero set: it widens the smooth
-fillet or scales the relief amplitude by $L$.
+**Next**. In a relieved scope, normalize `SdfSampledLattice.CurvedSplit` by the
+local first-difference slope. For coarse admission, bound base-field variation
+over the cell and charge at most the relief's full amplitude swing:
 
-The design therefore splits cleanly along that boundary:
+```text
+(L_0 * R + min(L_g * R, 2 * A)) / L_scope
+```
 
-- **Per-shape and per-segment clamps retire `SdfProgram.StepScale`.**
-  `SdfProgram.AnalyzeChainLipschitz` already computes every chain's factor
-  $L_{\text{chain}}$. Any chain whose composition into the accumulator is a
-  hard boolean and is not followed in its scope by a magnitude-reading op
-  clamps its own candidate directly by $1 / L_{\text{chain}}$ in both `mapCore`
-  and `SdfFieldEvaluator`. Any depth-0 (unscoped) run containing smooth blends
-  or field edits clamps at the end of that segment or local scope. Every
-  segment and scope then hands a 1-Lipschitz field to the root accumulator.
-  `mapCore` removes its final `stepScale` multiply, `sdf-mesh-bake.comp.hlsl`
-  removes its `1.0 / stepScale` unscale, and `SdfMeshBakeGroup.Seal` deletes
-  its call to `SdfMeshGeometryBuilder.AppendStepScale`. Editing a relief or warp
-  in one creation then leaves every unrelated group's `SdfMeshGeometry` hash
-  untouched.
-- **Scale-invariant curvature and sound local bounds for relieved scopes.**
-  Inside a creation scope that genuinely applies a trailing relief or smooth
-  blends across warped shapes (the glacier and the valley sectors), the scope
-  retains its `PopField` clamp so 1-Lipschitz contact marches and parent
-  compositions stay sound without distorting authored fillet radii or relief
-  heights. The bake stops letting that scope clamp distort refinement:
-  - `SdfSampledLattice.CurvedSplit` divides its second finite difference by the
-    cell's local first-difference slope (`SdfSampledLattice.Slope`), making
-    curvature estimation invariant to positive field scaling.
-  - Coarse cell admission (`SdfSampledLattice.Refine` and
-    `SdfMeshPathBake.Refine`) uses each cell's local bound instead of the
-    scope's worst bound. For a scope with base bound $L_0$ over the shapes
-    whose bounds overlap the cell, plus a bounded relief with slope $L_g$ and
-    amplitude ceiling $A$ (included only where the relief's masks are not
-    provably zero across the cell), any surface entering a cell of half-diagonal
-    $R$ satisfies:
-
-    ```text
-    |f_raw(corner)| <= L_0 * R + min(L_g * R, 2 * A)
-    ```
-
-    Dividing by the scope's factor $L_{\text{scope}}$ gives the exact threshold
-    on the clamped field: `(L_0 * R + min(L_g * R, 2 * A)) / L_scope`. For
-    coarse valley-wall cells where $L_g R > 2A$, the relief saturates at its
-    true amplitude swing $2A$ instead of multiplying the whole cell diagonal by
-    $L_g$, and inside masked-zero bowls or unwarped parts of the glacier, the
-    threshold drops to the local shapes' true bound.
-
-**Invariant, enforcement, and boundary.** *Invariant:* every candidate or
-segment entering the root accumulator is 1-Lipschitz without moving any
-authored zero set, smooth fillet, or relief amplitude; every coarse cell
-rejected by the bake provably contains no zero crossing. *Enforced by:*
-catalogue-driven Lipschitz rules checked by `SdfFieldDeviceLawTests` and
-zero-set / mesh-audit comparisons on clamped creations, plus contact
-certificate tests in `SdfFieldEvaluator`. *Where the guarantee stops:* the
-contact evaluator's `DeferredScopes` optimization may still defer a
-whole-program scope scale into `Capabilities.StepScale` to keep Q48.16
-precision, and `CurvedSplit` remains a finite-difference estimate at the coarse
-lattice spacing.
+Here `R` is the cell's half diagonal, `L_0` bounds the base field over the
+cell, and `L_g` and `A` bound a relief that can contribute there. Tightening
+the admitted cell set requires a proof that the contributing operands and
+masks cover the whole cell.
 
 ### 3. Root frame computed once per creation
 
-Every creation emitted through `CreationStampEmitter.StampPrefix`
-(`src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs`) repeats
-`ResetPoint`, optional `TransformDynamic`, `Translate`, `Rotate`, `Scale`, and
-optional reflection on every shape and relief chain. Even at rest (identity
-origin, rotation, and scale), `SdfProgramBuilder.Translate`, `Rotate`, and
-`Scale` emit all three identity instructions, so 209 chains of the glacier emit
-627 identity ops and 209 identical `TransformDynamic` loads.
+`SdfProgramBuilder` elides identity translation, either sign of the identity
+quaternion, and effective unit scale. `SdfProgram` uses the existing segment
+ranges to find runs inside one owner that reset and repeat exactly the same
+rigid, uniform-scale or mirror prefix. The first chain the evaluator actually
+visits saves the point and scale by running that prefix in its original order.
+The GPU saves the dynamic slot as well. Later resets in the run restore the
+saved frame and skip the prefix.
 
-Two changes remove that repetition for both CPU and GPU:
-
-- **Elide exact identity point ops in `SdfProgramBuilder`.** Skip emitting
-  `Translate` at `Vector3.Zero`, `Rotate` at identity `(0, 0, 0, ±1)`, and
-  `Scale` at `Vector3.One` (leaving `MirrorX`, whose X is `-1`, intact).
-  `SdfFieldEvaluator` already skips identity rotates and unit scales at runtime;
-  eliding them at build time removes fetch, decode, and storage from both
-  interpreters and from every packed program.
-- **Hoist the creation root frame with a depth-1 frame pair.** Add a balanced
-  frame-push and frame-pop pair through the new op catalogue, restricted by
-  validation to a rigid plus uniform-scale plus optional-mirror prefix inside
-  one instance (never a non-linear warp or lattice fold, and never nested past
-  depth 1). Pushing the frame stores the transformed point, distance scale, and
-  dynamic slot in five scalar registers (no local array). Inside the frame,
-  `ResetPoint` resets `localPosition`, `distanceScale`, and `currentSlot` to
-  that saved frame instead of world space (clearing erosion and material
-  delta), and popping restores world space. Segments holding the push or pop
-  mark `segmentEligible = false` in `SdfProgram.SkipSpheres` (the same rule
-  `PushField` and `PopField` already use), while `SdfProgram.PointState`,
-  `SkipSpheres`, `RigidPlan`, `Lipschitz`, `Cells`, `SdfFieldEvaluator`,
-  `SdfMeshGeometryBuilder`, and `SdfMeshAudit` seed each enclosed `ResetPoint`
-  from the pushed frame. `CreationStampEmitter` and `WorldCreationInstances`
-  then emit the stamp or root-slot prefix once per creation instead of once per
-  shape.
-
-**Invariant, enforcement, and boundary.** *Invariant:* every segment inside a
-pushed frame enters with the same deterministic creation frame regardless of
-which sibling segments were skipped, and every analysis pass computes the same
-world-space bounds, Lipschitz factors, and bake keys as the unhoisted stream.
-*Enforced by:* `SdfProgram.ValidatePackedContract` (balanced within one
-instance, depth at most 1, rigid/uniform-scale/mirror prefix only),
-`SdfProgram.RequireSegmentsStartAtTheWorldPoint` extended to the active frame
-depth, and `segmentEligible = false` on the push/pop segments. *Where the
-guarantee stops:* an articulated creation whose shapes ride different bone
-slots still emits each bone's `TransformDynamic` on its own chain outside the
-shared root frame (or per shared-slot run).
+The packed reset metadata comes from `SdfProgram.FindRootFrames`, after the
+ordinary tape passes admission. A skipped chain leaves no obligation for the
+next chain because every reset still has its own prefix. The original tape
+continues to supply geometry hashes, bounds, rigid and part plans, and
+excerpts, which can begin at any reset and derive their own reuse.
+The GPU shares the most recently used dynamic root across generic, rigid and
+part execution within the same sample.
 
 ### 4. Bake kernel register pressure and spill removal
 
@@ -469,33 +384,7 @@ directly on the generated catalogue without adding hand-synced opcode arms.
    shape-formula leg passes on Direct3D 12 and Vulkan within its documented
    distance tolerance and with matching discrete outcomes away from ties.
 
-4. **Drop identity point ops and hoist each creation's root frame.**
-   Elide identity `Translate`, `Rotate`, and `Scale` in `SdfProgramBuilder`,
-   add the depth-1 frame push and pop ops through the catalogue (proving the
-   catalogue enforces every reader, walker, and bake key in one edit), and emit
-   each creation's stamp or root-slot prefix once in `CreationStampEmitter` and
-   `WorldCreationInstances`.
-   *Check:* `puck creation stats` reports the glacier at roughly 1,033 or fewer
-   instructions per evaluation (down from 1,866) with one `TransformDynamic`
-   instead of 209; `puck mesh audit --cpu` on the glacier and north valley
-   sector passes cleanly with CPU bake time cut substantially;
-   `SdfFieldDeviceLawTests` and `puck test --reproduce` hold for static,
-   mirrored, scaled, and dynamic creations.
-
-5. **Replace `SdfProgram.StepScale` with per-shape and per-segment Lipschitz clamps.**
-   Apply per-chain clamps directly at `ShapeBlend` for hard-composed chains
-   with no downstream magnitude-reading op, and clamp unscoped depth-0 smooth
-   or field-edited runs at their segment or local scope boundary. Remove
-   `stepScale` multiplication from `mapCore`, `unscale` from
-   `sdf-mesh-bake.comp.hlsl`, and `SdfMeshGeometryBuilder.AppendStepScale` from
-   `SdfMeshBakeGroup.Seal`.
-   *Check:* editing a relief or warp in one creation leaves every other bake
-   group's `SdfMeshGeometry` hash unchanged (zero unrelated rebakes);
-   `SdfFieldDeviceLawTests` passes on both backends without a global step-scale
-   ratio; contact `SdfFieldEvaluator.Capabilities.StepScale` stays certified on
-   every contact law test.
-
-6. **Make bake curvature scale-invariant and tighten cell admission with local bounds.**
+4. **Make bake curvature scale-invariant and tighten cell admission with local bounds.**
    Normalize `SdfSampledLattice.CurvedSplit` by `SdfSampledLattice.Slope`, and
    compute each coarse cell's sound local admission threshold
    `(L_0 * R + min(L_g * R, 2 * A)) / L_scope` in `SdfSampledLattice.Refine`
@@ -516,8 +405,9 @@ directly on the generated catalogue without adding hand-synced opcode arms.
 - **Per-group GPU-time reporting and per-tap instruction counts** (named in
   [the kernel measurement](field-programs/research-measure.md#what-remains-to-measure))
   belong to the rendering lane that runs the next quiet-window bake capture:
-  they show whether any long, unculled creation remains GPU-heavy after steps 1,
-  4, and 6, which decides whether per-brick pruning is ever worth building.
+  they show whether any long, unculled creation remains GPU-heavy after the
+  register, root-frame and refinement work, which decides whether per-brick
+  pruning is worth building.
 - **Dirty-brick incremental re-baking during live sculpting** belongs to
   [the editor plan](editor.md) once live sculpting edits arrive; it decides
   whether whole-group rebakes stay within the interactive edit loop.

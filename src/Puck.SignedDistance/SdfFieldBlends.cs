@@ -25,6 +25,7 @@ public static partial class SdfFieldBlends {
         public abstract bool IsSubtraction { get; }
         public abstract SdfFieldResource Resources { get; }
         public abstract bool ScopeOnly { get; }
+        public abstract bool Hard { get; }
     }
 
     /// <summary>Returns the external field inputs this entry needs.</summary>
@@ -32,6 +33,7 @@ public static partial class SdfFieldBlends {
 
     [SdfFieldEntry(0)]
     private sealed class Union : Entry {
+        public override bool Hard => true;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.Union;
@@ -53,6 +55,7 @@ public static partial class SdfFieldBlends {
     // blend radius = instruction Data1.x
     [SdfFieldEntry(1)]
     private sealed class SmoothUnion : Entry {
+        public override bool Hard => false;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.SmoothUnion;
@@ -78,6 +81,7 @@ public static partial class SdfFieldBlends {
     /// gradient in open air. Extend a carve past every point a body can reach, or build the void from union geometry.</para></summary>
     [SdfFieldEntry(2)]
     private sealed class Subtraction : Entry {
+        public override bool Hard => true;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.Subtraction;
@@ -100,6 +104,7 @@ public static partial class SdfFieldBlends {
     /// rule on <see cref="SdfBlendOp"/>.</summary>
     [SdfFieldEntry(3)]
     private sealed class Intersection : Entry {
+        public override bool Hard => true;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.Intersection;
@@ -121,6 +126,7 @@ public static partial class SdfFieldBlends {
     /// <summary>Symmetric difference: solid where exactly one of the fields is solid (hollow where they overlap).</summary>
     [SdfFieldEntry(4)]
     private sealed class Xor : Entry {
+        public override bool Hard => true;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.Xor;
@@ -143,6 +149,7 @@ public static partial class SdfFieldBlends {
     /// <see cref="SdfBlendOp"/>.</summary>
     [SdfFieldEntry(5)]
     private sealed class SmoothIntersection : Entry {
+        public override bool Hard => false;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.SmoothIntersection;
@@ -164,6 +171,7 @@ public static partial class SdfFieldBlends {
     /// <summary>Subtraction with a smooth (filleted) carve seam (blend radius = instruction Data1.x).</summary>
     [SdfFieldEntry(6)]
     private sealed class SmoothSubtraction : Entry {
+        public override bool Hard => false;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.SmoothSubtraction;
@@ -192,6 +200,7 @@ public static partial class SdfFieldBlends {
     /// retain their own bounds.</para></summary>
     [SdfFieldEntry(7)]
     private sealed class ChamferUnion : Entry {
+        public override bool Hard => false;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.ChamferUnion;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Chamfer;
         public override SdfFormula Formula => SdfFieldFormulas.ChamferUnion;
@@ -214,6 +223,7 @@ public static partial class SdfFieldBlends {
     /// the same Lipschitz recurrence as <see cref="ChamferUnion"/>.</summary>
     [SdfFieldEntry(8)]
     private sealed class ChamferIntersection : Entry {
+        public override bool Hard => false;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Chamfer;
         public override SdfFormula Formula => SdfFieldFormulas.ChamferIntersection;
@@ -236,6 +246,7 @@ public static partial class SdfFieldBlends {
     /// through the same Lipschitz recurrence as <see cref="ChamferUnion"/>.</summary>
     [SdfFieldEntry(9)]
     private sealed class ChamferSubtraction : Entry {
+        public override bool Hard => false;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Chamfer;
         public override SdfFormula Formula => SdfFieldFormulas.ChamferSubtraction;
@@ -258,6 +269,7 @@ public static partial class SdfFieldBlends {
     /// The tube is measured in field coordinates; its spatial width depends on the surfaces' angle.</summary>
     [SdfFieldEntry(10)]
     private sealed class GrooveUnion : Entry {
+        public override bool Hard => false;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.RoundSeam;
         public override SdfFormula Formula => SdfFieldFormulas.GrooveUnion;
@@ -280,6 +292,7 @@ public static partial class SdfFieldBlends {
     /// Both round seam blends compose derivative bounds as sqrt(La²+Lb²).</summary>
     [SdfFieldEntry(11)]
     private sealed class PipeUnion : Entry {
+        public override bool Hard => false;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Pipe;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.RoundSeam;
         public override SdfFormula Formula => SdfFieldFormulas.PipeUnion;
@@ -303,6 +316,7 @@ public static partial class SdfFieldBlends {
     /// Strictly 1-Lipschitz. PopField compose only.</summary>
     [SdfFieldEntry(12)]
     private sealed class Morph : Entry {
+        public override bool Hard => false;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.None;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.Union;
@@ -325,6 +339,7 @@ public static partial class SdfFieldBlends {
     /// Composes derivative bounds as sqrt(La²+Lb²).</summary>
     [SdfFieldEntry(13)]
     private sealed class GrooveSubtraction : Entry {
+        public override bool Hard => false;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.RoundSeam;
         public override SdfFormula Formula => SdfFieldFormulas.GrooveSubtraction;
@@ -347,6 +362,7 @@ public static partial class SdfFieldBlends {
     /// Composes derivative bounds as sqrt(La²+Lb²).</summary>
     [SdfFieldEntry(14)]
     private sealed class PipeSubtraction : Entry {
+        public override bool Hard => false;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Pipe;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.RoundSeam;
         public override SdfFormula Formula => SdfFieldFormulas.PipeSubtraction;
@@ -369,6 +385,7 @@ public static partial class SdfFieldBlends {
     /// Strictly 1-Lipschitz. PopField compose only.</summary>
     [SdfFieldEntry(15)]
     private sealed class StairsUnion : Entry {
+        public override bool Hard => false;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.Union;
@@ -391,6 +408,7 @@ public static partial class SdfFieldBlends {
     /// Strictly 1-Lipschitz. PopField compose only.</summary>
     [SdfFieldEntry(16)]
     private sealed class StairsSubtraction : Entry {
+        public override bool Hard => false;
         public override SdfBlendHaloAction Halo => SdfBlendHaloAction.Radius;
         public override SdfBlendLipschitzAction Lipschitz => SdfBlendLipschitzAction.Maximum;
         public override SdfFormula Formula => SdfFieldFormulas.Subtraction;

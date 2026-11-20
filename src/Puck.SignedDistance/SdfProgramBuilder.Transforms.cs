@@ -697,16 +697,7 @@ public sealed partial class SdfProgramBuilder {
         // Normalized HOST-SIDE (defensive: JSON-authored quaternions arrive here raw) — the shader's inverse-rotate
         // assumes a unit quaternion, and a drifted one would shear space rather than rotate it.
         var unit = Quaternion.Normalize(value: rotation);
-
-        return Transform(
-            data0: new Vector4(
-                w: unit.W,
-                x: unit.X,
-                y: unit.Y,
-                z: unit.Z
-            ),
-            op: SdfOp.Rotate
-        );
+        return RotateUnit(rotation: unit);
     }
     /// <summary>Rotates subsequent point evaluation by a quaternion normalized in the deterministic fixed-point
     /// domain.</summary>
@@ -715,19 +706,20 @@ public sealed partial class SdfProgramBuilder {
     /// <remarks>This overload is the simulation-safe encoding boundary. It performs every derived operation,
     /// including normalization, before converting the four finished components to the program's single-precision
     /// storage format. The conversion itself is exactly rounded and does not feed a platform math routine.</remarks>
-    public SdfProgramBuilder Rotate(FixedQuaternion rotation) {
-        var unit = rotation.Normalize().ToQuaternion();
+    public SdfProgramBuilder Rotate(FixedQuaternion rotation) => RotateUnit(rotation: rotation.Normalize().ToQuaternion());
 
-        return Transform(
+    private SdfProgramBuilder RotateUnit(Quaternion rotation) =>
+        (rotation.X == 0f && rotation.Y == 0f && rotation.Z == 0f && MathF.Abs(x: rotation.W) == 1f)
+        ? this
+        : Transform(
             data0: new Vector4(
-                w: unit.W,
-                x: unit.X,
-                y: unit.Y,
-                z: unit.Z
+                w: rotation.W,
+                x: rotation.X,
+                y: rotation.Y,
+                z: rotation.Z
             ),
             op: SdfOp.Rotate
         );
-    }
     /// <summary>Mirrors subsequent point evaluation across the chain's local plane x = 0. The mirror is an isometry, so
     /// the field stays exact and its distance is not rescaled: it is a <see cref="SdfOp.Scale"/> whose X component
     /// carries the sign and whose distance correction is one. <see cref="Scale"/> takes magnitudes, so this is the
@@ -762,6 +754,8 @@ public sealed partial class SdfProgramBuilder {
         // distance, never overstep. the floor is
         // SdfSolidGeometry.MinimumScale, the one the authoring reach charges, so the shader reads no floor of its own.
         var clamped = SdfSolidGeometry.EffectiveScale(scale: scale);
+
+        if (clamped == Vector3.One) { return this; }
 
         return Transform(
             data0: new Vector4(
@@ -858,7 +852,7 @@ public sealed partial class SdfProgramBuilder {
             subject: "A translation"
         );
 
-        return Transform(
+        return (offset == Vector3.Zero) ? this : Transform(
             data0: new Vector4(
                 value: offset,
                 w: 0f

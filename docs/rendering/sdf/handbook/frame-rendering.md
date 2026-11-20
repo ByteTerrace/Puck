@@ -1117,11 +1117,10 @@ each and no edge of the mesh is shared by more than two quads. A face whose
 diagonal corners agree is cut to separate its inside corners whichever cell
 reads it, so the two cells that share a face agree and the mesh has no crack. The
 walk a group samples through answers that group's instances alone, compiled
-parts and rigid plans included, and each sample is the group's own field: the
-kernel divides out the program-wide step scale another instance's warps lower
-(`SdfFieldDeviceLawTests.Instances` holds both to the CPU evaluator over the
-instance alone, on Vulkan and Direct3D 12). A shape under a non-uniform `Scale`
-still samples a lower bound of its distance.
+parts and rigid plans included. The bake reads each group's shape and scope
+clamps directly. `SdfFieldDeviceLawTests.Instances` compares those samples to
+the CPU evaluator over an instance alone on Vulkan and Direct3D 12. A shape
+under a non-uniform `Scale` still samples a lower bound of its distance.
 
 Static shapes also declare feature spacing through `SdfInstanceRange.Detail`:
 an eighth of the smaller sweep radius, a quarter of shell thickness or rounded

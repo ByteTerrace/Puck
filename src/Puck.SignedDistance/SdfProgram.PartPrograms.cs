@@ -134,7 +134,8 @@ public sealed partial class SdfProgram {
             }
             if (
                 (cursor >= end) ||
-                (m_instructions[cursor].Op != SdfOp.ShapeBlend)
+                (m_instructions[cursor].Op != SdfOp.ShapeBlend) ||
+                (ShapeStepScaleAt(instructionIndex: cursor) != 1f)
             ) {
                 return false;
             }
