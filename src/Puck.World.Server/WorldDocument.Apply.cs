@@ -448,6 +448,7 @@ public sealed partial class WorldDocument {
         WorldDefinition? next = null;
         string contentHash;
         IReadOnlyList<string> conflicts = [];
+        byte[]? journalPatch = null;
         var prepared = ((reload is not null) && ReferenceEquals(objA: reload.Revision, objB: m_revision.Definition) && ReferenceEquals(objA: reload.Live, objB: priorDefinition))
             ? reload
             : null;
@@ -459,6 +460,7 @@ public sealed partial class WorldDocument {
             candidate = prepared.Candidate;
             next = prepared.Next;
             conflicts = prepared.Conflicts;
+            journalPatch = prepared.JournalPatch;
             contentHash = (request.ContentHash ?? throw new InvalidOperationException(message: $"{verb}: a reload request carrying a delta must also carry its content hash."));
         } else if ((request.Kind == WorldRebuildKind.Reload) && (request.Delta is { } delta)) {
             if (!delta.TryReconstruct(m_revision.Definition, out next, out var reconstructReason)) {
@@ -515,6 +517,7 @@ public sealed partial class WorldDocument {
                     return false;
                 }
                 candidate = merged;
+                journalPatch = change.AcceptedPatch(priorDefinition, candidate);
             } catch (InvalidDataException exception) {
                 RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: exception.Message, verb: verb);
                 return false;
@@ -554,9 +557,7 @@ public sealed partial class WorldDocument {
         }
 
         // The live-authoring guard: world.load without `force` refuses outright while the journal is dirty, rather
-        // than silently discarding unsaved work. Orthogonal to world.reset (reset IS the discard, by name, every
-        // time) and to world.reload (the artist external-edit loop is expected to discard the in-session journal on
-        // every reload — its whole point is re-reading the file the artist just edited).
+        // than silently discarding unsaved work. Reset discards that work explicitly, and reload adds to it.
         if (
             (request.Kind == WorldRebuildKind.Load) &&
             !request.Force &&
@@ -605,6 +606,7 @@ public sealed partial class WorldDocument {
                     contentHash: contentHash,
                     correlationId: correlationId,
                     kind: kind,
+                    journalPatch: journalPatch,
                     next: next!,
                     prepared: prepared,
                     principal: principal,
@@ -963,8 +965,10 @@ public sealed partial class WorldDocument {
         // A new base starts a fresh deal lifecycle, even when its source rows equal the previous session's.
         // Keeping a completed memo would skip materialization after reset or a live replay drive. A reload merges over
         // the live document, whose dealt placements it keeps, so its deals stand.
-        if (request.Kind != WorldRebuildKind.Reload) { Host.ResetPlacementDeals(); }
-        m_journal.Clear();
+        if (request.Kind != WorldRebuildKind.Reload) {
+            Host.ResetPlacementDeals();
+            m_journal.Clear();
+        }
 
         // Snapshot, for every CURRENTLY CONNECTED (admitted, not parked) peer, exactly
         // which of its ORIGINAL admission-minted rows it still actually holds — BEFORE the reset below discards the
@@ -999,28 +1003,24 @@ public sealed partial class WorldDocument {
             Host.Machines.Finish(plan: rebuildMachinePlan!);
         }
 
-        // Reset targets the base WITHOUT moving it (the whole point: repeated resets always land on the same base
-        // until the next save/load). Load/Reload REPLACE the base — the newly installed document becomes what the
-        // NEXT reset targets, exactly like a swap always has.
-        WorldBaseOrigin origin;
+        // Load moves the undo base. Reload moves the independent source revision and appends to the undo history.
+        string history;
 
         if (request.Kind == WorldRebuildKind.Reset) {
-            origin = m_baseOrigin;
-        } else {
+            history = $"base is {m_baseOrigin}, journal cleared";
+        } else if (request.Kind == WorldRebuildKind.Load) {
             m_base = candidate;
-            m_revision = new WorldSourceRevision(ContentHash: contentHash, Definition: (next ?? candidate));
-            origin = new WorldBaseOrigin(
-                Kind: ((request.Kind == WorldRebuildKind.Load)
-                    ? WorldBaseOriginKind.Load
-                    : WorldBaseOriginKind.Reload),
-                Source: request.Origin
-            );
-            m_baseOrigin = origin;
+            m_revision = new WorldSourceRevision(ContentHash: contentHash, Definition: next);
+            m_baseOrigin = new WorldBaseOrigin(Kind: WorldBaseOriginKind.Load, Source: request.Origin);
+            history = $"base is {m_baseOrigin}, journal cleared";
             // Installed as of this point: a later live commit resolves against the candidate's own directory too.
+            Host.PipelineSources = rebuildPipelineSources;
+        } else {
+            history = AcceptReload(request, next, contentHash, journalPatch, WorldPrivateDrawKeys.Positions(m_definition));
             Host.PipelineSources = rebuildPipelineSources;
         }
 
-        var message = $"{verb} applied — base is {origin}, journal cleared{stateKept}{changedMembers}{DescribeConflicts(conflicts: conflicts)}";
+        var message = $"{verb} applied — {history}{stateKept}{changedMembers}{DescribeConflicts(conflicts: conflicts)}";
 
         if ((request.Delta is { } appliedDelta) &&
             WorldSubmissionCodec.TryEncodeRebuild(request with { Definition = null }, out var payload, out _)) {
@@ -1396,6 +1396,7 @@ public sealed partial class WorldDocument {
         } else {
             Host.AdoptPreparedArena(arena: arena, continuity: WorldArenaContinuity.Edit, definition: definition);
         }
+        Host.ContinueValueDisclosure(previous, m_definition);
         m_pendingStateDelivery = true;
 
         ReconcileStateConsumers(

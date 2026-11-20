@@ -41,6 +41,13 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
     private WorldDefinition? m_shaped;
     private readonly Dictionary<int, WorldObservedRow> m_observations = [];
 
+    /// <summary>Keeps the existing shape for a value delivery whose following snapshot carries the changed cells.</summary>
+    public void KeepValueShape(WorldDefinition previous, WorldDefinition next) {
+        if (ReferenceEquals(m_shaped, previous) && ReferenceEquals(previous.StateCatalog, next.StateCatalog)) {
+            m_shaped = next;
+        }
+    }
+
     /// <summary>The last delivered observable row metadata, including a hidden count or anonymous backs.</summary>
     public WorldObservedRow? Observation(int ordinal) => m_observations.GetValueOrDefault(ordinal);
 

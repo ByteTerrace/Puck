@@ -672,6 +672,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         byte[]? Fetch(ContentPin pin) => upstream.FetchPrototype(pin: pin, traveler: ((m_submissionCredential is { } credential)
             ? new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility) : null));
         var hold = new WorldProjectionHold(fetch: Fetch);
+        WorldDefinition? replica = null;
+        WorldDocumentVersion replicaVersion = default;
         // The session's one door: every record it reads, a route included, passes this ingress on its stamp before
         // anything the record carries is decoded into the hold or published by this authority, and a record out of
         // order (another stream, an earlier generation, an ordinal not ahead) ends the session, which closes the
@@ -739,6 +741,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         // projection, which nothing of the ended span can complete.
                         hold = new WorldProjectionHold(fetch: Fetch);
                         bodies = new WorldSnapshotReceiver();
+                        replica = null;
+                        replicaVersion = default;
                         sink.DeliverCut(stream: cut, terminal: terminal);
                         if (terminal) {
                             return false;
@@ -783,11 +787,24 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                             location: ref m_definition,
                             value: definition
                         );
+                        replica = definitionTier == WorldDisclosureTier.Replica ? definition : null;
+                        replicaVersion = definitionVersion;
                         sink.DeliverDefinition(
                             definition: definition,
                             stream: definitionStream,
                             version: definitionVersion
                         );
+                        break;
+                    }
+                case WorldFederationResponse.PresentationRows: {
+                        if (replica is null ||
+                            !Admits(frame.Body.Span, out var rowStream, out var rowBody, out _) ||
+                            !WorldFederationCodec.TryDecodePresentationRows(rowBody, replica, out var rows, out var changed, out var rowVersion) ||
+                            rowVersion.Activation != replicaVersion.Activation || rowVersion.Sequence <= replicaVersion.Sequence) { return false; }
+                        replica = changed!;
+                        replicaVersion = rowVersion;
+                        Volatile.Write(ref m_definition, replica);
+                        sink.DeliverPresentation(replica, rows!, rowVersion, rowStream);
                         break;
                     }
                 case WorldFederationResponse.ProjectionDelta: {

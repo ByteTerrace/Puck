@@ -215,7 +215,7 @@ public sealed partial class WorldHistory {
 
     // What a keyframe's in-place restore relies on: no structural edit (a journaled mutation, a rebuild, an undo, a
     // compaction, or a solid rebuild) landed between it and the live document.
-    internal readonly record struct WorldHistoryFingerprint(WorldDefinition? Base, int JournalCount, WorldMutation? LastMutation, ulong LastJournalTick, int SolidRevision) {
+    internal readonly record struct WorldHistoryFingerprint(WorldDefinition? Base, WorldDefinition? Source, int JournalCount, object? LastEdit, ulong LastJournalTick, int SolidRevision) {
         public static WorldHistoryFingerprint Of(WorldServer server) {
             var journal = server.Document.Journal;
             var last = ((journal.Count > 0)
@@ -224,16 +224,18 @@ public sealed partial class WorldHistory {
 
             return new WorldHistoryFingerprint(
                 Base: server.Document.Base,
+                Source: server.Document.Revision.Definition,
                 JournalCount: journal.Count,
-                LastMutation: last.Mutation,
+                LastEdit: last.Identity,
                 LastJournalTick: last.Tick,
                 SolidRevision: server.Document.SolidRevision
             );
         }
         public bool Matches(WorldHistoryFingerprint other) => (
             ReferenceEquals(objA: Base, objB: other.Base) &&
+            ReferenceEquals(objA: Source, objB: other.Source) &&
             (JournalCount == other.JournalCount) &&
-            ReferenceEquals(objA: LastMutation, objB: other.LastMutation) &&
+            ReferenceEquals(objA: LastEdit, objB: other.LastEdit) &&
             (LastJournalTick == other.LastJournalTick) &&
             (SolidRevision == other.SolidRevision)
         );

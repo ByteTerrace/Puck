@@ -28,6 +28,8 @@ public enum WorldProjectionDeliveryKind : byte {
 /// <param name="TimelineOnly">Whether the delivery is a delta of the timeline alone: anchors, which a recipient takes
 /// into the definition it holds without hydrating anything else.</param>
 public readonly record struct WorldProjectionDelivery(WorldProjectionDeliveryKind Kind, WorldProjectionDocument? Projection, byte[] Payload, bool ValuesOnly, bool TimelineOnly = false) {
+    /// <summary>Hydrated replacements for an in-process recipient that already holds the projection.</summary>
+    public WorldPresentationRows? Appearance { get; init; }
     /// <summary>Gets the delivery that owes nothing.</summary>
     public static WorldProjectionDelivery Nothing => new(
         Kind: WorldProjectionDeliveryKind.None,
@@ -56,6 +58,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     private WorldProjectionDocument? m_held;
     private JsonObject? m_tree;
     private ContentPin? m_recipientIdentity;
+    private ContentPin? m_recipientFrame;
 
     /// <summary>Compares a traveller's current projection with its last delivery, retaining its clock anchors and
     /// sequence for the comparison. A hidden install cannot change this identity.</summary>
@@ -74,6 +77,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
             return Step(view, cursor, time.Tick, time.EngineTick);
         }
         m_recipientIdentity = identity;
+        m_recipientFrame = view.Images.FrameIdentity(view);
         var projection = view.Project(m_anchors, m_held?.Provenance.Revision ?? 0)!;
         var payload = WorldProjection.SerializeCompact(projection);
         var tree = WorldProjectionDelta.Tree(payload);
@@ -113,6 +117,70 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
         var valuesOnly = WorldProjectionDelta.IsValuesOnly(delta, previousObservations, nextObservations);
         m_held = projection; m_tree = tree;
         return Partial(projection, delta, valuesOnly);
+    }
+
+    /// <summary>Advances a primed projection from changed presentation rows, falling back to a disclosure composition
+    /// when state or policy also moved.</summary>
+    public WorldProjectionDelivery ComposeAppearance(WorldRecipientView view, WorldDeliveryCursor cursor, WorldPresentationRows rows) {
+        if (!view.Observes) { return WorldProjectionDelivery.Nothing; }
+        if (rows.ChangesProjectionDependencies || m_held is not { } held || m_tree is not { } tree ||
+            !view.Images.TryAdvanceAppearance(view, m_recipientFrame, m_recipientIdentity, out var frame, out var identity)) {
+            return Compose(view, cursor);
+        }
+        if (frame == m_recipientFrame) { return WorldProjectionDelivery.Nothing; }
+
+        var changedReferences = new JsonArray();
+        var references = held.Creations.ToArray();
+        var replacements = new List<WorldPresentationCreation>();
+        var store = content ?? WorldProjectionContent.Shared;
+        foreach (var (ordinal, row) in rows.Creations) {
+            var flat = WorldProjection.FlattenPrototype(view.Source, view.Arena, view.Recipient, view.Unrestricted, row);
+            var reference = WorldProjectionContent.Put(flat, store);
+            if (references[ordinal] == reference) { continue; }
+            references[ordinal] = reference;
+            replacements.Add(new(ordinal, flat));
+            changedReferences.Add(JsonSerializer.SerializeToNode(reference, WorldJsonContext.Default.For<WorldPrototypeReference>()));
+        }
+
+        var delta = new JsonObject();
+        if (changedReferences.Count != 0) { delta["prototypes"] = changedReferences; }
+        if (rows.Shades.Length != 0 || rows.HasShades != (held.Shades is not null)) {
+            if (!rows.HasShades) {
+                delta["shades"] = null;
+            } else {
+                var shades = new JsonObject();
+                foreach (var (name, shade) in rows.Shades) {
+                    shades[name] = shade is null ? null : JsonSerializer.SerializeToNode(shade, WorldJsonContext.Default.For<Puck.SignedDistance.SdfShadeDefinition>());
+                }
+                delta["shades"] = shades;
+            }
+        }
+        m_recipientFrame = frame;
+        m_recipientIdentity = identity;
+        if (delta.Count == 0) { return WorldProjectionDelivery.Nothing; }
+
+        cursor.Delivered();
+        var provenance = held.Provenance with { Revision = checked((int)cursor.Sequence) };
+        delta["provenance"] = JsonSerializer.SerializeToNode(provenance, WorldJsonContext.Default.For<WorldProjectionProvenance>());
+        tree["provenance"] = delta["provenance"]!.DeepClone();
+        var heldReferences = (JsonArray)tree["prototypes"]!;
+        for (var index = 0; index < replacements.Count; index++) {
+            heldReferences[replacements[index].Ordinal] = changedReferences[index]!.DeepClone();
+        }
+        if (!rows.HasShades) {
+            tree.Remove("shades");
+        } else if (delta["shades"] is JsonObject changedShades) {
+            var heldShades = tree["shades"] as JsonObject;
+            if (heldShades is null) { tree["shades"] = heldShades = new JsonObject(); }
+            foreach (var (name, shade) in changedShades) {
+                if (shade is null) { heldShades.Remove(name); } else { heldShades[name] = shade.DeepClone(); }
+            }
+        }
+
+        m_held = held with { Creations = references, Provenance = provenance, Shades = view.Source.ShadesRaw };
+        return Partial(m_held, delta, valuesOnly: false) with {
+            Appearance = new([.. replacements], rows.Shades, HasCreations: true, rows.HasShades)
+        };
     }
 
     /// <summary>Delivers anchor corrections at this stream's sequence.</summary>
@@ -270,6 +338,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
         m_held = null;
         m_tree = null;
         m_recipientIdentity = null;
+        m_recipientFrame = null;
     }
 
     private WorldProjectionDelivery Partial(WorldProjectionDocument projection, JsonObject delta, bool valuesOnly) {
@@ -470,10 +539,7 @@ public static class WorldProjectionDelta {
     /// <param name="utf8Json">The projection's bytes.</param>
     /// <returns>The tree.</returns>
     /// <exception cref="JsonException">The bytes are not a JSON object.</exception>
-    public static JsonObject Tree(ReadOnlySpan<byte> utf8Json) => ((JsonNode.Parse(
-        documentOptions: new JsonDocumentOptions { AllowDuplicateProperties = false },
-        utf8Json: utf8Json
-    ) as JsonObject) ?? throw new JsonException(message: "a projection is a JSON object."));
+    public static JsonObject Tree(ReadOnlySpan<byte> utf8Json) => CanonicalJsonDocument.ParseObject(utf8Json);
     /// <summary>Returns a timeline's canonical tree, as a projection carries it.</summary>
     /// <param name="timeline">The timeline.</param>
     /// <returns>The tree.</returns>

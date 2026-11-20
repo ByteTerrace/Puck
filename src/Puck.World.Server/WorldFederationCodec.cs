@@ -115,6 +115,8 @@ public enum WorldFederationResponse : byte {
     Cut = 19,
     /// <summary>Body changes relative to an acknowledged snapshot in this stream generation.</summary>
     SnapshotDelta = 20,
+    /// <summary>Changed creation and shade rows over the replica definition already held.</summary>
+    PresentationRows = 21,
 }
 /// <summary>The stable names a federation authority refuses under. A refusal frame's text always opens with one of
 /// these, so a peer and a read-back can both count refusals by name rather than by sentence.</summary>
@@ -177,7 +179,7 @@ public static partial class WorldFederationCodec {
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames. The key's final digit is the contract's version: raise it whenever the
     /// federation wire contract changes.</summary>
-    public const ulong WireKey = 0x354445464B435550UL; // "PUCKFED5"
+    public const ulong WireKey = 0x364445464B435550UL; // "PUCKFED6"
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;
@@ -589,6 +591,31 @@ public static partial class WorldFederationCodec {
 
         return bytes;
     }
+
+    internal static bool TryDecodePresentationRows(ReadOnlySpan<byte> body, WorldDefinition held,
+        out WorldPresentationRows? rows, out WorldDefinition? definition, out WorldDocumentVersion version) {
+        rows = null;
+        definition = null;
+        version = default;
+        if (body.Length < DocumentHeaderBytes || body.Length > WireLimits.MaxDocumentBytes ||
+            body[0] != (byte)WorldDisclosureTier.Replica ||
+            !WorldPresentationRows.TryDeserialize(body[DocumentHeaderBytes..], out var patch) ||
+            !patch.TryApply(held, out var candidate)) { return false; }
+        version = ReadDocumentVersion(body);
+        if (!version.IsDelivered || version.Sequence < 0) { return false; }
+        var creations = patch.Creations;
+        for (var index = 0; index < creations.Length; index++) {
+            var row = creations[index];
+            if (!WorldStateDocumentValues.TryResolveGraph(candidate, row.Row, out var resolved, out _)) { return false; }
+            creations[index] = row with { Row = resolved };
+        }
+        if (!patch.TryApply(held, out definition)) { return false; }
+        rows = patch;
+        return true;
+    }
+    private static WorldDocumentVersion ReadDocumentVersion(ReadOnlySpan<byte> body) => new(
+        Activation: new Guid(body.Slice(1, 16), bigEndian: false),
+        Sequence: BinaryPrimitives.ReadInt64LittleEndian(body[17..]));
     /// <summary>Frames a presentation-tier recipient's projection delta: a document leaf's header naming the version the
     /// delta brings the recipient to, the authoritative tick and engine tick it stands at, then the delta
     /// (<see cref="ProjectionDeltaHeaderBytes"/>).</summary>
@@ -664,16 +691,7 @@ public static partial class WorldFederationCodec {
             return false;
         }
 
-        version = new WorldDocumentVersion(
-            Activation: new Guid(
-                b: body.Slice(
-                    length: 16,
-                    start: 1
-                ),
-                bigEndian: false
-            ),
-            Sequence: BinaryPrimitives.ReadInt64LittleEndian(source: body[17..])
-        );
+        version = ReadDocumentVersion(body);
 
         if (!version.IsDelivered || (version.Sequence < 0L)) {
             failure = new WireFailure(
@@ -1076,6 +1094,7 @@ public static partial class WorldFederationCodec {
         WorldFederationResponse.Cut => (StreamStampBytes + 1),
         WorldFederationResponse.Completion => (1024 * 1024),
         WorldFederationResponse.Definition => (WireLimits.MaxDocumentBytes + StreamStampBytes),
+        WorldFederationResponse.PresentationRows => (WireLimits.MaxDocumentBytes + StreamStampBytes),
         WorldFederationResponse.ProjectionDelta => ((WireLimits.MaxDocumentBytes + ProjectionDeltaHeaderBytes) + StreamStampBytes),
         WorldFederationResponse.Reservation => MaxFrameBytes,
         WorldFederationResponse.Route => MaxFrameBytes,
@@ -1267,16 +1286,7 @@ public static partial class WorldFederationCodec {
             return false;
         }
 
-        version = new WorldDocumentVersion(
-            Activation: new Guid(
-                b: body.Slice(
-                    length: 16,
-                    start: 1
-                ),
-                bigEndian: false
-            ),
-            Sequence: BinaryPrimitives.ReadInt64LittleEndian(source: body[17..])
-        );
+        version = ReadDocumentVersion(body);
 
         // A delivered document names its activation and a non-negative install ordinal; only a document that is not a
         // delivery (a reservation's preview) carries the empty version, whole.

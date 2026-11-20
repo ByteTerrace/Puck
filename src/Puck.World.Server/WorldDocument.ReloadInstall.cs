@@ -2,7 +2,6 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldDocument {
     // What a presentation install may change: creations, in what shading reads, and the shade programs.
-    private static readonly WorldDocumentInputs PresentationParts = WorldDocumentInputs.Of(WorldDocumentInput.Prototypes, WorldDocumentInput.Shades);
 
     /// <summary>Returns what installing a reload's candidate over the live document rebuilds, decided by which parts of
     /// the document the candidate holds as another instance than the live document
@@ -28,7 +27,7 @@ public sealed partial class WorldDocument {
             rows = valueRows;
             return WorldInstallKind.Value;
         }
-        return (changed.Except(other: PresentationParts).IsEmpty && ChangesShadingAlone(candidate: candidate, live: live))
+        return (changed.Except(other: WorldPresentationRows.Parts).IsEmpty && ChangesShadingAlone(candidate: candidate, live: live))
             ? WorldInstallKind.Presentation
             : WorldInstallKind.Full;
     }

@@ -4,23 +4,62 @@ namespace Puck.World.Server;
 
 /// <summary>One journal entry — the tick and engine tick a mutation applied at, and the mutation itself, which the
 /// replay reproduces.</summary>
-/// <param name="Tick">The simulation-tick coordinate undo and replay rebase a <c>Cycle</c> epoch against.</param>
-/// <param name="EngineTick">The engine-tick coordinate they rebase an <c>Advance</c> epoch against.</param>
-/// <param name="Mutation">The applied mutation.</param>
 /// <remarks>The two clocks are independent.</remarks>
-public readonly record struct WorldJournalEntry(ulong Tick, ulong EngineTick, WorldMutation Mutation) {
+public readonly record struct WorldJournalEntry {
+    private readonly WorldMutation? m_mutation;
+    /// <summary>The simulation tick an accepted edit applied at.</summary>
+    public ulong Tick { get; }
+    /// <summary>The engine tick an accepted edit applied at.</summary>
+    public ulong EngineTick { get; }
+    /// <summary>The mutation carried by the external-mutation recovery tail.</summary>
+    public WorldMutation Mutation => m_mutation ?? throw new InvalidOperationException("The journal entry is a source edit.");
+
+    public WorldJournalEntry(ulong Tick, ulong EngineTick, WorldMutation Mutation) {
+        this.Tick = Tick;
+        this.EngineTick = EngineTick;
+        m_mutation = Mutation;
+    }
+    /// <summary>Unpacks a committed mutation from the mutation journal tap.</summary>
+    public void Deconstruct(out ulong tick, out ulong engineTick, out WorldMutation mutation) {
+        tick = Tick;
+        engineTick = EngineTick;
+        mutation = Mutation;
+    }
+    internal WorldJournalEntry(ulong tick, ulong engineTick, byte[] reloadPatch, WorldDrawPositions? positions) {
+        Tick = tick;
+        EngineTick = engineTick;
+        ReloadPatch = reloadPatch;
+        ReloadDrawPositions = positions;
+    }
+
     internal MutationDrawHistory? DrawHistory { get; init; }
+    internal byte[]? ReloadPatch { get; init; }
+    internal WorldDrawPositions? ReloadDrawPositions { get; init; }
+    internal string Description => m_mutation is { } mutation ? WorldServer.Describe(mutation) : "world.reload";
+    internal object? Identity => (object?)m_mutation ?? ReloadPatch;
 
     internal static bool MayDraw(WorldDefinition current, WorldMutation mutation) =>
         current.StateRaw?.DrawInstallCount > 0 || mutation is WorldMutation.Batch or WorldMutation.UpsertStateRow { Row.Draw.PrivateStream: true };
 
     internal bool TryCompose(WorldServer host, WorldDefinition current, out WorldDefinition candidate, out string reason) {
+        if (ReloadPatch is { } patch) {
+            if (!WorldReloadDelta.TryApplyPatch(current, patch, current.DocumentDirectory, out var reloaded, out reason)) {
+                candidate = current;
+                return false;
+            }
+            candidate = reloaded;
+            if (ReloadDrawPositions is { } positions &&
+                (!WorldDrawBootResolver.TryResolve(candidate, host.InstanceIdentity, out candidate, out reason, host.DrawKeys, restore: positions) ||
+                !WorldStateDocumentValues.TryResolve(candidate, out candidate, out reason))) { return false; }
+            return true;
+        }
+        var mutation = Mutation;
         current = DrawHistory?.RestorePositions(current) ?? current;
-        using var input = DrawHistory is not null || MayDraw(current, Mutation)
+        using var input = DrawHistory is not null || MayDraw(current, mutation)
             ? host.DrawKeys.Replay(DrawHistory?.Words ?? [], static address => new InvalidDataException($"PrivateDrawJournalMismatch: {address}"), historical: true)
             : null;
         try {
-            return WorldDocument.TryCompose(current, Mutation, Tick, EngineTick, host.InstanceIdentity, out candidate, out reason, out _, out _, host.GrantTable);
+            return WorldDocument.TryCompose(current, mutation, Tick, EngineTick, host.InstanceIdentity, out candidate, out reason, out _, out _, host.GrantTable);
         } catch (InvalidDataException error) {
             candidate = current;
             reason = error.Message;

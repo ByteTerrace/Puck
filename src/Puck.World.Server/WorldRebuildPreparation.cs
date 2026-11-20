@@ -20,7 +20,9 @@ namespace Puck.World.Server;
 /// <param name="Validated">Whether the candidate was validated, as its install kind needs, without an admission to
 /// carry: a value or presentation install's validation compiles nothing.</param>
 public sealed record WorldReloadPreparation(WorldDefinition Revision, WorldDefinition Live, WorldDefinition Next, WorldDefinition Candidate, IReadOnlyList<string> Conflicts,
-    WorldInstallKind Kind, IReadOnlyList<string> Rows, bool Validated);
+    WorldInstallKind Kind, IReadOnlyList<string> Rows, bool Validated) {
+    internal byte[]? JournalPatch { get; init; }
+}
 
 /// <summary>What a whole-document rebuild's candidate alone decides, captured from the authority when the rebuild is
 /// submitted and computed from that capture: a reload delta's next revision, reconstructed over the source revision the
@@ -64,7 +66,9 @@ internal sealed record WorldRebuildPreparation(WorldRebuildRequest Request, Prin
             } else {
                 var kind = WorldDocument.ReloadInstallKindOf(candidate: candidate, live: Live, rows: out var rows);
 
-                reload = new WorldReloadPreparation(Candidate: candidate, Conflicts: conflicts, Kind: kind, Live: Live, Next: next, Revision: Revision, Rows: rows, Validated: false);
+                reload = new WorldReloadPreparation(Candidate: candidate, Conflicts: conflicts, Kind: kind, Live: Live, Next: next, Revision: Revision, Rows: rows, Validated: false) {
+                    JournalPatch = kind == WorldInstallKind.Nothing ? null : delta.AcceptedPatch(Live, candidate)
+                };
             }
         }
 

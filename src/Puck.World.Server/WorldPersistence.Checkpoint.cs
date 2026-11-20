@@ -8,6 +8,17 @@ public sealed partial class WorldPersistence {
     // compaction, an undo, or a journal horizon fold, so a checkpoint cadence serializes it once rather than at
     // every capture.
     private (WorldDefinition Base, byte[] Json)? m_baseJson;
+    private (WorldDefinition Base, WorldDefinition Source, byte[] Patch)? m_sourcePatch;
+
+    private byte[]? SourcePatch() {
+        var basis = Host.Document.Base;
+        var source = Host.Document.Revision.Definition;
+        if (ReferenceEquals(basis, source)) { return null; }
+        if (m_sourcePatch is { } cached && ReferenceEquals(cached.Base, basis) && ReferenceEquals(cached.Source, source)) { return cached.Patch; }
+        var patch = WorldReloadDelta.Between(basis, source).Patch;
+        m_sourcePatch = (basis, source, patch);
+        return patch;
+    }
 
     private byte[] BaseJson(byte[] definitionJson) {
         var baseDefinition = Host.Document.Base;
@@ -103,7 +114,7 @@ public sealed partial class WorldPersistence {
         for (var index = 0; (index < keep); index++) {
             var entry = Host.Document.Journal[index];
             if (!entry.TryCompose(Host, candidate, out var next, out var composeReason)) {
-                var composeRefusal = $"undo refused: replay failed at journal entry {index} ({WorldServer.Describe(mutation: entry.Mutation)}) — {composeReason}";
+                var composeRefusal = $"undo refused: replay failed at journal entry {index} ({entry.Description}) — {composeReason}";
 
                 return RefuseUndo(
                     connectionId: connectionId,
@@ -122,7 +133,7 @@ public sealed partial class WorldPersistence {
             ) ||
                 !products.TryCheck(next: next, reason: out reason)
             ) {
-                var refusal = $"undo refused: replay failed at journal entry {index} ({WorldServer.Describe(mutation: entry.Mutation)}) — {reason}";
+                var refusal = $"undo refused: replay failed at journal entry {index} ({entry.Description}) — {reason}";
 
                 return RefuseUndo(
                     connectionId: connectionId,
@@ -663,6 +674,8 @@ public sealed partial class WorldPersistence {
                 DefinitionJson: definitionJson,
                 BaseDefinitionJson: BaseJson(definitionJson: definitionJson),
                 BaseOrigin: baseOrigin,
+                SourceRevisionPatch: SourcePatch(),
+                SourceContentHash: Host.Document.Revision.ContentHash,
                 Journal: journal,
                 LastCompletedTick: Host.Tick.CompletedTick,
                 LastCompletedEngineTicks: Host.Tick.CompletedEngineTicks,
@@ -770,7 +783,7 @@ public sealed partial class WorldPersistence {
     }
     // What a checkpoint restore adopts that its validation already built: the arena, the journal base and where the
     // base was loaded from.
-    private sealed record ValidatedCheckpoint(StateArena Arena, WorldDefinition Base, WorldBaseOrigin Origin);
+    private sealed record ValidatedCheckpoint(StateArena Arena, WorldDefinition Base, WorldBaseOrigin Origin, WorldSourceRevision Source);
 
     // Every refusal the checkpoint's own contents can raise against the definition it carries, raised before any host
     // state moves: a malformed cached route, base bytes, key ledger or machine image refuses the whole restore
@@ -801,6 +814,13 @@ public sealed partial class WorldPersistence {
         var restoredBase = (server.BaseDrawPositions is null && server.BaseDefinitionJson.AsSpan().SequenceEqual(other: server.DefinitionJson)
             ? restoredDefinition
             : keys.Install(WorldDefinitionSerialization.Deserialize(documentDirectory: restoredDefinition.DocumentDirectory, utf8Json: server.BaseDefinitionJson), restore: server.BaseDrawPositions));
+        var restoredSource = restoredBase;
+        if (server.SourceRevisionPatch is { } patch) {
+            if (!WorldReloadDelta.TryApplyPatch(restoredBase, patch, restoredBase.DocumentDirectory, out var source, out var reason)) {
+                throw new ArgumentException(message: $"checkpoint source revision is invalid: {reason}");
+            }
+            restoredSource = source;
+        }
         var restoredArena = PrepareCheckpointArena(compilation: admission.Compilation, server: server);
 
         Host.Events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
@@ -826,13 +846,14 @@ public sealed partial class WorldPersistence {
         return new ValidatedCheckpoint(
             Arena: restoredArena,
             Base: restoredBase,
-            Origin: restoredOrigin
+            Origin: restoredOrigin,
+            Source: new WorldSourceRevision(ContentHash: server.SourceContentHash ?? string.Empty, Definition: restoredSource)
         );
     }
     private void RestoreCheckpointCore(WorldPrivateDrawKeys keys, WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true, bool resetSessionEpochs = false, string? authorityIdentity = null, IWorldAddonPreparedPlan? preparedAddons = null, ValidatedCheckpoint? validated = null) {
         var server = checkpoint.Server;
         var restoredDefinition = admission.Definition;
-        var (restoredArena, restoredBase, restoredOrigin) = (validated ?? ValidateCheckpointRestore(
+        var (restoredArena, restoredBase, restoredOrigin, restoredSource) = (validated ?? ValidateCheckpointRestore(
             keys: keys,
             admission: admission,
             checkpoint: checkpoint,
@@ -876,9 +897,7 @@ public sealed partial class WorldPersistence {
             definition: restoredBase,
             origin: restoredOrigin
         );
-        // A checkpoint carries no source revision: the next reload is cut from the restored base, which no source read
-        // matches as unchanged.
-        Host.Document.AdoptRevision(revision: new WorldSourceRevision(ContentHash: string.Empty, Definition: restoredBase));
+        Host.Document.AdoptRevision(restoredSource);
         Host.Document.Journal.Clear();
         Host.Document.Journal.AddRange(server.Journal);
         Host.Document.Pending.Clear();

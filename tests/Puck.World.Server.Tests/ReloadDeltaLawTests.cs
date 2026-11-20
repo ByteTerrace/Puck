@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.World.Client;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -16,8 +17,17 @@ public sealed class ReloadDeltaLawTests {
         }, original.Id);
         Assert.True(recoloured.DiffersInShadingAlone(original));
         var target = world with { CreationsRaw = [recoloured, .. world.Creations.Skip(1)] };
+        var rows = WorldPresentationRows.Between(world, target);
+        Assert.Single(rows.Creations);
+        Assert.True(WorldPresentationRows.TryDeserialize(rows.Payload.Span, out var receivedRows));
+        Assert.True(receivedRows!.TryApply(world, out var applied));
+        Assert.Equal("#6B8299", applied!.Creations[0].Document.Palette![0].Color);
         using var deltaWorld = Fixtures.FreshServer(world);
         using var wholeWorld = Fixtures.FreshServer(world);
+        var mirror = new WorldSessionMirror(placeholder: WorldProjection.Undisclosed);
+        using var subscription = deltaWorld.Server.AttachSink(mirror);
+        var work = new WorldBootWork();
+        using var count = WorldBootWork.Attribute(work);
         deltaWorld.Step();
         wholeWorld.Step();
         var hash = WorldDefinitionFileSource.ComputeContentHash(WorldDefinitionSerialization.Serialize(target));
@@ -34,6 +44,11 @@ public sealed class ReloadDeltaLawTests {
         var actual = WorldStateHashComposition.HashAuthoritative(deltaWorld.Server, 2);
         var expected = WorldStateHashComposition.HashAuthoritative(wholeWorld.Server, 2);
         Assert.Equal(expected, actual);
+        Assert.Equal("#6B8299", mirror.Document.Definition.Creations[0].Document.Palette![0].Color);
+        Assert.Equal(1L, work.Read(WorldBootWork.PresentationRowsDelivered));
+        var delivered = work.Read(WorldBootWork.PresentationBytesDelivered);
+        Assert.Equal(rows.Payload.Length, delivered);
+        Console.WriteLine($"presentation delivery: 1 row, {delivered} bytes");
         Console.WriteLine($"reload-delta parity: whole={expected:x16} delta={actual:x16} payload={bytes.Length}");
     }
 

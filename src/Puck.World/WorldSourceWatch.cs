@@ -21,6 +21,7 @@ public sealed class WorldSourceWatch {
     private readonly DependencyWatch<CompileInput, CompileInput?> m_watch;
 
     private Action? m_reload;
+    private string? m_source;
     private string? m_path;
     private bool m_pending;
 
@@ -64,15 +65,20 @@ public sealed class WorldSourceWatch {
     }
     private CompileInput? Read(CompileInput input) {
         StampReads++;
+        WorldBootWork.Count(WorldBootWork.WatchStampReads);
         try {
             var fact = CompileInputs.Current(query: input, read: out var read);
 
-            if (read) { ContentReads++; }
+            if (read) { CountContentRead(); }
             return fact;
         } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
-            ContentReads++;
+            CountContentRead();
             return null;
         }
+    }
+    private void CountContentRead() {
+        ContentReads++;
+        WorldBootWork.Count(WorldBootWork.WatchContentReads);
     }
     private void Refresh(CompileInputLog reads) {
         if (m_path is not { } path) { return; }
@@ -85,12 +91,13 @@ public sealed class WorldSourceWatch {
         }
         var root = new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Content, Path: path);
 
-        facts.TryAdd(key: root, value: ReadCurrent(input: root));
+        if (!facts.ContainsKey(root)) { facts.Add(root, ReadCurrent(input: root)); }
         m_watch.Refresh(facts.Keys, firstRead: key => facts[key]);
     }
-    private void TrackSource() {
+    private void TrackSource(string source) {
         m_watch.Clear();
-        m_path = PuckPaths.Normalize(path: m_sourcePath());
+        m_source = source;
+        m_path = PuckPaths.Normalize(path: source);
         var reads = new CompileInputLog();
 
         using (CompileInputs.Record(log: reads)) {
@@ -111,15 +118,24 @@ public sealed class WorldSourceWatch {
 
     /// <summary>Starts watching and records the current compiler dependency set.</summary>
     /// <param name="submitReload">Queues world.reload through the host-issued ingress of the enabling principal.</param>
-    public void Start(Action submitReload) {
+    /// <param name="bootReads">The dependency answers used by the boot load, or null to read the current source.</param>
+    public void Start(Action submitReload, CompileInputLog? bootReads = null) {
         ArgumentNullException.ThrowIfNull(submitReload);
         Stop();
-        TrackSource();
+        var source = m_sourcePath();
+        if (bootReads is null) {
+            TrackSource(source);
+        } else {
+            m_source = source;
+            m_path = PuckPaths.Normalize(path: source);
+            Refresh(bootReads);
+        }
         m_reload = submitReload;
     }
     /// <summary>Stops watching and discards changes that have not yet submitted a reload.</summary>
     public void Stop() {
         m_reload = null;
+        m_source = null;
         m_path = null;
         m_pending = false;
         m_watch.Clear();
@@ -151,13 +167,18 @@ public sealed class WorldSourceWatch {
     /// <param name="now">A Stopwatch timestamp; null reads the current timestamp.</param>
     public void Poll(long? now = null) {
         if (m_reload is not { } reload) { return; }
+        WorldBootWork.Count(WorldBootWork.WatchPumps);
         var timestamp = (now ?? Stopwatch.GetTimestamp());
+        var source = m_sourcePath();
 
-        if (!PuckPaths.Comparer.Equals(x: PuckPaths.Normalize(path: m_sourcePath()), y: m_path)) {
-            TrackSource();
-            // These bytes may have changed since world.load read its accepted candidate. Reload once through
-            // the normal command door rather than treating this adoption-time read as the running world's proof.
-            m_watch.Retry(now: timestamp);
+        if (!string.Equals(source, m_source, StringComparison.Ordinal)) {
+            if (PuckPaths.Comparer.Equals(PuckPaths.Normalize(source), m_path)) {
+                m_source = source;
+            } else {
+                TrackSource(source);
+                // A save may have landed since world.load read the accepted candidate.
+                m_watch.Retry(now: timestamp);
+            }
         }
         if (m_pending || !m_watch.Poll(debounceTicks: ((Stopwatch.Frequency * Client.WorldViewGraphHost.WatchDebounceMilliseconds) / 1000),
             now: timestamp,

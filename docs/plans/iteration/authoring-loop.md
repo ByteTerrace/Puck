@@ -27,12 +27,9 @@ change. What is still wrong:
 - **Validation is whole.** Every install but a state-value one validates the
   whole candidate, and so does every `world.row.set` that changes more than
   state values.
-- **A file edit is still a rebuild, not a mutation.** The install clears the
-  journal, only the operator may send it, the tape records a path rather than
-  the delta, and each client receives the whole definition again while the
-  frame waits.
-- **The watch is off until asked**, so a saved file reaches the World only by a
-  typed `world.reload` unless the author turns `world.watch` on.
+- **A file reload still requires an operator.** A published world's granted
+  author needs section-scoped admission. The tape still records the source
+  path and pin.
 - **Caches are keyed by path and by assembly build identity**, so two checkouts
   share nothing and any rebuild of a compiler assembly empties the compile
   cache.
@@ -258,12 +255,12 @@ members the current vocabulary accepts.
   changed), validates the result once and installs it by which root members
   changed (`WorldDocument.ReloadInstallKindOf`): a colour edit is a
   presentation install with no rule compile. The sender still serializes both
-  revisions once to slice them. A reload clears the journal and keeps a body's
-  pose and every live edit the source did not also change.
+  revisions once to slice them. A file reload adds its accepted overlay to
+  the undo journal and preserves body poses and unrelated live edits.
 - **`world.watch on`** (`WorldSourceWatch`) polls the stamps of every file
   fact the last compile read and queues an ordinary `world.reload` after a
-  quiet moment. It is off by default and is described only in the World guide
-  and one debug page.
+  quiet moment. A local operator's source boot seeds the watch with the
+  dependency answers the loader used.
 - **`world.load`** validates another file and submits its whole definition,
   refusing over unsaved edits unless forced.
 - **Document mutations** (`world.row.set`, `world.row.add`, `world.row.remove`,
@@ -553,7 +550,7 @@ What changes is where it comes from and where it goes:
 | Made by | The sender, from the root members whose bytes moved between two composed revisions (`WorldReloadDelta.Between` over `WorldDefinitionMembers`) | The session, from the rows whose digest moved between two revisions of the source |
 | Describes | The source revision the authority took against the new one | The same |
 | Pinned by | Content pins of both revisions | The same pins, kept as a digest over row digests, so checking them costs what the delta costs |
-| Applied as | A rebuild merged over the live document and installed by kind (`WorldDocument.ReloadInstallKindOf`), with the journal cleared | A batch through the ordinary mutation door: admitted against the sender's grants, classified by `WorldDocument.InstallKindOf`, one journal entry |
+| Applied as | One journal entry for the accepted source edit, installed by `WorldDocument.ReloadInstallKindOf` | Section-scoped admission for granted authors on published worlds |
 | A row both changed | The source's value wins and the verdict names the row | The same for an author's save, since saved files drive the running World first ([what the owner settled](#what-the-owner-settled)); a release over a live world keeps the runtime plan's refusal by row |
 | Recorded as | A path and a content hash | The delta's bytes |
 | Sent to a remote authority as | The patch, operator only | The same bytes, admitted like any mutation |
@@ -563,8 +560,8 @@ document, is what lets the file and the World be edited together, and that
 part is built: the authority holds the source revision it last took
 (`WorldServer.SourceRevision`), every row the live session changed and the
 file did not keeps its live value, and a state row is seeded again only when
-the delta changes its declaration. What is left is the door the delta enters
-by, its journal entry, its grants and its record.
+the delta changes its declaration. Section-scoped admission and tape
+recording of the delta remain.
 
 This is the release transition at the size of one save. The runtime plan's
 authored delta between two releases, applied as admitted changes and refused
@@ -797,25 +794,21 @@ stage order is in [the duplicates](#duplicates-to-remove).
    source lowered, a handful of rows merged and no whole-document
    serialization, and the incremental-equals-clean law passes over an edit
    corpus drawn from the debug world.
-4. **Join the door.** Built in part: a reload is a delta between the source
-   revision the authority took (`WorldServer.SourceRevision`) and the next,
-   merged over the live document (`WorldReloadDelta.TryMergeOver`), validated
-   once at the authority and installed by which parts of the document changed
-   (`WorldDocument.ReloadInstallKindOf`), and a full install rebuilds only the
-   compiled products whose recorded inputs it changed
-   (`WorldDocument.PlanProducts`). Left: the watch starts on for a World a
-   local operator boots from a source tree ([what the owner settled](#what-the-owner-settled));
-   the delta enters as one journal entry, admitted by the sender's grants,
-   instead of clearing the journal under the operator's authority; a row both
-   the source and the session changed follows the rule this step settles
-   (today the source wins and is named; the target above refuses and asks);
-   and an install delivers only the changed rows to each client, so the frame
-   no longer waits on a whole definition
-   ([what is left](../iteration.md#what-is-left) in the live edit path).
-   *Check:* a one-colour file edit, saved with the watch on from boot, leaves
-   one journal entry that `world.undo` reverts, is admitted from a
-   non-operator principal granted the creations section, and moves the
-   client's delivery by that row alone.
+4. **Join the door.** The local file edit path is built. `WorldSourceWatch`
+   submits a saved edit through the reload boundary. The authority merges the
+   change over the live document, names conflicts where the source wins and
+   records the accepted overlay as one undo entry. Presentation delivery
+   carries changed creation and shade rows, and value delivery uses changed
+   snapshot rows. The [live edit path](../iteration.md#the-live-edit-path-step-3)
+   describes the mechanisms and counters. Section-scoped admission for remote
+   authors stays with the [published-world decision](#what-the-owner-settled).
+   Left: in the debug world a one-colour save still delivers every creation in
+   the roster, because `WorldPresentationRows.Between` finds moved rows by
+   instance and the reloaded roster arrives with new instances for rows the
+   edit left alone; and `world.undo` of a reload replays the journal as a full
+   install that delivers the whole definition. *Check:* a one-colour save in
+   the debug world reads one row in `world.boot.presentation-rows-delivered`
+   per primed sink, and undoing it is a presentation install.
 5. **Narrow validation**, for the delta and for `world.row.set` alike:
    sections first, then rows by digest. Not started: only a state-value
    install validates part of the document

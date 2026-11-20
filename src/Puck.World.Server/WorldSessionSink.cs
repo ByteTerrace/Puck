@@ -110,6 +110,12 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         var projection = delivery.Projection!;
 
+        if (delivery.Appearance is { } rows && m_hydrated is { } previous && rows.TryApply(previous, out var appearance)) {
+            m_hydrated = appearance;
+            inner.DeliverPresentation(appearance, rows, version, m_cursor.Stamp());
+            return;
+        }
+
         if (
             (delivery.Kind == WorldProjectionDeliveryKind.Delta) &&
             delivery.TimelineOnly &&
@@ -179,8 +185,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
     // Composes what the observer's projection owes; after a cut, its whole projection under the new generation, which
     // the primer snapshot completes once it is presented (cut).
-    private WorldProjectionDelivery ComposeProjection(out bool cut) {
-        var delivery = m_feed.Compose(cursor: m_cursor, view: m_view);
+    private WorldProjectionDelivery ComposeProjection(out bool cut, WorldPresentationRows? rows = null) {
+        var delivery = rows is null ? m_feed.Compose(m_view, m_cursor) : m_feed.ComposeAppearance(m_view, m_cursor, rows);
 
         cut = AnnounceCut();
         if (!cut) {
@@ -193,10 +199,11 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
     // Observes the live body policy outside a snapshot: an install can turn it redacting while no snapshot follows (a
     // paused world), and the cut is owed with the document that carries it.
-    private void ObserveBodies() {
+    private WorldSinkDisclosure ObserveBodies() {
         var bodies = m_view.Bodies;
 
-        m_cursor.ObserveBodies(mode: bodies.Policy.Mode, radius: bodies.Policy.Radius);
+        m_cursor.ObserveBodies(bodies.Policy);
+        return bodies;
     }
     // Sends the record a cut the cursor decided owes, once: the new generation, with no content. True when one was sent,
     // after which the stream owes its whole disclosed document and a primer before anything newer.
@@ -387,7 +394,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         try {
             m_withheld = false;
             server.AttachCursor(observation.Session, m_cursor);
-            ObserveBodies();
+            _ = ObserveBodies();
 
             if (Tier == WorldDisclosureTier.Replica) {
                 DeliverReplicaDocument(delivered: DiscloseToReplica(definition: definition));
@@ -409,6 +416,36 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     public void DeliverSessionLever(WorldSessionLever lever) {
     }
 
+    public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+        if (!Discloses()) { return; }
+        if (m_withheld) {
+            DeliverDefinition(definition, version, in stream);
+            return;
+        }
+        try {
+            // The rows travel through the same cursor and body policy as a whole document: a policy that moved with
+            // the edit owes a cut, which the row path refuses so the document door primes it.
+            server.AttachCursor(observation.Session, m_cursor);
+            _ = ObserveBodies();
+            if (Tier != WorldDisclosureTier.Replica) {
+                var time = server.DeliveryTime;
+                Present(ComposeProjection(out var cut, rows), Version, time.Tick, time.EngineTick);
+                if (cut) { PrimeSnapshot(); }
+                FollowObserverDetach();
+            } else if (!m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
+                DeliverDefinition(definition, version, in stream);
+            } else if (moved) {
+                inner.DeliverPresentation(m_view.Definition, rows, Version, m_cursor.Stamp());
+                WorldOutputHub.CountPresentationRows(rows);
+                observation.SettleSceneProof(server.DeliveryTime.Tick);
+                FollowObserverDetach();
+            }
+        } catch (Exception exception) {
+            EndAfterFault(exception);
+            throw;
+        }
+    }
+
     private WorldInputPublication[] m_inputDisclosure = [];
     private WorldInputAnswer[] m_answerDisclosure = [];
 
@@ -420,10 +457,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             return;
         }
 
-        var bodies = m_view.Bodies;
-
-        m_cursor.ObserveBodies(mode: bodies.Policy.Mode, radius: bodies.Policy.Radius);
-
+        var bodies = ObserveBodies();
         var redacted = snapshot with { Entries = frame.Project(bodies) };
         var tick = snapshot.Tick;
         var engineTick = snapshot.EngineTick;
@@ -492,7 +526,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         try {
             server.AttachCursor(observation.Session, m_cursor);
-            ObserveBodies();
+            _ = ObserveBodies();
             if (Tier != WorldDisclosureTier.Replica) {
                 m_withheld = false;
                 Present(

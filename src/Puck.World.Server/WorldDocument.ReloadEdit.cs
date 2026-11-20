@@ -6,10 +6,10 @@ namespace Puck.World.Server;
 public sealed partial class WorldDocument {
     // Installs a reload whose candidate changes nothing, only state values, or only what presentation reads, keeping the
     // arena, every compiled product, the solid field, the population and the authority as they stand. The source revision
-    // moves to the next one and the base to the candidate, and the journal clears, as every reload does. The candidate
+    // moves to the next one and the accepted patch enters the undo journal. The candidate
     // was validated off the tick as its kind needs when its preparation still stands; otherwise it is validated here.
     private bool ApplyReloadEdit(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string verb, WorldInstallKind kind, string changed,
-        WorldDefinition candidate, WorldDefinition next, string contentHash, IReadOnlyList<string> conflicts, WorldReloadPreparation? prepared) {
+        WorldDefinition candidate, WorldDefinition next, string contentHash, IReadOnlyList<string> conflicts, WorldReloadPreparation? prepared, byte[]? journalPatch) {
         var previous = m_definition;
         string detail;
 
@@ -64,12 +64,9 @@ public sealed partial class WorldDocument {
             }
         }
 
-        m_journal.Clear();
-        m_base = m_definition;
-        m_revision = new WorldSourceRevision(ContentHash: contentHash, Definition: next);
-        m_baseOrigin = new WorldBaseOrigin(Kind: WorldBaseOriginKind.Reload, Source: request.Origin);
+        var history = AcceptReload(request, next, contentHash, journalPatch);
 
-        var message = $"{verb} applied — base is {m_baseOrigin}, journal cleared{detail}{changed}{DescribeConflicts(conflicts: conflicts)}";
+        var message = $"{verb} applied — {history}{detail}{changed}{DescribeConflicts(conflicts: conflicts)}";
 
         if ((request.Delta is { } appliedDelta) &&
             WorldSubmissionCodec.TryEncodeRebuild(request with { Definition = null }, out var payload, out _)) {
@@ -87,6 +84,21 @@ public sealed partial class WorldDocument {
             RebuildOrigin: request.Origin
         ));
         return true;
+    }
+
+    private string AcceptReload(WorldRebuildRequest request, WorldDefinition next, string contentHash, byte[]? patch, WorldDrawPositions? drawPositions = null) {
+        m_revision = new WorldSourceRevision(ContentHash: contentHash, Definition: next);
+        if (request.Origin is WorldRebuildOrigin.Store) {
+            // A deployment changes the hosted release's base. A save by the local author changes the session.
+            AdoptBase(m_definition, new WorldBaseOrigin(Kind: WorldBaseOriginKind.Reload, Source: request.Origin));
+            m_journal.Clear();
+            return $"base is {m_baseOrigin}, journal cleared";
+        }
+        if (patch is { Length: > 2 }) {
+            var time = Host.DeliveryTime;
+            m_journal.Add(new WorldJournalEntry(time.Tick, time.EngineTick, patch, drawPositions));
+        }
+        return $"journal entries={m_journal.Count}";
     }
 
     // The parts of the document a reload changed, for its verdict.
