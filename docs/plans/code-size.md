@@ -693,19 +693,17 @@ The recipient streams and mirrors keep the order their own plans give them.
   would also refuse a feature that is right to add, and it rewards
   reformatting. The comparison is always against Git, and judgement reads it.
 
-## Decisions for the owner
+## What the owner settled
 
-**The research and oracle wings of `Puck.Maths`.** The `Research` folder is
-10,700 lines of exact number theory (continued-fraction tails, Sturmian
-words, quasicrystals). Its own README says none of it is on the simulation
-path. Read as text, about 5,000 of those lines are named by nothing outside
-the folder and 4,200 only by tests. The `Oracle` folder is 10,200 lines of
-presented algebra, of which 6,900 are named only by tests. They are public
-API of a packable library, so this is the owner's call, not a dead-code
-sweep. The options: keep them in `Puck.Maths` and count them as product
-source; move them to their own project so the engine's numerics are 16,000
-lines smaller and the wings still build and test; or delete what nothing
-names. The plan's targets show both outcomes.
+**The concern is duplication and poor algorithm choice, not line count for
+its own sake** (the owner's ruling). A reduction lane earns its place by
+folding a family of hand-written copies into one definition, merging parallel
+paths, or replacing an algorithm with a better one; it never trims code that
+is earned. Line and statement counts are the measure of those changes, not a
+target in themselves.
+
+**The research and oracle wings of `Puck.Maths` stay as they are** (the
+owner's ruling). They count as product source and are not a reduction target.
 
 ## Systems this plan builds on
 
