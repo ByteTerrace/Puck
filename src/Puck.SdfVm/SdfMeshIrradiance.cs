@@ -112,16 +112,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // Name the trace scene's CPU hierarchy and the probe caches in the managed heap's row of the process account, read
     // when the account is measured. Disposed outside m_gate, which their reads take while the account holds its sample
     // gate.
-    private readonly IDisposable m_sceneOwner;
     private readonly IDisposable m_cacheOwner;
+    private readonly Puck.Hosting.Jobs.MemoryAccount.Owner m_volumeOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateOwner(
+        name: "sdf.mesh-gi.volume", memoryClass: MemoryClass.Elastic);
 
-    /// <summary>Initializes a new instance of the <see cref="SdfMeshIrradiance"/> class, naming its trace scene's CPU
-    /// hierarchy and its probe caches in the process account (<see cref="Puck.Hosting.Jobs.MemoryAccount.CreateSampledOwner"/>)
-    /// until it is disposed.</summary>
+    /// <summary>Registers the probe cache's sampled storage in the process account.</summary>
     public SdfMeshIrradiance() {
-        m_sceneOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: Puck.Abstractions.Memory.MemoryBacking.Managed, memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "sdf.mesh-gi.trace-scene", read: () => {
-            lock (m_gate) { return (m_scene?.HierarchyBytes ?? 0L); }
-        });
         m_cacheOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: Puck.Abstractions.Memory.MemoryBacking.Managed, memoryClass: Puck.Abstractions.Memory.MemoryClass.Cached, name: "sdf.mesh-gi.probe-cache", read: CacheBytes);
     }
 
@@ -166,7 +162,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
             jobs = new[] { m_build, m_refill, m_worker, m_drawnBuild }.OfType<Task>().ToArray();
         }
-        m_sceneOwner.Dispose();
         m_cacheOwner.Dispose();
         if (jobs.Length == 0) { ReleaseScene(); return; }
         _ = Task.WhenAll(jobs).ContinueWith(continuationAction: _ => ReleaseScene(), scheduler: TaskScheduler.Default);
@@ -185,6 +180,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             RentedArrays.Return(array: m_snapshotDraws);
             (m_diagnosticDraws, m_diagnosticCount, m_snapshotDraws) = ([], 0, []);
             m_snapshotClaims.Dispose();
+            m_volumeOwner.Change(-(m_volume.LongLength * sizeof(uint)), MemoryBacking.Managed);
+            m_volume = [];
+            m_volumeOwner.Dispose();
         }
     }
 
@@ -436,6 +434,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private readonly Stopwatch m_clock = new();
     // When the latest scene build began, a timestamp of Time; zero before the first.
     private long m_sceneStartedAt;
+    private long? m_sceneRefusedAt;
+    private long? m_diagnosticRefusedAt;
 
     private SdfWorldTables? m_writeTables;
     private Action<ReadOnlyMemory<uint>>? m_write;
@@ -452,7 +452,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             if (m_disposed) { return null; }
             if (Draws(draws: m_diagnosticDraws, count: m_diagnosticCount, frame: frame)) { return m_scene?.Acquire(); }
             if ((m_drawnScene is { } drawn) && Draws(draws: m_drawnDraws, count: m_drawnDraws.Length, frame: frame)) { return drawn.Acquire(); }
-            if (m_drawnBuild is { IsCompleted: false }) { return null; }
+            if (m_drawnBuild is { IsCompleted: false } || WaitingForMemory(m_diagnosticRefusedAt)) { return null; }
 
             var rows = frame.DrawRows;
             var input = new List<SdfMeshDraw>();
@@ -465,10 +465,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             var previous = (m_drawnScene ?? m_scene)?.Acquire();
 
             m_drawnBuild = Task.Run(action: () => {
-                SdfMeshIrradianceScene scene;
+                SdfMeshIrradianceScene? scene;
 
-                using (previous) { scene = SdfMeshIrradianceScene.Build(draws: input, previous: previous); }
+                using (previous) { scene = TryBuildScene(input, previous); }
                 lock (m_gate) {
+                    if (scene is null) {
+                        m_diagnosticRefusedAt = Time.GetTimestamp();
+                        m_drawnClaims.Update(draws: Array.Empty<SdfMeshDraw>());
+                        return;
+                    }
+                    m_diagnosticRefusedAt = null;
                     if (m_disposed) { scene.Dispose(); return; }
                     m_drawnScene?.Dispose();
                     (m_drawnScene, m_drawnDraws) = (scene, [.. input]);
@@ -800,6 +806,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         lock (m_gate) {
             m_wrote = false;
             m_geometryWrote = false;
+            var resizing = (!m_windowValid || (layout.Levels != m_layout.Levels));
+            if (resizing && !TryReplaceVolume(layout.TotalCount * SdfMeshIrradianceProbe.ProbeWords)) {
+                return Converging(stage: converging ? SdfMeshConvergenceStage.Refill : SdfMeshConvergenceStage.None);
+            }
             if (ScenePendingDue(frame: frame)) { _ = RefreshScene(bakePending: bakePending, frame: frame); }
             RefreshLighting(frame: frame, layout: layout);
             Grant(budget: frame.IndirectBudget);
@@ -810,10 +820,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_nextCameraSample = 0;
             }
 
-            var resizing = (!m_windowValid || (layout.Levels != m_layout.Levels));
-
             if (resizing) {
-                m_volume = new uint[(layout.TotalCount * SdfMeshIrradianceProbe.ProbeWords)];
                 m_changedSlots.Clear();
                 foreach (var level in m_levels) {
                     level.Cache.Clear();
@@ -900,6 +907,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         return Converging(stage: stage);
     }
 
+    // Under the volume gate. Keep the published table until its complete replacement fits.
+    private bool TryReplaceVolume(int words) {
+        var old = m_volume;
+        try { m_volume = m_volumeOwner.AllocateArray<uint>(words); }
+        catch (HostMemoryRefusedException) { return false; }
+        m_volumeOwner.Change(-(old.LongLength * sizeof(uint)), MemoryBacking.Managed);
+        return true;
+    }
     // Starts the trace worker: the drain of a lighting-converged frame, or the budgeted background work. Apart from
     // Stage, whose every call would otherwise allocate the closure over `drain`.
     private Task StartWorker(bool drain) => Task.Run(action: () => {
@@ -962,8 +977,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             lock (m_gate) {
                 if (m_disposed) { return true; }
                 build = RefreshScene(frame: frame);
+                if (build is null) { return !WaitingForMemory(m_sceneRefusedAt); }
             }
-            if (build is null) { return true; }
             if (HostWaits.Wait(deadline: deadline, reason: in SceneWait, task: build) == WaitOutcome.DeadlinePassed) { return false; }
         }
     }
@@ -1561,7 +1576,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // Even a frame matching the installed scene waits for an older build: that build could otherwise replace
         // the scene while this frame traces it. The lockstep caller resolves this frame again after it lands.
         if (m_build is { IsCompleted: false }) { return m_build; }
-        if (key == m_sceneKey) { return null; }
+        if (key == m_sceneKey) { m_sceneRefusedAt = null; return null; }
+        if (WaitingForMemory(m_sceneRefusedAt)) { return null; }
         if (key == m_buildingKey) { return m_build; }
         if (bakePending && (draws == 0)) { return null; }
 
@@ -1676,11 +1692,20 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_sceneStartedAt = Time.GetTimestamp();
         m_build = Task.Run(function: async () => {
             var clock = Stopwatch.StartNew();
-            SdfMeshIrradianceScene scene;
+            SdfMeshIrradianceScene? scene;
             ChangeTree? changed;
 
             using (previous) {
-                scene = SdfMeshIrradianceScene.Build(draws: input, previous: previous, counters: Counters);
+                scene = TryBuildScene(input, previous, Counters);
+                if (scene is null) {
+                    lock (m_gate) {
+                        m_sceneRefusedAt = Time.GetTimestamp();
+                        m_buildingKey = null;
+                        m_snapshotClaims.Update(draws: Array.Empty<SdfMeshDraw>());
+                        Array.Clear(snapshot);
+                    }
+                    return;
+                }
                 changed = (hadScene ? ChangedBoxes(after: snapshot.AsSpan(length: count, start: 0), before: previousDraws.AsSpan(length: previousCount, start: 0)) : null);
             }
             Counters.Count(kind: Scenes);
@@ -1710,6 +1735,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] scene draws={count} floors={floors} triangles={scene.TriangleCount} geometries={scene.GeometryCount} built={scene.GeometriesBuilt} built-triangles={scene.TrianglesBuilt} reused={scene.GeometriesReused} retained-triangles={scene.TrianglesRetained} prefix-words={scene.PrefixWords} changed={((changed is null) ? "all" : changed.Boxes.ToString(provider: CultureInfo.InvariantCulture))} change-nodes={(changed?.Nodes.Length ?? 0)} since={since:0.0} seconds={built:0.000} held={(clock.Elapsed.TotalSeconds - built):0.000}"));
         });
         return m_build;
+    }
+    private bool WaitingForMemory(long? refusedAt) => refusedAt is { } at && Time.GetElapsedTime(at) < PendingSceneInterval;
+
+    // Parallel hierarchy workers can report several refusals together. Other build faults still reach the caller.
+    private static SdfMeshIrradianceScene? TryBuildScene(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous, WorkCounterSet? counters = null) {
+        try { return SdfMeshIrradianceScene.Build(draws, previous, counters); }
+        catch (HostMemoryRefusedException) { return null; }
+        catch (AggregateException errors) when (errors.Flatten().InnerExceptions.All(static error => error is HostMemoryRefusedException)) { return null; }
     }
     // A built scene waiting to replace the installed one: its input, its key and the change it makes; Done completes
     // once it is installed, or dropped by a disposed volume.
@@ -1744,6 +1777,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The replaced draws' array becomes the next snapshot's.
         (m_snapshotDraws, m_diagnosticDraws, m_diagnosticCount) = (m_diagnosticDraws, install.Draws, install.Count);
         m_sceneKey = install.Key;
+        m_sceneRefusedAt = null;
         m_buildingKey = null;
         m_tracedSinceScene = 0L;
         AdvanceGeometry(changed: install.Changed);

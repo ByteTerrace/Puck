@@ -5,12 +5,33 @@ namespace Puck.Abstractions.Memory;
 /// <summary>Receives allocation deltas from an explicit storage owner, including allocate/copy overlap, each naming the
 /// physical row its storage lies in.</summary>
 public interface IAllocationObserver {
+    /// <summary>Gets the storage owner reported on refusal.</summary>
+    string Name => GetType().Name;
+    /// <summary>Charges new host storage before allocation. A refusal leaves the owner unchanged.</summary>
+    /// <param name="bytes">The size of the allocation, including all of a replacement.</param>
+    /// <param name="backing">The physical row the storage will occupy.</param>
+    /// <returns>Whether the charge was taken. Release it if allocation fails.</returns>
+    bool TryAcquire(long bytes, MemoryBacking backing) {
+        Change(bytes, backing);
+        return true;
+    }
+    /// <summary>Charges an allocation or throws a refusal naming the owner.</summary>
+    /// <param name="bytes">The requested bytes.</param>
+    /// <param name="backing">The allocation's row.</param>
+    void Acquire(long bytes, MemoryBacking backing) {
+        if (!TryAcquire(bytes, backing)) { throw new HostMemoryRefusedException(Name, bytes); }
+    }
     /// <summary>Accounts bytes acquired (positive) or released (negative).</summary>
     /// <param name="bytes">The signed allocation delta, in bytes, including growth overlap.</param>
     /// <param name="backing">The physical row the storage lies in, which the storage making the charge states; a release
     /// names the row its acquisition named.</param>
     void Change(long bytes, MemoryBacking backing);
 }
+/// <summary>A host owner was refused before allocating a buffer.</summary>
+/// <param name="owner">The owner whose work needed the buffer.</param>
+/// <param name="bytes">The requested allocation size.</param>
+public sealed class HostMemoryRefusedException(string owner, long bytes)
+    : Exception($"The host memory account refused {bytes} bytes for {owner}.");
 /// <summary>Optional physical allocator readings; these include allocator slack and are not payload counts.</summary>
 public interface IAllocatorStatistics {
     /// <summary>Reads the allocator's committed and reserved address-space bytes.</summary>
@@ -69,42 +90,32 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
     public void Resize(int length, bool clear = true, bool preserve = true) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
         ArgumentOutOfRangeException.ThrowIfNegative(length);
-        if (!preserve) { m_length = 0; }
         if (length > m_capacity) {
             var bytes = checked((((long)length) * sizeof(T)));
-
-            if (allocator is null) {
-                var replacement = new T[length];
-
-                GetSpan().CopyTo(destination: replacement);
-                observer?.Change(backing: Backing, bytes: bytes);
-                var oldManagedBytes = checked((((long)m_capacity) * sizeof(T)));
-
-                m_managed = replacement;
-                m_capacity = m_length = length;
-                observer?.Change(backing: Backing, bytes: -oldManagedBytes);
-                return;
-            }
-            var candidate = ((T*)allocator.Allocate(checked((nuint)bytes)));
-
-            if (candidate is null) { throw new OutOfMemoryException(message: $"Cannot allocate {bytes} bytes of {typeof(T).Name} storage."); }
+            var oldBytes = ((long)m_capacity) * sizeof(T);
+            observer?.Acquire(bytes, Backing);
             try {
-                new ReadOnlySpan<T>(length: m_length, pointer: m_pointer).CopyTo(destination: new Span<T>(length: length, pointer: candidate));
-                if (clear) { new Span<T>(length: (length - m_length), pointer: (candidate + m_length)).Clear(); }
-                observer?.Change(backing: Backing, bytes: bytes);
+                if (allocator is null) {
+                    var replacement = new T[length];
+                    if (preserve) { GetSpan().CopyTo(replacement); }
+                    m_managed = replacement;
+                } else {
+                    var candidate = (T*)allocator.Allocate(checked((nuint)bytes));
+                    if (candidate is null) { throw new OutOfMemoryException(message: $"Cannot allocate {bytes} bytes of {typeof(T).Name} storage."); }
+                    var kept = preserve ? m_length : 0;
+                    new ReadOnlySpan<T>(m_pointer, kept).CopyTo(new Span<T>(candidate, length));
+                    if (clear) { new Span<T>(candidate + kept, length - kept).Clear(); }
+                    allocator.Free(ptr: m_pointer);
+                    m_pointer = candidate;
+                }
             } catch {
-                allocator.Free(ptr: candidate);
+                observer?.Change(backing: Backing, bytes: -bytes);
                 throw;
             }
-            var old = m_pointer;
-            var oldBytes = checked((((long)m_capacity) * sizeof(T)));
-
-            m_pointer = candidate;
-            m_capacity = length;
-            m_length = length;
-            allocator.Free(ptr: old);
+            m_capacity = m_length = length;
             observer?.Change(backing: Backing, bytes: -oldBytes);
         } else {
+            if (!preserve) { m_length = 0; }
             if (clear && (length > m_length)) {
                 if (allocator is null) { m_managed.AsSpan(length: (length - m_length), start: m_length).Clear(); } else { new Span<T>(length: (length - m_length), pointer: (m_pointer + m_length)).Clear(); }
             }
