@@ -183,6 +183,11 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// the index is not a declared screen.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     WorldMachineState? State(int index);
+    /// <summary>Returns the fault of a declared screen's machine, or <see langword="null"/> when the screen has no
+    /// machine or its machine runs cleanly: <see cref="State"/>'s <see cref="WorldMachineState.Fault"/> without
+    /// building the rest of the state, for the per-frame fault-decal poll.</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    string? FaultOf(int index);
     /// <summary>Establishes (or reports dormant) a runtime cable link over two or more declared screens.</summary>
     /// <param name="name">The link's stable name.</param>
     /// <param name="members">The engine screen indices in cable order.</param>

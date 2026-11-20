@@ -41,9 +41,15 @@ public sealed partial class WorldMachineHost {
 
     // The content path a lease mounted: the prepared asset of its configuration's content field, which a boot whose
     // authored content file is absent leaves out.
-    private static string? MountedContent(MachineLease lease) => lease.Assets.Values.FirstOrDefault(
-        predicate: static asset => (asset.Role == MachineFieldRole.ContentPath)
-    )?.Path;
+    private static string? MountedContent(MachineLease lease) {
+        foreach (var asset in lease.Assets.Values) {
+            if (asset.Role == MachineFieldRole.ContentPath) {
+                return asset.Path;
+            }
+        }
+
+        return null;
+    }
 
     /// <inheritdoc/>
     public IMachineVideoOutput? VideoOutput(string instance, string output) =>
@@ -911,7 +917,6 @@ public sealed partial class WorldMachineHost {
                     (site.Field.Role == MachineFieldRole.ContentPath) &&
                     !TryResolveContent(
                     bytes: out image,
-                    cartridge: out _,
                     compilation: out content,
                     content: source,
                     contentPath: path,
@@ -942,7 +947,10 @@ public sealed partial class WorldMachineHost {
                         WorldDefinitionFileSource.ComputeContentHash(content: source),
                         source,
                         content,
-                        site.Field.Role
+                        site.Field.Role,
+                        ((content is null)
+                            ? null
+                            : WorldDefinitionFileSource.ComputeContentHash(content: image))
                     )
                 );
             }
