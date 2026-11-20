@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -57,9 +56,9 @@ public sealed class SdfResidencySelector {
     public const string WorkOwner = "sdf.gpu-work";
 
     private static readonly ConditionalWeakTable<IGpuDeviceContext, SdfResidencySelector> Selectors = [];
-    // How long a residency's report counts toward the bias after it was made; a residency no frame prepares stops
-    // steering it.
-    private static readonly long FreshTicks = (2L * Stopwatch.Frequency);
+    // How long a residency's report counts toward the bias after it was made, in seconds; a residency no frame prepares
+    // stops steering it.
+    private const double FreshSeconds = 2d;
     private readonly Lock m_gate = new();
     private readonly List<SdfResidencyGrant> m_grants = [];
 
@@ -84,12 +83,16 @@ public sealed class SdfResidencySelector {
     /// <param name="account">The account the selector reads its pool from and reserves the regions in.</param>
     /// <param name="pool">The pool the mesh regions lie in
     /// (<see cref="GpuMemorySegments.ExpectedPool(bool, GpuMemoryRole)"/> of a device-local buffer).</param>
+    /// <param name="time">The clock the budget and the reports' freshness read (<see cref="IGpuDeviceContext.Time"/>);
+    /// <see langword="null"/> reads <see cref="TimeProvider.System"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="account"/> is <see langword="null"/>.</exception>
-    public SdfResidencySelector(MemoryAccount account, PhysicalMemory pool) {
+    public SdfResidencySelector(MemoryAccount account, PhysicalMemory pool, TimeProvider? time = null) {
         ArgumentNullException.ThrowIfNull(argument: account);
 
         m_account = account;
         Pool = pool;
+        Time = (time ?? TimeProvider.System);
+        Work = new SdfGpuWorkBudget(time: Time);
     }
 
     /// <summary>Gets the half rungs every residency's bake coarsens its demand by. Safe to read from any thread.</summary>
@@ -97,8 +100,11 @@ public sealed class SdfResidencySelector {
     /// <summary>Gets the pool the mesh regions lie in.</summary>
     public PhysicalMemory Pool { get; }
 
+    /// <summary>Gets the clock the presentation's background work is metered by: its budget, its services' waits and its
+    /// lighting's ages.</summary>
+    public TimeProvider Time { get; }
     /// <summary>Gets the one budget of GPU time and upload bytes the presentation's background GPU work draws on.</summary>
-    public SdfGpuWorkBudget Work { get; } = new();
+    public SdfGpuWorkBudget Work { get; }
 
     /// <summary>Returns a device's selector, the same one for every residency on the device, reading the process
     /// account.</summary>
@@ -110,7 +116,8 @@ public sealed class SdfResidencySelector {
 
         return Selectors.GetValue(key: device, createValueCallback: static device => new SdfResidencySelector(
             account: MemoryAccount.Shared,
-            pool: GpuMemorySegments.ExpectedPool(role: GpuMemoryRole.DeviceLocal, unifiedMemory: device.MemoryProfile.UnifiedMemory)
+            pool: GpuMemorySegments.ExpectedPool(role: GpuMemoryRole.DeviceLocal, unifiedMemory: device.MemoryProfile.UnifiedMemory),
+            time: device.Time
         ));
     }
     /// <summary>Returns a reservation for what one background GPU service's jobs hold on the device: workspace under
@@ -274,7 +281,8 @@ public sealed class SdfResidencySelector {
     // detail it can give up, and falls half a rung once every residency has fit a half rung finer for the quiet wait,
     // which doubles when a rise follows a fall closely.
     internal int Decide(SdfResidencyGrant grant, in SdfDetailReport report) {
-        var now = Stopwatch.GetTimestamp();
+        var now = Time.GetTimestamp();
+        var fresh = ((long)(FreshSeconds * Time.TimestampFrequency));
         var bounded = m_account.TryReadTotals(held: out var held, limit: out var limit, pool: Pool, promised: out var promised);
 
         var limitNow = (bounded ? limit : long.MaxValue);
@@ -299,7 +307,7 @@ public sealed class SdfResidencySelector {
 
             foreach (var other in m_grants) {
                 named += other.Named;
-                if ((other.ReportedAt == 0) || ((now - other.ReportedAt) > FreshTicks)) { continue; }
+                if ((other.ReportedAt == 0) || ((now - other.ReportedAt) > fresh)) { continue; }
                 if (other.Named > primary.Named) { primary = other; }
                 if ((other.ReportSerial > m_decidedSerial) && (other.ReportLimit >= limitNow)) { over |= other.Report.Over; }
                 anySpare |= other.Report.AnySpare;

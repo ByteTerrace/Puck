@@ -524,7 +524,10 @@ public sealed partial class SdfWorldPassesLawTests {
     private sealed class TemporalRig : IDisposable {
         private static readonly string[] Names = ["world"];
         private static readonly RenderGraphRoot[] Roots = [new RenderGraphRoot(Height: 1, Instance: "world", Width: 1)];
-        private readonly UploadModelGpu m_gpu = new();
+        // The device's clock moves one display period for each frame the rig produces, so the frames it drives, never the
+        // wall time they take, decide when the background work they meter lands.
+        private readonly VirtualClock m_clock = VirtualClock.ForDevice();
+        private readonly UploadModelGpu m_gpu;
 
         private readonly FrameContext m_context;
         private readonly TaintingFeed? m_feed;
@@ -535,6 +538,8 @@ public sealed partial class SdfWorldPassesLawTests {
         private ulong m_rendered;
 
         public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false, float renderScale = 1f, Puck.SignedDistance.SdfLights? lights = null, Action<SdfSky>? sky = null, bool environment = false, bool glass = false, int displayHertz = 0) {
+            m_gpu = new UploadModelGpu(clock: m_clock);
+
             var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
             var frame = Frame() with { EnableCadenceGate = cadence };
 
@@ -585,9 +590,8 @@ public sealed partial class SdfWorldPassesLawTests {
                 FrameDeltaTicks: ((displayHertz > 0) ? (Puck.Maths.FixedTickConversion.TicksPerSecond / ((ulong)displayHertz)) : 0UL),
                 Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = m_gpu }),
                 StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent, DisplayHertz: displayHertz, GridHertz: displayHertz);
-            // The irradiance volume's first lighting lands in wall time (its GPU work draws on a budget that accrues by the
-            // clock, not by frames), so the rig settles it before a law counts frames: a view stands only once its lighting
-            // has settled (SdfWorldResidency.IsUnchanged).
+            // The irradiance volume's first lighting lands over the frames it is granted, so the rig settles it before a law
+            // counts frames: a view stands only once its lighting has settled (SdfWorldResidency.IsUnchanged).
             TestLiveness.Until(step: () => {
                 Produce();
                 return (Selected.IsReady && Passes.HasRenderedResolvedView(instance: "world") &&
@@ -633,6 +637,7 @@ public sealed partial class SdfWorldPassesLawTests {
         public ShaderPipelineRenderNode World => Runtime.Node(instance: Runtime.Instances.IndexOf(name: "world"));
 
         public void Produce(bool named = true) {
+            m_clock.Advance(by: VirtualClock.Frame);
             m_rendered = World.FrameCounter;
             var scheduled = new RenderGraphFrame(DisplayHeight: ((int)OutputExtent), DisplayHertz: 60, DisplayWidth: ((int)OutputExtent),
                 Footprints: ((m_feed is null) ? [] : [new RenderGraphFootprint(Consumer: "world", Height: 1.0, Producer: "feed", Width: 1.0)]),
@@ -642,8 +647,8 @@ public sealed partial class SdfWorldPassesLawTests {
 
             _ = Runtime.ProduceFrame(context: in context, frame: in scheduled);
         }
-        // Produces frames until the irradiance volume's lighting has settled, which a lighting change relights in wall
-        // time: a view stands only once its lighting has (SdfWorldResidency.IsUnchanged).
+        // Produces frames until the irradiance volume's lighting has settled, which a lighting change relights over the
+        // frames it is granted: a view stands only once its lighting has (SdfWorldResidency.IsUnchanged).
         public void SettleLighting() => TestLiveness.Until(step: () => {
             Produce();
             return !(Selected.MeshIrradiance.Settling || (Second?.MeshIrradiance.Settling ?? false));

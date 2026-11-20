@@ -400,6 +400,8 @@ public sealed class SdfGpuWork : IDisposable {
 
     private readonly GpuDeviceServices m_gpu;
     private readonly SdfGpuWorkBudget m_budget;
+    // The clock every wait, accrual and age below reads, the budget's own (Drive's waits on fences are real time).
+    private readonly TimeProvider m_time;
     // The service's turn on the budget, which orders its budgeted takes against every other service's (Takes).
     private readonly SdfGpuWorkTurn m_turn;
     private readonly SdfGpuWorkHold? m_hold;
@@ -482,7 +484,8 @@ public sealed class SdfGpuWork : IDisposable {
 
         m_gpu = device.Services;
         m_name = name;
-        m_budget = (selector?.Work ?? new SdfGpuWorkBudget());
+        m_time = (selector?.Time ?? device.Time);
+        m_budget = (selector?.Work ?? new SdfGpuWorkBudget(time: m_time));
         m_turn = m_budget.Join(name: name);
 
         using var scope = new GpuCreationScope();
@@ -698,7 +701,7 @@ public sealed class SdfGpuWork : IDisposable {
     /// they were taken to fit and the jobs a client handed over past what was left.</summary>
     /// <returns>One space-led field.</returns>
     public string Describe() {
-        var busy = ((m_busyTicks + ((m_inFlight > 0) ? (Stopwatch.GetTimestamp() - m_busySince) : 0L)) / ((double)Stopwatch.Frequency));
+        var busy = ((m_busyTicks + ((m_inFlight > 0) ? (m_time.GetTimestamp() - m_busySince) : 0L)) / ((double)m_time.TimestampFrequency));
 
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $" gpu-work=[jobs:{m_submitted},answered:{m_answered},gpu:{(m_gpuSeconds * 1000.0):0}ms,busy:{busy:0.0}s,occupancy:{((busy > 0.0) ? (m_gpuSeconds / busy) : 0.0):0.00},most-in-flight:{m_mostInFlight},pumps:{m_pumps},services:{m_services},service-jobs:{m_serviceJobs},drives:{m_drives},drive-fence:{Seconds(ticks: m_driveFenceTicks):0.0}s,drive-idle:{Seconds(ticks: m_driveIdleTicks):0.0}s,drive-step:{Seconds(ticks: m_driveStepTicks):0.0}s,unbound:{m_unbound},budget-holds:{m_budgetHolds},deadline-holds:{m_deadlineHolds},turn-holds:{m_turnHolds},owed-jobs:{m_owedJobs},deferred:{m_deferrals},lease-waits:{m_leaseWaits},over-allowance:{m_overAllowance},over-deadline:{m_overDeadline},timestamps:{((m_timestamps is not null) ? "measured" : "estimated")}] most-job=[{(m_mostJobSeconds * 1000.0):0.00}ms {m_mostJob}]");
     }
@@ -791,7 +794,7 @@ public sealed class SdfGpuWork : IDisposable {
             slot.Lease = readback;
             slot.Reader = client;
             Vacate(slot: slot);
-            if (--m_inFlight == 0) { m_busyTicks += (Stopwatch.GetTimestamp() - m_busySince); }
+            if (--m_inFlight == 0) { m_busyTicks += (m_time.GetTimestamp() - m_busySince); }
             try {
                 client.Complete(job: job, readback: readback);
                 m_answered++;
@@ -807,8 +810,8 @@ public sealed class SdfGpuWork : IDisposable {
     // free slot is the one Refill would reuse: no job in flight and its last readback released (Slot.IsFree), so no job
     // and no client reads what goes.
     private void ReleaseIdle() {
-        var now = Stopwatch.GetTimestamp();
-        var window = ((long)(IdleSeconds * Stopwatch.Frequency));
+        var now = m_time.GetTimestamp();
+        var window = ((long)(IdleSeconds * m_time.TimestampFrequency));
 
         foreach (var slot in m_slots) {
             if (!slot.IsFree || (slot.Held.Count == 0)) { continue; }
@@ -842,7 +845,7 @@ public sealed class SdfGpuWork : IDisposable {
             var start = BitConverter.ToUInt64(value: times);
             var ticks = (BitConverter.ToUInt64(value: times[sizeof(ulong)..]) - start) & mask;
             var measured = ((ticks * timestamps.NanosecondsPerTick) * 1e-9);
-            var inFlight = Stopwatch.GetElapsedTime(startingTimestamp: slot.SubmittedAt).TotalSeconds;
+            var inFlight = m_time.GetElapsedTime(startingTimestamp: slot.SubmittedAt).TotalSeconds;
 
             seconds = (slot.Charged
                 ? m_budget.SettleGpu(charge: slot.Charge, estimate: slot.Estimate, inFlight: inFlight, measured: measured)
@@ -867,8 +870,8 @@ public sealed class SdfGpuWork : IDisposable {
     // Banks what the presentation's budget accrued since any service last asked, and returns the seconds since this
     // service's last step (zero at the first), which its recording time is a share of.
     private double Accrue() {
-        var now = Stopwatch.GetTimestamp();
-        var seconds = ((m_pumpedAt != 0) ? ((now - m_pumpedAt) / ((double)Stopwatch.Frequency)) : 0.0);
+        var now = m_time.GetTimestamp();
+        var seconds = ((m_pumpedAt != 0) ? ((now - m_pumpedAt) / ((double)m_time.TimestampFrequency)) : 0.0);
 
         m_budget.Accrue();
         m_pumpedAt = now;
@@ -882,7 +885,7 @@ public sealed class SdfGpuWork : IDisposable {
     private Stop Refill(SdfWorldTables tables, bool budgeted, TimeSpan? within) {
         var seconds = Accrue();
         var hostBudget = TimeSpan.FromSeconds(value: Math.Clamp(value: (seconds * HostShare), min: HostBudget.TotalSeconds, max: MostHostBudget.TotalSeconds));
-        var began = Stopwatch.GetTimestamp();
+        var began = m_time.GetTimestamp();
 
         if (within is { } left) {
             // The frame's own pump follows the wait: a job that could not be recorded before the deadline is its.
@@ -896,7 +899,7 @@ public sealed class SdfGpuWork : IDisposable {
             // Work the frame owes comes first, under its own allowance and outside the credit: a job that waits
             // for room holds the step as a deadline hold, since the ordinary allowance it would fall back to is smaller.
             if (budgeted) {
-                if (Stopwatch.GetElapsedTime(startingTimestamp: began) >= hostBudget) {
+                if (m_time.GetElapsedTime(startingTimestamp: began) >= hostBudget) {
                     m_budgetHolds++;
                     return Stop.Host;
                 }
@@ -932,7 +935,7 @@ public sealed class SdfGpuWork : IDisposable {
                 m_budgetHolds++;
                 return Stop.Budget;
             }
-            if ((budgeted || (within is not null)) && (Stopwatch.GetElapsedTime(startingTimestamp: began) >= hostBudget)) {
+            if ((budgeted || (within is not null)) && (m_time.GetElapsedTime(startingTimestamp: began) >= hostBudget)) {
                 if (budgeted) { m_budgetHolds++; }
                 return Stop.Host;
             }
@@ -980,7 +983,7 @@ public sealed class SdfGpuWork : IDisposable {
             // A client whose job was handed back for want of room is offered a slot again once one has come back, whose
             // buffers its job may then take, or after a while, since room can come from another holder. The others'
             // jobs go on meanwhile.
-            if ((WaitingOf(client: candidate) is { } waiting) && (BusySlots() >= waiting.Busy) && (Stopwatch.GetElapsedTime(startingTimestamp: waiting.At) < DeferralRetry)) { continue; }
+            if ((WaitingOf(client: candidate) is { } waiting) && (BusySlots() >= waiting.Busy) && (m_time.GetElapsedTime(startingTimestamp: waiting.At) < DeferralRetry)) { continue; }
             if (owed
                 ? candidate.TryTakeOwed(allowance: allowance, estimatedSeconds: out estimate, job: out job, tables: tables, uploadBytes: uploadBytes)
                 : candidate.TryTake(allowance: allowance, estimatedSeconds: out estimate, job: out job, tables: tables, uploadBytes: uploadBytes)) {
@@ -1032,7 +1035,7 @@ public sealed class SdfGpuWork : IDisposable {
                 client.Abandon(job: job);
                 m_deferrals++;
 
-                var now = Stopwatch.GetTimestamp();
+                var now = m_time.GetTimestamp();
 
                 if (WaitingOf(client: client) is not { } waiting) { m_waiting.Add(item: (waiting = new Deferral(Client: client, Since: now))); }
                 waiting.At = now;
@@ -1060,7 +1063,7 @@ public sealed class SdfGpuWork : IDisposable {
         }
         slot.Fence.SignalOnCompletion(signal: m_service!.Signal);
         if (WaitingOf(client: client) is { } submitted) { _ = m_waiting.Remove(item: submitted); }
-        slot.SubmittedAt = Stopwatch.GetTimestamp();
+        slot.SubmittedAt = m_time.GetTimestamp();
         slot.Estimate = estimate;
         slot.Allowance = allowance;
         slot.Charged = charged;
@@ -1112,7 +1115,7 @@ public sealed class SdfGpuWork : IDisposable {
     // only a buffer the slot already holds at the size asked comes back.
     internal IGpuBuffer Hold(int slot, ISdfGpuWorkClient? client, string part, ulong bytes, bool hostVisible, bool readback, GpuBufferUsage usage, SdfGpuWorkSizing sizing) {
         var held = m_slots[slot].Held;
-        var now = Stopwatch.GetTimestamp();
+        var now = m_time.GetTimestamp();
         var at = -1;
 
         for (var index = 0; (index < held.Count); index++) {
@@ -1140,7 +1143,7 @@ public sealed class SdfGpuWork : IDisposable {
             ReleaseFree(except: slot);
 
             var (flying, reading) = InUseBy(client: m_recording!);
-            var forced = ((flying == 0) && ((reading == 0) || ((WaitingOf(client: m_recording!) is { } waiting) && (Stopwatch.GetElapsedTime(startingTimestamp: waiting.Since) >= ForcedPatience))));
+            var forced = ((flying == 0) && ((reading == 0) || ((WaitingOf(client: m_recording!) is { } waiting) && (m_time.GetElapsedTime(startingTimestamp: waiting.Since) >= ForcedPatience))));
 
             if (!hold.TryRaise(bytes: ((long)size), forced: forced, hostVisible: hostVisible)) {
                 throw new SdfGpuWorkDeferredException(bytes: ((long)size), part: part);

@@ -65,8 +65,10 @@ internal sealed class UploadModelGpu :
     private long m_nextHandle = 0x1000;
 
     /// <summary>Initializes a new instance of the <see cref="UploadModelGpu"/> class.</summary>
-    public UploadModelGpu() {
-        m_inner = new FakeGpuDevice();
+    /// <param name="clock">The clock the device hands its background work (<see cref="IGpuDeviceContext.Time"/>), which a
+    /// law steps by frames; <see langword="null"/> for the host's.</param>
+    public UploadModelGpu(TimeProvider? clock = null) {
+        m_inner = new FakeGpuDevice(clock: clock);
         Services = new GpuDeviceServices {
             Bindings = this,
             BufferFactory = this,
@@ -96,6 +98,10 @@ internal sealed class UploadModelGpu :
     /// region.</summary>
     public GpuMemoryProfile MemoryProfile { get; set; }
     public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+    /// <summary>Gets the clock the device hands its background work: its inner device's
+    /// (<see cref="FakeGpuDevice.Clock"/>).</summary>
+    public TimeProvider Clock => m_inner.Clock;
+    TimeProvider IGpuDeviceContext.Time => Clock;
 
     public void RefreshMemoryReading() { }
 

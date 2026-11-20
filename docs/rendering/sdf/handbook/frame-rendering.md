@@ -1428,8 +1428,9 @@ packs again only once those words outnumber the named meshes' words and 32 MB
 Placed meshes never land in a frame's upload: they stream through the
 residency's background GPU work (`SdfWorldTables.MeshLanding.cs`, a client of
 `SdfGpuWork`), in jobs of at most `SdfGpuWork.MostUploadJobBytes` under that
-service's byte, host-time and GPU-share budgets, each a rate of wall time
-(`SdfGpuWork.UploadBytesPerSecond`), so a slow or throttled frame lands as many
+service's byte, host-time and GPU-share budgets, each a rate of the device's clock
+(`IGpuDeviceContext.Time`: wall time on a host, a clock a device-free law steps by
+frames; `SdfGpuWork.UploadBytesPerSecond`), so a slow or throttled frame lands as many
 bytes a second as a fast one, the meshes the views see largest
 first (`SdfMeshDemand`). A draw whose mesh is still owed keeps its producer row as an absent
 record until its last job has completed, so a boot, a relocation or a body whose

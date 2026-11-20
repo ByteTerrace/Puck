@@ -97,6 +97,17 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     private bool m_disposed;
     private bool m_trimListening;
+    private TimeProvider m_time = TimeProvider.System;
+
+    /// <summary>Gets or sets the clock that meters the volume's work: the budget's grants, the intervals between its
+    /// scene builds and lighting captures, and the ages of its probes' light. It is the device's
+    /// (<see cref="Puck.Abstractions.Gpu.IGpuDeviceContext.Time"/>), which the residency hands over before its first
+    /// frame stages; a wait on the volume's trace is bounded in real time whatever it reads. Set before the first frame
+    /// stages.</summary>
+    public TimeProvider Time {
+        get => Volatile.Read(location: ref m_time);
+        set => Volatile.Write(location: ref m_time, value: (value ?? throw new ArgumentNullException(paramName: nameof(value))));
+    }
 
     // Name the trace scene's CPU hierarchy and the probe caches in the managed heap's row of the process account, read
     // when the account is measured. Disposed outside m_gate, which their reads take while the account holds its sample
@@ -423,7 +434,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private uint[] m_volume = [];
     private readonly List<int> m_changedSlots = [];
     private readonly Stopwatch m_clock = new();
-    private readonly Stopwatch m_sceneClock = new();
+    // When the latest scene build began, a timestamp of Time; zero before the first.
+    private long m_sceneStartedAt;
 
     private SdfWorldTables? m_writeTables;
     private Action<ReadOnlyMemory<uint>>? m_write;
@@ -564,7 +576,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private SdfIndirectBudget m_budget;
     // The budget's grants not yet spent: probes the worker may relight and trace before the next frame grants more, in
     // whole and part probes, since a rate of a few probes a second grants less than one a frame. And when the latest
-    // grant was made (a Stopwatch timestamp, zero before the first), which the next grants the wall time since.
+    // grant was made (a timestamp of Time, zero before the first), which the next grants the time since.
     private double m_relightCredits;
     private double m_traceCredits;
     private long m_grantedAt;
@@ -1004,8 +1016,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         budget.Validate();
         m_budget = budget;
 
-        var now = Stopwatch.GetTimestamp();
-        var seconds = ((m_grantedAt == 0L) ? FirstGrantSeconds : Math.Min(val1: MostGrantSeconds, val2: Stopwatch.GetElapsedTime(startingTimestamp: m_grantedAt, endingTimestamp: now).TotalSeconds));
+        var now = Time.GetTimestamp();
+        var seconds = ((m_grantedAt == 0L) ? FirstGrantSeconds : Math.Min(val1: MostGrantSeconds, val2: Time.GetElapsedTime(startingTimestamp: m_grantedAt, endingTimestamp: now).TotalSeconds));
 
         m_grantedAt = now;
         if (budget.RelightPerSecond > 0) { m_relightCredits = Banked(credits: m_relightCredits, perSecond: budget.RelightPerSecond, seconds: seconds); }
@@ -1447,7 +1459,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // Sample at the diagnostic read, rather than reporting the ages from the last work-list rebuild.
     private string DescribeLevelAges() {
         if (m_lighting is null) { return ""; }
-        var now = Stopwatch.GetTimestamp();
+        var now = Time.GetTimestamp();
         var descriptions = new List<string>();
 
         for (var level = 0; (level < m_levels.Length); level++) {
@@ -1462,7 +1474,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     for (var x = low.X; (x < (low.X + dims.X)); x++) {
                         if (!m_levels[level].Cache.TryGetValue(key: (x, y, z), value: out var probe)) { continue; }
                         var next = Math.Clamp(((probe.Lighting + 1) - m_versionBase), 0, (m_versionTimes.Count - 1));
-                        var age = ((probe.Lighting == m_lightingVersion) ? 0 : (float)Stopwatch.GetElapsedTime(m_versionTimes[next], now).TotalSeconds);
+                        var age = ((probe.Lighting == m_lightingVersion) ? 0 : (float)Time.GetElapsedTime(m_versionTimes[next], now).TotalSeconds);
 
                         ages.Add(item: age);
                         var center = (new Vector3(x: (x + .5f), y: (y + .5f), z: (z + .5f)) * m_layout.SpacingOf(level: level));
@@ -1528,7 +1540,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private bool ScenePendingDue(SdfFrame frame) =>
         ((m_build is { IsFaulted: true }) ||
         (!frame.ConvergesLighting && (m_build is null or { IsCompleted: true }) && ((m_scene is null) || !m_traceOwed || (m_tracedSinceScene >= m_layout.TotalCount)) &&
-        (!m_sceneClock.IsRunning || (m_sceneClock.Elapsed >= PendingSceneInterval))));
+        ((m_sceneStartedAt == 0L) || (Time.GetElapsedTime(startingTimestamp: m_sceneStartedAt) >= PendingSceneInterval))));
     // The probes traced since the installed scene was (Install, Batch).
     private long m_tracedSinceScene;
     // Rebuilds the scene on the thread pool when the static draws changed, from the scene it replaces so only geometry new
@@ -1647,10 +1659,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         var (previousDraws, previousCount) = (m_diagnosticDraws, m_diagnosticCount);
         var hadScene = (m_scene is not null);
-        var since = (m_sceneClock.IsRunning ? m_sceneClock.Elapsed.TotalSeconds : 0d);
+        var since = ((m_sceneStartedAt == 0L) ? 0d : Time.GetElapsedTime(startingTimestamp: m_sceneStartedAt).TotalSeconds);
 
         m_buildingKey = key;
-        m_sceneClock.Restart();
+        m_sceneStartedAt = Time.GetTimestamp();
         m_build = Task.Run(function: async () => {
             var clock = Stopwatch.StartNew();
             SdfMeshIrradianceScene scene;
@@ -1768,7 +1780,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             sameSky = SdfSkyEnvironment.SameMap(block: skyBlock, layers: m_skyLayers, otherBlock: m_lightingSky, otherLayers: m_lightingSkyLayers);
         }
         if ((key == m_lightingKey) && sameSky && (m_lighting is not null)) { return; }
-        if (!frame.ConvergesLighting && (m_lighting is not null) && (Stopwatch.GetElapsedTime(startingTimestamp: m_lightingCheckedAt) < LightingInterval)) { return; }
+        if (!frame.ConvergesLighting && (m_lighting is not null) && (Time.GetElapsedTime(startingTimestamp: m_lightingCheckedAt) < LightingInterval)) { return; }
 
         var skyOnly = ((key == m_lightingKey) && (m_lighting is not null));
 
@@ -1777,13 +1789,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_localVersion++;
         }
 
-        var captured = Lighting.Capture(captureLights: captureLights, frame: frame, localVersion: m_localVersion, previous: m_lighting, scratch: m_captureScratch, version: (m_lightingVersion + 1));
+        var captured = Lighting.Capture(captureLights: captureLights, frame: frame, localVersion: m_localVersion, previous: m_lighting, scratch: m_captureScratch, capturedAt: Time.GetTimestamp(), version: (m_lightingVersion + 1));
 
         if ((frame.IndirectSources & SdfIndirectSources.Sky) != 0) { Counters.Count(kind: SkyCaptures); }
         // Exposure reads the current capture's bound even when its irradiance stays in the same grid cell.
         m_skyPeak = captured.SkyPeak;
 
-        m_lightingCheckedAt = Stopwatch.GetTimestamp();
+        m_lightingCheckedAt = Time.GetTimestamp();
         m_lightingKey = key;
         m_lightingSky = skyBlock;
         m_skyLayers.CopyTo(array: m_lightingSkyLayers, index: 0);
@@ -2065,7 +2077,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             // made under replaced lighting holds none of the probes it left stale.
             if (!m_listed || (m_listGeometry != snapshot.Geometry) || (m_listWindow != snapshot.WindowVersion) || (m_listLayout != snapshot.Layout) ||
                 (m_listSweep != snapshot.Sweep) || (m_listLighting != snapshot.Lighting.Version)) {
-                var now = Stopwatch.GetTimestamp();
+                var now = Time.GetTimestamp();
                 bool stale;
 
                 BeginUnit();
@@ -2256,7 +2268,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var stale = false;
         var layout = snapshot.Layout;
         var lighting = snapshot.Lighting;
-        var now = Stopwatch.GetTimestamp();
+        var now = Time.GetTimestamp();
 
         candidates.Clear();
         for (var level = layout.Finest; (level < m_levels.Length); level++) {
@@ -2274,7 +2286,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                         var current = (present && (probe.Lighting == lighting.Version));
                         var center = (new Vector3(x: (x + 0.5f), y: (y + 0.5f), z: (z + 0.5f)) * spacing);
                         var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
-                        var age = ((!present || current) ? 0 : (float)Stopwatch.GetElapsedTime(StaleSince(lighting: probe.Lighting, snapshot: in snapshot), now).TotalSeconds);
+                        var age = ((!present || current) ? 0 : (float)Time.GetElapsedTime(StaleSince(lighting: probe.Lighting, snapshot: in snapshot), now).TotalSeconds);
                         var bound = SdfMeshProbeRelight.AgeBoundOf(level: level, target: snapshot.AgeTarget);
 
                         if (present) {
@@ -2332,10 +2344,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private static (int Band, uint Morton) ProbePriority((int X, int Y, int Z) cell, (int X, int Y, int Z) low, Vector3 center, Vector3 camera, Vector3 spacing) =>
         (((int)(((center - camera) / spacing).Length() / 8)), BinaryIntegerFunctions.BitwiseTriple<uint, uint>(second: ((uint)(cell.Y - low.Y)), third: ((uint)(cell.Z - low.Z)), value: ((uint)(cell.X - low.X))));
     // When a probe's lighting went stale: the capture of the version after its own, or the oldest capture remembered.
-    private static long StaleSince(int lighting, in Snapshot snapshot) {
+    private long StaleSince(int lighting, in Snapshot snapshot) {
         var index = ((lighting + 1) - snapshot.VersionBase);
 
-        return ((snapshot.VersionTimes.Length == 0) ? Stopwatch.GetTimestamp() : snapshot.VersionTimes[Math.Clamp(value: index, min: 0, max: (snapshot.VersionTimes.Length - 1))]);
+        return ((snapshot.VersionTimes.Length == 0) ? Time.GetTimestamp() : snapshot.VersionTimes[Math.Clamp(value: index, min: 0, max: (snapshot.VersionTimes.Length - 1))]);
     }
     // Records the lighting age a listing found and the relight rate of the cycle it closes, and reports a cycle whose
     // oldest lighting is past the budget's age target; under the gate.
@@ -2350,7 +2362,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_ageMedian = m_ageMax = 0f;
         }
 
-        var seconds = ((m_cycleStart == 0L) ? 0d : Stopwatch.GetElapsedTime(endingTimestamp: now, startingTimestamp: m_cycleStart).TotalSeconds);
+        var seconds = ((m_cycleStart == 0L) ? 0d : Time.GetElapsedTime(endingTimestamp: now, startingTimestamp: m_cycleStart).TotalSeconds);
 
         if (seconds > 0d) { m_cycleRate = ((float)((Counters.Read(kind: Relit) - m_cycleRelit) / seconds)); }
         m_cycleStart = now;
@@ -2372,7 +2384,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         if (worst < 0) { return; }
         m_behind = true;
         Counters.Count(kind: Behind);
-        if ((m_behindAt != 0L) && (Stopwatch.GetElapsedTime(endingTimestamp: now, startingTimestamp: m_behindAt) < BehindInterval)) { return; }
+        if ((m_behindAt != 0L) && (Time.GetElapsedTime(endingTimestamp: now, startingTimestamp: m_behindAt) < BehindInterval)) { return; }
         m_behindAt = now;
 
         Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture,
@@ -3531,7 +3543,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
         // Captures a frame's lighting; the materials are the previous capture's while the program is the same one.
         // The workspace is the caller's, refilled by every capture; a capture keeps only copies of what it holds.
-        public static Lighting Capture(SdfFrame frame, SdfLights captureLights, Lighting? previous, int version, int localVersion, CaptureScratch scratch) {
+        public static Lighting Capture(SdfFrame frame, SdfLights captureLights, Lighting? previous, int version, int localVersion, CaptureScratch scratch, long capturedAt) {
             var lights = scratch.Lights;
             var indices = scratch.Indices;
             var points = scratch.Points;
@@ -3574,7 +3586,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             return new Lighting {
                 Version = version,
                 LocalVersion = localVersion,
-                CapturedAt = Stopwatch.GetTimestamp(),
+                CapturedAt = capturedAt,
                 SkyPeak = skyPeak,
                 Direct = ((sources & SdfIndirectSources.Direct) != 0),
                 Emission = ((sources & SdfIndirectSources.Emission) != 0),

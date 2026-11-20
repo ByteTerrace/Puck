@@ -1,7 +1,7 @@
-using System.Diagnostics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.Hosting.Jobs;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -190,15 +190,15 @@ public sealed class SdfResidencySelectorLawTests {
     }
     [Fact]
     public void TheWorkBudgetIsOneRateOfWallTimeForEveryService() {
-        var now = Stopwatch.Frequency;
-        var budget = new SdfGpuWorkBudget(clock: () => now);
+        var clock = VirtualClock.ForDevice();
+        var budget = new SdfGpuWorkBudget(time: clock);
         var charged = 0.0;
 
         // Two services at ten frames a second, each taking a frame's share of jobs while the budget holds credit: over
         // five seconds they are charged the budget's share of that time between them, not a share each.
         budget.Accrue();
         for (var frame = 0; (frame < 50); frame++) {
-            now += (Stopwatch.Frequency / 10);
+            clock.Advance(by: TimeSpan.FromSeconds(value: 0.1));
             for (var service = 0; (service < 2); service++) {
                 budget.Accrue();
                 while (budget.Holds) {
@@ -214,11 +214,11 @@ public sealed class SdfResidencySelectorLawTests {
         Assert.InRange(actual: share, high: (SdfGpuWork.GpuShare * 1.1), low: (SdfGpuWork.GpuShare * 0.9));
 
         // With nobody waiting on it, a gap banks one frame's share and no more.
-        var idle = new SdfGpuWorkBudget(clock: () => now);
+        var idle = new SdfGpuWorkBudget(time: clock);
 
         idle.Accrue();
         idle.ChargeGpu(seconds: (SdfGpuWork.GpuShare * SdfGpuWorkBudget.ReferencePeriodSeconds));
-        now += (10L * Stopwatch.Frequency);
+        clock.Advance(by: TimeSpan.FromSeconds(value: 10d));
         idle.Accrue();
 
         var jobs = 0;
@@ -232,8 +232,8 @@ public sealed class SdfResidencySelectorLawTests {
     [Fact]
     public void TheWorkBudgetsShareFollowsTheTimeTheFrameLeavesFree() {
         const double Period = (1.0 / 60.0);
-        var now = Stopwatch.Frequency;
-        var budget = new SdfGpuWorkBudget(clock: () => now);
+        var clock = VirtualClock.ForDevice();
+        var budget = new SdfGpuWorkBudget(time: clock);
 
         void Frames(double frameSeconds, int windows) {
             for (var frame = 0; (frame < (windows * SdfGpuWorkBudget.FollowFrames)); frame++) { budget.Observe(frameSeconds: frameSeconds, periodSeconds: Period); }
@@ -260,7 +260,7 @@ public sealed class SdfResidencySelectorLawTests {
         // Credit accrues at the live share: a second a service waited on banks the share of MostBankSeconds, no more.
         budget.Accrue();
         budget.Want();
-        now += Stopwatch.Frequency;
+        clock.Advance(by: TimeSpan.FromSeconds(value: 1d));
         budget.Accrue();
         Assert.InRange(actual: budget.GpuCredit, high: (SdfGpuWorkBudget.MostBankSeconds * budget.Share) + 1e-12, low: 0.0);
         // A frame with no reading returns to the cap and names why.
@@ -270,8 +270,8 @@ public sealed class SdfResidencySelectorLawTests {
     }
     [Fact]
     public void TheWorkBudgetsDebtIsBoundedWhateverAJobReports() {
-        var now = Stopwatch.Frequency;
-        var budget = new SdfGpuWorkBudget(clock: () => now);
+        var clock = VirtualClock.ForDevice();
+        var budget = new SdfGpuWorkBudget(time: clock);
 
         budget.Accrue();
         var charge = budget.ChargeGpu(seconds: (SdfGpuWork.GpuShare * SdfGpuWorkBudget.ReferencePeriodSeconds));
@@ -310,7 +310,7 @@ public sealed class SdfResidencySelectorLawTests {
         Assert.InRange(actual: wait.TotalSeconds, high: ((SdfGpuWorkBudget.MostDebtSeconds / SdfGpuWork.GpuShare) + 0.001), low: (SdfGpuWorkBudget.MostDebtSeconds / SdfGpuWork.GpuShare));
         // Accruals at a serviced host's pace: the credit is positive once the wait has passed.
         for (var step = 0; ((step < 400) && !budget.Holds); step++) {
-            now += (Stopwatch.Frequency / 100);
+            clock.Advance(by: TimeSpan.FromSeconds(value: 0.01));
             budget.Accrue();
             budget.Want();
         }
@@ -319,8 +319,8 @@ public sealed class SdfResidencySelectorLawTests {
     }
     [Fact]
     public void ASettlementGivesBackOnlyWhatItsChargeDebitedSoTheFloorMintsNoCredit() {
-        var now = Stopwatch.Frequency;
-        var budget = new SdfGpuWorkBudget(clock: () => now);
+        var clock = VirtualClock.ForDevice();
+        var budget = new SdfGpuWorkBudget(time: clock);
 
         budget.Accrue();
 
@@ -340,14 +340,14 @@ public sealed class SdfResidencySelectorLawTests {
     }
     [Fact]
     public void TheJobsQueuedAheadOfAFrameFitOneFrameAllowanceWhateverTheBankHolds() {
-        var now = Stopwatch.Frequency;
-        var budget = new SdfGpuWorkBudget(clock: () => now);
+        var clock = VirtualClock.ForDevice();
+        var budget = new SdfGpuWorkBudget(time: clock);
         var allowance = budget.FrameAllowanceSeconds;
 
         // A long wait a service waited through banks the share of MostBankSeconds: several allowances of credit.
         budget.Accrue();
         budget.Want();
-        now += Stopwatch.Frequency;
+        clock.Advance(by: TimeSpan.FromSeconds(value: 1d));
         budget.Accrue();
         Assert.True(condition: (budget.GpuCredit > (2.0 * allowance)), userMessage: $"the bank holds {budget.GpuCredit}");
 
@@ -391,7 +391,7 @@ public sealed class SdfResidencySelectorLawTests {
     [Fact]
     public void AFrameIsCountedMissedBehindBackgroundWorkOnlyWhenThatWorkAndItsOwnTimeOverrunItsPeriod() {
         const double Period = (1.0 / 60.0);
-        var budget = new SdfGpuWorkBudget(clock: static () => Stopwatch.Frequency);
+        var budget = new SdfGpuWorkBudget(time: VirtualClock.ForDevice());
 
         // Frames start a period apart on the queue's clock, each read once and taking its own GPU time from its start; a
         // frame is judged two readings after its own.

@@ -5,6 +5,9 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfWorldTablesWorkLawTests {
+    // The frames a landing may take at the upload budget's rate: ten seconds of the stepped clock.
+    private const int MostLandingFrames = 600;
+
     private static SdfMesh ResidencyTriangle(float extent = 1f) => new(
         positions: new Vector3[] { Vector3.Zero, (Vector3.UnitX * extent), (Vector3.UnitY * extent) },
         indices: new uint[] { 0, 1, 2 }
@@ -92,13 +95,14 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         rig.Engine.Pack(frame: frame);
         var grown = rig.Engine.MeshRegionBytes;
         Assert.False(condition: rig.Engine.MeshesResident);
-        // The big mesh lands in several jobs, at the upload budget's rate of wall time (SdfGpuWork.UploadBytesPerSecond),
-        // so the loop is bounded in seconds rather than pumps.
+        // The big mesh lands in several jobs, at the upload budget's rate (SdfGpuWork.UploadBytesPerSecond) of the device's
+        // stepped clock, so the loop is bounded in frames.
         rig.Engine.SubmitUpload();
         var oldFence = Assert.IsType<FakeGpuDevice.Fence>(@object: rig.Gpu.LastSubmittedFence);
-        var deadline = System.Diagnostics.Stopwatch.StartNew();
+        var frames = 0;
         while (rig.Engine.MeshesLanding) {
-            Assert.True(condition: (deadline.Elapsed < TimeSpan.FromSeconds(10)));
+            Assert.True(condition: (frames++ < MostLandingFrames), userMessage: "The mesh region never landed its meshes.");
+            rig.Step();
             rig.Engine.GpuWork.Pump(tables: rig.Engine);
             // Waiting the latest job completes every earlier submission on the queue.
             rig.Gpu.LastSubmittedFence!.Wait();
@@ -120,10 +124,11 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         carried.Completed = true;
         // The carry has completed, but the relocated meshes have not landed.
         Assert.False(condition: rig.Engine.MeshesResident);
-        // The big mesh's landing overdrew the upload budget, which accrues again over wall time.
-        deadline.Restart();
+        // The big mesh's landing overdrew the upload budget, which accrues again over the frames that follow.
+        frames = 0;
         while (!rig.Engine.MeshesResident) {
-            Assert.True(condition: (deadline.Elapsed < TimeSpan.FromSeconds(10)));
+            Assert.True(condition: (frames++ < MostLandingFrames), userMessage: "The relocated meshes never landed.");
+            rig.Step();
             rig.Engine.GpuWork.Pump(tables: rig.Engine);
             rig.Gpu.LastSubmittedFence!.Wait();
             rig.Engine.GpuWork.Pump(tables: rig.Engine);
