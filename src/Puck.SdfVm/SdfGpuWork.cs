@@ -253,12 +253,17 @@ public readonly ref struct SdfGpuWorkRecording {
     /// <see cref="CopyToReadback"/>). A job asks for every buffer, and reserves its readback
     /// (<see cref="ReserveReadback"/>), before it copies a region.</remarks>
     public void CopyRegion(GpuRegion region, int regionSlot, GpuStage readers) {
+        ArgumentNullException.ThrowIfNull(argument: region);
+        // The flush stages the owed words, growing the slot's staging buffer, and a refusal there takes nothing the region
+        // owes (it stays owed), so it comes before the copy consumes the job: a staging buffer the memory account has no
+        // room for hands the job back (GpuMemoryRefusedException) instead of faulting the service.
+        region.Flush(slot: regionSlot);
         m_owner.Consume(slot: m_slot);
 
         var command = CommandBuffer;
         var copies = new GpuRegionCopyRecording(recorder: Recorder, readers: readers, begin: () => command);
 
-        copies.Record(handsToReaders: true, region: region, slot: regionSlot);
+        copies.Record(flushed: true, handsToReaders: true, region: region, slot: regionSlot);
         _ = copies.Finish();
     }
 }

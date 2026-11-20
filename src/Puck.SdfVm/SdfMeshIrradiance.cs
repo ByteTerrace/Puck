@@ -1743,8 +1743,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // Parallel hierarchy workers can report several refusals together. Other build faults still reach the caller.
     private static SdfMeshIrradianceScene? TryBuildScene(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous, WorkCounterSet? counters = null) {
         try { return SdfMeshIrradianceScene.Build(draws, previous, counters); }
-        catch (HostMemoryRefusedException) { return null; }
-        catch (AggregateException errors) when (errors.Flatten().InnerExceptions.All(static error => error is HostMemoryRefusedException)) { return null; }
+        catch (Exception exception) when (HostMemoryRefusedException.Of(exception: exception) is not null) { return null; }
     }
     // A built scene waiting to replace the installed one: its input, its key and the change it makes; Done completes
     // once it is installed, or dropped by a disposed volume.

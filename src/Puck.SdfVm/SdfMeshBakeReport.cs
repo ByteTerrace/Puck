@@ -132,6 +132,13 @@ internal static class SdfMeshBakeReport {
         public long StopDrained;
         public long StopSamples;
         public long StopTaps;
+        // The takes that stopped at a lattice the readback reservation had no room left for, the takes that waited for
+        // that reservation itself, the copies into the library the host memory account deferred, and the groups whose refused
+        // stage started their final lattice again (SdfMeshPathBake.Refusals).
+        public long StopReadback;
+        public long ReadbackWaits;
+        public long CopyWaits;
+        public long Readmissions;
         public long Takes;
         public long Taps;
         public long WaitingGroups;
@@ -151,7 +158,8 @@ internal static class SdfMeshBakeReport {
         public void Clear() {
             Array.Clear(array: StageTicks);
             Array.Clear(array: KindSamples);
-            Takes = IdleTakes = Batches = StopTaps = StopSamples = StopBatch = StopDrained = 0;
+            Takes = IdleTakes = Batches = StopTaps = StopSamples = StopBatch = StopDrained = StopReadback = 0;
+            ReadbackWaits = CopyWaits = Readmissions = 0;
             WaitingGroups = FlyingGroups = WorkingGroups = 0;
             FrameGateWaitMax = FrameGateWaitTotal = FrameGateWaitsSlow = 0;
             Dispatches = Samples = Taps = Discarded = Returned = RefinedCells = CutEdges = Softened = Merged = Loaded = 0;
@@ -207,7 +215,7 @@ internal static class SdfMeshBakeReport {
             var takes = Math.Max(val1: 1L, val2: Takes);
             var kinds = string.Join(separator: ",", values: Enumerable.Range(start: 0, count: KindNames.Length).Select(selector: kind => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{KindNames[kind]}:{KindSamples[kind]}")));
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" joined=[groups:{Joined},landed:{JoinedLanded},abandoned:{JoinedAbandoned},stalled:{JoinedStalled},samples-saved:{SamplesSaved}] {DescribeCheckpoints()} kinds=[{kinds}] cpu=[{stages}] batches={Batches} takes={Takes} idle={IdleTakes} stop=[taps:{StopTaps},samples:{StopSamples},batch:{StopBatch},drained:{StopDrained}] per-take=[waiting:{(WaitingGroups / ((double)takes)):0.0},flying:{(FlyingGroups / ((double)takes)):0.0},working:{(WorkingGroups / ((double)takes)):0.0}]{dispatches?.Invoke()} frame-gate=[max:{((FrameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((FrameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{FrameGateWaitsSlow}] gate=[{DescribeGate()}] managed=[{DescribeManaged()}] tail={PoolTailSeconds():0.0}s");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" joined=[groups:{Joined},landed:{JoinedLanded},abandoned:{JoinedAbandoned},stalled:{JoinedStalled},samples-saved:{SamplesSaved}] {DescribeCheckpoints()} kinds=[{kinds}] cpu=[{stages}] batches={Batches} takes={Takes} idle={IdleTakes} stop=[taps:{StopTaps},samples:{StopSamples},batch:{StopBatch},readback:{StopReadback},drained:{StopDrained}] host-refusals=[readback-waits:{ReadbackWaits},copy-waits:{CopyWaits},readmitted:{Readmissions}] per-take=[waiting:{(WaitingGroups / ((double)takes)):0.0},flying:{(FlyingGroups / ((double)takes)):0.0},working:{(WorkingGroups / ((double)takes)):0.0}]{dispatches?.Invoke()} frame-gate=[max:{((FrameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((FrameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{FrameGateWaitsSlow}] gate=[{DescribeGate()}] managed=[{DescribeManaged()}] tail={PoolTailSeconds():0.0}s");
         }
         // Each gate site entered: its entries, the milliseconds it waited and held in all, and its longest hold.
         private string DescribeGate() {
@@ -352,6 +360,28 @@ internal static class SdfMeshBakeReport {
     /// <param name="selector">The group's selector.</param>
     /// <param name="peak">The group's peak bytes.</param>
     public static void AdmittedAlone(string residency, int selector, long peak) => Say(line: () => $"[sdf.mesh-bake] admitted alone residency={residency} group={selector} peak={peak} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
+    /// <summary>Writes the line for a bake whose takes wait for the readback reservation that answers their lattices,
+    /// which the host memory account has no room for; no lattice is taken and no group admitted until it is held.</summary>
+    /// <param name="residency">The residency's name.</param>
+    /// <param name="bytes">The reservation, in bytes.</param>
+    public static void ReadbackDeferred(string residency, long bytes) => Say(line: () => $"[sdf.mesh-bake] readback deferred residency={residency} bytes={bytes} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
+    /// <summary>Writes the line for a group whose copy into the mesh library (its published mesh, or its renumbered take
+    /// of its leader's) the host memory account refused; it waits where it stands until the group can reserve the copy's
+    /// bytes.</summary>
+    /// <param name="residency">The residency's name.</param>
+    /// <param name="selector">The group's selector.</param>
+    /// <param name="owner">The memory owner the account refused.</param>
+    /// <param name="bytes">The bytes the copy waits for.</param>
+    public static void CopyDeferred(string residency, int selector, string owner, long bytes) => Say(line: () => $"[sdf.mesh-bake] copy deferred residency={residency} group={selector} owner={owner} bytes={bytes} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
+    /// <summary>Writes the line for a group whose stage the host memory account refused, which starts its final lattice
+    /// again under an admission of at least <paramref name="floor"/> bytes.</summary>
+    /// <param name="residency">The residency's name.</param>
+    /// <param name="selector">The group's selector.</param>
+    /// <param name="owner">The memory owner the account refused.</param>
+    /// <param name="bytes">The bytes refused.</param>
+    /// <param name="floor">The peak the group's next admission reserves at least.</param>
+    /// <param name="refusal">The refusal, whose stack names the allocation no admission covered.</param>
+    public static void Readmitted(string residency, int selector, string owner, long bytes, long floor, Exception refusal) => Say(line: () => $"[sdf.mesh-bake] readmitted residency={residency} group={selector} owner={owner} refused={bytes} floor={floor}\n{refusal.StackTrace}");
     /// <summary>Writes the line for a group whose bake refused.</summary>
     /// <param name="selector">The group's selector.</param>
     /// <param name="refusal">Why.</param>

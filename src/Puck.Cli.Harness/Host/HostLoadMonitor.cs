@@ -32,7 +32,7 @@ public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, d
 /// <param name="WorkingSetGb">The process's working set, in gigabytes: every page it holds resident now, the clean shareable
 /// pages of mapped files and images included; NaN when the reading does not report it.</param>
 /// <param name="PrivateResidentGb">The process's private working set, in gigabytes
-/// (<see cref="ProcessInspection.PrivateResidentBytes"/>): the resident pages of its private regions, a graphics driver's
+/// (<see cref="Puck.Hosting.HostMemory.PrivateResidentBytes"/>): the resident pages of its private regions, a graphics driver's
 /// write-combined host views included, without the mapped files and images the system shares and reclaims; NaN when the
 /// reading does not report it.</param>
 public readonly record struct HostRunningStart(int Id, HostStartKind Kind, double PrivateGb, bool Ready = false, long StartTicks = 0, double WorkingSetGb = double.NaN, double PrivateResidentGb = double.NaN) {

@@ -44,17 +44,73 @@ public static partial class HostMemory {
         return (GlobalMemoryStatusEx(status: ref status) ? status : null);
     }
 
-    /// <summary>Reads the process charge used for host admission without walking its pages.</summary>
-    /// <returns>Private commit on Windows, resident anonymous bytes and swap on Linux, or null on other hosts.</returns>
-    public static long? ProcessPrivateBytes() {
-        if (OperatingSystem.IsWindows()) {
-            using var process = System.Diagnostics.Process.GetCurrentProcess();
-            return process.PrivateMemorySize64;
-        }
+    private const uint ProcessQueryLimitedInformation = 0x1000;
+
+    [LibraryImport(libraryName: "kernel32.dll")]
+    [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
+    private static partial bool CloseHandle(nint handle);
+    [LibraryImport(libraryName: "kernel32.dll", SetLastError = true)]
+    private static partial nint OpenProcess(uint access, [MarshalAs(unmanagedType: UnmanagedType.Bool)] bool inherit, uint processId);
+    [LibraryImport(libraryName: "kernel32.dll", EntryPoint = "K32GetProcessMemoryInfo")]
+    [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
+    private static partial bool GetProcessMemoryInfo(nint process, ref ProcessMemoryCountersEx2 counters, uint size);
+
+    // PROCESS_MEMORY_COUNTERS_EX2 (psapi.h): the documented counters through PrivateUsage, then the private working set and
+    // the shared commit. A system that predates the structure refuses its size, which reads as no answer.
+    [StructLayout(layoutKind: LayoutKind.Sequential)]
+    private struct ProcessMemoryCountersEx2 {
+        public uint Size;
+        public uint PageFaultCount;
+        public nuint PeakWorkingSetSize;
+        public nuint WorkingSetSize;
+        public nuint QuotaPeakPagedPoolUsage;
+        public nuint QuotaPagedPoolUsage;
+        public nuint QuotaPeakNonPagedPoolUsage;
+        public nuint QuotaNonPagedPoolUsage;
+        public nuint PagefileUsage;
+        public nuint PeakPagefileUsage;
+        public nuint PrivateUsage;
+        public nuint PrivateWorkingSetSize;
+        public ulong SharedCommitUsage;
+    }
+
+    /// <summary>Reads how much of a process's working set is its own private memory: the pages no other process shares
+    /// and the system cannot drop without writing them out. On Windows it is the private working set
+    /// (<c>PROCESS_MEMORY_COUNTERS_EX2.PrivateWorkingSetSize</c>), which counts every resident page of a private region, a
+    /// graphics driver's write-combined host views included, and leaves out commit no page backs yet (a driver's
+    /// device-memory mirror, a collector's or allocator's committed reserve) and mapped files and images, whose clean pages
+    /// the system shares between processes and reclaims under pressure (NVIDIA's Direct3D 12 shader disk cache is about a
+    /// gibibyte of a windowed World's working set). On Linux it is <c>/proc/&lt;pid&gt;/status</c>'s <c>RssAnon</c> plus
+    /// <c>RssShmem</c>: shared memory is swap-backed, not a clean file page. The host memory account's bar
+    /// (<see cref="Jobs.MemoryAccount.SetHostBar"/>) and the tools' admission of a start both read it.</summary>
+    /// <param name="processId">The process to inspect.</param>
+    /// <returns>The bytes, or <see langword="null"/> when they cannot be read (the process exited, belongs to another user,
+    /// the system predates the counter, or the host is neither Windows nor Linux).</returns>
+    public static long? PrivateResidentBytes(int processId) {
         if (OperatingSystem.IsLinux()) {
-            return MemInfoBytes(field: "RssAnon:", path: "/proc/self/status") + MemInfoBytes(field: "VmSwap:", path: "/proc/self/status");
+            var status = $"/proc/{processId.ToString(provider: CultureInfo.InvariantCulture)}/status";
+
+            return ((MemInfoBytes(field: "RssAnon:", path: status) is { } anonymous) ? (anonymous + (MemInfoBytes(field: "RssShmem:", path: status) ?? 0L)) : null);
         }
-        return null;
+        if (!OperatingSystem.IsWindows()) {
+            return null;
+        }
+
+        var process = OpenProcess(access: ProcessQueryLimitedInformation, inherit: false, processId: ((uint)processId));
+
+        if (process == 0) {
+            return null;
+        }
+
+        try {
+            var counters = new ProcessMemoryCountersEx2 { Size = ((uint)Marshal.SizeOf<ProcessMemoryCountersEx2>()) };
+
+            return (GetProcessMemoryInfo(counters: ref counters, process: process, size: counters.Size)
+                ? ((long)Math.Min(val1: ((ulong)counters.PrivateWorkingSetSize), val2: ((ulong)long.MaxValue)))
+                : null);
+        } finally {
+            _ = CloseHandle(handle: process);
+        }
     }
     /// <summary>Returns the physical memory free now, in bytes.</summary>
     /// <returns>The bytes, or <see langword="null"/> when this platform or this moment cannot say.</returns>

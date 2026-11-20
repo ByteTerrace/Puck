@@ -340,15 +340,25 @@ combined allowance because both the CPU and GPU draw from the same RAM.
 A smaller machine or a busy host can offer less on any profile.
 
 With a profile selected, `MemoryAccount.SetHostBar` makes the account sample
-the process's private commit on Windows, or resident anonymous memory plus
-swap on Linux, alongside free physical memory. The part beyond the host
-owners' charges reduces the space that can be promised. Host-placed GPU
-blocks still spend their own bytes. A driver mapping can therefore make
-admission conservative. Read `private-beyond-held` as a deduction from
-the budget and use the disjoint physical rows to attribute actual storage.
-Forced work, fixed allocations and region floors may use emergency headroom
-only while their next acquisition fits the host bar. A refusal reports its
-owner in `host.memory`; a mesh entry refused during decode stays in the store.
+the process's private resident pages (`HostMemory.PrivateResidentBytes`: the
+private working set on Windows, resident anonymous and shared memory on
+Linux) alongside free physical memory. Private commit is not the reading: it
+holds the driver's commit for its views of device memory and the collector's
+and allocator's committed reserve, which occupy no host memory and grow with
+the device's resources. The part beyond the host owners' charges reduces the
+space that can be promised. Host-placed GPU blocks still spend their own
+bytes. Read `private-beyond-held` as a deduction from the budget and use the
+disjoint physical rows to attribute actual storage. Storage that gives way
+(workspace, elastic and cached storage, a reservation past its floor) counts
+the bytes beyond the owners against the bar. Fixed allocations, region
+floors, the forced job and an owner's progress floor
+(`MemoryAccount.Owner.TryReserveProgress`, a mesh bake's readback) fit the bar
+on what the owners hold and are promised alone, since the bytes beyond them
+are a reading no admission can shrink: a World that stands over its bar for
+storage no owner names keeps its tables, and its work still settles, one job
+at a time, while every byte an owner names stays under the bar. A refusal reports its
+owner in `host.memory`; a mesh entry refused during decode stays in the store,
+and the bake defers what the account refuses rather than failing it.
 
 The account controls engine allocations that pass its doors. The CLR,
 driver and other uninstrumented allocations can grow between samples. A

@@ -163,7 +163,7 @@ public sealed partial class HostProbe(string checkoutRoot) {
             // Only a tracked start pays the handle its private working set is read through.
             if (HostProcesses.RunningStart(commandLine: commandLine, name: name) is { } kind) {
                 var startTicks = tree[id].Started.ToUniversalTime().Ticks;
-                var privateResidentGb = ((ProcessInspection.PrivateResidentBytes(processId: id) is { } bytes) ? (bytes / 1073741824.0) : double.NaN);
+                var privateResidentGb = ((Puck.Hosting.HostMemory.PrivateResidentBytes(processId: id) is { } bytes) ? (bytes / 1073741824.0) : double.NaN);
 
                 starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb, PrivateResidentGb: privateResidentGb, Ready: ready.Contains(item: (id, startTicks)), StartTicks: startTicks, WorkingSetGb: workingSetGb));
             }

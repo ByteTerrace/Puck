@@ -97,6 +97,13 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
 /// <param name="Lattices">The lattices, in dispatch order.</param>
 /// <param name="Tickets">The group each lattice answers.</param>
 public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Tickets) {
+    // The readback bytes the take granted the batch (SdfMeshPathBake.ReadbackBytes): handed once to the copy of its samples,
+    // which gives them back when freed, or given back by the bake when the batch is abandoned before any copy is made.
+    private long m_readback;
+
+    internal long Readback { init => m_readback = value; }
+    // Hands over the batch's granted readback bytes once; zero after the first call.
+    internal long TakeReadback() => Interlocked.Exchange(location1: ref m_readback, value: 0L);
     /// <summary>Gets each lattice's group's poses: the first slot they cover and three rows a slot from it, laid out as
     /// the dynamic-transform table lays a slot out, which the bake kernel reads in place of the frame's transforms; no
     /// rows for a group that reads no slot.</summary>
@@ -826,6 +833,21 @@ public sealed partial class SdfMeshPathBake {
             m_takenSampled.Clear();
             var samples = 0;
             var taps = 0;
+            // The readback bytes the batch's lattices take, granted with the batch (SdfMeshPathBake.Readback).
+            var readback = 0L;
+            var from = DoneThrough();
+            // The groups still baking are the ones from the done cursor on; their counts are kept as they change
+            // (GroupTally), so a take walks no group for them. `awaiting` is the groups admitted whose first stage has not
+            // reached the pool's queue: stages on their way. `waiting` counts the groups holding a lattice no dispatch has
+            // taken, whether or not an owed take could take it.
+            var pending = (from < m_groups.Count);
+
+            // No lattice is taken, and no group admitted, without the readback reservation that answers it.
+            if (!pending && (m_slice is null)) {
+                IdleReadback();
+            } else if (!HoldReadback()) {
+                return false;
+            }
             // A slice's lattices come first, within the same batch, so a long bake never holds a diagnostic back; it owes
             // the frame no hole, so an owed take leaves it to the next.
             while (!owedOnly && (m_slice is { } slice) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)) {
@@ -835,8 +857,13 @@ public sealed partial class SdfMeshPathBake {
                     slice.Return(ticket: lattice);
                     break;
                 }
+                if ((readback + next.OutputBytes) > ReadbackRoom) {
+                    slice.Return(ticket: lattice);
+                    break;
+                }
                 samples += next.Samples;
                 taps += next.Taps;
+                readback += next.OutputBytes;
                 lattices.Add(item: next);
                 tickets.Add(item: new SliceTicket(Generation: slice.Generation, Lattice: lattice, Slice: slice));
                 m_takenPoses.Add(item: (0, ReadOnlyMemory<Vector4>.Empty));
@@ -844,15 +871,10 @@ public sealed partial class SdfMeshPathBake {
                 // A slice samples any instance, so it reads every field at the bake's set.
                 for (var handle = 0; (handle < m_sampled.Count); handle++) { m_takenSampled[handle] = m_sampled[handle]; }
             }
-            var from = DoneThrough();
-            // The groups still baking are the ones from the done cursor on; their counts are kept as they change
-            // (GroupTally), so a take walks no group for them. `awaiting` is the groups admitted whose first stage has not
-            // reached the pool's queue: stages on their way. `waiting` counts the groups holding a lattice no dispatch has
-            // taken, whether or not an owed take could take it.
-            var pending = (from < m_groups.Count);
             var (flying, working, admitted, awaiting, waiting) = (pending ? m_tally.Read() : default);
 
             if (pending) {
+                if (m_parked.Count > 0) { ResumeParked(); }
                 m_accounts.Takes++;
                 m_accounts.WaitingGroups += waiting;
                 m_accounts.FlyingGroups += flying;
@@ -894,6 +916,12 @@ public sealed partial class SdfMeshPathBake {
                     stop = 1;
                     break;
                 }
+                // A lattice whose answer the readback reservation has no room left for waits until earlier answers end
+                // (ReadbackBytes), and a smaller one behind it may fit; it is not admitted before then.
+                if ((readback + next.OutputBytes) > ReadbackRoom) {
+                    stop = 4;
+                    continue;
+                }
                 // A group starting its final lattice holds that lattice and everything meshed from it until it lands,
                 // so the process account admits its simultaneous peak; the rest keep their small refining lattices.
                 // A first slab returned unanswered keeps the admission it took.
@@ -907,7 +935,7 @@ public sealed partial class SdfMeshPathBake {
                         continue;
                     }
 
-                    var peak = PeakOf(final: group.Final!);
+                    var peak = Math.Max(val1: PeakOf(final: group.Final!), val2: group.PeakFloor);
 
                     // The account's host pool paces admission: its budget, and the machine's free memory as the
                     // account reads it.
@@ -936,6 +964,7 @@ public sealed partial class SdfMeshPathBake {
                 group.TakenSamples += next.Samples;
                 samples += next.Samples;
                 taps += next.Taps;
+                readback += next.OutputBytes;
                 lattices.Add(item: next);
                 tickets.Add(item: group);
                 m_takenPoses.Add(item: (group.PoseFirst, group.PoseRows));
@@ -948,6 +977,7 @@ public sealed partial class SdfMeshPathBake {
                     case 1: m_accounts.StopTaps++; break;
                     case 2: m_accounts.StopSamples++; break;
                     case 3: m_accounts.StopBatch++; break;
+                    case 4: m_accounts.StopReadback++; break;
                     default: m_accounts.StopDrained++; break;
                 }
             }
@@ -957,8 +987,10 @@ public sealed partial class SdfMeshPathBake {
             var sampledAt = 0;
 
             foreach (var (handle, snapshot) in m_takenSampled) { sampled[sampledAt++] = (handle, snapshot); }
+            GrantReadback(bytes: readback);
             batch = new SdfMeshBakeBatch(Lattices: [.. lattices], Tickets: [.. tickets]) {
                 Bake = this,
+                Readback = readback,
                 Poses = [.. m_takenPoses],
                 Keeps = [.. m_takenKeys],
                 Sampled = sampled,
@@ -1026,6 +1058,9 @@ public sealed partial class SdfMeshPathBake {
     /// <param name="sampled">Whether the batch's dispatch completed, so its samples were taken and are dropped.</param>
     public void Abandon(SdfMeshBakeBatch? batch, bool sampled = false) {
         if (batch is null) { return; }
+        // A batch abandoned before its samples were copied gives back the readback bytes its take granted it; a copy
+        // already made gives them back itself when it is freed.
+        ReleaseReadback(bytes: batch.TakeReadback());
         using (EnterGate(site: BakeGate.Ticket)) {
             for (var index = 0; (index < batch.Tickets.Length); index++) { _ = MoveTicket(batch: batch, index: index, to: SdfMeshBakeTicket.Returned, sampled: sampled); }
         }
@@ -1035,8 +1070,22 @@ public sealed partial class SdfMeshPathBake {
     /// takes nothing; a decode failure returns its request, and <see cref="Abandon"/> returns every untaken answer after
     /// it.</summary>
     /// <param name="batch">The batch <see cref="TryTake(SdfProgram?, out SdfMeshBakeBatch?, long)"/> took.</param>
-    /// <param name="samples">The output planes of each lattice, back to back.</param>
+    /// <param name="samples">The output planes of each lattice, back to back, which the bake copies into the readback
+    /// storage its take granted the batch before it answers any lattice.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="batch"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="samples"/> is shorter than the batch's output.</exception>
     public void Complete(SdfMeshBakeBatch batch, ReadOnlySpan<byte> samples) {
+        var copy = CopySamples(batch: batch, fill: static (destination, source) => source.CopyTo(destination: destination), length: samples.Length, state: samples);
+
+        try {
+            Complete(batch: batch, samples: copy);
+        } finally {
+            copy.Release();
+        }
+    }
+    // Answers a batch from its samples' copy (CopySamples), as the public Complete describes: each group's answer reads
+    // its lattice's slice of the copy in place and holds a reference to the copy until the answer ends.
+    internal void Complete(SdfMeshBakeBatch batch, AnsweredSamples samples) {
         ArgumentNullException.ThrowIfNull(argument: batch);
 
         var offset = 0;
@@ -1044,13 +1093,14 @@ public sealed partial class SdfMeshPathBake {
         for (var index = 0; (index < batch.Lattices.Length); index++) {
             var lattice = batch.Lattices[index];
             var bytes = lattice.OutputBytes;
-            var slice = samples.Slice(length: bytes, start: offset);
+            var slice = samples.Span.Slice(length: bytes, start: offset);
+            var at = offset;
 
             offset += bytes;
-            // A group's lattice is decoded here, in place of a copy of its readback, and answered off the caller's
-            // thread ahead of every other queued stage; the group stays in flight until then, so the bake takes no
-            // lattice of it before its answer lands. The queued job keeps the group's storage owner open for the
-            // decoded answer, which a retired group never takes.
+            // A group's lattice is answered off the caller's thread ahead of every other queued stage, reading its slice
+            // of the copy in place; the group stays in flight until then, so the bake takes no lattice of it before its
+            // answer lands. The queued job holds the copy until its answer ends and runs even for a retired group, so the
+            // copy is always let go.
             // Invariant: a dispatched request and the group workspace its points lie in (a final lattice's point
             // buffer, the group's crease and material points) belong to whoever holds its ticket: the take until
             // dispatch, this reader while the ticket is Decoding, and the group's answer job once it is Answered. That
@@ -1068,7 +1118,7 @@ public sealed partial class SdfMeshPathBake {
                 }
                 Answer answer;
                 try {
-                    answer = Receive(group, batch.Keeps[index], in lattice, slice);
+                    answer = Receive(group, batch.Keeps[index], in lattice, samples, at);
                 } catch {
                     // No next lattice is published until AnswerGroup. Return the claimed request for retry.
                     using (EnterGate(site: BakeGate.Ticket)) {
@@ -1122,24 +1172,36 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
-    // One lattice's decoded samples, owned by its group's answer job and charged to the group's storage owner: each
-    // sample's value and material, and either its gradient or, for a points lattice without gradients, the slot that won
-    // at the point.
-    private sealed class Answer(IAllocator? allocator, MemoryAccount.Owner owner) : IDisposable {
-        public readonly OwnedBuffer<float> Values = new(allocator: allocator, observer: owner);
-        public readonly OwnedBuffer<int> Materials = new(allocator: allocator, observer: owner);
-        public readonly OwnedBuffer<float> Gradients = new(allocator: allocator, observer: owner);
+    // One lattice's answer, read in place from its slice of the answered samples (AnsweredSamples), whose reference it
+    // holds until its group's answer job disposes it: each sample's value and material, or its value and gradient, or,
+    // for a points lattice without gradients, the slot that won at the point. A final lattice's slab answers nothing
+    // here: the reader copied it into the lattice (Decode).
+    private sealed class Answer(AnsweredSamples samples, int offset, in SdfMeshBakeRequest request) : IDisposable {
+        private readonly AnsweredSamples m_samples = samples.Share();
+        private readonly int m_offset = offset;
+        private readonly int m_length = request.OutputBytes;
+        private readonly int m_count = request.Samples;
+        private readonly bool m_slab = (request.Slab >= 0);
+        private readonly bool m_materialOnly = request.MaterialOnly;
+        private readonly bool m_withMaterial = request.WithMaterial;
+        private readonly bool m_withGradient = request.WithGradient;
 
-        public void Dispose() { Values.Dispose(); Materials.Dispose(); Gradients.Dispose(); }
+        private ReadOnlySpan<int> Words => MemoryMarshal.Cast<byte, int>(m_samples.Span.Slice(length: m_length, start: m_offset));
+
+        public ReadOnlySpan<float> Values => ((m_slab || m_materialOnly) ? default : MemoryMarshal.Cast<int, float>(Words[..m_count]));
+        public ReadOnlySpan<int> Materials => (m_slab ? default : (m_materialOnly ? Words : (m_withMaterial ? Words[m_count..] : default)));
+        public ReadOnlySpan<float> Gradients => ((!m_slab && !m_materialOnly && m_withGradient) ? MemoryMarshal.Cast<int, float>(Words[m_count..]) : default);
+
+        public void Dispose() => m_samples.Release();
     }
 
     // Everything a reader does with a group's lattice while its ticket is Decoding (Complete's invariant): decodes its
     // samples and keeps them under the keys its take recorded, whose key reads the request's points.
-    private Answer Receive(Group group, SampleKeys? keys, in SdfMeshBakeRequest request, ReadOnlySpan<byte> samples) {
-        var answer = Decode(group, in request, samples);
+    private Answer Receive(Group group, SampleKeys? keys, in SdfMeshBakeRequest request, AnsweredSamples samples, int offset) {
+        var answer = Decode(group, in request, samples, offset);
 
         try {
-            if (keys is not null) { KeepSamples(keys: keys, request: in request, samples: samples); }
+            if (keys is not null) { KeepSamples(keys: keys, request: in request, samples: samples.Span.Slice(length: request.OutputBytes, start: offset)); }
             return answer;
         } catch {
             answer.Dispose();
@@ -1147,43 +1209,32 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
-    // The ticket (or checkpoint worker) owns this group's slab until AnswerGroup publishes its successor.
-    private Answer Decode(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<byte> samples) {
-        var answer = new Answer(Library.Allocator, group.Memory);
-        try {
+    // The ticket (or checkpoint worker) owns this group's slab until AnswerGroup publishes its successor. A slab is copied
+    // into the group's final lattice, which its admission covers; every other answer reads the samples in place.
+    private static Answer Decode(Group group, in SdfMeshBakeRequest request, AnsweredSamples samples, int offset) {
+        if (request.Slab >= 0) {
             var count = request.Samples;
-            var words = MemoryMarshal.Cast<byte, int>(samples);
-            var values = MemoryMarshal.Cast<int, float>(words[..count]);
-            if (request.Slab >= 0) {
-                var first = request.Slab * request.Dims.X * request.Dims.Y;
-                values.CopyTo(group.Final!.Values[first..]);
-                words[count..].CopyTo(group.Final.Materials[first..]);
-            } else if (request.MaterialOnly) {
-                answer.Materials.CopyFrom(words);
-            } else {
-                answer.Values.CopyFrom(values);
-                if (request.WithMaterial) { answer.Materials.CopyFrom(words[count..]); }
-                if (request.WithGradient) { answer.Gradients.CopyFrom(MemoryMarshal.Cast<int, float>(words[count..])); }
-            }
-            return answer;
-        } catch {
-            answer.Dispose();
-            throw;
+            var words = MemoryMarshal.Cast<byte, int>(samples.Span.Slice(length: request.OutputBytes, start: offset));
+            var first = request.Slab * request.Dims.X * request.Dims.Y;
+
+            MemoryMarshal.Cast<int, float>(words[..count]).CopyTo(group.Final!.Values[first..]);
+            words[count..].CopyTo(group.Final.Materials[first..]);
         }
+        return new Answer(offset: offset, request: in request, samples: samples);
     }
     // Answers one lattice of a group on a worker: a refining lattice narrows its group's box, a final slab fills its
     // lattice, and a points lattice answers its stage. Each handler works on the group's own storage outside the gate,
     // where only the group's one running job reads it, and takes the gate only to publish the group's next step.
     private void AnswerGroup(Group group, in SdfMeshBakeRequest request, Answer answer) {
         var answered = Stopwatch.GetTimestamp();
-        var values = answer.Values.GetSpan();
-        var materials = answer.Materials.GetSpan();
+        var values = answer.Values;
+        var materials = answer.Materials;
 
         if (!request.Points.IsEmpty) {
             if (group.Final is { } final) {
-                AnswerFinal(final: final, gradients: answer.Gradients.GetSpan(), group: group, materials: materials, request: in request, values: values);
+                AnswerFinal(final: final, gradients: answer.Gradients, group: group, materials: materials, request: in request, values: values);
             } else if (group.Creases is not null) {
-                AnswerCreases(gradients: answer.Gradients.GetSpan(), group: group, request: in request, values: values);
+                AnswerCreases(gradients: answer.Gradients, group: group, request: in request, values: values);
             } else {
                 AnswerPoints(group: group, kind: 6, materials: materials, request: in request);
             }
@@ -1989,7 +2040,7 @@ public sealed partial class SdfMeshPathBake {
             if (refusal is not null) { SdfMeshBakeReport.Refused(refusal: refusal, selector: group.Selector); } else { StoreEmpty(group); }
         } else {
             // The refinement now names its fine samples, so the admission narrows from their bound to their count.
-            _ = group.Memory.TryReserve(peak: PeakOf(final: final, fineSamples: ((final.Stage == FinalStage.Refinement) ? points.Length : 0)));
+            _ = group.Memory.TryReserve(peak: Math.Max(val1: PeakOf(final: final, fineSamples: ((final.Stage == FinalStage.Refinement) ? points.Length : 0)), val2: group.PeakFloor));
             final.Points = points;
         }
 
@@ -2407,12 +2458,24 @@ public sealed partial class SdfMeshPathBake {
         PublishMesh(group, mesh, merged);
     }
 
+    // Publishes a group's mesh: copies it into the library's storage under the process account and lands it. The group's
+    // final lattice went with its contour, so before the copy its admission gives up the room it no longer holds, which
+    // the copy's own owners then charge. A copy the account still has no room for waits, parked with the bytes refused,
+    // until the group can reserve them again (ResumeParked), and is published then: the group never fails for it.
     private void PublishMesh(Group group, SdfMesh? mesh, int merged) {
         if (mesh is not null) {
             var started = Stopwatch.GetTimestamp();
-            mesh = StageCodeCurrent(group)
-                ? Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh)
-                : Library.CopyUnstored(mesh);
+            var baked = mesh;
+
+            _ = group.Memory.TryReserve(peak: group.Memory.Bytes);
+            try {
+                mesh = StageCodeCurrent(group)
+                    ? Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: baked)
+                    : Library.CopyUnstored(baked);
+            } catch (HostMemoryRefusedException refused) {
+                Park(bytes: Math.Max(val1: refused.Bytes, val2: baked.StorageBytes), group: group, refused: refused, work: () => PublishMesh(group: group, mesh: baked, merged: merged));
+                return;
+            }
             Account(since: started, stage: BakeStage.Store);
         } else if ((group.Outcome is not null) && StageCodeCurrent(group)) {
             Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true);
@@ -2866,6 +2929,9 @@ public sealed partial class SdfMeshPathBake {
             return at;
         }
         public bool DeferredReported { get; set; }
+        // The least peak the group's admission reserves, raised each time the account refused one of its stages
+        // (Readmit) to what it held then and the bytes refused; zero for a group never refused.
+        public long PeakFloor { get; set; }
         // Whether a stage of the group threw (Fail), so no later program keeps it.
         public bool Failed { get; set; }
         // Whether the bake no longer plans the group (a later program replaced it, or its residency was released): the

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 using Puck.SignedDistance;
 using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
@@ -255,7 +256,14 @@ public sealed partial class SdfMeshPathBake {
     // whose leader left nothing in the library (it retired or failed, or the library let its mesh go) starts its geometry
     // again (Start), waiting on another group that started it meanwhile or leading it itself. On the pool.
     private void TakeLanded(Group group, SdfMeshBakeShare? share) {
-        var taken = Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh);
+        var taken = Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refused: out var refused);
+
+        // A take that renumbers the leader's mesh copies its materials into the library under the account; one it has no
+        // room for waits parked rather than baking the geometry again (Park).
+        if (refused is not null) {
+            Park(bytes: refused.Bytes, group: group, refused: refused, work: () => TakeLanded(group: group, share: share));
+            return;
+        }
 
         using (EnterGate(site: BakeGate.Taken)) {
             // A waiter that already took, deserted or retired is no longer this share's to finish.
@@ -388,15 +396,20 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
-    // Queues work for which the group's job count is already taken (Group.QueueWork). A stage that throws finishes its
-    // group with no new mesh (Fail), so its reservation and workspace are released and the bake still settles. An
-    // urgent answer runs even once its group retires, since it owns its decoded samples and frees them.
+    // Queues work for which the group's job count is already taken (Group.QueueWork). A stage the host memory account
+    // refused starts its group's final lattice again under a larger admission (Readmit); any other stage that throws
+    // finishes its group with no new mesh (Fail), so its reservation and workspace are released and the bake still
+    // settles. An urgent answer runs even once its group retires, since it holds its answered samples and lets them go.
     private void Enqueue(Group group, Action work, bool urgent) {
         void Run() {
             try {
                 if (urgent || !group.Retired) { work(); }
             } catch (Exception exception) {
-                Fail(exception: exception, group: group);
+                if (HostMemoryRefusedException.Of(exception: exception) is { } refused) {
+                    Readmit(group: group, refused: refused);
+                } else {
+                    Fail(exception: exception, group: group);
+                }
             } finally {
                 group.EndWork();
                 Offer();
@@ -496,8 +509,10 @@ public sealed partial class SdfMeshPathBake {
                 group.Retired = true;
                 group.InFlight = false;
             }
+            m_parked.Clear();
         }
         lock (WorkGate) { _ = WorkQueue.RemoveAll(match: item => { if (!item.Group.Retired) { return false; } item.Group.EndWork(); return true; }); }
+        RetireReadback();
     }
 
     // A worker: runs the queued work, answers first, then the highest priority, and waits for more once none is queued.
