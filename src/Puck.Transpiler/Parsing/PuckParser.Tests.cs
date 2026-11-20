@@ -101,9 +101,11 @@ public static partial class PuckParser {
             span: out var rowSpan,
             text: out var rowText
         )) {
+            var bad = ReadRestOfTestLine(context: context);
+
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.TestStepInadmissible,
-                message: $"'{ReadRestOfLine(context: context)}' is not a 'given' line — a test's given block writes initial cells, one per line, as 'row = literal' or 'row[key] = literal'",
+                message: $"'{bad}' is not a 'given' line — a test's given block writes initial cells, one per line, as 'row = literal' or 'row[key] = literal'",
                 span: new SourceSpan(cellStart, (cursor.Offset - cellStart), cellLine, cellColumn)
             );
             ConsumeSeparator(context: context);
@@ -114,12 +116,12 @@ public static partial class PuckParser {
 
         SkipWhiteSpace(context: context);
         if (!TryConsume(c: '=', context: context)) {
+            _ = ReadRestOfTestLine(context: context);
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.TestStepInadmissible,
                 message: $"'{rowText}' carries no '=' — a test's given block writes initial cells as 'row = literal', and no other effect spelling is admitted there",
                 span: new SourceSpan(cellStart, (cursor.Offset - cellStart), cellLine, cellColumn)
             );
-            _ = ReadRestOfLine(context: context);
             ConsumeSeparator(context: context);
             SkipWhiteSpace(context: context);
 
@@ -157,6 +159,8 @@ public static partial class PuckParser {
 
         SkipWhiteSpace(context: context);
         while (!cursor.Eof && (cursor.Current != '}')) {
+            var before = cursor.Offset;
+
             if (TryHandleNestedTestWorldBlock(
                 context: context,
                 diagnostics: diagnostics,
@@ -172,6 +176,10 @@ public static partial class PuckParser {
                 diagnostics: diagnostics
             ) is { } cell) {
                 cells.Add(item: cell);
+            }
+            if (cursor.Offset == before) {
+                cursor.Advance();
+                SkipWhiteSpace(context: context);
             }
         }
 
@@ -343,9 +351,11 @@ public static partial class PuckParser {
                 }
             }
             if (!TryConsume(c: ':', context: context)) {
+                var rest = ReadRestOfTestLine(context: context);
+
                 diagnostics?.ReportError(
                     code: PuckDiagnosticCodes.TestStepInadmissible,
-                    message: $"'{actor}{ReadRestOfLine(context: context)}' is not a 'when' step — a test's when block carries 'ticks <n>', 'seat<n>: <command line>', 'seat<n> refused [\"text\"]: <command line>', and 'world {{ … }}' addressing one world of a composition",
+                    message: $"'{actor}{rest}' is not a 'when' step — a test's when block carries 'ticks <n>', 'seat<n>: <command line>', 'seat<n> refused [\"text\"]: <command line>', and 'world {{ … }}' addressing one world of a composition",
                     span: new SourceSpan(stepStart, (cursor.Offset - stepStart), stepLine, stepColumn)
                 );
                 ConsumeSeparator(context: context);
@@ -354,7 +364,7 @@ public static partial class PuckParser {
                 return null;
             }
 
-            var command = ReadRestOfLine(context: context);
+            var command = ReadRestOfTestLine(context: context);
 
             if (!TryParseSeatLabel(
                 label: actor,
@@ -389,9 +399,11 @@ public static partial class PuckParser {
             return step;
         }
 
+        var unrecognized = ReadRestOfTestLine(context: context);
+
         diagnostics?.ReportError(
             code: PuckDiagnosticCodes.TestStepInadmissible,
-            message: $"'{ReadRestOfLine(context: context)}' is not a 'when' step — a test's when block carries 'ticks <n>', 'seat<n>: <command line>', and 'world {{ … }}' addressing one world of a composition",
+            message: $"'{unrecognized}' is not a 'when' step — a test's when block carries 'ticks <n>', 'seat<n>: <command line>', and 'world {{ … }}' addressing one world of a composition",
             span: new SourceSpan(stepStart, (cursor.Offset - stepStart), stepLine, stepColumn)
         );
         ConsumeSeparator(context: context);
@@ -405,6 +417,8 @@ public static partial class PuckParser {
 
         SkipWhiteSpace(context: context);
         while (!cursor.Eof && (cursor.Current != '}')) {
+            var before = cursor.Offset;
+
             if (TryHandleNestedTestWorldBlock(
                 context: context,
                 diagnostics: diagnostics,
@@ -421,6 +435,10 @@ public static partial class PuckParser {
                 world: outer
             ) is TestSeatStepNode seat) {
                 steps.Add(item: seat);
+            }
+            if (cursor.Offset == before) {
+                cursor.Advance();
+                SkipWhiteSpace(context: context);
             }
         }
 
@@ -738,13 +756,19 @@ public static partial class PuckParser {
                 continue;
             }
 
+            var bad = ReadRestOfTestLine(context: context);
+
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.TestShapeInadmissible,
-                message: $"test '{name}' carries '{ReadRestOfLine(context: context)}' — a test's body is 'given', 'when' and 'expect', in that order, and nothing else",
+                message: $"test '{name}' carries '{bad}' — a test's body is 'given', 'when' and 'expect', in that order, and nothing else",
                 span: new SourceSpan(blockStart, (cursor.Offset - blockStart), blockLine, blockColumn)
             );
             ConsumeSeparator(context: context);
             SkipWhiteSpace(context: context);
+            if (cursor.Offset == blockStart) {
+                cursor.Advance();
+                SkipWhiteSpace(context: context);
+            }
         }
 
         if (!TryConsume(c: '}', context: context)) {
@@ -815,6 +839,7 @@ public static partial class PuckParser {
             );
         }
     }
+    private static string ReadRestOfTestLine(ParseContext context) => ReadRestOfLine(context: context, stopAtClosingBrace: true);
     private static bool TryParseSeatLabel(string label, out int seat) {
         seat = 0;
 

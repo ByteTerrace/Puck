@@ -1,0 +1,12 @@
+exports {
+  reads [score, turns]
+  actions [score]
+  bindings [`cam-a`, camB]
+}
+
+state {
+  world {
+    slot score = 0
+    slot turns = 0
+  }
+}

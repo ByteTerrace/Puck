@@ -1,0 +1,6 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let sizes = [1, 2, 3]
+
+spawnPoints: map(sizes, (s, i) => { id: $"s{i}", position [s * 2, 0, 0], yawDegrees: 0 })
