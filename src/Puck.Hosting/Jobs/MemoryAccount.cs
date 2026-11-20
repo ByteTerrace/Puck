@@ -56,8 +56,9 @@ public readonly record struct MemoryReading(long Live, long Reserved, long Cache
 /// <para>
 /// The host pool has two allowances (<see cref="MemoryAllowance"/>), fixed for each owner when it is created. Invariant:
 /// play storage (every device grant, and every owner created as <see cref="MemoryAllowance.Play"/>) fits the authored
-/// host bar on what play holds and has promised with the private bytes beyond every owner, and fits the machine's room;
-/// authoring storage fits the machine's room alone, counting everything the pool holds and has promised. The one place
+/// host bar on what play holds and has promised with play's part of the private bytes beyond every owner, and fits the
+/// machine's room; authoring storage fits the machine's room past play's entitlement (the larger of what play holds and
+/// has promised and the bar's limit), so a bake never crowds play out of its budget. The one place
 /// that enforces it is the account's room arithmetic (<c>Fits</c>, <c>FitsHostBar</c>, <c>FitsChargedHostBar</c>), which
 /// every door reaches with the owner's allowance, and the allowance's held and promised bytes move only where an owner's
 /// charge or peak moves (<c>Owner.RecordChange</c>, <c>Owner.SetPeak</c>). A player's build counts authoring as play
@@ -678,14 +679,23 @@ public sealed class MemoryAccount {
     }
     // Under m_gate: the machine's budget less the headroom.
     private long MachineLimit() => Math.Max(val1: 0L, val2: (MachineBudget() - Headroom));
+    // Under m_gate: what play's owners may hold and promise under the authored bar: the bar less play's part of the
+    // private bytes beyond the owners and the headroom; null without a bar.
+    private long? BarLimit() => ((m_hostBar is { } bar) ? Math.Max(val1: 0L, val2: ((Math.Min(val1: bar, val2: (m_budget ?? DefaultBudget)) - m_playBeyondHeld) - Headroom)) : null);
+    // Under m_gate: the room authoring apart from play has left for a new promise: the machine's limit less what
+    // authoring holds and has promised and less play's entitlement, the larger of what play holds and has promised and
+    // its bar's limit, so a bake draws on the headroom past play's budget and never crowds play out of it. Without a bar,
+    // play is entitled only to what it holds and has promised. Negative when the pool stands past it.
+    private long AuthoringRoomLocked() =>
+        ((MachineLimit() - (AuthoringHeld + AuthoringPromised)) - Math.Max(val1: (PlayHeldOf(pool: PhysicalMemory.Host) + PlayPromisedOf(pool: PhysicalMemory.Host)), val2: (BarLimit() ?? 0L)));
     // Under m_gate: a pool's spend limit, or null where nothing bounds it (a device pool no reading names). The host
-    // pool's is play's: the authored bar less play's part of the private bytes beyond the owners and the headroom, and no
-    // more than the machine's limit leaves once authoring's bytes are taken out.
+    // pool's is play's: the bar's limit, and no more than the machine's limit leaves once authoring's bytes are taken
+    // out.
     private long? LimitOf(PhysicalMemory pool) {
         if (pool == PhysicalMemory.Host) {
             var play = (MachineLimit() - (AuthoringHeld + AuthoringPromised));
 
-            if (m_hostBar is { } bar) { play = Math.Min(val1: play, val2: ((Math.Min(val1: bar, val2: (m_budget ?? DefaultBudget)) - m_playBeyondHeld) - Headroom)); }
+            if (BarLimit() is { } bar) { play = Math.Min(val1: play, val2: bar); }
 
             return Math.Max(val1: 0L, val2: play);
         }
@@ -709,22 +719,21 @@ public sealed class MemoryAccount {
     // holds and has promised more than its limit.
     // A play room, of a pool's play limit: what play holds and has promised is taken from it.
     private long? RoomOf(PhysicalMemory pool) => ((LimitOf(pool: pool) is { } limit) ? ((limit - PlayHeldOf(pool: pool)) - PlayPromisedOf(pool: pool)) : null);
-    // Under m_gate: whether a pool has room for extra bytes of promise in an allowance: play's room, or for authoring the
-    // machine's limit less everything the host pool holds and has promised.
+    // Under m_gate: whether a pool has room for extra bytes of promise in an allowance: play's room, or authoring's
+    // (AuthoringRoomLocked).
     private bool Fits(PhysicalMemory pool, long extra, MemoryAllowance allowance = MemoryAllowance.Play) {
         if (extra <= 0L) { return true; }
-        if ((pool == PhysicalMemory.Host) && Apart(allowance: allowance)) { return (extra <= ((MachineLimit() - HeldOf(pool: pool)) - PromisedOf(pool: pool))); }
+        if ((pool == PhysicalMemory.Host) && Apart(allowance: allowance)) { return (extra <= AuthoringRoomLocked()); }
 
         return ((RoomOf(pool: pool) is not { } room) || (extra <= room));
     }
 
     // Ordinary admission leaves headroom. Storage that gives way may spend that reserve when it acquires, but no promise
     // or acquisition that gives way can pass an explicit host bar on what play holds, the process's private bytes beyond
-    // its owners counted; authoring storage, apart from play, can pass no more than the machine's budget on everything the
-    // pool holds.
+    // its owners counted; authoring storage, apart from play, may spend the headroom past its own room and no more.
     private bool FitsHostBar(PhysicalMemory pool, long extra, MemoryAllowance allowance = MemoryAllowance.Play) {
         if ((pool != PhysicalMemory.Host) || (extra <= 0L)) { return true; }
-        if (Apart(allowance: allowance)) { return (extra <= ((MachineBudget() - HeldOf(pool: pool)) - PromisedOf(pool: pool))); }
+        if (Apart(allowance: allowance)) { return (extra <= (AuthoringRoomLocked() + Headroom)); }
 
         return ((m_hostBar is not { } bar) || (extra <= (((Math.Min(val1: bar, val2: DefaultBudget) - m_playBeyondHeld) - PlayHeldOf(pool: pool)) - PlayPromisedOf(pool: pool))));
     }
@@ -850,6 +859,7 @@ public sealed class MemoryAccount {
             AuthoringOnPlayBar = (host && m_authoringOnPlayBar),
             AuthoringPromised = (host ? AuthoringPromised : 0L),
             LastRefusedOwner = state.LastRefusedOwner,
+            AuthoringRoom = (host ? (m_authoringOnPlayBar ? 0L : Math.Max(val1: 0L, val2: AuthoringRoomLocked())) : null),
             MachineLimit = (host ? MachineLimit() : null),
             PlayBeyondHeld = (host ? m_playBeyondHeld : 0L),
             PrivateBeyondHeld = (host ? m_privateBeyondHeld : 0L),

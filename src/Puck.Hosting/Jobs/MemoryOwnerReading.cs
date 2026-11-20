@@ -112,14 +112,16 @@ public sealed record MemoryAdmissionReading(PhysicalMemory Pool, long? Limit, lo
     /// free memory with what the pool held when it was read when that is smaller, less the private bytes beyond the
     /// owners and the headroom; <see langword="null"/> outside host memory.</summary>
     public long? MachineLimit { get; init; }
-    /// <summary>Gets the room authoring has left for a new promise, at least zero: the machine's limit less what play and
-    /// authoring hold and have promised; <see langword="null"/> outside host memory.</summary>
-    public long? AuthoringRoom => ((MachineLimit is { } limit) ? Math.Max(val1: 0L, val2: ((((limit - Held) - Promised) - AuthoringHeld) - AuthoringPromised)) : null);
+    /// <summary>Gets the room authoring apart from play has left for a new promise, at least zero: the machine's limit
+    /// less what authoring holds and has promised and less play's entitlement (the larger of what play holds and has
+    /// promised and the bar's limit), so a bake draws on the headroom past play's budget; zero in a player's build, whose
+    /// authoring shares play's room, and <see langword="null"/> outside host memory.</summary>
+    public long? AuthoringRoom { get; init; }
     /// <summary>Returns the room an allowance has left for a new promise: authoring's apart from play
     /// (<see cref="AuthoringRoom"/>), or play's (<see cref="Room"/>), which a player's build's authoring shares.</summary>
     /// <param name="allowance">The allowance.</param>
     /// <returns>The bytes, at least zero, or <see langword="null"/> where nothing bounds the pool.</returns>
-    public long? RoomFor(MemoryAllowance allowance) => (((allowance == MemoryAllowance.Authoring) && !AuthoringOnPlayBar && (MachineLimit is not null)) ? AuthoringRoom : Room);
+    public long? RoomFor(MemoryAllowance allowance) => (((allowance == MemoryAllowance.Authoring) && !AuthoringOnPlayBar && (AuthoringRoom is not null)) ? AuthoringRoom : Room);
     /// <summary>Gets the room left for a new promise, at least zero, or <see langword="null"/> where nothing bounds the
     /// pool.</summary>
     public long? Room => ((Limit is { } limit) ? Math.Max(val1: 0L, val2: ((limit - Held) - Promised)) : null);

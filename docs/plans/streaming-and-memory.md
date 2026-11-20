@@ -346,18 +346,24 @@ the earlier run ended. On the 4070 table the World can use half of a
 combined allowance because both the CPU and GPU draw from the same RAM.
 A smaller machine or a busy host can offer less on any profile.
 
+These bars are play budgets: they bound what a player's process holds while
+playing, and a bake on a development machine draws on that machine's headroom
+([play and authoring](#the-large-host-owners)).
+
 With a profile selected, `MemoryAccount.SetHostBar` makes the account sample
 the process's private resident pages (`HostMemory.PrivateResidentBytes`: the
 private working set on Windows, resident anonymous and shared memory on
 Linux) alongside free physical memory. Private commit is not the reading: it
 holds the driver's commit for its views of device memory and the collector's
 and allocator's committed reserve, which occupy no host memory and grow with
-the device's resources. The part beyond the host owners' charges reduces the
-space that can be promised. Host-placed GPU blocks still spend their own
-bytes. Read `private-beyond-held` as a deduction from the budget and use the
-disjoint physical rows to attribute actual storage. Storage that gives way
+the device's resources. The part beyond what the host pool holds (its
+owners' charges and its device blocks, whose write-combined views are resident
+private pages) reduces the space that can be promised. Read
+`private-beyond-held` as a deduction from the machine's budget and
+`play-beyond-held` as play's part of it, the deduction from the bar, and use
+the disjoint physical rows to attribute actual storage. Storage that gives way
 (workspace, elastic and cached storage, a reservation past its floor) counts
-the bytes beyond the owners against the bar. Fixed allocations, region
+play's part of the bytes beyond the owners against the bar. Fixed allocations, region
 floors, the forced job and an owner's progress floor
 (`MemoryAccount.Owner.TryReserveProgress`, a mesh bake's readback) fit the bar
 on what the owners hold and are promised alone, since the bytes beyond them
@@ -432,7 +438,7 @@ What enforces the first, at one door each:
   through `MemoryAccount.Owner.TryAcquire` before growing. Existing promises
   cover the same owner's charges.
 - **Forced progress.** One job in the process, not one per bake, may be
-  admitted into headroom when the authored host bar permits it
+  admitted into headroom when its allowance permits it
   (`MemoryAccount.Owner.TryReserveForced`,
   [decision 3](#decision-3-one-reservation-across-residencies-with-floors-and-classes)).
 
@@ -623,14 +629,17 @@ Puck admits.
   heaps are never summed into one budget, since a heap with room does not help
   an allocation that must go in another. Without the extension the heap sizes
   stand in and the reading says it is an estimate.
-- **Host.** `HostMemory.AvailablePhysicalBytes`, the committed managed heap and
-  the native allocator's committed bytes, as `host.memory` already prints them.
+- **Host.** `HostMemory.AdmissibleBytes` (free physical memory, or the commit
+  room when that is smaller), the committed managed heap and the native
+  allocator's committed bytes, as `host.memory` already prints them.
 
 **How the limits are formed.** A segment's limit is its reported budget less
 the larger of a tenth of it and the account's headroom. The host pool's limit
 is the smaller of `MemoryAccount.DefaultBudget` and what the host has
-available plus what Puck already holds, less the headroom. A device profile
-also deducts private bytes outside the host owners from its authored host bar. A
+available plus what Puck already holds, less the headroom: the machine's limit,
+which play and authoring share. A device profile also holds play to its
+authored host bar, less play's part of the private bytes outside the host
+pool's holdings. A
 discrete card's device pool is limited by its segments.
 On unified memory the one pool takes the host's limit, because it is the
 host's memory, and a device allocation obeys its segment's limit as well: host

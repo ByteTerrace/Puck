@@ -274,8 +274,9 @@ public sealed class MemoryAdmissionLawTests {
         var host = account.ReadAdmission(pool: PhysicalMemory.Host);
 
         Assert.Equal(expected: ((4L * Gibibyte), (16L * Gibibyte), false), actual: (host.Promised, host.AuthoringPromised, host.AuthoringOnPlayBar));
-        // The machine's room counts play and authoring together.
-        Assert.False(condition: bake.TryReserve(peak: (32L * Gibibyte)));
+        // Authoring draws only on the machine's room past play's bar: 25 GiB with play's 4 fits the machine's limit, but
+        // not once play is entitled to its whole bar.
+        Assert.False(condition: bake.TryReserve(peak: (25L * Gibibyte)));
         // A player's build holds authoring to the play bar: a bake there is refused and degrades.
         account.SetAuthoringOnPlayBar(onPlayBar: true);
         Assert.False(condition: bake.TryReserve(peak: (17L * Gibibyte)));
