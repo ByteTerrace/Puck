@@ -344,12 +344,15 @@ public static partial class WorldDefinitionValidator {
     }
 
     // The state rows a binding resolves against: each authored row by its name, the first of a duplicated name.
-    private static Dictionary<string, WorldStateRow> DeclaredStateRows(WorldDefinition definition) {
-        var rows = new Dictionary<string, WorldStateRow>(comparer: StringComparer.Ordinal);
+    private static Dictionary<string, WorldStateRow> DeclaredStateRows(WorldDefinition definition) =>
+        FirstRowsByName(rows: definition.State.Where(predicate: static row => row is { Generated: false }), name: static row => row.Name);
+    // A section's rows keyed by name, the first row of a duplicated name winning, as a reference resolves by a scan.
+    private static Dictionary<string, TRow> FirstRowsByName<TRow>(IEnumerable<TRow?> rows, Func<TRow, string?> name) where TRow : class {
+        var byName = new Dictionary<string, TRow>(comparer: StringComparer.Ordinal);
 
-        foreach (var row in definition.State) {
-            if (row is { Generated: false }) { _ = rows.TryAdd(key: row.Name, value: row); }
+        foreach (var row in rows) {
+            if ((row is not null) && (name(arg: row) is { } key)) { _ = byName.TryAdd(key: key, value: row); }
         }
-        return rows;
+        return byName;
     }
 }

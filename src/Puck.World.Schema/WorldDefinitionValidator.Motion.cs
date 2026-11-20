@@ -106,20 +106,8 @@ public static partial class WorldDefinitionValidator {
     // The authored rows keyed the same way the compiled table is (first row of a duplicated name wins, matching
     // ValidateBodyMotionPrograms). The target source a producer senses is authored vocabulary rather than compiled
     // instruction state, so the checks over it read the row rather than the compiled program.
-    private static Dictionary<string, BodyMotionProgram> BodyMotionProgramRows(IReadOnlyList<BodyMotionProgram> programs) {
-        var rows = new Dictionary<string, BodyMotionProgram>(comparer: StringComparer.Ordinal);
-
-        foreach (var program in programs) {
-            if (program is { Name: not null }) {
-                _ = rows.TryAdd(
-                    key: program.Name,
-                    value: program
-                );
-            }
-        }
-
-        return rows;
-    }
+    private static Dictionary<string, BodyMotionProgram> BodyMotionProgramRows(IReadOnlyList<BodyMotionProgram> programs) =>
+        FirstRowsByName(rows: programs, name: static program => program.Name);
     private static Dictionary<string, CompiledBodyMotionProgram> ValidateBodyMotionPrograms(IReadOnlyList<BodyMotionProgram> programs, ISet<string> targetRegisterNames, ISet<string> navigationDomainNames, ISet<string> curveNames, int simulationRateHz, List<string> errors) {
         var compiled = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
 
