@@ -6,9 +6,9 @@ using System.Text.Json.Nodes;
 namespace Puck.World;
 
 public static partial class WorldDefinitionFileSource {
-    private static bool TryFindComposedImage(IWorldDocumentSource source, string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldComposedDocument? image) {
+    private static bool TryFindComposedImage(IWorldDocumentSource source, ImageCacheKey key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldComposedDocument? image) {
         if (ComposedDocuments.TryGetValue(key: key, value: out image)) { return true; }
-        image = source.Compositions?.ReadComposition(key: key);
+        image = source.Compositions?.ReadComposition(key: key.DiskKey);
         // An image this process composed holds one JSON object by construction (Compact); one read back from the
         // store is checked to hold one once, when it is admitted, rather than on every serve.
         if ((image is null) || (MembersOf(json: image.ComposedJson) is null)) {
@@ -27,12 +27,21 @@ public static partial class WorldDefinitionFileSource {
     // itself, to a basis several hops above it, or to any import recomposes rather than serving a stale merge, and
     // a file that has since vanished or turned unreadable does the same. Identity is the resolved path plus the catalog
     // fingerprint, freshness is content: no clock takes part in either.
-    private static readonly ConcurrentDictionary<string, WorldComposedDocument> ComposedDocuments = new(comparer: StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<ImageCacheKey, WorldComposedDocument> ComposedDocuments = new();
 
     // An image is held per document path, catalog fingerprint and source: two sources may resolve one path's graph
     // differently (the directory source refuses what the composer compiles), so neither answers for the other.
-    private static string CacheKey(string path, string fingerprint, IWorldDocumentSource source) =>
-        $"{PuckPaths.Key(path: path)}\0{fingerprint}\0{source.GetType().FullName}";
+    private readonly record struct ImageCacheKey(string Path, string Fingerprint, Type Source) {
+        public bool Equals(ImageCacheKey other) =>
+            PuckPaths.Comparer.Equals(x: Path, y: other.Path) && (Fingerprint == other.Fingerprint) && (Source == other.Source);
+
+        public override int GetHashCode() => HashCode.Combine(PuckPaths.Comparer.GetHashCode(obj: Path), Fingerprint, Source);
+
+        public string DiskKey => $"{PuckPaths.Key(path: Path)}\0{Fingerprint}\0{Source.FullName}";
+    }
+
+    private static ImageCacheKey CacheKey(string path, string fingerprint, IWorldDocumentSource source) =>
+        new(Path: PuckPaths.Normalize(path: path), Fingerprint: fingerprint, Source: source.GetType());
     // A chain link read through any IWorldDocumentSource decodes exactly like a load through File.ReadAllText would.
     private static string DecodeJson(byte[] bytes) => Puck.Confinement.FileContent.Text(content: bytes);
     // Every document a load or a composition reads comes through here, so the boot ledger counts each read once.
@@ -96,7 +105,7 @@ public static partial class WorldDefinitionFileSource {
         ) { Layers = layers, Origins = ((composed is null) ? null : origins?.Snapshot(node: composed)) };
 
         ComposedDocuments[key] = image;
-        if (inputs is not null) { source.Compositions?.WriteComposition(image: image, key: key); }
+        if (inputs is not null) { source.Compositions?.WriteComposition(image: image, key: key.DiskKey); }
 
         return image;
     }

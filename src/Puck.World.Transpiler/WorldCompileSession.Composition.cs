@@ -23,7 +23,7 @@ public sealed partial class WorldCompileSession {
     /// <inheritdoc />
     public bool ResolvesFiles => true;
     /// <inheritdoc />
-    public IWorldCompositionStore Compositions => this;
+    public IWorldCompositionStore? Compositions => (Directory is null ? null : this);
 
     /// <inheritdoc />
     public bool RecordInputs(string resolvedName, byte[] content) => StillReads(content: content, resolvedName: resolvedName);

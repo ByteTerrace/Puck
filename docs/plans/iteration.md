@@ -171,8 +171,8 @@ latest readings against them:
 - **An author's `.puck` edit still validates and delivers the whole world.**
   A saved file reaches the running World as a `world.reload` (by hand, or
   queued by `world.watch on`). The compile and composition now do work in
-  proportion to the edit, but a process's first recomposition after it starts
-  merges whole, every install but a state-value one validates the whole
+  proportion to the edit, including the first reload after a warm boot.
+  Every install but a state-value one validates the whole
   candidate, the install clears the journal, and each client receives the
   whole definition again while the frame waits
   ([what is left](#what-is-left)). [The authoring loop](iteration/authoring-loop.md)
@@ -419,10 +419,9 @@ both.
 ### What is left
 
 - **Composition and validation in front of the install.** The sender admits
-  nothing, and a one-colour edit merges one root member, but a process's first
-  recomposition of a persisted image merges whole, a changed member merges its
-  whole list, and the authority validates the whole candidate for every install
-  but a state-value one: the authoring loop's steps 3 and 5.
+  nothing, and a one-colour edit merges one root member. A changed member
+  still merges its whole list, and the authority validates the whole candidate
+  for every install but a state-value one (the authoring loop's steps 3 and 5).
 - **The sender serializes both revisions once.** `WorldDefinitionMembers`
   slices a revision's compact bytes the first time a delta reads it; the next
   revision's slices come from one serialization of it. It goes when the compile
