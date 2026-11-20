@@ -170,9 +170,7 @@ public static class WorldPlacementFrameCompilation {
     /// <returns>The world frames.</returns>
     public static IReadOnlyDictionary<string, CompiledPlacementFrame> Compile(IReadOnlyList<WorldPlacement>? placements, ulong worldSeed) {
         if (placements is not { Count: > 0 }) { return Empty; }
-        var byId = new Dictionary<string, WorldPlacement>(capacity: placements.Count, comparer: StringComparer.Ordinal);
-
-        foreach (var row in placements) { byId[row.Id] = row; }
+        var byId = WorldPlacementIndex.ById(placements: placements);
         var frames = new Dictionary<string, CompiledPlacementFrame>(capacity: placements.Count, comparer: StringComparer.Ordinal);
         var visiting = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -216,14 +214,7 @@ public static class WorldPlacementFrameCompilation {
             return true;
         }
 
-        var byId = new Dictionary<string, WorldPlacement>(
-            capacity: placements.Count,
-            comparer: StringComparer.Ordinal
-        );
-
-        foreach (var placement in placements) {
-            byId[placement.Id] = placement;
-        }
+        var byId = WorldPlacementIndex.ById(placements: placements);
 
         foreach (var placement in placements) {
             if (placement.Parent is not { Length: > 0 } parentId) {
