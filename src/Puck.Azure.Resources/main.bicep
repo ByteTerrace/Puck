@@ -207,6 +207,11 @@ type logAnalyticsWorkspaceConfigType = {
   dailyQuotaGb: int?
   name: string
   tags: tagsType?
+  // The workspace transformation rule that drops the Functions host's own runtime metrics at ingestion.
+  workspaceTransformRule: {
+    name: string
+    tags: tagsType?
+  }
 }
 @export()
 type monitorPrivateLinkScopeConfigType = {
@@ -490,6 +495,20 @@ var frontDoorSkuMap = {
   premium: 'Premium_AzureFrontDoor'
   standard: 'Standard_AzureFrontDoor'
 }
+// The Functions host exports its own OpenTelemetry runtime metrics (SDK version `azurefunctions:...`): the .NET
+// runtime and process counters, Kestrel, ASP.NET Core and the health-check report counter. Nothing in the app or in
+// `host.json` reaches them, so the workspace drops them at ingestion. Matching the SDK version as well as the name
+// keeps this to the host's own export: our worker and the silo report under their own SDK versions, and an
+// Application Insights `_APPRESOURCEPREVIEW_` row, `faas.invoke_duration`, `http.server.*` and
+// `azure.functions.health_check.unhealthy_checks` stay.
+var hostRuntimeMetricNamePrefixes = [
+  'aspnetcore.'
+  'azure.functions.health_check.reports'
+  'dotnet.'
+  'kestrel.'
+  'process.'
+]
+var logAnalyticsWorkspaceTransformKql = 'source | where not(SDKVersion startswith \'azurefunctions\' and (${join(map(hostRuntimeMetricNamePrefixes, prefix => 'Name startswith \'${prefix}\''), ' or ')}))'
 var monitoring = {
   applicationInsightsPublicNetworkAccess: {
     ingestion: 'Enabled'
@@ -2483,33 +2502,62 @@ module kubernetesService_containerServiceDnsZoneRoleAssignment 'br/public:avm/pt
     roleDefinitionId: az.roleDefinitions('Network Contributor').id
   }
 }
-module logAnalyticsWorkspace 'br/public:avm/res/operational-insights/workspace:0.16.1' = {
+// Step 1 of 3: the workspace, without a default rule. Step 3 deploys it again with the rule; both come from one file.
+module logAnalyticsWorkspace './logAnalyticsWorkspace.bicep' = {
   params: {
-    dailyQuotaGb: string(resources.logAnalyticsWorkspace.?dailyQuotaGb ?? -1)
-    dataRetention: 30
-    diagnosticSettings: []
+    dailyQuotaGb: resources.logAnalyticsWorkspace.?dailyQuotaGb ?? -1
     enableTelemetry: enableTelemetry
-    features: {
-      disableLocalAuth: true
-      enableDataExport: false
-      enableLogAccessUsingOnlyResourcePermissions: true
-      immediatePurgeDataOn30Days: false
+    location: location
+    lockKind: lockKind
+    name: resources.logAnalyticsWorkspace.name
+    tags: union(tags, resources.logAnalyticsWorkspace.?tags ?? {})
+  }
+}
+// Step 3 of 3: the workspace again, with the rule as its default. Nothing else waits for it.
+module logAnalyticsWorkspaceDefaultRule './logAnalyticsWorkspace.bicep' = {
+  params: {
+    dailyQuotaGb: resources.logAnalyticsWorkspace.?dailyQuotaGb ?? -1
+    defaultDataCollectionRuleResourceId: logAnalyticsWorkspaceTransformRule.outputs.resourceId
+    enableTelemetry: enableTelemetry
+    location: location
+    lockKind: lockKind
+    name: resources.logAnalyticsWorkspace.name
+    tags: union(tags, resources.logAnalyticsWorkspace.?tags ?? {})
+  }
+}
+// Step 2 of 3: the rule, whose destination is the workspace that step 1 (`logAnalyticsWorkspace`) created.
+module logAnalyticsWorkspaceTransformRule 'br/public:avm/res/insights/data-collection-rule:0.11.0' = {
+  params: {
+    dataCollectionRuleProperties: {
+      dataFlows: [
+        {
+          destinations: [
+            'workspace'
+          ]
+          streams: [
+            'Microsoft-Table-AppMetrics'
+          ]
+          transformKql: logAnalyticsWorkspaceTransformKql
+        }
+      ]
+      description: 'Drops the Functions host\'s own runtime metrics from the AppMetrics table before they are billed.'
+      destinations: {
+        logAnalytics: [
+          {
+            name: 'workspace'
+            workspaceResourceId: logAnalyticsWorkspace.outputs.resourceId
+          }
+        ]
+      }
+      kind: 'WorkspaceTransforms'
     }
-    forceCmkForQuery: false
+    enableTelemetry: enableTelemetry
     location: location
     lock: {
       kind: lockKind
     }
-    managedIdentities: {
-      systemAssigned: false
-      userAssignedResourceIds: []
-    }
-    name: resources.logAnalyticsWorkspace.name
-    publicNetworkAccessForIngestion: 'Enabled'
-    publicNetworkAccessForQuery: 'Enabled'
-    roleAssignments: []
-    skuName: 'PerGB2018'
-    tags: union(tags, resources.logAnalyticsWorkspace.?tags ?? {})
+    name: resources.logAnalyticsWorkspace.workspaceTransformRule.name
+    tags: union(tags, resources.logAnalyticsWorkspace.workspaceTransformRule.?tags ?? {})
   }
 }
 module postgreSql 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.16.1' = if (enabled.postgreSql) {

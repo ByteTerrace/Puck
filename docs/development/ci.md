@@ -1223,6 +1223,26 @@ is chosen:
 - **Traces are rate-limited** to `AzureMonitorTelemetryExtensions.TracesPerSecond`
   per process; logs are not sampled, so every warning and error is kept. The silo
   does not trace `/healthz` and drops the Orleans request-latency histogram.
+- **The workspace drops the Functions host's own runtime metrics at ingestion.**
+  The host exports OpenTelemetry metrics under its own SDK version
+  (`azurefunctions:...`): .NET runtime and process counters (`dotnet.*`,
+  `process.*`), Kestrel, ASP.NET Core and
+  `azure.functions.health_check.reports`. Nothing in the app or `host.json`
+  reaches them, and they were about 2.9 GB of the roughly 4.7 GB a month left
+  after the cuts above. A workspace transformation (a data collection rule of
+  kind `WorkspaceTransforms`, named by the workspace's default rule) removes
+  them from `AppMetrics` before they are billed, about 2.6 GB a month, which
+  leaves an expected 2 GB or so a month. The rule matches the host's SDK version
+  as well as the name, so our worker's and the silo's metrics, the host's
+  `faas.invoke_duration`, `http.server.*` and
+  `azure.functions.health_check.unhealthy_checks`, and every log table are
+  untouched. The prefixes are `hostRuntimeMetricNamePrefixes` in `main.bicep`.
+  The rule's destination is the workspace, so a fresh environment deploys in
+  three steps within one run: `logAnalyticsWorkspace` creates the workspace,
+  `logAnalyticsWorkspaceTransformRule` creates the rule, and
+  `logAnalyticsWorkspaceDefaultRule` deploys the workspace again (both from
+  `logAnalyticsWorkspace.bicep`) with the rule as its default. On an existing
+  environment, step 1 briefly leaves the default unset until step 3 sets it.
 - **`logAnalyticsWorkspace.dailyQuotaGb`** in `main.bicepparam` caps a day's ingestion as a
   safety net. It is set far above the expected volume, because ingestion stops
   until the daily reset once it is reached.
