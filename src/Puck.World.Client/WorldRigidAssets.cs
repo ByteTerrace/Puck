@@ -278,38 +278,54 @@ public sealed partial class WorldRigidAssets {
     public bool ContainsBody(int body) => m_liveBodies.Contains(item: body);
     /// <summary>Resolves a rigid body's authored part in its current root pose.</summary>
     public bool TryPartPose(int body, string partId, IWorldStampSource? source, out SdfAnchor pose) {
-        var stamp = m_bodies.FirstOrDefault(predicate: stamp => (stamp.BodyIndex == body));
-
-        if ((stamp.Creation is null) || !CreationPartCompiler.Compile(document: stamp.Creation.Document).TryResolve(partId: partId, transformSlot: out var shape)) { pose = default; return false; }
+        if (!TryStampOf(body: body, stamp: out var stamp) || !CreationPartCompiler.Compile(document: stamp.Creation.Document).TryResolve(partId: partId, transformSlot: out var shape)) { pose = default; return false; }
         return TryShapePose(body, stamp.Creation.EngineDocument.Shapes![shape].Id, source, out pose);
     }
     /// <summary>Resolves a rigid shape or root without allocating shape transforms.</summary>
     public bool TryShapePose(int body, int? shapeId, IWorldStampSource? source, out SdfAnchor pose) {
-        var stamp = m_bodies.FirstOrDefault(predicate: stamp => (stamp.BodyIndex == body));
-
-        if (stamp.Creation is null) { pose = default; return false; }
-        var copy = m_copies.FirstOrDefault(predicate: copy => ((copy.Identity is WorldPickTarget { BodyIndex: var index }) && (index == body)));
+        if (!TryStampOf(body: body, stamp: out var stamp)) { pose = default; return false; }
+        var copy = CopyOf(body: body);
 
         if ((copy is null) && (source is null)) { pose = default; return false; }
         var position = (copy?.Transform.Position ?? source!.Position(index: body));
         var orientation = (copy?.Transform.Orientation ?? source!.Orientation(index: body));
-        var shape = ((shapeId is null) ? null : stamp.Creation.EngineDocument.Shapes?.FirstOrDefault(predicate: shape => (shape.Id == shapeId)));
+        var shape = ((shapeId is null) ? null : ShapeOf(creation: stamp.Creation.EngineDocument, shapeId: shapeId.Value));
 
         pose = new SdfAnchor((position + Vector3.Transform(((shape?.Position.Value ?? Vector3.Zero) * stamp.Scale), orientation)), Quaternion.Normalize(value: (orientation * (shape?.Rotation.Value ?? Quaternion.Identity))));
         return true;
     }
     /// <summary>Returns whether a rigid body publishes a part.</summary>
     public bool TryPartSlot(int body, string partId, out int slot) {
-        var stamp = m_bodies.FirstOrDefault(predicate: stamp => (stamp.BodyIndex == body));
-
-        if ((stamp.Creation is not null) && CreationPartCompiler.Compile(document: stamp.Creation.Document).TryResolve(partId: partId, transformSlot: out _)) { return TryRootSlot(body: body, slot: out slot); }
+        if (TryStampOf(body: body, stamp: out var stamp) && CreationPartCompiler.Compile(document: stamp.Creation.Document).TryResolve(partId: partId, transformSlot: out _)) { return TryRootSlot(body: body, slot: out slot); }
         slot = -1; return false;
     }
     /// <summary>Finds a live copy's packed root slot.</summary>
     public bool TryRootSlot(int body, out int slot) {
-        for (var index = 0; (index < m_copies.Count); index++) {
-            if ((m_copies[index].Identity is WorldPickTarget { BodyIndex: var found }) && (found == body)) { slot = m_copies[index].FrameSlot; return true; }
-        }
+        if (CopyOf(body: body) is { } copy) { slot = copy.FrameSlot; return true; }
         slot = -1; return false;
+    }
+
+    // The live copy of a body, or null when it has none. Loops: the pose paths run per body per frame.
+    private SdfMeshInstance? CopyOf(int body) {
+        for (var index = 0; (index < m_copies.Count); index++) {
+            if ((m_copies[index].Identity is WorldPickTarget { BodyIndex: var found }) && (found == body)) { return m_copies[index]; }
+        }
+
+        return null;
+    }
+    private static ShapeDocument? ShapeOf(CreationDocument creation, int shapeId) {
+        if (creation.Shapes is not { } shapes) { return null; }
+        for (var index = 0; (index < shapes.Count); index++) {
+            if (shapes[index].Id == shapeId) { return shapes[index]; }
+        }
+
+        return null;
+    }
+    // The body's stamp, or false when the body has none; its creation is never null on a true answer.
+    private bool TryStampOf(int body, out WorldCreationInstances.BodyStamp stamp) {
+        for (var index = 0; (index < m_bodies.Count); index++) {
+            if ((m_bodies[index].BodyIndex == body) && (m_bodies[index].Creation is not null)) { stamp = m_bodies[index]; return true; }
+        }
+        stamp = default; return false;
     }
 }
