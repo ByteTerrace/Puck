@@ -156,6 +156,9 @@ public static class WorldModuleExports {
             node: tree,
             type: typeof(WorldDefinition),
             visitor: (_, _, value, field, memberType) => {
+                if (!WorldModuleNamespace.IsModuleScoped(kind: field.Kind)) {
+                    return;
+                }
                 if (field.Role == WorldNameRole.Declares) {
                     if (
                         (value is JsonValue leaf) &&

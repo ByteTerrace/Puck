@@ -35,7 +35,7 @@ public readonly record struct WorldViewSlot(
     float Y = 0f,
     float Width = 1f,
     float Height = 1f,
-    [property: DocumentText("a camera name")] string? Camera = null,
+    [property: DocumentName(WorldNameKind.Camera, WorldNameRole.Names)] string? Camera = null,
     [property: DocumentText("a view instance name")]
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Instance = null
 ) {

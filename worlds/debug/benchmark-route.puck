@@ -56,7 +56,7 @@ function ride(from, to, level, pace) = [
 function valleySeam(name, pace) = {
   name: name
   steps [
-    { $type: "pose", spawn: "seam-valley" }
+    { $type: "pose", spawn: `seam-valley` }
     stand(1)
     goTo([16, floor0, 20], pace)
     goTo([16, floor0, -14], pace)
@@ -67,7 +67,7 @@ function valleySeam(name, pace) = {
 function gardenSeam(name, pace) = {
   name: name
   steps [
-    { $type: "pose", spawn: "portal-garden" }
+    { $type: "pose", spawn: `portal-garden` }
     stand(1)
     { $type: "cross", headingDegrees: 180, pace: pace, metres: 11 }
     stand(1)
@@ -78,7 +78,7 @@ function gardenSeam(name, pace) = {
 function liftSeam(name, pace) = {
   name: name
   steps: concat(
-    [{ $type: "pose", spawn: "gallery-level-0" }, stand(1)],
+    [{ $type: "pose", spawn: `gallery-level-0` }, stand(1)],
     ride(floor0, floor3, 3, pace),
     [stand(1)],
     ride(floor3, floor0, 0, pace),
@@ -99,7 +99,7 @@ routes [
         {
           name: "the stage into the hall"
           steps [
-            { $type: "pose", spawn: "stage" }
+            { $type: "pose", spawn: stage }
             { $type: "line", text: "player.camera.view first" }
             stand(1)
             go("place-hall-entrance", "run")

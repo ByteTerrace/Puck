@@ -18,7 +18,7 @@ public static class LintCommand {
         diagnostic.Span.Offset,
         diagnostic.Message
     );
-    private static int LintFile(string filePath, bool strict, WorldMachineCatalog machines, string catalogFingerprint, HashSet<string>? reported = null) {
+    private static int LintFile(string filePath, bool strict, WorldMachineCatalog machines, string catalogFingerprint, HashSet<string>? reported = null, PuckLibraryUse? libraries = null) {
         string sourceText;
 
         try {
@@ -30,6 +30,7 @@ public static class LintCommand {
         var diagnostics = WorldSourceDiagnostics.Diagnose(
             catalogFingerprint: catalogFingerprint,
             foreign: Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Diagnose,
+            libraries: libraries,
             machines: machines,
             source: sourceText,
             sourcePath: filePath,
@@ -107,11 +108,13 @@ public static class LintCommand {
 
             var failureCount = 0;
             var reported = new HashSet<string>(comparer: StringComparer.Ordinal);
+            var libraries = new PuckLibraryUse();
 
             foreach (var file in files) {
                 var code = LintFile(
                     catalogFingerprint: catalogFingerprint,
                     filePath: file,
+                    libraries: libraries,
                     machines: machines,
                     reported: reported,
                     strict: strict
@@ -120,6 +123,16 @@ public static class LintCommand {
                 if (code != 0) {
                     failureCount++;
                 }
+            }
+            // A library declaration is for its importers, so whether one is read is known only once every source of the
+            // directory has been read.
+            foreach (var library in libraries.Unused().GroupBy(keySelector: static finding => finding.SourcePath!, comparer: StringComparer.Ordinal)) {
+                var unused = new DiagnosticBag();
+
+                foreach (var finding in library) {
+                    unused.Report(diagnostic: finding);
+                }
+                Console.WriteLine(value: unused.FormatReport(filePath: library.Key, sourceText: File.ReadAllText(path: library.Key)));
             }
 
             return ((failureCount > 0)

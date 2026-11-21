@@ -1,0 +1,15 @@
+// A rule's `when` written in its header is the gate written in its body after the body's locals, which evaluate
+// before the gate wherever they are written.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot count = 0
+  }
+}
+
+rule "tick" when count < 3 {
+  local next = count + 1
+  count = next
+}

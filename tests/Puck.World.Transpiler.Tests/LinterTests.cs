@@ -21,6 +21,24 @@ public class LinterTests {
         PuckLinter.Lint(PuckParser.ParseDocument($"rule \"guarded\" {{\nlocal value = {expression}\na = value\n}}"), diagnostics);
         Assert.Equal(warns, diagnostics.Any(diagnostic => diagnostic.Code == PuckDiagnosticCodes.EagerConditionalArithmetic));
     }
+    // A library's declaration is for its importers: one read by an importer (bare, dotted, or as a function a gate
+    // calls) or by another of its own declarations is used, and one nothing in the set reads is reported against it.
+    [Fact]
+    public void ALibraryDeclarationNoSourceReadsIsReportedAgainstTheLibrary() {
+        using var files = new TemporaryDirectory();
+        var library = files.WriteText(name: "lib.puck", text: "let base = 2\nlet table = { step: base }\nfunction held(x) = x > table.step\nlet idle = 4\ntemplate unused(n) {\n  width: n\n}\n");
+        var world = files.WriteText(name: "world.puck", text: "schema: \"puck.world.definition.v1\"\ndocumentId: \"world\"\n\nimport \"lib\"\n\nstate {\n  world {\n    slot count = 0\n  }\n}\n\nrule \"r\" {\n  if held(count) {\n    count = 0\n  }\n}\n");
+        var use = new PuckLibraryUse();
+
+        foreach (var path in (ReadOnlySpan<string>)[library, world]) {
+            _ = WorldSourceDiagnostics.Diagnose(libraries: use, source: File.ReadAllText(path: path), sourcePath: path);
+        }
+
+        Assert.Equal(
+            actual: use.Unused().Select(selector: static finding => (Path.GetFileName(path: finding.SourcePath), finding.Message.Split(separator: '\'')[1])),
+            expected: [("lib.puck", "idle"), ("lib.puck", "unused")]
+        );
+    }
     // Every child a node declares is walked, so a constant read only where an effect takes a value is a use.
     [InlineData("schedule due in cooldown")]
     [InlineData("deal cooldown from deck to hand")]

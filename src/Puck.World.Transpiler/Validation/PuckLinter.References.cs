@@ -10,17 +10,18 @@ using Puck.Transpiler.Diagnostics;
 namespace Puck.World.Transpiler.Validation;
 
 // Symbol resolution over the LOWERED JSON, not the AST: it sees exactly what ships, template-expanded and ready to
-// compose. Four reference families — state row, prototypeId, placement parent, camera/spawn-point — plus a
+// compose. Reference families — state row, prototype, placement, camera, spawn point (ResolvedKinds) — plus a
 // shape-parent check (each Warning in a root document, with nearest-name suggestions) and a best-effort `$`-prefix
 // typo check (Information). Zero false positives is the bar: a `$`-prefixed name is never checked against a
 // declared-row set, and a cell key's reserved spellings are read only where they hold an expression.
 //
-// The state-row family is found by WorldNameRegistry, not listed here: WorldModuleNamespace.Visit walks the tree
+// Every family is found by WorldNameRegistry, not listed here: WorldModuleNamespace.Visit walks the tree
 // type-directed and hands back every registered site, the same sites an aliased import rewrites, so a member
-// registered there is resolved here without a second edit. A site is read by its role — a name or a list of
-// them, an expression as IR or as infix text, a `state.<row>` binding, a template's placeholders. A `state`,
-// `comparandState` or `fromState` field the registry excludes sits at body scope and names a per-body slot; the
-// generic walk resolves those against the same catalog, which holds every lane's names.
+// registered there is resolved here without a second edit, against the names the composed tree's Declares sites
+// mint (ReferenceCatalog). A site is read by its role — a name or a list of them, an expression as IR or as infix
+// text, a `state.<row>` binding, a template's placeholders. What no registered site reaches is walked generically:
+// a `state`, `comparandState` or `fromState` field the registry excludes sits at body scope and names a per-body
+// slot, resolved against the same catalog, which holds every lane's names; and a shape's `parent`.
 //
 // A document naming a `basis` or `imports` composes its whole graph through WorldCompileSession — the same
 // composition the game boot path and `compile --validate` run — so a name only a basis or import supplies resolves
@@ -93,29 +94,7 @@ public static partial class PuckLinter {
             return;
         }
 
-        var references = new ReferenceCatalog(
-            State: CollectRowNames(stateSection: (catalogSource["state"] as JsonObject)),
-            Prototypes: CollectFieldValues(
-                array: (catalogSource["prototypes"] as JsonArray),
-                field: "id"
-            ),
-            Placements: CollectFieldValues(
-                array: ((catalogSource["placements"] as JsonObject)?["rows"] as JsonArray),
-                field: "id"
-            ),
-            Cameras: CollectFieldValues(
-                array: (catalogSource["cameras"] as JsonArray),
-                field: "name"
-            ),
-            SpawnPoints: CollectFieldValues(
-                array: (catalogSource["spawnPoints"] as JsonArray),
-                field: "id"
-            ),
-            Sets: CollectFieldValues(
-                array: (catalogSource["sets"] as JsonArray),
-                field: "name"
-            )
-        );
+        var references = ReferenceCatalog.Of(composed: catalogSource);
 
         var registered = new HashSet<(JsonObject Holder, string Member)>();
 
@@ -150,14 +129,46 @@ public static partial class PuckLinter {
         );
     }
 
-    private readonly record struct ReferenceCatalog(
-        HashSet<string> State,
-        HashSet<string> Prototypes,
-        HashSet<string> Placements,
-        HashSet<string> Cameras,
-        HashSet<string> SpawnPoints,
-        HashSet<string> Sets
-    );
+    // The names the composed document declares, by kind: every Declares site the registry lists (a rule's upserted
+    // placement included), and every row of every state section, which holds each lane's names.
+    private sealed class ReferenceCatalog {
+        private readonly Dictionary<WorldNameKind, HashSet<string>> m_declared = [];
+
+        public HashSet<string> State => Declared(kind: WorldNameKind.State);
+
+        public static ReferenceCatalog Of(JsonObject composed) {
+            var catalog = new ReferenceCatalog();
+
+            WorldModuleNamespace.Visit(
+                node: composed,
+                type: typeof(WorldDefinition),
+                visitor: (_, _, value, field, _) => {
+                    if ((field.Role == WorldNameRole.Declares) && (value is JsonValue leaf) && leaf.TryGetValue(value: out string? name) && !string.IsNullOrEmpty(value: name)) {
+                        _ = catalog.Declared(kind: field.Kind).Add(item: name);
+                    }
+                }
+            );
+            catalog.State.UnionWith(other: CollectRowNames(stateSection: (composed["state"] as JsonObject)));
+
+            return catalog;
+        }
+        public HashSet<string> Declared(WorldNameKind kind) {
+            if (!m_declared.TryGetValue(key: kind, value: out var names)) {
+                names = new HashSet<string>(comparer: StringComparer.Ordinal);
+                m_declared[kind] = names;
+            }
+
+            return names;
+        }
+    }
+    // What the lint resolves at a registered site of each kind beyond a state row's: the code and words of the finding.
+    // Every other kind is refused by the engine's own validation with a better message than a lint could give.
+    private static readonly Dictionary<WorldNameKind, (string Code, string Noun)> ResolvedKinds = new() {
+        [WorldNameKind.Prototype] = (PuckDiagnosticCodes.LintUnresolvedPrototype, "prototypeId"),
+        [WorldNameKind.Placement] = (PuckDiagnosticCodes.LintUnresolvedPlacementParent, "placement"),
+        [WorldNameKind.Camera] = (PuckDiagnosticCodes.LintUnresolvedView, "camera reference"),
+        [WorldNameKind.SpawnPoint] = (PuckDiagnosticCodes.LintUnresolvedView, "spawn point reference"),
+    };
 
     private static HashSet<string> CollectRowNames(JsonObject? stateSection) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -183,26 +194,6 @@ public static partial class PuckLinter {
             }
         }
         return names;
-    }
-    private static HashSet<string> CollectFieldValues(JsonArray? array, string field) {
-        var values = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        if (array is null) {
-            return values;
-        }
-        foreach (var element in array) {
-            if (
-                (element is JsonObject obj) &&
-                TryGetString(
-                field: field,
-                obj: obj,
-                value: out var value
-            )
-            ) {
-                values.Add(item: value);
-            }
-        }
-        return values;
     }
     private static bool TryGetString(JsonObject obj, string field, out string value) {
         if (
@@ -314,112 +305,19 @@ public static partial class PuckLinter {
             }
         }
     }
+    // What the registry walk does not reach: a `state`, `comparandState` or `fromState` field at body scope.
     private static void CheckObjectReferences(JsonObject obj, string pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, HashSet<(JsonObject Holder, string Member)> registered, bool resolveGlobalReferences) {
-        // A placement row (identified by its own required prototypeId) — parent names a sibling placement id.
-        if (
-            resolveGlobalReferences &&
-            TryGetString(
-            field: "prototypeId",
-            obj: obj,
-            value: out var prototypeId
-        )
-        ) {
-            if (!catalog.Prototypes.Contains(item: prototypeId)) {
-                Report(
-                    code: PuckDiagnosticCodes.LintUnresolvedPrototype,
-                    diagnostics: diagnostics,
-                    message: $"Unresolved prototypeId '{prototypeId}'{DocumentNearestNames.Suggestion(candidates: catalog.Prototypes, name: prototypeId)}.",
-                    pointer: DocumentJsonPointer.Child(name: "prototypeId", pointer: pointer),
-                    severity: DiagnosticSeverity.Warning,
-                    sourceMap: sourceMap
-                );
-            }
-            if (
-                TryGetString(
-                field: "parent",
+        foreach (var field in ((ReadOnlySpan<string>)["state", "comparandState", "fromState"])) {
+            CheckStateField(
+                catalog: catalog,
+                diagnostics: diagnostics,
+                field: field,
                 obj: obj,
-                value: out var placementParent
-            ) &&
-                !catalog.Placements.Contains(item: placementParent)
-            ) {
-                Report(
-                    code: PuckDiagnosticCodes.LintUnresolvedPlacementParent,
-                    diagnostics: diagnostics,
-                    message: $"Unresolved placement parent '{placementParent}'{DocumentNearestNames.Suggestion(candidates: catalog.Placements, name: placementParent)}.",
-                    pointer: DocumentJsonPointer.Child(name: "parent", pointer: pointer),
-                    severity: DiagnosticSeverity.Warning,
-                    sourceMap: sourceMap
-                );
-            }
-        }
-
-        CheckStateField(
-            catalog: catalog,
-            diagnostics: diagnostics,
-            field: "state",
-            obj: obj,
-            pointer: pointer,
-            registered: registered,
-            resolveGlobalReferences: resolveGlobalReferences,
-            sourceMap: sourceMap
-        );
-        CheckStateField(
-            catalog: catalog,
-            diagnostics: diagnostics,
-            field: "comparandState",
-            obj: obj,
-            pointer: pointer,
-            registered: registered,
-            resolveGlobalReferences: resolveGlobalReferences,
-            sourceMap: sourceMap
-        );
-        CheckStateField(
-            catalog: catalog,
-            diagnostics: diagnostics,
-            field: "fromState",
-            obj: obj,
-            pointer: pointer,
-            registered: registered,
-            resolveGlobalReferences: resolveGlobalReferences,
-            sourceMap: sourceMap
-        );
-
-        if (resolveGlobalReferences) {
-            if (
-                TryGetString(
-                field: "camera",
-                obj: obj,
-                value: out var cameraName
-            ) &&
-                (cameraName.Length > 0) &&
-                !catalog.Cameras.Contains(item: cameraName)
-            ) {
-                Report(
-                    code: PuckDiagnosticCodes.LintUnresolvedView,
-                    diagnostics: diagnostics,
-                    message: $"Unresolved camera reference '{cameraName}'{DocumentNearestNames.Suggestion(candidates: catalog.Cameras, name: cameraName)}.",
-                    pointer: DocumentJsonPointer.Child(name: "camera", pointer: pointer),
-                    severity: DiagnosticSeverity.Warning,
-                    sourceMap: sourceMap
-                );
-            }
-            if (
-                TryGetString(
-                field: "spawnPoint",
-                obj: obj,
-                value: out var spawnPointId
-            ) &&
-                !catalog.SpawnPoints.Contains(item: spawnPointId)
-            ) {
-                Report(
-                    code: PuckDiagnosticCodes.LintUnresolvedView,
-                    diagnostics: diagnostics,
-                    message: $"Unresolved spawn point reference '{spawnPointId}'{DocumentNearestNames.Suggestion(candidates: catalog.SpawnPoints, name: spawnPointId)}.",
-                    pointer: DocumentJsonPointer.Child(name: "spawnPoint", pointer: pointer),
-                    severity: DiagnosticSeverity.Warning,
-                    sourceMap: sourceMap
-                );
-            }
+                pointer: pointer,
+                registered: registered,
+                resolveGlobalReferences: resolveGlobalReferences,
+                sourceMap: sourceMap
+            );
         }
     }
     // A field the registry walk already read is not read twice; what is left names a per-body slot.
@@ -446,15 +344,45 @@ public static partial class PuckLinter {
             sourceMap: sourceMap
         );
     }
-    // One registered site, read by its role. Only a state row's namespace is resolved here: a zone is a state row, a
-    // set of positions is a board row or a declared set, and every other kind is refused by the engine's own
-    // validation with a better message than a lint could give.
+    // One registered site, read by its role: a state row's namespace (a zone is a state row, a set of positions is a
+    // board row or a declared set), and a name of each kind ResolvedKinds lists against what the document declares.
     private static void CheckRegisteredSite(JsonObject holder, string member, JsonNode value, WorldNameField field, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, bool resolveGlobalReferences) {
+        if (field.Role == WorldNameRole.Declares) {
+            return;
+        }
+        if (ResolvedKinds.TryGetValue(key: field.Kind, value: out var resolved)) {
+            if (resolveGlobalReferences && (field.Role == WorldNameRole.Names)) {
+                var declared = catalog.Declared(kind: field.Kind);
+
+                if (value is JsonArray named) {
+                    for (var index = 0; (index < named.Count); index++) {
+                        Resolve(element: named[index], index: index);
+                    }
+                } else {
+                    Resolve(element: value, index: -1);
+                }
+
+                void Resolve(JsonNode? element, int index) {
+                    if ((element is not JsonValue leaf) || !leaf.TryGetValue(value: out string? name) || IsSkippableName(name: name) || declared.Contains(item: name)) {
+                        return;
+                    }
+                    var at = DocumentJsonPointer.Child(name: member, pointer: PointerOf(node: holder));
+
+                    Report(
+                        code: resolved.Code,
+                        diagnostics: diagnostics,
+                        message: $"Unresolved {resolved.Noun} '{name}'{DocumentNearestNames.Suggestion(candidates: declared, name: name)}.",
+                        pointer: ((index < 0) ? at : DocumentJsonPointer.Child(index: index, pointer: at)),
+                        severity: DiagnosticSeverity.Warning,
+                        sourceMap: sourceMap
+                    );
+                }
+            }
+
+            return;
+        }
         // An interaction side names a property's row, or a region's placement (below), so its kind is Any.
-        if (
-            (field.Role == WorldNameRole.Declares) ||
-            ((field.Kind is not (WorldNameKind.State or WorldNameKind.Zone or WorldNameKind.Positions)) && (field.Owner != typeof(WorldInteraction)))
-        ) {
+        if ((field.Kind is not (WorldNameKind.State or WorldNameKind.Zone or WorldNameKind.Positions)) && (field.Owner != typeof(WorldInteraction))) {
             return;
         }
         if (
@@ -462,7 +390,7 @@ public static partial class PuckLinter {
             (value is JsonValue positions) &&
             positions.TryGetValue(value: out string? setName) &&
             (setName is not null) &&
-            catalog.Sets.Contains(item: setName)
+            catalog.Declared(kind: WorldNameKind.CellSet).Contains(item: setName)
         ) {
             return;
         }
@@ -493,12 +421,12 @@ public static partial class PuckLinter {
                     obj: holder,
                     value: out var placementId
                 ) &&
-                !catalog.Placements.Contains(item: placementId)
+                !catalog.Declared(kind: WorldNameKind.Placement).Contains(item: placementId)
             ) {
                 Report(
                     code: PuckDiagnosticCodes.LintUnresolvedPlacementParent,
                     diagnostics: diagnostics,
-                    message: $"Unresolved region placement '{placementId}'{DocumentNearestNames.Suggestion(candidates: catalog.Placements, name: placementId)}.",
+                    message: $"Unresolved region placement '{placementId}'{DocumentNearestNames.Suggestion(candidates: catalog.Declared(kind: WorldNameKind.Placement), name: placementId)}.",
                     pointer: DocumentJsonPointer.Child(name: member, pointer: PointerOf(node: holder)),
                     severity: DiagnosticSeverity.Warning,
                     sourceMap: sourceMap

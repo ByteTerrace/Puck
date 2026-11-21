@@ -1,0 +1,26 @@
+// A literal written before the row it compares with, a number or a string, is the comparison written row first with
+// its comparator flipped. A relational text comparison is refused when the document is validated, and both spellings
+// are refused alike.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot count = 0
+    row {
+      name: "label"
+      kind: "Text"
+      cells [{ key: "0", value: "a" }]
+    }
+  }
+}
+
+rule "first" {
+  when 3 < count and "a" != label[0]
+  count = 1
+}
+
+rule "relational" {
+  when "a" < label[0] or 2 >= count
+  count = 2
+}

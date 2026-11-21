@@ -49,6 +49,19 @@ public sealed class WorldCompositionMergeLawTests {
     }
 
     [Fact]
+    public void An_effect_list_is_an_ordered_program_the_layer_replaces_whole() {
+        // Two effects writing cell 0 of two rows share their `key`; an effect's key names a cell, never the row.
+        const string effects = """[{"$type":"setState","state":"boneHolder","key":"0","value":-1},{"$type":"setState","state":"reporter","key":"0","value":-1}]""";
+        var basis = JsonNode.Parse($$"""{"rules":[{"name":"claim-expire","effects":{{effects}}}]}""")!.AsObject();
+        var overlay = JsonNode.Parse("""{"rules":[{"name":"claim-expire","effects":[{"$type":"setState","state":"reporter","key":"0","value":2},{"$type":"setState","state":"reporter","key":"0","value":3}]}]}""")!.AsObject();
+
+        Assert.True(WorldDocumentBasis.TryMerge(basis, JsonNode.Parse(basis.ToJsonString())!.AsObject(), out var restated, out var reason), reason);
+        Assert.True(JsonNode.DeepEquals(basis, restated));
+        Assert.True(WorldDocumentBasis.TryMerge(basis, overlay, out var composed, out reason), reason);
+        Assert.True(JsonNode.DeepEquals(overlay["rules"]![0]!["effects"], composed!["rules"]![0]!["effects"]));
+    }
+
+    [Fact]
     public void Numeric_hash_collisions_still_distinguish_exact_large_integer_keys() {
         var basis = JsonNode.Parse("""{"rows":[{"id":9007199254740992,"kept":1}]}""")!.AsObject();
         var overlay = JsonNode.Parse("""{"rows":[{"id":9007199254740993,"added":2}]}""")!.AsObject();

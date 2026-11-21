@@ -502,7 +502,13 @@ public static partial class WorldDocumentEmitter {
             case NotPredicateNode not: {
                     var (gate, constant) = FoldGate(node: not.Operand, scope: scope);
 
-                    return ((gate is null) ? (null, !constant) : (not with { Operand = gate }, false));
+                    // A gate is two-valued (GateOp.Not), so `not not p` is `p`: a chain of negations nests one level
+                    // at most, however long it is written.
+                    return gate switch {
+                        null => (null, !constant),
+                        NotPredicateNode inner => (inner.Operand, false),
+                        _ => (not with { Operand = gate }, false),
+                    };
                 }
             default:
                 return (node, false);
@@ -622,12 +628,14 @@ public static partial class WorldDocumentEmitter {
         var comparison = Enum.GetName(value: parsedComparison)!;
 
         if ((cmp.Left.Syntax is ExpressionSpelling.SourceString) || (cmp.Right.Syntax is ExpressionSpelling.SourceString)) {
+            var literalOnRight = (cmp.Right.Syntax is ExpressionSpelling.SourceString);
             var literal = ((cmp.Right.Syntax as ExpressionSpelling.SourceString) ?? ((ExpressionSpelling.SourceString)cmp.Left.Syntax!));
-            var stateText = ((cmp.Right.Syntax is ExpressionSpelling.SourceString) ? leftText : rightText);
+            var stateText = (literalOnRight ? leftText : rightText);
 
+            // The state row is the subject, so a literal written first flips the comparator as a constant's does.
             if ((ClassifyBareComparison(leftText: stateText, leftToken: out var stateToken, rightText: "0", rightToken: out _) == BareComparisonShape.StateAgainstConstant) &&
                 (stateToken!.Payload is InstructionPayload.State state)) {
-                return NewCompareState(state.Name.Spelling, state.Key?.Spelling, comparison, text: literal.Value);
+                return NewCompareState(state.Name.Spelling, state.Key?.Spelling, (literalOnRight ? comparison : Enum.GetName(value: parsedComparison.Flip())!), text: literal.Value);
             }
             scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.OperandParse,
                 message: "A text comparison requires a named state row on the other side", span: cmp.Span);

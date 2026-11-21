@@ -364,7 +364,10 @@ to the tools that read a bare one, and open to whatever syntax a hole
 computed; an atom's result is one name or one number by construction. A
 compile-time binding is read by its own name inside a bare operand and
 shadows a row of the same name; an enumeration word is never shadowed, and
-one bare word that is a key is never a binding.
+one bare word that is a key is never a binding. The innermost binding wins: a
+rule's `local`, a lambda's parameter and a pool binding hide a document
+constant of the same name where they are in scope, for lowering, hover and
+go-to-definition alike (`SyntaxScopes`).
 
 **P5 — One door.** Every consumer that compiles a source calls the same entry
 point with the same options; a harness that compiles a source differently

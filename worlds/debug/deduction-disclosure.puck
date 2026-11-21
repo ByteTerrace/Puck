@@ -13,7 +13,7 @@ import "deduction"
 bodies {
   localSeats: 4
   seatActivation [Eager, Eager, Eager, Eager]
-  seatSpawns ["stage", "stage", "stage", "stage"]
+  seatSpawns [stage, stage, stage, stage]
 }
 
 // The sessions the harness observes from: the authority's name decides the tier. The editor session may also write

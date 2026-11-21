@@ -35,6 +35,7 @@ public static partial class PuckLinter {
                 hazard |= CollectOperandReferences(ternary.WhenFalse, DocumentValueForm.Expression, references, binder, conditionalArm: true);
                 break;
             case Syntax.SourceCall call:
+                references.Add(item: call.Name);
                 foreach (var argument in call.Arguments) {
                     hazard |= CollectOperandReferences(argument.Value, DocumentValueForm.Expression, references, binder, conditionalArm);
                 }

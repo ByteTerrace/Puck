@@ -2862,7 +2862,7 @@ lane's.
 ### Language and authoring
 
 Owner: language lane (transpiler) · medium · Next: the cost corpus, then the
-unreproduced language findings.
+`roles` module re-check.
 
 - [medium] The cost pairs two documents cannot share (static placements
   against one creation, `wall - opening` against its box tiling, a mirrored
@@ -2873,35 +2873,17 @@ unreproduced language findings.
   has no implementation: no code puts or gets a creation document outside a
   projection. Build it when a creation-library step needs it, or delete the
   remark.
-- Decide (the language lane's call): whether a rule's effect list merges by
-  `key` when a template is re-expanded over a basis. A rule whose effects
-  write one key twice (`claim-expire` in `worlds/debug/pond.puck`) refuses
-  today, so the garden's crowd fixture re-expands only `pondFlocks`; effects
-  are ordered actions, not a keyed set.
-- Refuse a `garden { … }` expectation naming a document the world does not
-  reference at authoring time (`puck lint`, the language server,
-  `puck compile`); today `puck test` refuses it when it stages the world. It
-  needs the composed document's references from the composer.
 - [low] The work sheet prices a few shapes above what one tick runs:
   `companion-interest-*` is about 170 running-minimum rules a nearest-point
   reduction would replace; a write whose key is not literal counts against
   every pinned cell of its row in `CountWriters`; a transfer between piles a
   live zone table picks prices its disclosure term by the square of the piles.
-- [low] A module library's lets and templates are never reported unused
-  (`elementFamilyGlyphs`, `continuousStyle`); a directory lint could report a
-  library declaration no linted source reads.
 - [low] An imported module named `roles` changed how its importer lints
   (PUCK031, the fragment validated as a root). Re-run it on the current head,
   then find why a module's name changes import resolution.
 - [low] A `Capsule` scaled `[0.05, 0.18, 0.05]` stopped about 9 cm short of
   where an author expected (`motion-nod`'s first neck); check what a Capsule's
   half-length means under scale and say so in the shapes reference.
-- [unreproduced] A string literal on the left of a relational gate is not
-  flipped (`WorldDocumentEmitter.Rules`); a header `when` gate makes a body's
-  `local` report PUCK012; `not` loses its source span and recursion depth
-  (`PuckParser.Expressions`); unary `-` or `~` before `not` parses at the
-  wrong precedence and fails the format round trip; `PuckPrinter` drops `!= 0`
-  from a grouped comparison gate.
 
 ### Maths
 

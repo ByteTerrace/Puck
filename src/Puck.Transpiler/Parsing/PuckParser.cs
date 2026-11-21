@@ -877,11 +877,17 @@ public static partial class PuckParser {
 
         RefuseMisplacedConstruct(col: col, context: context, identifier: firstId, line: line, nextOffset: afterFirstIdOffset, startOffset: startOffset);
 
+        var callee = firstId;
+
+        if (!firstSpelling.Quoted && TryReadQualifiedCallee(callee: out var qualified, context: context, initialName: firstId)) {
+            callee = qualified;
+        }
+
         SkipWhiteSpace(context: context);
 
-        // Check if invocation: name(...)
+        // Check if invocation: name(...) or alias.name(...)
         if (cursor.Current == '(') {
-            var callExpr = ParseCallExpression(col: col, context: context, functionName: firstId, line: line, startOffset: startOffset);
+            var callExpr = ParseCallExpression(col: col, context: context, functionName: callee, line: line, startOffset: startOffset);
             var len = (cursor.Offset - startOffset);
 
             return new ExpressionStatementNode(Column: col, Expression: callExpr, Length: len, Line: line, Offset: startOffset);
@@ -1804,6 +1810,32 @@ public static partial class PuckParser {
         }
 
         cursor.ResetPosition(position: saved);
+
+        return false;
+    }
+    // A call statement through an aliased import, `m.sized(size: 7)`: the dotted segments must touch and end at '(',
+    // the same callee the expression parser builds from a member access (QualifiedName.From). Anything else (a row
+    // write `row.key = 1`) puts the cursor back and answers false.
+    private static bool TryReadQualifiedCallee(ParseContext context, string initialName, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out string? callee) {
+        var cursor = context.Scanner.Cursor;
+        var saved = cursor.Position;
+        var name = initialName;
+
+        while (!cursor.Eof && (cursor.Current == '.')) {
+            cursor.Advance();
+
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var member)) {
+                break;
+            }
+            name += $".{member}";
+        }
+        if ((name.Length != initialName.Length) && !cursor.Eof && (cursor.Current == '(')) {
+            callee = name;
+
+            return true;
+        }
+        cursor.ResetPosition(position: saved);
+        callee = null;
 
         return false;
     }

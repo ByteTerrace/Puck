@@ -334,20 +334,22 @@ public class LinterSugarTests {
             finding.Message
         );
     }
+    // Every position the model registers as naming a spawn point is read: a pose effect and a seat's spawn alike.
     [Fact]
     public void UnresolvedSpawnPointReferenceIsFlagged() {
         var document = new JsonObject {
             ["spawnPoints"] = new JsonArray(new JsonObject { ["id"] = "plaza-1" }),
+            ["population"] = new JsonObject { ["seatSpawns"] = new JsonArray("plaza-1", "plaza-7") },
             ["rules"] = new JsonArray(new JsonObject {
                 ["name"] = "r",
-                ["effects"] = new JsonArray(new JsonObject { ["$type"] = "designate", ["spawnPoint"] = "plaza-9" }),
+                ["effects"] = new JsonArray(new JsonObject { ["$type"] = "pose", ["key"] = "0", ["spawnPoint"] = "plaza-9" }),
             }),
         };
+        var findings = LintReferencesAsRoot(document: document).Where(predicate: static d => (d.Code == "PUCK_LINT_008")).Select(selector: static d => d.Message).ToArray();
 
-        Assert.Contains(
-            collection: LintReferencesAsRoot(document: document),
-            filter: d => ((d.Code == "PUCK_LINT_008") && d.Message.Contains(value: "plaza-9"))
-        );
+        Assert.Contains(collection: findings, filter: static message => message.Contains(value: "'plaza-9'"));
+        Assert.Contains(collection: findings, filter: static message => message.Contains(value: "'plaza-7'"));
+        Assert.DoesNotContain(collection: findings, filter: static message => message.Contains(value: "'plaza-1'"));
     }
     [Fact]
     public void UnresolvedStateRowInAGateIsFlagged() {
