@@ -460,7 +460,10 @@ keys literally (`keys`), through the seat's active binding page (`bound`, the
 binding entry ids, so the lamps follow a page change and a rebinding), or by
 the character a state cell holds (`character`, through
 `KeyboardUsageMap.TryGetSource`). `lit` and `available` gate and dim a row from
-state, and `flashSignal` flashes its keys each time a cell changes.
+state, and `flashSignal` flashes its keys each time a cell changes. Each of
+those four reads through the seat's own lease, so a binding keyed `$body`
+(`state.<row>.$body`) reads the cell of the seat's body and lights only that
+seat's keyboard.
 `WorldKeyLightDirector` builds each local seat's legend from the section every
 fixed step and publishes the keyboard-holding seat's to the driver. A World
 that opens no physical device (headless, or `--devices none`) registers no

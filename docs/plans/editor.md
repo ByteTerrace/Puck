@@ -207,10 +207,11 @@ what they made, and cannot tell how far apart two things are.
    its undos removed, both through one replay (`WorldPersistence.ApplyUndo`);
    the conflict rule is the
    [authoring-loop plan's](iteration/authoring-loop.md#several-authors-at-once).
-   The verdict echoes the principal's undo and redo depths. Left: `world.undo`
-   and `world.redo` become bindable, checked at dispatch under the pressing
-   seat's principal as `world.reload` is (today both need the operator), and
-   `world.status` echoes the acting principal's depths.
+   The verdict and `world.status` echo the principal's undo and redo depths.
+   Both verbs are bindable and answer any principal: the authority admits a
+   step as it would admit submitting each of its edits again
+   (`WorldDocument.TryAdmitCompleteMutation`), so a seat undoes the edits it may
+   still make. Left: no standard page binds them.
 2. **One gesture, one step.** Every editor gesture is one journal entry: a
    gesture over several rows submits one `WorldMutation.Batch`, and a drag
    ([E7](#e7--gizmos-and-pointer-dragging)) commits once on release.

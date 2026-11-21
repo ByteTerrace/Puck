@@ -244,6 +244,12 @@ tint or weight, so it does not draw those two fields. A template's placeholders
 are substituted before the markup is read, so a state cell can supply a tag's
 name or a parameter's value.
 
+A text paint is the second consumer (`WorldSurfaceTexts`, a creation palette
+paint's `text` facet with `markup: true`): its glyphs are laid out by
+`TextLayout` and drawn on the paint's surface, and it applies each glyph's
+offset, scale, coverage and tint. An offset's unit is the paint's `effectUnit`.
+It has no weight.
+
 `TextGlyphChannel.Resolve` is a pure function of the caller's content tick.
 Motion kinds are gated by `motionEnabled` (settling to rest when off; reveals
 still complete), while `Color`/`Weight` always apply—the reduced-motion

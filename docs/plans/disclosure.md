@@ -412,13 +412,18 @@ Step 3's invariant: a recipient's mutation or guard cannot inspect or change a r
 does not disclose whole. `WorldRecipientView.Admits` decides before grants and composition at
 `WorldDocument.TryAdmitCompleteMutation`; detached composition rechecks the same capability against
 each preceding batch member. Addon binds and typed writes use that same row policy. Whole-document
-rebuild and undo are authority-only at their apply doors, as well as operator-only console verbs.
+rebuild is authority-only at its apply door, as well as an operator-only console verb.
 
-Step 3 also closes the whole-document write doors. `world.load`, `world.reload`,
-`world.reset` and `world.undo` are operator verbs, and `WorldDocument.ApplyRebuild`
-and `WorldPersistence.ApplyUndo` refuse a recipient before inspecting the source or journal.
-The every-section Mutate hold alone did not protect hidden state: undo drops entries
-from the authority's journal and replays what remains, including mutations hidden from a seat.
+Step 3 also closes the whole-document write doors. `world.load`, `world.reload` and
+`world.reset` are operator verbs, and `WorldDocument.ApplyRebuild` refuses a recipient before
+inspecting the source. Undo is the acting principal's own (`WorldPersistence.ApplyUndo`): it
+toggles only entries that principal authored, and each mutation among them passes
+`WorldDocument.TryAdmitCompleteMutation` again, the door that admitted it, so a recipient undoes
+only a write whose whole footprint it still reads. Undoing a source edit keeps the operator
+and every-section Mutate gate. What a recipient is told names no other principal's edit: a
+conflict names the row its own edit wrote, and an empty history and a failed replay read the same
+whatever else the journal holds. One bit remains: a step refused for a conflict or a failed replay
+tells its author that some later edit stands on a row it wrote, a row it reads whole.
 
 A sealed bid is a write into a row the writer may not read. The first draft of
 this plan admitted such writes blind (a pure `Set`, one `accepted` receipt, the

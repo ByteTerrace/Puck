@@ -256,6 +256,60 @@ of its `scale`) follow the placement scale. A static placement shares one palett
 placements and draws no parented paint. To find a frame, paint a test stripe and
 look before trusting the numbers.
 
+### Text paints
+
+A paint that authors `text` draws lettering in place of filling its primitive:
+the surface takes `color` only inside both the primitive and a glyph. It is the
+tier for words on a part that change while the world runs (a slug's word, a
+score on a sheet, a label that follows a cell), since the glyphs are supplied
+each frame and no program or bake changes with them. Text that is relief is a
+`textRuns` entry ([rig](rig.md)); a display's own text is a text screen.
+
+```puck
+paints [
+  {
+    parent: "slug"
+    type: "Box"                  // the box the text is laid out in
+    position [0, 0.045, 0]       // the slug's top face
+    rotation [-0.707107, 0, 0, 0.707107]
+    scale [0.14, 0.058, 0.02]    // half width, half height, half depth
+    color: "#1A110A"             // the ink
+    text { template: "{state.word}", emHeight: 0.09, fit: true }
+  }
+]
+```
+
+The text lies on the paint's local XY plane: +X is the advance, +Y the ascent,
+and it is projected along local Z through the box's depth, so the z half-extent
+decides which faces it reaches. The rotation above lays it flat on a part's top
+face, reading from the part's +Z side. The block is centred on the box's height
+and placed across its width by `align`.
+
+| Field | Meaning |
+|---|---|
+| `template` | Literal text and `{state.<row>[.<key>]}` placeholders (an Int, Fixed, Bool or Text row; no `$body`). A line feed breaks a line |
+| `emHeight` | The height of one em, in the paint frame's units; positive |
+| `font` | A `text.fonts` name; absent is the catalog's default. The world must declare a text catalog |
+| `align` | `left`, `center` (the default) or `right` |
+| `tracking`, `lineSpacing` | As a text run's |
+| `wrap` | Wrap at the box's width; otherwise only a line feed breaks a line |
+| `fit` | Shrink a block wider or taller than the box to fit it; otherwise the box clips it |
+| `markup` | Read the substituted text as effect tags (`[color=#C0392B]`, `[caret at=3]`, `[shake]`); a placeholder can supply a tag's name or a parameter |
+| `effectUnit` | The length of one unit of an effect's amplitude; absent is a thirty-second of `emHeight` |
+
+A text paint's primitive must be bounded (not a `Plane`) and carries no
+`stroke`. The surface text tier draws an effect's offset, scale, coverage and
+tint a glyph at a time and has no weight. Layout is `Puck.Text.TextLayout`'s:
+proportional, kerned, one Unicode scalar a glyph.
+
+Limits: a world draws at most `SdfSurfaceTextLayout.MaxTexts` distinct text
+paints (the validator counts them; paints equal in every field share one), and
+a text draws its first `SdfSurfaceTextLayout.MaxGlyphs` glyphs. A text is the
+world's, not a body's: every copy of a creation shows the same words. A static
+placement draws an unparented text paint in world space, as any paint, and no
+parented one. A world shown through a screen or a portal draws none of its
+text paints yet.
+
 ## Flow
 
 `palette[].flow` moves a slot's shading along an authored flow while its

@@ -223,7 +223,10 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
 - **Keyboard lamps are painted from the document.** `WorldKeyLightDirector`
   (`Puck.World.Client`) builds each local seat's `LightLegendState` every fixed
   step from its routed world's `keyLights` rows and the seat's active
-  `BindingPageView`, composes it onto a reference board for `lights.state`, and
+  `BindingPageView`. A row's scalars (`lit`, `available`, `character`,
+  `flashSignal`) read through the seat's `WorldStateLease`, so one keyed `$body`
+  reads the seat's body as a haptic row's does. It composes the legend onto a
+  reference board for `lights.state`, and
   publishes the keyboard-holding seat's legend to `LampLegendDriver`
   (`Puck.Input.Lighting`). The driver owns the device loop on its own thread:
   it opens `Win32LampArrayDeviceSource` at the first published legend, never
@@ -233,7 +236,8 @@ The pattern contract (`WorldInputPattern.cs`, `WorldInputOwner.Patterns.cs`):
 - Output goes through `IGamepadOutput` (capability-gated; rumble is finite by
   contract). `WorldHapticDirector` evaluates world-authored `haptics` rows
   (`WorldHapticRow`) per local seat against each seat's routed
-  `WorldStateMirror` (including `$body` keys via `WorldStateLease`) and
+  `WorldStateMirror` (including `$body` keys via `WorldStateLease.Scalar`,
+  bound to the body `WorldSeatBodies` names for the seat) and
   drives the seat's assigned pad via `PlayerRoster.TryGetSeatDevice` and
   `GamepadManager.TryGetOutput`; `haptics.state` echoes per-seat status.
   The haptic, key light and highlight directors share `WorldSignalEdges`

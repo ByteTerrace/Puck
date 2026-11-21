@@ -125,7 +125,9 @@ public sealed partial class WorldPersistence {
                 return RefuseUndo(
                     connectionId: connectionId,
                     correlationId: correlationId,
-                    refusal: $"{verb} refused: replay failed at journal entry {index} ({entry.Description}) — {composeReason}"
+                    refusal: ((isOperator || (entry.Authored && (entry.Author == principal)))
+                        ? $"{verb} refused: replay failed at journal entry {index} ({entry.Description}) — {composeReason}"
+                        : $"{verb} refused: a later edit no longer applies without it; nothing was {(redo ? "redone" : "undone")}")
                 );
             }
 

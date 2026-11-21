@@ -1,8 +1,9 @@
 # Text and glyphs
 
-Puck supports two text tiers with different correctness requirements:
-marchable glyph geometry and material-level glyph decals. Both use the shared
-glyph atlas, but they consume different representations of the data.
+Puck supports three text tiers with different correctness requirements:
+marchable glyph geometry, a display's glyph decal, and surface text a paint
+draws. All use the shared glyph atlas, but they consume different
+representations of the data.
 
 ## The glyph atlas
 
@@ -118,6 +119,35 @@ Keep the carrier surface and decal frame aligned. Coplanar glyph geometry and a
 slab should not be used as a substitute for decals because coincident zero sets
 produce unstable material ownership.
 
+## Surface text
+
+A text paint draws lettering on its material's surface at the hit: the albedo
+takes the paint's colour inside a glyph, so the lettering is lit, shadowed and
+weathered as the surface is, where a decal is a display's own picture. It never
+enters the field or the bake. A world document authors it as a palette paint's
+`text` facet (`PalettePaintTextDocument`); a paint parented to a shape rides
+that shape's motion.
+
+The paint names a surface text slot (`SdfPaint.Text`), and the slot's glyphs
+are supplied each frame (`ISdfFrameSource.SurfaceTexts`,
+`SdfWorldTables.SetSurfaceText`): a run of glyph quads laid out by
+`Puck.Text.TextLayout` in the paint's bound box, each a rectangle of the box,
+an atlas cell and an ink (`SdfSurfaceTextLayout` states the packing). The slots
+follow the screens' descriptors in the decal buffer, so a text change uploads a
+few hundred bytes and moves the decal revision, which re-renders the shading
+passes and nothing else. `sdfSurfaceTextInk` (`shade/sdf-glyph-ink.hlsli`)
+tests the hit against each quad and samples the one it lies in through the same
+coverage and pixel-footprint antialiasing the decal uses
+(`sdfGlyphInkCoverage`).
+
+`WorldSurfaceTexts` supplies the boot world's slots: it substitutes each
+template's placeholders from the state mirror, lays the text out again only
+when a placeholder's cell moved, and resolves a marked-up text's per-glyph
+channel (`TextGlyphChannel`: offset, scale, coverage and tint) at the
+presentation clock. `WorldPresentationManifest.SurfaceTexts` assigns the slots,
+one per distinct text paint in document order, and both the emitted program and
+the glyph supply read that one list.
+
 ## Layout and determinism
 
 Font selection, atlas identity, and glyph metrics are input data. Do not depend
@@ -141,6 +171,7 @@ implemented.
 |---|---|
 | Engraving, embossing, silhouette, or field composition | `Glyph` geometry |
 | Dense labels on a known surface | `GlyphDecal` |
+| Lettering on a part's surface that follows state and is lit as the surface | a text paint (surface text) |
 | Emulator or arbitrary framebuffer content | Screen source |
 | Rich script shaping | Shape text before building SDF content |
 
