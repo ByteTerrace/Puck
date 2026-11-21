@@ -176,6 +176,16 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <summary>Gets the current destination's writable-page revision; zero for a host-visible policy.</summary>
     public ulong PageRevision => (m_pages?.Revision ?? 0);
 
+    // Every region's content revisions come from one process-wide sequence, so no two contents of any regions share one.
+    private static long ContentRevisions;
+    private long m_contentRevision = Interlocked.Increment(location: ref ContentRevisions);
+
+    /// <summary>Gets a revision of <see cref="Contents"/> that moves whenever a write changes its bytes or its size
+    /// (<see cref="Write"/> owing a difference, <see cref="WriteRuns"/> writing a run, a growth, shrink or shadow), and
+    /// is never shared with another state of this or any other region's contents, so a reader that folds it in place of
+    /// the bytes sees every change. A write that leaves the bytes as they were does not move it.</summary>
+    public long ContentRevision => m_contentRevision;
+
     // Native paged buffers own their authority. A committed destination has no mapping transitions; this
     // region's all-writable authority can preserve its proofs across an ordered contiguous carry.
     private void SetDestinationPages(IGpuBuffer destination, bool carried = false) {
@@ -1099,6 +1109,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         FreeContents(m_contents, m_shadowBytes);
         m_contents = contents;
         m_shadowBytes = byteCount;
+        m_contentRevision = Interlocked.Increment(location: ref ContentRevisions);
     }
     // Grows a staged region's own destination: a mapped one backs the chunks the new size reaches and keeps every word
     // where it stands, replacing nothing; any other is replaced by a larger one, which carries the old one's bytes on the
@@ -1760,6 +1771,7 @@ public sealed unsafe class GpuRegion : IDisposable {
 
         if (owed) {
             m_stagedSlot = -1;
+            m_contentRevision = Interlocked.Increment(location: ref ContentRevisions);
         }
 
         return owed;
@@ -1820,6 +1832,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         }
 
         m_stagedSlot = -1;
+        m_contentRevision = Interlocked.Increment(location: ref ContentRevisions);
 
         return true;
     }

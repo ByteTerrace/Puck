@@ -61,6 +61,10 @@ public static class WorldTickWork {
     /// <summary>Gets the kind counting the spatial neighbourhoods built over a frozen image, one per cell width a query
     /// asked for since the freeze.</summary>
     public static WorkKind PerceptionGrids { get; } = new(name: "world.tick.perception-grids", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the tag-row cells a <c>nearest</c> read walked.</summary>
+    public static WorkKind NearestCells { get; } = new(name: "world.tick.nearest-cells", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the deal templates the placement deal sweep dealt again.</summary>
+    public static WorkKind DealRedeals { get; } = new(name: "world.tick.deal-redeals", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Body candidates inspected by the recipient spatial grid.</summary>
     public static WorkKind InterestCandidates { get; } = new("world.tick.interest-candidates", "count", WorkClass.Deterministic);
     /// <summary>Body records serialized for distinct projected audiences and acknowledged baselines.</summary>
@@ -72,7 +76,7 @@ public static class WorldTickWork {
     public static WorkCounterSet Process { get; } = new(
         kinds: [
             InterestCandidates, InterestBodies, InterestBytes,
-            FactDerives, FactSlots, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids,
+            FactDerives, FactSlots, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids, NearestCells, DealRedeals,
             ContinuationProfiles, ContinuationProfileBytes, ContinuationTailBytes, .. SectionEncodes, .. SectionBytes,
             .. SectionComparedBytes, .. SectionFilteredCompares, .. SectionUnchangedEncodes,
         ],

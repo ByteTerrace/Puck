@@ -96,7 +96,7 @@ public sealed partial class WorldStateCommandModule {
                             ).Select(selector: compiled.DirectionName)
                         )
                     );
-                    var normalized = TopologyCompilation.Normalize(topology: topology);
+                    var normalized = topology.Footprint();
                     var origin = ((compiled is null)
                         ? "none"
                         : $"({((double)compiled.Origin.X):0.####},{((double)compiled.Origin.Y):0.####},{((double)compiled.Origin.Z):0.####})"

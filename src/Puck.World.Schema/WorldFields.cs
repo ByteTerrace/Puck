@@ -401,6 +401,9 @@ public sealed record WorldFieldTopology(
     /// <inheritdoc/>
     [JsonIgnore]
     public override TopologyKind Kind => TopologyKind.Field;
+
+    /// <inheritdoc/>
+    public override (int Width, int Depth, int Layers, TopologyWrap Wrap, int Radius) Footprint() => (Width, Depth, Layers, TopologyWrap.None, 0);
 }
 /// <summary>A state row's <c>field</c> trait — carried only by a row whose <see cref="StateRowShape.Domain"/> is
 /// <see cref="StateDomain.CellsOf"/> over a <c>Field</c>-kind topology: the row holds one

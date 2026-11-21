@@ -16,29 +16,41 @@ public sealed partial class WorldTick : IWorldPersistedSection<WorldBoardEnforce
     // IWorldPersistedSection<WorldBoardEnforcementCheckpoint>.
     private readonly Dictionary<string, long> m_boardVerdictLatch = new(comparer: StringComparer.Ordinal);
 
-    private bool TryReadSlotValue(StateRow? row, out long value) => TryReadKeyedCell(row, StateRow.SlotKey.Value, out value);
-    private bool TryReadKeyedCell(StateRow? row, string key, out long value) {
+    // A Return-bound board binding as the installed document resolves it: its placement, its binding and the catalog
+    // ordinals of its verdict and move rows, -1 for a row the catalog does not hold. Resolved once per placement list
+    // and catalog, which is sound because a document's rows are replaced wholesale, never changed in place.
+    private readonly record struct BoardReturn(string PlacementId, WorldPlacementBoard Board, int VerdictRow, int MoveRow);
+
+    private static readonly CellName MoveFromKey = CellName.Parse(candidate: "from");
+    private static readonly CellName MoveToKey = CellName.Parse(candidate: "to");
+
+    private readonly List<BoardReturn> m_boardReturns = [];
+    private IReadOnlyList<WorldPlacement>? m_boardReturnsOf;
+    private StateCatalog? m_boardReturnsCatalog;
+
+    private void IndexBoardReturns(IReadOnlyList<WorldPlacement> placements, StateCatalog catalog) {
+        if (ReferenceEquals(objA: m_boardReturnsOf, objB: placements) && ReferenceEquals(objA: m_boardReturnsCatalog, objB: catalog)) { return; }
+        m_boardReturnsOf = placements;
+        m_boardReturnsCatalog = catalog;
+        m_boardReturns.Clear();
+        foreach (var ordinal in WorldPlacementIndex.Of(placements: placements).ReturnBoards) {
+            if (placements[ordinal] is not { Board: { Verdict: { } verdict, Move: { } move } board } placement) { continue; }
+            m_boardReturns.Add(item: new BoardReturn(PlacementId: placement.Id, Board: board, VerdictRow: Host.RuleHost.DocumentRowOrdinal(name: verdict), MoveRow: Host.RuleHost.DocumentRowOrdinal(name: move)));
+        }
+    }
+    private bool TryReadKeyedCell(int rowOrdinal, CellName key, out long value) {
         value = 0;
-        return row is not null && Host.Arena.Catalog.TryResolve(StateLane.Document, row.Name, out var handle) &&
-            CellName.TryParse(key, out var name, out _) && Host.Arena.Keys.TryResolve(name, out var cell) &&
-            Host.Arena.TryReadLiveNumber(handle.Ordinal, cell, Host.RuleHost.Time, out value);
+        return (rowOrdinal >= 0) && Host.Arena.Keys.TryResolve(key, out var cell) &&
+            Host.Arena.TryReadLiveNumber(rowOrdinal, cell, Host.RuleHost.Time, out value);
     }
     // Poses the body sitting on the move's 'to' cell back onto its 'from' cell — the same WorldBody.Pose door
     // FirePoseEffect (WorldServer.RuleHost.cs) already uses for a rule-authored pose. Height rides the body's own
     // current Y and yaw rides its own current heading; pitch/roll reset upright, the resting attitude a settled
     // board piece already carries.
-    private void ReturnBoardMove(WorldPlacementBoard board, StateRow moveRow) {
+    private void ReturnBoardMove(WorldPlacementBoard board, int moveRow) {
         if (
-            !TryReadKeyedCell(
-            row: moveRow,
-            key: "from",
-            out var fromCell
-        ) ||
-            !TryReadKeyedCell(
-            row: moveRow,
-            key: "to",
-            out var toCell
-        ) ||
+            !TryReadKeyedCell(rowOrdinal: moveRow, key: MoveFromKey, value: out var fromCell) ||
+            !TryReadKeyedCell(rowOrdinal: moveRow, key: MoveToKey, value: out var toCell) ||
             (fromCell < 0L) ||
             (toCell < 0L)
         ) {
@@ -101,63 +113,16 @@ public sealed partial class WorldTick : IWorldPersistedSection<WorldBoardEnforce
     // rather than the level, so a verdict left sitting at its refusing value returns the piece exactly once.
     private void StepBoardEnforcement(ulong tick) {
         _ = tick;
+        IndexBoardReturns(placements: Host.Document.Definition.Placements, catalog: Host.Arena.Catalog);
 
-        var placements = Host.Document.Definition.Placements;
+        foreach (var (placementId, board, verdictRow, moveRow) in m_boardReturns) {
+            if (!TryReadKeyedCell(rowOrdinal: verdictRow, key: StateRow.SlotKey, value: out var verdict)) { continue; }
 
-        foreach (var ordinal in WorldPlacementIndex.Of(placements: placements).ReturnBoards) {
-            var placement = placements[ordinal];
-            var board = placement.Board!;
+            var previous = (m_boardVerdictLatch.TryGetValue(key: placementId, value: out var seen) ? seen : board.Accept);
 
-            if (
-                (board.Verdict is not { } verdictName) ||
-                (board.Move is not { } moveName)
-            ) {
-                continue;
-            }
-
-            if (
-                !Host.RuleHost.TryResolveDocumentRow(
-                handle: out _,
-                name: verdictName,
-                row: out var verdictRow
-            ) ||
-                !TryReadSlotValue(
-                row: verdictRow,
-                value: out var verdict
-            )
-            ) {
-                continue;
-            }
-
-            var previous = (m_boardVerdictLatch.TryGetValue(
-                key: placement.Id,
-                value: out var seen
-            )
-                ? seen
-                : board.Accept
-            );
-
-            m_boardVerdictLatch[placement.Id] = verdict;
-
-            if (
-                (verdict == board.Accept) ||
-                (previous != board.Accept)
-            ) {
-                continue;
-            }
-
-            if (
-                Host.RuleHost.TryResolveDocumentRow(
-                handle: out _,
-                name: moveName,
-                row: out var moveRow
-            ) &&
-                (moveRow is not null)
-            ) {
-                ReturnBoardMove(
-                    board: board,
-                    moveRow: moveRow
-                );
+            m_boardVerdictLatch[placementId] = verdict;
+            if ((verdict != board.Accept) && (previous == board.Accept) && (moveRow >= 0)) {
+                ReturnBoardMove(board: board, moveRow: moveRow);
             }
         }
     }
