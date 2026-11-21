@@ -29,7 +29,8 @@ float PSMain(MeshRasterVertex input) : SV_Depth {
         meshVisibility.GetDimensions(width, height);
         uint2 tile = pixel / SDF_SHADOW_OPTICAL_TILE_EDGE;
         uint index = tile.y * sdfShadowOpticalTilesAcross(width) + tile.x;
-        if (!WaveActiveAllEqual(index) || WaveIsFirstLane()) {
+        uint firstTile = WaveReadLaneFirst(index);
+        if (index != firstTile || WaveIsFirstLane()) {
             InterlockedOr(sdfGlassSumsRW[sdfShadowOpticalBitmap(width) + index / 32u], 1u << (index % 32u));
         }
         uint word = sdfShadowOpticalWord(width, pixel);

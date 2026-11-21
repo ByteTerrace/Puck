@@ -127,12 +127,6 @@ public sealed class SdfMeshRasterPass {
 
     /// <summary>Gets the shadow pipeline's description: the mesh pass's without culling, named for the shadow stages.</summary>
     public static GpuGraphicsPipelineDescription ShadowDescription { get; } = Description with { Cull = GpuCullMode.None, Name = ShadowShaderStem };
-    /// <summary>Gets the shadow entry description for closed casters wholly beyond the near plane.</summary>
-    public static GpuGraphicsPipelineDescription ShadowEntryDescription { get; } = ShadowDescription with { Cull = GpuCullMode.Back };
-    /// <summary>Gets the shadow exit pipeline's description: the shadow pipeline's with the faces toward the light culled,
-    /// so a cascade's exit layer holds where the light leaves the first solid it crosses. The cascade's light camera keeps
-    /// the view cameras' handedness, so a face's winding seen from the light says whether it faces the light.</summary>
-    public static GpuGraphicsPipelineDescription ShadowExitDescription { get; } = ShadowDescription with { Cull = GpuCullMode.Front };
     /// <summary>Gets the glass pipeline's description: the mesh pass's without culling, named for the glass stage. It draws in the mesh
     /// pass's render pass (<see cref="RenderPass"/>), into the glass target and the glass pass's own depth.</summary>
     public static GpuGraphicsPipelineDescription GlassDescription { get; } = Description with { Cull = GpuCullMode.None, Name = GlassShaderStem };
@@ -209,12 +203,7 @@ public sealed class SdfMeshRasterPass {
     /// <returns>The key.</returns>
     public static GpuPassPipelineKey ShadowKeyOf(ReadOnlyMemory<byte> vertex, GpuCullMode cull = GpuCullMode.None) =>
         GpuPassPipelineKey.OfGraphics(
-            description: cull switch {
-                GpuCullMode.Back => ShadowEntryDescription,
-                GpuCullMode.Front => ShadowExitDescription,
-                GpuCullMode.None => ShadowDescription,
-                _ => throw new ArgumentOutOfRangeException(nameof(cull)),
-            },
+            description: ShadowDescription with { Cull = cull },
             fragment: default,
             renderPass: ShadowRenderPass,
             vertex: vertex

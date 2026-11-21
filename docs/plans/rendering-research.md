@@ -2189,7 +2189,7 @@ amplification shader runs before it and decides which meshlets are drawn.
 - *Both layers of a cascade in one pass.* Every caster a cascade keeps is
   drawn twice today: once for the layer where light enters
   (`SdfMeshRasterPass.ShadowDescription`) and once for the layer where it
-  leaves (`SdfMeshRasterPass.ShadowExitDescription`). Its vertices are
+  leaves (`SdfMeshRasterPass.ShadowExitKey`). Its vertices are
   fetched, skinned and transformed both times. A mesh shader transforms
   them once. It sends every triangle to the first layer and the triangles
   that face away from the light to the second, because a mesh shader can

@@ -184,7 +184,7 @@ public sealed partial class SdfWorldTables : IDisposable {
     /// after the tables.</param>
     /// <param name="shadowEntryRaster">The depth pipeline for casters whose back faces can be culled.</param>
     /// <param name="shadowExitRaster">The device's shadow cascade exit-layer pipeline
-    /// (<see cref="SdfMeshRasterPass.ShadowExitDescription"/>), built on <paramref name="device"/> with the shadow
+    /// (<see cref="SdfMeshRasterPass.ShadowExitKey"/>), built on <paramref name="device"/> with the shadow
     /// pipeline's layout and render pass. The caller keeps ownership and disposes it after the tables.</param>
     /// <param name="glassRaster">The device's glass raster pipeline, built on <paramref name="device"/> with the mesh
     /// pass's layout and render pass, which a view's glass pass draws the glass draws with. The caller keeps ownership
