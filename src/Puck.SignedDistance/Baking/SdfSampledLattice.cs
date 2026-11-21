@@ -72,12 +72,13 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// <param name="cell">The contour's finest cell along each axis, in its frame's units.</param>
     /// <param name="workspace">The workspace owner charged for the stages' rented scratch, or null for unmetered work.</param>
     /// <returns>The finished contour.</returns>
-    public SdfContour Finished(Vector3 cell, IAllocationObserver? workspace = null) {
-        var welded = Weld(distance: (WeldCells * MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z))), workspace: workspace);
+    /// <param name="allocator">The native allocator the working lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> to rent them.</param>
+    public SdfContour Finished(Vector3 cell, IAllocationObserver? workspace = null, IAllocator? allocator = null) {
+        var welded = Weld(allocator: allocator, distance: (WeldCells * MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z))), workspace: workspace);
 
         welded.SelectDiagonals();
 
-        return welded.SplitAtCreases(workspace: workspace);
+        return welded.SplitAtCreases(allocator: allocator, workspace: workspace);
     }
     /// <summary>Returns the contour with each pair of vertices a quad's edge joins nearer than
     /// <paramref name="distance"/> welded into one vertex, shortest first: the vertices of neighbouring cells that the
@@ -92,7 +93,8 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// <param name="distance">The longest edge welded, in the contour's units; zero or less welds nothing.</param>
     /// <param name="workspace">The workspace owner charged for the weld's rented scratch, or null for unmetered work.</param>
     /// <returns>The welded contour with its unreferenced vertices dropped; this contour when nothing welds.</returns>
-    public SdfContour Weld(float distance, IAllocationObserver? workspace = null) {
+    /// <param name="allocator">The native allocator the working lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> to rent them.</param>
+    public SdfContour Weld(float distance, IAllocationObserver? workspace = null, IAllocator? allocator = null) {
         var quadCount = QuadCount;
         var vertexCount = VertexCount;
 
@@ -101,7 +103,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         var positions = Positions;
         var limit = (distance * distance);
         // Every short edge as each quad meets it; sorted, an edge two quads share is one entry, as a set would keep it.
-        using var candidateList = new RentedList<(float Length, int A, int B)>(owner: workspace);
+        using var candidateList = new OwnedBuffer<(float Length, int A, int B)>(allocator: allocator, observer: workspace);
         var raw = new int[4];
 
         for (var quad = 0; (quad < quadCount); quad++) {
@@ -116,10 +118,10 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                 }
             }
         }
-        if (candidateList.Count == 0) { return this; }
-        candidateList.AsSpan().Sort();
+        if (candidateList.Length == 0) { return this; }
+        candidateList.GetSpan().Sort();
 
-        var candidates = candidateList.AsSpan()[..SpanDistinct.Sorted(sorted: candidateList.AsSpan())];
+        var candidates = candidateList.GetSpan()[..SpanDistinct.Sorted(sorted: candidateList.GetSpan())];
 
         // The welds work on rented copies, which the welded contour's compacted arrays are copied out of.
         using var positionLease = RentedArrays.Rent<float>(array: out positions, minimumLength: Positions.Length, owner: workspace);
@@ -330,9 +332,9 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         if (!any) { return this; }
 
         // The quads as the welds name them, and the vertices they still reference, renumbered in their original order.
-        using var quads = new RentedList<int>(capacity: Quads.Length, owner: workspace);
-        using var materials = new RentedList<int>(capacity: quadCount, owner: workspace);
-        using var axes = new RentedList<sbyte>(capacity: QuadAxes.Length, owner: workspace);
+        using var quads = new OwnedBuffer<int>(allocator: allocator, capacity: Quads.Length, observer: workspace);
+        using var materials = new OwnedBuffer<int>(allocator: allocator, capacity: quadCount, observer: workspace);
+        using var axes = new OwnedBuffer<sbyte>(allocator: allocator, capacity: QuadAxes.Length, observer: workspace);
         using var remapLease = RentedArrays.Rent<int>(array: out var remap, minimumLength: vertexCount, owner: workspace);
 
         remap.AsSpan(start: 0, length: vertexCount).Fill(value: -1);
@@ -429,7 +431,8 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// <param name="workspace">The workspace owner charged for the split's rented scratch, or null for unmetered work.</param>
     /// <returns>The contour with the split vertices appended and its quads renumbered to them; this contour when nothing
     /// splits.</returns>
-    public SdfContour SplitAtCreases(IAllocationObserver? workspace = null) {
+    /// <param name="allocator">The native allocator the working lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> to rent them.</param>
+    public SdfContour SplitAtCreases(IAllocationObserver? workspace = null, IAllocator? allocator = null) {
         var positions = Positions;
         var normals = Normals;
         var vertexCount = (positions.Length / 3);
@@ -438,9 +441,9 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         // A quad at a crease vertex folded across the crease, its two triangles facing apart by more than the crease
         // angle (one on each face, as where a crease is shorter than a cell), shades as its two triangles: as one quad it
         // takes one side's normal at every corner, and its other triangle shades as a spike of that side on this one.
-        using var quadList = new RentedList<int>(capacity: Quads.Length, owner: workspace);
-        using var materialList = new RentedList<int>(capacity: QuadMaterials.Length, owner: workspace);
-        using var axisList = new RentedList<sbyte>(capacity: QuadAxes.Length, owner: workspace);
+        using var quadList = new OwnedBuffer<int>(allocator: allocator, capacity: Quads.Length, observer: workspace);
+        using var materialList = new OwnedBuffer<int>(allocator: allocator, capacity: QuadMaterials.Length, observer: workspace);
+        using var axisList = new OwnedBuffer<sbyte>(allocator: allocator, capacity: QuadAxes.Length, observer: workspace);
 
         for (var quad = 0; (quad < QuadMaterials.Length); quad++) {
             var (ia, ib, ic, id) = (Quads[(4 * quad)], Quads[((4 * quad) + 1)], Quads[((4 * quad) + 2)], Quads[((4 * quad) + 3)]);
@@ -530,15 +533,15 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             }
         }
 
-        using var addedPositions = new RentedList<float>(owner: workspace);
-        using var addedNormals = new RentedList<float>(owner: workspace);
+        using var addedPositions = new OwnedBuffer<float>(allocator: allocator, observer: workspace);
+        using var addedNormals = new OwnedBuffer<float>(allocator: allocator, observer: workspace);
         // A lowest quad only narrows the search: overlapping normal neighborhoods can share that quad without sharing
         // their other members, so reuse a split only when its complete neighborhood agrees. Each (vertex, lowest quad)
         // names the first of its splits, each split its members' run in `splitMembers` and the next split of its key.
         var splits = new Dictionary<(int Vertex, int Group), int>();
-        using var splitList = new RentedList<(int Start, int Count, int Vertex, int Next)>(owner: workspace);
-        using var splitMembers = new RentedList<int>(owner: workspace);
-        using var members = new RentedList<int>(owner: workspace);
+        using var splitList = new OwnedBuffer<(int Start, int Count, int Vertex, int Next)>(allocator: allocator, observer: workspace);
+        using var splitMembers = new OwnedBuffer<int>(allocator: allocator, observer: workspace);
+        using var members = new OwnedBuffer<int>(allocator: allocator, observer: workspace);
 
         for (var quad = 0; (quad < quadCount); quad++) {
             var facing = facings[quad];
@@ -587,7 +590,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                     var (start, count, splitVertex, _) = splitList[candidate];
 
                     last = candidate;
-                    if (members.AsSpan().SequenceEqual(other: splitMembers.AsSpan().Slice(start: start, length: count))) {
+                    if (members.GetSpan().SequenceEqual(other: splitMembers.GetSpan().Slice(start: start, length: count))) {
                         split = splitVertex;
                         break;
                     }
@@ -595,11 +598,11 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                 if (split < 0) {
                     var normal = Vector3.Normalize(value: sum);
 
-                    split = (vertexCount + (addedPositions.Count / 3));
+                    split = (vertexCount + (addedPositions.Length / 3));
                     // Appended at the end of its key's chain, so candidates are tried in the order they were made.
-                    if (last < 0) { splits.Add(key: (vertex, group), value: splitList.Count); } else { splitList[last].Next = splitList.Count; }
-                    splitList.Add(item: (splitMembers.Count, members.Count, split, -1));
-                    splitMembers.AddRange(items: members.AsSpan());
+                    if (last < 0) { splits.Add(key: (vertex, group), value: splitList.Length); } else { splitList[last].Next = splitList.Length; }
+                    splitList.Add(item: (splitMembers.Length, members.Length, split, -1));
+                    splitMembers.AddRange(items: members.GetSpan());
                     addedPositions.Add(item: positions[(3 * vertex)]);
                     addedPositions.Add(item: positions[((3 * vertex) + 1)]);
                     addedPositions.Add(item: positions[((3 * vertex) + 2)]);
@@ -611,9 +614,9 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             }
         }
 
-        return (((addedPositions.Count == 0) && !folded)
+        return (((addedPositions.Length == 0) && !folded)
             ? this
-            : (this with { Normals = [.. normals, .. addedNormals.AsSpan()], Positions = [.. positions, .. addedPositions.AsSpan()], QuadAxes = axisList.ToArray(), QuadMaterials = materialList.ToArray(), Quads = quads }));
+            : (this with { Normals = [.. normals, .. addedNormals.GetSpan()], Positions = [.. positions, .. addedPositions.GetSpan()], QuadAxes = axisList.ToArray(), QuadMaterials = materialList.ToArray(), Quads = quads }));
 
         bool Feature(int vertex) => ((vertex < Features.Length) && Features[vertex]);
     }
@@ -754,6 +757,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private readonly OwnedBuffer<ulong> m_signInside;
     // The owner every rented scratch array of the lattice's refinement and contour is charged to, as the owned buffers are.
     private readonly IAllocationObserver? m_observer;
+    // The native allocator the lattice's workspaces and its contour's scratch come from, or null for offline managed storage.
+    private readonly IAllocator? m_allocator;
 
     /// <summary>Initializes a new instance of the <see cref="SdfSampledLattice"/> class.</summary>
     /// <param name="origin">The position of sample (0, 0, 0), in the frame the samples were taken in.</param>
@@ -787,6 +792,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         }
 
         m_observer = observer;
+        m_allocator = allocator;
         m_origin = origin;
         m_cell = cell;
         m_samplesX = samplesX;
@@ -1937,17 +1943,17 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var cellsY = (m_samplesY - 1);
         var side = (factor + 1);
         var refined = m_refined.GetSpan();
-        using var cells = new RentedList<int>(owner: m_observer);
+        using var cells = new OwnedBuffer<int>(allocator: m_allocator, observer: m_observer);
 
         for (var cell = 0; (cell < refined.Length); cell++) {
             if (refined[cell]) { cells.Add(item: cell); }
         }
-        if ((((long)cells.Count) * side * side * side) < PrimeSamples) { return; }
+        if ((((long)cells.Length) * side * side * side) < PrimeSamples) { return; }
         _ = FineInside(key: 0);
 
         var fineX = ((cellsX * factor) + 1);
         var fineY = ((cellsY * factor) + 1);
-        var listed = cells.AsSpan().ToArray();
+        var listed = cells.GetSpan().ToArray();
 
         _ = Parallel.For(fromInclusive: 0, toExclusive: listed.Length.CeilingDivide(divisor: PrimeCells), body: partition => {
             var end = Math.Min(val1: listed.Length, val2: ((partition + 1) * PrimeCells));
@@ -2102,7 +2108,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
             if ((word & bit) == 0UL) {
                 word |= bit;
-                m_gradientKeys.Append(item: key);
+                m_gradientKeys.Add(item: key);
             }
         }
 
@@ -2647,7 +2653,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                         var start = ((x + ((a & 1) * stride)) + (fineX * ((y + (((a >> 1) & 1) * stride)) + (fineY * (z + (((a >> 2) & 1) * stride))))));
                         var key = CrossingKey(axis: axis, length: stride, start: start);
 
-                        m_crossingKeys.Append(item: key);
+                        m_crossingKeys.Add(item: key);
                     }
                 }
             }
@@ -2677,7 +2683,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                                 left = right;
                                 AddCell(mask: mask, stride: 1, x: fx, y: fy, z: fz);
 
-                                if ((mask != 0) && (mask != 0xFF)) { m_crossedFineCells.Append(item: new SdfCrossedCell(Corner: (fx + (fineX * (fy + (fineY * fz)))), Mask: ((byte)mask))); }
+                                if ((mask != 0) && (mask != 0xFF)) { m_crossedFineCells.Add(item: new SdfCrossedCell(Corner: (fx + (fineX * (fy + (fineY * fz)))), Mask: ((byte)mask))); }
                             }
                         }
                     }
@@ -3320,6 +3326,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         public double Crossing(int x, int y, int z, int axis, int length, out int index) => owner.Crossing(index: out index, axis: axis, length: length, x: x, y: y, z: z);
 
         public IAllocationObserver? Workspace => owner.m_observer;
+        public IAllocator? Allocator => owner.m_allocator;
         public int CellsX => ((owner.m_samplesX - 1) * owner.m_factor);
         public int CellsY => ((owner.m_samplesY - 1) * owner.m_factor);
         public int CellsZ => ((owner.m_samplesZ - 1) * owner.m_factor);

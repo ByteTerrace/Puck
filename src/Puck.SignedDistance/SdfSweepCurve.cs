@@ -3,7 +3,7 @@ using System.Numerics;
 namespace Puck.SignedDistance;
 
 /// <summary>Represents one <see cref="SdfShapeType.Sweep"/> instruction's own control points and radius endpoints —
-/// the host-side twin of the packed side table <see cref="SdfProgram.Words"/> carries (see
+/// the host-side twin of the packed side table <see cref="SdfProgram.FieldWords"/> carries (see
 /// <see cref="SdfShapeType.Sweep"/>'s remarks), keyed by that instruction's index so
 /// <see cref="Puck.SignedDistance.Queries.SdfFieldEvaluator"/> can mirror the field without decoding the packed
 /// table offset.</summary>

@@ -59,7 +59,7 @@ public sealed record WorldPlacementCostReport(int ProgramWords, int SharedWords,
 
             rows[placement] = row with { MeshDraws = (row.MeshDraws + 1) };
         }
-        return new WorldPlacementCostReport(ProgramWords: program.Words.Length, SharedWords: checked((program.Words.Length - owned)),
+        return new WorldPlacementCostReport(ProgramWords: program.WordCount, SharedWords: checked((program.WordCount - owned)),
             OtherInstanceWords: other, Placements: [.. rows.Values.OrderByDescending(keySelector: static row => row.OwnedWords)
                 .ThenBy(keySelector: static row => row.Placement, comparer: StringComparer.Ordinal)]);
 

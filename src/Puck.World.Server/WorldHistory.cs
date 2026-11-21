@@ -150,6 +150,11 @@ public sealed partial class WorldHistory {
     // Set by branch, consumed by the first live tick behind the head: the name the discarded future is kept under.
     private string? m_pendingBranchName;
     private string? m_waiting;
+    // While the history is on, its bytes are charged to the process account under their own name, so the account
+    // governs by cause rather than finding them as unnamed managed heap. The step thread publishes the count after each
+    // tick's budget check; the account's measure reads it from any thread.
+    private IDisposable? m_accountOwner;
+    private long m_publishedBytes;
 
     /// <summary>Initializes a new instance of the <see cref="WorldHistory"/> class over the boot world's server and
     /// the tape whose capture feeds it.</summary>
@@ -385,6 +390,7 @@ public sealed partial class WorldHistory {
         m_branches.Clear();
         m_pendingBranchName = null;
         m_waiting = waiting;
+        Volatile.Write(location: ref m_publishedBytes, value: HeldBytes);
         PublishRow();
     }
     // Drops the oldest span once the next one alone reaches the window's length behind the head, and then while the
@@ -421,6 +427,7 @@ public sealed partial class WorldHistory {
         ) {
             m_branches.RemoveAt(index: 0);
         }
+        Volatile.Write(location: ref m_publishedBytes, value: HeldBytes);
     }
     private void Evict() {
         Recycle(segment: m_segments[0]);
@@ -701,6 +708,8 @@ public sealed partial class WorldHistory {
         m_recycled.Clear();
         m_on = false;
         m_tape.DetachHistory();
+        m_accountOwner?.Dispose();
+        m_accountOwner = null;
     }
     /// <summary>Returns the history's read-back.</summary>
     /// <returns>The status.</returns>
@@ -765,6 +774,7 @@ public sealed partial class WorldHistory {
         }
 
         m_on = true;
+        m_accountOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: Puck.Abstractions.Memory.MemoryBacking.Managed, name: "world.history", read: () => Volatile.Read(location: ref m_publishedBytes));
         m_counters = default;
         m_waiting = "waiting for the next tick to capture the first keyframe";
         m_tape.AttachHistory(history: this);

@@ -10,13 +10,19 @@ internal sealed class WorldCatalogBand(Func<int, bool> presents, Func<int, (byte
     private List<(int Body, byte Rig, WorldLook Look, Vector3 Color)> m_scratch = [];
     private (int Body, string Hash, float Scale, WorldLook Look)[] m_articulated = [];
 
+    private readonly List<int> m_bodies = [];
+
     public int[] Slots { get; } = new int[WorldBodiesLimits.CapacityCeiling];
+    // The bodies holding a slot, in body order, as of the latest Prepare: what a per-frame walk visits instead of every
+    // index of Slots. A span, so the walk allocates no enumerator.
+    public ReadOnlySpan<int> Bodies => CollectionsMarshal.AsSpan(m_bodies);
     public int SlotCount { get; private set; }
     public int Revision { get; private set; }
     public int ArticulatedRevision { get; private set; }
 
     public void Prepare() {
         m_scratch.Clear();
+        m_bodies.Clear();
         var slot = 0;
         for (var body = 0; body < Slots.Length; body++) {
             if (!presents(body)) {
@@ -24,6 +30,7 @@ internal sealed class WorldCatalogBand(Func<int, bool> presents, Func<int, (byte
                 continue;
             }
 
+            m_bodies.Add(body);
             Slots[body] = slot;
             slot += WorldRigCatalog.TransformSlotsPerBody;
             var (rig, look, color) = appearance(body);

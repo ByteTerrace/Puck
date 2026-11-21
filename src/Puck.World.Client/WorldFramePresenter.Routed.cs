@@ -221,6 +221,7 @@ public sealed partial class WorldFramePresenter {
         domains: m_domains,
         endpoint: endpoint,
         hostFrame: () => m_dressedFrame,
+        jobs: m_animator.Jobs,
         key: key,
         mirror: mirror,
         name: name,

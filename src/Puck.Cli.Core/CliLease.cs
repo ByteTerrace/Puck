@@ -39,22 +39,23 @@ public sealed class CliLease : IDisposable {
     /// <param name="ancestor">Recognizes a live ancestor holder by PID and start ticks, allowing a serialized child lease.</param>
     /// <param name="lane">The lane the holder works for, which admission rotates between; null takes the holder's first word.</param>
     /// <param name="admission">Optional host judgement: unreserved while queued without a hold, then a nonwaiting
-    /// reservation under the guard. A failed reservation parks the same ticket without serving its lane. The heavy lease
-    /// shares its slots (<see cref="SharedSlots"/>) only between holders this judgement admits: without one, a heavy hold is
-    /// exclusive, since nothing measures whether a second would fit.</param>
-    /// <param name="kind">The expected peak class of the work the hold covers, recorded beside its holder so every other
-    /// process's host admission counts the growth the hold still has (<see cref="AdmittedHolds"/>); null records none.</param>
+    /// reservation under the guard. A failed reservation parks the same ticket without serving its lane. The heavy and gpu
+    /// leases share their slots (<see cref="SharedSlots"/>) only between holders this judgement admits: without one, a hold
+    /// is exclusive, since nothing measures whether a second would fit.</param>
+    /// <param name="profile">The profile of the work the hold covers (its kind, and for a windowed World its backend and mesh
+    /// store), recorded beside its holder so every other process's host admission counts the growth the hold still has
+    /// (<see cref="AdmittedHolds"/>); null records none.</param>
     /// <param name="device">Whether the held work opens a GPU device, recorded beside its holder so another process's device
     /// admission waits for it from the grant, before its device process appears.</param>
-    /// <param name="exclusive">Whether a heavy hold runs alone: it waits for every heavy slot to drain and keeps the others
-    /// empty while it holds.</param>
+    /// <param name="exclusive">Whether a hold of a lease that shares its slots (gpu, heavy) runs alone: it waits for every slot
+    /// to drain and keeps the others empty while it holds, as a timing leg needs.</param>
     /// <returns>The held lease.</returns>
     /// <exception cref="ArgumentException">The name, holder, lane, checkout or wait is invalid.</exception>
     /// <exception cref="TimeoutException">The lease remains held at the deadline.</exception>
     /// <exception cref="LeaseProtocolException">The lease directory records a newer lease protocol than <see cref="Protocol"/>.</exception>
-    public static Task<CliLease> AcquireAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, string checkout, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null, string? lane = null, Func<bool, TimeSpan, CancellationToken, Task<bool>>? admission = null, HostStartKind? kind = null, bool device = false, bool exclusive = false) {
+    public static Task<CliLease> AcquireAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, string checkout, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null, string? lane = null, Func<bool, TimeSpan, CancellationToken, Task<bool>>? admission = null, HostStartProfile? profile = null, bool device = false, bool exclusive = false) {
         if (name is not ("build" or "gpu" or "heavy")) { throw new ArgumentException(message: "Use AcquireQuietAsync for a measurement reservation.", paramName: nameof(name)); }
-        return AcquireCoreAsync(ancestor: ancestor, cancellationToken: cancellationToken, checkout: checkout, clock: clock, holder: holder, lane: lane, name: name, quiet: null, root: root, wait: wait, admission: admission, hold: new Hold(Device: device, Exclusive: (exclusive || (admission is null)), Kind: kind));
+        return AcquireCoreAsync(ancestor: ancestor, cancellationToken: cancellationToken, checkout: checkout, clock: clock, holder: holder, lane: lane, name: name, quiet: null, root: root, wait: wait, admission: admission, hold: new Hold(Device: device, Exclusive: (exclusive || (admission is null)), Profile: profile));
     }
     /// <summary>Queues a priority measurement window, then drains and holds all three resources. One deadline bounds acquisition;
     /// current work is never killed. The returned lease releases the resources before releasing the priority reservation.</summary>
@@ -90,7 +91,7 @@ public sealed class CliLease : IDisposable {
         lane = (lane?.Trim() ?? DefaultLane(holder: holder));
         checkout = Puck.Abstractions.PuckPaths.Slashed(path: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: checkout)));
         Directory.CreateDirectory(path: root);
-        var request = new Request(Ancestor: Remembered(ancestor: ancestor), Checkout: checkout, Clock: clock, Holder: holder, Lane: lane, Name: name, Quiet: quiet, Root: root, Hold: (hold ?? new Hold(Device: false, Exclusive: true, Kind: null)));
+        var request = new Request(Ancestor: Remembered(ancestor: ancestor), Checkout: checkout, Clock: clock, Holder: holder, Lane: lane, Name: name, Quiet: quiet, Root: root, Hold: (hold ?? new Hold(Device: false, Exclusive: true, Profile: null)));
         var started = clock.GetTimestamp();
         string? reported = null;
         var reportedAt = started;
@@ -137,9 +138,9 @@ public sealed class CliLease : IDisposable {
 
     /// <summary>What one acquisition asks for, fixed for its whole wait.</summary>
     private sealed record Request(string Root, string Name, string Holder, string Lane, string Checkout, TimeProvider Clock, CliLease? Quiet, Func<int, long, bool>? Ancestor, Hold Hold);
-    /// <summary>What a granted hold records beside its holder for other processes' admission: the peak class of its work,
+    /// <summary>What a granted hold records beside its holder for other processes' admission: the profile of its work,
     /// whether that work opens a device, and whether it runs alone in a lease that shares its slots.</summary>
-    private sealed record Hold(HostStartKind? Kind, bool Device, bool Exclusive);
+    private sealed record Hold(HostStartProfile? Profile, bool Device, bool Exclusive);
     /// <summary>A waiter's ticket: its file and the queue directory it was taken in.</summary>
     private sealed record Ticket(string Path, string Queue);
     /// <summary>What one pass through the grant door decided: the lease when granted, the ticket the waiter holds now, and
@@ -169,17 +170,18 @@ public sealed class CliLease : IDisposable {
         return ((((request.Quiet is not null) || (request.Name == "quiet")) ? Route.Quiet : Route.Root), directory);
     }
 
-    /// <summary>The most holders the heavy lease takes at once. It bounds the slot directories a reader lists, never how many
-    /// run: host admission decides that, by the memory, commit and CPU headroom each new hold leaves.</summary>
+    /// <summary>The most holders the heavy and gpu leases take at once each. It bounds the slot directories a reader lists,
+    /// never how many run: host admission decides that, by the memory, commit, CPU and device headroom each new hold
+    /// leaves.</summary>
     public const int SharedSlots = 8;
     /// <summary>The slot directories of a root lease, in the order a grant tries them: the lease's own directory, then, for
-    /// the heavy lease, <c>heavy.2</c> up to <see cref="SharedSlots"/>. Queue and rotation stay the lease's, shared by every
-    /// slot, so lanes rotate through one queue however many holders run.</summary>
+    /// the heavy and gpu leases, <c>heavy.2</c> up to <see cref="SharedSlots"/>. Queue and rotation stay the lease's, shared
+    /// by every slot, so lanes rotate through one queue however many holders run.</summary>
     private static IEnumerable<string> SlotsOf(string root, string name) {
         var first = Path.Combine(path1: root, path2: name);
 
         yield return first;
-        if (name != "heavy") { yield break; }
+        if (name is not ("heavy" or "gpu")) { yield break; }
         for (var slot = 2; (slot <= SharedSlots); slot++) { yield return (first + "." + slot.ToString(provider: CultureInfo.InvariantCulture)); }
     }
 
@@ -232,12 +234,13 @@ public sealed class CliLease : IDisposable {
     }
 
     /// <summary>The lease protocol this CLI speaks. Every CLI copy on a machine shares the lease root, so two copies must agree on
-    /// what its files mean: holders, tickets and sidecars, rotation, the quiet reservation, the child layout, the heavy
-    /// lease's shared slots and the hold each records for admission (<see cref="AdmittedHolds"/>), readiness marks, how host
-    /// admission classifies the processes it waits on (<c>HostProcesses</c>), and the measured peaks it admits by
-    /// (<c>HostStartTracker.ObservationDirectory</c>). Raise it in any change to one of those meanings: a copy built before the
-    /// change then refuses by name instead of deadlocking against, or overcommitting beside, a newer one.</summary>
-    public const int Protocol = 5;
+    /// what its files mean: holders, tickets and sidecars, rotation, the quiet reservation, the child layout, the shared
+    /// slots of the heavy and gpu leases and the hold each records for admission (<see cref="AdmittedHolds"/>), readiness and
+    /// profile marks (<see cref="StartProfiles"/>), how host admission classifies the processes it waits on
+    /// (<c>HostProcesses</c>), and the measured peaks it admits by (<c>HostStartTracker.ObservationDirectory</c>). Raise it in
+    /// any change to one of those meanings: a copy built before the change then refuses by name instead of deadlocking
+    /// against, or overcommitting beside, a newer one.</summary>
+    public const int Protocol = 6;
 
     private const string ProtocolFile = "protocol";
 
@@ -352,16 +355,20 @@ public sealed class CliLease : IDisposable {
     }
 
     /// <summary>A live hold another process's host admission counts: a held gpu lease or heavy slot whose holder recorded the
-    /// peak class of its work.</summary>
+    /// profile of its work.</summary>
     /// <param name="Lease">The resource: gpu or heavy.</param>
     /// <param name="Holder">The holder name.</param>
     /// <param name="ProcessId">The holder's process id; the work the hold covers is that process and its descendants.</param>
     /// <param name="StartTicks">The holder process's UTC start ticks, which with <paramref name="ProcessId"/> identify it.</param>
-    /// <param name="Kind">The expected peak class of the work.</param>
+    /// <param name="Profile">The profile of the work.</param>
     /// <param name="Device">Whether the work opens a GPU device.</param>
-    public sealed record AdmittedHold(string Lease, string Holder, int ProcessId, long StartTicks, HostStartKind Kind, bool Device);
+    /// <param name="Exclusive">Whether the hold runs alone in its lease.</param>
+    public sealed record AdmittedHold(string Lease, string Holder, int ProcessId, long StartTicks, HostStartProfile Profile, bool Device, bool Exclusive = false) {
+        /// <summary>Gets the expected peak class of the work.</summary>
+        public HostStartKind Kind => Profile.Kind;
+    }
     /// <summary>Reads the root holds of the gpu and heavy leases whose guard a process holds now and whose holder recorded a
-    /// peak class. A child lease beneath a holder is left out: its work is inside its root holder's process tree, which the
+    /// profile. A child lease beneath a holder is left out: its work is inside its root holder's process tree, which the
     /// root hold already covers. Reading removes nothing.</summary>
     /// <param name="root">The shared lease directory.</param>
     /// <param name="now">The time the metadata of a process the OS cannot name is judged against.</param>
@@ -371,22 +378,22 @@ public sealed class CliLease : IDisposable {
 
         foreach (var name in new[] { "gpu", "heavy" }) {
             foreach (var slot in SlotsOf(root: root, name: name)) {
-                if ((ReadHolder(directory: slot) is { Length: > 0 } holder) && (Identity(lines: holder) is { } identity) && (HoldOf(owner: holder, slot: slot) is { Kind: { } kind } hold) && GuardHeld(directory: slot, holder: holder, now: now)) {
-                    holds.Add(item: new AdmittedHold(Device: hold.Device, Holder: holder[0], Kind: kind, Lease: name, ProcessId: identity.Pid, StartTicks: identity.Ticks));
+                if ((ReadHolder(directory: slot) is { Length: > 0 } holder) && (Identity(lines: holder) is { } identity) && (HoldOf(owner: holder, slot: slot) is { Profile: { } profile } hold) && GuardHeld(directory: slot, holder: holder, now: now)) {
+                    holds.Add(item: new AdmittedHold(Device: hold.Device, Exclusive: hold.Exclusive, Holder: holder[0], Lease: name, ProcessId: identity.Pid, Profile: profile, StartTicks: identity.Ticks));
                 }
             }
         }
         return holds;
     }
 
-    // A holder's hold is recorded beside it in `<slot>/hold` (its process id and start ticks, then the kind or `-`, `device`
-    // or `host`, and `exclusive` or `shared`), read only for the holder it names, like the checkout sidecar.
+    // A holder's hold is recorded beside it in `<slot>/hold` (its process id and start ticks, then the profile name or `-`,
+    // `device` or `host`, and `exclusive` or `shared`), read only for the holder it names, like the checkout sidecar.
     private const string HoldFile = "hold";
 
-    private static string HoldSidecar(Hold hold, string[] metadata) => Sidecar(metadata: metadata, values: [(hold.Kind?.ToString() ?? "-"), (hold.Device ? "device" : "host"), (hold.Exclusive ? "exclusive" : "shared")]);
+    private static string HoldSidecar(Hold hold, string[] metadata) => Sidecar(metadata: metadata, values: [(hold.Profile?.Name ?? "-"), (hold.Device ? "device" : "host"), (hold.Exclusive ? "exclusive" : "shared")]);
     private static Hold? HoldOf(string slot, string[] owner) =>
-        ((Owned(owner: owner, sidecar: Path.Combine(path1: slot, path2: HoldFile)) is [var kind, var device, var exclusive])
-            ? new Hold(Device: (device == "device"), Exclusive: (exclusive == "exclusive"), Kind: (Enum.TryParse<HostStartKind>(value: kind, result: out var parsed) ? parsed : null))
+        ((Owned(owner: owner, sidecar: Path.Combine(path1: slot, path2: HoldFile)) is [var profile, var device, var exclusive])
+            ? new Hold(Device: (device == "device"), Exclusive: (exclusive == "exclusive"), Profile: (HostStartProfile.TryParse(name: profile, profile: out var parsed) ? parsed : null))
             : null);
 
     // The checkout is recorded beside the holder file and each ticket rather than as a metadata line, which keeps a holder or

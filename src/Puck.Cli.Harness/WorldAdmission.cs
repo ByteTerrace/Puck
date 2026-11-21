@@ -6,7 +6,7 @@ namespace Puck.Cli;
 /// booted inside this process (<c>puck bench</c>, <c>puck determinism</c>) passes it through <see cref="WaitInProcess"/>.
 /// The wait is the admission's own bounded, heartbeat-printing wait on the host's timer, never a spin, and the waiting
 /// process's own descendants and the holds of its ancestors hold back neither a heavy start's CPU wait nor a device step's
-/// wait for an idle GPU, so a verb under <c>puck lease heavy</c> or the gate does not wait on its own runs.</summary>
+/// wait for room on the GPU, so a verb under <c>puck lease heavy</c> or the gate does not wait on its own runs.</summary>
 public static class WorldAdmission {
     private static HostAdmit? Installed = Host.HostAdmission.For(clock: TimeProvider.System);
 
@@ -27,20 +27,21 @@ public static class WorldAdmission {
     /// <summary>Waits until the host can take a start, at most <paramref name="bound"/>, printing what holds it back on
     /// standard error.</summary>
     /// <param name="step">The step's name, for the wait lines.</param>
-    /// <param name="device">Whether the start opens a GPU device, and so also waits for an idle GPU.</param>
+    /// <param name="device">Whether the start opens a GPU device, and so also waits while the GPU is full beside another
+    /// working device holder.</param>
     /// <param name="heavySuite">Whether the start runs under the heavy lease.</param>
-    /// <param name="kind">What the start is, which sets the commit it is expected to peak at.</param>
+    /// <param name="kind">What the start is (<see cref="HostStartProfile"/>), which sets the commit it is expected to peak at.</param>
     /// <param name="bound">How long to wait, at most, or <see langword="null"/> for the admission's own bound.</param>
     /// <param name="reserve">Whether an admitted start reserves its expected peak.</param>
     /// <param name="stage">Receives what the wait is on, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">Stops the wait.</param>
     /// <param name="checkout">The start's checkout, or null for the current checkout.</param>
     /// <returns><see langword="true"/> once admitted; <see langword="false"/> when the bound passed first.</returns>
-    internal static Task<bool> TryAdmitAsync(string step, bool device, bool heavySuite, HostStartKind kind, TimeSpan? bound, bool reserve, Action<string>? stage, CancellationToken cancellationToken, string? checkout = null) {
+    internal static Task<bool> TryAdmitAsync(string step, bool device, bool heavySuite, HostStartProfile kind, TimeSpan? bound, bool reserve, Action<string>? stage, CancellationToken cancellationToken, string? checkout = null) {
         if (Installed is not { } admit) { return Task.FromResult(result: true); }
 
         checkout ??= (CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root) ? root : Environment.CurrentDirectory);
 
-        return admit(checkout: checkout, step: step, device: device, heavySuite: heavySuite, kind: kind, bound: bound, reserve: reserve, progress: Console.Error, stage: stage, cancellationToken: cancellationToken);
+        return admit(checkout: checkout, step: step, device: device, heavySuite: heavySuite, profile: kind, bound: bound, reserve: reserve, progress: Console.Error, stage: stage, cancellationToken: cancellationToken);
     }
 }

@@ -36,6 +36,6 @@ public sealed class RetainedEmissionLawTests {
         var direct = Builder(count: prefix);
 
         Emit(builder: direct);
-        Assert.Equal(direct.Build().Words.ToArray(), replay.Build().Words.ToArray());
+        Assert.Equal(direct.Build().CopyWords(), replay.Build().CopyWords());
     }
 }

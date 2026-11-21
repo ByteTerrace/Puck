@@ -25,12 +25,8 @@ public static class StartIdleness {
     /// for it as before.</summary>
     /// <param name="root">The shared lease directory.</param>
     /// <param name="start">The idle start.</param>
-    public static void Mark(string root, IdleStart start) {
-        try {
-            _ = System.IO.Directory.CreateDirectory(path: Directory(root: root));
-            File.WriteAllText(contents: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{start.Since.UtcTicks}\n{start.Kind}\n"), path: Path.Combine(path1: Directory(root: root), path2: ProcessMarks.Name(processId: start.ProcessId, startTicks: start.StartTicks)));
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) { }
-    }
+    public static void Mark(string root, IdleStart start) =>
+        ProcessMarks.Write(directory: Directory(root: root), processId: start.ProcessId, startTicks: start.StartTicks, contents: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{start.Since.UtcTicks}\n{start.Kind}\n"));
     /// <summary>Removes a start's idle mark, when it has one.</summary>
     /// <param name="root">The shared lease directory.</param>
     /// <param name="processId">The process id.</param>
@@ -45,17 +41,8 @@ public static class StartIdleness {
     /// runs.</param>
     /// <param name="prune">Whether to remove the marks of processes that have exited.</param>
     /// <returns>The idle starts that still run, by process id and start ticks.</returns>
-    public static IReadOnlyDictionary<(int ProcessId, long StartTicks), IdleStart> Among(string root, IReadOnlyDictionary<int, long> running, bool prune = true) {
-        var idle = new Dictionary<(int, long), IdleStart>();
-
-        foreach (var (id, file) in ProcessMarks.Among(directory: Directory(root: root), prune: prune, running: running)) {
-            try {
-                if (File.ReadAllLines(path: file) is [var since, var kind, ..] && long.TryParse(s: since, provider: CultureInfo.InvariantCulture, result: out var ticks) && Enum.TryParse<HostStartKind>(value: kind, result: out var parsed)) {
-                    idle[id] = new IdleStart(Kind: parsed, ProcessId: id.ProcessId, Since: new DateTimeOffset(ticks: ticks, offset: TimeSpan.Zero), StartTicks: id.StartTicks);
-                }
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentOutOfRangeException)) { }
-        }
-
-        return idle;
-    }
+    public static IReadOnlyDictionary<(int ProcessId, long StartTicks), IdleStart> Among(string root, IReadOnlyDictionary<int, long> running, bool prune = true) =>
+        ProcessMarks.Read<IdleStart>(directory: Directory(root: root), prune: prune, running: running, parse: static (id, lines) => ((lines is [var since, var kind, ..] && long.TryParse(s: since, provider: CultureInfo.InvariantCulture, result: out var ticks) && Enum.TryParse<HostStartKind>(value: kind, result: out var parsed))
+            ? new IdleStart(Kind: parsed, ProcessId: id.ProcessId, Since: new DateTimeOffset(ticks: ticks, offset: TimeSpan.Zero), StartTicks: id.StartTicks)
+            : null));
 }

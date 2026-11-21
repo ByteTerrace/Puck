@@ -24,21 +24,22 @@ public static class SdfMeshChunks {
     /// <param name="preserveFeatures">Whether coarser levels limit crease and material-edge error to the largest bake-cell dimension divided by 8.</param>
     /// <param name="owner">The workspace owner charged for the merge's, the binning's and each collapse's tables, or <see langword="null"/> for none.</param>
     /// <returns>The merged mesh, holding independently levelled chunks when larger than one chunk.</returns>
-    public static SdfMesh Bake(SdfMesh mesh, bool preserveFeatures = false, IAllocationObserver? owner = null) {
+    /// <param name="allocator">The native allocator the merge's, the binning's and each collapse's lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> to rent them.</param>
+    public static SdfMesh Bake(SdfMesh mesh, bool preserveFeatures = false, IAllocationObserver? owner = null, IAllocator? allocator = null) {
         ArgumentNullException.ThrowIfNull(mesh);
         // A split introduces open edges that must remain fixed for independent levels. Merge the original planar
         // surface first, so a flat face does not retain an artificial row of contour vertices at every spatial seam.
-        mesh = SdfMeshPlanarMerge.Merge(mesh: mesh, owner: owner);
+        mesh = SdfMeshPlanarMerge.Merge(allocator: allocator, mesh: mesh, owner: owner);
         if (mesh.TriangleCount == 0) { return mesh; }
         var positions = mesh.Positions.Span;
         var low = mesh.PositionLow;
         var size = (mesh.PositionHigh - low);
 
         if (MathF.Max(x: size.X, y: MathF.Max(x: size.Y, y: size.Z)) <= Side) {
-            return SdfMeshCollapse.Levels(mesh: mesh, preserveFeatures: preserveFeatures, owner: owner);
+            return SdfMeshCollapse.Levels(allocator: allocator, mesh: mesh, preserveFeatures: preserveFeatures, owner: owner);
         }
 
-        using var scope = new RentedScope(owner: owner);
+        using var scope = new RentedScope(allocator: allocator, owner: owner);
         var triangleCount = mesh.TriangleCount;
         var bins = new Dictionary<(int X, int Y, int Z), int>();
         var binOf = scope.Rent<int>(minimumLength: triangleCount);
@@ -68,7 +69,7 @@ public static class SdfMeshChunks {
             }
             if (filled) { break; }
         }
-        if (bins.Count == 1) { return SdfMeshCollapse.Levels(mesh: mesh, preserveFeatures: preserveFeatures, owner: owner); }
+        if (bins.Count == 1) { return SdfMeshCollapse.Levels(allocator: allocator, mesh: mesh, preserveFeatures: preserveFeatures, owner: owner); }
 
         // Each bin's triangles, in triangle order: its first triangle's place in `order` is starts[bin].
         var parts = bins.Count;
@@ -146,7 +147,7 @@ public static class SdfMeshChunks {
             triangleBase += binTriangles;
         }
         Parallel.For(0, chunks.Length, part => {
-            chunks[part] = SdfMeshCollapse.Levels(chunks[part], preserveFeatures, owner) with { BakedSites = null };
+            chunks[part] = SdfMeshCollapse.Levels(chunks[part], preserveFeatures, owner, allocator) with { BakedSites = null };
         });
         return new SdfMesh(joinedPositions, joinedIndices, joinedNormals, joinedMaterials) { BakeCell = mesh.BakeCell, Chunks = chunks };
     }

@@ -109,10 +109,12 @@ collided runs, while the same expensive work ran eight times).
   Run them one after another, or give the second only its code and return its
   GPU legs as verification requests for the lead's window.
 - **At most three GPU-granted lanes hold windowed work at once.** A grant is
-  a turn in `puck lease gpu`'s queue, not a standing window: the lease admits
-  one windowed World at a time, and each holds 12 to 20 GB, so on the lead
-  machine one fits beside the building lanes and two only on a quiet machine.
-  A windowed leg is therefore short: a boot, the place the lane's entry names,
+  a turn in `puck lease gpu`'s queue, not a standing window: the lease shares
+  its slots between windowed Worlds while host admission covers each one's own
+  measured need (its backend and warm or cold mesh store, 12 to 20 GB) and the
+  GPU's video memory is not full, so two warm Worlds run side by side on the
+  lead machine and a third waits its turn; a timing leg takes the lease
+  `--exclusive`. A windowed leg is therefore short: a boot, the place the lane's entry names,
   a presented burst while moving and the counters, then the World stops, and
   two backends are two short runs. Before briefing a lane that needs a
   windowed World, count the granted lanes in flight; a fourth works on what
@@ -1071,13 +1073,17 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
 `LOADED` when capacity ends without pressure, `PRESSURE`, `GPU busy` and
 `GPU idle`), so each change arrives once:
 
-- On capacity, admit the next job. Heavy jobs share the machine by measured
-  headroom: the heavy lease takes several holders while admission covers each
-  new one's expected peak beside what the running ones still have to grow, and
-  a further heavy start waits on CPU while the CPU is over the capacity
-  threshold. `puck gate` and `puck affected` acquire a heavy slot around each
+- On capacity, admit the next job. Heavy and GPU jobs share the machine by
+  measured headroom: the heavy and gpu leases take several holders while
+  admission covers each new one's expected peak (by its own profile: kind,
+  backend, warm or cold mesh store) beside what the running ones still have to
+  grow, a further heavy start waits on CPU while the CPU is over the capacity
+  threshold, and a further device start waits while the GPU's video memory is
+  full; a device holder that goes idle gives its place back.
+  `puck gate` and `puck affected` acquire a heavy slot around each
   heavy suite and release it on every exit; a run that must not share the
-  machine passes `puck lease heavy --exclusive`. Nested runs under
+  machine passes `puck lease heavy --exclusive` (`puck lease gpu --exclusive`
+  for a timing leg, which the bench verbs request themselves). Nested runs under
   `puck lease heavy` serialize on child leases after validating the ancestor
   holder's process identity.
 - A lane never runs a full `puck test worlds/debug` sweep (every test world, a
@@ -1116,7 +1122,7 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   and the step's own expected private working set fits in free memory above that floor, so a
   running agent waits rather than being killed. No fixed amount of free memory
   gates a start: a small start is admitted beside a windowed World that leaves
-  5 to 7 GB free, a second windowed World is not.
+  5 to 7 GB free, and a second windowed World when its own measured peak fits.
 - On GPU idle, start the next GPU leg. A device test host counts as GPU work.
 - The thresholds scale with the machine; the code is their source of truth
   (`HostLoadThresholds.For`, [CLI reference](../../../docs/reference/cli.md#puck-host-loadadmission-lines-for-the-machine)).
