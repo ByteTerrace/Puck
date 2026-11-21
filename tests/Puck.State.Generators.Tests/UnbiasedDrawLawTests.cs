@@ -27,7 +27,7 @@ public sealed class UnbiasedDrawLawTests {
     private static StateGenerator WithWords(GeneratorSource source, long minimum, long maximum, params long[] words) {
         var raw = new StateGenerator(Source: GeneratorSource.StreamDraw, Extended: new GeneratorExtended(128, Script: words));
 
-        Assert.True(condition: GeneratorEngine.TryBuildExtendedTable(raw, Seed.State, Seed.Stream, 0, out var table, out var reason), userMessage: reason);
+        Assert.True(condition: GeneratorEngine.TryBuildExtendedTable(raw, Seed, 0, out var table, out var reason), userMessage: reason);
         return new StateGenerator(Source: source, RangeMin: source == GeneratorSource.UniformRange ? minimum : null, RangeMax: source == GeneratorSource.UniformRange ? maximum : null, Extended: new GeneratorExtended(128, Table: table));
     }
 
@@ -38,12 +38,12 @@ public sealed class UnbiasedDrawLawTests {
         var source = new StateGenerator(Source: GeneratorSource.StreamDraw);
         var values = new long[4];
 
-        Assert.True(condition: GeneratorEngine.TryFireBatch(source, CellKind.Int, Seed.State, Seed.Stream, 7, null, values,
+        Assert.True(condition: GeneratorEngine.TryFireBatch(source, CellKind.Int, Seed, 7, null, values,
             out _, out var advances, out var reason, secret: key), userMessage: reason);
         Assert.Equal(values.Length, advances);
         for (var index = 0; (index < values.Length); index++) {
             Assert.Equal(PrivateWord(rawKey, Seed.State, Seed.Stream, (7 + index)), values[index]);
-            Assert.True(condition: GeneratorEngine.TryFire(source, CellKind.Int, Seed.State, Seed.Stream, (7 + index), null,
+            Assert.True(condition: GeneratorEngine.TryFire(source, CellKind.Int, Seed, (7 + index), null,
                 out var single, out reason, key), userMessage: reason);
             Assert.Equal(single.Numeric, values[index]);
             Assert.Equal(1, single.Advances);
@@ -68,19 +68,19 @@ public sealed class UnbiasedDrawLawTests {
         var words = Enumerable.Repeat(count: rejected, element: 0L).Concat(second: [uint.MaxValue, 1L]).ToArray();
         var source = WithWords(GeneratorSource.UniformRange, minimum, maximum, words);
 
-        Assert.True(condition: GeneratorEngine.TryFire(source, CellKind.Int, Seed.State, Seed.Stream, 0, null, out var first, out var reason), userMessage: reason);
+        Assert.True(condition: GeneratorEngine.TryFire(source, CellKind.Int, Seed, 0, null, out var first, out var reason), userMessage: reason);
         Assert.Equal(maximum, first.Numeric);
         Assert.Equal((rejected + 1L), first.Advances);
-        Assert.True(condition: GeneratorEngine.TryFire(source, CellKind.Int, Seed.State, Seed.Stream, first.Advances, null, out var second, out reason), userMessage: reason);
+        Assert.True(condition: GeneratorEngine.TryFire(source, CellKind.Int, Seed, first.Advances, null, out var second, out reason), userMessage: reason);
         var continuation = minimum + (width == 4294967296L ? 1L : 0L);
         Assert.Equal(continuation, second.Numeric);
         Assert.Equal(1, second.Advances);
         var values = new long[2];
 
-        Assert.True(condition: GeneratorEngine.TryFireBatch(source, CellKind.Int, Seed.State, Seed.Stream, 0, null, values, out _, out var advances, out reason), userMessage: reason);
+        Assert.True(condition: GeneratorEngine.TryFireBatch(source, CellKind.Int, Seed, 0, null, values, out _, out var advances, out reason), userMessage: reason);
         Assert.Equal(actual: values, expected: new[] { maximum, continuation });
         Assert.Equal(actual: advances, expected: (rejected + 2L));
-        Assert.True(condition: GeneratorEngine.TryAdvanceBatch(source, CellKind.Int, Seed.State, Seed.Stream, 0, null, 2, out _, out var skipped, out reason), userMessage: reason);
+        Assert.True(condition: GeneratorEngine.TryAdvanceBatch(source, CellKind.Int, Seed, 0, null, 2, out _, out var skipped, out reason), userMessage: reason);
         Assert.Equal(actual: skipped, expected: advances);
         // New declaration means a cold cache, as after checkpoint deserialization.
         var fresh = source with { Extended = new GeneratorExtended(128, Table: source.Extended!.Table!.ToArray()) };
@@ -127,7 +127,7 @@ public sealed class UnbiasedDrawLawTests {
             Extended: new GeneratorExtended(8, Script: [minimum, maximum, minimum]));
 
         for (var cursor = 0L; (cursor < 3); cursor++) {
-            Assert.True(condition: GeneratorEngine.TryFire(source, CellKind.Int, Seed.State, Seed.Stream, cursor, null, out var result, out var reason, skip: 5), userMessage: reason);
+            Assert.True(condition: GeneratorEngine.TryFire(source, CellKind.Int, Seed, cursor, null, out var result, out var reason, skip: 5), userMessage: reason);
             Assert.Equal(((cursor == 1) ? maximum : minimum), result.Numeric);
             Assert.Equal(1, result.Advances);
         }

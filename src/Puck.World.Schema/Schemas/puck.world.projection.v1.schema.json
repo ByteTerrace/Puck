@@ -41631,7 +41631,7 @@
                               "title": "StateTransformArrange"
                             },
                             {
-                              "description": "Clears every group of cells valued Lower..Upper beside the cell From names that has no empty cell beside it, writing the board\u0027s empty value over their members. The write-path twin of $board:enclosedAt, applied after the value lands.",
+                              "description": "Clears every group of cells valued Lower..Upper beside the cell From names that has no liberty in the boundary range, writing the board\u0027s empty value over its members. The write-path twin of $board:enclosedAt, applied after the value lands.",
                               "properties": {
                                 "$type": {
                                   "const": "clearEnclosed"
@@ -41831,6 +41831,22 @@
                                 "upper": {
                                   "description": "The enclosed range\u0027s inclusive high end.",
                                   "type": "integer"
+                                },
+                                "boundaryLower": {
+                                  "description": "The liberty range\u0027s inclusive low end. Defaults to the board\u0027s empty value.",
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "default": null
+                                },
+                                "boundaryUpper": {
+                                  "description": "The liberty range\u0027s inclusive high end. Defaults to the board\u0027s empty value.",
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ],
+                                  "default": null
                                 }
                               },
                               "required": [

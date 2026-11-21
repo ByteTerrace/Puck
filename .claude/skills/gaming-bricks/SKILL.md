@@ -104,9 +104,13 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
   wrote. The `battery-save` and `host-persistence` stages pin the restore case.
 - **Deck boards own offsets, not memory, and time from bus edges.** NROM,
   MMC1 (`HgdMmc1`) and MMC3 (`HgdMmc3`) keep every RAM byte, the battery save's
-  layout and its snapshot order in one `HgdBoardMemory`; a new board does the
-  same. Board timing comes only from `IHgdMapper.ObserveM2` and
-  `ObservePpuAddress`: MMC1's consecutive-cycle write rule counts M2 falls, and
+  layout and its snapshot order in one `HgdBoardMemory`; a new board derives
+  `HgdBoard`, which owns that memory and the PPU window. A board maps its ROM
+  banks into `HgdBoardMemory`'s windows, and its nametable `Wiring`, whenever a
+  register changes and after it loads state, never per read. Board timing comes
+  only from `IHgdMapper.ObserveM2` and `ObservePpuAddress`, which the machine
+  calls only for a board with `TimesOnEdges` (NROM times nothing): MMC1's
+  consecutive-cycle write rule counts M2 falls, and
   MMC3's counter clocks on a PPU A12 rise after three whole low M2 cycles. A
   board's laws live in `BoardLawTests`, and its fixture joins
   `PostMachine.Fixtures`, which the determinism, fork and mid-instruction replay
@@ -172,7 +176,11 @@ for last/peak/total fuel. Run=2 plays runtime segments; run=3 fuzzes a seeded wi
 No game addresses or title knowledge belongs in this guest.
 
 The debug world runs 30 world ticks per second, holding inputs across about two native
-frames. Hash/probe reads drain workers; checkpoints preserve their rational cycle phase,
+frames; a screen shows only each segment's last one. `machine.state` reports each
+machine's `nativeFrames`, `backpressure` and worker `busyMs` (host time, never state):
+`busyMs` over the wall time between two reads is the share of real time it needs. It is
+a timing reading, so it is taken only on a quiet machine; `nativeFrames` per segment
+is a count any machine can read. Hash/probe reads drain workers; checkpoints preserve their rational cycle phase,
 so these generic checks need no extra frame-stamped input seam. Every queued core
 implements pure `PeekByte`/`PeekBytes` (AGB's reads bus inspection, including byte
 lanes of 16-bit IO registers); the inherited default peeks zero and hides live RAM.

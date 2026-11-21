@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Puck.Assets;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
@@ -522,18 +523,18 @@ public sealed partial class DocumentScope {
     /// <param name="statements">The statements in this lexical document scope.</param>
     public void IndexDeclarations(IReadOnlyList<StatementNode> statements) {
         if (!Annotations.TryGetValue(key: "DeclaredRows", value: out var rowsValue)) {
-            rowsValue = new HashSet<string>(comparer: StringComparer.Ordinal);
+            rowsValue = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
             Annotations["DeclaredRows"] = rowsValue;
         }
         if (!Annotations.TryGetValue(key: "DeclaredPools", value: out var poolsValue)) {
-            poolsValue = new HashSet<string>(comparer: StringComparer.Ordinal);
+            poolsValue = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
             Annotations["DeclaredPools"] = poolsValue;
         }
         if (!Annotations.TryGetValue(key: "DeclaredGates", value: out var gatesValue)) {
-            gatesValue = new HashSet<string>(comparer: StringComparer.Ordinal);
+            gatesValue = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
             Annotations["DeclaredGates"] = gatesValue;
         }
-        IndexStructuralNames(gates: ((HashSet<string>)gatesValue!), pools: ((HashSet<string>)poolsValue!), rows: ((HashSet<string>)rowsValue!), statements: statements);
+        IndexStructuralNames(gates: ((ImmutableHashSet<string>.Builder)gatesValue!), pools: ((ImmutableHashSet<string>.Builder)poolsValue!), rows: ((ImmutableHashSet<string>.Builder)rowsValue!), statements: statements);
         IndexModuleInstances(statements: statements);
         // A `let` an imported file declares evaluates beside that file, so what it writes resolves where it was
         // written, as a module's body does.
@@ -579,7 +580,7 @@ public sealed partial class DocumentScope {
         }
     }
 
-    private static void IndexStructuralNames(IReadOnlyList<StatementNode> statements, HashSet<string> rows, HashSet<string> pools, HashSet<string> gates) {
+    private static void IndexStructuralNames(IReadOnlyList<StatementNode> statements, ImmutableHashSet<string>.Builder rows, ImmutableHashSet<string>.Builder pools, ImmutableHashSet<string>.Builder gates) {
         foreach (var statement in statements) {
             switch (statement) {
                 case StatePoolDeclarationNode pool: pools.Add(item: pool.Name); rows.Add(item: pool.Name); break;
@@ -755,6 +756,9 @@ public sealed partial class DocumentScope {
 }
 /// <summary>JSON helpers every lowering pass needs and none should restate.</summary>
 public static class JsonNodeExtensions {
+    /// <summary>Reads a JSON string, returning null for a missing member or any other kind of value.</summary>
+    public static string? StringValue(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+
     /// <summary>Appends a node to an array, keeping a null as a JSON null rather than refusing it.</summary>
     /// <param name="array">The array to append to.</param>
     /// <param name="item">The node, which may be null.</param>

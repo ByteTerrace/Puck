@@ -409,12 +409,11 @@ public sealed class PenrosePatch {
             masks: null,
             reason: out reason,
             result: out var drawn,
-            seedState: GeneratorEngine.ComputeSeedState(
+            seed: GeneratorEngine.ComputeDrawSeed(
                 documentSeed: documentSeed,
                 instanceIdentity: instanceIdentity,
                 site: site
             ),
-            stream: GeneratorEngine.ComputeStreamId(site: site),
             targetKind: CellKind.Int
         )) {
             return false;

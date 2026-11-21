@@ -58,7 +58,8 @@ public sealed partial class ArenaSearch {
             ((work.Allowance - spent) >= unit)
         ) {
             if (job.TreeActive) {
-                spent += StepTree(job: job);
+                job.PreparedReach = false;
+                spent += StepTree(job: job) + (job.PreparedReach ? work.Prepare : 0L);
 
                 continue;
             }
@@ -127,7 +128,7 @@ public sealed partial class ArenaSearch {
 
                 continue;
             }
-            if (!TryResolveCandidate(
+            var resolved = TryResolveCandidate(
                 candidateIndex: candidateIndex,
                 code: out var code,
                 companionIndex: out var companionIndex,
@@ -138,7 +139,9 @@ public sealed partial class ArenaSearch {
                 shapeIndex: shapeIndex,
                 target: out var target,
                 token: token
-            )) {
+            );
+            spent += job.PreparedReach ? work.Prepare : 0L;
+            if (!resolved) {
                 level.Target = (candidateIndex + 1);
                 spent += work.Inspect;
 

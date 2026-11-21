@@ -190,6 +190,11 @@ public static partial class ExpressionArithmetic {
     /// <summary>Gets a value indicating whether a core arithmetic operator consumes one stack value (functions have their own dispatcher).</summary>
     /// <param name="operation">An expression operation.</param>
     public static bool IsUnary(ExpressionOp operation) => (ExpressionOperators.Find(operation: operation) is { Function: false, Arity: 1 });
+    /// <summary>Clamps a numeric carrier to an inclusive range. An inverted range faults.</summary>
+    public static bool TryClamp(long input, long minimum, long maximum, out long value) {
+        value = minimum <= maximum ? Math.Clamp(input, minimum, maximum) : 0L;
+        return minimum <= maximum;
+    }
     /// <summary>Evaluates one unary operation. Bit operations read the Int carrier's two's-complement bits; Negate and
     /// Abs keep the operand's kind and refuse the carrier's minimum; Sign yields Int -1, 0, or 1 for either kind.</summary>
     /// <param name="operation">A unary expression operation.</param>

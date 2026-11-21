@@ -179,10 +179,20 @@ public sealed class GpuUploadRuns {
     /// membership describes the conservative represented ranges rather than only the originally added units.</summary>
     /// <param name="value">The unit to find.</param>
     /// <returns>Whether a run contains the unit, including its start and excluding its end.</returns>
-    public bool Contains(int value) {
-        var run = PartitionPoint.Of(span: m_ends.AsSpan(start: 0, length: m_count), state: value, isBefore: static (at, end) => (end <= at));
+    public bool Contains(int value) => Overlaps(length: 1, start: value);
+    /// <summary>Returns whether any unit of <c>[start, start + length)</c> lies in the retained sorted runs, with the
+    /// same conservative membership as <see cref="Contains"/>.</summary>
+    /// <param name="start">The first unit of the range.</param>
+    /// <param name="length">The range's length in units; an empty range overlaps nothing.</param>
+    /// <returns>Whether a run holds a unit of the range.</returns>
+    public bool Overlaps(int start, int length) {
+        if (length <= 0) {
+            return false;
+        }
 
-        return ((run < m_count) && (m_starts[run] <= value));
+        var run = PartitionPoint.Of(span: m_ends.AsSpan(start: 0, length: m_count), state: start, isBefore: static (at, end) => (end <= at));
+
+        return ((run < m_count) && (((long)m_starts[run]) < (((long)start) + length)));
     }
 
     // Halves the run count by closing the smallest gaps: the runs are already ordered, and each gap no wider

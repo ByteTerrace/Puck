@@ -218,7 +218,7 @@ public sealed class VectorTransformFiringLawTests {
             host: host,
             moved: out var mixed,
             transform: new StateTransform.Mix(
-                Into: "wide",
+                Into: "(`wide`)",
                 Terms: [new VectorTerm(
                         From: "bank[a]",
                         Weight: 1
@@ -231,7 +231,7 @@ public sealed class VectorTransformFiringLawTests {
             host: host,
             moved: out var meaned,
             transform: new StateTransform.Mean(
-                From: "bank",
+                From: "`bank`",
                 Into: "wide"
             )
         );

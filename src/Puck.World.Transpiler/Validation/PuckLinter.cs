@@ -139,7 +139,7 @@ public static partial class PuckLinter {
                 // Check if hardcoded color literal could be hoisted to a constant
                 if (!inLet) {
                     diagnostics.ReportInformation(
-                        code: PuckDiagnosticCodes.LintShadowedDeclaration,
+                        code: PuckDiagnosticCodes.LintInlineColor,
                         message: $"Inline color literal '{color.Hex}' — consider declaring as a named 'let' constant",
                         span: color.Span
                     );
@@ -148,7 +148,7 @@ public static partial class PuckLinter {
 
             case LiteralExpressionNode { Value: string strVal } lit when (!inLet && strVal.StartsWith(value: '#') && ((strVal.Length == 7) || (strVal.Length == 9))):
                 diagnostics.ReportInformation(
-                    code: PuckDiagnosticCodes.LintShadowedDeclaration,
+                    code: PuckDiagnosticCodes.LintInlineColor,
                     message: $"Inline color literal '{strVal}' — consider declaring as a named 'let' constant",
                     span: lit.Span
                 );

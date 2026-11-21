@@ -34,14 +34,13 @@ public sealed class WorldLatticeDrawLawTests {
         ]
     );
     private static GeneratorEngine.FireResult Fire(StateGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? masks) {
-        var (seed, stream) = Keys();
+        var seed = Keys();
 
         Assert.True(
             condition: GeneratorEngine.TryFire(
                 generator: generator,
                 targetKind: CellKind.Fixed,
-                seedState: seed,
-                stream: stream,
+                seed: seed,
                 cursor: cursor,
                 masks: masks,
                 result: out var result,
@@ -52,13 +51,10 @@ public sealed class WorldLatticeDrawLawTests {
 
         return result;
     }
-    private static (ulong Seed, ulong Stream) Keys() => (
-        GeneratorEngine.ComputeSeedState(
+    private static DrawSeed Keys() => GeneratorEngine.ComputeDrawSeed(
         documentSeed: WorldSeed,
         instanceIdentity: Instance,
         site: Site
-    ),
-        GeneratorEngine.ComputeStreamId(site: Site)
     );
     private static WorldStateSection LatticeState(WorldLatticeFill? fill, long cursor = 0L, IReadOnlyList<ClosedBitset256>? masks = null, WorldLatticeFill? second = null) {
         var paint = new List<WorldLatticeFill>();
@@ -117,7 +113,7 @@ public sealed class WorldLatticeDrawLawTests {
 
     [Fact]
     public void ABatch_IsTheSitesOwnStream_CellByCell() {
-        var (seed, stream) = Keys();
+        var seed = Keys();
 
         foreach (var generator in new[] { CountedBag(mode: GeneratorMode.RestartOnExhaustion), CountedBag(mode: GeneratorMode.WithReplacement), new StateGenerator(
             Source: GeneratorSource.UniformRange,
@@ -130,8 +126,7 @@ public sealed class WorldLatticeDrawLawTests {
                 condition: GeneratorEngine.TryFireBatch(
                     generator: generator,
                     targetKind: CellKind.Fixed,
-                    seedState: seed,
-                    stream: stream,
+                    seed: seed,
                     cursor: 7L,
                     masks: null,
                     values: cells,
@@ -145,8 +140,7 @@ public sealed class WorldLatticeDrawLawTests {
                 condition: GeneratorEngine.TryAdvanceBatch(
                     generator: generator,
                     targetKind: CellKind.Fixed,
-                    seedState: seed,
-                    stream: stream,
+                    seed: seed,
                     cursor: 7L,
                     masks: null,
                     sampleCount: cells.Length,
@@ -194,8 +188,7 @@ public sealed class WorldLatticeDrawLawTests {
         Assert.False(condition: GeneratorEngine.TryFireBatch(
             generator: text,
             targetKind: CellKind.Fixed,
-            seedState: seed,
-            stream: stream,
+            seed: seed,
             cursor: 0L,
             masks: null,
             values: new long[2],
@@ -237,7 +230,7 @@ public sealed class WorldLatticeDrawLawTests {
 
         var once = CountedBag(mode: GeneratorMode.WithoutReplacement);
 
-        var (seed, stream) = Keys();
+        var seed = Keys();
         cursor = 0L;
         masks = null;
 
@@ -255,8 +248,7 @@ public sealed class WorldLatticeDrawLawTests {
         Assert.False(condition: GeneratorEngine.TryFire(
             generator: once,
             targetKind: CellKind.Fixed,
-            seedState: seed,
-            stream: stream,
+            seed: seed,
             cursor: cursor,
             masks: masks,
             result: out _,
@@ -294,7 +286,7 @@ public sealed class WorldLatticeDrawLawTests {
             ]
         );
 
-        var (seed, stream) = Keys();
+        var seed = Keys();
         var cursor = 0L;
         IReadOnlyList<ClosedBitset256>? masks = null;
         var drawn = new List<string>();
@@ -304,8 +296,7 @@ public sealed class WorldLatticeDrawLawTests {
                 condition: GeneratorEngine.TryFire(
                     generator: walk,
                     targetKind: CellKind.Text,
-                    seedState: seed,
-                    stream: stream,
+                    seed: seed,
                     cursor: cursor,
                     masks: masks,
                     result: out var fired,
@@ -326,8 +317,7 @@ public sealed class WorldLatticeDrawLawTests {
         Assert.False(condition: GeneratorEngine.TryFire(
             generator: walk,
             targetKind: CellKind.Text,
-            seedState: seed,
-            stream: stream,
+            seed: seed,
             cursor: cursor,
             masks: masks,
             result: out _,
@@ -410,15 +400,14 @@ public sealed class WorldLatticeDrawLawTests {
     [Fact]
     public void BootResolution_RefusesAPersistedPassItsSourceCannotDraw_ByName() {
         var bag = CountedBag(mode: GeneratorMode.WithoutReplacement);
-        var (seed, stream) = Keys();
+        var seed = Keys();
 
         // One four-cell pass takes four of the bag's six units; the persisted masks leave two, so the next pass cannot draw.
         Assert.True(
             condition: GeneratorEngine.TryAdvanceBatch(
                 generator: bag,
                 targetKind: CellKind.Fixed,
-                seedState: seed,
-                stream: stream,
+                seed: seed,
                 cursor: 0L,
                 masks: null,
                 sampleCount: 4,
@@ -522,8 +511,7 @@ public sealed class WorldLatticeDrawLawTests {
         Assert.False(condition: GeneratorEngine.TryFire(
             generator: oversized,
             targetKind: CellKind.Int,
-            seedState: 1UL,
-            stream: 1UL,
+            seed: new DrawSeed(1UL, 1UL),
             cursor: 0L,
             masks: null,
             result: out _,

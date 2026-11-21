@@ -61,10 +61,7 @@ public sealed record WorldCompilation(
     /// <summary>Gets what the compiled tree declares about the documents it emits (<see cref="WorldSourceDeclaration"/>),
     /// the same reading the name index takes from a parse alone; <see langword="null"/> when the source did not
     /// parse.</summary>
-    public WorldSourceDeclaration? Declaration => ((Document is { } document)
-        ? WorldSourceDeclaration.Of(document: document)
-        : null
-    );
+    public WorldSourceDeclaration? Declaration { get; init; }
     /// <summary>Gets whether the source emits a document: each world it declares, or else the one document its top
     /// level lowers to. A module library, whose modules, templates and <c>let</c>s only the sources importing it
     /// expand, emits none and carries no document name (<see cref="WorldSourceDeclaration.EmitsDocument"/>).</summary>
@@ -238,6 +235,7 @@ internal static class WorldCompiler {
             : imports
         );
 
+        var declaration = WorldSourceDeclaration.Of(document: document);
         var walkedImports = false;
         // One budget for the whole compile: the import walk charges it first and the lowering goes on charging it.
         var budget = new DocumentEvaluationBudget { CancellationToken = cancellationToken };
@@ -329,7 +327,7 @@ internal static class WorldCompiler {
             Json: ((worlds.Count == 0) ? loweringResult.Value : ((worlds.Count == 1) ? worlds[0].Json : null)),
             SourceMap: ((worlds.Count == 1) ? worlds[0].SourceMap : sourceMap),
             TestWorlds: testWorlds
-        ) { Acknowledgements = SourceAcknowledgements.Of(document: document, sourcePath: sourcePath), Assets = assets, EvaluationWork = loweringResult.EvaluationWork, Worlds = worlds };
+        ) { Declaration = declaration, Acknowledgements = SourceAcknowledgements.Of(document: document, sourcePath: sourcePath), Assets = assets, EvaluationWork = loweringResult.EvaluationWork, Worlds = worlds };
     }
 
     /// <summary>Reads <paramref name="path"/> and compiles it.</summary>

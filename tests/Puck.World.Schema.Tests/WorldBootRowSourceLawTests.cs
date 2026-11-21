@@ -55,12 +55,11 @@ public sealed class WorldBootRowSourceLawTests {
             masks: null,
             reason: out var reason,
             result: out var fired,
-            seedState: GeneratorEngine.ComputeSeedState(
+            seed: GeneratorEngine.ComputeDrawSeed(
                 documentSeed: (definition.Generation?.WorldSeed ?? 0UL),
                 instanceIdentity: instanceIdentity,
                 site: site
             ),
-            stream: GeneratorEngine.ComputeStreamId(site: site),
             targetKind: row.Kind
         ), userMessage: reason);
 

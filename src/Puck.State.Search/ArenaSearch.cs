@@ -108,6 +108,7 @@ public sealed partial class ArenaSearch {
             ScopeShape = new int[scopes];
             ScopeTarget = new int[scopes];
             ScopeToken = new int[scopes];
+            Reach = plan.Shapes.Any(static shape => shape.Moves is not null) ? new MoveReach?[scopes + 1] : null;
             TokenKeys = new CellKey[tokenCapacity];
             Wide = ((plan.ReachOrdinal >= 0)
                 ? new long[(tokenCapacity * WideWordsPerToken(cellCount: cellCount))]
@@ -165,6 +166,8 @@ public sealed partial class ArenaSearch {
         public int Iteration { get; set; }
 
         public IArenaSearchJudge Judge { get; set; } = null!;
+        public readonly MoveReach?[]? Reach;
+        public bool PreparedReach;
         // Every row a position key folds: what the plan names and what the judge reads, ascending.
         public int[] KeyRows { get; set; } = [];
         // The rows the job's input stamp folds: its key rows and the held and revision slots its outputs are taken

@@ -126,8 +126,8 @@ public enum TransformRefusal : byte {
     [Refusal(door: "state.transform", condition: "a clearEnclosed's origin names no cell of the board's topology", kind: RefusalKind.Verdict)]
     ClearEnclosedOrigin,
 
-    /// <summary>A clearEnclosed's range is inverted, or it contains the board's empty value.</summary>
-    [Refusal(door: "state.transform", condition: "a clearEnclosed's range is inverted, or it contains the board's empty value", kind: RefusalKind.Verdict)]
+    /// <summary>A clearEnclosed range is inverted, or the group range contains the board's empty value.</summary>
+    [Refusal(door: "state.transform", condition: "a clearEnclosed range is inverted, or the group range contains the board's empty value", kind: RefusalKind.Verdict)]
     ClearEnclosedRange,
 
     /// <summary>An observe addresses no knowledge board.</summary>

@@ -397,6 +397,42 @@ public sealed partial class CompiledTopology {
         ? m_neighbours[((cell * DirectionCount) + direction)]
         : -1
     );
+
+    /// <summary>Walks the cells after an origin, stopping at an edge, a return to the origin, or the cell limit.</summary>
+    public RayCells Ray(int origin, int direction) => new(this, origin, direction);
+
+    /// <summary>Allocation-free traversal of the ordinals on a topology ray.</summary>
+    public struct RayCells {
+        private readonly CompiledTopology m_topology;
+        private readonly int m_origin;
+        private readonly int m_direction;
+        private int m_remaining;
+
+        internal RayCells(CompiledTopology topology, int origin, int direction) {
+            m_topology = topology;
+            m_origin = origin;
+            m_direction = direction;
+            m_remaining = (topology.CellCount - 1);
+            Current = origin;
+        }
+
+        /// <summary>Gets the current cell ordinal.</summary>
+        public int Current { get; private set; }
+        /// <summary>Returns the traversal cursor.</summary>
+        public readonly RayCells GetEnumerator() => this;
+        /// <summary>Steps to the next cell, if the ray continues.</summary>
+        public bool MoveNext() {
+            if (m_remaining-- <= 0) {
+                return false;
+            }
+            Current = m_topology.Neighbour(cell: Current, direction: m_direction);
+            if ((Current < 0) || (Current == m_origin)) {
+                m_remaining = 0;
+                return false;
+            }
+            return true;
+        }
+    }
     /// <summary>Returns the most cells a ray read in one direction can hold, from any origin: the walk stops at an edge
     /// or on returning to its origin, and never takes more than <see cref="CellCount"/> less one step.</summary>
     /// <param name="direction">The direction ordinal.</param>
@@ -419,7 +455,7 @@ public sealed partial class CompiledTopology {
                 for (var origin = 0; (origin < CellCount); origin++) {
                     var length = 0;
 
-                    for (var cell = Neighbour(cell: origin, direction: way); ((cell >= 0) && (cell != origin) && (length < (CellCount - 1))); cell = Neighbour(cell: cell, direction: way)) {
+                    foreach (var _ in Ray(origin: origin, direction: way)) {
                         length++;
                     }
                     rays[way] = Math.Max(val1: rays[way], val2: length);
@@ -429,6 +465,15 @@ public sealed partial class CompiledTopology {
         }
 
         return rays[direction];
+    }
+    /// <summary>Returns the sum of the longest rays in all directions.</summary>
+    public long LongestRays() {
+        var total = 0L;
+
+        for (var direction = 0; (direction < DirectionCount); direction++) {
+            total += LongestRay(direction: direction);
+        }
+        return total;
     }
     /// <summary>Reads the direction ordinal whose step vector is the negation of <paramref name="direction"/>'s —
     /// compiled once from each direction's own offset rather than assumed from ordinal arithmetic, so an

@@ -55,6 +55,10 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <summary>Reads execution and generation state by instance identity.</summary>
     /// <param name="name">The authored instance name.</param>
     WorldMachineInstanceState? InstanceState(string name);
+    /// <summary>Reads an instance's host-side pace: its native frames, backpressure and worker busy time.</summary>
+    /// <param name="name">The authored instance name.</param>
+    /// <returns>The pace, or <see langword="null"/> when no instance has the name.</returns>
+    WorldMachinePace? Pace(string name);
     /// <summary>Resolves one running named instance's video output without creating or advancing it; a stopped instance
     /// has no output for the tick.</summary>
     /// <param name="instance">The authored instance name.</param>

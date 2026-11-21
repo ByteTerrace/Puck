@@ -222,10 +222,11 @@ The closed `transformState` effect and transaction step carry one of `transfer`,
 `setRay`, `pushRay`, `shuffle`, `sort`, `writeSet`, `boardCombine`, `arrange`,
 `clearEnclosed`, `observe`, or the vector transforms `mix`, `mean`, `nearest`, and
 `remember`. `clearEnclosed`
-(`row`, `from`, `lower`, `upper`) writes the board's empty value over every
+(`row`, `from`, `lower`, `upper`, optional `boundaryLower` and `boundaryUpper`) writes the board's empty value over every
 component valued lower..upper beside the cell `from` names (a literal cell or
-any dynamic key spelling) that has no empty cell beside it—the write-path
-twin of `$board:enclosedAt`, fired after the value lands. `arrange` (`row`,
+any dynamic key spelling) that has no liberty in the boundary range. Both
+boundary bounds default to the board's empty value. Use the same bounds in
+`$board:enclosedAt` to predict the capture before the value lands. `arrange` (`row`,
 `from`, `fromKey`) reorders an ordered zone of at most 20 tokens into the
 arrangement at the Lehmer rank read from an integer cell, rank 0 being the token
 domain's own order—the inverse of `$reduce:arrangementRank`. `writeSet` (`row`, `set`, `setKey`,
@@ -1560,7 +1561,7 @@ row only while it carries no cell yet (first fill: process boot, or a fresh
 `world.instance.start`), keeps the facet and cursor, and resumes on reload
 rather than re-rolling a value the player already saw; nothing settles into a
 bare literal and nothing is cleared. A KEYED row may be a site too—a dice
-tray: its numeric source fills one sample per authored cell in cell order at
+tray: its numeric source fills one sample per authored cell in ordinal key-name order at
 its first fill (cursor zero), and `world.generate <row> [key ...]` /
 `WorldMutation.Generate(row, keys)` redraws every cell or only the named ones
 with the rest held, advancing the cursor by the raw words consumed. A text source
@@ -3132,9 +3133,9 @@ tokens) is one of them, and `turn` to the turn slot's value; absent, a pattern
 applies to every token or on every turn. A token no pattern applies to offers
 no candidate. The patterns only narrow what the judge runs on, which decides
 every move as before: a pattern that reaches more than the rules allow costs
-judge runs, one that reaches less hides legal moves. Resolving a candidate
-against the patterns is priced as an inspection (`SearchShapePlan.MoveInspect`),
-far below a judge run. A graph or tiling has no translations and refuses
+judge runs, one that reaches less hides legal moves. Search charges for
+preparing the reach bitset (`SearchShapePlan.MovePreparation`) separately from
+testing it for each target. A graph or tiling has no translations and refuses
 `moves`. The debug world's chess opponent authors one pattern set per piece
 kind and side, so a one-ply reply judges a few dozen candidates where every
 token on every cell was 2,048.

@@ -22,9 +22,9 @@ public sealed class GeneratorExtendedLawTests {
                 masks: null,
                 reason: out var reason,
                 result: out var fired,
-                seedState: SeedState(),
+                seed: Seed(),
                 skip: skip,
-                stream: Stream(),
+
                 targetKind: CellKind.Int
             ),
             userMessage: reason
@@ -32,12 +32,11 @@ public sealed class GeneratorExtendedLawTests {
 
         return fired.Numeric!.Value;
     }
-    private static ulong SeedState() => GeneratorEngine.ComputeSeedState(
+    private static DrawSeed Seed() => GeneratorEngine.ComputeDrawSeed(
         documentSeed: WorldSeed,
         instanceIdentity: Instance,
         site: Site
     );
-    private static ulong Stream() => GeneratorEngine.ComputeStreamId(site: Site);
 
     [Fact]
     public void PerTickExtendedSite_AllocatesNothingAfterTheFirstRebuildOrACollection() {
@@ -49,8 +48,7 @@ public sealed class GeneratorExtendedLawTests {
                 Table: table
             )
         );
-        var seed = SeedState();
-        var stream = Stream();
+        var seed = Seed();
         var cursor = 0L;
 
         // The first draw at a fresh cursor is a cache miss: it builds and caches the extended generator, which
@@ -60,8 +58,7 @@ public sealed class GeneratorExtendedLawTests {
             condition: GeneratorEngine.TryFire(
                 generator: generator,
                 targetKind: CellKind.Int,
-                seedState: seed,
-                stream: stream,
+                seed: seed,
                 cursor: cursor,
                 masks: null,
                 result: out var fired,
@@ -81,8 +78,7 @@ public sealed class GeneratorExtendedLawTests {
                         condition: GeneratorEngine.TryFire(
                             generator: generator,
                             targetKind: CellKind.Int,
-                            seedState: seed,
-                            stream: stream,
+                            seed: seed,
                             cursor: cursor,
                             masks: null,
                             result: out var drawn,

@@ -664,10 +664,10 @@ destination empty), and `promote` (`codes`: an int row keyed
 by the tokens; `to`: up to sixteen codes — relocate and change the token's code to each in turn) are the other
 arms. `relocate` with `displace: false` leaves the standing token in place rather than evicting it.
 `relocate` with `moves` (`WorldSearchMove`: lattice `offsets`, `range` 1 or 0 to the edge, optional
-`codes` read from the shape's `codes` row and `turn`) tries only the cells a token's patterns reach, a ray
-ending on its first occupied cell; resolving it is an inspection (`ArenaSearch.MovesReach`,
-`SearchShapePlan.MoveInspect`), not a judge run. Reach for it whenever a judge is costly: the chess
-opponent's per-piece patterns cut a one-ply reply from 2,016 judged candidates to 56. A job
+`codes` read from the shape's `codes` row and `turn`) tries only the cells a token's patterns reach. A ray
+includes its first occupied cell and stops there. `ArenaSearch.ReachFor` builds the bitset for a shape and token
+in the open position. `SearchShapePlan.MovePreparation` prices that work separately from each target's bit test.
+The chess opponent's per-piece patterns cut a one-ply reply from 2,016 judged candidates to 56. A job
 with a score keeps a transposition table (`SearchCapacity.TranspositionEntries`
 slots keyed by relevant state and effective move ply) that rides the checkpoint
 and hash. Preserve the move-ply component when changing cache probes or stores:
