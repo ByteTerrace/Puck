@@ -81,12 +81,20 @@ public sealed class SdfKernelInterfaces {
     public const int MeshReceiverStep = 4;
     /// <summary>Receiver hierarchy reduction step.</summary>
     public const int MeshReceiverReduceStep = 5;
+    /// <summary>Compaction count step: each group of candidates counts the commands a phase emitted in its slots.</summary>
+    public const int MeshOcclusionCountStep = 6;
+    /// <summary>Compaction step: each group copies a phase's emitted commands, in candidate order, to the phase's
+    /// compact list after the counts of the groups before it, and the last group writes the phase's draw count.</summary>
+    public const int MeshOcclusionCompactStep = 7;
     /// <summary>Cascade texels per receiver cell, as a power of two.</summary>
     public const int MeshReceiverShift = 4;
     /// <summary>Receiver sample grid and jitter row.</summary>
     public const int MeshReceiverRow = 14;
+    /// <summary>The compaction row: the command slots a phase holds, the first word of the compact lists, the first word
+    /// of the group counts and the groups a phase counts.</summary>
+    public const int MeshCompactRow = 15;
     /// <summary>First portal sight query row.</summary>
-    public const int MeshSightRow = 15;
+    public const int MeshSightRow = 16;
     /// <summary>First portal sight verdict after draw counts.</summary>
     public const int MeshSightCountBase = 5;
     /// <summary>The first selection mark word in the raster selection's counts, past every portal sight verdict: on a
@@ -102,8 +110,9 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The raster pass's per-draw retained state: visibility, previous level, mesh reference identity and
     /// whether this frame's box/receiver classification kept the draw. The level survives buffer growth and resets on a mesh change.</summary>
     public const string MeshOcclusionVisibleWritten = "sdfMeshOcclusionVisibleRW";
-    /// <summary>The mesh pass occlusion's indirect draws: the first phase's records, then the second's, each
-    /// <c>GpuDrawIndirectCommand</c> records long.</summary>
+    /// <summary>The mesh pass occlusion's indirect draws: each phase's slots, one <c>GpuDrawIndirectCommand</c> a
+    /// candidate in staged order, empty where the phase draws nothing; then each phase's compact list, its emitted
+    /// commands in the same order, which the counted indirect draw executes; then each phase's group counts.</summary>
     public const string MeshOcclusionDrawsWritten = "sdfMeshOcclusionDrawsRW";
     /// <summary>The indirect commands read by Vulkan vertex stages through their draw index, including the fixed-count fallback.</summary>
     public const string MeshIndirectCommands = "sdfMeshIndirectCommands";

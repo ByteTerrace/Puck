@@ -154,8 +154,9 @@ be baked on demand and cached where a triangle asset cannot.
   the kernel's sight step tests "Four rows per screen" against the same
   pyramid through `sdfOcclusionMaySee` and writes one word per query at
   `SDF_SIGHT_COUNT_BASE + id.x`; `SdfMeshOcclusion.ReadCounts` hands that range
-  back once the slot completes, and `SdfPortalSight` applies a result only to
-  the query and camera it was captured for ("Unknown, changed and retired
+  back once the slot completes, and `SdfPortalSight` applies a result to the
+  camera it was captured for, or to a later eye inside the reach its second
+  bit proved (`sdfOcclusionHiddenWithin`; "Unknown, changed and retired
   observations always keep demand"). It is a reusable per-query box test with
   a completion seam, not per-draw evidence; D6 builds on it
   as such. The frame-bar packet records the consequence of posing without
@@ -697,7 +698,7 @@ frustum tier by occlusion is one whose swept reach box no view's completed
 query saw, no cascade's receivers kept and no consumer read, and it is rated
 at the slowest nonzero tier, never held*, enforced in `RateOf`, the one door
 every rated body passes, which reads sight results only through
-`SdfPortalSight`'s camera-and-epoch match. What the two-pixel rule does and
+`SdfPortalSight`'s camera-or-reach and epoch match. What the two-pixel rule does and
 does not cover: the tiers bound an update's step by part
 speed for a body something shows; an occluded body's pose is at most one
 tier period plus the readback latency stale when it reappears, and that first

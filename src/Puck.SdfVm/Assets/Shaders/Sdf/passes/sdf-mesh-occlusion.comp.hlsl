@@ -7,18 +7,25 @@
 // - depth: one invocation a texel of the level. Level one takes each 2x2 block of the first phase's target, the farthest
 //   forward depth of its covered pixels, or positive infinity where any is uncovered (the sky shows there, so nothing
 //   behind it is hidden); each level above takes the farthest of its 2x2 children. A level's extent is the one below it
-//   halved, rounded up, to 1x1.
+//   halved, rounded up, to 1x1. A pass that tests portal sight also builds the nearest chain the same way.
 // - late: one invocation a candidate. Its box is projected as the mesh vertex stage projects a vertex, and the smallest
 //   2x2 texels of a level that cover every pixel center the box can reach, a pixel past it each way, are read: the box is
 //   hidden when its nearest corner lies beyond the farthest of them. A box reaching the near plane is never hidden. The
 //   visible set takes the verdict, and a visible candidate the first phase did not draw is drawn by the second phase.
+// - count, then compact: one invocation a candidate, after the early step (its phases) or the late step (the second
+//   phase), flag one below the shift naming the late one. Each group counts the commands a phase emitted in its slots;
+//   then each group copies those commands, in slot order, to the phase's compact list after the commands of the groups
+//   before it, and the last group writes the phase's draw count. The counted indirect draw executes the compact list,
+//   so a phase costs the commands it draws, not one for each candidate (a counted draw that pushes each command's
+//   identity, as Direct3D 12's does, pays for every command it reads, empty or not).
 //
 // Draws are counted on the GPU, into the pass's drawn counts past the work counter rows (GpuKernelCounters.DrawnWords).
 // On a marked frame (flag 8 of the header's fourth word) each draw a phase emits a command for ORs its level plus one
 // into its two bits of the counts' mark words from SDF_MESH_MARK_BASE, sixteen draws a word, which the host reads back
 // (SdfMeshOcclusion, SdfMeshSelectionMarks).
-// The controls' header holds the draw count and pyramid levels; each phase writes one GpuDrawIndirectCommand a
-// candidate at the candidate's place, empty where it draws nothing, with the identity first and first instance zero.
+// The controls' header holds the draw count and pyramid levels, and the compaction row the slots a phase holds and where
+// the compact lists and group counts start; each phase writes one GpuDrawIndirectCommand a candidate at the candidate's
+// slot, empty where it draws nothing, with the identity first and first instance zero.
 // KEEP IN SYNC with SdfMeshOcclusion. Bounds, levels and mesh identity come from the retained mesh region.
 #include "../isa/sdf-mesh.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
@@ -58,6 +65,18 @@ uint sdfOcclusionPixel(uint2 pixel) {
 uint sdfOcclusionTexel(uint2 dims, uint level, uint2 texel) {
     return ((level == 0u) ? sdfOcclusionPixel(texel) : sdfMeshOcclusionDepthRW[sdfOcclusionWord(dims, level, texel)]);
 }
+// Whether the pyramid carries its nearest chain beside the farthest (flag 64 of the header's fourth word, set where the
+// pass tests portal sight): the same levels, each texel the nearest covered depth of its block, after every farthest level.
+bool sdfOcclusionNearChain() {
+    return ((sdfMeshOcclusionCandidates[0].w & 64u) != 0u);
+}
+// A level's texel in the nearest chain, which starts past the farthest chain's last level.
+uint sdfOcclusionNearWord(uint2 dims, uint level, uint2 texel) {
+    return (sdfOcclusionWord(dims, (sdfMeshOcclusionCandidates[0].y + 1u), uint2(0u, 0u)) + sdfOcclusionWord(dims, level, texel));
+}
+uint sdfOcclusionNearTexel(uint2 dims, uint level, uint2 texel) {
+    return ((level == 0u) ? sdfOcclusionPixel(texel) : sdfMeshOcclusionDepthRW[sdfOcclusionNearWord(dims, level, texel)]);
+}
 
 #include "../frame/sdf-caster-receivers.hlsli"
 
@@ -84,12 +103,7 @@ void sdfOcclusionCount(uint draws, uint vertices) {
 // an empty command. The identity is the draw with the level the selection kernel chose for it from bit SDF_MESH_LEVEL_SHIFT up, which
 // the vertex stage reads its level's first triangle by.
 void sdfOcclusionEmit(uint phase, uint candidate, uint identity, uint vertices, bool emit) {
-    uint words;
-    uint stride;
-
-    sdfMeshOcclusionDrawsRW.GetDimensions(words, stride);
-
-    uint capacity = (words / ((sdfMeshOcclusionCandidates[0].z >> 2u) * SdfOcclusionCommandWords));
+    uint capacity = sdfMeshOcclusionCandidates[SDF_COMPACT_ROW].x;
 
     if (candidate < capacity) {
         uint word = (((phase * capacity) + candidate) * SdfOcclusionCommandWords);
@@ -99,6 +113,77 @@ void sdfOcclusionEmit(uint phase, uint candidate, uint identity, uint vertices, 
         sdfMeshOcclusionDrawsRW[(word + 2u)] = (emit ? 1u : 0u);
         sdfMeshOcclusionDrawsRW[(word + 3u)] = 0u;
         sdfMeshOcclusionDrawsRW[(word + 4u)] = 0u;
+    }
+}
+
+groupshared uint sdfCompactFlags[SDF_MESH_SELECTION_GROUP_SIZE];
+groupshared uint sdfCompactBase;
+
+// Counts (scatter false) or compacts (scatter true) one phase's commands for the group holding a candidate; every thread
+// of the group calls it, since it synchronizes the group.
+void sdfOcclusionCompactPhase(uint candidate, uint local, uint phase, bool scatter) {
+    uint4 row = sdfMeshOcclusionCandidates[SDF_COMPACT_ROW];
+    uint count = sdfMeshOcclusionCandidates[0].x;
+    uint group = (candidate / SDF_MESH_SELECTION_GROUP_SIZE);
+    uint slot = (((phase * row.x) + candidate) * SdfOcclusionCommandWords);
+    bool emitted = (candidate < count) && (sdfMeshOcclusionDrawsRW[(slot + 1u)] != 0u) && (sdfMeshOcclusionDrawsRW[(slot + 2u)] != 0u);
+
+    sdfCompactFlags[local] = (emitted ? 1u : 0u);
+    if (local == 0u) { sdfCompactBase = 0u; }
+    GroupMemoryBarrierWithGroupSync();
+
+    uint rank = 0u;
+
+    [loop]
+    for (uint lane = 0u; (lane < local); lane++) {
+        rank += sdfCompactFlags[lane];
+    }
+    if (!scatter) {
+        if (local == (SDF_MESH_SELECTION_GROUP_SIZE - 1u)) {
+            sdfMeshOcclusionDrawsRW[((row.z + (phase * row.w)) + group)] = (rank + sdfCompactFlags[local]);
+        }
+        GroupMemoryBarrierWithGroupSync();
+        return;
+    }
+
+    uint before = 0u;
+
+    [loop]
+    for (uint earlier = local; (earlier < group); earlier += SDF_MESH_SELECTION_GROUP_SIZE) {
+        before += sdfMeshOcclusionDrawsRW[((row.z + (phase * row.w)) + earlier)];
+    }
+    InterlockedAdd(sdfCompactBase, before);
+    GroupMemoryBarrierWithGroupSync();
+
+    uint place = (sdfCompactBase + rank);
+
+    if (emitted) {
+        uint word = (row.y + (((phase * row.x) + place) * SdfOcclusionCommandWords));
+
+        [unroll]
+        for (uint part = 0u; (part < SdfOcclusionCommandWords); part++) {
+            sdfMeshOcclusionDrawsRW[(word + part)] = sdfMeshOcclusionDrawsRW[(slot + part)];
+        }
+    }
+    if ((local == (SDF_MESH_SELECTION_GROUP_SIZE - 1u)) && (group == ((count - 1u) / SDF_MESH_SELECTION_GROUP_SIZE))) {
+        sdfMeshOcclusionCountsRW[phase] = (place + sdfCompactFlags[local]);
+    }
+    GroupMemoryBarrierWithGroupSync();
+}
+// Counts or compacts every phase the step before it emitted: the second after the late step; the first after the early
+// step, and a cascade's solid exit, thin exit and, with glass extinction, optical phases.
+void sdfOcclusionCompact(uint candidate, uint local, bool scatter, bool late) {
+    uint4 header = sdfMeshOcclusionCandidates[0];
+
+    if (late) {
+        sdfOcclusionCompactPhase(candidate, local, 1u, scatter);
+        return;
+    }
+    sdfOcclusionCompactPhase(candidate, local, 0u, scatter);
+    if ((header.z & 2u) != 0u) {
+        sdfOcclusionCompactPhase(candidate, local, 2u, scatter);
+        sdfOcclusionCompactPhase(candidate, local, 3u, scatter);
+        if ((header.z >> 2u) == 5u) { sdfOcclusionCompactPhase(candidate, local, 4u, scatter); }
     }
 }
 
@@ -175,10 +260,127 @@ bool sdfOcclusionMaySee(float3 center, float3 halfX, float3 halfY, float3 halfZ,
     return (farthest == SdfOcclusionUncovered) || ((((asfloat(farthest) * 1.0001) + 1.0e-3)) >= nearest);
 }
 
+// The pyramid's farthest and nearest depths over every pixel a perspective view's box, grown by a cube of half side `grow`
+// along the view's axes, can reach, a pixel past it each way; false where that reaches the near plane or past the image,
+// whose depths the pyramid does not hold.
+bool sdfOcclusionRegion(float3 center, float3 halfX, float3 halfY, float3 halfZ, float grow, uint levels, out uint farthest, out uint nearest) {
+    ViewportData view = worldView();
+    uint2 dims = worldViewDims(view);
+    float near = worldSurfaceNearDistance(view);
+    float scaleX = (1.0 / (view.up.w * view.right.w));
+    float scaleY = (1.0 / view.right.w);
+    float2 low = float2(1.0e30, 1.0e30);
+    float2 high = float2(-1.0e30, -1.0e30);
+
+    farthest = SdfOcclusionUncovered;
+    nearest = 0u;
+    [loop]
+    for (uint corner = 0u; (corner < 64u); corner++) {
+        float3 p = (((center + (((corner & 1u) != 0u) ? halfX : -halfX)) + (((corner & 2u) != 0u) ? halfY : -halfY)) + (((corner & 4u) != 0u) ? halfZ : -halfZ));
+        p += (grow * (((((corner & 8u) != 0u) ? view.right.xyz : -view.right.xyz) + (((corner & 16u) != 0u) ? view.up.xyz : -view.up.xyz)) + (((corner & 32u) != 0u) ? view.forward.xyz : -view.forward.xyz)));
+        float3 relative = (p - view.position.xyz);
+        float w = dot(relative, view.forward.xyz);
+
+        if (w <= near) {
+            return false;
+        }
+        float2 ndc = (float2((scaleX * (dot(relative, view.right.xyz) - (view.lens.y * w))), (scaleY * (dot(relative, view.up.xyz) - (view.lens.z * w)))) / w);
+        float2 at = float2((((ndc.x * 0.5) + 0.5) * (float)dims.x), ((0.5 - (ndc.y * 0.5)) * (float)dims.y));
+
+        low = min(low, at);
+        high = max(high, at);
+    }
+
+    float2 limit = (float2(dims) + 2.0);
+    int2 first = (int2(ceil(clamp((low - 0.5), -2.0, limit))) - 1);
+    int2 last = (int2(floor(clamp((high - 0.5), -2.0, limit))) + 1);
+
+    if (any(first < 0) || any(last >= int2(dims))) {
+        return false;
+    }
+
+    uint2 x0y0 = uint2(first);
+    uint2 x1y1 = uint2(last);
+    uint level = 1u;
+
+    [loop]
+    while ((level < levels) && ((((x1y1.x >> level) - (x0y0.x >> level)) > 1u) || (((x1y1.y >> level) - (x0y0.y >> level)) > 1u))) {
+        level++;
+    }
+
+    uint2 a = (x0y0 >> level);
+    uint2 b = (x1y1 >> level);
+
+    farthest = max(
+        max(sdfOcclusionTexel(dims, level, a), sdfOcclusionTexel(dims, level, uint2(b.x, a.y))),
+        max(sdfOcclusionTexel(dims, level, uint2(a.x, b.y)), sdfOcclusionTexel(dims, level, b))
+    );
+    nearest = min(
+        min(sdfOcclusionNearTexel(dims, level, a), sdfOcclusionNearTexel(dims, level, uint2(b.x, a.y))),
+        min(sdfOcclusionNearTexel(dims, level, uint2(a.x, b.y)), sdfOcclusionNearTexel(dims, level, b))
+    );
+    return true;
+}
+
+// Whether a box stays hidden from every eye within `reach` of this view's, whatever way it faces (a turn alone hides
+// nothing new). The pyramid holds the occluders this eye saw; an eye moved by at most the reach sees the box's points
+// along rays that, at distance r from this eye, lie within asin(reach / r) of this eye's ray to the same point. So where
+// every pixel of the box's directions, widened by that angle at the nearest occluder depth d, holds an occluder nearer
+// than the box (farthest below the box's nearest depth), and d exceeds the reach, every such ray crosses the occluders'
+// depth surface before the box. The widening is taken as a cube of half side reach x (the box's farthest distance) / d
+// about each point, and repeated until the region's nearest depth holds the d it was widened by. The surface is taken as
+// closed across its depth steps: a hole in a far occluder that a nearer one hides from this eye is assumed absent, which
+// is where the guarantee stops.
+bool sdfOcclusionHiddenWithin(float3 center, float3 halfX, float3 halfY, float3 halfZ, float reach, uint levels) {
+    ViewportData view = worldView();
+    float nearest = 1.0e30;
+    float distance = 0.0;
+
+    [unroll]
+    for (uint corner = 0u; (corner < 8u); corner++) {
+        float3 p = (((center + (((corner & 1u) != 0u) ? halfX : -halfX)) + (((corner & 2u) != 0u) ? halfY : -halfY)) + (((corner & 4u) != 0u) ? halfZ : -halfZ));
+        float3 relative = (p - view.position.xyz);
+
+        nearest = min(nearest, dot(relative, view.forward.xyz));
+        distance = max(distance, length(relative));
+    }
+
+    float covered = 0.0;
+    float grow = 0.0;
+
+    [loop]
+    for (uint attempt = 0u; (attempt < 3u); attempt++) {
+        uint farthest;
+        uint closest;
+
+        if (!sdfOcclusionRegion(center, halfX, halfY, halfZ, grow, levels, farthest, closest) || (farthest == SdfOcclusionUncovered) ||
+            (((asfloat(farthest) * 1.0001) + 1.0e-3) >= nearest)) {
+            return false;
+        }
+
+        float least = asfloat(closest);
+
+        if (least <= reach) {
+            return false;
+        }
+        if ((attempt > 0u) && (least >= covered)) {
+            return true;
+        }
+        covered = least;
+        grow = ((distance * reach) / least);
+    }
+    return false;
+}
+
 [numthreads(SDF_MESH_SELECTION_GROUP_SIZE, 1, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID) {
+void CSMain(uint3 id : SV_DispatchThreadID, uint local : SV_GroupIndex) {
     id.x += id.y * (SDF_MESH_SELECTION_GROUP_SIZE * SDF_MESH_SELECTION_GROUPS_PER_ROW);
     uint step = (pushedIndex.index >> SDF_MESH_LEVEL_SHIFT);
+
+    if ((step == SDF_OCCLUSION_COUNT_STEP) || (step == SDF_OCCLUSION_COMPACT_STEP)) {
+        sdfOcclusionCompact(id.x, local, (step == SDF_OCCLUSION_COMPACT_STEP), ((pushedIndex.index & SdfMeshDrawMask) != 0u));
+        return;
+    }
 
     // One workgroup tests the consumer's portal slabs with exactly the draw test and the same pyramid.
     // Four rows per screen follow the selection controls; the first five count words are draw phases.
@@ -190,11 +392,15 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         if (id.x < screens) {
             uint row = SDF_SIGHT_ROW + id.x * 4u;
             float4 center = asfloat(sdfMeshOcclusionCandidates[row]);
-            bool visible = center.w == 0.0 || sdfOcclusionMaySee(center.xyz,
-                asfloat(sdfMeshOcclusionCandidates[row + 1u].xyz),
-                asfloat(sdfMeshOcclusionCandidates[row + 2u].xyz),
-                asfloat(sdfMeshOcclusionCandidates[row + 3u].xyz), sdfMeshOcclusionCandidates[0].y);
-            sdfMeshOcclusionCountsRW[SDF_SIGHT_COUNT_BASE + id.x] = visible ? 1u : 0u;
+            float4 halfX = asfloat(sdfMeshOcclusionCandidates[row + 1u]);
+            float3 halfY = asfloat(sdfMeshOcclusionCandidates[row + 2u].xyz);
+            float3 halfZ = asfloat(sdfMeshOcclusionCandidates[row + 3u].xyz);
+            uint levels = sdfMeshOcclusionCandidates[0].y;
+            // Bit one: a slab this eye may see. Bit two: a slab hidden from every eye within the reach the host asked for
+            // in the half axis's fourth lane (SdfPortalSight).
+            bool visible = center.w == 0.0 || sdfOcclusionMaySee(center.xyz, halfX.xyz, halfY, halfZ, levels);
+            bool within = !visible && (halfX.w > 0.0) && sdfOcclusionNearChain() && sdfOcclusionHiddenWithin(center.xyz, halfX.xyz, halfY, halfZ, halfX.w, levels);
+            sdfMeshOcclusionCountsRW[SDF_SIGHT_COUNT_BASE + id.x] = (visible ? 1u : 0u) | (within ? 2u : 0u);
         }
         return;
     }
@@ -219,6 +425,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             );
 
             sdfMeshOcclusionDepthRW[sdfOcclusionWord(dims, level, texel)] = farthest;
+            if (sdfOcclusionNearChain()) {
+                uint nearest = min(
+                    min(sdfOcclusionNearTexel(dims, (level - 1u), child), sdfOcclusionNearTexel(dims, (level - 1u), uint2(other.x, child.y))),
+                    min(sdfOcclusionNearTexel(dims, (level - 1u), uint2(child.x, other.y)), sdfOcclusionNearTexel(dims, (level - 1u), other))
+                );
+
+                sdfMeshOcclusionDepthRW[sdfOcclusionNearWord(dims, level, texel)] = nearest;
+            }
         }
 
         // The pyramid counts nothing: the pass's texels stay the fragments its two phases write, which the box cull
@@ -248,15 +462,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint slices = ((header.w >> 8u) & 0xFFu) + 1u;
     uint slice = ((header.w >> 16u) & 0xFFu);
 
-    // Each phase draws one command a candidate, empty or not.
-    if (id.x == 0u) {
-        sdfMeshOcclusionCountsRW[((step == SDF_OCCLUSION_LATE_STEP) ? 1u : 0u)] = header.x;
-        if (splitExit && step == SDF_OCCLUSION_EARLY_STEP) {
-            sdfMeshOcclusionCountsRW[2] = header.x;
-            sdfMeshOcclusionCountsRW[3] = header.x;
-            if (optical) { sdfMeshOcclusionCountsRW[4] = header.x; }
-        }
-    }
     if (id.x < header.x) {
         uint draw = id.x;
         uint record = sdfMeshRecord(draw);

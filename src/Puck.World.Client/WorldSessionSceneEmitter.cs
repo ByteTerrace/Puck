@@ -467,6 +467,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 : WorldWindowFrustumFit.ShownHeight(fitted: in camera, viewerPixelsPerMetre: (ViewerPixelsPerMetre?.Invoke() ?? 0f))),
             DemandWithinView = (fitted is not null),
             Quality = (Session?.NestedViewQuality(view: ViewName) ?? default),
+            RenderScale = (((Session is { } settings) && (ViewName is { } name)) ? settings.Ceiling(view: name) : 1f),
             // A window shows the luminance beyond its glass, which the view looking through it exposes.
             Unexposed = (m_windowFit is not null),
         });

@@ -432,8 +432,11 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_OCCLUSION_SIGHT_STEP", value: SdfKernelInterfaces.MeshOcclusionSightStep);
         declarations.Count(name: "SDF_RECEIVER_STEP", value: SdfKernelInterfaces.MeshReceiverStep);
         declarations.Count(name: "SDF_RECEIVER_REDUCE_STEP", value: SdfKernelInterfaces.MeshReceiverReduceStep);
+        declarations.Count(name: "SDF_OCCLUSION_COUNT_STEP", value: SdfKernelInterfaces.MeshOcclusionCountStep);
+        declarations.Count(name: "SDF_OCCLUSION_COMPACT_STEP", value: SdfKernelInterfaces.MeshOcclusionCompactStep);
         declarations.Count(name: "SDF_RECEIVER_SHIFT", value: SdfKernelInterfaces.MeshReceiverShift);
         declarations.Count(name: "SDF_RECEIVER_ROW", value: SdfKernelInterfaces.MeshReceiverRow);
+        declarations.Count(name: "SDF_COMPACT_ROW", value: SdfKernelInterfaces.MeshCompactRow);
         declarations.Count(name: "SDF_SIGHT_ROW", value: SdfKernelInterfaces.MeshSightRow);
         declarations.Count(name: "SDF_SIGHT_COUNT_BASE", value: SdfKernelInterfaces.MeshSightCountBase);
         declarations.Count(name: "SDF_MESH_MARK_BASE", value: SdfKernelInterfaces.MeshMarkBase);

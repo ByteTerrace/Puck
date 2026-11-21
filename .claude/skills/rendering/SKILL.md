@@ -1054,10 +1054,18 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   dresses: seat views, the operator pose and `views.layouts` slots that name a
   camera. A camera view a screen films and a session view take the nested
   quality (`WorldRenderSettings.NestedRestriction`, `NestedViewQuality`): the
-  presentation's own, with what the world's `render.nested` table gives up at
+  presentation's own, with what the presentation's nested table gives up at
   the view's presented share of the display, and `Temporal` off, which
-  `SdfViewQuality.Restrict` ANDs, so they never jitter. With no table a nested
-  view gives up nothing else, so a portal is lit as the room behind it.
+  `SdfViewQuality.Restrict` ANDs, so they never jitter. The table is the running
+  quality preset's or device table's `nested`, else the world's `render.nested`
+  (`WorldRenderSettings.NestedRows`, chosen by the `nested-table` lever a preset
+  writes). Each named view holds its row until its share falls to
+  `NestedHysteresis` of a lower row's bound (`NestedRowIndex`), since a row change
+  rebuilds the view's graph and redraws its cascades cold. Every nested view's
+  render-scale ceiling is the presentation's own, and its row's `renderScale`
+  below it (`WorldRenderSettings.Ceiling`, through `DressResolution`). With no
+  table a nested view gives up nothing else, so a portal is lit as the room
+  behind it.
 - **A settled capture cannot show what changes between frames.** Flicker
   (jitter moiré on a screen, a still scene whose pixels change), ghosting and
   trails show only in a presented capture (`FrameCaptureMode.Presented`:
@@ -1563,9 +1571,16 @@ by its fence share is GPU back-pressure, not CPU work.
   `@held`. A settled capture (`IRenderGraphInstances.SettledCapturePath`) turns the graph host's
   levers off. `SdfPortalSight` supplies completed per-consumer slab tests from the mesh pass's existing
   farthest-depth pyramid. `SdfMeshOcclusion` dispatches one additional workgroup through `sdfOcclusionMaySee`
-  and reads its result only once its node proves the frame slot complete. A changed camera or slab, unknown result, or replaced
-  view/program retains demand. Occlusion is presentation evidence from an earlier completed frame;
-  moving occluders carry that delay. Settled captures and non-occlusion cull modes bypass it.
+  and reads its result only once its node proves the frame slot complete. A verdict reaches the host frames after
+  its camera, so each test also asks `sdfOcclusionHiddenWithin` whether the slab stays hidden from every eye within a
+  reach (`SdfPortalSight.Capture`: eight of the eye's latest steps, 5 cm to 2 m), reading the pyramid's nearest chain
+  (header flag 64, built beside the farthest only for a pass with portal sight): it widens the slab's region by the
+  parallax an occluder at the region's nearest depth can show across the reach, and needs that region whole on
+  screen. `SdfPortalSight.Occluded` is the one door: a slab is hidden only for the camera its test ran for, or for a
+  later eye inside that test's reach. The test takes the occluders' depth surface as closed across its steps, so a hole
+  a nearer occluder hides from the tested eye is assumed absent; that is where the guarantee stops. A changed slab,
+  unknown result, or replaced view/program retains demand. Occlusion is presentation evidence from an earlier completed
+  frame; moving occluders carry that delay. Settled captures and non-occlusion cull modes bypass it.
 - **A hidden window renders until its world is resident.** `WorldViewGraphHost.ReserveArrivals` keeps one window,
   and the windows on the way to it, at `WorldPortalVisibility.ArrivalShare` for each world a rendered view leads to
   whose `SdfWorldResidency.MeshesArriving` holds: its bake pending, or its region owing words or their upload. A

@@ -1080,9 +1080,10 @@ its own measured clock, never through the host's presentation clock—independen
 remote worlds do not share a presentation coordinate. It lights the destination under the
 destination's own sky and lighting, its keys read on the destination's own clocks, and its sky clock
 (star twinkle, cloud drift) is the destination's delivered engine tick. Its view renders at the
-viewer's quality, giving up only what the viewer's nested-view table (`render.nested`) says at the
-share of the display the view is presented at (`WorldRenderSettings.NestedViewQuality`), and with no
-far bound. The same table names the irradiance-volume levels the destination measures
+viewer's quality, giving up only what the viewer's nested-view table (its quality preset's or device
+table's `nested`, else `render.nested`) says at the share of the display the view is presented at
+(`WorldRenderSettings.NestedViewQuality`), at the viewer's render-scale ceiling or its row's below it,
+and with no far bound. The same table names the irradiance-volume levels the destination measures
 (`WorldRenderSettings.NestedIndirectLevels`), and the destination's background work draws on the
 presentation's one budget by the share of the display's pixels the view covers
 (`WorldRenderSettings.NestedDisplayShare`).
