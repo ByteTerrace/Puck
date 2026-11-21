@@ -148,6 +148,15 @@ public sealed class StateReadAccess {
         key = LocalKey(source);
         return true;
     }
+    /// <summary>Walks admitted membership in its current order, reading each member's live number from the slot the
+    /// walk found (<see cref="StateArena.TryNextLiveNumber"/>).</summary>
+    public bool TryNextLiveNumber(StateReadRow rowOrdinal, ref int cursor, in ArenaTime time, out CellKey key, out long value) {
+        var row = Require(rowOrdinal);
+        key = default;
+        if (!m_arena.TryNextLiveNumber(row, ref cursor, in time, out var source, out value)) { return false; }
+        key = LocalKey(source);
+        return true;
+    }
     /// <summary>Reads one admitted member's key by position.</summary>
     public bool TryKeyAt(StateReadRow rowOrdinal, int position, out CellKey key) {
         key = default;

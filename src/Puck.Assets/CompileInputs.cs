@@ -21,6 +21,12 @@ public enum CompileInputKind {
     /// (<see cref="CompileInputs.RegisterDeclarer"/>), so it holds while the file declares the same, whatever else in it
     /// changed: an edit to a value in a sibling a compile only resolved a name in leaves that compile standing.</summary>
     Declaration = 4,
+    /// <summary>The compile read which names the files directly in the directory at the path claim, as the declarer the
+    /// fact names reads them (<see cref="CompileInputs.RegisterDeclarer"/>). The fact is the declarer's name, a <c>/</c>,
+    /// and the digest of the claims' canonical text, so it holds while the directory's claiming files and what each
+    /// claims are the same, whatever else in them or beside them changed: one fact for the directory where a listing and
+    /// a declaration per file would otherwise stand.</summary>
+    Claims = 5,
 }
 /// <summary>One fact a compile read from the file system, and what must still hold for its output to stand.</summary>
 /// <param name="Path">The path exactly as the compile spelled it; a relative path is resolved against the current
@@ -28,12 +34,15 @@ public enum CompileInputKind {
 /// <param name="Kind">What the compile learned.</param>
 /// <param name="ContentHash">The <see cref="ContentPin.Hex"/> of the bytes read, for <see cref="CompileInputKind.Content"/>,
 /// or of the names listed, for <see cref="CompileInputKind.Listing"/>; for <see cref="CompileInputKind.Declaration"/>, the
-/// declarer's name, a <c>/</c>, and the <see cref="ContentPin.Hex"/> of what the file declares; empty otherwise.</param>
+/// declarer's name, a <c>/</c>, and the <see cref="ContentPin.Hex"/> of what the file declares; for
+/// <see cref="CompileInputKind.Claims"/>, the declarer's name, a <c>/</c>, and the <see cref="ContentPin.Hex"/> of what the
+/// directory's files claim; empty otherwise.</param>
 public readonly record struct CompileInput(string Path, CompileInputKind Kind, string ContentHash) {
-    /// <summary>Gets this fact as a question: its path and kind, and for a declaration the declarer that answers it,
-    /// without the answer the compile read. <see cref="CompileInputs.Current"/> answers it as it answers the fact.</summary>
+    /// <summary>Gets this fact as a question: its path and kind, and for a declaration or claims the declarer that
+    /// answers it, without the answer the compile read. <see cref="CompileInputs.Current"/> answers it as
+    /// it answers the fact.</summary>
     public CompileInput Question => (this with {
-        ContentHash = ((Kind == CompileInputKind.Declaration)
+        ContentHash = ((Kind is (CompileInputKind.Declaration or CompileInputKind.Claims))
             ? CompileInputs.DeclarerPrefix(contentHash: ContentHash)
             : string.Empty),
     });
@@ -76,6 +85,7 @@ public sealed class CompileInputLog {
         lock (m_lock) {
             if (m_seen.Add(item: (input.Path, input.Kind))) {
                 m_inputs.Add(item: input);
+                CompileInputs.CountRecorded();
             }
         }
     }
@@ -100,7 +110,8 @@ public sealed class CompileInputLog {
 /// A declaration (<see cref="CompileInputKind.Declaration"/>) is answered by the declarer registered under the name the
 /// fact carries (<see cref="RegisterDeclarer"/>), from the file's digest: a declarer holds what each digest declares, so
 /// asking about an unchanged file again reads nothing, and asking about an edited one reads it once. A declarer this
-/// process has not registered answers nothing a recorded fact can equal, so the fact does not hold.
+/// process has not registered answers nothing a recorded fact can equal, so the fact does not hold. A claims fact
+/// (<see cref="CompileInputKind.Claims"/>) is answered by the same declarer, from the directory.
 /// </para>
 /// </summary>
 public static class CompileInputs {
@@ -117,8 +128,10 @@ public static class CompileInputs {
     // path had when it was read.
     private static readonly ConcurrentDictionary<string, Known> Remembered = new(comparer: Puck.Abstractions.PuckPaths.Comparer);
     // Each declarer by name: from a file's digest, and a reader of its bytes for a digest the declarer does not hold,
-    // the canonical text of what the file declares.
-    private static readonly ConcurrentDictionary<string, Func<string, Func<byte[]>, string>> Declarers = new(comparer: StringComparer.Ordinal);
+    // the canonical text of what the file declares; and from a directory, the canonical text of what the files
+    // directly in it claim, read through this door without recording.
+    private static readonly ConcurrentDictionary<string, Declarer> Declarers = new(comparer: StringComparer.Ordinal);
+    private sealed record Declarer(Func<string, Func<byte[]>, string> Declare, Func<string, string> Claim);
     // A declaration fact's hash by declarer and file digest: what a file declares is a function of its bytes alone, so
     // its canonical text is built and digested once per declarer and digest, under the running code.
     private static readonly CodeDerivedCache<(string Declarer, string Digest), string> DeclaredHashes = new(capacity: MaxRememberedPaths);
@@ -126,10 +139,16 @@ public static class CompileInputs {
     private static readonly AsyncLocal<PassMemo?> Passing = new();
     private static long StampReadCount;
     private static long ContentReadCount;
+    private static long RecordedCount;
 
     /// <summary>Gets the number of file and directory stamps the door has read in this process: one per question it
     /// answered from the file system.</summary>
     public static long StampReads => Interlocked.Read(location: ref StampReadCount);
+    /// <summary>Gets the number of facts recorded into logs in this process, each counted once per log that holds it:
+    /// what held compiles carry and what proving them again reads.</summary>
+    public static long RecordedFacts => Interlocked.Read(location: ref RecordedCount);
+
+    internal static void CountRecorded() => Interlocked.Increment(location: ref RecordedCount);
     /// <summary>Gets the number of file contents the door has read and directories it has listed in this process,
     /// which it does only for a path whose stamp does not vouch for the answer it last read.</summary>
     public static long ContentReads => Interlocked.Read(location: ref ContentReadCount);
@@ -151,6 +170,7 @@ public static class CompileInputs {
         public ConcurrentDictionary<string, FileAnswer> Files { get; } = new(comparer: Puck.Abstractions.PuckPaths.Comparer);
         public ConcurrentDictionary<string, (string[] Names, string Hash)> Listings { get; } = new(comparer: Puck.Abstractions.PuckPaths.Comparer);
         public ConcurrentDictionary<string, IReadOnlyList<string>> Joined { get; } = new(comparer: StringComparer.Ordinal);
+        public ConcurrentDictionary<(string Declarer, string Directory), (string Hash, object Value)> Claims { get; } = new();
     }
 
     private static void Add(CompileInput input) {
@@ -271,14 +291,22 @@ public static class CompileInputs {
             return new CompileInput(ContentHash: hash, Kind: CompileInputKind.Listing, Path: query.Path);
         }
 
-        if (query.Kind == CompileInputKind.Declaration) {
+        if (query.Kind is (CompileInputKind.Declaration or CompileInputKind.Claims)) {
             var prefix = DeclarerPrefix(contentHash: query.ContentHash);
 
             if ((prefix.Length == 0) || !Declarers.TryGetValue(key: prefix[..^1], value: out var declarer)) {
                 read = false;
 
-                // A recorded declaration is never empty, so an unregistered declarer's fact never holds.
-                return new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Declaration, Path: query.Path);
+                // A recorded declaration or claims fact is never empty, so an unregistered declarer's fact never holds.
+                return new CompileInput(ContentHash: string.Empty, Kind: query.Kind, Path: query.Path);
+            }
+            if (query.Kind == CompileInputKind.Claims) {
+                var contentReads = ContentReads;
+                var claimed = ClaimsHash(canonical: Unrecorded(read: () => declarer.Claim(arg: query.Path)), declarer: prefix[..^1]);
+
+                read = (ContentReads != contentReads);
+
+                return new CompileInput(ContentHash: claimed, Kind: CompileInputKind.Claims, Path: query.Path);
             }
 
             var fileDigest = Answer(path: query.Path, content: out var bytes, read: out read, wantDigest: true);
@@ -288,7 +316,7 @@ public static class CompileInputs {
             }
 
             var wasRead = read;
-            var hash = DeclaredHash(declare: declarer, declarer: prefix[..^1], digest: fileDigest, read: () => {
+            var hash = DeclaredHash(declare: declarer.Declare, declarer: prefix[..^1], digest: fileDigest, read: () => {
                 wasRead = true;
 
                 return (bytes ??= ReadRemembering(hash: out _, path: query.Path));
@@ -418,22 +446,75 @@ public static class CompileInputs {
 
         return digest;
     }
-    /// <summary>Registers the declarer a declaration fact names (<see cref="CompileInputKind.Declaration"/>), so this
-    /// process can answer whether such a fact still holds. A declarer registers once, before any compile records or
-    /// checks one of its facts; the first registration of a name stands.</summary>
+    /// <summary>Registers the declarer a declaration or claims fact names (<see cref="CompileInputKind.Declaration"/>,
+    /// <see cref="CompileInputKind.Claims"/>), so this process can answer whether such a fact still holds. A declarer
+    /// registers once, before any compile records or checks one of its facts; the first registration of a name
+    /// stands.</summary>
     /// <param name="name">The declarer's name, which the facts it answers carry; it holds no <c>/</c>.</param>
     /// <param name="declare">From a file's digest, and a reader of its bytes for a digest the declarer does not hold,
     /// the canonical text of what the file declares: a function of the bytes alone.</param>
+    /// <param name="claim">From a directory, the canonical text of what the files directly in it claim: the same text
+    /// <see cref="Claim{T}"/>'s build answers for that directory, read through this door.</param>
     /// <exception cref="ArgumentException"><paramref name="name"/> is empty or holds a <c>/</c>.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="declare"/> is <see langword="null"/>.</exception>
-    public static void RegisterDeclarer(string name, Func<string, Func<byte[]>, string> declare) {
+    /// <exception cref="ArgumentNullException"><paramref name="declare"/> or <paramref name="claim"/> is
+    /// <see langword="null"/>.</exception>
+    public static void RegisterDeclarer(string name, Func<string, Func<byte[]>, string> declare, Func<string, string> claim) {
         ArgumentException.ThrowIfNullOrEmpty(argument: name);
         ArgumentNullException.ThrowIfNull(argument: declare);
+        ArgumentNullException.ThrowIfNull(argument: claim);
         if (name.Contains(value: '/')) {
             throw new ArgumentException(message: "A declarer's name holds no '/'.", paramName: nameof(name));
         }
 
-        _ = Declarers.TryAdd(key: name, value: declare);
+        _ = Declarers.TryAdd(key: name, value: new Declarer(Claim: claim, Declare: declare));
+    }
+    /// <summary>Reads what the files directly in <paramref name="directory"/> claim through <paramref name="build"/>,
+    /// recording one claims fact (<see cref="CompileInputKind.Claims"/>) under the registered declarer named
+    /// <paramref name="declarer"/> in place of everything the build read: the build's own reads are not recorded, so a
+    /// compile that resolves a name among the directory's files stands while what they claim is the same. Within a
+    /// <see cref="Pass"/> the build runs once per declarer and directory, and each later read records the same fact.</summary>
+    /// <typeparam name="T">What the caller learns from the claims.</typeparam>
+    /// <param name="directory">The directory, spelled as the fact records it.</param>
+    /// <param name="declarer">The registered declarer's name (<see cref="RegisterDeclarer"/>).</param>
+    /// <param name="build">From the directory, what the caller learns and the canonical text of the claims, which
+    /// must equal what the registered declarer's claim answers for the same directory.</param>
+    /// <returns>What <paramref name="build"/> returned, or what it returned earlier in the same pass.</returns>
+    /// <exception cref="ArgumentException"><paramref name="declarer"/> is not registered, or
+    /// <paramref name="directory"/> is empty.</exception>
+    public static T Claim<T>(string directory, string declarer, Func<string, (T Value, string Canonical)> build) where T : class {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
+        ArgumentNullException.ThrowIfNull(argument: build);
+        if (!Declarers.ContainsKey(key: declarer)) {
+            throw new ArgumentException(message: $"No declarer named '{declarer}' is registered.", paramName: nameof(declarer));
+        }
+
+        var pass = Passing.Value;
+
+        if ((pass is not null) && pass.Claims.TryGetValue(key: (declarer, directory), value: out var held)) {
+            Add(input: new CompileInput(ContentHash: held.Hash, Kind: CompileInputKind.Claims, Path: directory));
+
+            return ((T)held.Value);
+        }
+
+        var (value, canonical) = Unrecorded(read: () => build(arg: directory));
+        var hash = ClaimsHash(canonical: canonical, declarer: declarer);
+
+        _ = pass?.Claims.TryAdd(key: (declarer, directory), value: (hash, value));
+        Add(input: new CompileInput(ContentHash: hash, Kind: CompileInputKind.Claims, Path: directory));
+
+        return value;
+    }
+    private static string ClaimsHash(string declarer, string canonical) => string.Concat(str0: declarer, str1: "/", str2: ContentPin.OfText(text: canonical).Hex);
+    // Runs a read on the calling flow with no recording, so the facts it reads are not facts of the compile.
+    private static T Unrecorded<T>(Func<T> read) {
+        var recording = Recording.Value;
+
+        Recording.Value = null;
+        try {
+            return read();
+        } finally {
+            Recording.Value = recording;
+        }
     }
     /// <summary>Reads what the file at <paramref name="path"/> declares through <paramref name="learn"/>, recording
     /// the declaration (<see cref="CompileInputKind.Declaration"/>) under the registered declarer named
@@ -469,7 +550,7 @@ public static class CompileInputs {
         byte[] Read() => (content ??= ReadRemembering(hash: out _, path: path));
         var value = learn(arg1: digest, arg2: Read);
 
-        Add(input: new CompileInput(ContentHash: DeclaredHash(declare: declare, declarer: declarer, digest: digest, read: Read), Kind: CompileInputKind.Declaration, Path: path));
+        Add(input: new CompileInput(ContentHash: DeclaredHash(declare: declare.Declare, declarer: declarer, digest: digest, read: Read), Kind: CompileInputKind.Declaration, Path: path));
 
         return value;
     }

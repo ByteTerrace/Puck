@@ -17,6 +17,27 @@ public interface ITimeTravelMachineCore<TInput> {
     long NativeFrameIndex { get; }
     /// <summary>Gets the core's current native framebuffer as packed <c>0x00RRGGBB</c> pixels.</summary>
     ReadOnlySpan<uint> Framebuffer { get; }
+    /// <summary>Gets the core's current machine-cycle rate: constant hardware for a fixed-rate core, or one whose
+    /// <see cref="MachineCycleRate.Cycles"/> tracks a live clock-multiplier latch. A host converts each engine-tick
+    /// budget against it through a remainder-carrying accumulator, so a varying rate carries no drift; the rate's
+    /// <see cref="MachineCycleRate.Seconds"/> stays constant for the core's lifetime. A cable-linked group reports the
+    /// one rate its medium budgets every member by.</summary>
+    MachineCycleRate CycleRate { get; }
+    /// <summary>Gets whether <see cref="RunCycles"/> measures each budget from the end of the previous one, so the
+    /// cycles an instruction ran past one budget come out of the next (<see langword="true"/>), or from where the clock
+    /// stands when it is called (<see langword="false"/>). A host that runs one budget in parts
+    /// (<see cref="MachineSegment"/>) reads it to make the parts end where the whole budget would have: a core that
+    /// does not carry its overshoot is given each part less what the part before it overran.</summary>
+    bool CarriesBudgetOvershoot { get; }
+    /// <summary>Gets the master cycles from now until the frame being drawn is complete, at least one: the next instant
+    /// at which <see cref="Framebuffer"/> holds one whole frame and nothing of the next. A host that shows every native
+    /// frame divides a budget there and copies the framebuffer. A core that latches its completed frame may answer an
+    /// estimate, since a copy a little late still reads the same frame; a core that draws in place answers exactly, or
+    /// a late copy would hold part of the next frame.</summary>
+    long CyclesToFrameEnd { get; }
+    /// <summary>Gets the master cycles one native frame takes, at least one, which with <see cref="CycleRate"/> states
+    /// the machine's native frame rate. A machine whose frames differ by a cycle or two answers the longer.</summary>
+    long CyclesPerFrame { get; }
 
     /// <summary>Serializes the core's whole mutable state into <paramref name="buffer"/>, growing it in place when it is
     /// too small (so a steady-state capture allocates nothing), and returns the byte length written.</summary>

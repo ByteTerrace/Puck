@@ -163,6 +163,14 @@ view and has never rendered: it never holds the other screens' records. Every
 actual image load and every written record is counted. The 512-byte residency
 buffer, one record per screen slot, is shared by all views.
 
+A display's light reaches as far as a point light of its intensity at its peak
+luminance would (its face's area times the luminance a picture value of one
+shows at, sized by `SdfPhotometry.RangeOf` at the world's brightest exposure),
+and is eased to exactly zero there (`sdfLightWindow`); its mean is held at that
+peak. A view past every changed screen's range keeps its shading standing while
+the screens play. An opening shows luminance no peak bounds, so its light reaches
+everywhere.
+
 Worlds that show each other light each other through ordinary frame feedback:
 each reduction reads the image the other world last completed, so the glow
 settles over a few frames and follows a moving scene, and nothing holds a frame

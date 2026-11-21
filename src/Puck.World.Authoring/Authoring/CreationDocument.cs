@@ -623,13 +623,20 @@ public sealed record CreationSoundDocument(
 /// reduced tiers (<c>world.rates bodies</c>: at least 30 or 15 updates a second) while it stands small on every view
 /// that may see it. Null or false = full rate wherever anything may show or read it; a copy nothing may show holds
 /// either way. A body-rooted creation takes the reduced tiers whatever this says.</param>
+/// <param name="RestRate">The most often a body wearing the creation re-poses while it rests, in updates a second: while
+/// its root and every input its rig reads stand as they stood at its last pose, its idle motion (a breath, a sway) updates
+/// at most this often. Null = as often as the motion its parts were measured to make needs (the update-rate lever's tiers,
+/// <c>world.rates bodies</c>). A stride or any other input that starts the body moving poses it on that frame whatever
+/// this says. Positive; a value of 60 or more is every frame.</param>
 public sealed record CreationBehaviorDocument(
     string? Locomotion,
     IReadOnlyList<CreationFaceDocument>? Faces,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CreationSoundDocument>? Sounds = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    bool? ReducedRateAtDistance = null
+    bool? ReducedRateAtDistance = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    float? RestRate = null
 );
 /// <summary>
 /// The <c>puck.creation.v1</c> document — an authored scene as data, the everything-as-data payoff for authoring: a

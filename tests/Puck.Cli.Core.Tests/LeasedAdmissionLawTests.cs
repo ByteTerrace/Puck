@@ -74,5 +74,32 @@ public sealed class LeasedAdmissionLawTests : IDisposable {
         using var next = await CliLease.AcquireAsync(m_root, "heavy", "b", TimeSpan.Zero, TimeProvider.System, m_root, Token);
     }
 
+    // Admitted heavy holds share the lease's slots, each recording its kind and device for other processes' admission; an
+    // exclusive hold and a quiet window wait for every slot to drain, and a shared hold waits while an exclusive one runs.
+    [Fact]
+    public async Task AdmittedHeavyHoldsShareTheLeaseWhileExclusiveAndQuietHoldsWaitForAllToDrain() {
+        HostAdmit admit = (_, _, _, _, _, _, _, _, _, _) => Task.FromResult(true);
+        Task<CliLease> Take(string lane, TimeSpan wait, bool exclusive = false, bool device = false) => LeasedAdmission.AcquireAsync(m_root, "heavy", lane + " run", lane, admit,
+            m_root, lane, device, true, HostStartKind.ReproduceReplica, TimeProvider.System, wait, TextWriter.Null, null, Token, exclusive);
+
+        using (var a = await Take("a", TimeSpan.Zero))
+        using (var b = await Take("b", TimeSpan.Zero, device: true)) {
+            Assert.Equal(["a run", "b run"], CliLease.Inspect(m_root, "heavy", DateTimeOffset.UtcNow).Holders.Select(held => held.Holder));
+            Assert.Equal([("heavy", "a run", HostStartKind.ReproduceReplica, false), ("heavy", "b run", HostStartKind.ReproduceReplica, true)],
+                CliLease.AdmittedHolds(m_root, DateTimeOffset.UtcNow).Select(hold => (hold.Lease, hold.Holder, hold.Kind, hold.Device)));
+            await Assert.ThrowsAsync<TimeoutException>(() => Take("c", TimeSpan.Zero, exclusive: true));
+            await Assert.ThrowsAsync<TimeoutException>(() => CliLease.AcquireQuietAsync(m_root, "measurement", TimeSpan.Zero, TimeProvider.System, m_root, Token));
+        }
+        using (var alone = await Take("c", TimeSpan.Zero, exclusive: true)) {
+            Assert.True(Assert.Single(CliLease.Inspect(m_root, "heavy", DateTimeOffset.UtcNow).Holders).Exclusive);
+            await Assert.ThrowsAsync<TimeoutException>(() => Take("d", TimeSpan.Zero));
+        }
+        // A heavy hold without an admission has nothing measuring whether a second fits, so it runs alone.
+        using (var unmeasured = await CliLease.AcquireAsync(m_root, "heavy", "e run", TimeSpan.Zero, TimeProvider.System, m_root, Token)) {
+            await Assert.ThrowsAsync<TimeoutException>(() => Take("d", TimeSpan.Zero));
+        }
+        using var d = await Take("d", TimeSpan.Zero);
+    }
+
     public void Dispose() => ConfinedDirectory.RemoveTree(m_root);
 }

@@ -5,8 +5,8 @@ namespace Puck.Cli;
 /// starts (each replica of <c>puck test --reproduce</c> and <c>--workers</c>, a sweep's legs, a canary's boots); a World
 /// booted inside this process (<c>puck bench</c>, <c>puck determinism</c>) passes it through <see cref="WaitInProcess"/>.
 /// The wait is the admission's own bounded, heartbeat-printing wait on the host's timer, never a spin, and the waiting
-/// process's own descendants hold back neither a heavy-suite wait nor a device step's wait for an idle GPU, so a verb
-/// under <c>puck lease heavy</c> or the gate does not wait on its own runs.</summary>
+/// process's own descendants and the holds of its ancestors hold back neither a heavy start's CPU wait nor a device step's
+/// wait for an idle GPU, so a verb under <c>puck lease heavy</c> or the gate does not wait on its own runs.</summary>
 public static class WorldAdmission {
     private static HostAdmit? Installed = Host.HostAdmission.For(clock: TimeProvider.System);
 

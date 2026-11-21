@@ -315,7 +315,7 @@ public sealed class AddonPrepareGateLawTests {
         );
     }
     [Fact]
-    public void UndoDisposesEveryIntermediateProbe_CommitsOnlyTheFinalReconcilePlan() {
+    public void UndoPreparesAndCommitsOnlyTheFinalReconcilePlan() {
         using var fixture = Fixtures.FreshServer();
         var host = new RecordingAddonHost();
 
@@ -336,25 +336,10 @@ public sealed class AddonPrepareGateLawTests {
         );
         fixture.Step();
 
-        // ApplyUndo re-plays the ONE kept journal entry (UpsertAddon 'a') as a throwaway probe — proved fallible,
-        // never committed, disposed immediately — then runs ONE final current-to-candidate reconcile that actually
-        // commits.
-        Assert.Equal(
-            expected: 2,
-            actual: host.LivePlans.Count
-        );
+        // ApplyUndo replays the kept journal entry (UpsertAddon 'a') through compose alone and prepares addons once, for
+        // the document it installs: ONE current-to-candidate reconcile that commits.
+        var final = Assert.Single(collection: host.LivePlans);
 
-        var probe = host.LivePlans[0];
-        var final = host.LivePlans[1];
-
-        Assert.True(
-            condition: probe.Disposed,
-            userMessage: "the intermediate undo probe was never disposed"
-        );
-        Assert.False(
-            condition: probe.Committed,
-            userMessage: "the intermediate undo probe must never commit"
-        );
         Assert.False(
             condition: final.Disposed,
             userMessage: "the final undo reconcile plan must not be disposed after it commits"

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -14,9 +15,10 @@ public sealed partial class WorldDocument {
     // The buffered live-edit ops (mutations, whole-document swaps, journal undo), drained FIFO at the step boundary
     // BEFORE intents. New allocation lives here, at the mutation boundary; an idle tick pays one empty-queue check.
     private readonly Queue<WorldPendingOp> m_pending = new();
-    // The mutation journal — the undo engine. m_base is the loaded base definition (reset by a swap or world.save
-    // compaction); m_journal is the append-only edit history over it. dirty == m_journal.Count.
-    private readonly List<WorldJournalEntry> m_journal = new();
+    // The edit journal — the undo engine. m_base is the loaded base definition (reset by a swap or world.save
+    // compaction); m_journal is the edit history over it. Every change replaces the list (SetJournal, AppendJournal), so
+    // one instance names one journal, and a history keyframe proves the live journal is its own by reference.
+    private ImmutableList<WorldJournalEntry> m_journal = [];
     // A human-readable description of m_base's origin — world.reset's read-back rule ("the completion echo names
     // what was reset to"). Set at construction (the boot document), replaced by Compact (world.save — "the last
     // world.save") and by ApplyRebuild's Load/Reload arm (a new base replaces the old one, exactly like a swap
@@ -60,10 +62,26 @@ public sealed partial class WorldDocument {
     /// <summary>Gets the server whose arena, entity table, grants and narration this pipeline runs against.</summary>
     private WorldServer Host => m_host;
 
-    /// <summary>Gets the applied-mutation journal over the base.</summary>
-    internal List<WorldJournalEntry> Journal => m_journal;
-    /// <summary>Gets the journal length — the number of applied mutations over the base.</summary>
+    /// <summary>Gets the edit journal over the base: an immutable list each change replaces.</summary>
+    internal ImmutableList<WorldJournalEntry> Journal => m_journal;
+    /// <summary>Gets the journal length — the number of entries over the base, undone ones included.</summary>
     internal int JournalLength => m_journal.Count;
+
+    /// <summary>Replaces the edit journal.</summary>
+    /// <param name="journal">The journal the base now carries.</param>
+    internal void SetJournal(ImmutableList<WorldJournalEntry> journal) => m_journal = journal;
+
+    // Appends an entry. An entry its author made clears that author's undone entries: a principal's next edit ends what
+    // that principal could redo.
+    private void AppendJournal(WorldJournalEntry entry) {
+        var journal = m_journal;
+
+        if (entry.Authored) {
+            var author = entry.Author;
+            journal = journal.RemoveAll(match: held => (held.Undone && (held.Author == author)));
+        }
+        m_journal = journal.Add(value: entry);
+    }
     /// <summary>Gets or sets the most recent visiting-world durable-state verdict.</summary>
     internal WorldDocumentSubmissionReceipt? LastDocumentReceipt {
         get => m_lastDocumentReceipt;
@@ -129,7 +147,7 @@ public sealed partial class WorldDocument {
     internal void Compact() {
         m_base = Host.MaterializeArena();
         m_baseOrigin = new WorldBaseOrigin(Kind: WorldBaseOriginKind.Save);
-        m_journal.Clear();
+        m_journal = [];
     }
     /// <summary>Restores the solid field and its revision verbatim from a checkpoint.</summary>
     /// <param name="solids">The captured field.</param>

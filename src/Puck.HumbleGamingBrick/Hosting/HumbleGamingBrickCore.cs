@@ -24,6 +24,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     private readonly IFramebuffer m_framebuffer;
     private readonly IJoypad m_joypad;
     private readonly ILightGun m_lightGun;
+    private readonly Ppu m_ppu;
     private readonly SystemBus m_systemBus;
     private readonly ITiltSensor m_tiltSensor;
 
@@ -67,6 +68,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
         m_framebuffer = m_machine.GetRequiredService<IFramebuffer>();
         m_joypad = m_machine.GetRequiredService<IJoypad>();
         m_lightGun = m_machine.GetRequiredService<ILightGun>();
+        m_ppu = m_machine.GetRequiredService<Ppu>();
         m_systemBus = m_machine.GetRequiredService<SystemBus>();
         m_tiltSensor = m_machine.GetRequiredService<ITiltSensor>();
 
@@ -87,6 +89,19 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     /// <inheritdoc/>
     public long CycleCount =>
         ((long)m_machine.Machine.Clock.CycleCount);
+    /// <inheritdoc/>
+    /// <remarks>The machine measures each budget from the end of the previous one (<see cref="RunCycles"/>).</remarks>
+    public bool CarriesBudgetOvershoot => true;
+    /// <inheritdoc/>
+    public long CyclesPerFrame => ((long)DotsPerFrame);
+    /// <inheritdoc/>
+    /// <remarks>The dots until the vertical blank begins, when the framebuffer the display draws in place holds one
+    /// whole frame. With the LCD off nothing is drawn, and the answer keeps the frame's cadence on the master clock.</remarks>
+    public long CyclesToFrameEnd =>
+        ((m_ppu.DotsToVerticalBlank is (> 0) and var dots)
+            ? dots
+            : ((long)(DotsPerFrame - (m_machine.Machine.Clock.CycleCount % DotsPerFrame)))
+        );
     /// <inheritdoc/>
     public ReadOnlySpan<uint> Framebuffer =>
         m_framebuffer.Pixels;

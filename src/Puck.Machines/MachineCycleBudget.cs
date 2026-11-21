@@ -25,6 +25,36 @@ public static class MachineCycleBudget {
             period: PhasePeriod(rate: rate),
             weight: checked((long)checked((ticks * rate.Cycles)))
         );
+    /// <summary>Returns the fewest engine ticks whose budget, taken from this phase at <paramref name="rate"/>, buys at
+    /// least <paramref name="cycles"/> machine cycles: the inverse of <see cref="TakeCycleBudget"/>, which a host uses to
+    /// end a part of a segment at an instant the machine names in its own cycles. The phase is read, not moved.</summary>
+    /// <param name="accumulator">The host pacer's phase.</param>
+    /// <param name="cycles">The machine cycles to reach; at least one.</param>
+    /// <param name="rate">The machine's current cycle rate.</param>
+    /// <returns>The engine ticks, at least one; <see cref="ulong.MaxValue"/> for a rate of zero cycles, which no
+    /// number of ticks reaches.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="cycles"/> is below one.</exception>
+    public static ulong TicksForCycles(this in RationalRateAccumulator accumulator, long cycles, MachineCycleRate rate) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            other: 1L,
+            value: cycles
+        );
+
+        if (rate.Cycles == 0UL) {
+            return ulong.MaxValue;
+        }
+
+        // The budget of t ticks is floor((phase + t × Cycles) / period), so t reaches `cycles` once
+        // phase + t × Cycles is at least cycles × period.
+        var owed = ((((Int128)cycles) * PhasePeriod(rate: rate)) - accumulator.Phase);
+        var ticks = owed.CeilingDivide(divisor: ((Int128)rate.Cycles));
+
+        return ((ulong)Int128.Clamp(
+            max: ulong.MaxValue,
+            min: Int128.One,
+            value: ticks
+        ));
+    }
     /// <summary>Gets the phase units in one machine cycle at <paramref name="rate"/>: a carried phase is always below
     /// it, which is how a restored phase is validated.</summary>
     /// <param name="rate">The rate whose phase scale to report.</param>

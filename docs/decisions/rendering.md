@@ -494,15 +494,22 @@ sign with its scope.
   entering does. A cull other than the one the scope held moves the revision,
   and no revision is ever reused, so a camera that returns to an earlier pose
   never returns to an earlier signature. What no draw's box bounds is named in
-  one place (`SdfWorldTables`' motion scopes): a skinned draw takes a host bound,
-  a light, a medium and a paint riding a slot take the box they reach, and a
-  whole-table seed moves every scope.
+  one place (`SdfWorldTables`' motion scopes): a skinned draw takes a host bound
+  under the shared rows and every view's pose overlay, written into its record so
+  every pass selects it by that bound; a light, a medium and a paint riding a
+  slot take the box they reach; a screen's emission takes the half sphere its
+  range reaches in front of its face; and a whole-table seed moves every scope.
+  A screen's light is eased to exactly zero at its range, sized from its peak
+  luminance as a point light's is, so a view past the range shows none of it.
+  Emission moves a scope's lighting revision, not its revision, since no pose
+  changed. The whole view signs with its scopes' revisions in place of the
+  residency's.
 - **Where the guarantee stops.** A kernel that starts reading a transform slot
   for something that list does not name leaves a pass standing on a stale image,
-  and nothing but that list catches it. The whole-view signature still folds the
-  residency-wide revisions, which is conservative. A scope bounds a skinned draw
-  on the host only: the selection kernel still draws every skinned draw in every
-  pass ([open](../plans/open-items.md#standing-passes)).
+  and nothing but that list catches it. An opening (a portal's window) shows
+  luminance no peak bounds, so its emission reaches every scope that shades.
+  The skinned bound is checked against the CPU twin of the pose
+  (`SdfMeshSkinBoundLawTests`), not against the kernel.
 - **At scale.** A zone is a world with its own residency, so a view pays for the
   movers some view of its own zone can show: a body no view or cascade can show
   already holds its pose (`SdfUpdateRates.Bodies`), and each one that moves is

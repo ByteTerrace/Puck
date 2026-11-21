@@ -124,8 +124,38 @@ public sealed partial class StateArena {
     /// <remarks>Visits every stored row shape without allocating or minting names. Ring traversal uses physical
     /// slot order; <see cref="ReadWord(int, in ArenaTime, Span{long}, int)"/> supplies chronological history instead.
     /// Structural edits and relayout invalidate an active cursor; snapshot keys before changing membership.</remarks>
-    public bool TryNextCell(int rowOrdinal, ref int cursor, out CellKey key) {
+    public bool TryNextCell(int rowOrdinal, ref int cursor, out CellKey key) => TryNextSlot(
+        cursor: ref cursor,
+        key: out key,
+        rowOrdinal: rowOrdinal,
+        slot: out _
+    );
+    /// <summary>Visits the next held cell exactly as <see cref="TryNextCell"/> does and reads its live number from the
+    /// slot the walk found, the answer <see cref="TryReadLiveNumber"/> gives for the returned key without resolving
+    /// that key back to its slot.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <param name="cursor">Start at zero; advances as <see cref="TryNextCell"/>'s does.</param>
+    /// <param name="time">The clocks the traits are evaluated against.</param>
+    /// <param name="key">The held cell's key, or the invalid default on exhaustion.</param>
+    /// <param name="value">The held cell's live raw value, or zero on exhaustion.</param>
+    /// <returns><see langword="true"/> when another held cell exists; a <see cref="CellKind.Text"/> or
+    /// <see cref="CellKind.Vector"/> row holds no number and answers <see langword="false"/> at once.</returns>
+    public bool TryNextLiveNumber(int rowOrdinal, ref int cursor, in ArenaTime time, out CellKey key, out long value) {
+        value = 0L;
+        if ((((uint)rowOrdinal) < ((uint)m_layout.RowCount)) && (m_layout[rowOrdinal].Kind is (CellKind.Text or CellKind.Vector))) {
+            key = default;
+            return false;
+        }
+        if (!TryNextSlot(cursor: ref cursor, key: out key, rowOrdinal: rowOrdinal, slot: out var slot)) {
+            return false;
+        }
+        value = LiveNumberAt(key: key, rowOrdinal: rowOrdinal, slot: slot, time: in time);
+        return true;
+    }
+    // The one held-cell walk: the next held slot of a row and the key it answers to.
+    private bool TryNextSlot(int rowOrdinal, ref int cursor, out CellKey key, out int slot) {
         key = default;
+        slot = -1;
         if ((((uint)rowOrdinal) >= ((uint)m_layout.RowCount)) || !m_layout[rowOrdinal].IsStored) {
             cursor = 0;
             return false;
@@ -135,14 +165,15 @@ public sealed partial class StateArena {
             ? (int)m_memberCounts[rowOrdinal] : layout.CellCapacity);
         if (UsesLinks(layout: layout)) {
             if ((cursor < 0) || (cursor >= extent)) { cursor = extent; return false; }
-            key = KeyAtSlot(layout: layout, slot: CellSlotAt(layout: layout, position: cursor++));
+            slot = CellSlotAt(layout: layout, position: cursor++);
+            key = KeyAtSlot(layout: layout, slot: slot);
             return key.IsValid;
         }
         var position = Math.Max(val1: 0, val2: cursor);
         var end = (layout.CellStart + extent);
 
         while (position < extent) {
-            var slot = CellSlotAt(layout: layout, position: position);
+            slot = CellSlotAt(layout: layout, position: position);
             var wordIndex = (slot >> 6);
             var word = m_presence[wordIndex] & (ulong.MaxValue << (slot & 63));
 
@@ -165,16 +196,18 @@ public sealed partial class StateArena {
             }
         }
         cursor = extent;
+        slot = -1;
         return false;
     }
 
-    // The key a stored slot answers to: a lattice cell's topology name, a ring slot's positional key, or the
-    // member key a keyed, ordered, or pool row holds there — the invalid default for a slot no member holds.
+    // The key a stored slot answers to: a lattice cell's key (its ordinal's decimal spelling), a ring slot's
+    // positional key, or the member key a keyed, ordered, or pool row holds there — the invalid default for a slot no
+    // member holds.
     private CellKey KeyAtSlot(in ArenaRowLayout layout, int slot) {
         var position = (slot - layout.CellStart);
 
         if (layout.Shape == RowShape.Lattice) {
-            _ = m_keys.TryResolve(name: layout.Topology!.NameOf(cell: position), key: out var key);
+            _ = m_keys.TryResolveIndex(index: position, key: out var key);
 
             return key;
         }
@@ -218,26 +251,18 @@ public sealed partial class StateArena {
                 key = m_keys.KeyAt(ordinal: ordinal);
                 return true;
             }
-            // A lattice cell's key is its topology's own key for that cell ordinal, and a cell the row does not hold
-            // addresses nothing, exactly as an absent keyed member does.
+            // A lattice cell's key is its ordinal's decimal spelling, and a cell the row does not hold addresses
+            // nothing, exactly as an absent keyed member does.
             if (
                 (layout.Shape == RowShape.Lattice) &&
                 (((uint)position) < ((uint)HashCellExtent(layout: layout))) &&
                 Bit(
                 index: CellSlotAt(layout: layout, position: position),
                 words: m_presence
-            ) &&
-                CellName.TryParse(
-                candidate: layout.Topology!.Key(cell: position),
-                name: out var cell,
-                reason: out _
-            ) &&
-                m_keys.TryResolve(
-                key: out key,
-                name: cell
             )
             ) {
-                return true;
+                key = KeyAtSlot(layout: in layout, slot: CellSlotAt(layout: layout, position: position));
+                return key.IsValid;
             }
         }
 
@@ -265,7 +290,7 @@ public sealed partial class StateArena {
             !layout.IsStored ||
             !m_keys.TryGetAddress(
             key: key,
-            name: out var name,
+            name: out _,
             ordinal: out var ordinal
         )
         ) {
@@ -289,33 +314,21 @@ public sealed partial class StateArena {
             return true;
         }
 
-        // A lattice or ring row's addresses are its topology's cell keys and its own slot indices: neither is
-        // minted, so the first read of one caches the mapping instead of the row carrying it up front.
-        var position = (layout.Shape switch {
-            RowShape.Lattice => (layout.Topology!.TryCell(
-            cell: out var cell,
-            key: name.Value
-        )
-                ? cell
-                : -1
-            ),
-            RowShape.Ring => ((int.TryParse(
-            result: out var index,
-            s: name.Value
-        ) && (((uint)index) < ((uint)layout.CellCapacity)))
-                ? index
-                : -1
-            ),
-            _ => -1,
+        // A lattice or ring row's addresses are the decimal spellings of its cell ordinals and its own slot indices:
+        // neither is minted, so the first read of one caches the mapping instead of the row carrying it up front.
+        var extent = (layout.Shape switch {
+            RowShape.Lattice => layout.Topology!.CellCount,
+            RowShape.Ring => layout.CellCapacity,
+            _ => 0,
         });
 
-        if (position < 0) {
+        if (!m_keys.TryKeyInteger(key: key, integer: out var position) || (((ulong)position) >= ((ulong)extent))) {
             slot = -1;
 
             return false;
         }
 
-        slot = CellSlotAt(layout: layout, position: position);
+        slot = CellSlotAt(layout: layout, position: ((int)position));
         if (ordinal >= 0) {
             resolved[ordinal] = slot;
         }

@@ -17,10 +17,6 @@ public interface IMachineGroupCore : ITimeTravelMachineCore<MachinePads>, IDispo
     /// <summary>Gets the number of bytes exchanged over the medium since the group formed. A completed two-sided
     /// exchange counts once per delivered byte, so an eight-bit round trip between two members counts twice.</summary>
     long CompletedTransfers { get; }
-    /// <summary>Gets the group's current cycle rate — the rate the group converts each engine-tick budget against. The
-    /// medium defines one shared wall-time budget for every member, so this is one rate for the whole group rather
-    /// than a per-member rate.</summary>
-    MachineCycleRate CycleRate { get; }
     /// <summary>Gets the number of members the medium connects.</summary>
     int MemberCount { get; }
     /// <summary>Gets a fingerprint folding every byte the medium has carried, in order — the pipe-assertable traffic

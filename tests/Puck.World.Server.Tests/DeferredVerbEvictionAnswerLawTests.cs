@@ -15,7 +15,7 @@ public sealed class DeferredVerbEvictionAnswerLawTests {
     private static WorldEditEcho Verdict(long correlationId, bool rejected) => new(
         Message: (rejected
             ? "undo refused: nothing to undo"
-            : "dropped 1, 0 remaining"),
+            : "undid 1 (world.reload), 0 left to undo, 1 to redo"),
         Rejected: rejected,
         Kind: WorldEditEchoKind.Mutation,
         CorrelationId: correlationId

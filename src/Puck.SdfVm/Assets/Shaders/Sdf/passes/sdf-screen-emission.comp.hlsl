@@ -42,9 +42,11 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         float4 total = 0.0;
         [loop] for (uint part = 0u; part < 64u; part++) { total += sdfScreenSums[part]; }
         // The mean picture value times the luminance a value of one shows at (the mapping's z): the face's mean
-        // luminance, in nits.
-        sdfScreenEmissionRW[screen] = total.w > 0.0
-            ? float4(((total.rgb / total.w) * mapping.state.z), 1.0) : 0.0;
+        // luminance, in nits. A display emits no more than its peak, which its light's range is sized from
+        // (SdfWorldTables' screen reaches), so an extended-range picture's mean is held at one.
+        float3 mean = (total.w > 0.0) ? (total.rgb / total.w) : 0.0;
+        if (display) { mean = min(mean, 1.0); }
+        sdfScreenEmissionRW[screen] = total.w > 0.0 ? float4((mean * mapping.state.z), 1.0) : 0.0;
         writes++;
     }
     puckCountDetail(0u, 0u, writes, 0u, 0u, samples);

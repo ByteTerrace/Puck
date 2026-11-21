@@ -63,15 +63,15 @@ public sealed partial class PuckLanguageServer {
         : null
     );
     // The files a unit of diagnosis read, as the session recorded them: every file it read, found present or found
-    // absent (an import or a basis that appears later is a read too). A listing names a directory, which no document
-    // is, and a sibling the name index only asked what it declares is not a file the document composes, so both are
-    // left out: an edit to that sibling reaches the document only when it saves and moves the names, which the
-    // session's own facts see.
+    // absent (an import or a basis that appears later is a read too). A listing or a directory's claims names a
+    // directory, which no document is, and a sibling the name index only asked what it declares is not a file the
+    // document composes, so all three are left out: an edit to that sibling reaches the document only when it saves and
+    // moves the names, which the session's own facts see.
     private static HashSet<string> ReadFiles(CompileInputLog reads) {
         var files = new HashSet<string>(comparer: PuckPaths.Comparer);
 
         foreach (var input in reads.Inputs) {
-            if (input.Kind is not (CompileInputKind.Listing or CompileInputKind.Declaration)) {
+            if (input.Kind is not (CompileInputKind.Listing or CompileInputKind.Declaration or CompileInputKind.Claims)) {
                 _ = files.Add(item: PuckPaths.Normalize(path: input.Path));
             }
         }

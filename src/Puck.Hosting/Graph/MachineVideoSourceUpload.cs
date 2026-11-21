@@ -5,17 +5,24 @@ using Puck.Abstractions.Sources;
 namespace Puck.Hosting;
 
 /// <summary>
-/// A machine's video output as an uploaded source: each render writes the output's latest complete frame into the
+/// A machine's video output as an uploaded source: each render writes one of the output's complete frames into the
 /// source's region, in the format the output declares (RGBA8, or an indexed image and its palette), and the runtime
-/// converts it through the conversion that format names, once however many screens show it. The source is deterministic
-/// and due once per completed tick, and it states the image it last wrote (<see cref="IImageSourceReference"/>): the
-/// CPU reference of that conversion over the bytes it wrote, with the descriptor and stamp of that write, which the exact
-/// verdict holds a capture of the converted image to. Its <see cref="Descriptor"/> follows the output the resolver names
-/// now, so a machine replaced by one with another extent or format is declared anew and the runtime rebuilds the
-/// source's conversion for it; only a write replaces the image the source states. The output belongs to its machine;
-/// the source only reads it.
+/// converts it through the conversion that format names, once however many screens show it. An output that completes
+/// frames on its own clock (<see cref="IMachineVideoOutput.FrameRateHz"/> above zero) is shown at that rate: the source
+/// declares the rate, is due on exactly the presented frames whose clock position brings a frame the region does not
+/// hold (<see cref="HasNewImage"/>), and writes that frame, naming the one it holds so the output keeps it in sequence,
+/// so a 60 Hz machine in a 30 Hz world shows every frame once on a 60 Hz display and an unchanged frame is never
+/// written or converted again. Any other output is due once per completed tick and writes
+/// its latest frame. The source is deterministic, and it states the image it last wrote
+/// (<see cref="IImageSourceReference"/>): the CPU reference of that conversion over the bytes it wrote, with the
+/// descriptor and stamp of that write, which the exact verdict holds a capture of the converted image to. Its
+/// <see cref="Descriptor"/> follows the output the resolver names now, so a machine replaced by one with another extent,
+/// format or rate is declared anew and the runtime rebuilds the source's conversion for it; only a write replaces the
+/// image the source states. The output belongs to its machine; the source only reads it, and which frame it reads never
+/// reaches the machine.
 /// </summary>
 public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageSourceReference {
+    private readonly Func<ulong>? m_clock;
     private readonly Func<IMachineVideoOutput?> m_output;
     private readonly string m_name;
     private readonly string m_producer;
@@ -31,7 +38,11 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
     // The region the next write fills, header first, for the declared shape.
     private byte[] m_region = [];
     // The output shape the descriptor, the fault and the scratch region were made for.
-    private (ImagePixelFormat Format, int Width, int Height)? m_shape;
+    private (ImagePixelFormat Format, int Width, int Height, uint FrameRateHz)? m_shape;
+    // The output frame the region holds: its sequence number, zero for none, and the output it came from, since a
+    // replacement machine numbers its frames from one again.
+    private long m_writtenFrame;
+    private IMachineVideoOutput? m_writtenOutput;
     // The last write: its region, header first, its descriptor and its stamp, which only the next write replaces.
     private ImageSourceDescriptor? m_written;
     private byte[] m_writtenRegion = [];
@@ -43,12 +54,17 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
     /// <param name="name">The source's name, which a fault names.</param>
     /// <param name="output">Resolves the machine output, or returns <see langword="null"/> while the machine does not run
     /// it.</param>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public MachineVideoSourceUpload(string producer, string name, Func<IMachineVideoOutput?> output) {
+    /// <param name="clock">Reads the host clock position the frame being rendered presents, in engine ticks on the clock
+    /// the machine's segments are stamped with, which picks the frame due; <see langword="null"/> shows the newest
+    /// frame.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="producer"/>, <paramref name="name"/> or
+    /// <paramref name="output"/> is <see langword="null"/>.</exception>
+    public MachineVideoSourceUpload(string producer, string name, Func<IMachineVideoOutput?> output, Func<ulong>? clock = null) {
         ArgumentNullException.ThrowIfNull(argument: producer);
         ArgumentNullException.ThrowIfNull(argument: name);
         ArgumentNullException.ThrowIfNull(argument: output);
 
+        m_clock = clock;
         m_name = name;
         m_output = output;
         m_producer = producer;
@@ -80,6 +96,29 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
     /// <remarks>A machine the resolver does not name is not running: its screen draws that state itself, so the source is
     /// absent rather than faulted.</remarks>
     public bool IsAbsent => (m_output() is null);
+    /// <inheritdoc/>
+    /// <remarks>An output on its own clock has a new image when the frame due at the presented clock position is not the
+    /// one the region holds; an output that follows the tick leaves the decision to its cadence.</remarks>
+    public bool? HasNewImage => ((m_output() is { FrameRateHz: > 0U } output)
+        ? (
+            !ReferenceEquals(
+                objA: output,
+                objB: m_writtenOutput
+            ) ||
+            (output.FrameDue(
+                dueTicks: Due,
+                held: m_writtenFrame
+            ) != m_writtenFrame)
+        )
+        : null
+    );
+    /// <summary>Gets how many frames the source has written into a region since it was created: beside the machine's
+    /// completed native frames it tells a display that shows every frame from one that shows every other.</summary>
+    public long Writes { get; private set; }
+
+    // The host clock position the frame being rendered presents; the end of time, which every frame is due by, with no
+    // clock.
+    private ulong Due => (m_clock?.Invoke() ?? ulong.MaxValue);
 
     /// <summary>Gets the descriptor of the image the source last wrote, which its reference states; before the first write,
     /// the descriptor it declares now.</summary>
@@ -89,9 +128,9 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
     // Brings the descriptor, the fault and the scratch region to the output's shape, remaking them only when it moves. The
     // last write is left as it is.
     private void Describe(IMachineVideoOutput? output) {
-        (ImagePixelFormat, int, int)? shape = ((output is null)
+        (ImagePixelFormat, int, int, uint)? shape = ((output is null)
             ? null
-            : (output.Format, output.Width, output.Height));
+            : (output.Format, output.Width, output.Height, output.FrameRateHz));
 
         if (
             m_described &&
@@ -104,6 +143,8 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
         m_shape = shape;
         m_descriptor = null;
         m_region = [];
+        m_writtenFrame = 0L;
+        m_writtenOutput = null;
 
         if (output is null) {
             m_fault = $"machine output '{m_name}' is not running";
@@ -139,7 +180,9 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
             region: m_region
         );
         m_descriptor = new ImageSourceDescriptor(
-            Cadence: ImageSourceCadence.Tick,
+            Cadence: ((output.FrameRateHz > 0U)
+                ? ImageSourceCadence.Rate(rateHz: output.FrameRateHz)
+                : ImageSourceCadence.Tick),
             Color: ImageColorEncoding.Srgb,
             Content: ImageContentClass.Deterministic,
             Format: output.Format,
@@ -153,10 +196,11 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
     /// <inheritdoc/>
     public void Dispose() { }
     /// <inheritdoc/>
-    /// <remarks>Writes the output's latest complete frame. A machine's frames are a function of the simulation, so an
-    /// output with none for this tick (no machine, or one that has completed no frame) refuses the tick, which only a
-    /// later tick changes; a shape that no longer matches the region waits, since the runtime rebuilds the region before
-    /// the next frame. A write becomes the image the source states.</remarks>
+    /// <remarks>Writes the output's frame due at the presented clock position, its latest with no clock. A machine's
+    /// frames are a function of the simulation, so an output with none for this tick (no machine, or one that has
+    /// completed no frame) refuses the tick, which only a later tick changes; a shape that no longer matches the region
+    /// waits, since the runtime rebuilds the region before the next frame. A write becomes the image the source
+    /// states.</remarks>
     public FrameRender Write(long tick, GpuRegion region) {
         ArgumentNullException.ThrowIfNull(argument: region);
 
@@ -173,9 +217,19 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
         if (region.ByteCount != m_region.Length) {
             return FrameRender.Waiting(reason: m_reshaped);
         }
-        if (output.WriteFrame(region: m_region) <= 0L) {
+        var frame = output.WriteFrame(
+            dueTicks: Due,
+            held: (ReferenceEquals(objA: output, objB: m_writtenOutput) ? m_writtenFrame : 0L),
+            region: m_region
+        );
+
+        if (frame <= 0L) {
             return FrameRender.Refused(reason: m_noFrame);
         }
+
+        m_writtenFrame = frame;
+        m_writtenOutput = output;
+        Writes++;
 
         _ = region.Write(
             bytes: m_region.AsSpan(start: ImageSourceUploadLayout.HeaderBytes),

@@ -57,6 +57,8 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
 
     private bool m_acceptingWork;
     private long m_backpressureEvents;
+    // The host clock position the last accepted segment ended at, in engine ticks. Producer thread only.
+    private ulong m_clock;
     private long m_completedSteps;
     private long m_stepBusyTimestampTicks;
     private long m_submittedSteps;
@@ -204,6 +206,38 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
                 ? submission
                 : QueuedMachineSubmission.PendingDrain;
         }
+    }
+    /// <summary>Returns the host clock position a segment about to be submitted ends at: the position its host states,
+    /// or this queue's own running clock, the sum of the segments it accepted, moved on by the segment's ticks. A step
+    /// item carries it so the frames the segment completes are stamped with it.</summary>
+    /// <param name="deltaTicks">The segment's engine-tick budget.</param>
+    /// <param name="endTicks">The position the host states for the segment's end, or <see langword="null"/>.</param>
+    /// <returns>The clock position at the segment's end, in engine ticks.</returns>
+    public ulong SegmentEnd(ulong deltaTicks, ulong? endTicks) =>
+        (endTicks ?? unchecked(m_clock + deltaTicks));
+    /// <summary>Submits one segment's step item, draining it when asked, and moves the running clock to the segment's
+    /// end when this call accepted it. A call that resumes an accepted item's drain submits nothing and moves
+    /// nothing.</summary>
+    /// <param name="item">The step item, carrying <paramref name="clock"/>.</param>
+    /// <param name="clock">The segment's end (<see cref="SegmentEnd"/>).</param>
+    /// <param name="drain">Whether the call waits for the item to complete.</param>
+    /// <param name="generation">The drain generation a resumed step hands back; zero for a fresh segment.</param>
+    /// <param name="deadline">The last instant to wait.</param>
+    /// <returns>The observable submission outcome.</returns>
+    public QueuedMachineSubmission SubmitSegment(in TWorkItem item, ulong clock, bool drain, ref ulong generation, WaitDeadline deadline) {
+        var fresh = (generation == 0UL);
+        var submission = (drain
+            ? Step(in item, ref generation, deadline)
+            : Submit(in item, deadline));
+
+        if (
+            fresh &&
+            submission.IsAccepted()
+        ) {
+            m_clock = clock;
+        }
+
+        return submission;
     }
     /// <summary>Submits one completion-bearing item and blocks until the worker has run it. A refused item (the queue
     /// is closed, or the worker already faulted) never ran, so each caller decides its own fallback. The caller owns

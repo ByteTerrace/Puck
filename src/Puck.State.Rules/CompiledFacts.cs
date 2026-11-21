@@ -195,7 +195,7 @@ public abstract class RuleKeyFact : IRuleKey {
     /// <param name="resolved">What the key resolved to.</param>
     /// <returns>The index when the key spells an integer, <see cref="FaultCase.Faulted"/> when resolving it faulted,
     /// and <see cref="FaultCase.Absent"/> otherwise.</returns>
-    protected static Resolved<long> IndexOf(IStateReader reader, Resolved<CellKey> resolved) {
+    public static Resolved<long> IndexOf(IStateReader reader, Resolved<CellKey> resolved) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         if (resolved.Case == FaultCase.Faulted) {
@@ -203,15 +203,9 @@ public abstract class RuleKeyFact : IRuleKey {
         }
         if (
             resolved.TryNamed(value: out var key) &&
-            reader.Arena.Keys.TryGetName(
-                key: key,
-                name: out var name
-            ) &&
-            long.TryParse(
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                result: out var index,
-                s: name.Value,
-                style: System.Globalization.NumberStyles.Integer
+            reader.Arena.Keys.TryKeyInteger(
+                integer: out var index,
+                key: key
             )
         ) {
             return Resolved<long>.Named(value: index);

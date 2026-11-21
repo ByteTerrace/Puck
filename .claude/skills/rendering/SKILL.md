@@ -81,8 +81,15 @@ name it there, or a pass stands on a stale image; nothing else catches it. Build
 pass's cull through `SdfWorldPasses.CullOf` and note its extent (`NoteDrawn`), so
 the scope judges by the cull the image was drawn under. `world.residency` prints
 each scope and why it last moved (`motion-scopes=`); `sdf.cadence.scopes` against
-`scopes.met` is how many stood. A scope that never stands names its cause there:
-on the debug world the standing body's breath meets every scope that can show it.
+`scopes.met` is how many stood. A scope that never stands names its cause there.
+A skinned draw's record carries the host bound the scopes judge it by
+(`SdfMeshBox.TryOfSkin`, written by `NoteSkinnedRows`), so every pass culls it.
+A screen's emission lights the scopes its range reaches (`NoteEmission`), moving
+their lighting revision (`SdfMotionScope.Lighting`, `sdf.cadence.scopes.lit`);
+the range lives in the screen surface row's `origin.w` and the shader windows the
+light to zero there (`sdfLightWindow`), so the two stay one value. The views pass
+folds only the screen images whose faces its mesh scope keeps
+(`SdfWorldTables.ScreenFaceShows`).
 
 `Shared/bloom-filter.hlsli` uses cell-edge reflection and conservative cell
 integration. Unit-sum taps alone only preserve constants: edge clamping duplicated
@@ -1620,8 +1627,10 @@ by its fence share is GPU back-pressure, not CPU work.
   inspect the live schedule and completed build as well.
 - Screen-light reproduction must compare source bytes, not just graph publication
   numbers. `MachineVideoSourceUpload` numbers uploads, while a queued machine's
-  video read takes its latest completed native frame. Equal publications can
-  therefore feed different images to `ScreenEmission`. Lockstep uses the existing
+  video read takes the native frame due at the position its machine host
+  presents (`IWorldMachineHost.PresentedTicks`), which outside lockstep follows
+  host time. Equal publications can therefore feed different images to
+  `ScreenEmission`. Lockstep uses the existing
   synchronous machine advance before rendering. A fence wait, readback or GPU
   validation can mask this worker race by changing pacing; diagnose the CPU
   video bytes and native frame version before changing GPU barriers.

@@ -63,6 +63,8 @@ public sealed class EngineTimeClockSequenceLawTests {
     [Fact]
     public void WriteChangeRateWriteUndoBothAndContinueFromACheckpointEachReproduceTheLiveValue() {
         using var fixture = Fixtures.FreshServer(definition: Document(ClockRow()));
+        // An undo takes back its own principal's edits, so the writing seat undoes them.
+        Assert.True(condition: fixture.Server.GrantTable.TryGrant(new WorldGrant(Actor, WorldCapability.Operate, GrantSubject.All, false), Principal.Console, out var operate), userMessage: operate);
 
         Write(
             fixture: fixture,
@@ -101,7 +103,7 @@ public sealed class EngineTimeClockSequenceLawTests {
 
         fixture.Server.EnqueueUndo(
             count: 2,
-            principal: Principal.Console
+            principal: Actor
         );
         fixture.Step(stepTicks: OtherRateStepTicks);
 

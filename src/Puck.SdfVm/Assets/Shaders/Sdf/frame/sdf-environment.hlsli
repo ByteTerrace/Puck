@@ -13,7 +13,7 @@
 struct ScreenSurfaceData {
     float4 right;   // xyz = unit world-space U axis, w = half-width
     float4 up;      // xyz = unit world-space V axis (V=0 at top), w = half-height
-    float4 origin;  // xyz = world-space front-face center, w = unused (pad)
+    float4 origin;  // xyz = world-space front-face center, w = the range its light reaches (SdfWorldTables' screen reaches)
 };
 static const uint WorldScreenSurfaceRows = 3u;
 ScreenSurfaceData worldScreenSurface(uint screenIndex) {

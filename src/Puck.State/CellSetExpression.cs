@@ -426,12 +426,11 @@ public static class CellSetLowering {
 
                     var cursor = 0;
 
-                    while (arena.TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
+                    while (arena.TryNextLiveNumber(cursor: ref cursor, key: out _, rowOrdinal: rowOrdinal, time: in time, value: out var raw)) {
                         var position = (cursor - 1);
 
                         if (position >= elements) { break; }
                         if (
-                            arena.TryReadLiveNumber(key: key, rowOrdinal: rowOrdinal, time: in time, value: out var raw) &&
                             (raw >= zone.Low) &&
                             (raw <= zone.High)
                         ) {

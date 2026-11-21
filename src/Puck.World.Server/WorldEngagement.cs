@@ -13,8 +13,11 @@ namespace Puck.World.Server;
 /// Server-internal: <see cref="IWorldMachineHost.Advance"/> reads <see cref="WorldEngagement.BuildPadSnapshot"/>
 /// directly, in-process, so this never crosses the loopback.</summary>
 /// <param name="ScreenIndex">The engine screen-surface index.</param>
-/// <param name="Pad">The merged controller image for this tick's machine step.</param>
-public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState Pad);
+/// <param name="Pad">The merged controller image the tick's machine step ends with.</param>
+/// <param name="Timeline">The merged image over the tick, from its start through each press, release and axis sample
+/// at the instant it was captured, ending at <paramref name="Pad"/>; <see langword="null"/> when the image holds for
+/// the whole tick. Valid until the next fold, as the lane itself is.</param>
+public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState Pad, MachinePadTimeline? Timeline = null);
 /// <summary>
 /// The control-application fold — where a participant's resolved intent goes, distinct from the
 /// <see cref="IntentSource"/> axis (what fills it). A principal holds a SET of
@@ -94,6 +97,14 @@ public sealed partial class WorldEngagement {
     // cleared and refilled every FoldTick call, since screen indices are document-authored and not a compact 0..N
     // space a fixed-size array could index directly.
     private readonly Dictionary<int, MachinePadState> m_screenPads = new();
+    // This tick's per-screen pad timelines, for the screens whose image changed inside the tick, and the timelines not
+    // in use, kept so a tick with a press allocates nothing once warm. One application's own timeline is built in
+    // m_applicationTimeline before it merges into its screen's.
+    private readonly Dictionary<int, MachinePadTimeline> m_screenTimelines = new();
+    private readonly Stack<MachinePadTimeline> m_spareTimelines = new();
+    private readonly MachinePadTimeline m_applicationTimeline = new();
+    // The step's timed events on the channels an application reaches, newest first, as FoldTick walks them back.
+    private readonly List<(ulong OffsetTicks, int Ordinal, FixedQ4816 Before)> m_stepEdges = [];
     // The reused, capacity-only-grows backing array BuildPadSnapshot slices into, sized against however many screens
     // are EVER simultaneously applied to rather than a document-declared screen count (there is no such cap).
     private ScreenPadSnapshot[] m_padEntries = Array.Empty<ScreenPadSnapshot>();
@@ -309,7 +320,8 @@ public sealed partial class WorldEngagement {
         foreach (var pair in m_screenPads) {
             m_padEntries[count++] = new ScreenPadSnapshot(
                 ScreenIndex: pair.Key,
-                Pad: pair.Value
+                Pad: pair.Value,
+                Timeline: m_screenTimelines.GetValueOrDefault(key: pair.Key)
             );
         }
 
@@ -560,9 +572,18 @@ public sealed partial class WorldEngagement {
     /// integration IS its delivery. Run once per <see cref="WorldServer.Step"/>, before the tick's
     /// <see cref="Protocol.WorldSnapshot"/> is built, so <see cref="BuildPadSnapshot"/> reflects this tick's
     /// applied intents. A tick that replays recorded input stages no portal forward: the destinations beyond a portal
-    /// are not replaying with this world.</summary>
+    /// are not replaying with this world. A screen member whose body's input owner admitted timed events this step also
+    /// gets the pad's image over the tick (<see cref="ScreenPadSnapshot.Timeline"/>), so a press reaches the machine at
+    /// the instant inside the tick it was captured.</summary>
     /// <param name="replaysInput">Whether this tick's input was fed from a replay tape (<see cref="WorldServer.ReplaysInput"/>).</param>
-    public void FoldTick(bool replaysInput) {
+    /// <param name="input">The authority's input owners, whose step events time a pad's changes inside the tick, or
+    /// <see langword="null"/> to hold each pad's folded image for the whole tick.</param>
+    public void FoldTick(bool replaysInput, WorldInputRuntime? input = null) {
+        foreach (var timeline in m_screenTimelines.Values) {
+            m_spareTimelines.Push(item: timeline);
+        }
+
+        m_screenTimelines.Clear();
         m_screenPads.Clear();
         m_bodyContributions.Clear();
         m_portalForwards.Clear();
@@ -610,31 +631,82 @@ public sealed partial class WorldEngagement {
                         continue;
                     }
 
+                    var reach = (policy.Reach?.Project(table: body.Channels) ?? ChannelReachMask.All);
                     var masked = ApplyMask(
                         intent: body.EngagedIntent,
-                        mask: (policy.Reach?.Project(table: body.Channels) ?? ChannelReachMask.All)
+                        mask: reach
+                    );
+                    var pointer = AimThrough(
+                        mapping: policy.Aim,
+                        ray: masked.SourceRay
                     );
                     var pad = (Translate(
                         intent: masked,
                         channels: body.Channels,
                         kit: policy.Kit
                     ) with {
-                        Pointer = AimThrough(
-                            mapping: policy.Aim,
-                            ray: masked.SourceRay
-                        ),
+                        Pointer = pointer,
                     });
+                    var timed = FoldStepEdges(
+                        body: index,
+                        channels: body.Channels,
+                        end: masked,
+                        input: input,
+                        kit: policy.Kit,
+                        pointer: pointer,
+                        reach: reach
+                    );
+                    var screen = application.Target.Value;
 
-                    m_screenPads[application.Target.Value] = (m_screenPads.TryGetValue(
-                        key: application.Target.Value,
+                    if (m_screenPads.TryGetValue(
+                        key: screen,
                         value: out var existing
-                    )
-                        ? MachinePadState.Merge(
+                    )) {
+                        if (
+                            timed ||
+                            m_screenTimelines.ContainsKey(key: screen)
+                        ) {
+                            // The screen's image over the tick is the instant-by-instant merge of every application's.
+                            if (!m_screenTimelines.TryGetValue(
+                                key: screen,
+                                value: out var merged
+                            )) {
+                                merged = RentTimeline(start: in existing);
+                                m_screenTimelines[screen] = merged;
+                            }
+                            if (timed) {
+                                merged.Merge(
+                                    changes: m_applicationTimeline.Changes,
+                                    start: m_applicationTimeline.Start
+                                );
+                            } else {
+                                merged.Merge(
+                                    changes: default,
+                                    start: in pad
+                                );
+                            }
+                        }
+
+                        m_screenPads[screen] = MachinePadState.Merge(
                             first: in existing,
                             second: in pad
-                        )
-                        : pad
-                    );
+                        );
+                    } else {
+                        if (timed) {
+                            var first = RentTimeline(start: m_applicationTimeline.Start);
+
+                            foreach (ref readonly var change in m_applicationTimeline.Changes) {
+                                first.Add(
+                                    offsetTicks: change.OffsetTicks,
+                                    pad: change.Pad
+                                );
+                            }
+
+                            m_screenTimelines[screen] = first;
+                        }
+
+                        m_screenPads[screen] = pad;
+                    }
                 } else if (application.Target.Kind == GrantSubjectKind.Body) {
                     m_bodyContributions.Add(item: new BodyRouteContribution(
                         SourceBody: index,
@@ -648,6 +720,170 @@ public sealed partial class WorldEngagement {
                 }
             }
         }
+    }
+    // A timeline held for one tick, from the spares.
+    private MachinePadTimeline RentTimeline(in MachinePadState start) {
+        var timeline = (m_spareTimelines.TryPop(result: out var spare)
+            ? spare
+            : new MachinePadTimeline()
+        );
+
+        timeline.Reset(start: in start);
+
+        return timeline;
+    }
+    // Builds, in m_applicationTimeline, one application's pad image over the tick from the timed events its body's
+    // input owner admitted this step: the image the tick ends with is the folded one, and each press, release and axis
+    // sample on a channel the application reaches is walked back from it, so the pad holds the earlier level until the
+    // instant the event was captured. A press therefore reaches the machine on the native frame it happened in. Only
+    // on-time events of the owner's current epoch count: a late event was captured in an earlier tick and holds from
+    // this one's start, and an epoch's barrier releases everything before it. A release counts only when it closes a
+    // hold the owner admitted, so the pad never holds a press the owner did not. An axis holds its first sample of the
+    // step from the start, since the level before it is not in the step. Returns false, leaving the timeline unused,
+    // when no event moves the image inside the tick.
+    private bool FoldStepEdges(WorldInputRuntime? input, int body, in PlayerIntent end, ChannelReachMask reach, string? kit, WorldChannelTable channels, MachinePointer pointer) {
+        if (
+            (input is null) ||
+            !input.TryGetBodyOwner(
+                body: body,
+                principal: out var principal
+            ) ||
+            !input.TryGet(
+                input: out var owner,
+                principal: principal
+            ) ||
+            (owner is null)
+        ) {
+            return false;
+        }
+
+        var interval = input.Interval;
+
+        m_stepEdges.Clear();
+
+        for (var index = (owner.Count - 1); (index >= 0); index--) {
+            var record = owner.Record(index: index);
+
+            if (record.Admission.Tick != interval.Tick) {
+                break;
+            }
+            if (
+                (record.Epoch != owner.Epoch) ||
+                (record.Capture.Tick != interval.Tick) ||
+                (record.Event.Kind is not (WorldInputEventKind.Press or WorldInputEventKind.Release or WorldInputEventKind.AxisSample))
+            ) {
+                continue;
+            }
+
+            var ordinal = owner.Mapping.Address(logicalId: record.Event.Channel);
+            var offset = ((ulong)((((UInt128)((ulong)Math.Max(val1: 0L, val2: record.Event.Offset.Value))) * FixedTickConversion.TicksPerSecond) >> FixedQ4816.FractionBitCount));
+
+            if (
+                (ordinal < 0) ||
+                !reach.Contains(ordinal: ordinal) ||
+                (offset == 0UL) ||
+                ((record.Event.Kind == WorldInputEventKind.Release) && (record.HoldPress == 0UL))
+            ) {
+                continue;
+            }
+
+            m_stepEdges.Add(item: (
+                OffsetTicks: offset,
+                Ordinal: ordinal,
+                Before: record.Event.Kind switch {
+                    WorldInputEventKind.Press => FixedQ4816.Zero,
+                    WorldInputEventKind.Release => FixedQ4816.One,
+                    _ => channels.Quantize(
+                        ordinal: ordinal,
+                        value: FixedQ4816.FromRawBits(value: PreviousSample(
+                            before: index,
+                            channel: record.Event.Channel,
+                            own: record.Event.RawValue,
+                            owner: owner,
+                            tick: interval.Tick
+                        ))
+                    ),
+                }
+            ));
+        }
+
+        if (m_stepEdges.Count == 0) {
+            return false;
+        }
+
+        // Walk back from the tick's end to its start, then forward again adding each change.
+        var intent = end;
+
+        foreach (var edge in m_stepEdges) {
+            intent = intent.WithChannel(
+                ordinal: edge.Ordinal,
+                value: edge.Before
+            );
+        }
+
+        m_applicationTimeline.Reset(start: (Translate(
+            intent: intent,
+            channels: channels,
+            kit: kit
+        ) with {
+            Pointer = pointer,
+        }));
+
+        for (var index = (m_stepEdges.Count - 1); (index >= 0); index--) {
+            var edge = m_stepEdges[index];
+            var after = ((index == 0)
+                ? end[edge.Ordinal]
+                : AfterEdge(edges: m_stepEdges, index: index, end: in end)
+            );
+
+            intent = intent.WithChannel(
+                ordinal: edge.Ordinal,
+                value: after
+            );
+            m_applicationTimeline.Add(
+                offsetTicks: edge.OffsetTicks,
+                pad: (Translate(
+                    intent: intent,
+                    channels: channels,
+                    kit: kit
+                ) with {
+                    Pointer = pointer,
+                })
+            );
+        }
+
+        return (m_applicationTimeline.Changes.Length != 0);
+    }
+    // The level a channel holds after the edge at `index` (the list is newest first): the level the channel's next
+    // later edge walks back to, or the tick's folded level when the edge is the channel's last.
+    private static FixedQ4816 AfterEdge(List<(ulong OffsetTicks, int Ordinal, FixedQ4816 Before)> edges, int index, in PlayerIntent end) {
+        for (var later = (index - 1); (later >= 0); later--) {
+            if (edges[later].Ordinal == edges[index].Ordinal) {
+                return edges[later].Before;
+            }
+        }
+
+        return end[edges[index].Ordinal];
+    }
+    // The raw level an axis held before a sample: the channel's previous sample in the same step, or the sample's own
+    // when it is the step's first on that channel, which then holds from the tick's start.
+    private static long PreviousSample(WorldInputOwner owner, int before, ushort channel, ulong tick, long own) {
+        for (var index = (before - 1); (index >= 0); index--) {
+            var record = owner.Record(index: index);
+
+            if (record.Admission.Tick != tick) {
+                break;
+            }
+            if (
+                (record.Epoch == owner.Epoch) &&
+                (record.Event.Channel == channel) &&
+                (record.Event.Kind == WorldInputEventKind.AxisSample)
+            ) {
+                return record.Event.RawValue;
+            }
+        }
+
+        return own;
     }
     /// <summary>Returns where a pointer ray aims a screen's light gun, mapped in fixed point from the live document's
     /// screen row alone through <see cref="WorldScreenMappings.Normalized"/>, the mapping the <c>$pointer:</c> rule read

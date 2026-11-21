@@ -135,7 +135,7 @@ public static class WorldReplayEntryDescriber {
             WorldReplayEntry.Mutation mutation => $"mutation {mutation.Value.GetType().Name} by {mutation.Actor.Describe()} {(mutation.Outcome
             ? "accepted"
             : "refused")}",
-            WorldReplayEntry.Undo undo => $"undo {undo.Count} by {undo.Actor.Describe()}",
+            WorldReplayEntry.Undo undo => $"{(undo.Redo ? "redo" : "undo")} {undo.Count} by {undo.Actor.Describe()}",
             WorldReplayEntry.Composition composition => $"{DescribeComposition(composition: composition.Value)} by {composition.Actor.Describe()}",
             WorldReplayEntry.Query query => $"query {query.Value.GetType().Name} by {query.Actor.Describe()}",
             WorldReplayEntry.PeerAdmitted admitted => $"peerAdmitted {DescribePeers(entries: admitted.Value.Entries)} grants={admitted.Value.MintedGrants.Count}",

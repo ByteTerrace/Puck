@@ -35,7 +35,7 @@ public sealed partial class WorldCompileSession {
 
         admission = null;
 
-        if (!TryComposeSource(
+        if (!TryComposeBytes(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
             document: document,
@@ -89,7 +89,7 @@ public sealed partial class WorldCompileSession {
 
         authored = null;
 
-        if (!TryComposeSource(
+        if (!TryComposeBytes(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
             document: document,
@@ -130,7 +130,7 @@ public sealed partial class WorldCompileSession {
 
         // The header records the composed bytes' hash, which a boot composing the same bytes keys the compiled world by
         // before it parses anything.
-        return (TryComposeSource(
+        return (TryComposeBytes(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
             document: document,
@@ -155,10 +155,22 @@ public sealed partial class WorldCompileSession {
         ));
     }
 
-    private bool TryComposeSource(string path, byte[] document, out byte[] json, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog, WorldCompiledSource? sourceCompilation) {
+    /// <summary>Composes <paramref name="document"/>' basis-and-imports graph through this session as
+    /// <see cref="TryCompose"/> does, taking the composed document as its bytes: a held composition's image, which is
+    /// shared and never to be written, or the composed tree written once; no tree is built for a held image.</summary>
+    /// <param name="path">The document's resolved path.</param>
+    /// <param name="document">The document's bytes.</param>
+    /// <param name="json">The composed document's compact UTF-8 JSON, or <paramref name="document"/> itself when it
+    /// names neither a basis nor imports.</param>
+    /// <param name="reason">The refusal, naming <paramref name="path"/>, or empty on success.</param>
+    /// <param name="catalogFingerprint">Stable metadata fingerprint used to partition the composition cache.</param>
+    /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/>.</param>
+    /// <param name="sourceCompilation">The compile of the root's own source, whose facts the composition keeps, or
+    /// <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the graph composed.</returns>
+    public bool TryComposeBytes(string path, byte[] document, out byte[] json, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldCompiledSource? sourceCompilation = null) {
         json = document;
 
-        // The composed document is taken as its bytes: a held image's own, or the composed tree written once.
         using var pass = CompileInputs.Pass();
 
         if (!WorldDefinitionFileSource.TryComposeChainBytes(

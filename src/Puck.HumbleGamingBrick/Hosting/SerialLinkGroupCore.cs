@@ -65,6 +65,19 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
     public MachineCycleRate CycleRate =>
         m_first.CycleRate;
     /// <inheritdoc/>
+    /// <remarks>The pair-stepper's targets are cumulative, so a step's overshoot comes out of the next budget.</remarks>
+    public bool CarriesBudgetOvershoot => true;
+    /// <inheritdoc/>
+    public long CyclesPerFrame =>
+        m_first.CyclesPerFrame;
+    /// <inheritdoc/>
+    /// <remarks>The sooner of the two members' frame ends, so each member's frame can be copied whole.</remarks>
+    public long CyclesToFrameEnd =>
+        Math.Min(
+            val1: m_first.CyclesToFrameEnd,
+            val2: m_second.CyclesToFrameEnd
+        );
+    /// <inheritdoc/>
     public ReadOnlySpan<uint> Framebuffer =>
         m_first.Framebuffer;
     /// <inheritdoc/>

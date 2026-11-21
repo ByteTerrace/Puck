@@ -108,18 +108,14 @@ public static partial class ArenaTransforms {
         }
         var cursor = 0;
 
-        while (arena.TryNextCell(
+        while (arena.TryNextLiveNumber(
             cursor: ref cursor,
             key: out var token,
-            rowOrdinal: observe.PositionsRowOrdinal
+            rowOrdinal: observe.PositionsRowOrdinal,
+            time: context.Time,
+            value: out var cell
         )) {
             if (
-                !arena.TryReadLiveNumber(
-                key: token,
-                rowOrdinal: observe.PositionsRowOrdinal,
-                time: context.Time,
-                value: out var cell
-            ) ||
                 (((ulong)cell) >= ((ulong)topology.CellCount)) ||
                 (visible[((int)cell)] == 0L) ||
                 !arena.TryReadLiveNumber(

@@ -73,6 +73,8 @@ public static partial class CreationCanonicalizer {
         );
         // False is the default, so it normalizes to absent.
         var reducedRate = ((behavior.ReducedRateAtDistance == true) ? (bool?)true : null);
+        // A rest rate that is not finite and positive is none; one of every frame or faster holds nothing.
+        var restRate = (((behavior.RestRate is { } rest) && float.IsFinite(f: rest) && (rest > 0f) && (rest < 60f)) ? (float?)rest : null);
 
         // Fully default → null (byte-stable round-trip with a manifest-less creation).
         if (
@@ -83,7 +85,8 @@ public static partial class CreationCanonicalizer {
         ) &&
             (faces is not { Count: > 0 }) &&
             (sounds is not { Count: > 0 }) &&
-            (reducedRate is null)
+            (reducedRate is null) &&
+            (restRate is null)
         ) {
             return null;
         }
@@ -92,6 +95,7 @@ public static partial class CreationCanonicalizer {
             Faces: faces,
             Locomotion: locomotion,
             ReducedRateAtDistance: reducedRate,
+            RestRate: restRate,
             Sounds: sounds
         );
     }

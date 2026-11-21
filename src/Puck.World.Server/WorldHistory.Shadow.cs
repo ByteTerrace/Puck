@@ -331,7 +331,7 @@ public sealed partial class WorldHistory {
                 );
                 edited.Server.ReplaysInput = true;
                 edited.Server.Advance(stepTicks: segment.StepTicks[offset]);
-                edited.Server.EnforceJournalDepth();
+                edited.Server.FoldJournal();
 
                 // The moved edits lead the authority list of their landing tick, so their outcomes lead its queue.
                 if (tick == (start + 1UL)) {

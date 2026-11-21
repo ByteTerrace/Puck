@@ -334,7 +334,7 @@ public static class DeterminismRecorder {
             }
 
             server.Advance(stepTicks: stepTicks);
-            server.EnforceJournalDepth();
+            server.FoldJournal();
 
             foreach (var (cell, applied) in answers) {
                 if (applied is not true) {

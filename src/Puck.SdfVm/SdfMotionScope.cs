@@ -31,6 +31,8 @@ internal enum SdfMotionCause : byte {
     Overlay,
     /// <summary>A previous table seeded whole.</summary>
     Seed,
+    /// <summary>A screen whose emitted light reaches the cull published a new reduction.</summary>
+    Emission,
 }
 /// <summary>
 /// What one raster pass of a view, and the passes that shade what it drew, can show of a residency's changes: the cull
@@ -63,6 +65,10 @@ public sealed class SdfMotionScope(SdfMotionReader reader = SdfMotionReader.Shad
     /// <summary>Gets the scope's revision: a new value whenever a change its cull keeps is staged, its cull changes, or
     /// the tables take it up again after letting it go.</summary>
     public long Revision { get; private set; } = Next();
+    /// <summary>Gets the scope's lighting revision: a new value whenever a light no draw or slot carries changes where its
+    /// cull keeps (a screen's emission, whose reach meets it), which the passes that shade sign with beside
+    /// <see cref="Revision"/>. A pose never moves it, so the temporal history's poses stand through it.</summary>
+    public long Lighting { get; private set; } = Next();
     /// <summary>Gets the revision as of the tables' latest upload: the poses the current transform and draw tables hold
     /// for the draws the scope keeps.</summary>
     public long Poses { get; private set; } = Next();
@@ -91,6 +97,12 @@ public sealed class SdfMotionScope(SdfMotionReader reader = SdfMotionReader.Shad
     internal void Meet(long staging, SdfMotionCause cause, int detail) {
         MetStaging = staging;
         Revision = Next();
+        (Cause, CauseDetail) = (cause, detail);
+        Meets++;
+    }
+    // A light no draw carries changed where the cull keeps.
+    internal void Light(SdfMotionCause cause, int detail) {
+        Lighting = Next();
         (Cause, CauseDetail) = (cause, detail);
         Meets++;
     }

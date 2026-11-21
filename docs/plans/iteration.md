@@ -298,15 +298,19 @@ rows, [the checks](#checks) below are owed.
 - **Undo follows the accepted edit.** A local file reload appends the overlay
   that actually installed to the same journal as console mutations
   (`WorldJournalEntry.TryCompose`). An unchanged reload advances the source
-  revision without adding an entry. `world.undo` drops the last entries a
-  principal authored and replays the World's own (its sweeps, searches, field
-  writes and rule effects, and scoped replays), so the author's edit is undone
-  however many of those followed it; a replayed overlay reads again only the
-  rows it names (`WorldDefinitionMembers.ApplyPatch`). An undo whose dropped entries changed only
+  revision without adding an entry. A reload entry records the principal whose
+  save submitted it. `world.undo` undoes the acting principal's own last edit
+  and replays the World's own entries (its sweeps, searches, field writes and
+  rule effects, and scoped replays), so the author's edit is undone however
+  many of those followed it; `world.redo` takes it back in place. A replayed
+  overlay reads again only the rows it names
+  (`WorldDefinitionMembers.ApplyPatch`), and the World's entries ahead of the
+  first edit fold into the base, so they cost an undo nothing
+  (`WorldPersistence.FoldJournal`). An undo whose undone entries changed only
   state row values, or only creations in what shading reads and shade programs,
   sets those rows back on the live document and takes the install a reload of
-  that change takes (`WorldPersistence.DroppedEdit`), keeping the session's
-  state; any
+  that change takes, validated once (`WorldPersistence.ToggledEdit`), keeping
+  the session's state; any
   other undo installs the replayed document whole. Undo and reset leave the
   file on disk alone. The checkpoint keeps the source revision independently of the undo
   base so the next save merges against the source the authority last accepted.

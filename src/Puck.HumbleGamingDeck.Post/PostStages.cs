@@ -15,6 +15,7 @@ internal static class PostStages {
         return [shared["determinism"], shared["zero-alloc"], shared["fork-lifecycle"],
             new SnapshotStage(), new LoaderStage(), new CpuTimingStage(), shared["throughput"],
             new EmbeddingStage(), shared["queued-host-checkpoint"], shared["queued-host-backpressure"],
+            shared["queued-host-segment-parts"],
             shared["queued-host-frames"], shared["queued-host-audio"], shared["queued-host-time-travel"],
             shared["queued-host-memory"], new PictureStage(), new ShippedCartridgesStage(),
             new ControllerStage(), new OamDmaStage(), new ApuStage(),

@@ -23,6 +23,25 @@ public sealed partial class WorldDocumentWalker {
     internal static ReloadEdit? ApplyPatchRows(object? value, JsonNode? patch, string path) =>
         new Cursor(rewriter: null!, tables: Everything.CurrentTables(), visitor: null!).ApplyPatchRows(value, patch, path);
 
+    /// <summary>Returns the document paths of what two definitions hold as different instances: each keyed row a list
+    /// holds differently, named by its key (<c>$.state.world[name=ink]</c>), and every other value that differs, named
+    /// whole. It reads by reference and descends only into what differs, so for a definition composed from another by an
+    /// edit it reads what the edit touched.</summary>
+    /// <param name="before">The earlier definition.</param>
+    /// <param name="after">The later definition.</param>
+    /// <returns>The distinct paths, in document order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="before"/> or <paramref name="after"/> is
+    /// <see langword="null"/>.</exception>
+    public static IReadOnlyList<string> ChangedRows(WorldDefinition before, WorldDefinition after) {
+        ArgumentNullException.ThrowIfNull(argument: before);
+        ArgumentNullException.ThrowIfNull(argument: after);
+
+        var rows = new List<string>();
+
+        new Cursor(rewriter: null!, tables: Everything.CurrentTables(), visitor: null!).ChangedRows(before, after, "$", rows);
+        return rows.Distinct(StringComparer.Ordinal).ToArray();
+    }
+
     private static object? ResolveReloadValue(WorldDefinition source, object? value) {
         if (value is null) { return null; }
         if (!WorldStateDocumentValues.TryResolveGraph(source, value, out var resolved, out var reason)) {
@@ -36,7 +55,7 @@ public sealed partial class WorldDocumentWalker {
             string path, ICollection<string> conflicts) {
             if (previous is null || live is null || next is null || tables.ShapeOf(live.GetType()) is not { } shape) { return null; }
 
-            if (shape.Kind == JsonTypeInfoKind.Enumerable && shape.ElementType is { } element &&
+            if (shape.Kind == JsonTypeInfoKind.Enumerable && ElementOf(shape, live.GetType()) is { } element &&
                 previous is IEnumerable previousItems && live is IEnumerable liveItems && next is IEnumerable nextItems &&
                 before is JsonArray beforeRows && after is JsonArray afterRows && patch is JsonArray { Count: > 0 } rowPatch &&
                 !WorldDocumentBasis.IsReplaceMarker(rowPatch[0])) {
@@ -183,6 +202,46 @@ public sealed partial class WorldDocumentWalker {
                 }
             }
             return identity;
+        }
+
+        // The paths two values hold differently (ChangedRows): a described object member by member, a keyed list row by
+        // row (each row held by one side alone, named by its key), and anything else whole.
+        internal void ChangedRows(object? before, object? after, string path, List<string> rows) {
+            if (SameAuthoredValue(before, after)) { return; }
+            // An owned list's held form varies (an immutable array or list) while its rows are the model's, so lists are
+            // compared row by row whatever holds them; any other value of another type differs whole.
+            if ((before is null) || (after is null) || (before is string) || (tables.ShapeOf(after.GetType()) is not { } shape) ||
+                ((before.GetType() != after.GetType()) && !((before is IEnumerable) && (shape.Kind == JsonTypeInfoKind.Enumerable)))) {
+                if (!Equals(before, after)) { rows.Add(path); }
+                return;
+            }
+            if ((shape.Kind == JsonTypeInfoKind.Enumerable) && (ElementOf(shape, after.GetType()) is { IsValueType: false } element) &&
+                (before is IEnumerable beforeItems) && (after is IEnumerable afterItems)) {
+                var earlier = beforeItems.Cast<object?>().OfType<object>().ToArray();
+                var later = afterItems.Cast<object?>().OfType<object>().ToArray();
+                var earlierSet = new HashSet<object>(earlier, ReferenceEqualityComparer.Instance);
+                var laterSet = new HashSet<object>(later, ReferenceEqualityComparer.Instance);
+                var dropped = earlier.Where(item => !laterSet.Contains(item)).Select(item => IdentityOf(item, element)).ToList();
+                var added = later.Where(item => !earlierSet.Contains(item)).Select(item => IdentityOf(item, element)).ToList();
+
+                if ((dropped.Count + added.Count) == 0) { return; }
+                // Each side holds a key once; a row an edit replaced is held by both under one key, and named once.
+                if (!WorldDocumentBasis.TryFindRowKey(((dropped.Count > 0) ? dropped : added), ((added.Count > 0) ? added : dropped), out var key, out _)) {
+                    rows.Add(path);
+                    return;
+                }
+                foreach (var named in dropped.Concat(added).Select(identity => WorldDocumentBasis.RowIdentity(identity, key)).Distinct(DocumentValueEqualityComparer.Instance)) {
+                    rows.Add((named is null) ? path : WorldDocumentBasis.RowPath(path, key, named));
+                }
+                return;
+            }
+            if ((shape.Kind == JsonTypeInfoKind.Object) && shape.Described) {
+                foreach (var member in tables.MembersOf(shape)) {
+                    ChangedRows(member.Read(before), member.Read(after), $"{path}.{member.Name}", rows);
+                }
+                return;
+            }
+            if (!Equals(before, after)) { rows.Add(path); }
         }
 
         // A list's element type: the one its shape names, or, where the shape enumerates only objects (an owned list held

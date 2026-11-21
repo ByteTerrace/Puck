@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Puck.Abstractions.Collections;
 using Puck.Assets;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
@@ -198,7 +199,7 @@ public sealed partial class DocumentScope {
         Dictionary<string, object?> annotations,
         Dictionary<string, JsonNode?> locals,
         DocumentEvaluationBudget budget,
-        Dictionary<(string Name, string? Field), (ExpressionNode Expression, JsonNode? Value)> values,
+        Dictionary<(ByReference<ExpressionNode> Expression, string? Field), JsonNode?> values,
         Dictionary<string, DocumentScope> arguments,
         Dictionary<string, DocumentScope> templateScopes,
         HashSet<string> evaluating
@@ -251,7 +252,9 @@ public sealed partial class DocumentScope {
     [SideTable(reason: "records the refusal a vocabulary bound to each constant")]
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ExpressionNode, DocumentBindingRefusal> RefusedBindings = new();
 
-    private readonly Dictionary<(string Name, string? Field), (ExpressionNode Expression, JsonNode? Value)> m_values;
+    // Each binding's value by the expression bound and the field it lowered for, memoized on the scope that owns it
+    // (MemoFor), shared with every scope derived without a fresh memo.
+    private readonly Dictionary<(ByReference<ExpressionNode> Expression, string? Field), JsonNode?> m_values;
     private readonly Dictionary<string, DocumentScope> m_arguments;
     private readonly Dictionary<string, DocumentScope> m_templateScopes;
     private readonly HashSet<string> m_evaluating;
@@ -339,7 +342,7 @@ public sealed partial class DocumentScope {
     /// <summary>Reads a deferred binding together with its lexical scope, for vocabulary compilers that lower
     /// expressions rather than evaluate document values. Locals still take precedence at the caller.</summary>
     public bool TryGetExpression(string name, out ExpressionNode? expression, out DocumentScope lexical) {
-        lexical = (m_arguments.GetValueOrDefault(key: name) ?? ForConstant());
+        lexical = LexicalScopeOf(name: name);
         return Constants.TryGetValue(key: name, value: out expression);
     }
 
@@ -361,50 +364,14 @@ public sealed partial class DocumentScope {
         )) {
             return false;
         }
-        var key = (name, fieldKey);
+        var lexical = LexicalScopeOf(name: name);
+        var memo = MemoFor(lexical: lexical);
+        (ByReference<ExpressionNode> Expression, string? Field) key = (expression, fieldKey);
 
-        if (
-            m_values.TryGetValue(
-            key: key,
-            value: out var cached
-        ) &&
-            ReferenceEquals(
-            objA: cached.Expression,
-            objB: expression
-        )
-        ) {
-            value = cached.Value;
-            return true;
+        if (!memo.TryGetValue(key: key, value: out value)) {
+            value = memo[key] = Guarded(evaluate: _ => EvaluateAtNoPosition(expression: expression, fieldKey: fieldKey, lexical: lexical), expression: expression, lexical: lexical, name: name);
         }
-        var lexical = (m_arguments.TryGetValue(
-            key: name,
-            value: out var caller
-        )
-            ? caller
-            : ForConstant()
-        );
-        var bindingSourcePath = (lexical.SourcePath ?? DefinitionPathOf(value: expression));
-
-        if (!m_evaluating.Add(item: name)) {
-            throw new DocumentEvaluationException(
-                $"The binding '{name}' refers to itself.",
-                expression.Span,
-                PuckDiagnosticCodes.InvalidValue
-            ) {
-                SourceAttributed = true,
-                SourcePath = bindingSourcePath,
-            };
-        }
-        using var sourceScope = Diagnostics.PushSource(sourcePath: bindingSourcePath);
-        try {
-            value = EvaluateAtNoPosition(expression: expression, fieldKey: fieldKey, lexical: lexical);
-            m_values[key] = (expression, value);
-            return true;
-        } catch (DocumentEvaluationException error) when (!error.SourceAttributed) {
-            throw error.WithSource(sourcePath: bindingSourcePath);
-        } finally {
-            m_evaluating.Remove(item: name);
-        }
+        return true;
     }
 
     /// <summary>Lowers a <c>let</c> holding a record at the position it lands in, as the record written there would
@@ -421,13 +388,22 @@ public sealed partial class DocumentScope {
             return false;
         }
         // Lowered once per position, so a let read in many places refuses a misspelling once, against its own source.
-        var key = (name, $"{fieldKey}\0{position}");
+        var lexical = LexicalScopeOf(name: name);
+        var memo = MemoFor(lexical: lexical);
+        (ByReference<ExpressionNode> Expression, string? Field) key = (expression, $"{fieldKey}\0{position}");
 
-        if (m_values.TryGetValue(key: key, value: out var cached) && ReferenceEquals(objA: cached.Expression, objB: expression)) {
-            value = cached.Value?.DeepClone();
-            return true;
+        if (!memo.TryGetValue(key: key, value: out var lowered)) {
+            lowered = memo[key] = Guarded(evaluate: _ => DocumentLowering.At(context: position, lower: () => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: lexical), scope: lexical), expression: expression, lexical: lexical, name: name);
         }
-        var lexical = (m_arguments.TryGetValue(key: name, value: out var caller) ? caller : ForConstant());
+        value = lowered?.DeepClone();
+        return true;
+    }
+    // The scope a binding evaluates in: the caller's for a template argument, the declaring scope for a `let`, and a
+    // locals-free view of this one for any other constant.
+    private DocumentScope LexicalScopeOf(string name) => (m_arguments.GetValueOrDefault(key: name) ?? ForConstant());
+    // The one guarded evaluation of a binding: a binding that refers to itself is refused, and a refusal is attributed
+    // to the source that wrote the binding, whose path `evaluate` is handed.
+    private T Guarded<T>(string name, ExpressionNode expression, DocumentScope lexical, Func<string?, T> evaluate) {
         var bindingSourcePath = (lexical.SourcePath ?? DefinitionPathOf(value: expression));
 
         if (!m_evaluating.Add(item: name)) {
@@ -438,11 +414,7 @@ public sealed partial class DocumentScope {
         }
         using var sourceScope = Diagnostics.PushSource(sourcePath: bindingSourcePath);
         try {
-            var lowered = DocumentLowering.At(context: position, lower: () => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: lexical), scope: lexical);
-
-            m_values[key] = (expression, lowered);
-            value = lowered?.DeepClone();
-            return true;
+            return evaluate(arg: bindingSourcePath);
         } catch (DocumentEvaluationException error) when (!error.SourceAttributed) {
             throw error.WithSource(sourcePath: bindingSourcePath);
         } finally {
@@ -450,6 +422,16 @@ public sealed partial class DocumentScope {
         }
     }
 
+    // The memo a binding's value is kept in: the one of the scope it evaluates in when that scope binds no locals, so a
+    // document `let` read inside a template is evaluated once for every call rather than once per call; otherwise this
+    // reading scope's, which each template invocation starts afresh, so an argument evaluated in a caller holding loop
+    // locals is kept only for the invocation it was bound to. A memoized value depends only on bindings its owning
+    // scope holds fixed: a scope without locals reads nothing a loop or lambda binds, and its bindings are keyed by the
+    // expression node, so a name another expression rebinds misses.
+    private Dictionary<(ByReference<ExpressionNode> Expression, string? Field), JsonNode?> MemoFor(DocumentScope lexical) => ((lexical.Locals.Count == 0)
+        ? lexical.m_values
+        : m_values
+    );
     // A binding's value is data until something uses it, and its result is cached across uses, so it is evaluated at
     // no position: what it holds is classified where it lands, never where it was first read. Its own method so the
     // closure is built only for a binding evaluated, never for one read from a local or the cache.
@@ -643,44 +625,27 @@ public sealed partial class DocumentScope {
         if (Locals.ContainsKey(key: name) || !Constants.TryGetValue(key: name, value: out var expression)) {
             return false;
         }
-        var lexical = (m_arguments.GetValueOrDefault(key: name) ?? ForConstant());
-        var bindingSourcePath = (lexical.SourcePath ?? DefinitionPathOf(value: expression));
+        var lexical = LexicalScopeOf(name: name);
 
-        if (!m_evaluating.Add(item: name)) {
-            throw new DocumentEvaluationException($"The binding '{name}' refers to itself.", expression.Span, PuckDiagnosticCodes.InvalidValue) {
-                SourceAttributed = true,
-                SourcePath = bindingSourcePath,
-            };
-        }
-
-        using var sourceScope = Diagnostics.PushSource(sourcePath: bindingSourcePath);
-        try {
-            var positioned = new DocumentScope(
-                annotations: Annotations,
-                arguments: lexical.m_arguments,
-                basePath: lexical.BasePath,
-                budget: Budget,
-                constants: lexical.Constants,
-                currentPointer: CurrentPointer,
-                diagnostics: Diagnostics,
-                evaluating: m_evaluating,
-                locals: lexical.Locals,
-                schema: Schema,
-                sourceMap: SourceMap,
-                sourcePath: bindingSourcePath,
-                templates: lexical.Templates,
-                templateScopes: lexical.m_templateScopes,
-                values: lexical.m_values,
-                vocabulary: Vocabulary
-            );
-
-            value = DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: positioned);
-            return true;
-        } catch (DocumentEvaluationException error) when (!error.SourceAttributed) {
-            throw error.WithSource(sourcePath: bindingSourcePath);
-        } finally {
-            m_evaluating.Remove(item: name);
-        }
+        value = Guarded(evaluate: bindingSourcePath => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: new DocumentScope(
+            annotations: Annotations,
+            arguments: lexical.m_arguments,
+            basePath: lexical.BasePath,
+            budget: Budget,
+            constants: lexical.Constants,
+            currentPointer: CurrentPointer,
+            diagnostics: Diagnostics,
+            evaluating: m_evaluating,
+            locals: lexical.Locals,
+            schema: Schema,
+            sourceMap: SourceMap,
+            sourcePath: bindingSourcePath,
+            templates: lexical.Templates,
+            templateScopes: lexical.m_templateScopes,
+            values: lexical.m_values,
+            vocabulary: Vocabulary
+        )), expression: expression, lexical: lexical, name: name);
+        return true;
     }
     /// <summary>Creates a scope identical to this one but carrying a different constant set, for a template
     /// invocation's bound parameters.</summary>

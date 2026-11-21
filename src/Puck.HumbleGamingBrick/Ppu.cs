@@ -472,6 +472,22 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
     /// <inheritdoc/>
     public int Mode =>
         m_mode;
+    /// <summary>Gets the dots from now until every visible line is drawn and the vertical blank begins, or zero while
+    /// the LCD is off and draws nothing. It reads the line counter and changes nothing.</summary>
+    public int DotsToVerticalBlank {
+        get {
+            if ((m_lcdc & LcdEnable) == 0) {
+                return 0;
+            }
+
+            var toLineEnd = ((m_firstLineAfterEnable ? FirstLineLength : DotsPerScanline) - m_dot);
+
+            return ((m_ly < VisibleScanlines)
+                ? (toLineEnd + (((VisibleScanlines - 1) - m_ly) * DotsPerScanline))
+                : (toLineEnd + ((((ScanlinesPerFrame - 1) - m_ly) + VisibleScanlines) * DotsPerScanline))
+            );
+        }
+    }
     /// <summary>Gets how many further dots a tick would only advance the counter on; unbounded with the LCD off.</summary>
     public int QuietDots =>
         (((m_lcdc & LcdEnable) == 0)

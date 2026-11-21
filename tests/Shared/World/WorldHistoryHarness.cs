@@ -117,7 +117,7 @@ internal sealed class WorldHistoryHarness : IDisposable {
     /// <summary>Steps one tick with whatever input is already submitted, the shell's order.</summary>
     public void StepWithoutInput() {
         Fixture.Step();
-        Fixture.Server.EnforceJournalDepth();
+        Fixture.Server.FoldJournal();
         Tape.NoteTick();
         Live[Tick] = Hash();
     }

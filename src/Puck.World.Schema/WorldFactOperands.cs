@@ -2,7 +2,7 @@ using AddressUse = Puck.State.Rules.AddressUse;
 using OperandAddress = Puck.State.Rules.OperandAddress;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using IRuleKey = Puck.State.Rules.IRuleKey;
-using RuleReads = Puck.State.Rules.RuleReads;
+using RuleKeyFact = Puck.State.Rules.RuleKeyFact;
 using WriteKey = Puck.State.Rules.WriteKey;
 
 namespace Puck.World;
@@ -593,25 +593,10 @@ public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey, IWorldDis
             ? WriteKey.Resolved(key: interned)
             : WriteKey.Refused(reason: reason));
     }
-    Resolved<long> IRuleKey.ResolveIndex(IStateReader reader) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
-        var resolved = ((IRuleKey)this).Resolve(reader: reader);
-
-        if (!resolved.TryNamed(value: out var key)) {
-            return ((resolved.Case == FaultCase.Faulted)
-                ? Resolved<long>.Faulted
-                : Resolved<long>.Nothing);
-        }
-
-        return (RuleReads.TryKeyIndex(
-            keys: reader.Arena.Keys,
-            index: out var index,
-            key: key
-        )
-            ? Resolved<long>.Named(value: index)
-            : Resolved<long>.Nothing);
-    }
+    Resolved<long> IRuleKey.ResolveIndex(IStateReader reader) => RuleKeyFact.IndexOf(
+        reader: reader,
+        resolved: ((IRuleKey)this).Resolve(reader: reader)
+    );
 }
 /// <summary>The rows a compiled body reference resolves through.</summary>
 public static class WorldBodyRefReads {

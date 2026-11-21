@@ -101,7 +101,7 @@ struct SdfLightSource {
     float weight;
     // A directional's unit direction toward the light; a point's, an occluder's or a screen's world position.
     float3 position;
-    // A rim's exponent, a point's range, an occluder's radius or a screen's face area.
+    // A rim's exponent, a point's or a screen's range, or an occluder's radius.
     float param;
     // A screen's face normal.
     float3 facing;
@@ -317,8 +317,9 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
         light.kind = SdfLightScreen;
         // The face's mean luminance, in nits (sdf-screen-emission.comp.hlsl).
         light.color = sdfScreenLights[screenIndex].rgb;
-        light.param = ((4.0 * surface.right.w) * surface.up.w);
-        light.weight = (light.param / SDF_PI);
+        // The range the host sizes from the face's peak luminance (SdfWorldTables' screen reaches).
+        light.param = surface.origin.w;
+        light.weight = (((4.0 * surface.right.w) * surface.up.w) / SDF_PI);
         light.position = surface.origin.xyz;
         light.facing = normalize(cross(surface.right.xyz, surface.up.xyz));
 
@@ -334,7 +335,8 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 // - a rim its view-dependent silhouette brighten;
 // - an occluder a Gaussian dimming of reflected light, facing the surface;
 // - a screen its glow toward what sits in front of its face: a Lambertian face of luminance L and area A casts
-//   E = L * A * cos / (d^2 + A / pi) on a surface facing it, exact on the axis of a disc of that area.
+//   E = L * A * cos / (d^2 + A / pi) on a surface facing it, exact on the axis of a disc of that area, eased to zero at
+//   its range as a point light is (sdfLightWindow).
 // A specular lobe's scale is the light's illuminance, pi times its weight, since sdfMaterialSpecular answers the BRDF
 // times the cosine. A wrap of 0 reduces each wrapped term to max(n.l, 0).
 // The one evaluation of a light's direction, reach, probe share and visibility, which the default response and an
@@ -362,7 +364,7 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
         float3 delta = light.position - surface.position;
         float distanceSquared = dot(delta, delta);
         inputs.direction = delta * rsqrt(max(distanceSquared, 1.0e-8));
-        if (light.kind == SdfLightScreen) inputs.reach = saturate(dot(light.facing, -inputs.direction)) / (distanceSquared + light.weight);
+        if (light.kind == SdfLightScreen) inputs.reach = (saturate(dot(light.facing, -inputs.direction)) * sdfLightWindow(distanceSquared, light.param)) / (distanceSquared + light.weight);
     }
     bool traced = surface.probed && light.record.Shadows != 0u && light.index >= 0;
     bool lit = (light.weight * inputs.reach > 0.0);

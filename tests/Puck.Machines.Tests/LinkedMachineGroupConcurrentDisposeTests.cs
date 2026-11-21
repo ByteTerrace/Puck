@@ -124,6 +124,9 @@ public sealed class LinkedMachineGroupConcurrentDisposeTests {
         public long CompletedTransfers => 0L;
         public long CycleCount => 0L;
         public MachineCycleRate CycleRate => new(cycles: 1UL);
+        public bool CarriesBudgetOvershoot => true;
+        public long CyclesPerFrame => 1L;
+        public long CyclesToFrameEnd => long.MaxValue;
         public ReadOnlySpan<uint> Framebuffer => m_first.Framebuffer;
         public int MemberCount => 2;
         public long NativeFrameIndex => 0L;
@@ -175,6 +178,9 @@ public sealed class LinkedMachineGroupConcurrentDisposeTests {
         public string CheckpointIdentity => "test/linked-core";
         public long CycleCount => 0L;
         public MachineCycleRate CycleRate => new(cycles: 1UL);
+        public bool CarriesBudgetOvershoot => true;
+        public long CyclesPerFrame => 1L;
+        public long CyclesToFrameEnd => long.MaxValue;
         public bool Disposed => (Volatile.Read(location: ref m_disposed) != 0);
         public bool DisposedMidStep { get; private set; }
         public ReadOnlySpan<uint> Framebuffer => m_framebuffer;

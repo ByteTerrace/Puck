@@ -14,7 +14,9 @@ namespace Puck.Machines;
 /// reconstructs by restoring the nearest keyframe and deterministically replaying the intervening inputs — the core is
 /// deterministic, so the replay lands bit-exact. The landing also hands back the host tick-to-cycle accumulator phase the
 /// landed frame was produced under, so the host restores it atomically with the core (a restored instant plus identical
-/// future ticks receives identical budgets). A dual-ended segment ring bounded by a memory budget holds the history; when
+/// future ticks receives identical budgets). A host that runs one tick segment in several parts
+/// (<see cref="MachineSegment"/>) records each part, and a rewind lands only where a segment ended, replaying the parts
+/// before it, so the resumed future re-traces the recorded one segment for segment. A dual-ended segment ring bounded by a memory budget holds the history; when
 /// the budget is full the oldest keyframe span is evicted. Capture runs into pre-sized, reused buffers (keyframes recycle
 /// their buffers on eviction, the per-frame record arrays are allocated once per segment), so the steady-state ring
 /// allocates nothing. There is no XOR/RLE delta encode: restore is keyframe-plus-replay (bit-exact by construction), so a
@@ -98,10 +100,11 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
     /// <summary>Gets whether the lookahead machine is live (runahead armed with a forked sibling).</summary>
     public bool RunaheadActive => ((m_runaheadFrames > 0) && (m_lookahead is not null));
 
-    private void AppendDelta(long cycle, long nativeFrame, in TInput input, long budget, RationalRateAccumulator hostAccumulator) {
+    private void AppendDelta(long cycle, long nativeFrame, in TInput input, long budget, RationalRateAccumulator hostAccumulator, bool lands) {
         var segment = Newest;
         var index = segment.DeltaCount;
 
+        segment.Lands[index] = lands;
         segment.Cycle[index] = cycle;
         segment.NativeFrame[index] = nativeFrame;
         segment.Input[index] = input;
@@ -158,11 +161,13 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
             m_segments[i] = new Segment(deltaCapacity: (m_interval - 1));
         }
     }
-    // Prefer the oldest captured instant in [target, current): this stays within the requested rewind window while moving
-    // as far back through it as the request permits. If no instant exists there (an instruction can cross more than one
-    // native-frame boundary), fall back to the nearest older instant so repeated RewindBy(1) calls still make progress.
-    private void Locate(long target, out int slot, out int frameIndex) {
-        slot = m_segHead;
+    // Among the instants a rewind may land on (those that end a host tick segment), prefer the oldest in
+    // [target, current): this stays within the requested rewind window while moving as far back through it as the
+    // request permits. If none exists there (an instruction can cross more than one native-frame boundary), fall back to
+    // the nearest older one so repeated RewindBy(1) calls still make progress. Returns false when the ring holds no
+    // instant to land on.
+    private bool Locate(long target, out int slot, out int frameIndex) {
+        slot = -1;
         frameIndex = 0;
         var current = m_core.NativeFrameIndex;
 
@@ -170,49 +175,47 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
             var index = ((m_segHead + s) % m_capacity);
             var segment = m_segments[index];
 
-            if (
-                (segment.BaseNativeFrame >= target) &&
-                (segment.BaseNativeFrame < current)
-            ) {
-                slot = index;
-                frameIndex = 0;
-
-                return;
-            }
-
-            if (segment.BaseNativeFrame < target) {
-                slot = index;
-                frameIndex = 0;
-            }
-
-            for (var i = 0; (i < segment.DeltaCount); ++i) {
-                if (
-                    (segment.NativeFrame[i] >= target) &&
-                    (segment.NativeFrame[i] < current)
-                ) {
-                    slot = index;
-                    frameIndex = (i + 1);
-
-                    return;
+            // Instant zero is the keyframe; instant i above it is the delta at i - 1.
+            for (var i = 0; (i <= segment.DeltaCount); ++i) {
+                if (!((i == 0) ? segment.BaseLands : segment.Lands[(i - 1)])) {
+                    continue;
                 }
 
-                if (segment.NativeFrame[i] < target) {
+                var nativeFrame = ((i == 0) ? segment.BaseNativeFrame : segment.NativeFrame[(i - 1)]);
+
+                if (
+                    (nativeFrame >= target) &&
+                    (nativeFrame < current)
+                ) {
                     slot = index;
-                    frameIndex = (i + 1);
+                    frameIndex = i;
+
+                    return true;
+                }
+
+                if (
+                    (nativeFrame < target) ||
+                    (slot < 0)
+                ) {
+                    slot = index;
+                    frameIndex = i;
                 }
             }
         }
+
+        return (slot >= 0);
     }
     // The retained size of one segment's per-frame record arrays: cycle + native-frame + budget + accumulator (four
-    // 8-byte lanes) plus the held-input image, each sized interval-1. Fixed per segment; allocated once in the ctor.
+    // 8-byte lanes), the landing flag, plus the held-input image, each sized interval-1. Fixed per segment; allocated
+    // once in the ctor.
     private long PerFrameRecordBytes() =>
-        (((long)(m_interval - 1)) * (32L + Unsafe.SizeOf<TInput>()));
+        (((long)(m_interval - 1)) * (33L + Unsafe.SizeOf<TInput>()));
     // The memory one live segment pins: its grown keyframe buffer plus the once-allocated per-frame record arrays
     // (cycle/native-frame/input/budget/accumulator, each sized interval-1). Sized against the current keyframe length so
     // the accounting tracks the real image, matching the per-span cost EnsureRing budgets the ring against.
     private long RetainedBytesPerSegment() =>
         (((long)m_snapshotSize) + PerFrameRecordBytes());
-    private void StartSegment(int length, long cycle, long nativeFrame, RationalRateAccumulator hostAccumulator) {
+    private void StartSegment(int length, long cycle, long nativeFrame, RationalRateAccumulator hostAccumulator, bool lands) {
         EnsureRing(baseLength: length);
 
         int slot;
@@ -240,6 +243,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
         segment.BaseCycle = cycle;
         segment.BaseNativeFrame = nativeFrame;
         segment.BaseAccumulator = hostAccumulator;
+        segment.BaseLands = lands;
         segment.DeltaCount = 0;
     }
     // Drop every captured frame newer than the landing (later deltas in the landing segment, and all newer segments).
@@ -402,7 +406,9 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
     /// <param name="hostAccumulator">The host's tick-to-cycle accumulator phase AFTER this frame produced its budget —
     /// the value that seeds the next frame's budget. Stored with the frame and handed back at the landing point on a
     /// rewind so the host restores it atomically with the core.</param>
-    public void Record(in TInput input, long budget, RationalRateAccumulator hostAccumulator) {
+    /// <param name="lands">Whether a rewind may land on this instant: <see langword="true"/> (the default) where a
+    /// host tick segment ended, <see langword="false"/> for a part inside one, which a rewind only replays through.</param>
+    public void Record(in TInput input, long budget, RationalRateAccumulator hostAccumulator, bool lands = true) {
         if (!m_enabled) {
             return;
         }
@@ -424,6 +430,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
             StartSegment(
                 cycle: cycle,
                 hostAccumulator: hostAccumulator,
+                lands: lands,
                 length: length,
                 nativeFrame: nativeFrame
             );
@@ -433,6 +440,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
                 cycle: cycle,
                 hostAccumulator: hostAccumulator,
                 input: in input,
+                lands: lands,
                 nativeFrame: nativeFrame
             );
         }
@@ -469,11 +477,13 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
         var current = m_core.NativeFrameIndex;
         var target = (current - frames);
 
-        Locate(
+        if (!Locate(
             frameIndex: out var frameIndex,
             slot: out var slot,
             target: target
-        );
+        )) {
+            return 0;
+        }
 
         var segment = m_segments[slot];
 
@@ -579,6 +589,7 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
     private sealed class Segment {
         public Segment(int deltaCapacity) {
             Cycle = new long[deltaCapacity];
+            Lands = new bool[deltaCapacity];
             NativeFrame = new long[deltaCapacity];
             Input = new TInput[deltaCapacity];
             Budget = new long[deltaCapacity];
@@ -589,10 +600,12 @@ public sealed class MachineTimeTravel<TInput> : IDisposable where TInput : unman
         public readonly long[] Budget;
         public readonly long[] Cycle;
         public readonly TInput[] Input;
+        public readonly bool[] Lands;
         public readonly long[] NativeFrame;
 
         public byte[] Base = [];
         public RationalRateAccumulator BaseAccumulator;
+        public bool BaseLands;
         public long BaseCycle;
         public int BaseLength;
         public long BaseNativeFrame;

@@ -166,7 +166,7 @@ public sealed partial class SdfWorldTables {
                 }
             }
             CanRecord &= (known || Forced);
-            Owes = m_refresh.Owes(block: m_tables.m_skyRecord[0], layers: layers, physical: m_physical, imageChanged: (m_watch.Changed() || !known || Forced));
+            Owes = m_refresh.Owes(block: m_tables.m_skyRecord[0], layers: layers, physical: m_physical, imageChanged: ((m_watch.ChangedScreens() != 0u) || !known || Forced));
             return known;
         }
         public long Publish() {

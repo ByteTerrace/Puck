@@ -22,6 +22,16 @@ public enum QueuedMachineSubmission {
     /// <summary>The segment was accepted and its ordered drain is still outstanding.</summary>
     PendingDrain,
 }
+/// <summary>Reads a <see cref="QueuedMachineSubmission"/>.</summary>
+public static class QueuedMachineSubmissions {
+    /// <summary>Returns whether the segment is in the machine's queue or beyond it: accepted, with or without a wait
+    /// for capacity, or accepted with its drain still outstanding. A caller that hands over anything with a segment (a
+    /// clock position, scheduled controller changes) lets go of it exactly when a fresh submission answers this.</summary>
+    /// <param name="submission">The submission outcome.</param>
+    /// <returns><see langword="true"/> for every outcome but a rejection and a capacity wait that ran out.</returns>
+    public static bool IsAccepted(this QueuedMachineSubmission submission) =>
+        (submission is QueuedMachineSubmission.Accepted or QueuedMachineSubmission.AcceptedAfterBackpressure or QueuedMachineSubmission.PendingDrain);
+}
 /// <summary>
 /// Optional asynchronous submission capability for a computationally heavy <see cref="IMachineRuntime"/>. Below its
 /// capacity, a host submits exact tick/input segments without waiting for emulation; the machine executes every accepted
@@ -55,6 +65,9 @@ public interface IQueuedMachineRuntime {
     TimeSpan StepBusyTime { get; }
     /// <summary>Gets a worker fault description, or <see langword="null"/> while the queue is healthy.</summary>
     string? QueueFault { get; }
+    /// <summary>Gets how many controller changes accepted segments carried inside them, each at its own offset rather
+    /// than at the segment's start, since the runtime was created. Host diagnostics, never machine state.</summary>
+    long TimedInputChanges => 0L;
 
     /// <summary>Accepts one exact tick/input segment for ordered execution, waiting for finite queue capacity when
     /// necessary. A non-rejected result guarantees that the segment will execute exactly once unless a later worker
@@ -66,4 +79,10 @@ public interface IQueuedMachineRuntime {
 
     /// <summary>Submits or resumes one segment. A synchronous step retains its drain generation across slices.</summary>
     QueuedMachineSubmission StepSegment(ulong deltaTicks, bool drain, ref ulong generation, WaitDeadline deadline);
+    /// <summary>States the host clock position the next submitted segment ends at, which stamps the frames that segment
+    /// completes so a display finds the one due when it presents (<see cref="IMachineVideoOutput.FrameDue"/>). The
+    /// submission captures it, as it does the input ports. A host that states none gets the machine's own running clock,
+    /// the sum of the segments it accepted. Presentation only: the stamp never reaches machine state.</summary>
+    /// <param name="endTicks">The clock position at the segment's end, in engine ticks; it never moves back.</param>
+    void SetSegmentClock(ulong endTicks);
 }
