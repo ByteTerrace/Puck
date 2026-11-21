@@ -48,6 +48,8 @@ public sealed partial class SdfMeshIrradiance {
     private uint[] m_gpuSavedHits = [];
     private uint[] m_gpuFresh = [];
     private int[] m_gpuDestinations = [];
+    // The candidate each row of a selection answers for (ListGpu).
+    private int[] m_gpuSelectRows = [];
     private Vector4[]? m_gpuLightingRows;
     private int[] m_gpuUpdateAt = [];
     private uint[] m_gpuUpdateData = [];
@@ -141,8 +143,11 @@ public sealed partial class SdfMeshIrradiance {
         var inputWords = (layout.TotalCount * SdfMeshProbeRelight.SelectionInputWords);
         ArrayCapacity.EnsureScratch(ref m_gpuOrigins, layout.TotalCount);
         ArrayCapacity.EnsureScratch(ref m_gpuInput, inputWords);
+        ArrayCapacity.EnsureScratch(ref m_gpuSelectRows, layout.TotalCount);
         var origins = m_gpuOrigins;
         var input = m_gpuInput;
+        var selectRows = m_gpuSelectRows;
+        var selections = 0;
         FitGpuHits(layout: layout);
         TrimGpuHits(layout: layout, lows: snapshot.Lows);
         var now = Time.GetTimestamp();
@@ -157,7 +162,6 @@ public sealed partial class SdfMeshIrradiance {
             for (var z = low.Z; z < low.Z + dims.Z; z++) {
                 for (var y = low.Y; y < low.Y + dims.Y; y++) {
                     for (var x = low.X; x < low.X + dims.X; x++) {
-                        var i = candidates.Count;
                         var present = m_levels[level].Cache.TryGetValue((x, y, z), out var probe);
                         var center = new Vector3(x + .5f, y + .5f, z + .5f) * spacing;
                         var slot = layout.OffsetOf(level) + SlotOf(x, y, z, dims);
@@ -170,35 +174,43 @@ public sealed partial class SdfMeshIrradiance {
                         if (present) { RecordAge(ages, level, age, change != InputChange.None); }
                         var required = !written || token == 0 || probe.Geometry != snapshot.Geometry;
                         if (!required && !OwesRelight(in probe, change, in snapshot, all, interleave, level, age, bound, phase, now, ref deferred)) { continue; }
-                        origins[i] = new(center, probe.Reach);
-                        var row = input.AsSpan(i * SdfMeshProbeRelight.SelectionInputWords, SdfMeshProbeRelight.SelectionInputWords);
-                        row[0] = (uint)probe.Geometry;
-                        row[1] = (uint)level;
-                        row[2] = BitConverter.SingleToUInt32Bits(probe.Offset.X);
-                        row[3] = BitConverter.SingleToUInt32Bits(probe.Offset.Y);
-                        row[4] = BitConverter.SingleToUInt32Bits(probe.Offset.Z);
-                        row[5] = probe.GpuSlot;
-                        row[6] = PackedIntPair.Low(value: token);
-                        row[7] = PackedIntPair.High(value: token);
+                        // A probe holding no device hits traces, as the selector's first test answers (sdf-probe-select:
+                        // no token is never present), so it takes no row of the selection.
+                        if (token != 0) {
+                            var i = selections++;
+                            selectRows[i] = candidates.Count;
+                            origins[i] = new(center, probe.Reach);
+                            var row = input.AsSpan(i * SdfMeshProbeRelight.SelectionInputWords, SdfMeshProbeRelight.SelectionInputWords);
+                            row[0] = (uint)probe.Geometry;
+                            row[1] = (uint)level;
+                            row[2] = BitConverter.SingleToUInt32Bits(probe.Offset.X);
+                            row[3] = BitConverter.SingleToUInt32Bits(probe.Offset.Y);
+                            row[4] = BitConverter.SingleToUInt32Bits(probe.Offset.Z);
+                            row[5] = probe.GpuSlot;
+                            row[6] = PackedIntPair.Low(value: token);
+                            row[7] = PackedIntPair.High(value: token);
+                        }
                         var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
                         var visible = InAnyView(center, in snapshot);
-                        candidates.Add(new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: present ? probe.LitAt : 0, Trace: false,
+                        candidates.Add(new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: present ? probe.LitAt : 0, Trace: (token == 0),
                             Overdue: bound > 0 && age >= bound, Stale: present && change != InputChange.None, Urgency: AgePriority(age, bound, visible, probe.Moved), Visible: visible));
                     }
                 }
             }
         }
-        var count = candidates.Count;
-        if (count == 0) { return deferred; }
+        if (selections == 0) {
+            OrderCandidates(candidates, all);
+            return deferred;
+        }
         var changes = new List<Vector4> {
             new(BitConverter.Int32BitsToSingle(snapshot.Geometry), 0, 0, 0),
             new(snapshot.Changes.Length, 0, BitConverter.Int32BitsToSingle(snapshot.Changes.Length == 0 ? 0 : snapshot.Changes[0].Geometry), layout.Reach),
             new(layout.SpacingOf(0), 0), new(layout.SpacingOf(1), 0), new(layout.SpacingOf(2), 0),
         };
         changes[1] = changes[1] with { Y = WriteChanges(changes: snapshot.Changes, rows: changes) };
-        var selected = GpuTrace!.Select(snapshot.Scene, origins.AsMemory(start: 0, length: count), input.AsMemory(start: 0, length: count * SdfMeshProbeRelight.SelectionInputWords), [.. changes], GpuHitCapacity, reuse: m_gpuAnswer);
+        var selected = GpuTrace!.Select(snapshot.Scene, origins.AsMemory(start: 0, length: selections), input.AsMemory(start: 0, length: selections * SdfMeshProbeRelight.SelectionInputWords), [.. changes], GpuHitCapacity, reuse: m_gpuAnswer);
         m_gpuAnswer = selected;
-        for (var i = 0; i < count; i++) { candidates[i] = candidates[i] with { Trace = selected[i] != 0 }; }
+        for (var i = 0; i < selections; i++) { candidates[selectRows[i]] = candidates[selectRows[i]] with { Trace = selected[i] != 0 }; }
         OrderCandidates(candidates, all);
         return deferred;
     }
