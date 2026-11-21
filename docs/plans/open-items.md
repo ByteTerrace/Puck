@@ -86,40 +86,58 @@ lanes, [the release](#the-release), the
 
 ### The first lanes
 
-The lead's own first act is the bulk window on the head, which runs the
-[verification debts](#verification-debts) and takes the frame-thread trace.
-These three lanes need nothing from it and start at once. Each brief's facts
-are in its packet.
+**The CPU frame is fixed first, as one structural campaign, at the start of
+the session** (the owner's ruling: "I expect it to be fixed ASAP when the next
+session starts. I'm tired of these incremental changes that barely seem to
+move the needle when my hardware is beast"). The RTX 4070 machine's CPU is a
+Ryzen 7 7800X3D (8 cores, 16 threads, 96 MB of L3); a world the debug world's
+size should cost it a few milliseconds a frame. The forcing function is that
+the debug world is GPU-bound on that machine: the frame thread does a few
+milliseconds of work and the rest spreads over the cores. Every item of
+[the CPU frame](#the-cpu-frame) is replaced in the same campaign, not
+shaved, and the lead runs its lanes in parallel by area from the first hour.
+The frame-thread trace in the first bulk window orders the work inside each
+lane; it does not gate starting them.
 
-1. **`tick-thread`, a design memo** · high · a principal on the strongest
-   model, then a review by another family before any code.
-   [The CPU frame](#the-cpu-frame), item 1: the in-process authority steps on
-   its own thread and the frame presents the latest completed tick. Key
-   facts: `HostLoop.Run` steps and produces on one thread;
-   [the job system's open question 7](engine-job-system.md#open-questions)
-   holds the three arrangements; the memo states the determinism invariant
-   and what enforces it, and measures input-to-display time on both sides.
-2. **`remote-content`, a reading and then a design** · high, M1 · a principal
-   on the strongest model. [A hosted world on a client](#a-hosted-world-on-a-client):
-   boot a listening World and a `--connect` client, read what the client
-   shows of text, machines and session screens, then weigh running them on
-   the client from its package against streaming them from the authority.
-   The pair boots headless; the captures need a window and come back as a
-   verification request.
-3. **`windowed-admission`, code** · high · a specialist on a mid model.
-   [CLI and lease machinery](#cli-and-lease-machinery): windowed admission
-   judges a start by its own measured need and the GPU lease admits by
-   measured headroom, as the heavy lease already does, with an exclusive hold
-   kept for timing. It cost lanes hours and left their work unverified.
+1. **`tick-thread`** · high · a principal on the strongest model, design and
+   code in one lane, reviewed by another family before it lands.
+   [The CPU frame](#the-cpu-frame), item 1: the in-process authority steps
+   on its own thread and the frame presents the latest completed tick. The
+   register allows the pipelined tick with present-time look input
+   ([the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation));
+   the lane states the determinism invariant and what enforces it, and
+   measures input-to-display time before and after.
+2. **`frame-fork`** · high · a principal or specialist. Item 2: capture, pack
+   and view recording run across one pool, partitioned by registration
+   ([the job system plan](engine-job-system.md)).
+3. **`slot-transforms`** · high · a specialist. Item 3: the GPU draw record
+   reads its slot's transform instead of storing a matrix, so a moving body
+   rewrites one transform row and pack stops restaging records.
+4. **`field-queries`** · high · a principal. Item 4: presentation queries
+   (effector probes, camera clearance) leave the interpreted CPU field, on
+   the GPU a frame late or as compiled vectorized code, whichever the lane
+   shows is better.
+5. **`frame-garbage`** · high · a specialist. Item 5 and the memory tenants:
+   no collection pauses during play, the 26 MB appearance clone, the 80 MB
+   clearance evaluator.
 
-Ready behind them, each a design memo on the strongest model unless said:
-`multi-seat` ([a multi-seat client](#a-multi-seat-client), M2, its trust
-boundary reviewed by another family); `field-queries`
-([the CPU frame](#the-cpu-frame), item 4); `crowd-peers`, code on a mid model
-([the debug world at MMO scale](#the-debug-world-at-mmo-scale)); and
-`exhibits-dark`, a diagnosis with a granted window
-([lighting](#lighting-and-gi)). [The CPU frame](#the-cpu-frame)'s items 2
-and 3 are briefed once the trace has ordered them.
+Beside them, from the same hour:
+
+- **`remote-content`** · high, M1 · a principal.
+  [A hosted world on a client](#a-hosted-world-on-a-client): boot a listening
+  World and a `--connect` client, read what the client shows of text,
+  machines and session screens, then build the answer.
+- **`windowed-admission`** · high · a specialist on a mid model.
+  [CLI and lease machinery](#cli-and-lease-machinery): windowed admission
+  judges a start by its own measured need and the GPU lease admits by
+  measured headroom, with an exclusive hold kept for timing. Five parallel
+  CPU lanes need it, so it lands first.
+
+Ready behind them: `multi-seat` ([a multi-seat client](#a-multi-seat-client),
+M2, its trust boundary reviewed by another family); `crowd-peers`, code on a
+mid model ([the debug world at MMO scale](#the-debug-world-at-mmo-scale));
+and `exhibits-dark`, a diagnosis with a granted window
+([lighting](#lighting-and-gi)).
 
 ### The release
 
