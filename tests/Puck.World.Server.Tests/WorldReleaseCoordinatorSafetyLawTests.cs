@@ -5,7 +5,7 @@ using Xunit;
 namespace Puck.World.Server.Tests;
 
 /// <summary>Failure-injection laws for coordinator ownership and uncertain commit responses.</summary>
-public sealed class WorldReleaseCoordinatorSafetyLawTests {
+public sealed partial class WorldReleaseCoordinatorSafetyLawTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     private static readonly ObjectStorageTarget Target = new DirectoryObjectStorageTarget(rootPath: "fake-store");
@@ -282,7 +282,7 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
         ));
 
         Assert.False(condition: group.Record.HasRecoveredBootstrap);
-        var abandoned = await coordinator.SupersedeBootstrapAsync(
+        var abandoned = await coordinator.SupersedeAsync(
             await PendingBootstrap(
                 group: group,
                 groups: groups,
@@ -326,10 +326,10 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
     }
 
     // A newer release ends a first deployment that never committed: one with no protected root is abandoned without a
-    // runtime effect, keeping the roots it saved unrecorded; one with roots is recovered as a failed start would be. An
-    // upgrade and a bootstrap of the successor itself are never superseded.
+    // runtime effect, keeping the roots it saved unrecorded; one with roots is recovered as a failed start would be. A
+    // bootstrap of the successor itself is never superseded.
     [Fact]
-    public async Task ANewerReleaseSupersedesOnlyAnUnfinishedBootstrapOfAnotherRelease() {
+    public async Task ANewerReleaseSupersedesAnUnfinishedBootstrapOfAnotherRelease() {
         var owner = Guid.NewGuid();
         var groups = new WorldReleaseGroupStore(
             new FakeObjectBlobStore(),
@@ -353,7 +353,7 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
         );
         var quiet = new RecordingRuntime(owner: owner);
 
-        Assert.False(condition: (await coordinator.SupersedeBootstrapAsync(
+        Assert.False(condition: (await coordinator.SupersedeAsync(
             unrooted,
             first.Identity,
             first,
@@ -362,7 +362,7 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
             Token
         )).Snapshot.HasValue);
         var saved = new Dictionary<string, string> { [$"{owner:D}/row"] = "saved-unrecorded" };
-        var abandoned = await coordinator.SupersedeBootstrapAsync(
+        var abandoned = await coordinator.SupersedeAsync(
             unrooted,
             second.Identity,
             first,
@@ -398,7 +398,7 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
             target: first
         );
         var recovering = new RecordingRuntime(owner: owner);
-        var recovered = await coordinator.SupersedeBootstrapAsync(
+        var recovered = await coordinator.SupersedeAsync(
             rooted,
             second.Identity,
             first,
@@ -414,33 +414,6 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
         );
         Assert.Null(@object: recovered.Snapshot!.Value.Record.PendingOperationId);
         Assert.True(condition: recovered.Snapshot!.Value.Record.History[^1].IsRecoveredBootstrap);
-        var upgrade = Required(result: await groups.BeginAsync(
-            Required(result: await groups.CreateAsync(
-                "serving",
-                first.Identity,
-                Token
-            )),
-            Guid.NewGuid(),
-            second.Identity,
-            Token
-        ));
-        var refused = await coordinator.SupersedeBootstrapAsync(
-            upgrade,
-            Manifest(image: 'e').Identity,
-            second,
-            new Dictionary<string, string>(),
-            quiet,
-            Token
-        );
-
-        Assert.False(condition: refused.Snapshot.HasValue);
-        Assert.Equal(
-            upgrade.VersionToken,
-            (await groups.LoadAsync(
-                "serving",
-                Token
-            ))!.Value.VersionToken
-        );
     }
 
     private sealed class RecordingRuntime(Guid owner) : IWorldReleaseRuntime {

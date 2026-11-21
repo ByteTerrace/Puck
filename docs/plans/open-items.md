@@ -146,9 +146,18 @@ first run to do so, and failed one step later: the public QUIC probe timed
 out. Public `/healthz` was answering unhealthy because checkpoint
 retention failed, retention failed because the store's role could not delete
 blobs, and the role lacked that right because a Template Spec's source had
-changed under a version already published.
+changed under a version already published. The next push's deploy then refused
+because that release's admitted operation still held the group's pending slot,
+and the pipeline never finalizes.
 
 Fixed on `lead/rendering` since, and not yet deployed:
+
+- A deploy follows whatever its predecessor left
+  ([CI](../development/ci.md#world-maintenance-and-recovery)): it accepts an
+  admitted release in the write that claims the group, admits a committed one
+  first, and abandons or recovers an unfinished one, so no failed release needs
+  a hand-run resume. The deploy after this push meets the admitted operation
+  the last release left and accepts it.
 
 - Template Specs `world-silo` 0.0.7 and `public-flex-api` 0.0.6 are published.
   The lead publishes and republishes them in place (AGENTS.md), and
@@ -3590,8 +3599,8 @@ is pushed to `main` ([the player channel](../development/ci.md#the-player-channe
   worker afterwards, check that a Spot eviction recovers
   (`az vm simulate-eviction`, then the release's health), and that a worker
   rebooted in place comes back guarded: the `puck-world.service` unit runs no
-  release guard on a reboot, and an unfinished upgrade refuses the next
-  deploy until it is resumed.
+  release guard on a reboot. An unfinished upgrade no longer holds the next
+  deploy; that deploy supersedes it.
 - [medium] A host that refuses a release's admission gives no reason
   (`WorldSiloHost.PublishManagedReleaseAdmissionAsync`), so a failed deploy
   names the step and not the cause. Carry the refusal's reason to the

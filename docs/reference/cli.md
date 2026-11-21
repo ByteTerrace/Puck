@@ -488,7 +488,7 @@ ticks. Add `--discard-progress` to explicitly rewind the entire group, and optio
 the same `status` and `resume` commands handle interruption. The implementation is
 under local acceptance and has not been accepted on Azure.
 `world release finalize` closes the current admitted rollback window with a
-guarded group write. It preserves gameplay, recovery history, and retained
+guarded group write; a deploy of the next release closes it the same way. It preserves gameplay, recovery history, and retained
 artifacts. Repeating it after finalization succeeds without another mutation;
 an uncommitted or closed deployment refuses. It uses the same configured Azure
 group as `status`, and acquires the deployment controller lease before its write.
@@ -503,10 +503,14 @@ A recovered source is reported as a failed deployment, not a successful upgrade.
 `world release deploy` verifies the package, retains its files and versioned
 deployment inputs, protects and pulls the exact source and target registry
 digests, and runs qualification before entering the coordinator. Repeating a
-pending target resumes it; another target refuses, except that it supersedes an
-unfinished first deployment (abandoned when it captured no recovery root,
-recovered otherwise). A previous rollback window
-must be finalized before a third release. Bootstrap refuses existing unmanaged
+pending target resumes it. Another target follows whatever its predecessor left
+(`WorldReleaseCoordinator.Succession` and `SupersedeAsync`): it accepts an
+admitted release, closing its rollback window as it claims the group; it admits a
+committed release first, and refuses with that release's cause when it cannot;
+it abandons an operation still in Prepare or a first deployment that captured no
+recovery root; and it recovers the source of any other unfinished operation,
+finishing a drain's protected capture first, before qualifying against it.
+Bootstrap refuses existing unmanaged
 workers and persisted gameplay; a worker an earlier recovered bootstrap of the
 group left is replaced with fresh compute, and a bootstrap's recovery deletes
 its compute. Azure production runs this same command after

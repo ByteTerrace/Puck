@@ -226,8 +226,8 @@ public static class WorldReleaseCommand {
         WorldReleaseOperationPhase.RecoverActivate => "Resume the restored source's private activation and admission publication.",
         WorldReleaseOperationPhase.Commit when (record.Admission == WorldReleaseAdmissionState.Closed) => "Resume the committed target and its admission publication. The pre-deployment save is no longer an automatic fallback.",
         _ when ((record.ActiveRelease is not null) && (record.Admission == WorldReleaseAdmissionState.Closed)) => "Resume the active release under fresh authority fences and publish its admission.",
-        _ when record.RollbackEligible => "Roll back to the retained previous release or finalize this rollback window before deploying another release.",
-        WorldReleaseOperationPhase.Commit => "Finalize the first deployment before preparing another release.",
+        _ when record.RollbackEligible => "Roll back to the retained previous release, or accept this one: finalize the rollback window, or deploy the next release, which closes it.",
+        WorldReleaseOperationPhase.Commit => "The release is admitted; deploying the next release accepts it.",
         _ when (record.ActiveRelease is null) => "Prepare the first managed deployment.",
         _ => "Prepare the next release."
     };

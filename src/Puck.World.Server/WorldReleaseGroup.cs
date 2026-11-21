@@ -56,9 +56,12 @@ public sealed record WorldReleaseGroupRecord {
 }
 /// <summary>Immutable history retained after an operation is finalized or recovered.</summary>
 public sealed record WorldReleaseGroupHistoryEntry {
-    /// <summary>The prefix of <see cref="Result"/> for an unfinished bootstrap a newer release superseded before it
-    /// captured any recovery root (<see cref="WorldReleaseGroupStore.AbandonBootstrapAsync"/>).</summary>
+    /// <summary>The prefix of <see cref="Result"/> for an unfinished operation a newer release superseded before it had an
+    /// effect to undo (<see cref="WorldReleaseGroupStore.AbandonAsync"/>).</summary>
     public const string AbandonedResult = "abandoned: ";
+    /// <summary>The <see cref="Result"/> of an admitted operation whose release was accepted, by finalization or by the
+    /// next operation that claimed the group.</summary>
+    public const string CommittedResult = "committed";
     /// <summary>The prefix of <see cref="Result"/> for a pre-commit operation whose protected roots were restored
     /// (<see cref="WorldReleaseGroupStore.CompleteRecoveryAsync"/>); the failure that began recovery follows it.</summary>
     public const string RecoveredResult = "recovered: ";
@@ -235,7 +238,11 @@ public sealed partial class WorldReleaseGroupStore {
             )
         );
     }
-    /// <summary>Begins one operation from the active release. Prepare preserves source admission until Drain.</summary>
+    /// <summary>Begins one operation from the active release. Prepare preserves source admission until Drain. A newer
+    /// release accepts the active one: the active release's admitted, committed operation moves into history and its
+    /// rollback window closes in the same guarded write that claims the group, so a deployment needs no separate
+    /// finalize, and the new operation's commit makes the active release its own rollback target. Only an unfinished
+    /// operation (<see cref="WorldReleaseGroupRecord.HasUnfinishedOperation"/>) refuses.</summary>
     public async Task<WorldReleaseGroupOutcome> BeginAsync(WorldReleaseGroupSnapshot current, Guid operationId, string targetRelease, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(current.Record);
         ValidateIdentity(
@@ -244,12 +251,11 @@ public sealed partial class WorldReleaseGroupStore {
         );
         if (
             (operationId == Guid.Empty) ||
-            (current.Record.PendingOperationId is not null) ||
-            current.Record.RollbackEligible
+            current.Record.HasUnfinishedOperation
         ) {
             return new(
                 WorldReleaseOperationOutcomeKind.Conflict,
-                "the deployment group already owns a pending or retained rollback operation"
+                "the deployment group already owns an unfinished operation"
             );
         }
         if (current.Record.ContainsOperation(operationId: operationId)) {
@@ -272,18 +278,18 @@ public sealed partial class WorldReleaseGroupStore {
             comparisonType: StringComparison.Ordinal
         )
         ) {
-            var next = current.Record with {
+            var next = CloseRetained(
+                old: current.Record,
+                result: WorldReleaseGroupHistoryEntry.CommittedResult
+            ) with {
                 PendingOperationId = operationId,
                 PendingSourceRelease = current.Record.ActiveRelease,
                 PendingTargetRelease = targetRelease,
                 PendingPhase = WorldReleaseOperationPhase.Prepare,
-                PendingCommitted = false,
-                RecoveryRoots = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal),
-                PendingFailure = null,
+                RollbackEligible = false,
                 // Prepare is a read-only preflight. The source remains the serving release until Drain coordinates the
                 // maintenance boundary and closes admission.
                 Admission = current.Record.Admission,
-                Revision = checked((current.Record.Revision + 1)),
             };
 
             return await WriteAsync(
@@ -325,27 +331,15 @@ public sealed partial class WorldReleaseGroupStore {
             );
         }
 
-        // Preserve the completed operation and its recovery references before reusing the single pending slot.
-        var history = ((old.PendingOperationId is not null)
-            ? old.History.Append(element: HistoryEntry(
-                old: old,
-                result: "rollback-started",
-                roots: old.RecoveryRoots
-            )).ToArray()
-            : old.History
-        );
-        var next = old with {
+        var next = CloseRetained(
+            old: old,
+            result: "rollback-started"
+        ) with {
             PendingOperationId = operationId,
-            RestorePoint = null,
             PendingSourceRelease = old.ActiveRelease,
             PendingTargetRelease = old.PreviousRelease,
             PendingPhase = WorldReleaseOperationPhase.Prepare,
-            PendingCommitted = false,
-            PendingFailure = null,
-            RecoveryRoots = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal),
             RollbackEligible = false,
-            History = history,
-            Revision = checked((old.Revision + 1)),
         };
 
         return await WriteAsync(
@@ -489,11 +483,6 @@ public sealed partial class WorldReleaseGroupStore {
                 "recovery must be privately completed before its durable operation can close"
             ));
         }
-        var rollbackAttempt = ((old.PreviousRelease is not null) && string.Equals(
-            a: old.PendingTargetRelease,
-            b: old.PreviousRelease,
-            comparisonType: StringComparison.Ordinal
-        ));
         var next = Retire(
             old: old,
             result: (WorldReleaseGroupHistoryEntry.RecoveredResult + (old.PendingFailure ?? "unspecified failure")),
@@ -503,9 +492,7 @@ public sealed partial class WorldReleaseGroupStore {
             ? WorldReleaseAdmissionState.Closed
             : WorldReleaseAdmissionState.Open),
             AuthorityLease = (sourceAuthorityLease ?? old.AuthorityLease),
-            RollbackEligible = ((old.RestorePoint is not null)
-            ? old.RollbackEligible
-            : rollbackAttempt),
+            RollbackEligible = RollbackEligibleAfterUnwind(old: old),
         };
 
         return WriteAsync(
@@ -514,17 +501,18 @@ public sealed partial class WorldReleaseGroupStore {
             next: next
         );
     }
-    /// <summary>Ends an unfinished first deployment that has captured no recovery root, so a newer release can begin.
-    /// Such a bootstrap has created no compute and restored nothing, so ending it needs no runtime effect; admission
-    /// stays closed.</summary>
-    /// <param name="current">The group state holding the bootstrap.</param>
+    /// <summary>Ends an unfinished operation that has had no effect a newer release must undo, so that release can
+    /// begin: an operation still in Prepare, whose source has not drained and still holds its admission, or a first
+    /// deployment that has captured no recovery root, which has created no compute and restored nothing. Ending either
+    /// needs no runtime effect, and admission stays as it is.</summary>
+    /// <param name="current">The group state holding the operation.</param>
     /// <param name="reason">The reason recorded in the history entry, after <see cref="WorldReleaseGroupHistoryEntry.AbandonedResult"/>.</param>
-    /// <param name="capturedRoots">The recovery roots the bootstrap saved under its operation identifier without
-    /// recording them, by root key; the history entry keeps them, so a later bootstrap recognizes the definitions this
-    /// one published.</param>
+    /// <param name="capturedRoots">The recovery roots the operation saved under its identifier without recording them,
+    /// by root key; the history entry keeps them, so a later bootstrap recognizes the definitions an abandoned one
+    /// published.</param>
     /// <param name="cancellationToken">The token that cancels the guarded write.</param>
-    /// <returns>The written state, or a conflict when the pending operation is not such a bootstrap.</returns>
-    public Task<WorldReleaseGroupOutcome> AbandonBootstrapAsync(WorldReleaseGroupSnapshot current, string reason,
+    /// <returns>The written state, or a conflict when the pending operation is not one that can be abandoned.</returns>
+    public Task<WorldReleaseGroupOutcome> AbandonAsync(WorldReleaseGroupSnapshot current, string reason,
         IReadOnlyDictionary<string, string> capturedRoots, CancellationToken cancellationToken = default) {
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
         ArgumentNullException.ThrowIfNull(capturedRoots);
@@ -532,15 +520,14 @@ public sealed partial class WorldReleaseGroupStore {
 
         if (
             (old.PendingOperationId is null) ||
-            (old.ActiveRelease is not null) ||
-            (old.PendingSourceRelease is not null) ||
             old.PendingCommitted ||
             (old.RecoveryRoots.Count != 0) ||
-            (old.PendingPhase is not (WorldReleaseOperationPhase.Prepare or WorldReleaseOperationPhase.Drain))
+            ((old.PendingPhase != WorldReleaseOperationPhase.Prepare) &&
+            ((old.PendingSourceRelease is not null) || (old.PendingPhase != WorldReleaseOperationPhase.Drain)))
         ) {
             return Task.FromResult(result: new WorldReleaseGroupOutcome(
                 WorldReleaseOperationOutcomeKind.Conflict,
-                "only a bootstrap that has captured no recovery root can be abandoned"
+                "only an operation in Prepare, or a bootstrap that has captured no recovery root, can be abandoned"
             ));
         }
         return WriteAsync(
@@ -553,7 +540,7 @@ public sealed partial class WorldReleaseGroupStore {
                     dictionary: capturedRoots.ToDictionary(comparer: StringComparer.Ordinal),
                     comparer: StringComparer.Ordinal
                 )
-            )
+            ) with { RollbackEligible = RollbackEligibleAfterUnwind(old: old) }
         );
     }
     /// <summary>Publishes target pointers at the commit boundary; admission remains closed until publication is explicit.</summary>
@@ -708,21 +695,10 @@ public sealed partial class WorldReleaseGroupStore {
         var old = current.Record;
 
         if (
-            (old.PendingOperationId is null) &&
-            old.RollbackEligible &&
-            (old.Admission == WorldReleaseAdmissionState.Open)
-        ) {
-            return WriteAsync(
-                current,
-                old with { RollbackEligible = false, Revision = checked((old.Revision + 1)) },
-                cancellationToken
-            );
-        }
-        if (
-            (old.PendingOperationId is null) ||
-            (old.PendingPhase != WorldReleaseOperationPhase.Commit) ||
-            !old.PendingCommitted ||
-            (old.Admission != WorldReleaseAdmissionState.Open)
+            (old.ActiveRelease is null) ||
+            old.HasUnfinishedOperation ||
+            (old.Admission != WorldReleaseAdmissionState.Open) ||
+            ((old.PendingOperationId is null) && !old.RollbackEligible)
         ) {
             return Task.FromResult(result: new WorldReleaseGroupOutcome(
                 WorldReleaseOperationOutcomeKind.Conflict,
@@ -732,13 +708,35 @@ public sealed partial class WorldReleaseGroupStore {
         return WriteAsync(
             cancellationToken: cancellationToken,
             current: current,
-            next: (Retire(
+            next: (CloseRetained(
                 old: old,
-                result: "committed",
-                roots: old.RecoveryRoots
+                result: WorldReleaseGroupHistoryEntry.CommittedResult
             ) with { RollbackEligible = false })
         );
     }
+
+    // The next revision of old with its retained operation (admitted and committed, so not unfinished), when it holds one,
+    // moved into history under result and its pending slot free for the next operation. Every door that claims or closes
+    // the slot of an accepted release goes through here, so a retained operation's recovery roots always reach history.
+    private static WorldReleaseGroupRecord CloseRetained(WorldReleaseGroupRecord old, string result) {
+        if (old.HasUnfinishedOperation) { throw new InvalidOperationException(message: "an unfinished operation is not retained work"); }
+        return ((old.PendingOperationId is null)
+            ? (old with { Revision = checked((old.Revision + 1)) })
+            : Retire(
+                old: old,
+                result: result,
+                roots: old.RecoveryRoots
+            ));
+    }
+    // Whether old's predecessor stays a rollback target once old's pre-commit operation unwinds without committing: a
+    // failed or abandoned rollback leaves its window open, as does an intentional rewind, which never changed it.
+    private static bool RollbackEligibleAfterUnwind(WorldReleaseGroupRecord old) => ((old.RestorePoint is not null)
+        ? old.RollbackEligible
+        : ((old.PreviousRelease is not null) && string.Equals(
+            a: old.PendingTargetRelease,
+            b: old.PreviousRelease,
+            comparisonType: StringComparison.Ordinal
+        )));
 
     // The history entry that retains the pending operation of old under result, with the recovery roots it keeps.
     private static WorldReleaseGroupHistoryEntry HistoryEntry(WorldReleaseGroupRecord old, string result, IReadOnlyDictionary<string, string> roots) => new() {
