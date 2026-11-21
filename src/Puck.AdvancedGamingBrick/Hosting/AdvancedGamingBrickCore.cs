@@ -79,6 +79,15 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
     public long CycleCount =>
         m_machine.Cycles;
     /// <inheritdoc/>
+    /// <remarks>The machine measures each budget from where its clock stands (<see cref="RunCycles"/>), so an
+    /// instruction's overshoot is not taken back from the next budget.</remarks>
+    public bool CarriesBudgetOvershoot => false;
+    /// <inheritdoc/>
+    public long CyclesPerFrame => AdvancedGamingBrickMachine.CyclesPerFrame;
+    /// <inheritdoc/>
+    public long CyclesToFrameEnd =>
+        m_machine.Ppu.CyclesToFrameEnd;
+    /// <inheritdoc/>
     public ReadOnlySpan<uint> Framebuffer =>
         m_machine.Framebuffer;
 

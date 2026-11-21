@@ -17,9 +17,10 @@ public sealed partial class WorldScreenBinder {
         gate: m_captureGate,
         opening: opening
     );
-    /// <summary>Creates the upload of a machine source instance (<see cref="WorldImageProducerSettings.MachineId"/>): once per
-    /// completed tick it writes the named machine output's latest complete frame into the instance's region, which the
-    /// runtime converts once however many screens show it. The machine is its world's own, read from the host of the
+    /// <summary>Creates the upload of a machine source instance (<see cref="WorldImageProducerSettings.MachineId"/>): it
+    /// writes the named machine output's frame due at the position its world's machine host presents
+    /// (<see cref="Puck.World.Server.IWorldMachineHost.PresentedTicks"/>) into the instance's region, on every presented frame that brings a
+    /// new one, which the runtime converts once however many screens show it. The machine is its world's own, read from the host of the
     /// world instance its settings name (<see cref="MachinesOf"/>), the boot world's or a world shown through a screen,
     /// so the source shows nothing while that world runs on another authority.</summary>
     /// <param name="context">The source instance and its settings.</param>
@@ -30,6 +31,7 @@ public sealed partial class WorldScreenBinder {
         var world = WorldSourceInstances.WorldOf(instance: instance);
 
         return new MachineVideoSourceUpload(
+            clock: () => (((world is null) ? null : MachinesOf(world: world))?.PresentedTicks ?? ulong.MaxValue),
             name: context.Instance,
             output: () => (((source is null) || (world is null))
                 ? null

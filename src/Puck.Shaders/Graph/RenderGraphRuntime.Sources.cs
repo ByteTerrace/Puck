@@ -390,9 +390,12 @@ public sealed partial class RenderGraphRuntime {
         }
 
         for (var index = 0; (index < m_sources.Length); index++) {
-            if (m_sources[index]?.State is not { } state) {
+            if (m_sources[index] is not { State: { } declaredState } source) {
                 continue;
             }
+
+            // A producer that knows whether it has a new image says so for this frame, before the frame schedules.
+            var state = (declaredState with { HasNewImage = source.Upload.HasNewImage });
 
             var named = false;
 

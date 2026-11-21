@@ -34,7 +34,8 @@ namespace Puck.Hosting;
 /// (<see cref="RenderGraphSourceState"/>), never a refresh or a footprint: a static source once, a tick source at most once
 /// per completed simulation tick (<see cref="RenderGraphFrame.Tick"/>), and a rate source at most its rate, counted in
 /// presented frames at the display's rate. Cadence is counted in ticks and frames, never the wall clock. A source whose
-/// producer declares no extent this frame does not render.</description></item>
+/// producer says whether it has a new image (<see cref="RenderGraphSourceState.HasNewImage"/>) renders exactly on the
+/// frames it has one. A source whose producer declares no extent this frame does not render.</description></item>
 /// <item><description>An instance the frame names to render again (<see cref="RenderGraphFrame.Rerender"/>, a capture
 /// frame's tainted instances, or one whose output stood for an image its producer no longer keeps) is due whatever its refresh and renders whatever the budget, whenever it is
 /// shown.</description></item>
@@ -496,6 +497,14 @@ public static class RenderGraphScheduler {
         ) {
             return false;
         }
+        // A producer that knows whether it has a new image decides: its cadence would only count frames toward the
+        // same answer, and round a display rate that is no multiple of the producer's down to fewer images.
+        if (state.HasNewImage is { } fresh) {
+            return (
+                (rendered < 0) ||
+                fresh
+            );
+        }
 
         switch (state.Cadence.Refresh) {
             case ImageRefresh.Static:
@@ -528,7 +537,8 @@ public static class RenderGraphScheduler {
     private static bool RefusesRate(RenderGraphFrame frame, int index, int[] sourceState) => (
         (frame.DisplayHertz <= 0) &&
         (sourceState[index] >= 0) &&
-        (frame.Sources![sourceState[index]].Cadence.Refresh == ImageRefresh.Rate)
+        (frame.Sources![sourceState[index]].Cadence.Refresh == ImageRefresh.Rate) &&
+        (frame.Sources![sourceState[index]].HasNewImage is null)
     );
     // The stalest instance first, ties in render order: a total order, so the sort's result never depends on its
     // algorithm.

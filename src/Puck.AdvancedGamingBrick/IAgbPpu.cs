@@ -10,6 +10,9 @@ namespace Puck.AdvancedGamingBrick;
 public interface IAgbPpu {
     /// <summary>Gets the completed 240×160 frame as packed 0xAARRGGBB pixels, row-major.</summary>
     ReadOnlySpan<uint> Framebuffer { get; }
+    /// <summary>Gets the master cycles from now until the last visible line is drawn, at least one: the instant the
+    /// framebuffer holds one whole frame. A unit with no raster answers one frame's length.</summary>
+    long CyclesToFrameEnd => AdvancedGamingBrickMachine.CyclesPerFrame;
 
     /// <summary>Reads a display register (DISPCNT, DISPSTAT, VCOUNT, BG/window/blend control).</summary>
     /// <param name="offset">The I/O offset within the 0x04000000 page (0x00–0x56).</param>

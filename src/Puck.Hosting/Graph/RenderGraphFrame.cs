@@ -35,7 +35,13 @@ public readonly record struct RenderGraphFootprint(string Consumer, string Produ
 /// frames.</param>
 /// <param name="Width">The negotiated width, in pixels, or zero while none is negotiated.</param>
 /// <param name="Height">The negotiated height, in pixels, or zero while none is negotiated.</param>
-public readonly record struct RenderGraphSourceState(string Instance, ImageSourceCadence Cadence, int Width, int Height);
+public readonly record struct RenderGraphSourceState(string Instance, ImageSourceCadence Cadence, int Width, int Height) {
+    /// <summary>Gets whether the producer has an image newer than the one it last rendered, when it knows that itself
+    /// (<c>IRenderGraphSourceUpload.HasNewImage</c>): the source is then due exactly when it does, whatever its cadence
+    /// counts, and a rate cadence needs no known display rate. <see langword="null"/>, the default, leaves the decision
+    /// to the cadence.</summary>
+    public bool? HasNewImage { get; init; }
+}
 /// <summary>Everything the scheduler reads about one presented frame: what is visible and how large it appears, the
 /// simulation tick it presents, and what each source's producer declares. It is a value, so a host describing each frame
 /// over the same root, footprint and source lists allocates nothing.</summary>

@@ -32,6 +32,7 @@ internal static class PostStages {
             new TrioLockstepStage(),
             new CameraCaptureStage(),
             shared["queued-host-backpressure"],
+            shared["queued-host-segment-parts"],
             shared["queued-host-frame-publication"],
             shared["queued-host-audio"],
             shared["queued-host-memory-access"],

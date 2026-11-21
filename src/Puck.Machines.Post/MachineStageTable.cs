@@ -55,6 +55,11 @@ public static class MachineStageTable {
 
                 return Outcome(result: QueuedHostContractProbe.VerifyBackpressure(withContent: factory.WithContent));
             }),
+            new("queued-host-segment-parts", isConcurrent, context => {
+                var factory = hosts(context);
+
+                return Outcome(result: QueuedHostContractProbe.VerifySegmentParts(withContent: factory.WithContent));
+            }),
             new(framePublicationName, isConcurrent, context => {
                 var factory = hosts(context);
 

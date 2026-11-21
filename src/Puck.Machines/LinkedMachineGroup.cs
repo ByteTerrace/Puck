@@ -186,7 +186,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     /// before the in-flight step finishes. Handlers must not block or call back into the link.</summary>
     public event Action? SeverWaiting;
 
-    private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs, bool forceStage, ref ulong generation, WaitDeadline deadline) {
+    private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs, ReadOnlySpan<MachineSeatChange> changes, ulong? endTicks, bool forceStage, ref ulong generation, WaitDeadline deadline) {
         if (
             (0 != Volatile.Read(location: ref m_disposed)) ||
             (m_lifecycle.Worker is null) ||
@@ -202,17 +202,20 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             );
         }
 
-        var item = GroupWorkItem.Step(deltaTicks: deltaTicks, forceStage: forceStage, inputs: MachinePads.From(inputs: inputs));
-        return forceStage
-            ? m_lifecycle.Step(in item, ref generation, deadline)
-            : m_lifecycle.Submit(in item, deadline);
-    }
-    // Each member publishes through its OWN worker's surfaces, so a linked machine's framebuffer, audio ring, feedback,
-    // and step count stay the same objects a host already reads.
-    private void PublishMembers(bool forceStage) {
-        foreach (var worker in m_workers) {
-            worker.PublishLentStep(forceStage: forceStage);
-        }
+        var clock = m_lifecycle.SegmentEnd(
+            deltaTicks: deltaTicks,
+            endTicks: endTicks
+        );
+        // A call that resumes an accepted segment's drain submits nothing, so it copies nothing.
+        var item = GroupWorkItem.Step(
+            changes: (((generation == 0UL) && !changes.IsEmpty) ? changes.ToArray() : null),
+            clock: clock,
+            deltaTicks: deltaTicks,
+            forceStage: forceStage,
+            inputs: MachinePads.From(inputs: inputs)
+        );
+
+        return m_lifecycle.SubmitSegment(in item, clock, forceStage, ref generation, deadline);
     }
     private void WorkerLoop() {
         var current = default(GroupWorkItem);
@@ -223,25 +226,29 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
 
                 switch (current.Kind) {
                     case GroupWorkKind.Step:
-                        var inputs = current.Inputs;
-                        var factor = m_timeTravel.FastForwardFactor;
+                        var parts = new SegmentParts(workers: m_workers);
 
-                        for (var repeat = 0; (repeat < factor); ++repeat) {
-                            var budget = m_cyclePhase.TakeCycleBudget(
-                                rate: m_core.CycleRate,
-                                ticks: current.DeltaTicks
-                            );
+                        _ = MachineSegment.Run(
+                            changes: current.Changes,
+                            core: m_core,
+                            deltaTicks: current.DeltaTicks,
+                            divides: true,
+                            endTicks: current.Clock,
+                            input: current.Inputs,
+                            observer: ref parts,
+                            phase: ref m_cyclePhase,
+                            timeTravel: m_timeTravel
+                        );
 
-                            m_core.ApplyInput(input: in inputs);
-                            m_core.RunCycles(cycles: budget);
-                            m_timeTravel.Record(
-                                budget: budget,
-                                hostAccumulator: m_cyclePhase,
-                                input: in inputs
+                        // Each member publishes through its own worker's surfaces, so a linked machine's frames, audio
+                        // ring, feedback, and step count stay the same objects a host already reads.
+                        foreach (var worker in m_workers) {
+                            worker.PublishLentStep(
+                                clock: current.Clock,
+                                forceStage: current.ForceStage
                             );
                         }
 
-                        PublishMembers(forceStage: current.ForceStage);
                         m_lifecycle.CompleteStep(startedTimestamp: takenAt);
 
                         break;
@@ -401,14 +408,35 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     /// <returns>The observable submission outcome.</returns>
     public QueuedMachineSubmission Submit(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs) {
         var generation = 0UL;
-        var result = EnqueueStep(deltaTicks: deltaTicks, inputs: inputs, forceStage: false, generation: ref generation,
+        var result = EnqueueStep(changes: default, deltaTicks: deltaTicks, endTicks: null, inputs: inputs, forceStage: false, generation: ref generation,
             deadline: WaitDeadline.Synchronous());
         return QueuedWorkerLifecycle<GroupWorkItem>.RequireSettled(result);
     }
 
     /// <summary>Submits or resumes a segment within the caller’s deadline.</summary>
     public QueuedMachineSubmission StepSegment(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs, ref ulong generation, WaitDeadline deadline) =>
-        EnqueueStep(deltaTicks: deltaTicks, inputs: inputs, forceStage: true, generation: ref generation, deadline: deadline);
+        EnqueueStep(changes: default, deltaTicks: deltaTicks, endTicks: null, inputs: inputs, forceStage: true, generation: ref generation, deadline: deadline);
+    /// <inheritdoc/>
+    public QueuedMachineSubmission StepSegment(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs, ReadOnlySpan<MachineSeatChange> changes, ulong? endTicks, ref ulong generation, WaitDeadline deadline) =>
+        EnqueueStep(changes: changes, deltaTicks: deltaTicks, endTicks: endTicks, inputs: inputs, forceStage: true, generation: ref generation, deadline: deadline);
+
+    // One part of a group segment: every member notes where its own frame completes, then stages the frame the part
+    // completed for it.
+    private readonly struct SegmentParts(QueuedMachineWorker[] workers) : IMachineSegmentObserver {
+        public void PartStarting() {
+            foreach (var worker in workers) {
+                worker.BeginLentPart();
+            }
+        }
+        public void PartCompleted(ulong stampTicks, bool presents) {
+            foreach (var worker in workers) {
+                worker.PublishLentPart(
+                    presents: presents,
+                    stamp: stampTicks
+                );
+            }
+        }
+    }
 
     private enum GroupWorkKind {
         Step,
@@ -423,7 +451,9 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         bool ForceStage,
         Action? Invoke,
         ManualResetEventSlim? Completion,
-        ulong BarrierGeneration = 0
+        ulong BarrierGeneration = 0,
+        MachineSeatChange[]? Changes = null,
+        ulong Clock = 0
     ) : IQueuedWorkItem<GroupWorkItem> {
         public static GroupWorkItem Barrier(ulong generation) =>
             new(
@@ -444,8 +474,10 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
                 Invoke: work,
                 Kind: GroupWorkKind.Invoke
             );
-        public static GroupWorkItem Step(ulong deltaTicks, in MachinePads inputs, bool forceStage) =>
+        public static GroupWorkItem Step(ulong deltaTicks, in MachinePads inputs, bool forceStage, MachineSeatChange[]? changes, ulong clock) =>
             new(
+                Changes: changes,
+                Clock: clock,
                 Completion: null,
                 DeltaTicks: deltaTicks,
                 ForceStage: forceStage,

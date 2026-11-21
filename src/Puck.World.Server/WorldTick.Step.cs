@@ -571,7 +571,10 @@ public sealed partial class WorldTick {
         // a recipient that something it cannot read moved.
         Host.Addons?.ResolveReads(tick: (context.Tick + 1UL));
         // Fold this tick's routed intents into their targets BEFORE the snapshot is built.
-        Host.Engagement.FoldTick(replaysInput: Host.ReplaysInput);
+        Host.Engagement.FoldTick(
+            input: Host.Input,
+            replaysInput: Host.ReplaysInput
+        );
         Host.ReplaysInput = false;
 
         // machines[].memory bindings poke a moved cell into its machine and mirror a machine's moved byte into its

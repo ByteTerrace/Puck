@@ -23,6 +23,12 @@ public interface IRenderGraphSourceUpload : IDisposable {
     /// source holds no frame incomplete and no reader inherits a refusal from it. <see cref="Fault"/> still names the
     /// state for a read-back. The default is <see langword="false"/>, a source with no image is faulted.</summary>
     bool IsAbsent => false;
+    /// <summary>Gets whether the producer has an image the region does not hold yet, when it knows that itself: a
+    /// producer that keeps its own frames (a machine's video) answers <see langword="true"/> on a frame that presents a
+    /// new one and <see langword="false"/> on a frame that presents the one already written, and the source is due
+    /// exactly then, whatever its cadence counts and whatever rate the display runs at. <see langword="null"/>, the
+    /// default, leaves the decision to the cadence. Read once per frame, before it schedules.</summary>
+    bool? HasNewImage => null;
 
     /// <summary>Writes the source's image for one render into its region's planes, after the header the runtime wrote
     /// (<see cref="ImageSourceUploadLayout.HeaderOf"/> of <see cref="Descriptor"/>). The region owes only the words that

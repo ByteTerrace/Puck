@@ -414,31 +414,47 @@ The Humble Gaming Deck's packages are in [its plan](humble-gaming-deck.md#open-i
   `queued-host-memory-access`), and under instrumentation the emulator loops
   slow by an order of magnitude. Fewer emulated frames in those stages, with the
   same checks, is what shortens both.
-- `QueuedMachineWorker` frame-tracking locals are not reset on checkpoint
-  restore or rewind, and `HgdMachine`'s reset keeps a latched bus write (read from
-  the code in a pre-`main` review, not reproduced; confirm with a failing test
-  before fixing).
-- **Show machine video at the machine's rate.** Today `MachineVideoSourceUpload`
-  declares tick cadence (so a 30 Hz world uploads at most once per tick, cutting
-  a 60 Hz scrolling cartridge's rate) and `MachineVideoSourceUpload.Write`
-  checks only whether `IMachineVideoOutput.WriteFrame` returned a positive
-  sequence number while advancing its own stamp, re-uploading unchanged frames.
-  Frames are lost: in the 30 Hz debug world `machine.state` counts about two
-  native frames per segment for every 60 Hz machine (the Deck 601 over 300
-  segments), and the worker stages only a segment's last frame, so every other
-  frame is emulated and never shown. Declare the machine's own cadence instead of tick cadence, and put
-  a short queue of complete frames — each stamped with the machine's own
-  sequence number — between the machine and the display so that sequence (plus
-  source replacement or reset) drives every downstream refresh. Check: a
-  scrolling test cartridge at display rates below, equal to and above the
-  machine's rate shows the latest eligible frame at a bounded age against the
-  audio clock, counting repeats and skips, with zero uploads of unchanged
-  frames. No display shows every machine frame exactly once at every rate (a
-  60 Hz machine repeats frames on a 120 Hz display and skips some on a 45 Hz
-  one), which is why the contract is the latest eligible frame, and audio
-  follows the same clock. Which frame is shown is a presentation matter: under
-  the machines decision neither visibility nor presentation rate controls how
-  a machine advances.
+- `HgdMachine`'s reset keeps a latched bus write (read from the code in a
+  pre-`main` review, not reproduced; confirm with a failing test before
+  fixing).
+- **Machine video and input for a remote viewer.** A world on another
+  authority runs its machines there and they show nothing here. The
+  [decision](../decisions/machines-and-cartridges.md#machines) settles the
+  shape: by an authored per-machine disclosure, a viewer either runs a replica
+  from the segments the authority's worker ran (ticks, seat images, timed
+  changes, and a checkpoint to join) or receives each segment's completed
+  frames with their stamps, once per segment; both feed the same stamped frame
+  queue the local path uses, so neither needs a transport at the machine's
+  rate. Steps, each with its check: (1) carry a machine's segment record
+  (`QueuedMachineWorker.StepSegment`'s arguments) on the world's delivery and
+  run a replica host from it; check: the replica's `CaptureCheckpoint` equals
+  the authority's after every segment over a scripted engagement. (2) Carry a
+  streamed machine's staged frames (pixels, sequence, stamp) and feed a
+  viewer-side queue; check: `shownFrames` over `nativeFrames` is about one to
+  one on the viewer while the authority's worker is the only one running the
+  core. (3) Author the disclosure on the machine row, defaulting to streamed;
+  check: a viewer of a streamed machine holds no cartridge bytes and no core.
+  (4) Stamp audio on the same clock so a viewer's sound follows its picture.
+- **Check machine video at display rates other than the machine's.** The frame
+  queue shows the latest frame due, so a 60 Hz machine repeats frames on a
+  faster display and skips some on a slower one. The `queued-host-segment-parts`
+  stage reads the queue at 60 Hz positions with no display, and takes every
+  frame once. A real display at 45 Hz (the Steam Deck's bar) and at 120 Hz are
+  each owed a presented-frame burst of the range deck's nearest television,
+  held at that rate while the frames are captured, counting repeats and skips
+  with `machine.state`'s `stagedFrames` and `shownFrames`. The burst tool slows
+  the host while it captures, so the capture itself has to be made cheap enough
+  to hold the display's rate first.
+- **Show a runahead lookahead at the machine's rate.** `MachineTimeTravel`
+  advances the lookahead once per segment, so the worker stages its picture
+  once per segment (`QueuedMachineWorker.CompleteSegment`) and a machine with
+  runahead armed shows at the tick rate. Advancing the lookahead per part would
+  restore the native rate.
+- **Let a machine source stand unchanged.** A render-graph instance that reads
+  a source never stands unchanged (`RenderGraphRuntime.WithUnchanged` excludes
+  every source), so a view showing a paused machine still renders every frame.
+  A source whose upload answers `HasNewImage` false could stand, and so could
+  the views that read only such sources.
 
 ---
 

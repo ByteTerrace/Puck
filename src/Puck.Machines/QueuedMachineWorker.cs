@@ -10,16 +10,19 @@ namespace Puck.Machines;
 
 /// <summary>
 /// The machine-neutral queued-host substrate: one machine-owning worker thread executes exact tick/input segments in FIFO
-/// order and swaps only complete native frames into a synchronized front buffer. A host wraps this around an
+/// order (<see cref="MachineSegment"/>) and puts every native frame the machine completes into a short queue, each
+/// stamped with the host clock position it completed at. A host wraps this around an
 /// <see cref="IQueuedMachineCore"/> and forwards the neutral <see cref="IMachineRuntime"/>/<see cref="IQueuedMachineRuntime"/>
-/// surface to it; both the SM83-family and the ARM7TDMI hosts are thin adapters over this one component.
+/// surface to it; every machine family's host is a thin adapter over this one component.
 /// <para>
 /// The generic <see cref="Step"/> remains synchronous (submit-and-drain); hosts that recognize the queued capability use
 /// <see cref="Submit"/> to keep commercial-ROM CPU work off their simulation/render pump while the pending-segment window
 /// has capacity. A full window blocks the producer until one exact segment completes rather than dropping or coalescing
-/// authoritative history. A consumer copies the latest complete frame under the frame lock (<see cref="WriteFrame"/>), which
-/// the worker holds only to swap its buffers. The save-flush debounce keys on native-frame transitions, so the interval means native
-/// ~59.73 Hz frames regardless of submission cadence.
+/// authoritative history. A consumer copies a complete frame under the frame lock, the newest
+/// (<see cref="WriteFrame(Span{byte})"/>) or the one due at the position its display presents
+/// (<see cref="WriteFrame(Span{byte}, ulong, long)"/>); the worker holds that lock only to publish a frame it has finished
+/// writing. Which frame a consumer takes, and whether any does, never reaches the machine. The save-flush debounce keys
+/// on native-frame transitions, so the interval means native ~59.73 Hz frames regardless of submission cadence.
 /// </para>
 /// <para>
 /// A worker can also LEND its core to a <see cref="LinkedMachineGroup"/> for the life of a cable link
@@ -36,6 +39,10 @@ public sealed class QueuedMachineWorker : IDisposable {
 
     // ~5 seconds at 59.73 fps between battery-save disk writes while dirty; counted in native frames, not work items.
     private const int SaveFlushIntervalFrames = 300;
+    // The complete frames the queue holds. A display runs one segment behind the newest (it interpolates toward the
+    // latest tick), so the frames of two segments are live at once; the rest absorbs a display hitch. A frame the queue
+    // drops is one no display asked for while it was due.
+    private const int FrameQueueLength = 6;
 
     private readonly int m_audioSampleRate;
     private readonly int m_frameByteLength;
@@ -59,17 +66,32 @@ public sealed class QueuedMachineWorker : IDisposable {
     private RationalRateAccumulator m_cyclePhase;
     private int m_disposed;
     private Vector3 m_emittedLight;
+    // The frame queue: a ring whose newest published slot is m_frameHead and which holds m_frameCount published slots,
+    // newest to oldest going backward. Guarded by m_frameLock. The slot after the head is never published, so the
+    // producing thread writes pixels into it without the lock.
+    private readonly FrameSlot[] m_frames = new FrameSlot[FrameQueueLength];
+    private int m_frameCount;
+    private int m_frameHead;
     private long m_frameVersion;
+    private long m_shownFrame;
+    private long m_shownFrames;
+    // Half the attached core's native frame period, in engine ticks: how far a display is kept in sequence.
+    private ulong m_frameSlackTicks = (FixedTickConversion.TicksPerSecond / 120UL);
+    // Reference execution: whole segments, the image held at a segment's end held from its start.
+    private volatile bool m_dividesSegments = true;
+    // The part in flight, on whichever thread steps the core (this worker's, or a link's while lent): the cycle count
+    // the frame being drawn completes at, the cycle count and native frame the newest staged frame was copied at, and
+    // the native frame of the last save flush.
+    private long m_flushNativeFrame;
+    private long m_partFrameEnd;
+    private long m_stagedCycle;
+    private long m_stagedNativeFrame;
     private IMachineCoreLender? m_lender;
     // Volatile: set under m_lifecycleLock, but read (IsLent, TryRunOnLink, the lending link's own ReturnCore/publish
     // calls) from the link thread and any caller thread without it, so a plain bool would let a reader observe a lend
     // that already ended.
     private volatile bool m_lent;
-    private long m_lentFlushNativeFrame;
-    private long m_lentStagedNativeFrame;
     private float m_motorLevel;
-    private byte[] m_rgbaBack;
-    private byte[] m_rgbaFront;
     private MachineTimeTravel<MachinePads>? m_timeTravel;
 
     private static readonly Vector128<byte> RepackShuffle = Vector128.Create(
@@ -140,8 +162,10 @@ public sealed class QueuedMachineWorker : IDisposable {
             role: "worker",
             workerName: workerName
         );
-        m_rgbaFront = new byte[m_frameByteLength];
-        m_rgbaBack = new byte[m_frameByteLength];
+
+        for (var slot = 0; (slot < m_frames.Length); ++slot) {
+            m_frames[slot] = new FrameSlot(pixels: new byte[m_frameByteLength]);
+        }
 
         StageBlackFrame();
     }
@@ -160,6 +184,33 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// attached.</summary>
     public TimeSpan StepBusyTime =>
         m_lifecycle.StepBusyTime;
+    /// <summary>Gets or sets whether a segment runs in parts that end where a seat's image changes and where the machine
+    /// completes a frame (<see cref="MachineSegment"/>), which is the default. <see langword="false"/> is the reference
+    /// the parts are held to: whole segments, each holding every seat's last image from its start and staging at most
+    /// one frame. The machine ends every segment in the same state either way.</summary>
+    public bool DividesSegments {
+        get => m_dividesSegments;
+        set => m_dividesSegments = value;
+    }
+    /// <summary>Gets the most frames a second the attached core completes, its native rate rounded up; 60 with no core
+    /// attached.</summary>
+    public uint FrameRateHz { get; private set; } = 60U;
+    /// <summary>Gets the complete frames this worker has put in its queue since it was created.</summary>
+    public long StagedFrames {
+        get {
+            lock (m_frameLock) {
+                return m_frameVersion;
+            }
+        }
+    }
+    /// <summary>Gets how many times a consumer took a frame other than the one taken before it.</summary>
+    public long ShownFrames {
+        get {
+            lock (m_frameLock) {
+                return m_shownFrames;
+            }
+        }
+    }
     /// <summary>Gets the light the framebuffer emits — its average color, normalized 0..1.</summary>
     public Vector3 EmittedLight {
         get {
@@ -205,6 +256,9 @@ public sealed class QueuedMachineWorker : IDisposable {
             op: TimeTravelOp.Status
         ).Status;
 
+    // Turns a submission whose synchronous wait ran out into its timeout, as the worker's own Step and Submit do.
+    internal static QueuedMachineSubmission RequireSettled(QueuedMachineSubmission outcome) =>
+        QueuedWorkerLifecycle<WorkItem>.RequireSettled(outcome: outcome);
     internal QueuedMachineCheckpoint CaptureCheckpoint() => RunCheckpoint(restore: null, validateOnly: false);
     internal void RestoreCheckpoint(QueuedMachineCheckpoint checkpoint) => _ = RunCheckpoint(restore: checkpoint, validateOnly: false);
     // Makes every check a restore of the checkpoint makes, behind the same accepted steps, and applies nothing.
@@ -254,7 +308,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             }
         } while (written == scratch.Length);
     }
-    private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, in MachinePads input, bool forceStage, ref ulong generation, WaitDeadline deadline) {
+    private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, in MachinePads input, MachineSeatChange[]? changes, ulong? endTicks, bool forceStage, ref ulong generation, WaitDeadline deadline) {
         if (
             (0 != Volatile.Read(location: ref m_disposed)) ||
             (m_lifecycle.Worker is null) ||
@@ -263,10 +317,13 @@ public sealed class QueuedMachineWorker : IDisposable {
             return QueuedMachineSubmission.Rejected;
         }
 
-        var item = WorkItem.Step(deltaTicks: deltaTicks, forceStage: forceStage, input: in input);
-        return forceStage
-            ? m_lifecycle.Step(in item, ref generation, deadline)
-            : m_lifecycle.Submit(in item, deadline);
+        var clock = m_lifecycle.SegmentEnd(
+            deltaTicks: deltaTicks,
+            endTicks: endTicks
+        );
+        var item = WorkItem.Step(changes: changes, clock: clock, deltaTicks: deltaTicks, forceStage: forceStage, input: in input);
+
+        return m_lifecycle.SubmitSegment(in item, clock, forceStage, ref generation, deadline);
     }
     private void ExecuteCheckpoint(IQueuedMachineCore core, CheckpointRequest request) {
         if (request.Restore is { } restore) {
@@ -297,7 +354,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             m_timeTravel.SetRunahead(frames: restore.RunaheadFrames);
             ResetAudioRing();
             lock (m_frameLock) { m_motorLevel = core.MotorLevel; }
-            StageMachineFrame(core: core);
+            RestageMachineFrame(core: core);
             request.Result = restore;
             return;
         }
@@ -373,7 +430,7 @@ public sealed class QueuedMachineWorker : IDisposable {
 
         if (request.Ok) {
             m_timeTravel?.Reset();
-            StageMachineFrame(core: core);
+            RestageMachineFrame(core: core);
         }
     }
     // Executes one marshaled time-travel command on the worker thread (single-producer with emulation); a rewind that
@@ -409,7 +466,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                         m_motorLevel = core.MotorLevel;
                     }
 
-                    StageMachineFrame(core: core);
+                    RestageMachineFrame(core: core);
                 }
 
                 break;
@@ -425,12 +482,78 @@ public sealed class QueuedMachineWorker : IDisposable {
 
         request.Status = timeTravel.GetStatus();
     }
-    private void PublishBackBuffer(Vector3 light) {
+    // Takes the slot the next frame is written into, which no consumer can reach: the one after the head, retired
+    // first when the queue is full. A restage abandons every queued frame, since they belong to a timeline the machine
+    // left. Pair with PublishFrame.
+    private FrameSlot TakeFrameSlot(bool restage) {
         lock (m_frameLock) {
-            (m_rgbaFront, m_rgbaBack) = (m_rgbaBack, m_rgbaFront);
-            m_emittedLight = light;
-            ++m_frameVersion;
+            if (restage) {
+                m_frameCount = 0;
+            } else if (m_frameCount == m_frames.Length) {
+                --m_frameCount;
+            }
+
+            return m_frames[((m_frameHead + 1) % m_frames.Length)];
         }
+    }
+    private void PublishFrame(FrameSlot slot, Vector3 light, ulong stamp) {
+        lock (m_frameLock) {
+            slot.Light = light;
+            slot.Sequence = ++m_frameVersion;
+            slot.Stamp = stamp;
+            m_frameHead = ((m_frameHead + 1) % m_frames.Length);
+            ++m_frameCount;
+            m_emittedLight = light;
+        }
+    }
+    // The frame due at a clock position: the newest stamped at or before it, or the oldest held when every one is
+    // later. A display that names the frame it shows is kept in sequence instead: it gets the next frame while that one
+    // is due within half a frame period either way (m_frameSlackTicks), early when nothing newer is due and late when
+    // the frame after it has only just come due, so a display at the machine's rate never repeats one frame and skips
+    // the next where its clock and the machine's beat. Call under m_frameLock; the queue always holds a frame.
+    private FrameSlot FrameDueLocked(ulong dueTicks, long held) {
+        var due = m_frames[m_frameHead];
+        FrameSlot? next = null;
+        FrameSlot? second = null;
+        FrameSlot? shown = null;
+
+        for (var age = (m_frameCount - 1); (age >= 0); --age) {
+            var slot = m_frames[(((m_frameHead - age) + m_frames.Length) % m_frames.Length)];
+
+            if (
+                (age == (m_frameCount - 1)) ||
+                (slot.Stamp <= dueTicks)
+            ) {
+                due = slot;
+            }
+            if (slot.Sequence == held) {
+                shown = slot;
+            } else if (slot.Sequence == (held + 1L)) {
+                next = slot;
+            } else if (slot.Sequence == (held + 2L)) {
+                second = slot;
+            }
+        }
+
+        if (
+            (held <= 0L) ||
+            (next is null)
+        ) {
+            return due;
+        }
+        if (due.Sequence <= held) {
+            // Nothing newer is due: the next frame early when it is nearly due, otherwise the one shown again.
+            return (((next.Stamp - dueTicks) <= m_frameSlackTicks)
+                ? next
+                : (shown ?? due)
+            );
+        }
+
+        // The next frame is due. Skip it only when the one after it has been due a while.
+        return (((second is null) || (second.Sequence > due.Sequence) || ((dueTicks - second.Stamp) < m_frameSlackTicks))
+            ? next
+            : due
+        );
     }
     // Repack the framebuffer's 0x00RRGGBB pixels as opaque R,G,B,A bytes into the reused staging array and compute the
     // average color (the emitted light). One integer Vector128 shuffle+widen pass serves both hosts, bit-exact against the
@@ -587,32 +710,123 @@ public sealed class QueuedMachineWorker : IDisposable {
         return request;
     }
     private void StageBlackFrame() {
-        Array.Clear(array: m_rgbaBack);
+        var slot = TakeFrameSlot(restage: true);
 
-        for (var offset = 3; (offset < m_rgbaBack.Length); offset += 4) {
-            m_rgbaBack[offset] = 0xFF;
+        Array.Clear(array: slot.Pixels);
+
+        for (var offset = 3; (offset < slot.Pixels.Length); offset += 4) {
+            slot.Pixels[offset] = 0xFF;
         }
 
-        PublishBackBuffer(light: Vector3.Zero);
+        PublishFrame(
+            light: Vector3.Zero,
+            slot: slot,
+            stamp: 0UL
+        );
 
         lock (m_frameLock) {
             m_motorLevel = 0f;
         }
     }
-    private void StageMachineFrame(IQueuedMachineCore core) {
-        Interlocked.Exchange(ref m_nativeFrameIndex, core.NativeFrameIndex);
+    // Puts the core's current picture in the queue, stamped with the host clock position it is due at.
+    private void StageMachineFrame(IQueuedMachineCore core, ulong stamp, bool restage = false) {
+        var slot = TakeFrameSlot(restage: restage);
+
+        m_stagedCycle = core.CycleCount;
+        m_stagedNativeFrame = core.NativeFrameIndex;
+        Interlocked.Exchange(ref m_nativeFrameIndex, m_stagedNativeFrame);
         // Present the runahead lookahead's framebuffer while it is live and primed; otherwise the authoritative machine's
         // own. The real machine stays the tick-locked audio authority either way.
         var pixels = (((m_timeTravel is { } timeTravel) && timeTravel.TryGetDisplayFramebuffer(framebuffer: out var lookahead))
             ? lookahead
             : core.Framebuffer
         );
-        var light = RepackFramebuffer(
-            pixels: pixels,
-            target: m_rgbaBack
+
+        PublishFrame(
+            light: RepackFramebuffer(
+                pixels: pixels,
+                target: slot.Pixels
+            ),
+            slot: slot,
+            stamp: stamp
+        );
+    }
+    // Stages the picture of a machine that jumped (a load, a restore, a rewind, a reconfigure) in place of every queued
+    // frame, due at once, and restarts the save-flush interval from where the machine landed.
+    private void RestageMachineFrame(IQueuedMachineCore core) {
+        m_flushNativeFrame = core.NativeFrameIndex;
+        StageMachineFrame(
+            core: core,
+            restage: true,
+            stamp: 0UL
+        );
+    }
+    // Notes where the frame being drawn completes, before a part of a segment runs.
+    private void BeginPart(IQueuedMachineCore core) {
+        var now = core.CycleCount;
+        var toEnd = Math.Max(
+            val1: 1L,
+            val2: core.CyclesToFrameEnd
         );
 
-        PublishBackBuffer(light: light);
+        // A core that completes no frame answers a distance no clock reaches.
+        m_partFrameEnd = ((toEnd > (long.MaxValue - now))
+            ? long.MaxValue
+            : (now + toEnd)
+        );
+    }
+    // Stages the frame a part completed, if it completed one. A runahead lookahead advances once a segment, so while
+    // one supplies the picture the segment's end stages it instead (CompleteSegment).
+    private void CompletePart(IQueuedMachineCore core, ulong stamp, bool presents) {
+        if (
+            presents &&
+            (core.CycleCount >= m_partFrameEnd) &&
+            (m_timeTravel is not { RunaheadActive: true })
+        ) {
+            StageMachineFrame(
+                core: core,
+                stamp: stamp
+            );
+        }
+    }
+    // Publishes what a completed segment leaves besides its frames: the motor level, the audio it synthesized, the
+    // native-frame progress, the picture a synchronous step or a runahead lookahead owes, the completed-step count and
+    // the native-frame-keyed save flush.
+    private void CompleteSegment(IQueuedMachineCore core, ulong clock, bool forceStage, long startedTimestamp) {
+        lock (m_frameLock) {
+            m_motorLevel = core.MotorLevel;
+        }
+
+        // Detached (m_audioSampleRate 0) skips this call entirely rather than draining an always-empty ring: the core
+        // never synthesized anything to drain (see ConfigureAudio's zero-cost contract).
+        if (m_audioSampleRate > 0) {
+            DrainAudio(core: core);
+        }
+
+        var nativeFrame = core.NativeFrameIndex;
+
+        Interlocked.Exchange(ref m_nativeFrameIndex, nativeFrame);
+
+        // A synchronous step shows the machine as it stands when the step returns, and a lookahead's picture is new
+        // once the authority completed a native frame.
+        if (
+            (forceStage && (m_stagedCycle != core.CycleCount)) ||
+            ((m_timeTravel is { RunaheadActive: true }) && (nativeFrame != m_stagedNativeFrame))
+        ) {
+            StageMachineFrame(
+                core: core,
+                stamp: clock
+            );
+        }
+
+        m_lifecycle.CompleteStep(startedTimestamp: startedTimestamp);
+
+        // The interval means native frames, not submitted work items — one native-frame count that is independent of
+        // how many exact segments each frame took.
+        if ((nativeFrame - m_flushNativeFrame) >= SaveFlushIntervalFrames) {
+            m_flushNativeFrame = nativeFrame;
+            core.FlushSave(force: false);
+        }
     }
     // A fresh attach resets the queue counters; resuming a returned core keeps them, so a host's step count survives a
     // cable link rather than appearing to reboot the machine. Either way the pending window reopens empty.
@@ -642,8 +856,6 @@ public sealed class QueuedMachineWorker : IDisposable {
     }
     private void WorkerLoop(IQueuedMachineCore core) {
         var current = default(WorkItem);
-        var stagedNativeFrame = core.NativeFrameIndex;
-        var lastFlushNativeFrame = core.NativeFrameIndex;
 
         try {
             while (true) {
@@ -651,66 +863,31 @@ public sealed class QueuedMachineWorker : IDisposable {
 
                 switch (current.Kind) {
                     case WorkKind.Step:
-                        var input = current.Input;
-                        var factor = (m_timeTravel?.FastForwardFactor ?? 1);
+                        var parts = new SegmentParts(
+                            core: core,
+                            worker: this
+                        );
+                        var held = MachineSegment.Run(
+                            changes: current.Changes,
+                            core: core,
+                            deltaTicks: current.DeltaTicks,
+                            divides: m_dividesSegments,
+                            endTicks: current.Clock,
+                            input: current.Input,
+                            observer: ref parts,
+                            phase: ref m_cyclePhase,
+                            timeTravel: m_timeTravel
+                        );
 
-                        // Fast-forward repeats the exact 1x tick segment rather than folding the factor into one large
-                        // RunCycles call. The accumulator carries across each sub-step, so every rewind record owns the
-                        // exact budget and phase that produced it while the framebuffer is still staged only once below.
-                        for (var i = 0; (i < factor); ++i) {
-                            // The rate is read here, on the worker thread, so a rate that tracks emulated state (a
-                            // clock-multiplier latch) is read consistently with the cycles it gates.
-                            var budget = m_cyclePhase.TakeCycleBudget(
-                                rate: core.CycleRate,
-                                ticks: current.DeltaTicks
-                            );
-
-                            core.ApplyInput(input: in input);
-                            core.RunCycles(cycles: budget);
-                            m_timeTravel?.Record(
-                                budget: budget,
-                                hostAccumulator: m_cyclePhase,
-                                input: in input
-                            );
-                        }
-
-                        lock (m_frameLock) {
-                            m_motorLevel = core.MotorLevel;
-                        }
-
-                        // The persistent lookahead advances only after the authoritative sub-steps finish, so presentation
+                        // The persistent lookahead advances only after the authoritative parts finish, so presentation
                         // still exposes one final fast-forward frame while the real machine remains the sole audio source.
-                        if (m_timeTravel is { } timeTravel) {
-                            timeTravel.AdvanceLookahead(predicted: in input);
-                        }
-
-                        // Detached (m_audioSampleRate 0) skips this call entirely rather than draining an always-empty
-                        // ring: the core never synthesized anything to drain (see ConfigureAudio's zero-cost contract).
-                        if (m_audioSampleRate > 0) {
-                            DrainAudio(core: core);
-                        }
-
-                        var nativeFrame = core.NativeFrameIndex;
-
-                        // Exact input/tick segments still run at the host's fixed-step rate, but pixels are repacked only
-                        // when the core completes a native ~59.7 Hz frame. The synchronous Step path forces a stage to
-                        // retain its generic contract; queued submissions avoid redundant framebuffer scans.
-                        if (
-                            current.ForceStage ||
-                            (nativeFrame != stagedNativeFrame)
-                        ) {
-                            StageMachineFrame(core: core);
-                            stagedNativeFrame = nativeFrame;
-                        }
-
-                        m_lifecycle.CompleteStep(startedTimestamp: takenAt);
-
-                        // The interval means native frames, not submitted work items — one native-frame count that is
-                        // independent of how many exact segments each frame took.
-                        if ((nativeFrame - lastFlushNativeFrame) >= SaveFlushIntervalFrames) {
-                            lastFlushNativeFrame = nativeFrame;
-                            core.FlushSave(force: false);
-                        }
+                        m_timeTravel?.AdvanceLookahead(predicted: in held);
+                        CompleteSegment(
+                            clock: current.Clock,
+                            core: core,
+                            forceStage: current.ForceStage,
+                            startedTimestamp: takenAt
+                        );
 
                         break;
                     case WorkKind.Flush:
@@ -873,8 +1050,6 @@ public sealed class QueuedMachineWorker : IDisposable {
 
             m_lender = lender;
             m_lent = true;
-            m_lentFlushNativeFrame = core.NativeFrameIndex;
-            m_lentStagedNativeFrame = core.NativeFrameIndex;
 
             return core;
         }
@@ -910,7 +1085,9 @@ public sealed class QueuedMachineWorker : IDisposable {
             }
             core.ConfigureAudio(sampleRate: m_audioSampleRate);
             ResetAudioRing();
-            StageMachineFrame(core: core);
+            FrameRateHz = NativeFrameRate(core: core);
+            m_frameSlackTicks = (FixedTickConversion.TicksPerSecond / (2UL * FrameRateHz));
+            RestageMachineFrame(core: core);
             StartWorker(core: core);
         }
     }
@@ -948,44 +1125,52 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// <param name="value">The byte to store.</param>
     public void PokeByte(int address, byte value) =>
         RunMemoryAccess(request: new MemoryRequest { Address = address, IsWrite = true, Value = value });
-    /// <summary>Publishes one link-driven step's results through this worker's own surfaces — the framebuffer stage,
-    /// the audio ring drain, the feedback sample, the completed-step count, and the native-frame-keyed save-flush
-    /// debounce — so a linked member looks exactly like an independently stepped one to every consumer. Call on the
-    /// link's execution thread after the group's step, once per member. A no-op when the core is not lent.</summary>
-    /// <param name="forceStage">When <see langword="true"/>, repack the framebuffer even when no native frame
-    /// completed (the synchronous step path's contract).</param>
-    public void PublishLentStep(bool forceStage) {
+    /// <summary>Notes where the lent core's frame completes, before the link runs a part of a segment. Call on the
+    /// link's execution thread; a no-op when the core is not lent.</summary>
+    public void BeginLentPart() {
         if (
-            !m_lent ||
-            (m_core is not { } core)
+            m_lent &&
+            (m_core is { } core)
         ) {
-            return;
+            BeginPart(core: core);
         }
-
-        lock (m_frameLock) {
-            m_motorLevel = core.MotorLevel;
-        }
-
-        if (m_audioSampleRate > 0) {
-            DrainAudio(core: core);
-        }
-
-        var nativeFrame = core.NativeFrameIndex;
-
+    }
+    /// <summary>Stages the frame the lent core completed in the part the link just ran, if it completed one, so a linked
+    /// member's video keeps its native rate. Call on the link's execution thread after each part; a no-op when the core
+    /// is not lent.</summary>
+    /// <param name="stamp">The host clock position the part ended at, in engine ticks.</param>
+    /// <param name="presents">Whether the part's frames are for display.</param>
+    public void PublishLentPart(ulong stamp, bool presents) {
         if (
-            forceStage ||
-            (nativeFrame != m_lentStagedNativeFrame)
+            m_lent &&
+            (m_core is { } core)
         ) {
-            StageMachineFrame(core: core);
-            m_lentStagedNativeFrame = nativeFrame;
+            CompletePart(
+                core: core,
+                presents: presents,
+                stamp: stamp
+            );
         }
-
-        // The step ran on the link's thread, whose own lifecycle charges its time.
-        m_lifecycle.CompleteStep(startedTimestamp: 0L);
-
-        if ((nativeFrame - m_lentFlushNativeFrame) >= SaveFlushIntervalFrames) {
-            m_lentFlushNativeFrame = nativeFrame;
-            core.FlushSave(force: false);
+    }
+    /// <summary>Publishes one link-driven step's results through this worker's own surfaces — the audio ring drain, the
+    /// feedback sample, the completed-step count, and the native-frame-keyed save-flush debounce — so a linked member
+    /// looks exactly like an independently stepped one to every consumer. Call on the link's execution thread after the
+    /// group's step, once per member. A no-op when the core is not lent.</summary>
+    /// <param name="clock">The host clock position the step ended at, in engine ticks.</param>
+    /// <param name="forceStage">When <see langword="true"/>, stage the machine's picture as it stands even when the
+    /// step's last part completed no frame (the synchronous step path's contract).</param>
+    public void PublishLentStep(ulong clock, bool forceStage) {
+        if (
+            m_lent &&
+            (m_core is { } core)
+        ) {
+            // The step ran on the link's thread, whose own lifecycle charges its time.
+            CompleteSegment(
+                clock: clock,
+                core: core,
+                forceStage: forceStage,
+                startedTimestamp: 0L
+            );
         }
     }
     /// <summary>Drains buffered audio from the worker's own ring — filled on the worker thread from the attached
@@ -1057,9 +1242,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             m_motorLevel = core.MotorLevel;
         }
 
-        m_lentStagedNativeFrame = core.NativeFrameIndex;
-
-        StageMachineFrame(core: core);
+        RestageMachineFrame(core: core);
     }
     /// <summary>Takes the core back from a severed link and restarts this worker's own execution thread on it, so the
     /// machine steps independently again. The completed/submitted step counts carry across the link rather than
@@ -1154,24 +1337,63 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// <returns>The observable submission outcome.</returns>
     public QueuedMachineSubmission Submit(ulong deltaTicks, in MachinePads input) {
         var generation = 0UL;
-        var result = EnqueueStep(deltaTicks: deltaTicks, input: in input, forceStage: false, generation: ref generation,
+        var result = StepSegment(deltaTicks: deltaTicks, input: in input, drain: false, generation: ref generation,
             deadline: WaitDeadline.Synchronous());
         return QueuedWorkerLifecycle<WorkItem>.RequireSettled(result);
     }
 
-    /// <summary>Submits or resumes a segment within the caller’s deadline.</summary>
-    public QueuedMachineSubmission StepSegment(ulong deltaTicks, in MachinePads input, bool drain, ref ulong generation, WaitDeadline deadline) =>
-        EnqueueStep(deltaTicks: deltaTicks, input: in input, forceStage: drain, generation: ref generation, deadline: deadline);
-    /// <summary>Writes the latest complete frame into an uploaded source's region: its one plane of tightly packed RGBA8
+    /// <summary>Submits or resumes a segment within the caller's deadline.</summary>
+    /// <param name="deltaTicks">The segment's fixed-step tick budget.</param>
+    /// <param name="input">The seat image held at the segment's start.</param>
+    /// <param name="drain">Whether the call waits for the segment to complete, which also stages the machine's picture
+    /// as it stands then.</param>
+    /// <param name="generation">The drain generation a resumed step hands back; zero for a fresh segment.</param>
+    /// <param name="deadline">The last instant to wait.</param>
+    /// <param name="changes">The seats' changes inside the segment, in rising offset order, or <see langword="null"/>
+    /// for none. The worker keeps the array.</param>
+    /// <param name="endTicks">The host clock position at the segment's end, in engine ticks, which stamps the frames it
+    /// completes; <see langword="null"/> continues the worker's own running clock.</param>
+    /// <returns>The observable submission outcome.</returns>
+    public QueuedMachineSubmission StepSegment(ulong deltaTicks, in MachinePads input, bool drain, ref ulong generation, WaitDeadline deadline, MachineSeatChange[]? changes = null, ulong? endTicks = null) =>
+        EnqueueStep(changes: changes, deltaTicks: deltaTicks, endTicks: endTicks, input: in input, forceStage: drain, generation: ref generation, deadline: deadline);
+    /// <summary>Returns the sequence number of the frame due at a host clock position, without writing it: the newest
+    /// complete frame stamped at or before <paramref name="dueTicks"/>, or the oldest queued when every one is later.
+    /// A display that names the frame it shows now is kept in sequence
+    /// (<see cref="IMachineVideoOutput.FrameDue"/>).</summary>
+    /// <param name="dueTicks">The host clock position a display presents, in engine ticks on the clock the segments
+    /// were stamped with.</param>
+    /// <param name="held">The sequence number of the frame the display shows now, or zero for none.</param>
+    /// <returns>The due frame's sequence number; positive.</returns>
+    public long FrameDue(ulong dueTicks, long held = 0L) {
+        lock (m_frameLock) {
+            return FrameDueLocked(
+                dueTicks: dueTicks,
+                held: held
+            ).Sequence;
+        }
+    }
+    /// <summary>Writes the newest complete frame into an uploaded source's region: its one plane of tightly packed RGBA8
     /// rows, at <see cref="ImageSourceUploadLayout.HeaderOf"/>'s offset for this worker's extent, leaving the header as it
-    /// is. The copy runs under the frame lock, which the worker holds only to swap its buffers, so the frame is written
-    /// whole however the worker runs meanwhile.</summary>
+    /// is. The copy runs under the frame lock, which the worker holds only to publish a frame it finished writing, so the
+    /// frame is written whole however the worker runs meanwhile.</summary>
     /// <param name="region">The region; at least <see cref="ImageSourceUploadLayout.ByteCount"/> bytes of the RGBA8
     /// layout of <see cref="Width"/> by <see cref="Height"/>.</param>
     /// <returns>The written frame's sequence number: positive, and rising once per staged frame, the opaque black frame a
     /// worker stages with no core attached included.</returns>
     /// <exception cref="ArgumentException"><paramref name="region"/> is shorter than the layout.</exception>
-    public long WriteFrame(Span<byte> region) {
+    public long WriteFrame(Span<byte> region) => WriteFrame(
+        dueTicks: ulong.MaxValue,
+        region: region
+    );
+    /// <summary>Writes the frame due at a host clock position (<see cref="FrameDue"/>) into an uploaded source's region,
+    /// as <see cref="WriteFrame(Span{byte})"/> writes the newest.</summary>
+    /// <param name="region">The region; at least <see cref="ImageSourceUploadLayout.ByteCount"/> bytes of the RGBA8
+    /// layout of <see cref="Width"/> by <see cref="Height"/>.</param>
+    /// <param name="dueTicks">The host clock position a display presents, in engine ticks.</param>
+    /// <param name="held">The sequence number of the frame the display shows now, or zero for none.</param>
+    /// <returns>The written frame's sequence number; positive.</returns>
+    /// <exception cref="ArgumentException"><paramref name="region"/> is shorter than the layout.</exception>
+    public long WriteFrame(Span<byte> region, ulong dueTicks, long held = 0L) {
         var plane = ImageSourceUploadLayout.PlaneOf(
             header: in m_header,
             plane: 0,
@@ -1179,12 +1401,52 @@ public sealed class QueuedMachineWorker : IDisposable {
         );
 
         lock (m_frameLock) {
-            m_rgbaFront.CopyTo(destination: plane);
+            var slot = FrameDueLocked(
+                dueTicks: dueTicks,
+                held: held
+            );
 
-            return m_frameVersion;
+            slot.Pixels.CopyTo(destination: plane);
+
+            if (slot.Sequence != m_shownFrame) {
+                m_shownFrame = slot.Sequence;
+                ++m_shownFrames;
+            }
+
+            return slot.Sequence;
         }
     }
 
+    // The core's native frames a second, rounded up: the frames its rate buys over the cycles one frame takes now.
+    private static uint NativeFrameRate(IQueuedMachineCore core) {
+        var rate = core.CycleRate;
+        var frameCycles = (((UInt128)((ulong)Math.Max(val1: 1L, val2: core.CyclesPerFrame))) * rate.Seconds);
+
+        return ((uint)UInt128.Clamp(
+            max: 1000U,
+            min: 1U,
+            value: ((UInt128)rate.Cycles).CeilingDivide(divisor: frameCycles)
+        ));
+    }
+
+    // One part of a segment as this worker's own thread publishes it.
+    private readonly struct SegmentParts(QueuedMachineWorker worker, IQueuedMachineCore core) : IMachineSegmentObserver {
+        public void PartStarting() => worker.BeginPart(core: core);
+        public void PartCompleted(ulong stampTicks, bool presents) => worker.CompletePart(
+            core: core,
+            presents: presents,
+            stamp: stampTicks
+        );
+    }
+    // One queued frame: its packed RGBA8 pixels, its sequence number, the host clock position it is due at, and the
+    // light it emits.
+    private sealed class FrameSlot(byte[] pixels) {
+        public readonly byte[] Pixels = pixels;
+
+        public Vector3 Light;
+        public long Sequence;
+        public ulong Stamp;
+    }
     private enum WorkKind {
         Step,
         Flush,
@@ -1252,7 +1514,9 @@ public sealed class QueuedMachineWorker : IDisposable {
         MemoryRequest? Memory,
         ReconfigureRequest? Reconfigure,
         CheckpointRequest? Checkpoint = null,
-        ulong BarrierGeneration = 0
+        ulong BarrierGeneration = 0,
+        MachineSeatChange[]? Changes = null,
+        ulong Clock = 0
     ) : IQueuedWorkItem<WorkItem> {
         public static WorkItem Barrier(ulong generation) =>
             new(
@@ -1315,8 +1579,10 @@ public sealed class QueuedMachineWorker : IDisposable {
                 Reconfigure: null,
                 TimeTravel: request
             );
-        public static WorkItem Step(ulong deltaTicks, in MachinePads input, bool forceStage) =>
+        public static WorkItem Step(ulong deltaTicks, in MachinePads input, bool forceStage, MachineSeatChange[]? changes, ulong clock) =>
             new(
+                Changes: changes,
+                Clock: clock,
                 Completion: null,
                 DeltaTicks: deltaTicks,
                 ForceFlush: false,

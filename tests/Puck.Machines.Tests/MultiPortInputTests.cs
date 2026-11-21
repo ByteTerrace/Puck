@@ -171,6 +171,9 @@ public sealed class MultiPortInputTests {
         public string CheckpointIdentity => "test/seat-recording-core";
         public long CycleCount => 0L;
         public MachineCycleRate CycleRate => new(cycles: 60UL);
+        public bool CarriesBudgetOvershoot => true;
+        public long CyclesPerFrame => 1L;
+        public long CyclesToFrameEnd => long.MaxValue;
         public ReadOnlySpan<uint> Framebuffer => m_framebuffer;
         public long NativeFrameIndex => 0L;
 
