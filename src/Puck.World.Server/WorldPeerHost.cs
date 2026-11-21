@@ -478,12 +478,18 @@ public sealed class WorldPeerHost : IDisposable {
                     return;
                 }
                 var federationAuthority = identityProof.Authority;
+                var currentProof = identityProof;
                 var hadArrivalAdmission = WorldAdmissionDoor.TryAdmitArrival(verifiedPolicy, federationAuthority, out _) is null;
                 async ValueTask<VerifiedPeerIdentity?> ReverifyAsync(IReadOnlyList<WorldAdmissionEntry>? policy, CancellationToken token) {
-                    if (hadArrivalAdmission && WorldAdmissionDoor.TryAdmitArrival(policy, federationAuthority, out _) is not null) { return null; }
-                    if (identityProof.TrustIsCurrent?.Invoke() != false) { return identityProof; }
+                    var admittedNow = WorldAdmissionDoor.TryAdmitArrival(policy, federationAuthority, out _) is null;
+                    if (hadArrivalAdmission && !admittedNow) { return null; }
+                    hadArrivalAdmission |= admittedNow;
+                    var latest = Volatile.Read(ref currentProof);
+                    if (latest.TrustIsCurrent?.Invoke() != false) { return latest; }
                     var next = await m_authenticator.VerifyAsync(boundChallenge, federationProof, token).ConfigureAwait(false);
-                    return next?.Authority == federationAuthority ? next : null;
+                    if (next?.Authority != federationAuthority) { return null; }
+                    Volatile.Write(ref currentProof, next);
+                    return next;
                 }
                 using var credential = new Credential(this, verifiedPolicy, identityProof, ReverifyAsync, ct);
 
@@ -850,7 +856,9 @@ public sealed class WorldPeerHost : IDisposable {
         }, credential.Token);
 
     private Task<Principal?> TransferredPrincipalAsync(Credential credential, WorldMobilityIdentity mobility, string sourceAuthority) =>
-        ExecuteAuthenticatedAsync<Principal?>(credential, () => m_server.TryTransferredPrincipal(sourceAuthority, mobility, out var principal) ? principal : null);
+        ExecuteAuthenticatedAsync<Principal?>(credential, () =>
+            ((WorldAdmissionDoor.TryAdmitArrival(m_server.Definition.Admission, sourceAuthority, out _) is null) &&
+            m_server.TryTransferredPrincipal(sourceAuthority, mobility, out var principal)) ? principal : null);
 
     // A destination asks this authority, as a companion's title authority, whether a hop is currently granted to it.
     // The destination is the namespace this connection authenticated as, never one the body names.
@@ -1715,7 +1723,9 @@ public sealed class WorldPeerHost : IDisposable {
                     return;
                 }
                 var (resolved, accepted) = await ExecuteAuthenticatedAsync(credential, () =>
-                    WorldLocalForwardedAuthority.TryApplyIntent(m_server, sourceAuthority, in mobility, leaseId, in submission)
+                    (WorldAdmissionDoor.TryAdmitArrival(m_server.Definition.Admission, sourceAuthority, out _) is null)
+                        ? WorldLocalForwardedAuthority.TryApplyIntent(m_server, sourceAuthority, in mobility, leaseId, in submission)
+                        : (null, false)
                 ).ConfigureAwait(false);
                 if (resolved is not { } stamped) {
                     await WriteFederationRefusal(
@@ -1738,12 +1748,14 @@ public sealed class WorldPeerHost : IDisposable {
                         mobility: mobility
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     credential.RequireValid();
-                    accepted = await ExecuteAuthenticatedAsync(credential, () => forwarder.TryForwardIntent(
-                        mobility: in mobility,
-                        reason: out reason,
-                        source: m_server,
-                        submission: in stamped
-                    )).ConfigureAwait(false);
+                    accepted = await ExecuteAuthenticatedAsync(credential, () =>
+                        (WorldAdmissionDoor.TryAdmitArrival(m_server.Definition.Admission, sourceAuthority, out _) is null) &&
+                        forwarder.TryForwardIntent(
+                            mobility: in mobility,
+                            reason: out reason,
+                            source: m_server,
+                            submission: in stamped
+                        )).ConfigureAwait(false);
                 }
 
                 if (!accepted) {
