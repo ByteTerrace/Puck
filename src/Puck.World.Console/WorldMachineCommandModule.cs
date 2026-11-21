@@ -90,7 +90,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "machine.state",
-            description: $"Reports named machine execution: {MachineStateForms.Spelling}. Includes generation, running state, hardware status, completed segments, backlog, and fault. Author declarations through world.row.set machines <json>.",
+            description: $"Reports named machine execution: {MachineStateForms.Spelling}. Includes generation, running state, hardware status, completed segments, backlog, completed native frames, backpressure waits, the worker's busy milliseconds on this host (busyMs over the wall time between two reads is the share of real time the machine needs), and fault. Author declarations through world.row.set machines <json>.",
             forms: MachineStateForms,
             handler: (context, args) => {
                 if (args.Count > 1) {
@@ -119,6 +119,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
                         );
                     }
                     found = true;
+                    var pace = server.Machines.Pace(name: name);
                     echo = echo.Head(head: name).Field(
                         key: "generation",
                         value: state.Generation
@@ -139,6 +140,16 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
                     ).Field(
                         key: "pending",
                         value: state.PendingSteps
+                    )
+                        .Field(
+                        key: "nativeFrames",
+                        value: (pace?.NativeFrames ?? -1L)
+                    ).Field(
+                        key: "backpressure",
+                        value: (pace?.BackpressureEvents ?? 0L)
+                    ).Field(
+                        key: "busyMs",
+                        value: ((long)(pace?.StepBusyTime.TotalMilliseconds ?? 0.0))
                     )
                         .Field(
                         key: "fault",

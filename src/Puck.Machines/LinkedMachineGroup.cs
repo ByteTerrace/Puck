@@ -219,7 +219,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
 
         try {
             while (true) {
-                current = m_lifecycle.TakeWork();
+                current = m_lifecycle.TakeWork(takenTimestamp: out var takenAt);
 
                 switch (current.Kind) {
                     case GroupWorkKind.Step:
@@ -242,7 +242,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
                         }
 
                         PublishMembers(forceStage: current.ForceStage);
-                        m_lifecycle.CompleteStep();
+                        m_lifecycle.CompleteStep(startedTimestamp: takenAt);
 
                         break;
                     case GroupWorkKind.Invoke:
