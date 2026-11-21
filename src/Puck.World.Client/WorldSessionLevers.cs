@@ -56,6 +56,10 @@ public static partial class WorldSessionLevers {
     /// <summary>The far shadow cascade's rate: its refreshes a second in lane A (zero for every frame, the unauthored
     /// default) and the light turn a held cascade tolerates, in degrees, in lane B.</summary>
     public const string FarShadows = "far-shadows";
+    /// <summary>The irradiance work each presented frame grants the volume: the probes relit in lane A and traced in lane B
+    /// (zero for unbounded), the lighting age in seconds in lane C (zero for none), and in lane D whether a device row
+    /// authors it (zero runs each world's own budget).</summary>
+    public const string IndirectBudget = "indirect-budget";
     /// <summary>The maximum shading footprint in A and the classification tile edge in B.</summary>
     public const string ViewsRate = "views-rate";
     /// <summary>The quality table whose nested-view table the presentation runs, named in
@@ -113,6 +117,14 @@ public static partial class WorldSessionLevers {
     public static WorldSessionLever FarShadowPolicy(WorldQualityPreset preset) => new(
         Section: WorldSection.Render, Name: FarShadows,
         A: (preset.FarShadows?.Hertz ?? 0), B: (preset.FarShadows?.TurnDegrees ?? 0f));
+    /// <summary>Creates the one lever that installs a preset's irradiance budget, or hands the volume back to each world's own
+    /// for a preset that authors none.</summary>
+    /// <param name="preset">The authored quality row.</param>
+    /// <returns>The probes a frame and the age target in one accepted settings write.</returns>
+    public static WorldSessionLever IndirectBudgetPolicy(WorldQualityPreset preset) => new(
+        Section: WorldSection.Render, Name: IndirectBudget,
+        A: (preset.IndirectBudget?.RelightPerFrame ?? 0), B: (preset.IndirectBudget?.TracePerFrame ?? 0),
+        C: (preset.IndirectBudget?.Age ?? 0f), D: ((preset.IndirectBudget is null) ? 0 : 1));
     /// <summary>Composes the applier every shipped knob is registered on.</summary>
     /// <param name="settings">The live render-lever settings the frame source reads.</param>
     /// <param name="pacing">The live present-rate control the window pump reads.</param>
@@ -270,6 +282,23 @@ public static partial class WorldSessionLevers {
                 return;
             }
             settings.FarShadows = rate;
+        });
+        sink.Register(name: IndirectBudget, setter: lever => {
+            if (lever.D == 0d) {
+                settings.IndirectBudget = null;
+                return;
+            }
+            // The values arrive off the wire, so they are judged here as the document validator judges an authored row.
+            var budget = new WorldRenderIndirectBudget(
+                RelightPerFrame: ((lever.A > 0d) ? ((int)lever.A) : null),
+                TracePerFrame: ((lever.B > 0d) ? ((int)lever.B) : null),
+                Age: ((lever.C > 0d) ? ((float)lever.C) : null));
+
+            if (budget.Refusal(path: "indirect-budget") is { } refusal) {
+                WorldClientDiagnostics.Report(channel: "world.quality", text: $"{refusal} — lever dropped");
+                return;
+            }
+            settings.IndirectBudget = budget;
         });
         sink.Register(name: NestedTable, setter: lever => settings.NestedTable = lever.View);
         sink.Register(name: ViewsRate, setter: lever => {

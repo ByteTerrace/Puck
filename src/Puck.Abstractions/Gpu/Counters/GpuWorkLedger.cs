@@ -249,6 +249,14 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         record.Readback = readback;
         record.ReadbackSlot = slot;
     }
+    /// <summary>Records whether the open submission's passes counted their own kernel work into their rows. A submission
+    /// reads as counted unless this says otherwise, so a source with nothing to gate never calls it; the sample then
+    /// carries <see cref="GpuWorkSample.KernelCountsIncluded"/> as given.</summary>
+    /// <param name="counted"><see langword="false"/> when the passes' counting was switched off for the submission, so
+    /// the pass rows' kernel counts read zero.</param>
+    public void MarkKernelCounts(bool counted) {
+        OpenRecord().KernelCounts = counted;
+    }
     /// <summary>Marks a pass as not run in the work being recorded, so its sample reads skipped rather than zero.</summary>
     /// <param name="pass">The zero-based pass index in the configured labels.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="pass"/> is not a configured pass.</exception>
@@ -452,6 +460,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
                 length: (((passCount + record.Details.Length) + 1) * Columns),
                 start: 0
             ),
+            kernelCountsIncluded: record.KernelCounts,
             labels: record.Labels,
             revision: record.Revision,
             states: record.States.AsSpan(
@@ -484,6 +493,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
 
         public GpuWorkCountingFence? Fence;
         public bool HasPassActivity;
+        public bool KernelCounts;
 
         public string[] Labels = [];
         public GpuWorkDetail[] Details = [];
@@ -516,6 +526,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             ).Clear();
             Fence = null;
             HasPassActivity = false;
+            KernelCounts = true;
             Readback = null;
             State = RecordState.Open;
             Submission = 0L;

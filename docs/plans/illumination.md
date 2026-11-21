@@ -260,10 +260,12 @@ the volume supplies; it never invents light the sun did not deliver.
 sets. Puck gives them one surface, in the world document and in the live
 verbs:
 
-- `render.indirect.budget` holds the probes relit a second, the hits traced
-  a second, and the target lighting age in seconds; the authored day length
-  sizes the relight rate (a 24-minute day moves the sun 0.25° a second). The
-  defaults live in the standard package as data, not in C#.
+- `render.indirect.budget` holds the probes relit a presented frame, the hits
+  traced a frame, and the target lighting age in seconds; each quality table
+  (`indirectBudget`, a device's own `table` among them) replaces it with that
+  device's count, and the authored day length sizes the relight count (a
+  24-minute day moves the sun 0.25° a second). The defaults live in the
+  standard package as data, not in C#.
 - `world.budget` prints the volume's cost sheet beside the program's: probes
   per level, bytes per copy, the relight and trace budgets, and the lighting
   age the current scene settles at.
@@ -553,16 +555,18 @@ Six steps run in order:
    `SdfMeshPathBake.BatchTaps`. Still open: a lattice is never split, and the
    cold bake in play needs measuring against the bar
    ([bake proportional to change](open-items.md#bake-proportional-to-change)).
-3. **Finish multi-job probe pipelining and per-second grants.** Built: multiple
+3. **Finish multi-job probe pipelining and per-frame grants.** Built: multiple
    probe jobs in flight with one commit per batch (`SdfMeshProbeGpuWork.Run`,
    `SdfMeshProbeGpuWork.RecordCommit`), stale relights sharing the worker with
-   owed traces (`SdfMeshIrradiance.Work`), and grants for each second of wall
-   time: `render.indirect.budget`'s `relightPerSecond` and `tracePerSecond`
-   accrue by the wall time since the previous frame's grant, held to
-   `SdfMeshIrradiance.MostGrantSeconds` (the bounded catch-up), so the lighting
-   a second does not fall with the frame rate. The GPU time those probes cost
-   is charged by their jobs' timestamps to the one wall-clock budget, so the
-   authored rate means the same on every device and a higher one lowers the
+   owed traces (`SdfMeshIrradiance.Work`), and a grant for each presented
+   frame: `render.indirect.budget`'s (or the running quality table's
+   `indirectBudget`) `relightPerFrame` and `tracePerFrame` bank once a frame the
+   volume stages, held to `SdfMeshIrradiance.MostBankedFrames` frames of
+   credit, so a frame that runs long owes no more probe work than a short one
+   and a slow device does less lighting work a second. The GPU time those
+   probes cost is charged by their jobs' timestamps to the one wall-clock
+   budget, and a frame over its period (`SdfGpuWorkBudget.FrameOver`) holds
+   even an unqueued job to the frame allowance, so a higher count lowers the
    lighting's age only while the frame leaves time free. A drain ignores the
    grant, so its result does not depend on the play rate. Still to do: mesh
    upload time measured per device beside the bytes-per-second staging cap, and

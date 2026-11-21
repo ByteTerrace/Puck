@@ -17,12 +17,13 @@
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
-    if ((id.x >= passGroup.extent.x) || (id.y >= passGroup.extent.y)) {
-        return;
+    uint texels = 0u;
+
+    if ((id.x < passGroup.extent.x) && (id.y < passGroup.extent.y)) {
+        float4 stored = source.Load(int3(id.xy, 0));
+
+        image[id.xy] = float4(imageSourceToWorking(IMAGE_COLOR_SCRGB, stored.rgb, passGroup.paperWhiteNits), stored.a);
+        texels = 1u;
     }
-
-    float4 stored = source.Load(int3(id.xy, 0));
-
-    image[id.xy] = float4(imageSourceToWorking(IMAGE_COLOR_SCRGB, stored.rgb, passGroup.paperWhiteNits), stored.a);
-    puckCountWork(0u, 1u);
+    puckCountWork(0u, texels);
 }

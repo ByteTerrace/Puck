@@ -60,6 +60,7 @@ internal sealed partial class WorldInspectionCommandModule {
             (pass == ((RenderGraphPackageCatalog.SdfWorld + "$") + SdfWorldPackage.Parts.Sky)) ||
             (pass == ((RenderGraphPackageCatalog.SdfWorld + "$") + SdfWorldPackage.Parts.Composite)));
         foreach (var node in nodes) {
+            node.Work.DemandKernelCounting();
             if (!node.Work.TryReadCompleted(sample: sample)) { continue; }
             if (!sample.PassLabels.ToArray().Any(predicate: IsSky)) { continue; }
             found = true;

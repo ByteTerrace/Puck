@@ -653,7 +653,7 @@ public sealed class SdfGpuWork : IDisposable {
                 Stop.Host => TimeSpan.FromSeconds(value: (HostBudget.TotalSeconds / HostShare)),
                 // The queued jobs may be another service's, whose fences wake only their own: come back once they should
                 // have run.
-                Stop.Deadline => TimeSpan.FromSeconds(value: m_budget.QueuedSeconds),
+                Stop.Deadline => TimeSpan.FromSeconds(value: m_budget.DeadlineRetrySeconds),
                 // The services ahead of this one charge as their own jobs complete: come back after one frame allowance.
                 Stop.Turn => TimeSpan.FromSeconds(value: Math.Max(val1: m_budget.FrameAllowanceSeconds, val2: HostBudget.TotalSeconds)),
                 _ => null,

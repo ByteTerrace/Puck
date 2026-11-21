@@ -91,6 +91,8 @@ public static partial class GpuWorkReport {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(sample);
 
+        source.DemandKernelCounting();
+
         return (source.TryReadCompleted(sample: sample)
             ? AppendSample(
                 builder: builder,
@@ -132,6 +134,7 @@ public static partial class GpuWorkReport {
         ArgumentNullException.ThrowIfNull(sample);
         ArgumentNullException.ThrowIfNull(selection);
 
+        node.Work.DemandKernelCounting();
         var completed = node.Work.TryReadCompleted(sample: sample);
 
         if (selection.NamesPasses && !(completed && SelectsAnyPass(
@@ -184,6 +187,7 @@ public static partial class GpuWorkReport {
         ArgumentNullException.ThrowIfNull(sample);
         ArgumentNullException.ThrowIfNull(selection);
 
+        node.Work.DemandKernelCounting();
         var completed = (node.Work.TryReadCompleted(sample: sample) && (sample.Submission != 0L));
 
         if (selection.NamesPasses && !(completed && SelectsAnyPass(
@@ -237,6 +241,7 @@ public static partial class GpuWorkReport {
         ArgumentNullException.ThrowIfNull(sample);
         ArgumentNullException.ThrowIfNull(selection);
 
+        node.Work.DemandKernelCounting();
         var completed = (node.Work.TryReadCompleted(sample: sample) && (sample.Submission != 0L));
 
         if (selection.NamesPasses && !(completed && SelectsAnyPass(
@@ -280,7 +285,7 @@ public static partial class GpuWorkReport {
         return true;
     }
     /// <summary>Writes one node as the JSON object
-    /// <c>{"name":…,"sample":{"submission":S,"revision":R,"passes":[{"label":…,"class":"deterministic|per-backend-deterministic","state":"executed|skipped|standing|not-reached","details":[{"label":…,"counts":{…}}],"counts":{…}}],"outside":{…}}|null,"lifetime":{…}|null,"owned-bytes":N|null}</c>.
+    /// <c>{"name":…,"sample":{"submission":S,"revision":R,"kernelCounts":true|false,"passes":[{"label":…,"class":"deterministic|per-backend-deterministic","state":"executed|skipped|standing|not-reached","details":[{"label":…,"counts":{…}}],"counts":{…}}],"outside":{…}}|null,"lifetime":{…}|null,"owned-bytes":N|null}</c>.
     /// A pass's <c>class</c> is <see cref="GpuWorkSample.GetPassClass"/>. A pass that did not execute carries no
     /// <c>counts</c> on either the pass or its details; <c>sample</c> is <see langword="null"/> while no submission has completed.</summary>
     /// <param name="writer">The writer to write to.</param>
@@ -310,6 +315,7 @@ public static partial class GpuWorkReport {
         ArgumentNullException.ThrowIfNull(sample);
         ArgumentNullException.ThrowIfNull(selection);
 
+        node.Work.DemandKernelCounting();
         var completed = (node.Work.TryReadCompleted(sample: sample) && (sample.Submission != 0L));
 
         if (selection.NamesPasses && !(completed && SelectsAnyPass(
@@ -405,6 +411,9 @@ public static partial class GpuWorkReport {
             builder: builder,
             value: sample.Revision
         );
+        if (!sample.KernelCountsIncluded) {
+            _ = builder.Append(value: " kernel-counts=off");
+        }
         _ = builder.Append(value: '\n');
 
         var labels = sample.PassLabels;
@@ -482,6 +491,10 @@ public static partial class GpuWorkReport {
         writer.WriteNumber(
             propertyName: "revision",
             value: sample.Revision
+        );
+        writer.WriteBoolean(
+            propertyName: "kernelCounts",
+            value: sample.KernelCountsIncluded
         );
         writer.WriteStartArray(propertyName: "passes");
 

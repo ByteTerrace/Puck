@@ -2,22 +2,24 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// What one job of background GPU work may take (<see cref="ISdfGpuWorkClient.TryTake"/>): the GPU time left before the
-/// frame's deadline, and whether other background work is queued ahead of the job. The queue runs every job submitted
+/// frame's deadline, and whether the job must fit it: other background work is queued ahead of it, or the frame is over its
+/// period (<see cref="SdfGpuWorkBudget.FrameOver"/>). The queue runs every job submitted
 /// before a frame whole before that frame, so the jobs queued ahead of one frame together fit one frame allowance
 /// (<see cref="SdfGpuWorkBudget.FrameAllowanceSeconds"/>): <see cref="Seconds"/> is that allowance less the priced length
 /// of the jobs already queued.
 /// <para>Invariant: while work is queued (<see cref="Queued"/>) a client hands over no job priced past
 /// <see cref="Seconds"/>. A client prices its job through <see cref="UnitsWithin"/> or <see cref="Admits"/> before it takes
 /// anything, since a job once taken cannot always be handed back unchanged (a probe query handed back is cancelled). With
-/// nothing queued the job is admitted whatever its price, cut to the allowance as far as its units allow, so a unit
-/// costlier than the whole allowance (a bake lattice, which is never split) still runs, alone. The service counts a job
+/// nothing queued and room in the frame the job is admitted whatever its price, cut to the allowance as far as its units
+/// allow, so a unit costlier than the whole allowance (a bake lattice, which is never split) still runs, alone; a frame
+/// over its period leaves no such room, and its jobs wait for it to come back under. The service counts a job
 /// that breaks the invariant (<see cref="SdfGpuWork.Describe"/>'s <c>over-deadline</c>).</para>
 /// </summary>
 /// <param name="Seconds">The GPU time, in seconds, the job is to fit: what is left of the frame allowance after the jobs
 /// already queued, or <see cref="double.PositiveInfinity"/> for a held frame's own work, which queues no frame behind
 /// it.</param>
-/// <param name="Queued">Whether other background work is queued ahead of the job, so a job past
-/// <see cref="Seconds"/> must wait for it rather than run.</param>
+/// <param name="Queued">Whether the job must fit <see cref="Seconds"/>: other background work is queued ahead of it, or the
+/// frame is over its period, so a job past <see cref="Seconds"/> must wait rather than run.</param>
 public readonly record struct SdfGpuWorkAllowance(double Seconds, bool Queued) {
     /// <summary>Gets the allowance of a held frame's own work: no bound, since no frame is queued behind it.</summary>
     public static SdfGpuWorkAllowance Unbounded => new(Queued: false, Seconds: double.PositiveInfinity);

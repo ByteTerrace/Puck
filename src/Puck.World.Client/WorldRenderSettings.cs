@@ -21,6 +21,7 @@ public sealed partial class WorldRenderSettings {
     /// <summary>The view shading rate selected by the active quality table.</summary>
     public SdfViewsRate? ViewsRate { get => m_viewsRate; set { m_viewsRate = value; m_revision++; } }
     private WorldFarShadows? m_farShadows;
+    private WorldRenderIndirectBudget? m_indirectBudget;
     private bool m_cadenceGate;
     private SdfMeshCullLevel m_cull;
     private SdfMeshDetailLevel m_detail;
@@ -87,6 +88,19 @@ public sealed partial class WorldRenderSettings {
     /// <see langword="null"/> to refresh it every frame. Boots at <c>render.farShadows</c>; a quality preset's row (the
     /// device table) moves it live.</summary>
     public WorldFarShadows? FarShadows { get => m_farShadows; set { m_farShadows = value; m_revision++; } }
+    /// <summary>The irradiance work each presented frame grants every residency's volume the session presents, routed
+    /// worlds' included (<see cref="Puck.SdfVm.SdfFrame.IndirectBudget"/>): the device table's row, or
+    /// <see langword="null"/> to run each world's own <c>render.indirect.budget</c> (<see cref="ResolveIndirectBudget"/>).
+    /// A quality preset's row moves it live.</summary>
+    public WorldRenderIndirectBudget? IndirectBudget { get => m_indirectBudget; set { m_indirectBudget = value; m_revision++; } }
+    /// <summary>Returns the budget a frame grants the volume: a device table's row replaces a world's own whole, since
+    /// what a frame may spend on lighting is the device's cost, never a painting world's.</summary>
+    /// <param name="authored">The world's own budget.</param>
+    /// <param name="row">The presenting session's device row, or <see langword="null"/> for none.</param>
+    /// <returns>The budget the frame carries.</returns>
+    public static SdfIndirectBudget ResolveIndirectBudget(SdfIndirectBudget authored, WorldRenderIndirectBudget? row) => ((row is { } chosen)
+        ? new SdfIndirectBudget(RelightPerFrame: (chosen.RelightPerFrame ?? 0), TracePerFrame: (chosen.TracePerFrame ?? 0), Age: (chosen.Age ?? 0f))
+        : authored);
     /// <summary>The exposure pin (<c>world.exposure pin</c>): an <c>EV100</c> every view the session presents renders
     /// manual at, with no local adaptation (<see cref="SdfExposure.HeldAt"/>), so look comparisons hold one exposure;
     /// <see langword="null"/> (the default) leaves each world's authored and held exposure exactly as it is. Presentation

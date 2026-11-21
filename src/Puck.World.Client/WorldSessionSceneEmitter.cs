@@ -528,7 +528,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 IndirectSources = environment.Indirect.Gains.Sources,
                 IndirectGains = environment.Indirect.Gains,
                 IndirectBounces = environment.Indirect.Bounces,
-                IndirectBudget = environment.Indirect.Budget,
+                // What a frame may spend on lighting is the presenting device's row, as the distant map's and the rays are.
+                IndirectBudget = WorldRenderSettings.ResolveIndirectBudget(authored: environment.Indirect.Budget, row: Session?.IndirectBudget),
                 // What the presenting session's nested-view table keeps of the volume at the glass's presented size, and
                 // the share of the display the glass covers, which weighs this world's background work against the
                 // others'.

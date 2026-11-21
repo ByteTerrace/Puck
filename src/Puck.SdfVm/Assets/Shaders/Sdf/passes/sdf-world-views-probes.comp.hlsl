@@ -20,47 +20,45 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint2 origin = (id.xy * SDF_VIEWS_PROBE_RATE);
 
     uint rate = sdfRateTile(view, viewIndex, id.xy, origin);
-    if (any(origin >= dims) || any(id.xy >= sdfViewsProbeCells())) {
-        return;
-    }
-
-    int viewMode = (int)round(view.forward.w);
-    uint lane = 0u;
-    bool present = false;
+    if (all(origin < dims) && all(id.xy < sdfViewsProbeCells())) {
+        int viewMode = (int)round(view.forward.w);
+        uint lane = 0u;
+        bool present = false;
 
 #if !defined(SDF_VIEWS_OMIT_PROBES)
-    [loop] for (uint candidate = 0u; (candidate < (SDF_VIEWS_PROBE_RATE * SDF_VIEWS_PROBE_RATE)) && !present; candidate++) {
-        uint2 pixel = (origin + uint2((candidate % SDF_VIEWS_PROBE_RATE), (candidate / SDF_VIEWS_PROBE_RATE)));
+        [loop] for (uint candidate = 0u; (candidate < (SDF_VIEWS_PROBE_RATE * SDF_VIEWS_PROBE_RATE)) && !present; candidate++) {
+            uint2 pixel = (origin + uint2((candidate % SDF_VIEWS_PROBE_RATE), (candidate / SDF_VIEWS_PROBE_RATE)));
 
-        if (any(pixel >= dims)) {
-            continue;
+            if (any(pixel >= dims)) {
+                continue;
+            }
+
+            SdfVisibility visibility = sdfLoadVisibility(worldVisibilityRecord(pixel, viewIndex));
+
+            if (sdfVisibilityHit(visibility) && sdfViewsProbesWanted(viewMode, visibility.material)) {
+                lane = candidate;
+                present = true;
+            }
         }
-
-        SdfVisibility visibility = sdfLoadVisibility(worldVisibilityRecord(pixel, viewIndex));
-
-        if (sdfVisibilityHit(visibility) && sdfViewsProbesWanted(viewMode, visibility.material)) {
-            lane = candidate;
-            present = true;
-        }
-    }
 #endif
 
-    SdfMeshProbes probes = sdfMeshProbesNone();
+        SdfMeshProbes probes = sdfMeshProbesNone();
 
-    if (present) {
-        uint2 pixel = (origin + uint2((lane % SDF_VIEWS_PROBE_RATE), (lane / SDF_VIEWS_PROBE_RATE)));
-        SdfPixel p = sdfPixelAt(view, pixel, viewIndex);
-        uint record = worldVisibilityRecord(pixel, viewIndex);
-        float t = asfloat(sdfVisibilityRecordBuffer[record + SdfVisibilityTWord]);
-        float3 normal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord]);
-        // The surface point exactly as views forms it (sdfViewsStage), so the representative reads its own gather.
-        precise float3 rayTravel = (p.rayDirection * t);
-        precise float3 surfacePoint = (p.rayOrigin + rayTravel);
+        if (present) {
+            uint2 pixel = (origin + uint2((lane % SDF_VIEWS_PROBE_RATE), (lane / SDF_VIEWS_PROBE_RATE)));
+            SdfPixel p = sdfPixelAt(view, pixel, viewIndex);
+            uint record = worldVisibilityRecord(pixel, viewIndex);
+            float t = asfloat(sdfVisibilityRecordBuffer[record + SdfVisibilityTWord]);
+            float3 normal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord]);
+            // The surface point exactly as views forms it (sdfViewsStage), so the representative reads its own gather.
+            precise float3 rayTravel = (p.rayDirection * t);
+            precise float3 surfacePoint = (p.rayOrigin + rayTravel);
 
-        probes = sdfMeshProbesAt(surfacePoint, normal);
-        sdfWorkTexels = 1u;
+            probes = sdfMeshProbesAt(surfacePoint, normal);
+            sdfWorkTexels = 1u;
+        }
+        sdfViewsProbesStore(sdfViewsProbeRecord(id.xy, viewIndex), probes, lane, present, rate);
     }
-    sdfViewsProbesStore(sdfViewsProbeRecord(id.xy, viewIndex), probes, lane, present, rate);
 
     // The pass counts a cell whose gather it wrote.
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
