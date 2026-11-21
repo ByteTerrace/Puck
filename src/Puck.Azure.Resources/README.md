@@ -140,11 +140,30 @@ The existing load balancer maps public TCP 443 to Caddy on 8443 (the image
 `src/Puck.World.Silo/Dockerfile` pins by digest). Caddy uses
 ACME TLS-ALPN-01 to issue, renew and hot-swap the certificate, forwarding only to
 the loopback MCP listener. That rule has its own TCP probe of 8443, not the world's
-`/healthz` probe: a fresh worker must obtain its certificate through the rule
+`/healthz` probe: a worker that finds no stored certificate obtains one through the rule
 before its release commits, and `/healthz` answers 503 until then. No DNS plugin, stored Azure credential, PFX secret,
-port 80 listener or renewal restart is needed. Certificate/account state persists
-in `/var/lib/puck-tls` across releases, under a separate container UID, outside
-the World container's mounts. Keep that directory across ordinary upgrades.
+port 80 listener or renewal restart is needed.
+
+Caddy keeps its certificate, key and ACME account in `/var/lib/puck-tls`, under a
+separate container UID, outside the World container's mounts. The TLS state keeper
+([Keep-WorldTls.py](../../build/Keep-WorldTls.py), a systemd service running as
+Caddy's user) carries that state between workers through the world owner's private
+container, at `private/puck/hosted/tls/<hostname>/state.json`, with the worker's own
+managed identity, which already owns that container. Let's Encrypt allows five new
+certificates per exact set of names in seven days, so a worker that issued on every
+bootstrap, Spot replacement or priority change would lock the hostname out of TLS.
+Caddy starts only after the keeper reports ready: the restored or local certificate
+is outside Caddy's renewal window (the last third of its lifetime), or this worker
+holds the lease on the `lock` blob beside the state. A second worker that finds no
+fresh certificate waits for the holder to store one, so a hostname issues once
+however many workers start. The keeper then stores whichever certificate is newer,
+so a renewal reaches the store, and a worker that sees another's renewal loads it
+before its own renewal comes due (Caddy reads storage again before renewing).
+Renewals Caddy makes with ACME Renewal Information are exempt from Let's Encrypt's
+rate limits. The state blob is encrypted at rest by the storage service. It is
+readable by every identity that can read the owner's container: the worker's, which
+the World container on the host network can also reach through instance metadata,
+and the publishing identity's container grant.
 DNS must resolve to this load balancer and CAA policy must permit Let's Encrypt.
 The release probe validates the public hostname and certificate before succeeding.
 Azure availability tests check HTTPS readiness and seven days of certificate
