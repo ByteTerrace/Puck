@@ -371,12 +371,29 @@ public sealed class FixedStepPump {
             m_registry.ApplySnapshot(snapshot: in m_pendingCommands);
             m_pendingContext = new FixedStepContext(ElapsedTicks: stepElapsedTicks, StepTicks: stepTicks, Tick: m_completedStepCount);
         }
-        if (!m_simulation.TryStep(in m_pendingContext, in m_pendingCommands)) { return false; }
+        var completed = m_simulation.TryStep(in m_pendingContext, in m_pendingCommands);
+
+        // Summed over every call a step held across wait slices takes, so the lane reports the whole tick.
+        if (m_timeline is { } open) {
+            m_stepExecutedTicks += open.TakeExecutedTicks();
+            m_stepPumpTicks += (open.Time.GetTimestamp() - started);
+        }
+        if (!completed) { return false; }
         m_elapsedTicks = m_pendingContext.ElapsedTicks;
         m_completedStepCount++;
         m_pendingContext = default;
         m_pendingCommands = default;
-        if (m_timeline is { } timeline) { timeline.NoteTick(ticks: timeline.Time.GetTimestamp() - started); }
+        if (m_timeline is { } timeline) {
+            timeline.NoteTick(ticks: ((m_stepExecutedTicks > 0L) ? m_stepExecutedTicks : m_stepPumpTicks));
+            m_stepExecutedTicks = 0L;
+            m_stepPumpTicks = 0L;
+        }
         return true;
     }
+
+    // The open step's cost for the timeline's tick lane, in the timeline's clock ticks: what a step thread reported
+    // executing, which is the tick's own cost apart from this thread's prepare and collect, and the time this thread
+    // spent inside the simulation, which is the tick's cost for a simulation that runs its tick here.
+    private long m_stepExecutedTicks;
+    private long m_stepPumpTicks;
 }

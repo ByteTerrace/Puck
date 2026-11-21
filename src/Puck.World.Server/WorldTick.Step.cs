@@ -939,9 +939,38 @@ public sealed partial class WorldTick {
     private PendingTick m_pendingTick;
     private bool m_resumingTick;
     private volatile TickBlock? m_tickBlock;
-    // Owner is the thread that ran the slice the tick went pending on: the one thread that resumes it, and so the one
-    // thread that must never wait for its boundary.
+    // Owner is the thread that handed over the slice the tick went pending on (SliceOwner): the one thread that brings
+    // the tick's boundary by handing over its next slice, and so the one thread that must never wait for it.
     private sealed record TickBlock(WaitReason Reason, ulong PreviousEngineTicks, string Detail, int Owner);
+
+    // The thread the calling thread runs a tick slice for when that is not itself; zero otherwise. Only ExecuteFor
+    // writes it, for the duration of one slice.
+    [ThreadStatic] private static int ExecutesFor;
+
+    /// <summary>Gets the thread a tick slice run now belongs to: the thread that handed the slice over
+    /// (<see cref="ExecuteFor"/>), or the calling thread when it runs its own. A held tick names this thread as its
+    /// owner, and a thread entering the authority gate is compared with the owner under the same reading, so a step
+    /// thread that runs a slice neither becomes the tick's owner nor waits for a boundary its own owner must
+    /// bring.</summary>
+    internal static int SliceOwner => ((ExecutesFor != 0) ? ExecutesFor : Environment.CurrentManagedThreadId);
+
+    /// <summary>Marks the calling thread as running a tick slice for <paramref name="owner"/> until the scope is
+    /// disposed. <see cref="WorldServerStepShell.Execute"/> is its one caller.</summary>
+    /// <param name="owner">The managed id of the thread that handed the slice over.</param>
+    /// <returns>The scope that restores the calling thread's previous reading.</returns>
+    internal static SliceOwnerScope ExecuteFor(int owner) {
+        var previous = ExecutesFor;
+
+        ExecutesFor = ((owner == Environment.CurrentManagedThreadId) ? 0 : owner);
+
+        return new SliceOwnerScope(previous: previous);
+    }
+
+    /// <summary>The span in which the calling thread runs a tick slice for another thread.</summary>
+    internal readonly ref struct SliceOwnerScope(int previous) {
+        /// <summary>Restores the calling thread's previous reading.</summary>
+        public void Dispose() => ExecutesFor = previous;
+    }
     private static readonly WaitReason BoundaryWait = new(Subsystem: "authority", WaitsFor: "the pending tick's boundary");
     // Pulsed whenever a held tick settles or freezes; waited on by AwaitBoundary without the authority gate.
     private readonly object m_boundary = new();
@@ -967,8 +996,9 @@ public sealed partial class WorldTick {
     internal WaitReason? BlockedReason => PendingReason is { } reason && !ResumingOnOwner ? reason : null;
     internal string? BlockedDetail => m_tickBlock is { } block && !ResumingOnOwner ? block.Detail : null;
     /// <summary>Gets whether the calling thread, entering the authority gate, waits for the held tick's boundary: a tick
-    /// is held across wait slices, it can still settle, and the calling thread is not the one that resumes it.</summary>
-    internal bool AwaitsBoundary => m_tickBlock is { } block && !ExecutionInterrupted && (block.Owner != Environment.CurrentManagedThreadId);
+    /// is held across wait slices, it can still settle, and the calling thread is neither the one that hands over its
+    /// next slice nor a thread running a slice for that one (<see cref="SliceOwner"/>).</summary>
+    public bool AwaitsBoundary => m_tickBlock is { } block && !ExecutionInterrupted && (block.Owner != SliceOwner);
 
     /// <summary>Blocks the calling thread, which must not hold the authority gate, until the held tick settles or
     /// freezes, for at most <see cref="WaitDeadline.SynchronousBudget"/>.</summary>
@@ -1049,7 +1079,7 @@ public sealed partial class WorldTick {
                 if (PendingReason != reason) {
                     var partitions = (reason == Puck.Hosting.Jobs.JobPool.JoinWait) ? Host.Jobs?.DescribeHeldPartitions(Puck.Hosting.Jobs.JobClass.Tick) : null;
                     var detail = string.IsNullOrEmpty(partitions) ? reason.ToString() : $"{reason} (held partitions {partitions})";
-                    m_tickBlock = new TickBlock(reason, m_pendingTick.PreviousEngineTicks, detail, Environment.CurrentManagedThreadId);
+                    m_tickBlock = new TickBlock(reason, m_pendingTick.PreviousEngineTicks, detail, SliceOwner);
                 }
                 if (m_pendingTick.Stall.HasPassed) { FreezeStalledTick(reason); }
                 return pending;

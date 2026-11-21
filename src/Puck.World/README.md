@@ -1118,10 +1118,12 @@ Facts a script needs:
   and offscreen then update logical wheel state.
 - `WorldHostStep.cs`—the one fixed step every boot shape runs, in one order:
   decide whether boot is due, submit its seats' intents, drain the host's
-  pending transfers, step boot through
-  `Puck.World.Server.WorldServerStepShell.Step` (not in this project)—
-  `WorldServer.Step`, then the replay tape's `NoteTick` and the console wait
-  gate's and capture scheduler's `PublishTick`—or, while boot is paused,
+  pending transfers, step boot through the instance host's step thread
+  (`Puck.World.Server.WorldInstanceHost.TryStepAuthority`, not in this
+  project: the pump prepares the tick, the step thread advances it and closes
+  the replay tape's group, and the pump waits and then publishes it to the
+  console wait gate, the capture scheduler and the tick script)—or, while boot
+  is paused,
   drain an administrative mutation and release a stalled `world.wait`; step
   every other instance; run the shell's post-step; finish the seat intents.
   It counts the host work a `world.wait` is clocked by. The frame reads

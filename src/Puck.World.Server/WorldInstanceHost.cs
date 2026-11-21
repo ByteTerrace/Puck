@@ -64,9 +64,11 @@ namespace Puck.World;
 /// second rule is not redundant with the first — it is what makes the placement true whatever the platform's path
 /// grammar turns out to do with a name.</para>
 /// <para>Stepping folds into the same <c>IFixedStepSimulation.Step</c> call both boot shapes already drive — never a
-/// second pump, a second host loop, or a second <c>IFixedStepSimulation</c> registration. Single-threaded throughout:
+/// second pump, a second host loop, or a second <c>IFixedStepSimulation</c> registration. One thread owns the host:
 /// the fixed-step thread is the only caller, and the verbs that mutate the registry route <c>Simulation</c> so they
-/// apply on it at a tick boundary.</para></remarks>
+/// apply on it at a tick boundary. The host's step thread (<see cref="WorldStepThread"/>) executes each authority tick
+/// that thread hands it (<see cref="TryStepAuthority"/>) and touches none of the host's tables: the fixed-step thread
+/// prepares the tick before the hand-off, waits for it, and collects it.</para></remarks>
 public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
     private readonly HostPacing m_pacing;
 
@@ -171,6 +173,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // a federation lane) writes on the host's own behalf, never on one instance's tick, plus the lines a lookup
     // failure writes before any instance is even resolved.
     private readonly WorldOutputHub m_narration = new();
+    // The thread that executes every authority tick this host steps, the boot world's included. Its lane starts no
+    // thread until the first tick is handed over.
+    private readonly WorldStepThread m_stepThread;
 
     // The onward authority is transport-neutral: a colocated destination forwards through the same interface a
     // socket one does, so a traveler that leaves over an in-process adjacency keeps the control its client already
@@ -427,6 +432,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <summary>Disposes every instance this host owns. The boot instance's own graph belongs to the container and
     /// is untouched.</summary>
     public void Dispose() {
+        // A tick still executing holds its server, tape and machines: nothing it uses is freed under it, and the
+        // process's exit releases what this leaves.
+        if (!m_stepThread.Stop(deadline: WaitDeadline.Synchronous())) {
+            m_narration.Narrate("world.host", "[world.host: the step thread is still executing a tick; the host's worlds are left to the process's exit]");
+            return;
+        }
         foreach (var instance in m_instances.Values) {
             if (instance.Tape is { Mode: WorldReplayMode.Recording } tape) {
                 _ = tape.CancelRecording();
@@ -736,10 +747,32 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         HostWaits.ThrowIfPending(TryStepInstances(masterDeltaTicks, WaitDeadline.Synchronous()));
     }
 
+    /// <summary>Gets whether a tick slice this host handed to its step thread has not been collected: the pump stopped
+    /// waiting for it once the stall budget passed, and it is still executing. While it is, the pump reads no authority
+    /// this host steps.</summary>
+    public bool StepInFlight => m_stepThread.InFlight;
+
+    /// <summary>Steps one authority this host owns through its step thread: the calling thread prepares each tick,
+    /// the step thread executes it while the calling thread waits, and the calling thread collects it
+    /// (<see cref="WorldServerStepShell.TryStep"/>). The boot world's step and every other instance's go through
+    /// here, so one thread executes every tick of the host.</summary>
+    /// <param name="server">The authority to step.</param>
+    /// <param name="tape">Its replay tape, or <see langword="null"/>.</param>
+    /// <param name="publishTick">Called on the calling thread after each completed tick.</param>
+    /// <param name="context">Host pacing coordinates and step width.</param>
+    /// <param name="pacing">The pacing of the host stepping the server.</param>
+    /// <param name="deadline">How long the tick's own waits may block in this call.</param>
+    /// <param name="pending">The dependency the current tick still waits for, or <see langword="null"/>.</param>
+    /// <returns>The completed tick count.</returns>
+    public ulong TryStepAuthority(WorldServer server, WorldReplayTape? tape, Action<ulong> publishTick, in FixedStepContext context, HostPacing pacing,
+        WaitDeadline deadline, out WaitReason? pending) =>
+        WorldServerStepShell.TryStep(server, tape, publishTick, in context, pacing, deadline, out pending, m_stepThread);
+
     private IReadOnlyList<string>? m_stepNames;
     private int m_stepNameIndex;
     private WorldInstance? m_pendingStepInstance;
     private ulong m_pendingStepWidth;
+    private int m_pendingStepRateHz;
 
     /// <summary>Advances rows on the master tick, retaining the current row if its tick exceeds the slice.</summary>
     public WaitReason? TryStepInstances(ulong masterDeltaTicks, WaitDeadline deadline) {
@@ -771,16 +804,23 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             // it is not yet part of the stepping engine at all, exactly like a row this host has not admitted.
             // ReleaseHold clears this and starts the door on the boundary the caller proves every mirror primed.
             // Retirement is a separate permanent hold; it must not bank ticks or run the paused-world edit drain.
+            var resuming = ReferenceEquals(instance, m_pendingStepInstance);
+            // A slice of this row the step thread is still executing is collected before anything reads the row.
+            var inFlight = (resuming && m_stepThread.InFlight);
+
             if (
-                instance.AwaitingMirrors ||
-                instance.Server.IsRetiring ||
-                instance.Server.Tick.ExecutionInterrupted
+                !inFlight && (
+                    instance.AwaitingMirrors ||
+                    instance.Server.IsRetiring ||
+                    instance.Server.Tick.ExecutionInterrupted
+                )
             ) {
                 continue;
             }
 
-            var resuming = ReferenceEquals(instance, m_pendingStepInstance);
-            var rateHz = instance.Server.Configuration.SimulationRateHz;
+            // A resumed tick keeps the rate it began under, so a rate its own install changed ends the batch after it
+            // whether or not the tick was held on the way.
+            var rateHz = (resuming ? m_pendingStepRateHz : instance.Server.Configuration.SimulationRateHz);
 
             if (!resuming && ((rateHz <= 0) || instance.IsPaused)) {
                 _ = instance.Server.DrainAdministrative();
@@ -814,7 +854,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 WorldNarrationScope.Current = name;
 
                 try {
-                    var completed = WorldServerStepShell.TryStep(
+                    var completed = TryStepAuthority(
                         // An instance steps on its own accumulator, banking the boot pump's delta at its own rate, so
                         // its time is elapsed engine time whatever the boot world's host steps per frame.
                         pacing: m_pacing,
@@ -826,12 +866,13 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                         pending: out var pending
                     );
                     if (pending is { } reason) {
-                        if (instance.Server.Tick.ExecutionInterrupted) {
+                        if (!m_stepThread.InFlight && instance.Server.Tick.ExecutionInterrupted) {
                             m_pendingStepInstance = null;
                             break;
                         }
                         m_pendingStepInstance = instance;
                         m_pendingStepWidth = stepWidth;
+                        m_pendingStepRateHz = rateHz;
                         return reason;
                     }
                     m_pendingStepInstance = null;
@@ -1540,6 +1581,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         m_addonHostFactory = addonHostFactory;
         m_admitsSpawn = admitsSpawn;
         m_travelerRouteStarted = travelerRouteStarted;
+        m_stepThread = new WorldStepThread(narration: m_narration);
     }
 
     /// <summary>Admits <paramref name="row"/> into the registry under its own name — the one place a row enters this

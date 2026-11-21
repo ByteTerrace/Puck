@@ -547,6 +547,11 @@ public sealed partial class WorldServer : IWorldServerHost {
     // never waits at another server's boundary: the held tick it would wait for may need the gate it holds to settle.
     [ThreadStatic] private static int HeldGates;
 
+    /// <summary>Gets whether the calling thread holds this server's authority gate, or any server's through
+    /// <see cref="EnterAtTickBoundary"/>. Such a thread cannot hand a tick to another thread and wait for it: the tick
+    /// takes the gate to run, and may enter another server's.</summary>
+    internal bool GateHeldByCallingThread => ((HeldGates != 0) || m_authorityGate.IsHeldByCurrentThread);
+
     /// <summary>Enters the authority gate at a tick boundary and returns the scope that exits it. While a tick is held
     /// across wait slices, a thread other than the one that resumes it waits, without the gate, until the tick settles
     /// or freezes, so it never reads or writes a half-stepped tick. The resuming thread, a thread already holding an

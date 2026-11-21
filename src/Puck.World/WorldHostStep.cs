@@ -42,8 +42,26 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     /// (<see cref="WorldCaptureScheduler.Drain"/>).</summary>
     public void SettleOwedFrames() => m_captureScheduler.Drain();
 
-    /// <summary>The authored simulation rate the fixed-step pump paces this world at.</summary>
-    public uint RatePerSecond => ((uint)m_server.Configuration.SimulationRateHz);
+    // What the host loop reads of the boot authority, published so the loop never reads the authority beside a tick
+    // the step thread is executing: refreshed at each read and before each hand-off while no slice is in flight, and
+    // left as last published while one is.
+    private uint m_publishedRate;
+    private bool m_publishedInterrupted;
+
+    private void Publish() {
+        if (m_instances.StepInFlight) { return; }
+        m_publishedRate = ((uint)m_server.Configuration.SimulationRateHz);
+        m_publishedInterrupted = ((m_phase == StepPhase.Boot) && m_server.Tick.ExecutionInterrupted);
+    }
+
+    /// <summary>The authored simulation rate the fixed-step pump paces this world at: the boot authority's own while no
+    /// tick slice is in flight on the step thread, and the rate last published while one is.</summary>
+    public uint RatePerSecond {
+        get {
+            Publish();
+            return m_publishedRate;
+        }
+    }
     /// <summary>The number of fixed ticks completed on the current authority timeline.</summary>
     public ulong Tick => (m_server.NextInputTick - 1UL);
 
@@ -63,7 +81,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
                 Tick: m_completedHostSteps
             );
 
-            var stepTick = WorldServerStepShell.TryStep(
+            var stepTick = m_instances.TryStepAuthority(
                 context: in bootContext,
                 pacing: pacing,
                 publishTick: m_publishStep,
@@ -100,8 +118,15 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     private bool m_stepsBoot;
 
     /// <summary>Gets whether the step in progress can no longer finish: the boot authority froze at a stall while its
-    /// tick was held. A row that freezes is skipped, so only the boot phase can hold the step for good.</summary>
-    public bool StepInterrupted => (m_phase == StepPhase.Boot) && m_server.Tick.ExecutionInterrupted;
+    /// tick was held. A row that freezes is skipped, so only the boot phase can hold the step for good. While a tick
+    /// slice is in flight on the step thread the answer is the one last published: a slice still executing has not
+    /// frozen its authority.</summary>
+    public bool StepInterrupted {
+        get {
+            Publish();
+            return m_publishedInterrupted;
+        }
+    }
 
     /// <summary>Runs one fixed step, resuming after the next control phase if a dependency exceeds the slice.</summary>
     /// <param name="context">The pump's tick context; only its step width reaches the server.</param>
@@ -115,9 +140,11 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
             m_phase = StepPhase.Boot;
         }
         if (m_phase == StepPhase.Boot) {
+            Publish();
             if (!StepBoot(in context, m_stepsBoot, deadline)) { return false; }
             m_phase = StepPhase.Rows;
         }
+        Publish();
         if (m_instances.TryStepInstances(context.StepTicks, deadline) is not null) { return false; }
         _ = m_seatRouter.DeliverRouteChanges();
         afterInstances?.Invoke();
