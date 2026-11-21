@@ -348,12 +348,15 @@ public sealed class WorldSessionMirror : IClientSink {
     private int m_arrivalCount;
 
     private readonly bool m_unread;
-    private readonly WorldStreamIngress m_ingress = new();
+    // Withdraws the mirror itself on every span move, between ending the old span and opening the next.
+    private readonly WorldStreamIngress m_ingress;
 
     /// <summary>Gets the stream this mirror is bound to and the span it holds: what its ingress accepts records
     /// from.</summary>
     public WorldStreamSpan Span => m_ingress.Span;
-    /// <summary>Gets the mirror's current delivery span, ended whenever its ingress cuts or closes.</summary>
+    /// <summary>Gets the delivery span of what the mirror holds now (<see cref="WorldStreamIngress.DeliverySpan"/>):
+    /// ended from an accepted cut, generation step, first bind or close until the mirror has dropped what it held, and
+    /// after a close.</summary>
     public Puck.Abstractions.Presentation.DeliverySpan DeliverySpan => m_ingress.DeliverySpan;
     /// <summary>Gets the number of records the mirror's ingress dropped: a record of another stream, of an earlier
     /// generation, or not ahead of the last record it took.</summary>
@@ -371,6 +374,7 @@ public sealed class WorldSessionMirror : IClientSink {
         ArgumentNullException.ThrowIfNull(argument: placeholder);
 
         m_unread = unread;
+        m_ingress = new WorldStreamIngress(withdraw: Withdraw);
         m_document = new WorldDeliveredDocument(
             Definition: placeholder,
             Lifetime: 0,
@@ -761,19 +765,16 @@ public sealed class WorldSessionMirror : IClientSink {
     /// showable, and the whole document and primer the stream owes the new generation fill it again from empty (its
     /// first snapshot seeds both pose endpoints of every body). A terminal record also closes the span, after which only
     /// a stream that never closed on this mirror binds it. A record of any other stream changes nothing.</remarks>
-    public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
-        if (m_ingress.Cut(stream: in stream, terminal: terminal)) { Withdraw(); }
-    }
+    public void DeliverCut(in WorldStreamStamp stream, bool terminal) => _ = m_ingress.Cut(stream: in stream, terminal: terminal);
     /// <inheritdoc/>
     /// <remarks>The mirror drops what it held exactly as for a terminal record, and takes records again only from a
     /// stream that never closed on it.</remarks>
-    public void CloseSpan(ulong stream) {
-        if (m_ingress.Close(stream: stream)) { Withdraw(); }
-    }
+    public void CloseSpan(ulong stream) => _ = m_ingress.Close(stream: stream);
     // Drops everything an ended span delivered: the undisclosed document in place of the delivered one, an empty table
     // in place of its bodies, and no route seed or queued cue, applied through the ordinary delivery paths so every
     // reader follows it. The undisclosed document, never the construction placeholder, which can be a delivered
-    // document (a route's, or the authority's last).
+    // document (a route's, or the authority's last). The ingress runs it on every span move, after the old span ended
+    // and before the next opens (WorldStreamIngress).
     private void Withdraw() {
         lock (m_snapshotWriteGate) { m_seededRouteEntity = null; }
         CueFrames.Clear();

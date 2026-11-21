@@ -1,3 +1,4 @@
+using Puck.Abstractions.Presentation;
 using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.World.Client;
@@ -177,6 +178,42 @@ public sealed class StreamGenerationLawTests {
         Assert.True(mirror.IsActive(index: 0));
         Assert.Equal(3f, mirror.PreviousPosition(index: 0).X);
         Assert.Equal(3f, mirror.CurrentPosition(index: 0).X);
+    }
+
+    [Fact]
+    public void AMirrorsDeliverySpanStaysEndedWhileItsCutWithdrawsAndOpensAgainOnlyAfter() {
+        var mirror = new WorldSessionMirror(placeholder: WorldProjection.Undisclosed);
+        var document = Fixtures.BuildDocument();
+        var ordinal = 0L;
+        WorldStreamStamp Next(long generation) => new(Generation: generation, Ordinal: ++ordinal, Stream: 5UL);
+        var duringWithdrawal = new List<bool>();
+
+        mirror.DeliverDefinition(definition: document, stream: Next(0L), version: default);
+
+        var before = mirror.DeliverySpan;
+
+        Assert.True(DeliveryLatch.Capture().IsCurrent(span: before));
+        // A presentation that reads the mirror's span while the cut withdraws it must read an ended span: the old
+        // content is still being dropped, and pairing it with the next span would carry it past the cut.
+        mirror.DocumentDelivered += _ => duringWithdrawal.Add(item: DeliveryLatch.Capture().IsCurrent(span: mirror.DeliverySpan));
+        mirror.DeliverCut(stream: Next(1L), terminal: false);
+
+        Assert.NotEmpty(duringWithdrawal);
+        Assert.DoesNotContain(true, duringWithdrawal);
+
+        var after = mirror.DeliverySpan;
+
+        Assert.False(DeliveryLatch.Capture().IsCurrent(span: before));
+        Assert.NotSame(before, after);
+        Assert.True(DeliveryLatch.Capture().IsCurrent(span: after));
+        // A generation step that arrives on a content record withdraws the same way before the record applies.
+        duringWithdrawal.Clear();
+        mirror.DeliverDefinition(definition: document, stream: Next(2L), version: default);
+        Assert.NotEmpty(duringWithdrawal);
+        Assert.Equal(false, duringWithdrawal[0]);
+        Assert.Same(document, mirror.Definition);
+        Assert.False(DeliveryLatch.Capture().IsCurrent(span: after));
+        Assert.True(DeliveryLatch.Capture().IsCurrent(span: mirror.DeliverySpan));
     }
 
     [Fact]
