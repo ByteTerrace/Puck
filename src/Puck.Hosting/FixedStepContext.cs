@@ -51,7 +51,7 @@ public interface IFixedStepSimulation {
     [Replaces(root: typeof(object))]
     void Step(in FixedStepContext context, in CommandSnapshot commands);
 
-    /// <summary>Gets whether the step <see cref="TryStep"/> began and has not finished can no longer finish: its
+    /// <summary>Gets whether the step <see cref="TryStep(in FixedStepContext, in CommandSnapshot)"/> began and has not finished can no longer finish: its
     /// authority froze at a stall. The host treats that as a tick boundary again, so its console runs (to inspect,
     /// recover or quit) instead of waiting for a step that never settles.</summary>
     bool StepInterrupted => false;
@@ -62,4 +62,22 @@ public interface IFixedStepSimulation {
         Step(in context, in commands);
         return true;
     }
+
+    /// <summary>Begins or resumes the same step for a simulation that executes its step on another thread: the host
+    /// waits for that thread no longer than <paramref name="collectBy"/>, and a false result then means the step is
+    /// still executing there. A deadline already passed polls. A simulation that steps on the calling thread ignores
+    /// it.</summary>
+    /// <param name="context">The exact host-owned tick context.</param>
+    /// <param name="commands">The canonical command snapshot already applied to the live command registry.</param>
+    /// <param name="collectBy">When the host stops waiting for a step another thread executes.</param>
+    /// <returns><see langword="false"/> while the step is pending; the host retains the command snapshot and clock
+    /// position and calls again.</returns>
+    [Replaces(root: typeof(object))]
+    bool TryStep(in FixedStepContext context, in CommandSnapshot commands, Puck.Abstractions.Waiting.WaitDeadline collectBy) => TryStep(in context, in commands);
+
+    /// <summary>Registers what the simulation calls, from any thread, when a step it left pending can make progress:
+    /// the host wakes from its pacing wait and resumes the step then instead of at its next iteration. A simulation
+    /// that steps on the calling thread never calls it.</summary>
+    /// <param name="wake">The wake, or <see langword="null"/> to register none.</param>
+    void WakeOnStepProgress(Action? wake) { }
 }

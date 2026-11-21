@@ -73,6 +73,15 @@ public sealed class JobLane : IDisposable {
             }
         }
     }
+    /// <summary>Gets or sets what the lane's thread calls each time a unit finishes, after the unit is ready to
+    /// collect: the wake of an owner that went on with other work instead of waiting. It runs on the lane's thread,
+    /// outside the lane's gate, and must not throw.</summary>
+    public Action? Finished {
+        get => Volatile.Read(location: ref m_finished);
+        set => Volatile.Write(location: ref m_finished, value: value);
+    }
+
+    private Action? m_finished;
 
     /// <summary>Hands <paramref name="unit"/> to the lane's thread and returns at once. The unit is in flight until
     /// <see cref="Collect"/> answers <see cref="WaitOutcome.Completed"/> or rethrows what the unit threw.</summary>
@@ -217,6 +226,7 @@ public sealed class JobLane : IDisposable {
                 m_stage = Stage.Finished;
                 Monitor.PulseAll(obj: m_gate);
             }
+            Volatile.Read(location: ref m_finished)?.Invoke();
         }
     }
 }

@@ -25,5 +25,12 @@ internal sealed class WorldSimulation(WorldHostStep step, Action afterInstances)
     }
 
     /// <inheritdoc/>
-    public bool TryStep(in FixedStepContext context, in CommandSnapshot commands) => step.TryStep(in context, afterInstances);
+    public bool TryStep(in FixedStepContext context, in CommandSnapshot commands) => step.TryStep(in context, afterInstances, collectBy: null);
+
+    /// <inheritdoc/>
+    public bool TryStep(in FixedStepContext context, in CommandSnapshot commands, Puck.Abstractions.Waiting.WaitDeadline collectBy) =>
+        step.TryStep(in context, afterInstances, collectBy: collectBy);
+
+    /// <inheritdoc/>
+    public void WakeOnStepProgress(Action? wake) => step.WakeOnStepProgress(wake: wake);
 }

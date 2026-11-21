@@ -71,7 +71,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     // boot runs immediately after its own step, reading boot's own just-settled state — never when boot did not
     // step at all, so a paused/stopped boot's latched "inside" occupancy neither fires nor is re-evaluated until a
     // genuine resume produces a new edge.
-    private bool StepBoot(in FixedStepContext context, bool stepsBoot, WaitDeadline deadline) {
+    private bool StepBoot(in FixedStepContext context, bool stepsBoot, WaitDeadline deadline, WaitDeadline? collectBy) {
         if (stepsBoot) {
             // Host work advances only when this authority steps. The server independently advances from its
             // checkpointed clock; restoring a replay timeline rewinds that clock without rewinding console waits.
@@ -88,6 +88,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
                 server: m_server,
                 tape: m_replayTape,
                 deadline: deadline,
+                collectBy: collectBy,
                 pending: out var pending
             );
 
@@ -128,12 +129,22 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         }
     }
 
-    /// <summary>Runs one fixed step, resuming after the next control phase if a dependency exceeds the slice.</summary>
+    /// <summary>Registers the host loop's wake with the step thread, which calls it each time a tick slice it executes
+    /// finishes.</summary>
+    /// <param name="wake">The wake, or <see langword="null"/> to register none.</param>
+    public void WakeOnStepProgress(Action? wake) => m_instances.StepProgressed = wake;
+
+    /// <summary>Runs one fixed step, resuming on a later call if a dependency exceeds the slice or the caller stops
+    /// waiting for the step thread. A call that resumes prepares nothing again: it collects the tick in flight and
+    /// goes on from there, so the step's order of events is the same however many calls it takes.</summary>
     /// <param name="context">The pump's tick context; only its step width reaches the server.</param>
     /// <param name="afterInstances">The shell's own post-step, run after every instance has stepped and before the
     /// seat intents finish: every shape syncs seat bindings and publishes seat context here, and a headless or
     /// offscreen shell then publishes logical wheel state.</param>
-    public bool TryStep(in FixedStepContext context, Action? afterInstances) {
+    /// <param name="collectBy">How long the caller waits for a tick the step thread executes before it answers
+    /// <see langword="false"/> and leaves the tick in flight; <see langword="null"/> waits for each tick.</param>
+    /// <returns><see langword="false"/> while the step is pending.</returns>
+    public bool TryStep(in FixedStepContext context, Action? afterInstances, WaitDeadline? collectBy) {
         var deadline = WaitDeadline.In(HostWaits.PumpAllowance ?? TimeSpan.FromSeconds(30));
         if (m_phase == StepPhase.Prepare) {
             PrepareStep(in context);
@@ -141,11 +152,11 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         }
         if (m_phase == StepPhase.Boot) {
             Publish();
-            if (!StepBoot(in context, m_stepsBoot, deadline)) { return false; }
+            if (!StepBoot(in context, m_stepsBoot, deadline, collectBy)) { return false; }
             m_phase = StepPhase.Rows;
         }
         Publish();
-        if (m_instances.TryStepInstances(context.StepTicks, deadline) is not null) { return false; }
+        if (m_instances.TryStepInstances(context.StepTicks, deadline, collectBy) is not null) { return false; }
         _ = m_seatRouter.DeliverRouteChanges();
         afterInstances?.Invoke();
         m_instances.FinishSeatIntents();

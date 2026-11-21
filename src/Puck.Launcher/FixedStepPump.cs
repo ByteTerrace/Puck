@@ -1,3 +1,4 @@
+using Puck.Abstractions.Waiting;
 using Puck.Commands;
 using Puck.Hosting;
 
@@ -260,7 +261,11 @@ public sealed class FixedStepPump {
 
             var resuming = StepPending;
             var width = resuming ? m_pendingContext.StepTicks : stepTicks;
-            if (!Step(stepTicks: width)) { break; }
+            // Only the last step due may be left executing: an earlier step of a burst is waited for, because the
+            // next step's input needs its results.
+            var last = ((m_accumulatorTicks - Math.Min(m_accumulatorTicks, width)) < stepTicks);
+
+            if (!Step(collectBy: ((RunsBesideStep && last) ? default(WaitDeadline) : null), stepTicks: width)) { break; }
             m_accumulatorTicks -= Math.Min(m_accumulatorTicks, width);
             stepCount++;
 
@@ -360,8 +365,35 @@ public sealed class FixedStepPump {
             : StepGate.Steps
         );
     }
-    // Apply input once, then retain the same coordinates and commands until the simulation completes.
-    private bool Step(ulong stepTicks) {
+    /// <summary>Gets or sets whether the host goes on with its iteration while the last step due executes on the
+    /// simulation's own thread, instead of waiting for it: <see cref="Advance"/> then polls that step, and the host
+    /// resumes it when the simulation reports progress (<see cref="Resume"/>) or at its next iteration. The host sets
+    /// it each iteration; a host that steps one tick per frame leaves it <see langword="false"/>.</summary>
+    public bool RunsBesideStep { get; set; }
+
+    /// <summary>Resumes the step in progress without waiting for it: collects what the simulation's own thread has
+    /// finished and hands over what follows in the same step. It starts no new step, so it closes no input: a host
+    /// calls it between iterations, from its pacing wait, where no input capture or console drain has run.</summary>
+    /// <returns><see langword="true"/> when the step in progress completed; <see langword="false"/> when none is in
+    /// progress or it is still pending.</returns>
+    public bool Resume() {
+        if (!StepPending) {
+            return false;
+        }
+
+        var width = m_pendingContext.StepTicks;
+
+        if (!Step(collectBy: default(WaitDeadline), stepTicks: width)) {
+            return false;
+        }
+        m_accumulatorTicks -= Math.Min(m_accumulatorTicks, width);
+
+        return true;
+    }
+
+    // Apply input once, then retain the same coordinates and commands until the simulation completes. A collectBy
+    // bounds how long this thread waits for a step the simulation executes on another; without one it waits for it.
+    private bool Step(ulong stepTicks, WaitDeadline? collectBy = null) {
         var started = m_timeline?.Time.GetTimestamp() ?? 0L;
         if (!StepPending) {
             var stepElapsedTicks = m_elapsedTicks + stepTicks;
@@ -371,7 +403,9 @@ public sealed class FixedStepPump {
             m_registry.ApplySnapshot(snapshot: in m_pendingCommands);
             m_pendingContext = new FixedStepContext(ElapsedTicks: stepElapsedTicks, StepTicks: stepTicks, Tick: m_completedStepCount);
         }
-        var completed = m_simulation.TryStep(in m_pendingContext, in m_pendingCommands);
+        var completed = ((collectBy is { } wait)
+            ? m_simulation.TryStep(in m_pendingContext, in m_pendingCommands, wait)
+            : m_simulation.TryStep(in m_pendingContext, in m_pendingCommands));
 
         // Summed over every call a step held across wait slices takes, so the lane reports the whole tick.
         if (m_timeline is { } open) {

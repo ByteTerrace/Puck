@@ -764,18 +764,32 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <param name="deadline">How long the tick's own waits may block in this call.</param>
     /// <param name="pending">The dependency the current tick still waits for, or <see langword="null"/>.</param>
     /// <returns>The completed tick count.</returns>
+    /// <param name="collectBy">How long the calling thread waits for the step thread before it leaves the tick in
+    /// flight and answers <see cref="WorldStepThread.ExecuteWait"/>; <see langword="null"/> waits for the tick.</param>
     public ulong TryStepAuthority(WorldServer server, WorldReplayTape? tape, Action<ulong> publishTick, in FixedStepContext context, HostPacing pacing,
-        WaitDeadline deadline, out WaitReason? pending) =>
-        WorldServerStepShell.TryStep(server, tape, publishTick, in context, pacing, deadline, out pending, m_stepThread);
+        WaitDeadline deadline, out WaitReason? pending, WaitDeadline? collectBy = null) =>
+        WorldServerStepShell.TryStep(server, tape, publishTick, in context, pacing, deadline, out pending, m_stepThread, collectBy);
+
+    /// <summary>Sets what the step thread calls, on its own thread, each time a tick slice finishes: the wake of a
+    /// host loop that went on without waiting for it, which then resumes the open host step.</summary>
+    public Action? StepProgressed { set => m_stepThread.Progressed = value; }
 
     private IReadOnlyList<string>? m_stepNames;
     private int m_stepNameIndex;
     private WorldInstance? m_pendingStepInstance;
     private ulong m_pendingStepWidth;
     private int m_pendingStepRateHz;
+    private FixedStepContext m_pendingStepContext;
 
-    /// <summary>Advances rows on the master tick, retaining the current row if its tick exceeds the slice.</summary>
-    public WaitReason? TryStepInstances(ulong masterDeltaTicks, WaitDeadline deadline) {
+    /// <summary>Advances rows on the master tick, retaining the current row if its tick exceeds the slice or the
+    /// calling thread stops waiting for it.</summary>
+    /// <param name="masterDeltaTicks">The host's master timeline advance for this call.</param>
+    /// <param name="deadline">How long each tick's own waits may block in this call.</param>
+    /// <param name="collectBy">How long the calling thread waits for the step thread before it leaves a tick in
+    /// flight; <see langword="null"/> waits for each tick.</param>
+    /// <returns>The dependency the current row's tick waits for, or <see langword="null"/> when every row
+    /// stepped.</returns>
+    public WaitReason? TryStepInstances(ulong masterDeltaTicks, WaitDeadline deadline, WaitDeadline? collectBy = null) {
         // Ordinal name order, so the step sequence is a property of the names rather than of insertion history.
         // Rows never observe one another, so the order carries no cross-row meaning — only each one's own
         // trajectory matters, and that is what makes iterating a hash map by sorted key honest here.
@@ -837,15 +851,17 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             var stepWidth = resuming ? m_pendingStepWidth : FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz));
 
             while (instance.ScheduleAccumulatorTicks >= stepWidth) {
-                var tick = instance.CompletedTicks;
-                // Accumulated, never re-derived from (tick + 1) * stepWidth — a product re-derivation breaks
-                // the instant this instance's own rate changes (see WorldInstance.ElapsedEngineTicks).
-                var elapsedTicks = (instance.ElapsedEngineTicks + stepWidth);
-                var context = new FixedStepContext(
-                    ElapsedTicks: elapsedTicks,
+                // A resumed tick keeps the coordinates it was handed over with: its server's own count moves while the
+                // step thread executes it. Elapsed time is accumulated, never re-derived from (tick + 1) * stepWidth —
+                // a product re-derivation breaks the instant this instance's own rate changes (see
+                // WorldInstance.ElapsedEngineTicks).
+                var context = (resuming ? m_pendingStepContext : new FixedStepContext(
+                    ElapsedTicks: (instance.ElapsedEngineTicks + stepWidth),
                     StepTicks: stepWidth,
-                    Tick: tick
-                );
+                    Tick: instance.CompletedTicks
+                ));
+                var tick = context.Tick;
+                var elapsedTicks = context.ElapsedTicks;
 
                 if (!resuming) {
                     m_seats.SubmitAuthorityIntents(endpoint: EndpointFor(instance: instance), tick: tick + 1UL);
@@ -863,7 +879,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                         server: instance.Server,
                         tape: instance.Tape,
                         deadline: deadline,
-                        pending: out var pending
+                        pending: out var pending,
+                        collectBy: collectBy
                     );
                     if (pending is { } reason) {
                         if (!m_stepThread.InFlight && instance.Server.Tick.ExecutionInterrupted) {
@@ -873,6 +890,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                         m_pendingStepInstance = instance;
                         m_pendingStepWidth = stepWidth;
                         m_pendingStepRateHz = rateHz;
+                        m_pendingStepContext = context;
                         return reason;
                     }
                     m_pendingStepInstance = null;

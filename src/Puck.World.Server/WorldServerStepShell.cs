@@ -116,10 +116,13 @@ public static class WorldServerStepShell {
     /// tick the call began has completed.</param>
     /// <param name="thread">The host's step thread, which executes each tick while the calling thread waits for it;
     /// <see langword="null"/> executes on the calling thread.</param>
+    /// <param name="collectBy">How long the calling thread waits for a tick the step thread executes before it answers
+    /// <see cref="WorldStepThread.ExecuteWait"/> and leaves the tick in flight for its next call: a deadline already
+    /// passed polls, and <see langword="null"/> waits for the tick, up to the stall budget.</param>
     /// <returns>The completed tick count: <paramref name="context"/>'s tick when the first tick is pending or a
     /// replay drive was cancelled, otherwise further along by each tick completed.</returns>
     public static ulong TryStep(WorldServer server, WorldReplayTape? tape, Action<ulong> publishTick, in FixedStepContext context, HostPacing pacing,
-        WaitDeadline deadline, out WaitReason? pending, WorldStepThread? thread = null) {
+        WaitDeadline deadline, out WaitReason? pending, WorldStepThread? thread = null, WaitDeadline? collectBy = null) {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(publishTick);
 
@@ -129,6 +132,7 @@ public static class WorldServerStepShell {
         // A slice this thread handed over and stopped waiting for is collected before anything else is prepared, and
         // ends the call as a resumed tick does.
         var collecting = (thread is { InFlight: true });
+        var wait = (collectBy ?? WaitDeadline.Synchronous());
 
         while (true) {
             WorldExecutedTick executed;
@@ -138,10 +142,13 @@ public static class WorldServerStepShell {
                 prepared = Prepare(server, tape, in current, deadline);
                 executed = (prepared.Cancelled ? WorldExecutedTick.Nothing : Execute(in prepared));
             } else {
-                if (!thread.InFlight && !thread.HandOver(server, tape, in current, deadline)) {
-                    return current.Tick;
+                if (!thread.InFlight) {
+                    // A fast-forwarding drive steps its burst inside one call, so the caller waits for each of its
+                    // ticks whatever it was told: only how many recorded ticks a host step replays depends on it.
+                    if ((tape is { WantsFastForwardStep: true }) && !pacing.StepsOneTickPerFrame) { wait = WaitDeadline.Synchronous(); }
+                    if (!thread.HandOver(server, tape, in current, deadline)) { return current.Tick; }
                 }
-                if (!thread.TryCollect(server, out prepared, out executed)) {
+                if (!thread.TryCollect(server, wait, out prepared, out executed)) {
                     pending = WorldStepThread.ExecuteWait;
                     return current.Tick;
                 }

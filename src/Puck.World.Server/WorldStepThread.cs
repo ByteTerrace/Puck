@@ -41,6 +41,12 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null) : IJobLane
     /// <summary>Gets whether a slice handed to the step thread has not been collected yet. While it is, the authority
     /// it belongs to is the step thread's, and the thread that handed it over reads none of it.</summary>
     public bool InFlight => m_lane.InFlight;
+    /// <summary>Gets or sets what the step thread calls, on its own thread, each time a slice finishes and is ready to
+    /// collect: the wake of a host loop that went on without waiting for the slice. It must not throw.</summary>
+    public Action? Progressed {
+        get => m_lane.Finished;
+        set => m_lane.Finished = value;
+    }
 
     /// <summary>Stops the step thread once it has finished the slice it holds.</summary>
     /// <param name="deadline">How long to wait for the thread to end.</param>
@@ -81,9 +87,10 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null) : IJobLane
 
         return true;
     }
-    // Waits for the slice in flight, which must be server's, until the stall budget from its hand-off has passed, and
-    // takes it. False while the slice is still executing. What the slice threw is rethrown here.
-    internal bool TryCollect(WorldServer server, out WorldPreparedTick prepared, out WorldExecutedTick executed) {
+    // Waits for the slice in flight, which must be server's, until collectBy or the stall budget from its hand-off,
+    // whichever is sooner, and takes it. A collectBy already passed polls. False while the slice is still executing.
+    // What the slice threw is rethrown here.
+    internal bool TryCollect(WorldServer server, WaitDeadline collectBy, out WorldPreparedTick prepared, out WorldExecutedTick executed) {
         if (!ReferenceEquals(objA: m_prepared.Server, objB: server)) {
             throw new InvalidOperationException(message: "The step thread holds another authority's tick slice.");
         }
@@ -91,14 +98,14 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null) : IJobLane
         WaitOutcome outcome;
 
         try {
-            outcome = m_lane.Collect(deadline: m_prepared.Stall, reason: in ExecuteWait);
+            outcome = m_lane.Collect(deadline: collectBy.Earliest(other: m_prepared.Stall), reason: in ExecuteWait);
         } catch {
             Settle();
             throw;
         }
 
         if (outcome == WaitOutcome.DeadlinePassed) {
-            if (!m_reportedLate) {
+            if (m_prepared.Stall.HasPassed && !m_reportedLate) {
                 m_reportedLate = true;
                 narration?.Narrate("world.tick", $"[world.tick: the step thread has executed one slice of a tick of '{server.InstanceIdentity}' for longer than the stall budget; the host waits for it]");
             }
