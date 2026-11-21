@@ -295,8 +295,9 @@ ledger) when:
 | The newest turn isn't rewindable | It wrote outside its declared rows, or a later write changed its rows. |
 
 A turn becomes unrewindable when a member writes a row outside the group's
-`rows`, when anything outside the group's pass writes one of its rows, or when
-another group's rewind changes one of them. That protection means a rewind never
+`rows`, when anything outside the group's pass writes one of its rows, when
+another group's rewind changes one of them, or when a scoped replay restores
+one. That protection means a rewind never
 overwrites a newer, unrelated edit.
 
 After a successful rewind, the group is skipped for the rest of that simulation
@@ -311,7 +312,8 @@ boundary. See [Search](search.md).
 ### What a rewind restores, and what it doesn't
 
 A rewind writes each retained position back, newest turn only, re-indexes the
-rows it touched, and moves their row versions. Keys the turn minted stay
+rows it touched, moves each one's row version once and marks it for delivery,
+so every session receives the takeback with the tick's other changes. Keys the turn minted stay
 reserved in the arena's key ledger; a rewind doesn't reclaim names that other
 rows may use.
 

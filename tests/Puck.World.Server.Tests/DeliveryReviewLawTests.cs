@@ -1,6 +1,5 @@
 using Puck.Assets.Documents;
 using Puck.Commands;
-using Puck.World.Client;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -20,7 +19,7 @@ public sealed class DeliveryReviewLawTests {
     private static WorldRecipientView View(WorldFixture fixture, WorldDisclosureImages images, WorldDisclosureTier tier = WorldDisclosureTier.Replica) =>
         new(() => fixture.Server.Definition, () => fixture.Server.Arena, Principal.Seat(1), tier, () => true, images,
             fixture.Server.AuthorityIdentity, () => fixture.Server.DeliveryTime);
-    private static WorldSessionObservation Observe(WorldFixture fixture, Replica sink) {
+    private static WorldSessionObservation Observe(WorldFixture fixture, SessionReplica sink) {
         var observation = fixture.Server.TryObserveAsSession(refusal: out var refusal, sink: sink, sourceAuthority: "reader");
         Assert.NotNull(observation);
         Assert.True(string.IsNullOrEmpty(refusal), refusal);
@@ -45,7 +44,7 @@ public sealed class DeliveryReviewLawTests {
         }).Append(new WorldStateRow(Name: CellName.Parse("readers"), Kind: CellKind.Text, Domain: StateDomain.Keys.Instance,
             Cells: [new StateCell(CellName.Parse("allowed"), CellValue.Text("session:0:1"))])).ToArray() };
         using var fixture = Fixtures.FreshServer(Document(tier: tier) with { StateRaw = section });
-        var sink = new Replica();
+        var sink = new SessionReplica();
         using var observation = Observe(fixture, sink);
         Assert.Equal("session:0:1", observation.Session.Describe());
         Assert.Contains(sink.Deltas, delta => delta.FieldName == "publicField");
@@ -61,7 +60,7 @@ public sealed class DeliveryReviewLawTests {
     [Fact]
     public void ARestrictedAdministrativeWriteBeforeTheFirstTickCannotPoisonTheSharedImage() {
         using var fixture = Fixtures.FreshServer(Document());
-        var sink = new Replica();
+        var sink = new SessionReplica();
         using var observation = Observe(fixture, sink);
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "hand", "pub", 11, WorldDocumentWriteKind.Set));
         Assert.True(fixture.Server.DrainAdministrative());
@@ -115,7 +114,7 @@ public sealed class DeliveryReviewLawTests {
     [Fact]
     public void AStateOnlyTickDeliversItsRowsWithoutComposingTheDisclosedDefinitionAgain() {
         using var fixture = Fixtures.FreshServer(Document(Row(hidden: HiddenCells.Count)));
-        var sink = new Replica();
+        var sink = new SessionReplica();
         using var observation = Observe(fixture, sink);
         fixture.Step();
         var work = fixture.Server.DisclosureWorkSource;
@@ -180,7 +179,7 @@ public sealed class DeliveryReviewLawTests {
     public void ReplicaMetadataPrimingAndReplacementNeverDependOnTheCurrentHiddenCount(HiddenCells policy) {
         static (long[] Versions, bool[] Metadata, long[] Quiet) Run(HiddenCells hidden, bool secret) {
             using var fixture = Fixtures.FreshServer(Document(Row(hidden: hidden, secret: secret)));
-            var sink = new Replica();
+            var sink = new SessionReplica();
             using var observation = Observe(fixture, sink);
             var metadata = new List<bool> { sink.State.Observation(0) is not null };
             // A public definition change replaces StateRaw in the disclosed document just as a placement refresh
@@ -206,7 +205,7 @@ public sealed class DeliveryReviewLawTests {
     [InlineData(true)]
     public void ReplicaRestoreCompletesItsObservationHeadersBeforeAnyFollowingTick(bool secret) {
         using var fixture = Fixtures.FreshServer(Document(Row(hidden: HiddenCells.Count, secret: secret)));
-        var sink = new Replica();
+        var sink = new SessionReplica();
         using var observation = Observe(fixture, sink);
         Assert.True(fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), reason);
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "hand", "pub", 11, WorldDocumentWriteKind.Set));
@@ -235,7 +234,7 @@ public sealed class DeliveryReviewLawTests {
             CreationsRaw = [CreationFixtures.UnitSphere(id: "store")],
             PlacementRowsRaw = [template],
         });
-        var dealt = new Replica();
+        var dealt = new SessionReplica();
         using var observation = Observe(fixture, dealt);
         // A federation peer, the public observer, whose cadence samples none of this law's ticks.
         var current = true;
@@ -261,7 +260,7 @@ public sealed class DeliveryReviewLawTests {
         Assert.Equal(snapshots + 2, dealt.Snapshots);
         Assert.Contains(dealt.Definition.Placements, placement => placement.Id == WorldPlacementDeal.ChildId(key: "a", template: "stores"));
         Assert.NotNull(dealt.State.Observation(0));
-        var fresh = new Replica();
+        var fresh = new SessionReplica();
         using var primed = Observe(fixture, fresh);
         Assert.Equal(Describe(fresh), Describe(dealt));
         // The peer was handed the deal's document and, in the same step and whatever its cadence, the tick's snapshot
@@ -285,7 +284,7 @@ public sealed class DeliveryReviewLawTests {
     }
 
     // Every value, motion and observation header a replica's state view reads, in row order.
-    private static string Describe(Replica replica) {
+    private static string Describe(SessionReplica replica) {
         var text = new System.Text.StringBuilder();
         var definition = replica.Definition;
         text.Append(Convert.ToHexString(WorldDefinitionSerialization.SerializeCompact(definition))).Append('\n');
@@ -331,46 +330,5 @@ public sealed class DeliveryReviewLawTests {
         Assert.Equal(WorldProjectionDeliveryKind.Delta, feed.Compose(fresh, cursor).Kind);
         Assert.Equal(2L, cursor.Sequence);
         Assert.Equal(5L, Assert.Single(Assert.Single(feed.Held!.Observations!).Cells).Value);
-    }
-
-    private sealed class Replica : IClientSink {
-        private WorldDefinition m_definition = WorldProjection.Undisclosed;
-        public WorldDocumentStateView State { get; }
-        public List<FieldCellDelta> Deltas { get; } = [];
-        public List<long> Versions { get; } = [];
-        public int Definitions { get; private set; }
-        public int States { get; private set; }
-        public int Snapshots { get; private set; }
-        public WorldDefinition Definition => m_definition;
-        public Replica() => State = new(() => m_definition);
-        public long Read(string row, string key) {
-            Assert.True(State.TryResolveRow(row, out var ordinal));
-            Assert.True(State.TryRead(ordinal, key, false, 0, 0, out var sample));
-            return sample.Value.Raw;
-        }
-        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
-            Definitions++;
-            Hold(definition, version);
-        }
-        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
-            States++;
-            Hold(definition, version);
-        }
-        private void Hold(WorldDefinition definition, WorldDocumentVersion version) {
-            m_definition = definition;
-            Versions.Add(version.Sequence);
-            State.TryResolveRow("hand", out _);
-        }
-        public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
-        public void CloseSpan(ulong stream) { }
-        public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
-            Snapshots++;
-            Deltas.AddRange(snapshot.FieldCells.ToArray());
-            Versions.Add(snapshot.Revision);
-            State.ApplyFieldCells(snapshot.FieldCells.Span, new int[StateCapacity.MaxRows]);
-        }
-        public void DeliverAnswer(in QueryAnswer answer) { }
-        public void DeliverComposition(WorldComposition composition) { }
-        public void DeliverSessionLever(WorldSessionLever lever) { }
     }
 }

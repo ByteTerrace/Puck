@@ -1,4 +1,5 @@
 using Puck.State.Rules;
+using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Server.Tests;
@@ -89,9 +90,13 @@ public sealed class WorldTurnUndoCheckpointLawTests {
         Assert.Equal(before, fixture.Server.Arena.ComputeHash());
         Assert.Equal(time, fixture.Server.RuleHost.Time);
     }
+    /// <summary>A rule's rewind restores its turn in the arena and in what a session holds, then suppresses its group
+    /// until the next tick.</summary>
     [Fact]
-    public void StandaloneRewindSuppressesItsTargetGroupUntilTheNextWorldTick() {
+    public void StandaloneRewindReachesSessionsAndSuppressesItsTargetGroupUntilTheNextWorldTick() {
         var definition = Fixtures.BuildDocument() with {
+            Admission = [new WorldAdmissionEntry(Domain: "*", Mode: WorldAdmissionTrustMode.FederatedAuthority, Disclosure: WorldDisclosureTier.Replica,
+                Grants: [new WorldAdmissionGrant(Capability: WorldCapability.Observe, Subject: GrantSubject.All, Budget: 100, EventBudget: 100)])],
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(Name: Name(value: "score"), Kind: CellKind.Int, Min: 0, Max: 100, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0))]),
                 new WorldStateRow(Name: Name(value: "undo"), Kind: CellKind.Int, Min: 0, Max: 1, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Int(value: 0))]),
@@ -105,17 +110,23 @@ public sealed class WorldTurnUndoCheckpointLawTests {
                 Steps: [new RuleGroupStep(Name(value: "advance"))], Undo: new RuleGroupUndo([Name(value: "score")], 2))],
         };
         using var fixture = Fixtures.FreshServer(definition: definition);
+        var session = new SessionReplica();
+        using var observation = fixture.Server.TryObserveAsSession(refusal: out var refusal, sink: session, sourceAuthority: "reader");
 
+        Assert.True(condition: (observation is not null), userMessage: refusal);
         fixture.Step();
         Assert.Equal(1L, ReadSlot(fixture: fixture, row: "score"));
+        Assert.Equal(1L, session.ReadSlot(row: "score"));
         Assert.True(condition: fixture.Server.Arena.Catalog.TryResolve(handle: out var undo, lane: StateLane.Document, name: "undo"));
         Assert.True(condition: fixture.Server.Arena.TryWrite(rowOrdinal: undo.Ordinal, key: fixture.Server.Arena.Catalog.Keys.Intern(name: StateRow.SlotKey), operand: 1L, write: StateWriteKind.Set, reason: out var reason), userMessage: reason);
 
         fixture.Step();
         Assert.Equal(0L, ReadSlot(fixture: fixture, row: "score"));
+        Assert.Equal(0L, session.ReadSlot(row: "score"));
         Assert.False(condition: fixture.Server.Arena.UndoTurnPending(group: "turn"));
 
         fixture.Step();
         Assert.Equal(1L, ReadSlot(fixture: fixture, row: "score"));
+        Assert.Equal(1L, session.ReadSlot(row: "score"));
     }
 }
