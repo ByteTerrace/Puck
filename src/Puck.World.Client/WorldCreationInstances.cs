@@ -56,22 +56,15 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     /// <param name="bodyIndex">The 0-based entity index of the body.</param>
     /// <returns>The number of registrations restarted, zero when the body roots none.</returns>
     public int Reseed(int bodyIndex) {
-        var reseeded = 0;
-
-        foreach (var registration in m_pool.AsSpan(0, m_poolCount)) {
-            if (
-                (registration is not { } live) ||
-                (live.BodyIndex != bodyIndex)
-            ) {
-                continue;
-            }
-
-            live.DriverSeeded = false;
-            live.RootEpoch = -1;
-            reseeded++;
+        if (!TryFindBody(bodyIndex: bodyIndex, live: out var live, poolIndex: out var poolIndex)) {
+            return 0;
         }
 
-        return reseeded;
+        live.DriverSeeded = false;
+        live.RootEpoch = -1;
+        WakeEntry(index: poolIndex);
+
+        return 1;
     }
 
     // The bounded volumes every live registration's creation authors (CreationDocument.Volumes), rebuilt in
@@ -251,6 +244,16 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         // frame owes that pack whatever wakes the registration.
         public float RateSeconds;
         public bool RateOwed;
+        // What a pack that does not visit the registration leaves to its next visit (WorldCreationInstances.Awake): the
+        // pool clock its replay cursor and cue clock stand at (negative before its first visit), the pool clock its held
+        // seconds are counted to, the pool clock its next cursor or cue change is scheduled for (infinity for none), the
+        // packs that last visited it and last posed it in full, and the door clip its last visit found.
+        public double ClockStamp = -1d;
+        public double RateStamp;
+        public double DeadlineDue = double.PositiveInfinity;
+        public long VisitPack = -1L;
+        public long PosedPack = -1L;
+        public SdfSlotClip? Clip;
 
         // The slowest tier the body was rated at since its last full pack, the tier its next interval is recorded under.
         public int RateSlowest = SdfUpdateRateTiers.EveryFrameHertz;
@@ -497,6 +500,9 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
             var capacity = ArrayCapacity.Grown(m_poolCount, required);
             Array.Resize(ref m_packedRegistrations, capacity);
             Array.Resize(ref m_meshDraws, capacity);
+            Array.Resize(ref m_meshDrawAt, capacity);
+            Array.Resize(ref m_heldCell, capacity);
+            Array.Resize(ref m_heldAt, capacity);
             m_owners.EnsureCapacity(capacity);
             Array.Resize(ref m_pool, capacity);
         }
@@ -700,7 +706,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     /// <param name="frame">The cue's frame name.</param>
     /// <returns><see langword="true"/> when the body wears a creation look with such a cue.</returns>
     public bool TriggerCue(int bodyIndex, string frame) {
-        if (!TryFindBody(bodyIndex: bodyIndex, live: out var live, poolIndex: out _) || (live.Cues is not { } cues)) {
+        if (!TryFindBody(bodyIndex: bodyIndex, live: out var live, poolIndex: out var poolIndex) || (live.Cues is not { } cues)) {
             return false;
         }
 
@@ -709,7 +715,10 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
                 continue;
             }
 
+            // The cue holds from the registration's own cue clock, which a sleeping registration has not advanced.
+            AdvanceClock(live: live);
             FireCue(index: index, live: live);
+            WakeEntry(index: poolIndex);
 
             return true;
         }
@@ -834,6 +843,8 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         }
         Rigid.Emit(builder, colors, (slotBase + ArticulatedSlotCount), textCatalog, (picks ?? new WorldPickMapBuilder()), Isolation);
         m_volumesDirty = true;
+        // The isolation may have hidden other shapes, which each registration's volumes follow at its next visit.
+        m_wakeAll = true;
     }
     /// <summary>Whether a live body-rooted creation look owns the entity's part namespace.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
@@ -938,6 +949,20 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         bodyStamps = bodyStamps.Where(predicate: stamp => !WorldRigidAssets.IsRigid(creation: stamp.Creation, look: stamp.Look)).ToArray();
         ReconcileSlots(bodyStamps: bodyStamps, creations: creations, dynamics: dynamics, placementFrames: placementFrames, placements: placements);
         IndexBodyReaders();
+        IndexWakes();
+        // Any pool index may hold another registration now, so everything kept by index starts again and the next pack
+        // visits every entry.
+        m_wakeAll = true;
+        m_stateWatch.Clear();
+        ReleaseHeldCells();
+        m_clipped.Clear();
+        m_clipsChanged = true;
+        m_meshDrawMembers = true;
+        foreach (var registration in m_pool.AsSpan(start: 0, length: m_poolCount)) {
+            if (registration is not null) {
+                registration.Clip = null;
+            }
+        }
     }
 
     private void IndexBodyReaders() {
@@ -1168,50 +1193,14 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         PoseRevision++;
     }
 
-    /// <summary>Advances every live replay cursor on the render clock (hold-style: each frame holds
-    /// <see cref="WorldPlacementPolicy.TimelineSecondsPerFrame"/>, looping 1..N; whole crossed frames subtract so a
-    /// hitch lands on the right frame), and latches <paramref name="deltaSeconds"/> for the pool's root/part
-    /// followers, stepped once by the next <see cref="PackTransforms"/>.</summary>
+    /// <summary>Advances the pool's render clock, which every replay cursor and cue is counted on (each registration
+    /// follows it when a pack next visits it, <see cref="AdvanceClock"/>), and latches <paramref name="deltaSeconds"/>
+    /// for the pool's root/part followers, stepped once by the next <see cref="PackTransforms"/>. Costs nothing a
+    /// registration.</summary>
     /// <param name="deltaSeconds">Seconds advanced since the previous produced frame.</param>
     public void Tick(float deltaSeconds) {
         m_pendingDeltaSeconds += deltaSeconds;
-
-        foreach (var live in m_pool.AsSpan(0, m_poolCount)) {
-            if (live is null) {
-                continue;
-            }
-
-            var frames = (live.Creation.Document.Frames ?? []);
-
-            if (frames.Count == 0) {
-                continue;
-            }
-
-            if (live.Cues is { Count: > 0 } cues) {
-                live.CueClock += deltaSeconds;
-
-                if ((live.CueFrame > 0) && (live.CueClock >= live.CueHoldUntil)) {
-                    live.CueFrame = 0;
-                }
-
-                for (var index = 0; (index < cues.Count); index++) {
-                    if ((live.CueFrames[index] > 0) && (live.CueClock >= live.CueNextSeconds[index])) {
-                        FireCue(index: index, live: live);
-                    }
-                }
-            }
-
-            if (!live.Replay) {
-                continue;
-            }
-
-            live.Clock += deltaSeconds;
-
-            while (live.Clock >= WorldPlacementPolicy.TimelineSecondsPerFrame) {
-                live.Clock -= WorldPlacementPolicy.TimelineSecondsPerFrame;
-                live.FrameCursor = ((live.FrameCursor % frames.Count) + 1);
-            }
-        }
+        m_clockSeconds += deltaSeconds;
     }
     /// <summary>Resolves a body-rooted creation look's current part pose without a packed buffer.</summary>
     /// <param name="bodyIndex">The population entity index.</param>

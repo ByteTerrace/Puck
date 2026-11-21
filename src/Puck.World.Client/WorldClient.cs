@@ -1069,7 +1069,12 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             ));
         }
 
+        // Another authority's snapshot moves every entity's address.
+        m_bodyChangesWhole |= (m_authority != snapshot.Authority);
+
         foreach (ref readonly var entry in snapshot.Entries.Span) {
+            var wasActive = ((((uint)entry.Index) < EntityCapacity) && m_poses.IsActive(index: entry.Index));
+
             if (!m_poses.TryAdmit(
                 admission: out var admission,
                 easeCorrections: true,
@@ -1079,6 +1084,19 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             }
 
             var index = entry.Index;
+
+            // Everything a stamp pool reads of a body besides its look (BodyChanges): a step other than plain
+            // double-buffering moved its pose epoch or its carries.
+            if (
+                (admission.Step != WorldPoseStep.Interpolated) ||
+                (wasActive != entry.Active) ||
+                (m_facts[index] != entry.Facts) ||
+                (m_generation[index] != entry.Generation) ||
+                (m_renderPosition[index] != entry.Position) ||
+                (m_renderOrientation[index] != entry.Orientation)
+            ) {
+                _ = m_changedBodies.Add(index: index);
+            }
 
             m_color[index] = entry.BodyColor;
             m_kit[index] = entry.Kit;
@@ -1149,6 +1167,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_posesDelivered = true;
         if (m_poses.ActiveChanged) {
             m_activeRevision++;
+            // A body that left is in no snapshot entry, so the set that changed is not named body by body.
+            m_bodyChangesWhole = true;
         }
         m_renderPoseRevision++;
         foreach (var index in m_poses.Seen) {
@@ -1488,6 +1508,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 m_renderPoseRevision++;
             }
             WorldPoseWork.Process.Add(kind: WorldPoseWork.Resolved, amount: m_movingCount);
+            PublishBodyChanges();
 
             return;
         }
@@ -1518,6 +1539,34 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_movingCount = moving;
         m_posesDelivered = false;
         WorldPoseWork.Process.Add(kind: WorldPoseWork.Resolved, amount: resolved);
+        PublishBodyChanges();
+    }
+
+    // The bodies whose presented inputs moved since the last frame resolved its poses (a delivery's entries and the
+    // poses this frame resolved), and whether the set cannot be named body by body.
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_changedBodies = new();
+    private bool m_bodyChangesWhole = true;
+    private readonly Puck.Abstractions.Gpu.GpuChangedRows m_bodyChanges = new(stableRows: true);
+
+    /// <inheritdoc/>
+    /// <remarks>One journal frame for each <see cref="UpdateRenderPoses"/>: the bodies whose render pose that frame
+    /// resolved to another value, and those a delivery since the frame before moved the pose epoch, generation, carries,
+    /// facts or active flag of. A frame that changed which bodies are active, or another authority's first snapshot, owes
+    /// every body.</remarks>
+    public Puck.Abstractions.Gpu.GpuRowChanges BodyChanges => m_bodyChanges.Reader;
+    /// <inheritdoc/>
+    public long BodyChangesSerial => m_bodyChanges.Serial;
+
+    private void PublishBodyChanges() {
+        m_bodyChanges.Begin(everything: m_bodyChangesWhole, rows: EntityCapacity);
+        if (!m_bodyChangesWhole) {
+            foreach (var index in m_changedBodies.Members) {
+                m_bodyChanges.Owe(count: 1, start: index);
+            }
+        }
+
+        m_changedBodies.Clear();
+        m_bodyChangesWhole = false;
     }
 
     // The live bodies whose two tick poses differ in the latest delivery (the only ones a frame between two deliveries
@@ -1553,6 +1602,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             m_renderPosition[index] = position;
             m_renderOrientation[index] = orientation;
             changed = true;
+            _ = m_changedBodies.Add(index: index);
         }
 
         return ((previousPosition != currentPosition) || (previousOrientation != currentOrientation));

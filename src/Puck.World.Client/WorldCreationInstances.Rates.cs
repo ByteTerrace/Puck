@@ -313,7 +313,13 @@ public sealed partial class WorldCreationInstances {
     }
     // Records that something outside the pack read a body registration's part pose, slot or latch this frame. Every
     // accessor that hands one out calls this, and it is the only record of a pose's consumers the bodies lever holds by.
-    private void NotePoseRead(Registration live) => live.PoseReadPack = m_packCount;
+    // A held body's next rating must see the read, so the read wakes it.
+    private void NotePoseRead(Registration live) {
+        live.PoseReadPack = m_packCount;
+        if (live.RateOwed && (live.BodyIndex is { } body) && TryFindBody(bodyIndex: body, live: out var held, poolIndex: out var index) && ReferenceEquals(objA: held, objB: live)) {
+            WakeEntry(index: index);
+        }
+    }
     // A body's reach for rating, in metres: the reach its rig derives from the document (CreationRig.Reach), which no pose
     // the rig can reach exceeds, or the farthest any pack has posed a part of it from its root (MotionReach) where a
     // follower carried one past it. A rig with no finite reach rates by its rest reach and the poses drawn.
@@ -367,29 +373,6 @@ public sealed partial class WorldCreationInstances {
         }
 
         Array.Clear(array: m_slotRateCodes);
-    }
-    // Notes a registration's tier after its pack (a body's, or a row-rooted placement's: an animated or attached one):
-    // its reading while the bodies lever rates, and its slots' code while the pool writes codes.
-    private void NoteRate(Registration live, int rootSlot, int packedSlots, Vector3 center, float radius, float placementScale, bool posed) {
-        if ((m_rateReadings is null) && !m_writesRateCodes) {
-            return;
-        }
-
-        var (hertz, pixelsPerMetre) = RateOf(center: center, live: live, placementScale: placementScale, radius: radius);
-
-        if (((m_rates & SdfUpdateRates.Bodies) != 0) && (m_rateReadings is not null)) {
-            live.RateName ??= ((live.BodyIndex is { } body) ? $"body:{body}" : $"placement:{live.Row?.Id}");
-            m_bodyReadings.Add(item: new SdfUpdateRateReadings.Reading(Hertz: hertz, Name: live.RateName, Size: pixelsPerMetre));
-        }
-        if (m_writesRateCodes) {
-            m_slotRateCodes.AsSpan(length: packedSlots, start: rootSlot).Fill(value: ((byte)SdfUpdateRateTiers.CodeOf(hertz: hertz, updated: posed)));
-        }
-    }
-    // Ends a pack's tiers: publishes the bodies' readings.
-    private void EndRateCodes() {
-        if (m_rateReadings is { } readings) {
-            m_bodyReadings.PublishTo(readings: readings, lever: SdfUpdateRates.Bodies);
-        }
     }
     // Whether a woken body-rooted registration holds its pose this frame rather than packing it in full: the floor at its
     // tier still holds over the seconds since its last full pack with this frame's (SdfUpdateRateTiers.Holds), counted
