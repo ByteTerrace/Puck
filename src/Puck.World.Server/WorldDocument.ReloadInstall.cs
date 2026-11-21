@@ -69,13 +69,15 @@ public sealed partial class WorldDocument {
         var named = new List<string>();
 
         for (var index = 0; (index < afterRows.Count); index++) {
-            if (ReferenceEquals(objA: afterRows[index], objB: beforeRows[index])) { continue; }
+            var row = afterRows[index];
+
+            if (ReferenceEquals(objA: row, objB: beforeRows[index])) { continue; }
+            if (!string.Equals(a: row.Name.Value, b: beforeRows[index].Name.Value, comparisonType: StringComparison.Ordinal)) { return false; }
+            // A row a replay read again holds its own instance of every list; it is the live row when it writes the same bytes.
+            if (SameAuthoredRow(left: row, right: beforeRows[index])) { continue; }
             // A row a private stream draws is drawn again by the full install, under the authority's own sampler.
-            if (!string.Equals(a: afterRows[index].Name.Value, b: beforeRows[index].Name.Value, comparisonType: StringComparison.Ordinal) ||
-                (afterRows[index].Draw?.PrivateStream == true) || !DiffersInValuesAlone(before: beforeRows[index], row: afterRows[index])) {
-                return false;
-            }
-            named.Add(item: afterRows[index].Name.Value);
+            if ((row.Draw?.PrivateStream == true) || !DiffersInValuesAlone(before: beforeRows[index], row: row)) { return false; }
+            named.Add(item: row.Name.Value);
         }
         if (named.Count == 0) { return false; }
         rows = named;

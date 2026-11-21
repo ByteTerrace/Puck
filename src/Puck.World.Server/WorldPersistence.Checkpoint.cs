@@ -147,15 +147,17 @@ public sealed partial class WorldPersistence {
             kept.Add(item: entry);
         }
 
-        // An undo whose dropped entries changed only what presentation reads installs as that edit, the way a reload of
-        // the same change does, and keeps the session's state, deals and draws.
-        var undone = DroppedPresentation(candidate: candidate, keep: keep, restored: out var restored);
+        // An undo whose dropped entries changed only state values or what presentation reads installs as that edit, the
+        // way a reload of the same change does (ReloadInstallKindOf names the kind, TryInstallEdit installs it), and
+        // keeps the session's arena, deals and draws.
+        var undone = DroppedEdit(candidate: candidate, keep: keep, restored: out var restored);
         var changed = WorldDocument.DescribeChanged(changed: undone);
+        var restoredRows = (IReadOnlyList<string>)[];
 
-        if (restored is not null) {
-            var restoredKind = WorldDocument.ReloadInstallKindOf(candidate: restored, live: Host.Document.Definition, rows: out _);
-
-            if (!Host.Document.TryInstallEdit(candidate: restored, detail: out var detail, kind: restoredKind, principal: principal, reason: out var editReason, rows: [], validated: true)) {
+        if ((restored is not null) &&
+            (WorldDocument.ReloadInstallKindOf(candidate: restored, live: Host.Document.Definition, rows: out restoredRows) is var restoredKind) &&
+            (restoredKind != WorldInstallKind.Full)) {
+            if (!Host.Document.TryInstallEdit(candidate: restored, detail: out var detail, kind: restoredKind, principal: principal, reason: out var editReason, rows: restoredRows, validated: true)) {
                 return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: $"undo refused: {editReason}");
             }
             return AcceptUndo(connectionId: connectionId, correlationId: correlationId, detail: (detail + changed), drop: drop, kept: kept);
@@ -193,11 +195,11 @@ public sealed partial class WorldPersistence {
 
     // What the dropped tail of the journal changed, read by composing it again over the restored document (every entry
     // passed its gates when it applied) and naming the parts the two hold as different instances. When the tail changed
-    // only creations in what shading reads and shade programs, `restored` is the live document with exactly those rows
-    // set back: every other row stays the live instance, so the session's state, deals and draws carry over and the
-    // presentation install delivers only the rows the undo moved. Otherwise `restored` is null and the undo installs
-    // the replayed document whole.
-    private WorldDocumentInputs DroppedPresentation(WorldDefinition candidate, int keep, out WorldDefinition? restored) {
+    // only state values, or only creations in what shading reads and shade programs, `restored` is the live document
+    // with exactly those rows set back: every other row stays the live instance, so the session's arena, deals and
+    // draws carry over and the install delivers only the rows the undo moved. Otherwise `restored` is null and the undo
+    // installs the replayed document whole.
+    private WorldDocumentInputs DroppedEdit(WorldDefinition candidate, int keep, out WorldDefinition? restored) {
         restored = null;
 
         var journal = Host.Document.Journal;
@@ -210,7 +212,7 @@ public sealed partial class WorldPersistence {
 
         var changed = WorldDocumentInputs.Changed(after: candidate, before: undone);
 
-        if (WorldDocument.ReloadInstallKindOf(candidate: candidate, live: undone, rows: out _) is not (WorldInstallKind.Nothing or WorldInstallKind.Presentation)) {
+        if (WorldDocument.ReloadInstallKindOf(candidate: candidate, live: undone, rows: out var valueRows) is not (WorldInstallKind.Nothing or WorldInstallKind.Presentation or WorldInstallKind.Value)) {
             return changed;
         }
 
@@ -255,6 +257,28 @@ public sealed partial class WorldPersistence {
                 if ((restoring?.ContainsKey(key: name) != true) && (held?.ContainsKey(key: name) == true)) { _ = Table().Remove(key: name); }
             }
             if (table is not null) { restored = (restored with { ShadesRaw = (((restoring is null) && (table.Count == 0)) ? null : table) }); }
+        }
+        if (valueRows.Count > 0) {
+            // The live section's rows in the live order, each row the dropped tail moved replaced by the replayed one;
+            // WithStateSection keeps the compiled catalog the rows still fit.
+            var section = restored.StateRaw;
+            var replays = candidate.StateRaw?.World;
+
+            if ((section?.World is not { } liveRows) || (replays is null)) { restored = null; return changed; }
+
+            var moved = new HashSet<string>(collection: valueRows, comparer: StringComparer.Ordinal);
+            var rows = new WorldStateRow[liveRows.Count];
+
+            for (var index = 0; (index < rows.Length); index++) {
+                var row = liveRows[index];
+
+                if (moved.Contains(item: row.Name.Value)) {
+                    if (WorldDefinitionRows.FindStateRow(rows: replays, name: row.Name.Value) is not { } replayed) { restored = null; return changed; }
+                    row = replayed;
+                }
+                rows[index] = row;
+            }
+            restored = restored.WithStateSection(state: (section with { World = rows }));
         }
         return changed;
     }
