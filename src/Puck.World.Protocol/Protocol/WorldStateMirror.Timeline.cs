@@ -129,7 +129,7 @@ public sealed partial class WorldStateMirror {
         if (slot < 0) { return false; }
         ref readonly var entry = ref m_slots[slot];
 
-        m_reads.Increment();
+        m_reads.IncrementShared();
         var simulationTick = ((Manifest.SimulationRateHz > 0) ? (tick.Whole / FixedTickConversion.PerRate(ratePerSecond: ((uint)Manifest.SimulationRateHz))) : Tick);
 
         if (!m_view.TryRead(entry.Ordinal, binding.Key, binding.Target, simulationTick, tick.Whole, out var sample) || !sample.Value.HasValue) { return false; }

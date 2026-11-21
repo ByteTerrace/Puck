@@ -180,7 +180,7 @@ public sealed partial class WorldScreenBinder {
     private InfinityEntry CreateInfinity(InfinityRoot root, WorldInfinityView planned, WorldSessionMirror mirror,
         string instance, WorldObservationSession? hosted, IReadOnlyList<string>? prototypes) {
         var name = ((root.Name == WorldViewGraphs.WorldInstance) ? planned.Name : ((root.Name + Puck.State.GeneratedName.Joiner) + planned.Name));
-        var emitter = new WorldSessionSceneEmitter(mirror: mirror, effectiveCameraName: null, domains: m_domains,
+        var emitter = new WorldSessionSceneEmitter(mirror: mirror, effectiveCameraName: null, domains: m_domains, jobs: m_stamps.Jobs,
             onlyPrototypes: ((planned.Spec.Kind == InfinityViewKind.Far) ? new HashSet<string>(collection: (prototypes ?? []), comparer: StringComparer.Ordinal) : null)) {
             SkyLayers = SkyLayers,
             Session = Settings,

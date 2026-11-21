@@ -31,7 +31,7 @@ public sealed class PartProgramLawTests {
         Assert.True(condition: evaluator.TryDistance(FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: new Vector3(x: 20f, y: 0f, z: 0f))), out var distance, out var material));
         Assert.Equal(actual: material, expected: 1);
         Assert.Equal(actual: ((float)distance), expected: 1f, tolerance: 0.001f);
-        var words = program.Words;
+        var words = program.CopyWords();
         var entry = (PartTable(words: words) + 8);
 
         Assert.Equal(compiled, ((words[(entry + 2)] & SdfProgram.PartLeafCountMask) != 0u));
@@ -76,7 +76,7 @@ public sealed class PartProgramLawTests {
         Assert.True(condition: evaluator.TryDistance(FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: new Vector3(x: 20f, y: 0f, z: 0f))), out var distance, out var material));
         Assert.Equal(actual: material, expected: 1);
         Assert.Equal(actual: ((float)distance), expected: 10f, tolerance: 0.001f);
-        var words = program.Words;
+        var words = program.CopyWords();
         var entry = (PartTable(words: words) + 8);
         var rejects = (((20f - program.InspectInstance(index: 1).BoundRadius) * SdfProgram.DecodePartDistanceGain(entryCountLane: words[(entry + 2)])) >= 15f);
 
@@ -188,7 +188,7 @@ public sealed class PartProgramLawTests {
                 first: first
             )]
         );
-        var words = program.Words;
+        var words = program.CopyWords();
         var table = PartTable(words: words);
 
         Assert.NotEqual(expected: 0u, actual: words[((table + 4) + 2)] & SdfProgram.PartLeafCountMask);
@@ -256,12 +256,12 @@ public sealed class PartProgramLawTests {
                 )]
         );
 
-        Assert.True(condition: (a.Words.Length < b.Words.Length));
+        Assert.True(condition: (a.WordCount < b.WordCount));
         Assert.Equal(
             a.PartCompilationWordCapacity,
             b.PartCompilationWordCapacity
         );
-        Assert.True(condition: (a.PartCompilationWordCapacity >= b.Words.Length));
+        Assert.True(condition: (a.PartCompilationWordCapacity >= b.WordCount));
     }
     [Fact]
     public void DifferentGeometryDoesNotAlias() {
@@ -291,7 +291,7 @@ public sealed class PartProgramLawTests {
                     end: 16,
                     first: 8
                 )]
-        ).Words;
+        ).CopyWords();
         var table = PartTable(words: words);
 
         Assert.Equal(
@@ -356,7 +356,7 @@ public sealed class PartProgramLawTests {
                     end: 18,
                     first: 9
                 )]
-        ).Words;
+        ).CopyWords();
 
         Assert.Equal(
             2u,
@@ -391,7 +391,7 @@ public sealed class PartProgramLawTests {
                     end: 16,
                     first: 8
                 )]
-        ).Words;
+        ).CopyWords();
         var table = PartTable(words: words);
 
         Assert.NotEqual(
@@ -505,13 +505,13 @@ public sealed class PartProgramLawTests {
 
         Assert.Equal(
             0,
-            PartTable(words: a.Words)
+            PartTable(words: a.CopyWords())
         );
         Assert.NotEqual(
             0,
-            PartTable(words: b.Words)
+            PartTable(words: b.CopyWords())
         );
-        Assert.True(condition: (a.PartCompilationWordCapacity >= b.Words.Length));
+        Assert.True(condition: (a.PartCompilationWordCapacity >= b.WordCount));
     }
     [Fact]
     public void NonUnionGenericScopeDisablesIndependentTracingOfOtherParts() {
@@ -543,7 +543,7 @@ public sealed class PartProgramLawTests {
                     end: 16,
                     first: 8
                 )]
-        ).Words;
+        ).CopyWords();
 
         Assert.Equal(
             1u,
@@ -581,7 +581,7 @@ public sealed class PartProgramLawTests {
                         end: 8,
                         first: 0
                     )]
-            ).Words)
+            ).CopyWords())
         );
     }
     [Fact]
@@ -601,7 +601,7 @@ public sealed class PartProgramLawTests {
                         end: 8,
                         first: 0
                     ) with { Active = false }]
-            ).Words)
+            ).CopyWords())
         );
     }
     [InlineData(true)]
@@ -636,7 +636,7 @@ public sealed class PartProgramLawTests {
                     end: 16,
                     first: 8
                 )]
-        ).Words;
+        ).CopyWords();
         var table = PartTable(words: words);
 
         // A detail copy differs from the first scope's shape in its identity, so it compiles a part of its own; an
@@ -745,7 +745,7 @@ public sealed class PartProgramLawTests {
                 4
             ).ToArray(),
             convexPolygonProfiles: [(3, vertices), (11, other)]
-        ).Words;
+        ).CopyWords();
         var table = PartTable(words: words);
 
         Assert.Equal(
@@ -795,7 +795,7 @@ public sealed class PartProgramLawTests {
                     end: 8,
                     first: 0
                 )]
-        ).Words;
+        ).CopyWords();
         var header = words[PartTable(words: words)];
 
         Assert.Equal(
@@ -840,7 +840,7 @@ public sealed class PartProgramLawTests {
                     end: 8,
                     first: 0
                 )]
-        ).Words;
+        ).CopyWords();
 
         Assert.Equal(
             1u,
@@ -878,7 +878,7 @@ public sealed class PartProgramLawTests {
                         end: 9,
                         first: 0
                     )]
-            ).Words)
+            ).CopyWords())
         );
     }
 }

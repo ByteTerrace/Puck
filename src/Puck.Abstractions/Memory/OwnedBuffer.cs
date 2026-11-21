@@ -64,22 +64,38 @@ public interface IAllocatorStatistics {
     void Collect();
 }
 /// <summary>
-/// One owner's reference-free storage. An injected allocator selects native backing; offline callers may use managed
-/// backing. Spans and memory slices are borrows: all must end before resize or disposal.
-/// Growth allocates, copies and publishes before freeing the old block. There is no finalizer recovery.
+/// One owner's growable run of reference-free elements: a build's workspace list or table, or a product's storage. An
+/// injected allocator selects native backing, which the collector never sees, so background work that keeps its scratch
+/// here cannot start a collection that pauses every managed thread. Without an allocator (offline callers) the storage is
+/// rented from <see cref="RentedArrays"/>, so a later build reuses it. Spans, references and memory slices are borrows:
+/// all end at the next growth or at disposal. Growth allocates, copies and publishes before releasing the old storage.
+/// There is no finalizer recovery.
 /// </summary>
 /// <typeparam name="T">The unmanaged element.</typeparam>
-/// <param name="allocator">The native allocator, or null for a standalone managed owner.</param>
-/// <param name="observer">The owning lifecycle's byte observer, or null for unmetered storage.</param>
-public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObserver? observer = null) : MemoryManager<T> where T : unmanaged {
+public sealed unsafe class OwnedBuffer<T> : MemoryManager<T> where T : unmanaged {
+    private readonly IAllocator? m_allocator;
+    private readonly IAllocationObserver? m_observer;
     private T* m_pointer;
-    private T[]? m_managed;
+    private T[] m_managed = [];
     private int m_capacity;
     private int m_length;
     private bool m_disposed;
 
-    // The row this buffer's charges name: an allocator's storage is native, a standalone owner's is managed.
-    private MemoryBacking Backing => ((allocator is null) ? MemoryBacking.Managed : MemoryBacking.NativeAllocator);
+    /// <summary>Initializes a new instance of the <see cref="OwnedBuffer{T}"/> class, empty unless a capacity is
+    /// reserved.</summary>
+    /// <param name="allocator">The native allocator, or null for storage rented from <see cref="RentedArrays"/>.</param>
+    /// <param name="observer">The owning lifecycle's byte observer, or null for unmetered storage.</param>
+    /// <param name="capacity">The elements to reserve room for at once, so a list that knows its size does not grow from
+    /// empty.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is negative.</exception>
+    public OwnedBuffer(IAllocator? allocator, IAllocationObserver? observer = null, int capacity = 0) {
+        m_allocator = allocator;
+        m_observer = observer;
+        Reserve(capacity: capacity);
+    }
+
+    // The row this buffer's native charges name; rented storage is charged by RentedArrays, which names its own.
+    private const MemoryBacking NativeBacking = MemoryBacking.NativeAllocator;
 
     /// <summary>Gets the logical element count.</summary>
     public int Length => m_length;
@@ -94,7 +110,7 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
         get {
             if (((uint)index) >= ((uint)m_length)) { throw new ArgumentOutOfRangeException(paramName: nameof(index)); }
             if (m_pointer is not null) { return ref m_pointer[index]; }
-            return ref m_managed![index];
+            return ref m_managed[index];
         }
     }
 
@@ -103,7 +119,16 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
     /// <inheritdoc/>
     public override Span<T> GetSpan() {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        return ((allocator is null) ? m_managed.AsSpan(length: m_length, start: 0) : new Span<T>(length: m_length, pointer: m_pointer));
+        return ((m_allocator is null) ? m_managed.AsSpan(length: m_length, start: 0) : new Span<T>(length: m_length, pointer: m_pointer));
+    }
+    /// <summary>Makes room for at least <paramref name="capacity"/> elements, preserving the contents and the length.</summary>
+    /// <param name="capacity">The fewest elements the storage holds afterward.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is negative.</exception>
+    /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
+    public void Reserve(int capacity) {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ArgumentOutOfRangeException.ThrowIfNegative(capacity);
+        if (capacity > m_capacity) { Grow(capacity: capacity, preserve: true); }
     }
     /// <summary>Changes the logical length, preserving existing entries and optionally clearing new entries.</summary>
     /// <param name="length">The nonnegative logical element count.</param>
@@ -113,55 +138,48 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
     public void Resize(int length, bool clear = true, bool preserve = true) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
         ArgumentOutOfRangeException.ThrowIfNegative(length);
-        if (length > m_capacity) {
-            var bytes = checked((((long)length) * sizeof(T)));
-            var oldBytes = ((long)m_capacity) * sizeof(T);
-            observer?.Acquire(bytes, Backing);
-            try {
-                if (allocator is null) {
-                    var replacement = new T[length];
-                    if (preserve) { GetSpan().CopyTo(replacement); }
-                    m_managed = replacement;
-                } else {
-                    var candidate = (T*)allocator.Allocate(checked((nuint)bytes));
-                    if (candidate is null) { throw new OutOfMemoryException(message: $"Cannot allocate {bytes} bytes of {typeof(T).Name} storage."); }
-                    var kept = preserve ? m_length : 0;
-                    new ReadOnlySpan<T>(m_pointer, kept).CopyTo(new Span<T>(candidate, length));
-                    if (clear) { new Span<T>(candidate + kept, length - kept).Clear(); }
-                    allocator.Free(ptr: m_pointer);
-                    m_pointer = candidate;
-                }
-            } catch {
-                observer?.Change(backing: Backing, bytes: -bytes);
-                throw;
-            }
-            m_capacity = m_length = length;
-            observer?.Change(backing: Backing, bytes: -oldBytes);
-        } else {
-            if (!preserve) { m_length = 0; }
-            if (clear && (length > m_length)) {
-                if (allocator is null) { m_managed.AsSpan(length: (length - m_length), start: m_length).Clear(); } else { new Span<T>(length: (length - m_length), pointer: (m_pointer + m_length)).Clear(); }
-            }
-            m_length = length;
-        }
+        if (!preserve) { m_length = 0; }
+        if (length > m_capacity) { Grow(capacity: length, preserve: preserve); }
+        if (clear && (length > m_length)) { Storage(start: m_length, length: (length - m_length)).Clear(); }
+        m_length = length;
     }
     /// <summary>Appends an element after the logical contents, doubling the capacity (to at least sixteen elements) when it
     /// is full, so a run of appends allocates and copies a geometric series rather than once each. The growth preserves the
     /// contents; every earlier borrow ends at the call.</summary>
     /// <param name="item">The element.</param>
     /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
-    public void Append(T item) {
+    public void Add(T item) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        if (m_length == m_capacity) {
-            var length = m_length;
-
-            Resize(length: ((int)Math.Min(val1: Math.Max(val1: 16L, val2: (2L * m_capacity)), val2: Array.MaxLength)), clear: false);
-            m_length = length;
-            if (m_length == m_capacity) { throw new OutOfMemoryException(message: $"Cannot grow {typeof(T).Name} storage past {m_capacity} elements."); }
-        }
-        if (m_pointer is not null) { m_pointer[m_length] = item; } else { m_managed![m_length] = item; }
+        if (m_length == m_capacity) { Grow(capacity: Doubled(required: (m_length + 1)), preserve: true); }
+        if (m_pointer is not null) { m_pointer[m_length] = item; } else { m_managed[m_length] = item; }
         m_length++;
     }
+    /// <summary>Appends elements after the logical contents, growing geometrically when they do not fit.</summary>
+    /// <param name="items">The elements, borrowed through the copy; never a borrow of this buffer.</param>
+    /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
+    public void AddRange(ReadOnlySpan<T> items) => items.CopyTo(destination: Extend(count: items.Length));
+    /// <summary>Appends elements of unspecified value and returns them, growing geometrically when they do not fit.</summary>
+    /// <param name="count">The number of elements to append.</param>
+    /// <returns>The appended elements, a borrow that ends at the next growth or at disposal.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
+    /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
+    public Span<T> Extend(int count) {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: count);
+        var required = checked((m_length + count));
+
+        if (required > m_capacity) { Grow(capacity: Doubled(required: required), preserve: true); }
+
+        var appended = Storage(start: m_length, length: count);
+
+        m_length = required;
+        return appended;
+    }
+    /// <summary>Empties the logical contents, keeping the storage.</summary>
+    public void Clear() => m_length = 0;
+    /// <summary>Copies the logical contents into a new managed array of exactly their count.</summary>
+    /// <returns>The copy; the shared empty array when the buffer is empty.</returns>
+    public T[] ToArray() => GetSpan().ToArray();
     /// <summary>Frees the storage after every borrow has ended, keeping the owner usable: its length and capacity become
     /// zero, a span of a memory view taken earlier throws <see cref="ArgumentOutOfRangeException"/> as one past the
     /// owner's length does, and a later <see cref="Resize"/> allocates again, after which those views read the new
@@ -170,15 +188,6 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
     public void Free() {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
         FreeStorage();
-    }
-    private void FreeStorage() {
-        var bytes = checked((((long)m_capacity) * sizeof(T)));
-
-        if (allocator is not null) { allocator.Free(ptr: m_pointer); }
-        m_managed = null;
-        m_pointer = null;
-        m_capacity = m_length = 0;
-        observer?.Change(backing: Backing, bytes: -bytes);
     }
     /// <summary>Replaces the logical contents after earlier borrows have ended.</summary>
     /// <param name="source">The source elements, borrowed through the copy.</param>
@@ -190,7 +199,7 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
     public override MemoryHandle Pin(int elementIndex = 0) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(((uint)elementIndex), ((uint)m_length));
-        if (allocator is null) { return m_managed.AsMemory(length: (m_length - elementIndex), start: elementIndex).Pin(); }
+        if (m_allocator is null) { return m_managed.AsMemory(length: (m_length - elementIndex), start: elementIndex).Pin(); }
         return new MemoryHandle((m_pointer + elementIndex));
     }
     /// <inheritdoc/>
@@ -205,4 +214,61 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
 
     /// <summary>Releases the owned storage after its last borrow ends.</summary>
     public void Dispose() => Dispose(disposing: true);
+
+    // The capacity a growth to `required` elements takes: double the current, at least sixteen, within the array limit.
+    private int Doubled(int required) {
+        var capacity = ArrayCapacity.Grown(current: m_capacity, required: required);
+
+        if (capacity < required) { throw new OutOfMemoryException(message: $"Cannot grow {typeof(T).Name} storage past {m_capacity} elements."); }
+        return capacity;
+    }
+    // Elements of the storage past the logical length are part of it; only the length bounds what callers borrow.
+    private Span<T> Storage(int start, int length) =>
+        ((m_allocator is null) ? m_managed.AsSpan(start: start, length: length) : new Span<T>(length: length, pointer: (m_pointer + start)));
+    // Replaces the storage with room for at least `capacity` elements, carrying the logical contents when `preserve`.
+    private void Grow(int capacity, bool preserve) {
+        var kept = (preserve ? m_length : 0);
+
+        if (m_allocator is null) {
+            m_managed = RentedArrays.Grow(array: m_managed, keep: kept, minimumLength: capacity, owner: m_observer);
+            m_capacity = m_managed.Length;
+            return;
+        }
+
+        var bytes = checked((((long)capacity) * sizeof(T)));
+        var oldBytes = (((long)m_capacity) * sizeof(T));
+
+        m_observer?.Acquire(bytes, NativeBacking);
+        // A reallocation may extend the block in place; one that carries nothing frees first, so the peak is one block.
+        T* candidate;
+
+        if (kept > 0) {
+            candidate = (T*)m_allocator.Reallocate(ptr: m_pointer, newSize: checked((nuint)bytes));
+        } else {
+            m_allocator.Free(ptr: m_pointer);
+            m_pointer = null;
+            m_capacity = 0;
+            m_observer?.Change(backing: NativeBacking, bytes: -oldBytes);
+            oldBytes = 0;
+            candidate = (T*)m_allocator.Allocate(checked((nuint)bytes));
+        }
+        if (candidate is null) {
+            m_observer?.Change(backing: NativeBacking, bytes: -bytes);
+            throw new OutOfMemoryException(message: $"Cannot allocate {bytes} bytes of {typeof(T).Name} storage.");
+        }
+        m_pointer = candidate;
+        m_capacity = capacity;
+        m_observer?.Change(backing: NativeBacking, bytes: -oldBytes);
+    }
+    private void FreeStorage() {
+        if (m_allocator is null) {
+            RentedArrays.Return(array: m_managed, owner: m_observer);
+            m_managed = [];
+        } else {
+            m_allocator.Free(ptr: m_pointer);
+            m_observer?.Change(backing: NativeBacking, bytes: -checked((((long)m_capacity) * sizeof(T))));
+            m_pointer = null;
+        }
+        m_capacity = m_length = 0;
+    }
 }

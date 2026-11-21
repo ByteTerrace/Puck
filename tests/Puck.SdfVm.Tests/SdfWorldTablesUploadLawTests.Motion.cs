@@ -181,11 +181,17 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         ]);
         Assert.Equal(expected: new[] { second, third }, actual: PreviousMatrices(rig: rig, draws: 2));
     }
-    // The previous mesh table holds matrices at a compact 16-word stride.
+    // The previous mesh table holds a draw with no frame slot's affine rows at the compact pose stride.
     private static Matrix4x4[] PreviousMatrices(Rig rig, int draws) {
-        var records = rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(draws * SdfMeshRecord.MatrixWords * sizeof(uint))));
+        var words = MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(draws * SdfMeshRecord.PoseWords * sizeof(uint))))).ToArray();
+        var matrices = new Matrix4x4[draws];
 
-        return [.. Enumerable.Range(count: draws, start: 0).Select(selector: draw =>
-            MemoryMarshal.Read<Matrix4x4>(source: records.AsSpan(length: 64, start: (draw * SdfMeshRecord.MatrixWords * sizeof(uint)))))];
+        for (var draw = 0; (draw < draws); draw++) {
+            var r = words.AsSpan(length: SdfMeshRecord.PoseWords, start: (draw * SdfMeshRecord.PoseWords));
+
+            matrices[draw] = new Matrix4x4(r[0], r[1], r[2], 0f, r[3], r[4], r[5], 0f, r[6], r[7], r[8], 0f, r[9], r[10], r[11], 1f);
+        }
+
+        return matrices;
     }
 }

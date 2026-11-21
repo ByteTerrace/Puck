@@ -360,8 +360,18 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     public bool Glass { get; init; }
     /// <summary>Gets the dynamic-transform slot whose frame the mesh's object space is, or <see langword="null"/> for a
     /// mesh in no slot's frame: the shading places a material's layers in that frame and reads its lanes, as it does for
-    /// a field hit of a shape riding the slot.</summary>
+    /// a field hit of a shape riding the slot. A draw with a frame slot rides it (<see cref="RidesSlot"/>): its
+    /// <see cref="ObjectToWorld"/> is the slot's pose in the frame at <see cref="SlotScale"/>, scale first, then the
+    /// slot's orientation and position, which is what its staged record keeps instead of the matrix, so a producer that
+    /// names a slot builds the matrix from that slot's transform in the same frame.</summary>
     public int? FrameSlot { get; init; }
+    /// <summary>Gets whether the draw rides its frame slot (<see cref="FrameSlot"/>): its record holds its scale and
+    /// not its matrix, and the kernels pose it from the slot's row, so the draw moving with its slot changes no
+    /// record.</summary>
+    public bool RidesSlot => (FrameSlot is >= 0);
+    /// <summary>Gets the uniform scale of the draw's matrix, its first row's length: for a draw riding its slot, the
+    /// scale its record holds and its slot's pose is taken at.</summary>
+    public float SlotScale => new Vector3(x: ObjectToWorld.M11, y: ObjectToWorld.M12, z: ObjectToWorld.M13).Length();
 
     /// <summary>Gets whether materials use the root/member frame. False keeps material coordinates in world space,
     /// independently of the root slot used by skinning and portal membership.</summary>
@@ -400,7 +410,8 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// <returns>Whether either draw places the same caster.</returns>
     public bool SameCaster(in SdfMeshDraw other) => Same(other: in other, groupMesh: true);
     /// <summary>Returns how a draw's staged content differs from another's: not at all, in its
-    /// <see cref="ObjectToWorld"/> alone, or elsewhere, comparing exact bits as <see cref="SameStagedContent"/> does.</summary>
+    /// <see cref="ObjectToWorld"/> alone, in the pose of a slot both ride at one scale, or elsewhere, comparing exact bits
+    /// as <see cref="SameStagedContent"/> does.</summary>
     /// <param name="other">The draw to compare, usually the one staged before.</param>
     /// <returns>The difference.</returns>
     public SdfMeshDrawDifference StagedDifference(in SdfMeshDraw other) {
@@ -411,7 +422,13 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
         var leftMatrix = this.ObjectToWorld;
         var rightMatrix = other.ObjectToWorld;
 
-        return (Bitwise.Equal(left: in leftMatrix, right: in rightMatrix) ? SdfMeshDrawDifference.None : SdfMeshDrawDifference.Matrix);
+        if (Bitwise.Equal(left: in leftMatrix, right: in rightMatrix)) {
+            return SdfMeshDrawDifference.None;
+        }
+
+        return ((RidesSlot && (BitConverter.SingleToUInt32Bits(value: SlotScale) == BitConverter.SingleToUInt32Bits(value: other.SlotScale)))
+            ? SdfMeshDrawDifference.Slot
+            : SdfMeshDrawDifference.Matrix);
     }
 
     private bool Same(in SdfMeshDraw other, bool groupMesh) {
@@ -463,17 +480,20 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
 public enum SdfMeshDrawDifference : byte {
     /// <summary>The draws stage the same content.</summary>
     None,
-    /// <summary>The draws differ in their object-to-world matrix alone: the same mesh, identities, flags, carry and clip.</summary>
+    /// <summary>The draws differ in their object-to-world matrix alone: the same mesh, identities, flags, carry and clip,
+    /// and a record that holds the matrix.</summary>
     Matrix,
+    /// <summary>The draws ride one frame slot at one scale and differ only in the slot's pose: their records are the
+    /// same, since a draw riding its slot is posed from the slot's row.</summary>
+    Slot,
     /// <summary>The draws differ in something besides their matrix.</summary>
     Content,
 }
 /// <summary>The CPU work needed to update one retained packed draw, independently of device upload deltas.</summary>
 /// <param name="PackedWords">The record words assigned; retained equal words are not assigned.</param>
-/// <param name="NormalComputed">Whether the normal matrix was derived.</param>
-/// <param name="SelectionComputed">Whether the world-space selection box was derived.</param>
+/// <param name="SelectionComputed">Whether the selection box was derived.</param>
 /// <param name="ChangedWords">One bit per word that changed in the retained record.</param>
-public readonly record struct SdfMeshDrawPacking(int PackedWords, bool NormalComputed, bool SelectionComputed, ulong ChangedWords);
+public readonly record struct SdfMeshDrawPacking(int PackedWords, bool SelectionComputed, ulong ChangedWords);
 /// <summary>
 /// The raw word layout of the region a frame's mesh draws upload into, read as a structured buffer of uints so every
 /// backend reads the same word offsets: first one record a draw (<see cref="SdfMeshRecord.DrawWords"/> words), then each distinct
@@ -486,24 +506,16 @@ public readonly record struct SdfMeshDrawPacking(int PackedWords, bool NormalCom
 /// past a reserve of draw records, where it stays until the arena packs again (<see cref="SdfMeshRegionArena"/>). A record names
 /// its mesh's words either way.
 /// <para>
-/// A draw's record is its row-vector object-to-world matrix, row by row (words 0 to 15, <c>M11</c> first), then its
-/// material, then its mesh: the word its first index sits at, its index count, the word its first vertex sits at, its
-/// attribute flags (<see cref="SdfMeshRecord.NormalsFlag"/>, <see cref="SdfMeshRecord.MaterialsFlag"/>), and the word its first triangle material
-/// sits at (words 16 to 21), then its normal matrix, the inverse transpose of the matrix's upper 3×3, row by row (words
-/// 22 to 30), which carries an object-space normal to world space under any scale, nonuniform and mirrored included
-/// (a singular matrix, which draws no area, writes its own upper 3×3 instead). Word 31 is the dynamic-transform slot
-/// whose frame the mesh is stored in (<see cref="SdfMeshDraw.FrameSlot"/>), or -1. Its word offsets are counted from
-/// the region's start, so a reader needs nothing but the record to find a draw's triangles: its index <c>k</c> is the
-/// word at <c>indexWord + k</c>, and names the vertex whose six words start at <c>vertexWord + (6 * index)</c>. A
-/// vertex without a normal holds zeros there, and the flags say which a mesh has. Word 32 is the word a mesh with
-/// members (<see cref="SdfMeshRecord.SkinFlag"/>) keeps them at, past its indices: their count, then <see cref="SdfMeshRecord.MemberWords"/> words a
-/// member (its slot offset, then its position and orientation), then SkinVertexWords per vertex carrying its owners, share and gradient. Words 33 to 40
-/// are the draw's carry (<see cref="SdfMeshDraw.CarryRotation"/> as x, y, z, w, then
-/// <see cref="SdfMeshDraw.CarryTranslation"/> and <see cref="SdfMeshDraw.CarryScale"/>), which every world position and
-/// normal the draw resolves goes through last, words 41 to 44 its clip plane (<see cref="SdfMeshDraw.ClipPlane"/>), and
-/// words 45 and 46 the first triangle of its mesh's first and second coarser levels (<see cref="SdfMesh.LevelOf"/>), which a draw
-/// of a level adds to the triangle its vertex id names. The record is whole words, so it has no padding a
-/// structured-buffer reader could disagree on.
+/// A draw's record is <see cref="SdfMeshRecord"/>'s layout. Its word offsets are counted from the region's start, so a
+/// reader needs nothing but the record to find a draw's triangles: its index <c>k</c> is the word at
+/// <c>indexWord + k</c>, and names the vertex whose six words start at <c>vertexWord + (6 * index)</c>. A vertex without a
+/// normal holds zeros there, and the flags say which a mesh has. A mesh with members (<see cref="SdfMeshRecord.SkinFlag"/>)
+/// keeps them past its indices: their count, then <see cref="SdfMeshRecord.MemberWords"/> words a member (its slot
+/// offset, then its position and orientation), then <see cref="SdfMeshRecord.SkinVertexWords"/> per vertex carrying its
+/// owners, share and gradient. A draw riding its frame slot (<see cref="SdfMeshDraw.RidesSlot"/>) holds its scale as its
+/// pose and its box in the slot's frame (<see cref="SdfMeshRecord.SlotBoxFlag"/>); any other holds its affine matrix and
+/// its world box. No record holds a normal matrix: the kernels derive it from the pose. The record is whole words, so it
+/// has no padding a structured-buffer reader could disagree on.
 /// </para>
 /// </summary>
 public static class SdfMeshRegion {
@@ -515,14 +527,19 @@ public static class SdfMeshRegion {
         record[(SdfMeshRecord.SelectionWord + 3)] = SdfMeshRecord.AbsentFlag;
     }
     /// <summary>Reads back what a packed record's selection words say of its draw: whether a pass may draw it at all,
-    /// the box it is selected by, and whether it is glass. The box is the one <see cref="WriteDraw"/> wrote
-    /// (<see cref="SdfMeshBox.TryOf"/>), so a reader judges a draw by the same box every pass selects it by.</summary>
+    /// the world box it is selected by, and whether it is glass. The box is the one <see cref="WriteDraw"/> wrote
+    /// (<see cref="SdfMeshBox.TryOf"/>), or, for a draw riding its frame slot (<see cref="SdfMeshRecord.SlotBoxFlag"/>),
+    /// the box the kernels derive from the slot's row (<see cref="SdfMeshBox.Ridden"/>), so a reader judges a draw by the
+    /// same box every pass selects it by under the same transforms.</summary>
     /// <param name="record">The record, <see cref="SdfMeshRecord.DrawWords"/> words that a write of this type packed.</param>
+    /// <param name="transforms">The frame's dynamic transforms, as the region's transform rows hold them.</param>
     /// <param name="box">The draw's box, or <see langword="null"/> for a draw no host box bounds, which every pass
-    /// draws.</param>
+    /// draws, and for a slot outside <paramref name="transforms"/>.</param>
     /// <param name="glass">Whether the draw is glass (<see cref="SdfMeshDraw.Glass"/>).</param>
     /// <returns><see langword="false"/> for an absent record (<see cref="WriteAbsent"/>), which no pass draws.</returns>
-    public static bool ReadSelection(ReadOnlySpan<uint> record, out SdfMeshBox? box, out bool glass) {
+    /// <exception cref="ArgumentNullException"><paramref name="transforms"/> is <see langword="null"/>.</exception>
+    public static bool ReadSelection(ReadOnlySpan<uint> record, IReadOnlyList<DynamicTransform> transforms, out SdfMeshBox? box, out bool glass) {
+        ArgumentNullException.ThrowIfNull(argument: transforms);
         var selection = record.Slice(length: SelectionWords, start: SdfMeshRecord.SelectionWord);
         var flags = selection[3];
 
@@ -531,28 +548,51 @@ public static class SdfMeshRegion {
         if ((flags & SdfMeshRecord.AbsentFlag) != 0u) {
             return false;
         }
-        if ((flags & 1u) == 0u) {
-            box = new SdfMeshBox(
-                Center: ReadSelectionVector(words: selection, offset: 0),
-                HalfX: ReadSelectionVector(words: selection, offset: 4),
-                HalfY: ReadSelectionVector(words: selection, offset: 8),
-                HalfZ: ReadSelectionVector(words: selection, offset: 12)
-            ) {
-                Stretch = BitConverter.UInt32BitsToSingle(value: selection[7]),
-            };
+        if ((flags & 1u) != 0u) {
+            return true;
         }
+        if ((flags & SdfMeshRecord.SlotBoxFlag) != 0u) {
+            var slot = unchecked((int)record[SdfMeshRecord.FrameSlotWord]);
+
+            if ((slot >= 0) && (slot < transforms.Count)) {
+                box = SdfMeshBox.Ridden(
+                    carryRotation: new Quaternion(x: Float(words: record, word: SdfMeshRecord.CarryRotationWord), y: Float(words: record, word: (SdfMeshRecord.CarryRotationWord + 1)),
+                        z: Float(words: record, word: (SdfMeshRecord.CarryRotationWord + 2)), w: Float(words: record, word: (SdfMeshRecord.CarryRotationWord + 3))),
+                    carryScale: Float(words: record, word: SdfMeshRecord.CarryScaleWord),
+                    carryTranslation: ReadSelectionVector(offset: SdfMeshRecord.CarryTranslationWord, words: record),
+                    center: ReadSelectionVector(words: selection, offset: 0),
+                    half: new Vector3(x: BitConverter.UInt32BitsToSingle(value: selection[4]), y: BitConverter.UInt32BitsToSingle(value: selection[9]),
+                        z: BitConverter.UInt32BitsToSingle(value: selection[14])),
+                    scale: Float(words: record, word: SdfMeshRecord.ScaleWord),
+                    slot: transforms[slot]
+                );
+            }
+
+            return true;
+        }
+        box = new SdfMeshBox(
+            Center: ReadSelectionVector(words: selection, offset: 0),
+            HalfX: ReadSelectionVector(words: selection, offset: 4),
+            HalfY: ReadSelectionVector(words: selection, offset: 8),
+            HalfZ: ReadSelectionVector(words: selection, offset: 12)
+        ) {
+            Stretch = BitConverter.UInt32BitsToSingle(value: selection[7]),
+        };
 
         return true;
+
+        static float Float(ReadOnlySpan<uint> words, int word) => BitConverter.UInt32BitsToSingle(value: words[word]);
     }
     /// <summary>The words of a record's selection rows, from <see cref="SdfMeshRecord.SelectionWord"/>.</summary>
     public const int SelectionWords = 16;
     /// <summary>Writes the box a draw is selected by into a record's selection words, as <see cref="ReadSelection"/> reads
-    /// it, leaving every other selection word as it stands: a box's center and half axes and its stretch, or the unboxed
-    /// flag for a draw no host box bounds, which every pass draws. A skinned draw's record takes its host bound
+    /// it, leaving every other selection word as it stands: a world box's center and half axes and its stretch, or the
+    /// unboxed flag for a draw no host box bounds, which every pass draws. A skinned draw's record takes its host bound
     /// (<see cref="SdfMeshBox.TryOfSkin"/>) here, whenever its members move.</summary>
     /// <param name="selection">The record's <see cref="SelectionWords"/> selection words.</param>
     /// <param name="box">The box, or <see langword="null"/> for none.</param>
     public static void WriteSelectionBox(Span<uint> selection, in SdfMeshBox? box) {
+        selection[3] &= ~SdfMeshRecord.SlotBoxFlag;
         if (box is not { } bounded) {
             selection[3] |= 1u;
 
@@ -804,9 +844,10 @@ public static class SdfMeshRegion {
     public static SdfMeshDrawPacking WriteDrawIncremental(in SdfMeshDraw draw, in SdfMeshDraw previous, SdfMeshRegionMesh placement, uint generation, Span<uint> record) =>
         WriteDrawCore(draw: in draw, generation: generation, placement: placement, previous: in previous, record: record, retained: true);
     /// <summary>Updates a retained packed draw whose draw differs from the one it holds in its matrix alone
-    /// (<see cref="SdfMeshDrawDifference.Matrix"/>): the matrix, the normal matrix, the selection box and the selection
-    /// flags, the only words such a draw changes. The record must still contain the full packing of
-    /// <paramref name="previous"/>, so it ends as <see cref="WriteDrawIncremental"/> would leave it.</summary>
+    /// (<see cref="SdfMeshDrawDifference.Matrix"/>): the pose words, the selection box and the selection flags, the only
+    /// words such a draw changes. The record must still contain the full packing of <paramref name="previous"/>, so it
+    /// ends as <see cref="WriteDrawIncremental"/> would leave it. A draw riding its slot whose pose alone moved
+    /// (<see cref="SdfMeshDrawDifference.Slot"/>) changes no word.</summary>
     /// <param name="draw">The current draw.</param>
     /// <param name="previous">The draw whose complete record is retained; it differs from <paramref name="draw"/> only
     /// in <see cref="SdfMeshDraw.ObjectToWorld"/>.</param>
@@ -814,9 +855,9 @@ public static class SdfMeshRegion {
     /// <returns>The CPU words assigned and the expensive field derivations performed.</returns>
     public static SdfMeshDrawPacking WriteDrawPose(in SdfMeshDraw draw, in SdfMeshDraw previous, Span<uint> record) {
         var writer = new DrawRecordWriter(record[..SdfMeshRecord.DrawWords], true);
-        var (normalChanged, boxChanged) = WritePose(draw: in draw, meshChanged: false, previous: in previous, record: record, retained: true, writer: ref writer);
+        var boxChanged = WritePose(draw: in draw, meshChanged: false, previous: in previous, record: record, retained: true, writer: ref writer);
 
-        return new(ChangedWords: writer.ChangedWords, NormalComputed: normalChanged, PackedWords: writer.PackedWords, SelectionComputed: boxChanged);
+        return new(ChangedWords: writer.ChangedWords, PackedWords: writer.PackedWords, SelectionComputed: boxChanged);
     }
 
     // Full and retained packing share every field writer. Exact input bits are the dependency key: numeric equality
@@ -833,7 +874,7 @@ public static class SdfMeshRegion {
         var shift = draw.CarryTranslation;
         var clip = draw.ClipPlane;
         var writer = new DrawRecordWriter(record[..SdfMeshRecord.DrawWords], retained);
-        var (normalChanged, boxChanged) = WritePose(draw: in draw, meshChanged: (!retained || !ReferenceEquals(objA: mesh, objB: previous.Mesh)), previous: in previous,
+        var boxChanged = WritePose(draw: in draw, meshChanged: (!retained || !ReferenceEquals(objA: mesh, objB: previous.Mesh)), previous: in previous,
             record: record, retained: retained, writer: ref writer);
 
         writer[SdfMeshRecord.MaterialWord] = unchecked((uint)material);
@@ -863,33 +904,54 @@ public static class SdfMeshRegion {
         writer[(SdfMeshRecord.SelectionWord + 11)] = generation;
         writer[(SdfMeshRecord.SelectionWord + 15)] = ((uint)mesh.Levels.Count);
 
-        return new(ChangedWords: writer.ChangedWords, NormalComputed: normalChanged, PackedWords: writer.PackedWords, SelectionComputed: boxChanged);
+        return new(ChangedWords: writer.ChangedWords, PackedWords: writer.PackedWords, SelectionComputed: boxChanged);
     }
-    // The words a draw's placement derives: its matrix, its normal matrix, its world selection box and the selection
-    // flags (bounded, glass, enclosing, dynamic), each written only where its inputs' bits moved in a retained record.
-    // Returns whether the normal matrix and the box were derived.
-    private static (bool NormalChanged, bool BoxChanged) WritePose(in SdfMeshDraw draw, in SdfMeshDraw previous, Span<uint> record, bool retained, bool meshChanged, ref DrawRecordWriter writer) {
+    // The words a draw's placement derives: its pose words, its selection box and the selection flags (bounded, glass,
+    // enclosing, dynamic, slot box), each written only where its inputs' bits moved in a retained record. A draw riding
+    // its slot writes its scale and its box in the slot's frame, which the slot moving leaves standing; any other writes
+    // its matrix and its world box. Returns whether the box was derived.
+    private static bool WritePose(in SdfMeshDraw draw, in SdfMeshDraw previous, Span<uint> record, bool retained, bool meshChanged, ref DrawRecordWriter writer) {
+        var rides = draw.RidesSlot;
+        var modeChanged = (!retained || (rides != previous.RidesSlot));
         var matrix = draw.ObjectToWorld;
         var previousMatrix = previous.ObjectToWorld;
+        var scale = draw.SlotScale;
         var carry = draw.CarryRotation;
         var previousCarry = previous.CarryRotation;
         var shift = draw.CarryTranslation;
         var previousShift = previous.CarryTranslation;
         var clip = draw.ClipPlane;
         var previousClip = previous.ClipPlane;
-        var matrixChanged = (!retained || !Bitwise.Equal(left: in matrix, right: in previousMatrix));
-        var normalChanged = (!retained || !SameNormalBasis(left: in matrix, right: in previousMatrix));
-        var boxChanged = (meshChanged || normalChanged || (draw.Displacement != previous.Displacement) || !SameDrawTranslation(left: in matrix, right: in previousMatrix) || !Bitwise.Equal(left: in carry, right: in previousCarry) ||
-            !Bitwise.Equal(left: in shift, right: in previousShift) ||
+        var carryChanged = (!Bitwise.Equal(left: in carry, right: in previousCarry) || !Bitwise.Equal(left: in shift, right: in previousShift) ||
             (BitConverter.SingleToUInt32Bits(value: draw.CarryScale) != BitConverter.SingleToUInt32Bits(value: previous.CarryScale)));
+        // Whether the map a normal goes through changed (the winding the enclosing flag reads), and the pose words' inputs.
+        bool basisChanged;
+        bool poseChanged;
+        bool boxChanged;
 
-        if (matrixChanged) { WriteDrawMatrix(matrix: in matrix, record: ref writer); }
-        if (normalChanged) { WriteNormalMatrix(matrix: matrix, record: ref writer); }
+        if (rides) {
+            basisChanged = (modeChanged || (BitConverter.SingleToUInt32Bits(value: scale) != BitConverter.SingleToUInt32Bits(value: previous.SlotScale)));
+            poseChanged = basisChanged;
+            boxChanged = (meshChanged || basisChanged || carryChanged || (draw.Displacement != previous.Displacement));
+        } else {
+            basisChanged = (modeChanged || !SameNormalBasis(left: in matrix, right: in previousMatrix));
+            poseChanged = (modeChanged || !Bitwise.Equal(left: in matrix, right: in previousMatrix));
+            boxChanged = (meshChanged || basisChanged || carryChanged || (draw.Displacement != previous.Displacement) || !SameDrawTranslation(left: in matrix, right: in previousMatrix));
+        }
+        if (poseChanged) { WritePoseWords(matrix: in matrix, record: ref writer, rides: rides, scale: scale); }
 
-        var selection = record.Slice(length: 16, start: SdfMeshRecord.SelectionWord);
+        var selection = record.Slice(length: SelectionWords, start: SdfMeshRecord.SelectionWord);
         var boxed = (retained && ((selection[3] & 1u) == 0u));
 
-        if (boxChanged) {
+        if (boxChanged && rides) {
+            // The box in the slot's frame, as the kernels place it (sdfSelectionBox) and the host reads it (ReadSelection).
+            boxed = SdfMeshBox.TryOfObject(center: out var center, draw: in draw, half: out var half);
+            WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 0), value: center);
+            WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 4), value: new Vector3(x: half.X, y: 0f, z: 0f));
+            writer[(SdfMeshRecord.SelectionWord + 7)] = BitConverter.SingleToUInt32Bits(value: (scale * MathF.Abs(x: draw.CarryScale)));
+            WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 8), value: new Vector3(x: 0f, y: half.Y, z: 0f));
+            WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 12), value: new Vector3(x: 0f, y: 0f, z: half.Z));
+        } else if (boxChanged) {
             boxed = SdfMeshBox.TryOf(box: out var box, draw: in draw);
             WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 0), value: box.Center);
             WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 4), value: box.HalfX);
@@ -898,14 +960,16 @@ public static class SdfMeshRegion {
             WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 12), value: box.HalfZ);
         }
 
-        var enclosed = ((!meshChanged && !normalChanged && Bitwise.Equal(left: in clip, right: in previousClip))
+        var enclosed = ((!meshChanged && !basisChanged && Bitwise.Equal(left: in clip, right: in previousClip))
             ? ((selection[3] & 4u) != 0u)
             : draw.EnclosesSolid);
+        // A skinned draw's box is a world bound its tables write (WriteSelectionBox), never one in the slot's frame.
+        var slotBox = (rides && boxed && draw.Mesh.Members.IsEmpty);
 
         writer[(SdfMeshRecord.SelectionWord + 3)] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (enclosed ? 4u : 0u) |
-            (draw.IsStatic ? 0u : SdfMeshRecord.DynamicFlag);
+            (draw.IsStatic ? 0u : SdfMeshRecord.DynamicFlag) | (slotBox ? SdfMeshRecord.SlotBoxFlag : 0u);
 
-        return (normalChanged, boxChanged);
+        return boxChanged;
     }
 
     // Every packed write passes this door: a changed-word mask cannot miss an assigned field.
@@ -943,23 +1007,27 @@ public static class SdfMeshRegion {
     private static bool SameDrawTranslation(in Matrix4x4 left, in Matrix4x4 right) =>
         MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in left)).Slice(length: 12, start: 48)
             .SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in right)).Slice(length: 12, start: 48));
-    private static void WriteDrawMatrix(in Matrix4x4 matrix, ref DrawRecordWriter record) {
+    // The pose words (SdfMeshRecord.PoseWords): a draw riding its slot's scale and zeros, or any other's affine rows (the
+    // basis rows, then the translation; the matrix's fourth column is the affine 0, 0, 0, 1 and is not kept).
+    private static void WritePoseWords(in Matrix4x4 matrix, float scale, bool rides, ref DrawRecordWriter record) {
+        if (rides) {
+            record[SdfMeshRecord.ScaleWord] = BitConverter.SingleToUInt32Bits(value: scale);
+            for (var word = (SdfMeshRecord.ScaleWord + 1); (word < SdfMeshRecord.PoseWords); word++) { record[word] = 0u; }
+
+            return;
+        }
         record[0] = BitConverter.SingleToUInt32Bits(value: matrix.M11);
         record[1] = BitConverter.SingleToUInt32Bits(value: matrix.M12);
         record[2] = BitConverter.SingleToUInt32Bits(value: matrix.M13);
-        record[3] = BitConverter.SingleToUInt32Bits(value: matrix.M14);
-        record[4] = BitConverter.SingleToUInt32Bits(value: matrix.M21);
-        record[5] = BitConverter.SingleToUInt32Bits(value: matrix.M22);
-        record[6] = BitConverter.SingleToUInt32Bits(value: matrix.M23);
-        record[7] = BitConverter.SingleToUInt32Bits(value: matrix.M24);
-        record[8] = BitConverter.SingleToUInt32Bits(value: matrix.M31);
-        record[9] = BitConverter.SingleToUInt32Bits(value: matrix.M32);
-        record[10] = BitConverter.SingleToUInt32Bits(value: matrix.M33);
-        record[11] = BitConverter.SingleToUInt32Bits(value: matrix.M34);
-        record[12] = BitConverter.SingleToUInt32Bits(value: matrix.M41);
-        record[13] = BitConverter.SingleToUInt32Bits(value: matrix.M42);
-        record[14] = BitConverter.SingleToUInt32Bits(value: matrix.M43);
-        record[15] = BitConverter.SingleToUInt32Bits(value: matrix.M44);
+        record[3] = BitConverter.SingleToUInt32Bits(value: matrix.M21);
+        record[4] = BitConverter.SingleToUInt32Bits(value: matrix.M22);
+        record[5] = BitConverter.SingleToUInt32Bits(value: matrix.M23);
+        record[6] = BitConverter.SingleToUInt32Bits(value: matrix.M31);
+        record[7] = BitConverter.SingleToUInt32Bits(value: matrix.M32);
+        record[8] = BitConverter.SingleToUInt32Bits(value: matrix.M33);
+        record[9] = BitConverter.SingleToUInt32Bits(value: matrix.M41);
+        record[10] = BitConverter.SingleToUInt32Bits(value: matrix.M42);
+        record[11] = BitConverter.SingleToUInt32Bits(value: matrix.M43);
     }
     private static void WriteSelectionVector(ref DrawRecordWriter words, int offset, Vector3 value) {
         words[(offset + 0)] = BitConverter.SingleToUInt32Bits(value: value.X);
@@ -1083,29 +1151,6 @@ public static class SdfMeshRegion {
                 paramName: nameof(destination)
             );
         }
-    }
-    // A draw's normal matrix: the inverse transpose of its matrix's upper 3×3, row by row, in the row-vector convention
-    // (n_world = n.x row0 + n.y row1 + n.z row2). A singular matrix writes its own upper 3×3.
-    private static void WriteNormalMatrix(Matrix4x4 matrix, ref DrawRecordWriter record) {
-        var upper = new Matrix4x4(
-            m11: matrix.M11, m12: matrix.M12, m13: matrix.M13, m14: 0f,
-            m21: matrix.M21, m22: matrix.M22, m23: matrix.M23, m24: 0f,
-            m31: matrix.M31, m32: matrix.M32, m33: matrix.M33, m34: 0f,
-            m41: 0f, m42: 0f, m43: 0f, m44: 1f
-        );
-        var normal = (Matrix4x4.Invert(matrix: upper, result: out var inverse)
-            ? Matrix4x4.Transpose(matrix: inverse)
-            : upper);
-
-        record[(SdfMeshRecord.NormalMatrixWord + 0)] = BitConverter.SingleToUInt32Bits(value: normal.M11);
-        record[(SdfMeshRecord.NormalMatrixWord + 1)] = BitConverter.SingleToUInt32Bits(value: normal.M12);
-        record[(SdfMeshRecord.NormalMatrixWord + 2)] = BitConverter.SingleToUInt32Bits(value: normal.M13);
-        record[(SdfMeshRecord.NormalMatrixWord + 3)] = BitConverter.SingleToUInt32Bits(value: normal.M21);
-        record[(SdfMeshRecord.NormalMatrixWord + 4)] = BitConverter.SingleToUInt32Bits(value: normal.M22);
-        record[(SdfMeshRecord.NormalMatrixWord + 5)] = BitConverter.SingleToUInt32Bits(value: normal.M23);
-        record[(SdfMeshRecord.NormalMatrixWord + 6)] = BitConverter.SingleToUInt32Bits(value: normal.M31);
-        record[(SdfMeshRecord.NormalMatrixWord + 7)] = BitConverter.SingleToUInt32Bits(value: normal.M32);
-        record[(SdfMeshRecord.NormalMatrixWord + 8)] = BitConverter.SingleToUInt32Bits(value: normal.M33);
     }
 }
 /// <summary>Where one distinct mesh sits in the mesh region, in the words a draw's record names it by, counted from the

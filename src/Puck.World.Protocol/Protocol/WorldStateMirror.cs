@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Numerics;
 using Puck.Abstractions.Counting;
 using Puck.Hosting;
@@ -41,9 +42,13 @@ public enum WorldStateConversion : byte {
 /// <c>.$target</c>.
 /// </para>
 /// <para>
-/// Refresh and apply both run on the thread that pumps the simulation and presents frames, so the mirror takes no
-/// lock. Reads are counted as <c>presentation.mirror.reads</c>, and keyed values resolved as
-/// <c>presentation.mirror.keyed</c>.
+/// Install, refresh and apply run on the thread that presents frames, never while a frame fork it starts is running,
+/// so they take no lock. Inside a frame fork (the pose pack's) many threads read slots at once, and a lease's first
+/// read of a binding acquires its slot there: the slot table's writers (<see cref="Acquire"/>, <see cref="Release"/>,
+/// registration) serialize on one gate, its binding lookups are concurrent maps that readers use without it, and a
+/// slot a reader already holds never moves or changes under it. Reads are counted as
+/// <c>presentation.mirror.reads</c>, and keyed values resolved as <c>presentation.mirror.keyed</c>, each count
+/// interlocked.
 /// </para>
 /// </summary>
 public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
@@ -66,9 +71,13 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
     );
 
     private static readonly WorkKind[] Kinds = [Reads, KeyedResolutions];
-    private readonly Dictionary<string, (bool Parsed, StateBinding Binding)> m_bindingByToken = new(comparer: StringComparer.Ordinal);
+    // Read without a lock beside a frame fork's acquisitions (see the class's thread contract), so both lookups are
+    // concurrent maps; every write to m_slotByBinding runs under m_slotGate.
+    private readonly ConcurrentDictionary<string, (bool Parsed, StateBinding Binding)> m_bindingByToken = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<object, WorldPresentationBinding[]> m_registrations = new(comparer: ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<(StateBinding Binding, WorldStateConversion Conversion), int> m_slotByBinding = [];
+    private readonly ConcurrentDictionary<(StateBinding Binding, WorldStateConversion Conversion), int> m_slotByBinding = new();
+    // Serializes the slot table's writers: an acquisition, a release, a registration and an unregistration.
+    private readonly Lock m_slotGate = new();
 
     private readonly IWorldStateView m_view;
 
@@ -276,39 +285,45 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
     /// <param name="binding">The parsed binding, its key already resolved for the holder.</param>
     /// <param name="conversion">How the consumer converts the cell.</param>
     /// <returns>The slot's index, valid until the holder releases it.</returns>
+    /// <remarks>Callable from the partitions of a frame fork at once (a pose pack's leases acquiring on first sight);
+    /// acquisitions serialize on the slot table's gate.</remarks>
     public int Acquire(in StateBinding binding, WorldStateConversion conversion) {
-        if (!m_slotByBinding.TryGetValue(
-            key: (binding, conversion),
-            value: out var slot
-        )) {
-            slot = Allocate(
-                binding: in binding,
-                conversion: conversion
-            );
+        lock (m_slotGate) {
+            if (!m_slotByBinding.TryGetValue(
+                key: (binding, conversion),
+                value: out var slot
+            )) {
+                slot = Allocate(
+                    binding: in binding,
+                    conversion: conversion
+                );
+            }
+
+            m_slots[slot].Holders++;
+
+            return slot;
         }
-
-        m_slots[slot].Holders++;
-
-        return slot;
     }
     /// <summary>Releases one holder's acquisition of a slot, retiring the slot when no holder remains and no
     /// registration reads it: it stops being read, and its index is free for a later binding.</summary>
     /// <param name="slot">The slot's index, from <see cref="Acquire"/>.</param>
     /// <exception cref="InvalidOperationException">The slot has no holder to release.</exception>
     public void Release(int slot) {
-        ref var entry = ref m_slots[slot];
+        lock (m_slotGate) {
+            ref var entry = ref m_slots[slot];
 
-        if (entry.Holders <= 0) {
-            throw new InvalidOperationException(message: $"State mirror slot {slot} has no holder to release.");
-        }
+            if (entry.Holders <= 0) {
+                throw new InvalidOperationException(message: $"State mirror slot {slot} has no holder to release.");
+            }
 
-        entry.Holders--;
+            entry.Holders--;
 
-        if (
-            (entry.Holders == 0) &&
-            (entry.Registrations == 0)
-        ) {
-            Retire(slot: slot);
+            if (
+                (entry.Holders == 0) &&
+                (entry.Registrations == 0)
+            ) {
+                Retire(slot: slot);
+            }
         }
     }
     /// <summary>Resolves every slot to its row ordinal in the newly installed document, registers every binding the
@@ -585,7 +600,7 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
     /// <returns><see langword="true"/> when the clock is named and its phase reads.</returns>
     public bool TryPhase(string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldClock? clock, out double phase, bool delivered = false) {
         phase = 0d;
-        m_keyed.Increment();
+        m_keyed.IncrementShared();
 
         if (!delivered) { return TryReadPhase(clock: out clock, name: name, phase: out phase); }
 
@@ -791,7 +806,7 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
     /// <returns>The reduced integral.</returns>
     public double Integrate(in BindableScalar rate, double modulus) {
         if (rate.Keys is { } keys) {
-            m_keyed.Increment();
+            m_keyed.IncrementShared();
 
             return ((m_view.Manifest.TryClock(
                 clock: out var clock,
@@ -822,7 +837,7 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
     /// <returns>The reduced integral.</returns>
     public Vector2 Integrate(in BindableVector2 rate, double modulus) {
         if (rate.Keys is { } keys) {
-            m_keyed.Increment();
+            m_keyed.IncrementShared();
 
             if (!m_view.Manifest.TryClock(
                 clock: out var clock,
@@ -908,6 +923,8 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
     // registration moves the generation. read says whether a new slot is read now or by the install's refresh that
     // follows.
     private void Mark(ReadOnlySpan<WorldPresentationBinding> bindings, bool read) {
+        using var gate = m_slotGate.EnterScope();
+
         foreach (ref readonly var entry in bindings) {
             if (!m_slotByBinding.TryGetValue(
                 key: (entry.Binding, entry.Conversion),
@@ -928,6 +945,8 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
     // Counts one registration fewer of each binding: a slot left with none moves the generation, and retires unless a
     // holder reads it.
     private void Unmark(ReadOnlySpan<WorldPresentationBinding> bindings) {
+        using var gate = m_slotGate.EnterScope();
+
         foreach (ref readonly var entry in bindings) {
             if (!m_slotByBinding.TryGetValue(
                 key: (entry.Binding, entry.Conversion),
@@ -1067,7 +1086,7 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
             }
         }
 
-        _ = m_slotByBinding.Remove(key: (entry.Binding, entry.Conversion));
+        _ = m_slotByBinding.TryRemove(key: (entry.Binding, entry.Conversion), value: out _);
         Remove(
             count: ref m_movingCount,
             list: m_moving,
@@ -1195,7 +1214,7 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
             sample = default;
         }
 
-        m_reads.Increment();
+        m_reads.IncrementShared();
         entry.Sample = sample;
         entry.PreviousValue = (hadNumber ? previousValue : sample.Value);
         entry.HasNumber = WorldStateReader.TryNumber(
@@ -1261,7 +1280,7 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
             changed = true;
         }
 
-        m_reads.Increment();
+        m_reads.IncrementShared();
         entry.HasNumber = (entry.Ordinal >= 0);
         entry.Interpolates = false;
         entry.Sample = new WorldStateSample(

@@ -266,6 +266,7 @@ public static partial class BenchmarkCommand {
             ExitAfterSeconds = WorldLaunch.Backstop(TimeSpan.FromSeconds(timeout + BudgetGraceSeconds)),
             Shape = shape,
             StateDirectory = Path.Combine(directory, "state"),
+            Timing = true,
             World = world,
         };
 

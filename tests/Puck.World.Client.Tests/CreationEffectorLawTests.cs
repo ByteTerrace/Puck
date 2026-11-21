@@ -157,7 +157,7 @@ public sealed class CreationEffectorLawTests {
             slotBase: 0
         );
 
-        return builder.Build().Words.ToArray();
+        return builder.Build().CopyWords();
     }
     // The one two-bone leg every pipeline law drives: a hip-knee-boot chain whose boot probes for whatever is below
     // the body within half a metre and stands 0.03 off it.

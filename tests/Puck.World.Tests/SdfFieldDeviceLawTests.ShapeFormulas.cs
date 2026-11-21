@@ -92,7 +92,7 @@ public sealed partial class SdfFieldDeviceLawTests {
             var program = Pack(emit: emit);
             var evaluator = new SdfFieldEvaluator(program: program);
             var references = points.Select(selector: point => Reference(evaluator: evaluator, point: point).Distance).ToArray();
-            var results = Run(kernel: Kernel(extension: extension), legs: [new SdfFieldLeg(Distances: references, Materials: [], Name: name, Words: program.Words.ToArray())], points: points, services: services);
+            var results = Run(kernel: Kernel(extension: extension), legs: [new SdfFieldLeg(Distances: references, Materials: [], Name: name, Words: program.CopyWords())], points: points, services: services);
 
             for (var index = 0; (index < points.Length); index++) {
                 var device = (results[index].X / results[index].Z);

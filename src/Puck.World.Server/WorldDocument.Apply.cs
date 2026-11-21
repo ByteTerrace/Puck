@@ -858,7 +858,7 @@ public sealed partial class WorldDocument {
             }
         }
         if ((operation.Partitions > 0) &&
-            (Host.Jobs!.Fork(operation.Partitions, m_snapshotRows!, ref operation.Fork, deadline) == WaitOutcome.DeadlinePassed)) {
+            (Host.Jobs!.Fork(Puck.Hosting.Jobs.JobClass.Tick, operation.Partitions, m_snapshotRows!, ref operation.Fork, deadline) == WaitOutcome.DeadlinePassed)) {
             snapshot = default;
             return WaitOutcome.DeadlinePassed;
         }

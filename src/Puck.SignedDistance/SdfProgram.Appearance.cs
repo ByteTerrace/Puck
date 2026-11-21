@@ -35,8 +35,8 @@ public sealed partial class SdfProgram {
     /// <param name="replaces">The program this one replaces, or <see langword="null"/>. When the field constructor would
     /// read the same inputs it read, the result shares its field derivation (<see cref="SharesField"/>): it is
     /// <paramref name="replaces"/> itself when the appearance is its own in every material and screen surface, and
-    /// otherwise a copy of its words with this appearance packed into their tail, so a look value costs a pack rather than
-    /// a field build.</param>
+    /// otherwise a program sharing its field's words with this appearance packed into a section of its own, so a look
+    /// value costs a pack of the appearance section rather than a field build or a copy of the field.</param>
     /// <returns>The program.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="instructions"/> or <paramref name="appearance"/> is
     /// <see langword="null"/>.</exception>
@@ -71,7 +71,7 @@ public sealed partial class SdfProgram {
             sweepCurves: sweepCurves
         );
 
-        appearance.Pack(materialVector: ((int)program.m_words[ProgramMaterialOffsetLane]), words: program.m_words);
+        appearance.Pack(materialVector: ((int)program.m_words[ProgramMaterialOffsetLane]), section: program.m_appearanceWords);
         program.m_appearance = appearance;
         program.m_instructionsKey = key;
         program.m_reservedPathWords = reservedPathWords;

@@ -42,7 +42,9 @@ namespace Puck.SignedDistance;
 //                         material table, SdfAppearance.MaterialVectorsPerEntry uvec4 per material (sdfMaterialLoad), then
 //                         the paints, SdfAppearance.PaintVectorsPerEntry uvec4 each, every material's contiguous
 //                         (sdfApplyPaints), then all paint side tables at absolute vector offsets, then shade programs.
-//                         SdfAppearance.Pack writes it; the field constructor only sizes it.
+//                         SdfAppearance.Pack writes it; the field constructor only sizes it. The host holds it in a
+//                         buffer of its own (ShadingWords) beside the field's (FieldWords), so programs that share a field
+//                         share the field's words; the device region holds the two back to back.
 /// <summary>Contains the typed SDF instruction stream and its packed GPU representation, bounds, instances,
 /// materials, screen surfaces, and acceleration metadata.</summary>
 public sealed partial class SdfProgram {
@@ -110,8 +112,12 @@ public sealed partial class SdfProgram {
     // What the field may know of its appearance: the material count, the glass materials, the declared screens and the
     // appearance section's size. No material value: the field derivation never reads one.
     private readonly SdfAppearanceOutline m_outline;
-    // Written by the constructor, and replaced only on a fresh copy that takes another appearance (WithAppearance).
-    private uint[] m_words;
+    // The field's words (FieldWords), written by the constructor and never after, so a program that takes another
+    // appearance (WithAppearance) shares them.
+    private readonly uint[] m_words;
+    // The appearance section (ShadingWords), sized by the constructor, packed by Of, and replaced only on a fresh copy
+    // that takes another appearance (WithAppearance).
+    private uint[] m_appearanceWords;
 
     /// <summary>Gets the content identity of the pixels the program's <see cref="SdfShapeType.Glyph"/> shapes sample: the
     /// value of the one atlas image's hash their builder laid them out against
@@ -301,12 +307,12 @@ public sealed partial class SdfProgram {
         var partProgramOffset = layout.PartProgramOffset;
         // The appearance section follows every table the field interpreter reads, so its size moves no field offset.
         var materialOffsetVectors = checked((partProgramOffset + partPrograms.VectorCount));
-        var totalVectors = checked((materialOffsetVectors + appearance.Vectors));
 
         PartCompilationWordCapacity = layout.PartCompilationWordCapacity(appearanceVectors: appearance.Vectors, reservedPathWords: reservedPathWords);
 
         InstructionCount = instructionCount;
-        m_words = new uint[(totalVectors * WordsPerVector)];
+        m_words = new uint[checked((materialOffsetVectors * WordsPerVector))];
+        m_appearanceWords = new uint[checked((appearance.Vectors * WordsPerVector))];
 
         // PATCH every ConvexPolygon instruction's Data0.x (its host-emitted placeholder is 0f) to the real packed
         // (table offset, vertex count) it will carry — BEFORE the instruction-header loop below packs m_instructions
@@ -424,26 +430,26 @@ public sealed partial class SdfProgram {
     /// <summary>Gets the number of instructions in the program.</summary>
     public int InstructionCount { get; }
     /// <summary>Gets the typed instructions the program was built from, in order — the source the packed
-    /// <see cref="Words"/> are compiled from. Retained so a consumer (e.g. a ray-tracing instance extractor that
+    /// <see cref="FieldWords"/> are compiled from. Retained so a consumer (e.g. a ray-tracing instance extractor that
     /// needs per-primitive world bounds) can read the scene structure without decoding the packed word layout.
-    /// <para>A read-only view over the stream, not the backing array: this typed seam and <see cref="Words"/> are two
+    /// <para>A read-only view over the stream, not the backing array: this typed seam and <see cref="FieldWords"/> are two
     /// spellings of ONE program (the CPU interpreter walks this, the GPU walks those), and a post-construction
     /// mutation through a downcast would desync them silently.</para></summary>
     public IReadOnlyList<SdfInstruction> Instructions => m_instructionsView;
 
     /// <summary>Gets every <see cref="SdfShapeType.ConvexPolygon"/> instruction's own vertex list, keyed by that
     /// instruction's index in <see cref="Instructions"/> — the host-side twin of the packed side table
-    /// <see cref="Words"/> carries, so a CPU consumer (<c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c>) can
+    /// <see cref="FieldWords"/> carries, so a CPU consumer (<c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c>) can
     /// mirror the field without decoding the packed word offset. Empty for a program with no convex-polygon
     /// profile.</summary>
     internal IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)> ConvexPolygonProfiles => m_convexPolygonProfiles;
     /// <summary>Gets every <see cref="SdfShapeType.Sweep"/> instruction's own control points and radius endpoints,
     /// keyed by that instruction's index in <see cref="Instructions"/> — the host-side twin of the packed side table
-    /// <see cref="Words"/> carries, so a CPU consumer (<c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c>) can
+    /// <see cref="FieldWords"/> carries, so a CPU consumer (<c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c>) can
     /// mirror the field without decoding the packed word offset. Empty for a program with no Sweep shape.</summary>
     internal IReadOnlyList<SdfSweepCurve> SweepCurves => m_sweepCurves;
     /// <summary>Gets every <see cref="SdfShapeType.Path"/> instruction's own edge table, keyed by that instruction's index
-    /// in <see cref="Instructions"/> — the host-side twin of the packed side table <see cref="Words"/> carries, so a CPU
+    /// in <see cref="Instructions"/> — the host-side twin of the packed side table <see cref="FieldWords"/> carries, so a CPU
     /// consumer (<c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c>) can mirror the field without decoding the packed
     /// word offset. Empty for a program with no Path shape.</summary>
     internal IReadOnlyList<SdfCompiledPath> Paths => m_paths;
@@ -453,20 +459,38 @@ public sealed partial class SdfProgram {
     /// live composition rebuild, say) can use the previous program's material count as a <see cref="SdfProgramBuilder"/>
     /// list-capacity hint without needing its own copy of the material table.</summary>
     public int MaterialCount => ((int)m_words[ProgramMaterialCountLane]);
-    /// <summary>Gets the range of <see cref="Words"/> the appearance section spans, the material and paint tables: values
-    /// that shade a surface and never change the field, the instruction stream or any bound. It is the stream's tail,
-    /// after <see cref="FieldWords"/>.</summary>
-    public Range ShadingWords => new(start: FieldWordCount, end: m_words.Length);
+    /// <summary>Gets the appearance section, the stream's tail after <see cref="FieldWords"/>, starting at word
+    /// <c>FieldWords.Length</c>: the material and paint tables, values that shade a surface and never change the field,
+    /// the instruction stream or any bound. Every vector offset it holds is absolute in the whole stream.</summary>
+    public ReadOnlySpan<uint> ShadingWords => m_appearanceWords;
     /// <summary>Gets the stream's field prefix: every word the field interpreter reads (the header, the instruction
-    /// headers and data, the bound tables, the directories, the rigid plan, the side tables and the part programs). Its
-    /// only appearance-derived words are the header's material count and material offset (lanes 1 and 3), which only the
-    /// shading kernels read; the offset follows the field's size. No material, paint or screen value is in it, so a
-    /// change to a material's values or its paints leaves it as it was, and a palette's size moves lane 1 alone; the
-    /// bake's field fingerprint describes the encoding over it.</summary>
-    public ReadOnlySpan<uint> FieldWords => m_words.AsSpan(start: 0, length: FieldWordCount);
+    /// headers and data, the bound tables, the directories, the rigid plan, the side tables and the part programs), up to
+    /// the header's material offset. Its only appearance-derived words are the header's material count and material
+    /// offset (lanes 1 and 3), which only the shading kernels read; the offset follows the field's size. No material,
+    /// paint or screen value is in it, so a change to a material's values or its paints leaves it as it was, and a
+    /// palette's size moves lane 1 alone; the bake's field fingerprint describes the encoding over it. Programs that share
+    /// a field (<see cref="SharesField"/>) share these words.</summary>
+    public ReadOnlySpan<uint> FieldWords => m_words;
+    /// <summary>Gets the packed stream's length in 32-bit words: <see cref="FieldWords"/> then
+    /// <see cref="ShadingWords"/>, as the device holds them.</summary>
+    public int WordCount => (m_words.Length + m_appearanceWords.Length);
 
-    // The words before the appearance section: its first vector, the header's material offset, in words.
-    private int FieldWordCount => (((int)m_words[ProgramMaterialOffsetLane]) * WordsPerVector);
+    /// <summary>Copies the packed stream, <see cref="FieldWords"/> then <see cref="ShadingWords"/>, into a destination.</summary>
+    /// <param name="destination">The destination, at least <see cref="WordCount"/> words.</param>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <see cref="WordCount"/>.</exception>
+    public void CopyWordsTo(Span<uint> destination) {
+        m_words.CopyTo(destination: destination);
+        m_appearanceWords.CopyTo(destination: destination[m_words.Length..]);
+    }
+    /// <summary>Returns a new array of the packed stream, <see cref="FieldWords"/> then <see cref="ShadingWords"/>: the
+    /// words the device holds, for a reader that needs them whole.</summary>
+    /// <returns>The words, <see cref="WordCount"/> of them.</returns>
+    public uint[] CopyWords() {
+        var words = new uint[WordCount];
+
+        CopyWordsTo(destination: words);
+        return words;
+    }
 
     /// <summary>Gets the minimum dynamic-transform slot capacity required to render this program without a shader reading
     /// past the supplied per-frame transform table. Equals one plus the highest <see cref="SdfOp.TransformDynamic"/>
@@ -481,8 +505,6 @@ public sealed partial class SdfProgram {
     /// <summary>Gets the CPU query's residual Lipschitz multiplier for a magnitude-reading root field.
     /// Shape and scope clamps already applied by the evaluator are accounted for in this bound.</summary>
     public float StepScale { get; }
-    /// <summary>Gets the packed 32-bit words uploaded to the GPU.</summary>
-    public ReadOnlySpan<uint> Words => m_words;
 
     /// <summary>The Lipschitz bound of ONE <c>blendShape</c> composition (field/sdf-blend.hlsli), given the bounds of the running
     /// accumulator and the incoming candidate.</summary>
@@ -1581,7 +1603,7 @@ public sealed partial class SdfProgram {
         m_words[((entryBase + WordsPerVector) + 3)] = ((uint)record.End);
     }
 
-    internal static void WriteVector4(uint[] words, int baseIndex, float x, float y, float z, float w) {
+    internal static void WriteVector4(Span<uint> words, int baseIndex, float x, float y, float z, float w) {
         words[baseIndex] = BitConverter.SingleToUInt32Bits(value: x);
         words[(baseIndex + 1)] = BitConverter.SingleToUInt32Bits(value: y);
         words[(baseIndex + 2)] = BitConverter.SingleToUInt32Bits(value: z);

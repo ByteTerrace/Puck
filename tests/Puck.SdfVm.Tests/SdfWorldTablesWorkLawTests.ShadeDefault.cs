@@ -13,7 +13,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         var capacity = rig.Engine.ProgramWordCapacity;
         var waits = gpu.Count(key: "IGpuDeviceContext.WaitIdle");
 
-        Assert.Equal(rig.Frame.Program.Words.Length + shade.Words.Length + shade.ParameterWords.Length, capacity);
+        Assert.Equal(rig.Frame.Program.WordCount + shade.Words.Length + shade.ParameterWords.Length, capacity);
         rig.Render();
         Assert.Equal(waits, gpu.Count(key: "IGpuDeviceContext.WaitIdle"));
         Assert.Equal(capacity, rig.Engine.ProgramWordCapacity);
@@ -28,7 +28,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         rig.Engine.UploadProgram(program: larger);
         var grown = rig.Engine.ProgramWordCapacity;
 
-        Assert.True(grown >= (larger.Words.Length + shade.Words.Length + shade.ParameterWords.Length));
+        Assert.True(grown >= (larger.WordCount + shade.Words.Length + shade.ParameterWords.Length));
         rig.Engine.Pack(frame: rig.Frame with { Program = larger });
         rig.Engine.SubmitUpload();
         Assert.Equal(grown, rig.Engine.ProgramWordCapacity);

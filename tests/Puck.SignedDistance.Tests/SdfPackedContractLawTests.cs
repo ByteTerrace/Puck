@@ -735,7 +735,7 @@ public sealed class SdfPackedContractLawTests {
         );
         var program = Build(instructions: hostile);
         // Header word 0 is (instructionCount, ...); instruction headers start one uvec4 in, lane 1 = the shape.
-        var packedShape = program.Words[5];
+        var packedShape = program.CopyWords()[5];
 
         Assert.Equal(
             actual: packedShape,
@@ -746,11 +746,11 @@ public sealed class SdfPackedContractLawTests {
         var honest = Build(instructions: [Shape(shape: ((uint)SdfShapeType.Box))]);
 
         Assert.Equal(
-            actual: honest.Words[5],
+            actual: honest.CopyWords()[5],
             expected: ((uint)SdfShapeType.Box)
         );
     }
-    /// <summary>The typed <see cref="SdfProgram.Instructions"/> seam and the packed <see cref="SdfProgram.Words"/> are
+    /// <summary>The typed <see cref="SdfProgram.Instructions"/> seam and the packed <see cref="SdfProgram.CopyWords()"/> are
     /// two spellings of one program; a post-construction mutation through a downcast would desync the CPU interpreter
     /// from the GPU without any error.</summary>
     [Fact]

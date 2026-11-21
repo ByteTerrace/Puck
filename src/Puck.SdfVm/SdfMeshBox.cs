@@ -93,10 +93,26 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
     /// draw's box spans its displacement's band of heights (<see cref="SdfMeshDraw.Displacement"/>) as well as its
     /// mesh's.</returns>
     public static bool TryOf(in SdfMeshDraw draw, out SdfMeshBox box) {
+        if (!TryOfObject(draw: in draw, center: out var center, half: out var half)) {
+            box = default;
+
+            return false;
+        }
+        box = Placed(center: center, draw: in draw, half: half);
+
+        return true;
+    }
+    /// <summary>Returns the box a draw's triangles lie in within its own object space, before its matrix and carry: the
+    /// box <see cref="TryOf"/> places.</summary>
+    /// <param name="draw">The draw.</param>
+    /// <param name="center">The box's center, in object space, when this returns <see langword="true"/>.</param>
+    /// <param name="half">The box's half extents along the object axes, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="false"/> for a draw whose mesh has members, as <see cref="TryOf"/> returns.</returns>
+    public static bool TryOfObject(in SdfMeshDraw draw, out Vector3 center, out Vector3 half) {
         var mesh = draw.Mesh;
 
         if (!mesh.Members.IsEmpty) {
-            box = default;
+            (center, half) = (default, default);
 
             return false;
         }
@@ -107,7 +123,7 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
             low.Y = MathF.Min(x: low.Y, y: displacement.Low);
             high.Y = MathF.Max(x: high.Y, y: displacement.High);
         }
-        box = Placed(center: ((low + high) * 0.5f), draw: in draw, half: ((high - low) * 0.5f));
+        (center, half) = (((low + high) * 0.5f), ((high - low) * 0.5f));
 
         return true;
     }
@@ -121,9 +137,10 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
 
     /// <summary>Returns a box that holds a skinned draw's triangles under a table of transforms: the mesh's rest box
     /// carried by each member's motion (<see cref="SdfMeshSkin.MotionOf"/>) and by the root's, which is none, held in one
-    /// sphere grown by <see cref="SkinBlendReach"/> for the vertices two members share, then placed as the draw's matrix
-    /// and carry place the mesh. It bounds the draw as the kernels pose it from the same table
-    /// (<c>frame/sdf-mesh-skin.hlsli</c>), not under a view's pose overlay (<see cref="SdfPoseOverlay"/>).</summary>
+    /// sphere grown by <see cref="SkinBlendReach"/> for the vertices two members share, then placed as the root's row in
+    /// the table, the draw's scale and its carry place the mesh (<see cref="Ridden"/>). It bounds the draw as the kernels
+    /// pose it from the same table (<c>frame/sdf-mesh-skin.hlsli</c>); a table a view's pose overlay replaced rows of
+    /// (<see cref="SdfPoseOverlay"/>) bounds it as that view poses it.</summary>
     /// <param name="draw">The draw, whose mesh has members.</param>
     /// <param name="transforms">The dynamic transforms the draw's root slot and its members' slots are read from.</param>
     /// <param name="box">The box, when this returns <see langword="true"/>.</param>
@@ -138,9 +155,8 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
             return false;
         }
 
-        var matrix = draw.ObjectToWorld;
-        // The scale a member's offset from the root is divided by: the draw matrix's first row (sdfMeshDrawScale).
-        var scale = new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length();
+        // The scale a member's offset from the root is divided by (sdfMeshDrawScale).
+        var scale = draw.SlotScale;
 
         if (!float.IsFinite(f: scale) || (scale <= 0f)) {
             return false;
@@ -176,9 +192,45 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
         if (!float.IsFinite(f: radius)) {
             return false;
         }
-        box = Placed(center: ((low + high) * 0.5f), draw: in draw, half: new Vector3(value: radius));
+        box = Ridden(
+            carryRotation: draw.CarryRotation,
+            carryScale: draw.CarryScale,
+            carryTranslation: draw.CarryTranslation,
+            center: ((low + high) * 0.5f),
+            half: new Vector3(value: radius),
+            scale: scale,
+            slot: transforms[root]
+        );
 
         return true;
+    }
+
+    /// <summary>Returns the box an object-space box of a draw riding its frame slot becomes where the kernels pose the
+    /// draw (<c>sdfSelectionBox</c>, <c>sdfMeshPoseOf</c>): scaled by the draw's scale, turned by the slot's orientation
+    /// and moved to its position as they stand in the slot's row, then through the draw's carry. The row's orientation is
+    /// read as the row holds it, as the kernels read it, so an unset one is the identity.</summary>
+    /// <param name="center">The box's center, in the draw's object space.</param>
+    /// <param name="half">The box's half extents along the object axes, none negative.</param>
+    /// <param name="slot">The slot's transform, as its row of the frame's dynamic transforms holds it.</param>
+    /// <param name="scale">The draw's scale (<see cref="SdfMeshDraw.SlotScale"/>).</param>
+    /// <param name="carryRotation">The draw's carry rotation (<see cref="SdfMeshDraw.CarryRotation"/>).</param>
+    /// <param name="carryTranslation">The draw's carry translation (<see cref="SdfMeshDraw.CarryTranslation"/>).</param>
+    /// <param name="carryScale">The draw's carry scale (<see cref="SdfMeshDraw.CarryScale"/>).</param>
+    /// <returns>The box in world space.</returns>
+    public static SdfMeshBox Ridden(Vector3 center, Vector3 half, in DynamicTransform slot, float scale, Quaternion carryRotation, Vector3 carryTranslation, float carryScale) {
+        var orientation = slot.Orientation;
+
+        return Placed(
+            carryRotation: carryRotation,
+            carryScale: carryScale,
+            carryTranslation: carryTranslation,
+            center: center,
+            half: half,
+            origin: slot.Position,
+            rowX: (Vector3.Transform(value: Vector3.UnitX, rotation: orientation) * scale),
+            rowY: (Vector3.Transform(value: Vector3.UnitY, rotation: orientation) * scale),
+            rowZ: (Vector3.Transform(value: Vector3.UnitZ, rotation: orientation) * scale)
+        );
     }
 
     /// <summary>Returns the world-axis box that holds two boxes, the larger of their stretches its own.</summary>
@@ -198,19 +250,31 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
     // The box an object-space box of a draw's mesh becomes under the draw's matrix and then its carry.
     private static SdfMeshBox Placed(in SdfMeshDraw draw, Vector3 center, Vector3 half) {
         var matrix = draw.ObjectToWorld;
-        var rotation = draw.CarryRotation;
-        var scale = draw.CarryScale;
-        var rowX = new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13);
-        var rowY = new Vector3(x: matrix.M21, y: matrix.M22, z: matrix.M23);
-        var rowZ = new Vector3(x: matrix.M31, y: matrix.M32, z: matrix.M33);
+
+        return Placed(
+            carryRotation: draw.CarryRotation,
+            carryScale: draw.CarryScale,
+            carryTranslation: draw.CarryTranslation,
+            center: center,
+            half: half,
+            origin: matrix.Translation,
+            rowX: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13),
+            rowY: new Vector3(x: matrix.M21, y: matrix.M22, z: matrix.M23),
+            rowZ: new Vector3(x: matrix.M31, y: matrix.M32, z: matrix.M33)
+        );
+    }
+    // The box an object-space box becomes under an affine map's rows (the row-vector convention) and translation, then a
+    // carry.
+    private static SdfMeshBox Placed(Vector3 center, Vector3 half, Vector3 rowX, Vector3 rowY, Vector3 rowZ, Vector3 origin, Quaternion carryRotation, Vector3 carryTranslation, float carryScale) {
+        var placed = ((((center.X * rowX) + (center.Y * rowY)) + (center.Z * rowZ)) + origin);
 
         return new SdfMeshBox(
-            Center: ((Vector3.Transform(value: Vector3.Transform(position: center, matrix: matrix), rotation: rotation) * scale) + draw.CarryTranslation),
-            HalfX: (Vector3.Transform(value: (half.X * rowX), rotation: rotation) * scale),
-            HalfY: (Vector3.Transform(value: (half.Y * rowY), rotation: rotation) * scale),
-            HalfZ: (Vector3.Transform(value: (half.Z * rowZ), rotation: rotation) * scale)
+            Center: ((Vector3.Transform(value: placed, rotation: carryRotation) * carryScale) + carryTranslation),
+            HalfX: (Vector3.Transform(value: (half.X * rowX), rotation: carryRotation) * carryScale),
+            HalfY: (Vector3.Transform(value: (half.Y * rowY), rotation: carryRotation) * carryScale),
+            HalfZ: (Vector3.Transform(value: (half.Z * rowZ), rotation: carryRotation) * carryScale)
         ) {
-            Stretch = (StretchOf(rowX: rowX, rowY: rowY, rowZ: rowZ) * MathF.Abs(x: scale)),
+            Stretch = (StretchOf(rowX: rowX, rowY: rowY, rowZ: rowZ) * MathF.Abs(x: carryScale)),
         };
     }
 
