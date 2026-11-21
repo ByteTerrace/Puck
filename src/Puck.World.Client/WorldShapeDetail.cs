@@ -115,7 +115,7 @@ internal static class WorldShapeDetail {
         return shape.Type switch {
             SdfSolidPrimitive.Sweep when (shape.Curve is { } curve) => (MathF.Max(x: curve.RadiusStart, y: curve.RadiusEnd) * size.X),
             SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid => middle,
-            SdfSolidPrimitive.Superellipsoid => (middle * (SdfProgramBuilder.MinSuperellipsoidExponent / (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent))),
+            SdfSolidPrimitive.Superellipsoid => (middle * (SdfProgramBuilder.MinSuperellipsoidExponent / ShapeDocument.EffectiveExponent(exponent: shape.Exponent))),
             SdfSolidPrimitive.Prism when (shape.Profile is { Kind: SdfPrismProfileKind.Ellipse }) => EllipseBend(a: size.X, b: size.Y),
             SdfSolidPrimitive.Cylinder or SdfSolidPrimitive.Cone => EllipseBend(a: size.X, b: size.Z),
             SdfSolidPrimitive.Capsule => size.X,

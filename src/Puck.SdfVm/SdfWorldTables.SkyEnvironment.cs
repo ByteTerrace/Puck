@@ -158,8 +158,7 @@ public sealed partial class SdfWorldTables {
                 if (!Screens[screen]) { continue; }
                 // A residency projects one canonical panorama, independent of the consuming camera's fit.
                 if ((residency.ScreenSources is { } sources) && sources.Screens.Contains(value: screen) &&
-                    (sources.ReadOf(screen: screen, view: view) is { } producer) && (reads is not null) &&
-                    (reads.IndexOf(producer: producer) is var read and >= 0)) {
+                    (residency.ScreenRead(reads: reads, screen: screen, view: view) is var read and >= 0) && (reads is not null)) {
                     var input = reads[read];
 
                     m_watch.Observe(publication: input.Publication, screen: screen, tainted: input.Tainted);

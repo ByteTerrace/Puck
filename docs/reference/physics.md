@@ -237,11 +237,20 @@ capsules and boxes. The same witnesses answer support, hold and tether
 queries. `SupportPoint` exposes the finite collider's supporting boundary
 for diagnostics. No rounded-box inset or axis-rod approximation remains.
 
-Superellipsoid placements use their Lp support map, including anisotropic
-radii and rotation. The chair seat and back are exponent-4 superellipsoids;
-they therefore never go through the oriented-bound fallback. Both convex
-kinds use Q32 intermediates for small simplex predicates and Q16 witnesses,
-with deterministic iteration limits and tie order.
+Sphere, Ellipsoid and Superellipsoid placements compile to one
+`FixedStaticCollider.Superellipsoid` over their radii, swept by the margin,
+including anisotropic radii and rotation; one scaled alike on every axis at
+exponent two compiles to a sphere. At exponent two the collider is an
+ellipsoid whose distance and normal are exact: `FixedEllipsoidProjection`
+measures them, so a ball's push, a hold's nearest point and the diagnostic
+distance read the true surface, and other bodies descend its closed-form
+support. A spheroid (`SdfSolidGeometry.IsSpheroid`, which also chooses the
+revolved ellipse its field emits) is therefore the field's own surface and an
+exact piece of a carved creation's partition. A higher exponent uses its Lp
+support map with fixed-point powers. The chair seat and back are exponent-4
+superellipsoids; they therefore never go through the oriented-bound fallback.
+Both convex kinds use Q32 intermediates for small simplex predicates and Q16
+witnesses, with deterministic iteration limits and tie order.
 Box does not admit a separate authored `rounding` on this vocabulary; that
 facet belongs to Prism, Cylinder and Cone.
 
@@ -252,8 +261,10 @@ Sphere and capsule contact uses that surface, so the corners of a cylinder's
 bounding box carry nothing. Upright capsule queries are analytic; a tilted
 capsule uses a bounded fixed-point segment search. Box bodies retain their
 bounds in the cylinder frame, tested against the circular cross-section;
-tilted box edges are still conservative. Elliptical and carved primitives
-remain bounded approximations in the analytic provider.
+tilted box edges are still conservative. A superellipsoid above exponent two
+and the carved primitives remain bounded approximations in the analytic
+provider, and a triaxial ellipsoid under a margin collides as its true
+margined surface while its gauge field dilates farther along its long axes.
 Rounded or chamfered circular rims currently use a contained cylinder core.
 The diagnostic reports the length of its radial/height contraction as the
 maximum inward approximation error. Such an error is a known approximation

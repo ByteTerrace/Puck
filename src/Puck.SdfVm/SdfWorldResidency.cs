@@ -824,14 +824,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         nint handle = 0;
 
-        if (
-            (m_screenSources?.ReadOf(
-                screen: screen,
-                view: view
-            ) is { } read) &&
-            (reads is not null) &&
-            (reads.IndexOf(producer: read) is var index and >= 0)
-        ) {
+        if ((ScreenRead(reads: reads, screen: screen, view: view) is var index and >= 0) && (reads is not null)) {
             if (!reads.IsTaken(index: index)) {
                 var lease = reads.Take(index: index);
 
@@ -845,6 +838,19 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         return handle;
     }
+    /// <summary>Returns where the read a screen samples in one view lies among the images a view's render graph hands
+    /// its pass: the instance the screen shows in that view (<see cref="ISdfScreenSources.ReadOf"/>). The image, its
+    /// lease and its publication are that read's (<see cref="RenderGraphExternalReads"/>).</summary>
+    /// <param name="view">The view's index in the residency's frame.</param>
+    /// <param name="screen">The program-declared screen index.</param>
+    /// <param name="reads">The images the pass's instance reads that its graph binds to no version, or
+    /// <see langword="null"/>.</param>
+    /// <returns>The read's position in <paramref name="reads"/>, or -1 when the screen samples none of them.</returns>
+    public int ScreenRead(int view, int screen, RenderGraphExternalReads? reads) => (
+        ((reads is not null) && (m_screenSources?.ReadOf(screen: screen, view: view) is { } producer))
+            ? reads.IndexOf(producer: producer)
+            : -1
+    );
 
     /// <summary>Gets the detail rows the residency's sky counts its runs and layers in, the composition's one set
     /// (<see cref="SdfWorldPipelineCatalog.SkyDetails"/>).</summary>

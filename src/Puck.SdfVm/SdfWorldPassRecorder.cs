@@ -598,7 +598,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
     }
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) =>
-        m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context);
+        m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context, reads: reads);
     public ulong? InputSignature(string input, long generation) => (((m_part == SdfWorldPackage.Parts.ShadowFar) && (m_context.Inputs.Count > 0) &&
         (input == m_context.Inputs[0].Name))
             ? m_owner.ReceiverSignatureOf(instance: m_context.Instance)

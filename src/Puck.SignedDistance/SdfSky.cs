@@ -275,6 +275,27 @@ public sealed class SdfSky {
     /// <returns>The record.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the stack.</exception>
     public ref SdfSkyLayer LayerAt(int index) => ref m_layers[Checked(index: index)];
+    /// <summary>Returns the screen a layer samples: a panorama's image, or a disc's texture.</summary>
+    /// <param name="index">The layer's index.</param>
+    /// <returns>The screen index, or -1 for a layer that samples no screen.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the stack.</exception>
+    public int ScreenAt(int index) {
+        ref var layer = ref LayerAt(index: index);
+
+        return layer.Kind switch {
+            SdfSkyLayerKind.Panorama => PayloadOf<SdfSkyPanorama>(layer: ref layer).Screen,
+            SdfSkyLayerKind.Disc => PayloadOf<SdfSkyDisc>(layer: ref layer).Screen,
+            _ => -1,
+        };
+    }
+    /// <summary>Marks every screen a layer of the stack samples (<see cref="ScreenAt"/>), clearing the rest.</summary>
+    /// <param name="screens">The flags, one per screen index; a layer's screen outside them is not marked.</param>
+    public void MarkScreens(Span<bool> screens) {
+        screens.Clear();
+        for (var index = 0; (index < m_layerCount); index++) {
+            if ((ScreenAt(index: index) is var screen) && (((uint)screen) < ((uint)screens.Length))) { screens[screen] = true; }
+        }
+    }
     /// <summary>Returns a layer's kind parameters, by reference.</summary>
     /// <typeparam name="T">The layer's kind parameters.</typeparam>
     /// <param name="index">The layer's index.</param>

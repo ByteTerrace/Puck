@@ -146,7 +146,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
     // The sky's detail rows: its runs', then every layer label the composition's skies have packed, which only grow.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_view.Residency.SkyDetails.Labels;
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) {
-        var signature = m_owner.SignatureOf(instance: m_context.Instance, part: m_context.Part!, temporal: m_temporal, context: in context);
+        var signature = m_owner.SignatureOf(instance: m_context.Instance, part: m_context.Part!, temporal: m_temporal, context: in context, reads: reads);
 
         if (signature is not { } value) { return null; }
         var view = (m_owner.ViewOf(instance: m_context.Instance) ?? m_view);
@@ -312,20 +312,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
         var bound = m_screens[recording.Slot];
         var filler = tables.SampledFiller.ImageViewHandle;
         var residency = m_view.Residency;
-        var sky = frame.Sky;
-
-        Array.Clear(array: m_sampledScreens);
-        for (var layer = 0; (layer < sky.LayerCount); layer++) {
-            var screen = sky.LayerAt(index: layer).Kind switch {
-                SdfSkyLayerKind.Panorama => sky.Parameters<SdfSkyPanorama>(index: layer).Screen,
-                SdfSkyLayerKind.Disc => sky.Parameters<SdfSkyDisc>(index: layer).Screen,
-                _ => -1,
-            };
-
-            if ((screen >= 0) && (screen < SdfWorldTables.MaxScreenSurfaces)) {
-                m_sampledScreens[screen] = true;
-            }
-        }
+        frame.Sky.MarkScreens(screens: m_sampledScreens);
         for (var screen = 0; (screen < SdfWorldTables.MaxScreenSurfaces); screen++) {
             var image = ((m_sampledScreens[screen] && m_declaredScreens[screen])
                 ? residency.ScreenImage(
