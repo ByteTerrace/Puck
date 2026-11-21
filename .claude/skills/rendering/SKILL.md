@@ -61,6 +61,14 @@ a value read from anywhere else must move the memo's epoch (`ForgetViewInputs`),
 or a pass stands on a stale signature. `world.counters sdf.cadence` counts the
 signatures, blocks and fits.
 
+Another instance's image (a screen's source, a sky layer's infinity image) changes
+in place behind one handle, so no table hash sees it. A pass that samples one folds
+its read's publication and taint into its signature (`SdfWorldPasses.ReadSignatureOf`,
+whose `ReadsOf` lists which parts sample which images; an unlisted part folds every
+screen), and the rest stand on their own inputs. A screen is never a reason to
+force every pass. Only the whole view, which sees no publication, renders while a
+screen shows a source (`SdfWorldTables.ForcesRender`).
+
 `Shared/bloom-filter.hlsli` uses cell-edge reflection and conservative cell
 integration. Unit-sum taps alone only preserve constants: edge clamping duplicated
 a corner impulse's energy, and point resampling odd levels changed their mean.

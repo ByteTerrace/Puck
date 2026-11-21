@@ -236,6 +236,13 @@ public sealed record ShapeDocument(
         ("scale", "[1, 1, 1]"),
     ];
 
+    /// <summary>Returns the superellipsoid exponent a primitive emits with: the authored exponent, or
+    /// <see cref="SdfProgramBuilder.MinSuperellipsoidExponent"/>, the ellipsoid, when none is authored. A shape's
+    /// <see cref="Exponent"/> and a palette paint's exponent both resolve here.</summary>
+    /// <param name="exponent">The authored exponent, or <see langword="null"/>.</param>
+    /// <returns>The exponent.</returns>
+    public static float EffectiveExponent(float? exponent) => (exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent);
+
     /// <summary>The largest half-extent <see cref="Elongate"/> sweeps a cross-section over, per axis.</summary>
     public const float MaxElongate = 2f;
     /// <summary>The largest bend rate, in radians per unit of local Y, moderated below <see cref="MaxTwist"/>'s

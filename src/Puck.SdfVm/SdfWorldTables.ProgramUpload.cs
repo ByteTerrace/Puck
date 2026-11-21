@@ -58,11 +58,6 @@ public sealed partial class SdfWorldTables {
         m_wrapSignature = WrapSignatureOf(program: program);
         m_shadowDensitySignature = ShadowDensitySignatureOf(program: program);
         m_requiredDynamicTransformCapacity = program.RequiredDynamicTransformCapacity;
-        // CADENCE GATE: whether ANY declared screen forces every frame to render — see m_programDeclaresScreenSlab.
-        m_programDeclaresScreenSlab = ProgramDeclaresShape(
-            program: program,
-            shapeType: SdfShapeType.ScreenSlab
-        );
         if (programChanged) { m_programRevision++; }
         if (geometryChanged) {
             m_programGeometryRevision++;

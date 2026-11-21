@@ -377,7 +377,7 @@ covered by the signature or by a refusal.
 
 | Input | How it is covered today |
 |---|---|
-| What each screen shows, its face, mapping, treatment, luminance and ripple (`ISdfScreenSources`); a screen carried by a body; text decals (`WorldScreenDecals`) | Bound on every frame. The mapping and surface tables are hashed, the decal buffer carries a revision, and a program that declares a screen forces every view to render (`SdfWorldTables.ForcesRender`) |
+| What each screen shows, its face, mapping, treatment, luminance and ripple (`ISdfScreenSources`); a screen carried by a body; text decals (`WorldScreenDecals`) | Bound on every frame. The mapping and surface tables are hashed, the decal buffer carries a revision, a pass that samples a screen's image folds the image's publication into its signature (`SdfWorldPasses.ReadSignatureOf`), and a screen that shows a source forces the whole view to render (`SdfWorldTables.ForcesRender`) |
 | The glyph atlas (`ISdfFrameSource.GlyphAtlas`) | Compared by identity on every frame |
 | A shader reload (`SdfWorldResidency.RequestShaderReload`), the debug view (`SdfWorldResidency.DebugMode`) and the hit-door diagnostic (`SdfWorldTables.ForceHitBound`) | The program revision moves at a reload, and the pass block carries the other two |
 | Indirect light (`SdfMeshIrradiance.Stage`) | `SdfMeshIrradiance.Settling` refuses a stand until the probes have reached the tables |

@@ -158,6 +158,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Set("Scene", scene.Acquire()); Set("Placements", placements); Set("PlacementVersion", 0L);
         Set("Chunks", channel); Set("Work", Task.CompletedTask); Set("Export", export);
         Set("m_root", Chunk(0, words[..Root], Root)); Set("m_cancel", new CancellationTokenSource());
+        Set("Deferred", Activator.CreateInstance(typeof(Queue<>).MakeGenericType(ChunkType))!);
         return upload;
         void Set(string field, object value) => UploadType.GetField(field, Members)!.SetValue(upload, value);
     }

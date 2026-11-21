@@ -108,6 +108,17 @@ until the next writer, shape or case arrives.
   (`WorldDocument.SnapshotCarrier`), so a primer cannot reach the tick's storage.
   The tick's snapshot completes a frame move without a primer, but a cut that
   state delivery decides primes there, so the split stays load-bearing.
+- On the host loop's pump thread, `HostWaits` clips a slice deadline to what
+  the iteration's allowance has left, which is right only for a caller that
+  resumes the wait in a later iteration. A synchronous door (one that completes
+  a resumable operation or throws, such as `WorldServer.Advance` or the
+  synchronous `JobPool.Fork`) mints `WaitDeadline.Synchronous`, which is never
+  clipped, and throws through `HostWaits.ThrowIfPending`, which names the
+  thread's expired wait and its budget. With a slice deadline, the replay probe's `Advance`, run from the
+  test batch's console operation on the pump, found the allowance spent and
+  failed with "jobs: fork partitions" whenever a worker still held a snapshot
+  partition as the forking thread finished its own share. Nothing makes a new
+  synchronous door choose the synchronous form.
 - The cascades' exit layer assumes a caster encloses a solid
   (`SdfMeshDraw.EnclosesSolid`); a body clipped at a portal's glass is a thin
   caster that shadows its own wrapped side
