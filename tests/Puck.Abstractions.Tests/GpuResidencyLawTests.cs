@@ -393,6 +393,7 @@ public sealed class GpuResidencyLawTests {
             name: default
         );
 
+        _ = region.Write(bytes: [1, 2, 3, 4], offset: 0);
         region.Flush(slot: 0);
         gpu.Services.Recorder.BeginCommandBuffer(commandBufferHandle: 9);
         Assert.Contains(
@@ -416,6 +417,7 @@ public sealed class GpuResidencyLawTests {
             name: default
         );
 
+        _ = region.Write(bytes: [9, 9, 9, 9], offset: 0);
         region.Flush(slot: 0);
         _ = Assert.Throws<InvalidOperationException>(testCode: () => region.RecordCopy(commandBuffer: 2, slot: 1));
         _ = region.Write(bytes: [1, 2, 3], offset: 5);
@@ -458,8 +460,8 @@ public sealed class GpuResidencyLawTests {
                 : [])
         );
     }
-    /// <summary>A region's buffers hold exactly the bytes <see cref="GpuRegion.BytesOf"/> states for its policy, and
-    /// disposing it releases them.</summary>
+    /// <summary>A region's buffers hold exactly the bytes <see cref="GpuRegion.BytesOf"/> states for its policy (a staged
+    /// region once it has staged one whole update), and disposing it releases them.</summary>
     [InlineData(GpuResidencyPolicy.InPlace)]
     [InlineData(GpuResidencyPolicy.Ring)]
     [InlineData(GpuResidencyPolicy.Staged)]
@@ -480,6 +482,10 @@ public sealed class GpuResidencyLawTests {
             name: default
         );
 
+        if (policy == GpuResidencyPolicy.Staged) {
+            _ = region.Write(bytes: Enumerable.Repeat(element: ((byte)7), count: 96).ToArray(), offset: 0);
+            region.Flush(slot: 0);
+        }
         Assert.Equal(
             actual: (gpu.BufferBytes - before),
             expected: GpuRegion.BytesOf(
@@ -760,6 +766,7 @@ public sealed class GpuResidencyLawTests {
             // The replacement takes only slot 0; slot 1 still names the old writer. Disposal must leave slot 0's
             // replacement writer intact, while dropping the old writer from slot 1 or from the share it moved off.
             replacement = Region(share: 0);
+            replacement.OweAll(slot: 0);
             Copy(gpu: gpu, region: replacement, slot: 0);
             if (moved) {
                 region.MoveCopySets(copySets: pool.Region(index: 1));
@@ -1237,10 +1244,10 @@ public sealed class GpuResidencyLawTests {
         Assert.Equal(expected: whole, actual: gpu.Memory(bufferHandle: region.Buffer(slot: 1).BufferHandle));
         Assert.True(condition: (region.OwnedBytes.HostVisible > before));
     }
-    // A slot's staging buffer holding more than four times what its flush stages, and more than the floor, is replaced
-    // at that flush by one of twice the flush, at least the floor, whether the slot owes words or none. A staged region
-    // shrinks to a smaller destination, keeping its leading bytes, dropping a carry a grow owed and owing every word of
-    // its new size.
+    // A staged region's ring holds only what its slots stage: it starts at the floor, grows past a flush it has no room
+    // for while the blocks of the ring it replaced stay readable until their slots release them, shrinks when it holds
+    // more than four times what its live blocks take, and is released once idle. A staged region shrinks to a smaller
+    // destination, keeping its leading bytes, dropping a carry a grow owed and owing every word of its new size.
     [Fact]
     public void AStagedRegionShrinksAndGivesBackStagingItNoLongerNeeds() {
         const long Bytes = (64L << 20);
@@ -1248,10 +1255,10 @@ public sealed class GpuResidencyLawTests {
         var gpu = new UploadModelGpu();
         var buffers = new RecordingBuffers(inner: gpu.Services.BufferFactory);
         using var copy = CopyPipeline(gpu: gpu);
-        using var destination = buffers.CreateDeviceLocal(name: default, sizeBytes: ((ulong)Bytes), usage: GpuBufferUsage.Storage);
+        using var destination = gpu.Services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)Bytes), usage: GpuBufferUsage.Storage);
         using var external = new GpuRegion(
             bindings: gpu.Services.Bindings,
-            buffers: buffers,
+            buffers: gpu.Services.BufferFactory,
             byteCount: Bytes,
             copyPipeline: copy,
             destination: destination,
@@ -1260,14 +1267,33 @@ public sealed class GpuResidencyLawTests {
             slotCount: 2
         );
 
-        // Each slot's staging buffer is created for the whole region; slot 0, owing nothing, gives its back down to the
-        // floor, and slot 1, owing a word, gives its back too.
-        Assert.Equal(expected: (2UL * (Reserve + ((ulong)Bytes))), actual: external.OwnedBytes.HostVisible);
-        external.Flush(slot: 0);
-        Assert.Equal(expected: ((Reserve + ((ulong)Bytes)) + GpuRegion.StagingFloorBytes), actual: external.OwnedBytes.HostVisible);
+        const ulong Large = (8UL << 20);
+        var floor = GpuRegion.StagingFloorBytes;
+
+        // Only the request buffers until a flush stages words; then a ring of the floor.
+        Assert.Equal(expected: (2UL * Reserve), actual: external.OwnedBytes.HostVisible);
         _ = external.Write(bytes: [1, 2, 3, 4], offset: 400);
-        external.Flush(slot: 1);
-        Assert.Equal(expected: (2UL * GpuRegion.StagingFloorBytes), actual: external.OwnedBytes.HostVisible);
+        Copy(gpu: gpu, region: external, slot: 0);
+        Assert.Equal(expected: ((2UL * Reserve) + floor), actual: external.OwnedBytes.HostVisible);
+        // A flush past its room grows a ring holding it and the live block; the old one keeps slot 0's block.
+        _ = external.Write(bytes: Enumerable.Repeat(element: ((byte)3), count: (((int)Large) - 4)).ToArray(), offset: 4096);
+        Copy(gpu: gpu, region: external, slot: 1);
+        Assert.Equal(expected: (((2UL * Reserve) + floor) + Large), actual: external.OwnedBytes.HostVisible);
+        // Slot 0 releasing its block releases the old ring with it.
+        _ = external.Write(bytes: [5, 6, 7, 8], offset: 400);
+        Copy(gpu: gpu, region: external, slot: 0);
+        Assert.Equal(expected: ((2UL * Reserve) + Large), actual: external.OwnedBytes.HostVisible);
+        // A small flush into a ring far larger than its live blocks takes a ring of the floor; slot 0's block keeps the
+        // large one until slot 0 flushes again.
+        _ = external.Write(bytes: [9, 9, 9, 9], offset: 800);
+        Copy(gpu: gpu, region: external, slot: 1);
+        Assert.Equal(expected: (((2UL * Reserve) + floor) + Large), actual: external.OwnedBytes.HostVisible);
+        Copy(gpu: gpu, region: external, slot: 0);
+        Assert.Equal(expected: ((2UL * Reserve) + floor), actual: external.OwnedBytes.HostVisible);
+        // An idle ring of the floor stays; retiring a slot early releases its block.
+        external.Retire(slot: 1);
+        Assert.Equal(expected: ((2UL * Reserve) + floor), actual: external.OwnedBytes.HostVisible);
+        Assert.Equal(expected: gpu.Memory(bufferHandle: destination.BufferHandle)[400..404], actual: new byte[] { 5, 6, 7, 8 });
 
         using var region = new GpuRegion(
             bindings: gpu.Services.Bindings,
@@ -1281,6 +1307,10 @@ public sealed class GpuResidencyLawTests {
             slotCount: 2
         );
 
+        // A new destination owes its clear; once recorded, a grow owes a carry.
+        Assert.True(condition: region.OwesCarry);
+        region.RecordCarry(commandBuffer: 2, copies: false, readers: GpuStage.ComputeShader);
+        Assert.False(condition: region.OwesCarry);
         _ = region.Write(bytes: [1, 2, 3, 4], offset: 400);
 
         var carried = region.Grow(byteCount: (2L * Bytes));
@@ -1295,9 +1325,9 @@ public sealed class GpuResidencyLawTests {
         Assert.Equal(expected: ((ulong)(Bytes / 2L)), actual: region.Buffer(slot: 0).SizeBytes);
         Assert.True(condition: region.ContentsAt(length: 4, offset: 400).SequenceEqual(other: new byte[] { 1, 2, 3, 4 }));
         Assert.True(condition: region.OwesCopy);
-        // The whole new size stages in the buffers created for the first one, which hold less than four times it.
+        // The whole new size stages into a ring that holds it.
         region.Flush(slot: 1);
-        Assert.Equal(expected: (2UL * (Reserve + ((ulong)Bytes))), actual: region.OwnedBytes.HostVisible);
+        Assert.Equal(expected: ((2UL * Reserve) + ((ulong)(Bytes / 2L))), actual: region.OwnedBytes.HostVisible);
         carried.Dispose();
         replaced.Dispose();
     }
@@ -1328,6 +1358,8 @@ public sealed class GpuResidencyLawTests {
         Assert.Equal(expected: 128L, actual: region.ShadowBytes);
         Assert.Equal(expected: 128UL, actual: region.CpuShadowBytes);
         Assert.Equal(expected: 128, actual: region.Contents.Length);
+        // A new destination starts cleared, so the owner owes the words its source holds.
+        region.OweSourced(length: (Bytes - 128), offset: 128);
         _ = region.Write(bytes: MemoryMarshal.AsBytes(span: truth.AsSpan(length: 32, start: 0)), offset: 0);
         Copy(gpu: gpu, region: region, slot: 0);
         Assert.Equal(expected: MemoryMarshal.AsBytes(span: truth.AsSpan()).ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: 0).BufferHandle));
@@ -1410,7 +1442,7 @@ public sealed class GpuResidencyLawTests {
         _ = Assert.Throws<InvalidOperationException>(testCode: () => ring.Shadow(shadowBytes: 32, source: source));
         _ = Assert.Throws<InvalidOperationException>(testCode: () => external.Shadow(shadowBytes: 32, source: source));
         _ = Assert.Throws<ArgumentNullException>(testCode: () => staged.Shadow(shadowBytes: 32, source: null!));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.Shadow(shadowBytes: 0, source: source));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.Shadow(shadowBytes: -4, source: source));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.Shadow(shadowBytes: 68, source: source));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.Shadow(shadowBytes: 30, source: source));
         _ = Assert.Throws<InvalidOperationException>(testCode: () => staged.OweSourced(length: 4, offset: 32));
@@ -1428,6 +1460,59 @@ public sealed class GpuResidencyLawTests {
     }
 
     // A source over an array of the region's words, counting the words it is asked for.
+    // An exact source answers only the words it was owed: owing more disjoint runs than a coarsening list holds asks it
+    // for no word between them, the destination receives every owed word and keeps every other, and handing the region
+    // the next source drops what the previous one was owed and no flush staged.
+    [Fact]
+    public void AnExactSourceIsAskedOnlyForTheWordsItWasOwed() {
+        const int Bytes = (64 << 10);
+        const int Runs = (GpuRegion.MaxCopyRuns + 44);
+        var gpu = new UploadModelGpu();
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: Bytes,
+            copyPipeline: copy,
+            hostCopyBytes: 0,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2
+        );
+        var truth = new uint[(Bytes / sizeof(uint))];
+        var owed = new HashSet<int>();
+
+        for (var index = 0; (index < truth.Length); index++) { truth[index] = ((uint)index | 0x8000_0000U); }
+        Assert.Equal(expected: 0UL, actual: region.CpuShadowBytes);
+        var source = new CheckedSource(words: truth, owed: owed);
+
+        region.Shadow(exact: true, shadowBytes: 0, source: source);
+        for (var run = 0; (run < Runs); run++) {
+            owed.Add(item: (run * 5));
+            region.OweSourced(length: sizeof(uint), offset: ((run * 5L) * sizeof(uint)));
+        }
+        Copy(gpu: gpu, region: region, slot: 0);
+        var held = MemoryMarshal.Cast<byte, uint>(span: gpu.Memory(bufferHandle: region.Buffer(slot: 0).BufferHandle)).ToArray();
+
+        Assert.Equal(expected: Runs, actual: source.Words);
+        for (var word = 0; (word < held.Length); word++) { Assert.Equal(expected: (owed.Contains(item: word) ? truth[word] : 0U), actual: held[word]); }
+
+        // Words owed from a source that never flushed are dropped when the next exact source is handed over.
+        region.OweSourced(length: sizeof(uint), offset: 4);
+        region.Shadow(exact: true, shadowBytes: 0, source: new CheckedSource(words: truth, owed: []));
+        Assert.False(condition: region.OwesCopy);
+    }
+    private sealed class CheckedSource(uint[] words, HashSet<int> owed) : IGpuRegionSource {
+        public int Words { get; private set; }
+
+        public void WriteWords(IGpuStorageBuffer buffer, ulong destinationOffsetBytes, int word, int count) {
+            for (var at = word; (at < (word + count)); at++) { Assert.Contains(expected: at, collection: owed); }
+            Words += count;
+            buffer.Write<uint>(data: words.AsSpan(length: count, start: word), destinationOffsetBytes: destinationOffsetBytes);
+        }
+    }
     private sealed class ArraySource(uint[] words) : IGpuRegionSource {
         public int Words { get; set; }
 
@@ -1538,7 +1623,6 @@ public sealed class GpuResidencyLawTests {
         Assert.Equal(expected: GpuResidencyPolicy.Staged, actual: region.Policy);
         Assert.Equal(expected: GpuHostVisibleMemory.Host, actual: region.Memory);
         Assert.Equal(expected: (reserved ? poolsBefore : (poolsBefore + 1)), actual: gpu.PoolsCreated.Count);
-        Assert.Equal(expected: GpuRegion.BytesOf(byteCount: 512, policy: GpuResidencyPolicy.Staged, slotCount: Slots), actual: (region.OwnedBytes.DeviceLocal + region.OwnedBytes.HostVisible));
         Assert.Equal(expected: held, actual: region.Contents[..64].ToArray());
         Assert.Equal(expected: 512L, actual: region.OwedCopyBytes);
         _ = region.Write(bytes: [5, 6, 7, 8], offset: 400);
@@ -1548,6 +1632,8 @@ public sealed class GpuResidencyLawTests {
             Assert.NotSame(expected: before, actual: region.Buffer(slot: slot));
             Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: slot).BufferHandle)[..512]);
         }
+        // Having staged the whole region once, it holds what its policy states.
+        Assert.Equal(expected: GpuRegion.BytesOf(byteCount: 512, policy: GpuResidencyPolicy.Staged, slotCount: Slots), actual: (region.OwnedBytes.DeviceLocal + region.OwnedBytes.HostVisible));
 
         replaced.Dispose();
     }
@@ -1676,26 +1762,26 @@ public sealed class GpuResidencyLawTests {
         Assert.True(condition: region.OwesCopy);
         region.Flush(slot: 0);
 
-        const int BlockBase = (GpuRegion.CopyHeaderWords + (GpuRegion.MaxCopyRuns * 2));
-        // The staging buffer created for the whole region gives way to one of the floor, which the flush writes.
-        var staging = buffers.Created[^1];
+        // The flush takes a ring of the floor for the owed words and writes the header into the slot's request buffer.
+        var request = buffers.Created[1];
+        var ring = buffers.Created[^1];
 
         Assert.Equal(expected: 3, actual: buffers.Created.Count);
-        Assert.Equal(expected: GpuRegion.StagingFloorBytes, actual: staging.SizeBytes);
-        var header = Assert.Single(collection: staging.Writes, predicate: static write => (write.Offset == 0UL));
+        Assert.Equal(expected: GpuRegion.StagingFloorBytes, actual: ring.SizeBytes);
+        var header = Assert.Single(collection: request.Writes);
         var words = MemoryMarshal.Cast<byte, uint>(span: header.Head.AsSpan(length: ((GpuRegion.CopyHeaderWords + 4) * sizeof(uint)), start: 0)).ToArray();
 
-        // A packed region's copy states no row width or strides (header words 4 to 6).
+        // A packed region's copy states no row width or strides (header words 4 to 6); its block starts the ring.
         Assert.Equal(
             actual: words,
-            expected: [3U, 2U, ((uint)BlockBase), 0U, 0U, 0U, 0U, ((uint)((2L << 30) / sizeof(uint))), 0U, ((uint)((Bytes - 8) / sizeof(uint))), 1U]
+            expected: [3U, 2U, 0U, 0U, 0U, 0U, 0U, ((uint)((2L << 30) / sizeof(uint))), 0U, ((uint)((Bytes - 8) / sizeof(uint))), 1U]
         );
         Assert.Equal(
-            actual: staging.Writes.Where(predicate: static write => (write.Offset != 0UL)).Select(selector: static write => (write.Offset, write.Length)),
-            expected: [((((ulong)BlockBase) * sizeof(uint)), 4), (((((ulong)BlockBase) + 1UL) * sizeof(uint)), 8)]
+            actual: ring.Writes.Select(selector: static write => (write.Offset, write.Length)),
+            expected: [(0UL, 4), (4UL, 8)]
         );
         Assert.Equal(
-            actual: staging.Writes.Single(predicate: static write => (write.Length == 8)).Head,
+            actual: ring.Writes.Single(predicate: static write => (write.Length == 8)).Head,
             expected: [5, 6, 7, 8, 9, 10, 11, 12]
         );
     }

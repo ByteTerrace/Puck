@@ -400,24 +400,19 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 return false;
             }
             pending.Meshes = meshes;
-            if (pending.Lighting is not null && !pending.Selection && !pending.CameraSample) {
-                if (m_feedbackWords != pending.VolumeWords) {
-                    // A slot of the service is the region's slot its job flushes through (Record), so a staging buffer
-                    // is rewritten only once the job that last staged through it completed.
-                    GpuRegion replacement;
-                    try {
-                        replacement = tables.CreateProbeRegion("probe-feedback", pending.VolumeWords * 4, SdfGpuWork.SlotCount);
-                    } catch (GpuMemoryRefusedException) {
-                        return false;
-                    }
-                    if (m_feedback is not null) { tables.RetireBackgroundResource(m_feedback); }
-                    m_feedback = replacement;
-                    m_feedbackWords = pending.VolumeWords;
+            if (pending.Lighting is not null && !pending.Selection && !pending.CameraSample && (m_feedbackWords != pending.VolumeWords)) {
+                // A slot of the service is the region's slot its job flushes through (Record), so a ring block is
+                // rewritten only once the job that last staged through it completed. The region keeps no host copy: each
+                // relight job hands it its own updates (Record).
+                GpuRegion replacement;
+                try {
+                    replacement = tables.CreateProbeRegion("probe-feedback", pending.VolumeWords * 4, SdfGpuWork.SlotCount, hostCopyBytes: 0);
+                } catch (GpuMemoryRefusedException) {
+                    return false;
                 }
-                var updates = pending.Updates;
-                for (var update = 0; update < updates.Count; update++) {
-                    m_feedback!.Write(updates.Words.Span[update] * 4, MemoryMarshal.AsBytes(updates.Data.Span.Slice(update * updates.Length, updates.Length)));
-                }
+                if (m_feedback is not null) { tables.RetireBackgroundResource(m_feedback); }
+                m_feedback = replacement;
+                m_feedbackWords = pending.VolumeWords;
             }
             m_pending.Dequeue();
             m_inFlight++;
@@ -489,9 +484,20 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         if (query.HitCapacity != 0) { FitHitCache(query, query.HitCapacity, command); }
         if (query.Batch is { } batch) { m_batchOutput.Fit(BatchOutputBytes(batch.Probes)); }
         originTable.Write<Vector4>(query.Origins.Span);
-        // The job stages the feedback volume's owed words through its own slot's staging buffer, which no submission in
-        // flight reads once the service hands the slot to this job.
-        if (relight) { recording.CopyRegion(m_feedback!, recording.Slot, GpuStage.ComputeShader); }
+        // The job stages its updates of the feedback volume through its own slot, whose ring block no submission in flight
+        // reads once the service hands the slot to this job. Every relight job hands the region its own updates, none
+        // included, so words an earlier job was owed and never staged are dropped rather than read from data its owner may
+        // since have reused: a job whose recording failed is abandoned and cancelled, which makes the volume send a full
+        // snapshot with its next batch (SdfMeshIrradiance.RelightGpu).
+        if (relight) {
+            var updates = query.Updates;
+
+            m_feedback!.Shadow(source: new FeedbackUpdates(updates), shadowBytes: 0, exact: true);
+            for (var update = 0; update < updates.Count; update++) {
+                m_feedback.OweSourced(offset: updates.Words.Span[update] * 4L, length: updates.Length * 4L);
+            }
+            recording.CopyRegion(m_feedback, recording.Slot, GpuStage.ComputeShader);
+        }
         Bind(SdfKernelInterfaces.ProbeScene, m_sceneRegion!.Buffer(0), 4);
         Bind(SdfWorldPackage.MeshRegion, query.Meshes!, 4);
         Bind(SdfKernelInterfaces.ProbeOrigins, originTable, 16);
@@ -846,6 +852,44 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     /// <summary>The slot-sized updates a relight job applies to the feedback volume before it runs: the first word each
     /// update writes, then every update's words back to back, each <see cref="Length"/> words long.</summary>
     internal readonly record struct Deltas(ReadOnlyMemory<int> Words, ReadOnlyMemory<uint> Data, int Count, int Length);
+
+    // A relight job's updates as the feedback region's exact source: it answers the words the job owed and nothing else,
+    // since the region joins owed runs only where updates touch. The updates may come in any order; a flush asks for a
+    // run that can span several adjacent ones.
+    private sealed class FeedbackUpdates : IGpuRegionSource {
+        private readonly Deltas m_updates;
+        // The updates' first words in increasing order, and each one's update.
+        private readonly int[] m_starts;
+        private readonly int[] m_order;
+
+        public FeedbackUpdates(Deltas updates) {
+            m_updates = updates;
+            m_starts = updates.Words.Span[..updates.Count].ToArray();
+            m_order = new int[updates.Count];
+            for (var index = 0; index < m_order.Length; index++) { m_order[index] = index; }
+            Array.Sort(keys: m_starts, items: m_order);
+        }
+
+        public void WriteWords(IGpuStorageBuffer buffer, ulong destinationOffsetBytes, int word, int count) {
+            var data = m_updates.Data.Span;
+            var length = m_updates.Length;
+            var at = PartitionPoint.Of(span: (ReadOnlySpan<int>)m_starts, state: word, isBefore: static (word, start) => (start <= word)) - 1;
+
+            while (count > 0) {
+                if ((at < 0) || (at >= m_order.Length)) { throw new InvalidOperationException(message: $"The feedback region asked for word {word}, which no update of the job holds."); }
+                var update = m_order[at];
+                var skip = word - m_starts[at];
+                if ((skip < 0) || (skip >= length)) { throw new InvalidOperationException(message: $"The feedback region asked for word {word}, which no update of the job holds."); }
+                var take = Math.Min(val1: count, val2: length - skip);
+
+                buffer.Write<uint>(data.Slice(start: (update * length) + skip, length: take), destinationOffsetBytes);
+                destinationOffsetBytes += (ulong)take * sizeof(uint);
+                word += take;
+                count -= take;
+                at++;
+            }
+        }
+    }
 
     private sealed class Job(SdfMeshIrradianceScene scene, Memory<Vector4> origins) {
         public readonly SdfMeshIrradianceScene Scene = scene;

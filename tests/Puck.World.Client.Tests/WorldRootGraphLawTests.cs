@@ -94,6 +94,23 @@ public sealed class WorldRootGraphLawTests {
             expected: [null, new RenderGraphRuntimeInput(Producer: WorldViewGraphs.WorldInstance, Version: "main$world")]
         );
     }
+    // However many post passes run, their stages share two images and the frame holds its own: each stage forwards the
+    // one two passes back, which only the pass before it read.
+    [Fact]
+    public void ALongPostChainHoldsTwoStagesAndTheFrame() {
+        WorldViewPostPass[] post = [.. Enumerable.Range(start: 0, count: 7).Select(selector: static index => new WorldViewPostPass(Name: $"grain-{index}", Package: FilmGrain))];
+        var graph = WorldRootGraph.Compose(
+            overlay: false,
+            packages: RenderGraphPackageCatalog.Engine,
+            post: post
+        );
+        var plan = Assert.IsType<RenderGraphPlan>(@object: graph.Plan);
+        var internalImages = plan.Pipeline.Storages.Where(predicate: static storage => !storage.IsExternal).ToArray();
+
+        Assert.Equal(expected: post.Length, actual: plan.Steps.Count);
+        Assert.Equal(expected: 3, actual: internalImages.Length);
+        Assert.Contains(collection: internalImages, filter: static storage => storage.Versions.Contains(value: "main$frame"));
+    }
     [Fact]
     public void EachPaneIsPlacedOverTheWorldBeforeThePostPassesAndMainBecomesTheRoot() {
         var graph = WorldRootGraph.Compose(
