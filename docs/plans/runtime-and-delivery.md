@@ -132,8 +132,15 @@ image of about 291 MB that every Puck change rewrites.
    route shows how much of it there is, and whether it needs a budget of its
    own. A residency no authored spawn point shows is filled only as far as its
    frames came, so a place that opens one needs a spawn point or the fill
-   needs a door that draws it. *Check:* the 2060's route reads zero
-   `rungs-missed`, and its `groups-baked` are all geometry a rule made.
+   needs a door that draws it. Two costs of the fill are open as well. It
+   bakes at the frame budget's pace, several times slower than a tick-locked
+   bake, because a fill started tick-locked in a running world never settles:
+   its frame stays withheld for its meshes (`SdfWorldResidency.MeshesPending`)
+   after every ladder is whole. And a whole set is about three times a
+   demand set's bytes, most of them tiers of far geometry no player reaches;
+   bounding a ladder's finest tier by how near a body can stand needs the
+   world's reach, which nothing computes yet. *Check:* the 2060's route reads
+   zero `rungs-missed`, and its `groups-baked` are all geometry a rule made.
 2. **The first boot after an update.** The driver's pipeline cache is per
    adapter and driver, so it is never shipped, and every release's first boot
    compiles the engine's pipelines on the player's machine; the 2060's one
