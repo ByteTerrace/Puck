@@ -279,6 +279,17 @@ bounded in bytes by the journal ceiling, refused at load naming both figures
 when a declared depth's worst-case turns cannot fit; there is no separate
 count of turns.
 
+**The document journal's undo is the acting principal's own, admitted as its
+edits were.** `world.undo` and `world.redo` toggle only entries the acting
+principal authored, so a seat may run them and a binding may name them. The
+authority asks of the step what it asked of each edit: every mutation it
+toggles passes the one admission door again, so a principal whose grant was
+narrowed can no longer undo what it can no longer write, and a recipient undoes
+only a write whose whole footprint it still reads. A source edit can rebuild
+any section, so undoing one needs the operator and Mutate over every section.
+This is the document's edit history, not K6's rule-scoped journal, whose gate
+stays the author's rule.
+
 A pending retained segment may span ticks; an ordinary arena journal scope never
 does. Settled passes with no retained writes consume no history. A successful
 rewind suppresses its group for the rest of that tick. Pool reservations count
