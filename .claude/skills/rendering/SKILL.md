@@ -453,11 +453,15 @@ compute samples camera depth, late compute samples light depth, in separate sets
 A far cascade at a reduced rate holds a static layer (`SdfFarShadows.HoldsStaticLayer`; the far pass's
 `ShadowFarStaticDepth` and `ShadowFarStaticExit` outputs, `SdfWorldPackage.WithShadows`' `farStatic`). Its invariant is
 that the layer is copied only into a cascade drawn from the camera it was drawn from, holding the static revision it
-drew; `SdfWorldPasses.RecordFar` is the one door (`SdfFarStaticLayer`, its `drawsStatic`), and `SubmittedFar` commits the
+drew; `SdfWorldPasses.RecordFar` is the one door (`SdfFarStaticLayer`, its `SdfFarStaticUse`), and `SubmittedFar` commits the
 layer. The recorder stages the static draws through a second `SdfMeshOcclusion` (`SdfMeshMotion.Static`, its own mesh
 set group after the cascade's, `OcclusionGroups`) and the moving draws plus every glass draw through the cascade's own
 (`SdfMeshMotion.Dynamic`) over a `CopyDepth` of the layer; the kernel leaves a draw a motion filter excludes untouched.
-A path that draws the layer must call `SdfWorldTables.CastersRead`, or a caster absent then never redraws it on landing.
+A refresh that ends the fit (`DecideFar`'s covers false) bypasses the layer (`SdfFarStaticUse.Bypasses`): every caster
+straight into the cascade, no static selection and no copy, and the layer stops standing until the next refresh the rate
+alone calls for draws it again; a layer drawn on a refresh that ends the fit would stand for nothing when the next one
+ends it too, as a walking camera does. So under a turning sun the authored `farShadows.turnDegrees` is the layer's
+lifetime. A path that draws the layer must call `SdfWorldTables.CastersRead`, or a caster absent then never redraws it on landing.
 The static selection's late step samples the layer it just drew, an access the graph plan never sees; it binds because
 `ShaderPipelineRenderNode.UsageOf` creates every depth sampled. A depth created without `Sampled` is a `D32_FLOAT`
 texture, and Direct3D 12 removes the device (`DXGI_ERROR_INVALID_CALL`, no breadcrumb) on creating its shader resource

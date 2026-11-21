@@ -69,7 +69,7 @@ uint sdfMeterWeight(uint2 pixel) {
 
 // Composites one output pixel; false outside the extent. exposed receives the luminance the image meter bins, at the
 // view's whole exposure, or a negative value where the pixel is not metered.
-bool sdfCompositePixel(uint3 id, out float exposed, out float covered) {
+bool sdfCompositePixel(uint3 id, uint2 volumes, out float exposed, out float covered) {
     exposed = -1.0;
     covered = 0.0;
     if (any(id.xy >= passGroup.extent)) {
@@ -147,7 +147,7 @@ bool sdfCompositePixel(uint3 id, out float exposed, out float covered) {
             float3 volumeSurface = (geometryOnly ? (surface / coverage) : surface);
             float volumeCoverage = (geometryOnly ? 1.0 : coverage);
 
-            color = shadeVolumes(volumeSurface, volumeCoverage, ((t > 0.0) ? t : far), sky, origin, direction, worldRayDistanceAt(view, direction, worldNearDistance(view)), far, id.xy, covered);
+            color = shadeVolumes(volumeSurface, volumeCoverage, ((t > 0.0) ? t : far), sky, origin, direction, worldRayDistanceAt(view, direction, worldNearDistance(view)), far, id.xy, volumes, covered);
             if (geometryOnly) { color *= coverage; }
             else if (fidelity > 0.0) { color = lerp(color, (surface + sky), fidelity); }
         }
@@ -177,22 +177,38 @@ bool sdfCompositePixel(uint3 id, out float exposed, out float covered) {
 }
 
 [numthreads(8, 8, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex) {
+void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint lane : SV_GroupIndex) {
     for (uint cleared = lane; (cleared <= SDF_EXPOSURE_METER_BINS); cleared += 64u) {
         sdfMeterBins[cleared] = 0u;
     }
+    // The bounded volumes the group's pixels may see (sdfVolumeTileCull), culled once for the group about its rays.
+    ViewportData tileView = sdfSkyPassView();
+    float3 tileAxis = cameraRayDirection(tileView, ((float2(groupId.xy * 8u) + 4.0) / float2(passGroup.extent)));
+
+    sdfVolumeTileBegin(lane);
+    GroupMemoryBarrierWithGroupSync();
+    sdfVolumeTileBound(tileAxis, sdfSkyPassDirection(tileView, id.xy));
+    GroupMemoryBarrierWithGroupSync();
+    sdfVolumeTileCull(lane, 64u, tileView.position.xyz, tileAxis, worldFarDistance(tileView));
     GroupMemoryBarrierWithGroupSync();
 
     float exposed;
     float covered;
+    uint weight = 0u;
+    uint coveredWeight = 0u;
 
-    if (sdfCompositePixel(id, exposed, covered) && (exposed >= 0.0)) {
-        uint weight = sdfMeterWeight(id.xy);
-
+    if (sdfCompositePixel(id, sdfVolumeTileCandidates(), exposed, covered) && (exposed >= 0.0)) {
+        weight = sdfMeterWeight(id.xy);
+        coveredWeight = (uint)round(covered * (float)weight);
         if (weight != 0u) {
             InterlockedAdd(sdfMeterBins[sdfMeterBin(exposed)], weight);
-            InterlockedAdd(sdfMeterBins[SDF_EXPOSURE_METER_BINS], (uint)round(covered * (float)weight));
         }
+    }
+    // Every metered pixel adds to the one covered word: the wave sums its lanes and adds once.
+    uint waveCovered = WaveActiveSum(coveredWeight);
+
+    if (WaveIsFirstLane() && (waveCovered != 0u)) {
+        InterlockedAdd(sdfMeterBins[SDF_EXPOSURE_METER_BINS], waveCovered);
     }
     GroupMemoryBarrierWithGroupSync();
     for (uint bin = lane; (bin <= SDF_EXPOSURE_METER_BINS); bin += 64u) {

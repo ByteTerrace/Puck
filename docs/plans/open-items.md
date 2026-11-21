@@ -835,8 +835,20 @@ The frame's GPU side:
   spills of the 25-entry luma window, occupancy) before changing it.
   `sdf-composite` keeps local arrays at high register allocation, and the
   bloom passes, `Graph/place`, `sdf-mesh-bake` and the sky passes smaller ones.
-- [low] `glass-clear` read about 10 ms in a single sample on the RTX 2060 at
-  the stage, a one-off whose cause is not read.
+- [medium] On the RTX 2060's second Direct3D 12 run the glass sums ran at PCIe
+  speed for the whole route (`glass-clear` 6.16 ms over 32 samples, 12.9 GB/s),
+  not once: the process was past its local budget (the closing `host.memory`
+  read `segment local budget=5217574910 usage=5313257472`, the device pool
+  `held=5156587520` against `spend-limit=4683340286`, `over-limit-grants=2360`),
+  so the memory manager placed or demoted allocations in system memory, and
+  Puck sets no residency priority (`GpuBackingSupport.MemoryPriority` is read
+  and never used), so a target every frame touches is as likely to go as a
+  cold one. The fixed class alone held 4.39 GB, and the nested views' optical
+  buffers were allocated 1.85 GB and released 1.79 GB each over the run (band
+  flips rebuilding graphs). Give per-frame render-graph storage a high
+  residency priority (`ID3D12Device1::SetResidencyPriority`,
+  `VK_EXT_memory_priority`) and bring the fixed class under the device's spend
+  limit.
 - [medium] Confirm whether the bench's default `world.indirect medium` is the
   bar's highest quality; if not, every frame reading sits below the bar's
   setting.

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-optics' (sha256/3d2405ccce5b5ce00419734706bb486b3a662e5e9e7adf8b2b2ed55b64d68388). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-optics' (sha256/efa3315cb10432c56c4ed8acd2b63bc4fd531e30fe88bd54a2260af452d26279). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_OPTICS
 #define PUCK_SHADER_INTERFACE_SDF_OPTICS
 
@@ -32,8 +32,8 @@ struct SdfOpticsPass {
     [[vk::offset(68)]] uint workCounterRow;
     [[vk::offset(72)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfOpticsPass> passGroupIsa88BDE672 : register(b0, space3);
-#define passGroup passGroupIsa88BDE672
+[[vk::binding(0, 3)]] ConstantBuffer<SdfOpticsPass> passGroupIsa38EC391E : register(b0, space3);
+#define passGroup passGroupIsa38EC391E
 [[vk::binding(1, 3)]] Texture2D<float4> bloomSource : register(t1, space3);
 [[vk::binding(2, 3)]] Texture2D<float4> bloomFine : register(t2, space3);
 [[vk::binding(3, 3)]] SamplerState bloomSampler : register(s3, space3);
@@ -82,17 +82,32 @@ void puckCountWork(uint steps, uint texels) {
     }
 }
 // Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
-// Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
+// The active lanes may name different rows (divergent layer evaluation): each distinct row among them in turn
+// sums its lanes' counts across the wave, and that row's first lane adds each sum, so a wave adds once a row
+// rather than once a lane.
 void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
     if (passGroup.workCounterRowDetail == 0u) {
         return;
     }
-    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
-    puckAddWork((row + PuckWorkStepsWord), steps);
-    puckAddWork((row + PuckWorkTexelsWord), texels);
-    puckAddWork((row + PuckWorkSkyWord), evaluations);
-    puckAddWork((row + PuckWorkSkyHashesWord), hashes);
-    puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
+    [loop] for (;;) {
+        if (WaveReadLaneFirst(detail) == detail) {
+            uint waveSteps = WaveActiveSum(steps);
+            uint waveTexels = WaveActiveSum(texels);
+            uint waveEvaluations = WaveActiveSum(evaluations);
+            uint waveHashes = WaveActiveSum(hashes);
+            uint waveLoads = WaveActiveSum(loads);
+
+            if (WaveIsFirstLane()) {
+                uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
+                puckAddWork((row + PuckWorkStepsWord), waveSteps);
+                puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+                puckAddWork((row + PuckWorkSkyWord), waveEvaluations);
+                puckAddWork((row + PuckWorkSkyHashesWord), waveHashes);
+                puckAddWork((row + PuckWorkSkyTextureLoadsWord), waveLoads);
+            }
+            break;
+        }
+    }
 }
 void puckCountShapes(uint shapes, uint gradients) {
     uint waveShapes = WaveActiveSum(shapes);

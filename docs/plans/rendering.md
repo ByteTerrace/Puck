@@ -163,10 +163,11 @@ The steps, each after the one it names:
    [streaming plan](streaming-and-memory.md#how-the-bars-are-read) sets the
    RTX 4070's and the Steam Deck's memory bars and no plan yet sets this
    machine's host bar.
-6. **The one-off passes.** After 1. The old reading held one sample of a
-   `glass-clear` pass costing about as much as the resolve. Whether it
-   recurs, and on what event, is read from the timeline before it is
-   attributed.
+6. **Passes past the local budget.** After 1. The `glass-clear` reading
+   that cost about as much as the resolve was sustained, not one-off: the
+   process ran past its local budget and the sums ran from system memory
+   (see open items). Read the timeline beside the `host.memory` segment lines
+   before attributing a slow pass.
 
 The CPU half of the frame (the simulation's steps, produce and its fence)
 belongs to the [engine job system](open-items.md#engine-job-system).

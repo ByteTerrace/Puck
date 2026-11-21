@@ -20,6 +20,11 @@
 // 10: the chosen stage's share as UNORM16 in bits 0 to 15, its measured flag in bit 16, the remainder's in bit 17, the
 //     representative's pixel within the cell (x + SDF_VIEWS_PROBE_RATE * y) in bits 18 to 25, and in bit 26 whether a
 //     representative was gathered at all (a cell with no pixel that wants the lookup holds none). Bits 27..28 select shared shading along x and y.
+// 11 to 31: the gather's six-axis cubes blended by its weights as the record holds them (sdfMeshProbeCube), in a probe
+//     slot's cube packing (sdfMeshCubeRead): the sky shares in 11 to 13, the radiance in 14 to 22 and the sky light in 23
+//     to 31, as half floats. A pixel that reuses the record reads its indirect light and reflection from these words, three
+//     faces a direction, rather than every corner's cube; the cube is linear in its faces, so the answer is the corners'
+//     up to the order of the sums and the halves' rounding.
 #ifndef PASSES_SDF_VIEWS_PROBES_HLSLI
 #define PASSES_SDF_VIEWS_PROBES_HLSLI
 #include "../shade/sdf-mesh-irradiance.hlsli"
@@ -28,6 +33,7 @@
 #define sdfViewsProbeRecordBuffer sdfViewsProbeRecordsRW
 #else
 #define sdfViewsProbeRecordBuffer sdfViewsProbeRecords
+#include "../shade/sdf-light.hlsli"
 #endif
 
 // The reuse test's tolerances (see the head of this file): the distance a reused receiver may lie from the pixel's, which
@@ -38,6 +44,9 @@ static const float SdfViewsProbePlane = (0.25 * SDF_MESH_IRRADIANCE_DEPTH_SURFAC
 static const float SdfViewsProbeFacing = 0.995;
 
 static const uint SdfViewsProbeStateWord = 10u;
+static const uint SdfViewsProbeSkyWord = 11u;
+static const uint SdfViewsProbeRadianceWord = 14u;
+static const uint SdfViewsProbeSkyLightWord = 23u;
 static const uint SdfViewsProbeMeasured = (1u << 16u);
 static const uint SdfViewsProbeRemainderMeasured = (1u << 17u);
 static const uint SdfViewsProbeLaneShift = 18u;
@@ -74,15 +83,37 @@ void sdfViewsProbesStore(uint record, SdfMeshProbes probes, uint lane, bool pres
     }
     sdfViewsProbeRecordBuffer[record] = probes.cage;
     sdfViewsProbeRecordBuffer[record + 1u] = probes.remainderCage;
+    // The cube blends the weights as a reader of the record holds them, quantized.
+    SdfMeshProbes held = probes;
     [unroll] for (uint pair = 0u; (pair < 8u); pair++) {
         uint low = (uint)round(saturate(probes.weight[2u * pair]) * 65535.0);
         uint high = (uint)round(saturate(probes.weight[(2u * pair) + 1u]) * 65535.0);
 
+        held.weight[2u * pair] = (float(low) / 65535.0);
+        held.weight[(2u * pair) + 1u] = (float(high) / 65535.0);
         sdfViewsProbeRecordBuffer[record + 2u + pair] = (low | (high << 16u));
     }
     sdfViewsProbeRecordBuffer[record + SdfViewsProbeStateWord] = ((uint)round(saturate(probes.share) * 65535.0)
         | (probes.measured ? SdfViewsProbeMeasured : 0u) | (probes.remainderMeasured ? SdfViewsProbeRemainderMeasured : 0u)
         | (lane << SdfViewsProbeLaneShift) | SdfViewsProbePresent | rate);
+
+    float sky[6];
+    float3 radiance[6];
+    float3 skyLight[6];
+
+    sdfMeshProbeCube(held, sky, radiance, skyLight);
+    [unroll] for (uint axis = 0u; (axis < 3u); axis++) {
+        sdfViewsProbeRecordBuffer[record + SdfViewsProbeSkyWord + axis] = (f32tof16(sky[2u * axis]) | (f32tof16(sky[(2u * axis) + 1u]) << 16u));
+    }
+    [unroll] for (uint word = 0u; (word < 9u); word++) {
+        uint low = (2u * word);
+        uint high = (low + 1u);
+
+        sdfViewsProbeRecordBuffer[record + SdfViewsProbeRadianceWord + word] =
+            (f32tof16(radiance[low / 3u][low % 3u]) | (f32tof16(radiance[high / 3u][high % 3u]) << 16u));
+        sdfViewsProbeRecordBuffer[record + SdfViewsProbeSkyLightWord + word] =
+            (f32tof16(skyLight[low / 3u][low % 3u]) | (f32tof16(skyLight[high / 3u][high % 3u]) << 16u));
+    }
 }
 #else
 // Reads a cell's gather; false for a cell with no representative.
@@ -120,8 +151,12 @@ SdfMeshProbes sdfViewsProbesAt(SdfPixel p, float3 surfacePoint, float3 normal) {
     SdfMeshProbes cellProbes;
     uint lane;
 
-    if (sdfViewsProbesLoad(sdfViewsProbeRecord(cell, p.viewIndex), cellProbes, lane)) {
+    uint cellRecord = sdfViewsProbeRecord(cell, p.viewIndex);
+
+    if (sdfViewsProbesLoad(cellRecord, cellProbes, lane)) {
         uint2 representative = ((cell * SDF_VIEWS_PROBE_RATE) + uint2((lane % SDF_VIEWS_PROBE_RATE), (lane / SDF_VIEWS_PROBE_RATE)));
+
+        cellProbes.cube = (cellRecord + 1u);
 
         if (all(representative == p.pixel)) {
             return cellProbes;
@@ -144,6 +179,37 @@ SdfMeshProbes sdfViewsProbesAt(SdfPixel p, float3 surfacePoint, float3 normal) {
 #endif
     return sdfMeshProbesAt(surfacePoint, normal);
 #endif
+}
+
+// The views pass's indirect light and reflection under the irradiance volume (sdfMeshIndirectSeen, sdfMeshReflectionSeen):
+// from the record's blended cube where the probes are a record's (SdfMeshProbes.cube), otherwise from their corners.
+void sdfViewsCubeAt(SdfMeshProbes probes, float3 direction, out float sky, out float3 radiance, out float3 skyLight) {
+    uint record = (probes.cube - 1u);
+
+    sdfMeshCubeRead(sdfViewsProbeRecordBuffer, (record + SdfViewsProbeSkyWord), (record + SdfViewsProbeRadianceWord),
+        (record + SdfViewsProbeSkyLightWord), direction, sky, radiance, skyLight);
+}
+float3 sdfViewsIndirectSeen(SdfMeshProbes probes, float3 normal) {
+    if ((probes.cube != 0u) && sdfMeshAnswers(probes)) {
+        float sky;
+        float3 radiance;
+        float3 skyLight;
+
+        sdfViewsCubeAt(probes, normal, sky, radiance, skyLight);
+        return (skyLight + radiance);
+    }
+    return sdfMeshIndirectSeen(probes, normal);
+}
+float3 sdfViewsReflectionSeen(SdfMeshProbes probes, float3 direction, float3 environment) {
+    if ((probes.cube != 0u) && sdfMeshAnswers(probes)) {
+        float sky;
+        float3 radiance;
+        float3 skyLight;
+
+        sdfViewsCubeAt(probes, direction, sky, radiance, skyLight);
+        return ((environment * sky) + radiance);
+    }
+    return sdfMeshReflectionSeen(probes, direction, environment);
 }
 #endif
 

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.Maths;
@@ -397,6 +398,71 @@ public sealed partial class SdfWorldTables {
         }
 
         return false;
+    }
+    /// <summary>Returns the rows of a view's render grid the glass pass may write: the rows every staged glass draw's box
+    /// spans in the view's projection, widened by <paramref name="margin"/> rows for the grid's jitter and the raster's
+    /// coverage. No cull leaves a draw out, so the rows hold whatever the pass's own selection keeps; a box wholly behind
+    /// the eye is clipped by the near plane and spans none, and a box crossing the near plane, or a draw no host box bounds,
+    /// spans every row.</summary>
+    /// <param name="camera">The view's camera, which the glass pass projects with.</param>
+    /// <param name="height">The rows down the view's render grid.</param>
+    /// <param name="margin">The rows each span is widened by on each side.</param>
+    /// <returns>The first and last row, inclusive, or <see langword="null"/> when no glass draw spans a row.</returns>
+    public (uint First, uint Last)? GlassRows(in CameraSnapshot camera, uint height, uint margin) {
+        if ((m_glassDrawCount == 0) || (height == 0)) {
+            return null;
+        }
+
+        var top = float.PositiveInfinity;
+        var bottom = float.NegativeInfinity;
+
+        foreach (var index in m_glassIndices) {
+            if (!SdfMeshRegion.ReadSelection(box: out var box, glass: out _, record: m_meshDrawWords.AsSpan(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords)))) {
+                continue;
+            }
+            if (box is not { } bounded) {
+                return (0u, (height - 1u));
+            }
+
+            var behind = 0;
+            var spanTop = float.PositiveInfinity;
+            var spanBottom = float.NegativeInfinity;
+
+            for (var corner = 0; (corner < 8); corner++) {
+                var point = (((bounded.Center
+                    + (((corner & 1) != 0) ? bounded.HalfX : -bounded.HalfX))
+                    + (((corner & 2) != 0) ? bounded.HalfY : -bounded.HalfY))
+                    + (((corner & 4) != 0) ? bounded.HalfZ : -bounded.HalfZ));
+
+                if (!camera.TryProject(world: point, ndc: out var ndc, depth: out var forward) || (forward < camera.Near)) {
+                    behind += ((forward <= 0f) ? 1 : 9);
+                    continue;
+                }
+
+                // The row a point projects to, as the kernels map a ray to a pixel: the first row's top at zero, Y down.
+                var row = ((0.5f - (0.5f * ndc.Y)) * height);
+
+                spanTop = MathF.Min(x: spanTop, y: row);
+                spanBottom = MathF.Max(x: spanBottom, y: row);
+            }
+            if (behind == 8) {
+                continue;
+            }
+            if (behind != 0) {
+                return (0u, (height - 1u));
+            }
+
+            top = MathF.Min(x: top, y: spanTop);
+            bottom = MathF.Max(x: bottom, y: spanBottom);
+        }
+        if (!(bottom >= top)) {
+            return null;
+        }
+
+        var first = Math.Clamp(value: (MathF.Floor(x: top) - margin), min: 0f, max: (height - 1f));
+        var last = Math.Clamp(value: (MathF.Ceiling(x: bottom) + margin), min: 0f, max: (height - 1f));
+
+        return ((uint)first, (uint)last);
     }
 
     // Packs new draws or a new revision, growing the region when the list needs more

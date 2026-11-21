@@ -194,6 +194,72 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
     transmissionOut = transmission;
 }
 
+// The volumes a group of pixels may see (sdfVolumeTileBegin, sdfVolumeTileBound, sdfVolumeTileCull, then
+// sdfVolumeTileCandidates): one bit a volume of the table, kept where the volume's bounding sphere meets the cone about the
+// group's rays out to the far distance. The cone is measured over the group's own rays, so it holds every ray a pixel of the
+// group integrates whatever the camera's projection; a volume it leaves out has a slab no pixel of the group's ray meets
+// (every point of the slab lies in its sphere), so shadeVolumes reaches the same volumes in the same order as a scan of the
+// whole table. Each lane tests the volumes of its index modulo the group, one each for a group of SDF_MAX_VOLUMES lanes.
+// The caller brackets sdfVolumeTileBound and sdfVolumeTileCull with group barriers.
+groupshared uint sdfVolumeTileCosine;
+groupshared uint sdfVolumeTileMask[2];
+// The bound the group's rays take their smallest cosine to the cone's axis from: a cosine plus two, so its bits order as
+// the float does.
+void sdfVolumeTileBegin(uint lane) {
+    if (lane == 0u) {
+        sdfVolumeTileCosine = 0xFFFFFFFFu;
+        sdfVolumeTileMask[0] = 0u;
+        sdfVolumeTileMask[1] = 0u;
+    }
+}
+// Widens the cone about `axis` (unit, the same for every lane of the group) to hold the lane's ray `direction`.
+void sdfVolumeTileBound(float3 axis, float3 direction) {
+    InterlockedMin(sdfVolumeTileCosine, asuint(clamp(dot(axis, direction), -1.0, 1.0) + 2.0));
+}
+// Marks the volumes whose bounding sphere meets the cone from `origin` about `axis` within `farDistance`. A volume riding a
+// dynamic slot is placed as sdfVolumeLocalPoint places it.
+void sdfVolumeTileCull(uint lane, uint lanes, float3 origin, float3 axis, float farDistance) {
+    float coneAngle = acos(clamp(asfloat(sdfVolumeTileCosine) - 2.0, -1.0, 1.0));
+
+    [loop] for (uint index = lane; index < SDF_MAX_VOLUMES; index += lanes) {
+        uint b = index * SDF_VOLUME_VECTORS_PER_ENTRY;
+        float4 r0 = sdfVolumes[b];
+        float3 halfExtent = sdfVolumes[b + 2u].xyz;
+
+        if (all(halfExtent <= 0.0)) {
+            continue;
+        }
+
+        float3 center = r0.xyz;
+        int dynamicSlot = (int)r0.w;
+
+        if (dynamicSlot != SDF_TRANSFORM_SLOT_NONE) {
+            uint slot = (uint)dynamicSlot;
+
+            center = (sdfDynamicTransforms[(3u * slot)].xyz + rotatePointByQuaternion(center, sdfDynamicTransforms[((3u * slot) + 1u)]));
+        }
+
+        float radius = length(halfExtent);
+        float3 toward = (center - origin);
+        float distance = length(toward);
+        bool keeps = (distance <= radius);
+
+        if (!keeps && ((distance - radius) <= farDistance)) {
+            // The angle from the axis to the sphere's centre, less the sphere's angular radius, within the cone's angle and
+            // a thousandth of a radian for rounding.
+            float centerAngle = acos(clamp((dot(axis, toward) / distance), -1.0, 1.0));
+
+            keeps = ((centerAngle - asin(saturate(radius / distance))) <= (coneAngle + 1.0e-3));
+        }
+        if (keeps) {
+            InterlockedOr(sdfVolumeTileMask[index >> 5], (1u << (index & 31u)));
+        }
+    }
+}
+uint2 sdfVolumeTileCandidates() {
+    return uint2(sdfVolumeTileMask[0], sdfVolumeTileMask[1]);
+}
+
 // Composites every bounded volume over a pixel's two shares, each clipped where its own rays end, so a volume never
 // paints before the near plane or through solid geometry: the surface share, premultiplied by its coverage
 // `surfaceCoverage`, between `nearDistance` (the ray distance where the ray crosses the camera's own near plane,
@@ -204,9 +270,11 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
 // without per-pixel arrays or an unrolled copy of the integrator for every capacity slot. A volume that ends before the
 // surface integrates once for both shares; one the surface clips integrates again over the surface share's span.
 // Overlapping media still composite as whole volumes; this is not a combined-density integral through their overlap.
+// `candidates` holds a bit for each volume the pixel's group may see (sdfVolumeTileCandidates); the pixel tests each of
+// them against its span once, and the ranking walks only those its span meets, in index order as a scan of the table does.
 // `covered` is one where any volume composites over the ray's span. Nothing reads it: the composite alone integrates volumes,
 // after the views pass, and a temporal view's reactivity is written by the views pass only, so a covered volume is not reactive.
-float3 shadeVolumes(float3 surface, float surfaceCoverage, float surfaceDistance, float3 sky, float3 rayOrigin, float3 rayDirection, float nearDistance, float farDistance, uint2 pixel, out float covered) {
+float3 shadeVolumes(float3 surface, float surfaceCoverage, float surfaceDistance, float3 sky, float3 rayOrigin, float3 rayDirection, float nearDistance, float farDistance, uint2 pixel, uint2 candidates, out float covered) {
     covered = 0.0;
     bool surfaceShare = (surfaceCoverage > 0.0);
     bool skyShare = (surfaceCoverage < 1.0);
@@ -216,22 +284,39 @@ float3 shadeVolumes(float3 surface, float surfaceCoverage, float surfaceDistance
     float dither = ((puckR2Dither(pixel) * 2.0) - 1.0);
     float previousNear = 3.402823e+38;
     uint previousIndex = SDF_MAX_VOLUMES;
+    uint2 meets = uint2(0u, 0u);
+
+    [unroll] for (uint word = 0u; word < 2u; word++) {
+        uint bits = candidates[word];
+
+        [loop] while (bits != 0u) {
+            uint bit = firstbitlow(bits);
+            bits &= (bits - 1u);
+            SdfVolumeData v = sdfLoadVolume((word * 32u) + bit);
+            float2 interval = sdfVolumeSlabInterval(sdfVolumeLocalPoint(v, rayOrigin), sdfVolumeLocalDirection(v, rayDirection), v.halfExtent);
+
+            if (min(interval.y, spanEnd) > max(interval.x, nearDistance)) {
+                meets[word] |= (1u << bit);
+            }
+        }
+    }
     [loop] for (uint rank = 0u; rank < SDF_MAX_VOLUMES; rank++) {
         uint selected = SDF_MAX_VOLUMES;
         float selectedNear = -3.402823e+38;
-        [loop] for (uint index = 0u; index < SDF_MAX_VOLUMES; index++) {
-            SdfVolumeData v = sdfLoadVolume(index);
-            // PackVolumes writes a contiguous prefix and zeroes every trailing bound.
-            if (all(v.halfExtent <= 0.0)) break;
-            float3 localOrigin = sdfVolumeLocalPoint(v, rayOrigin);
-            float3 localDirection = sdfVolumeLocalDirection(v, rayDirection);
-            float2 interval = sdfVolumeSlabInterval(localOrigin, localDirection, v.halfExtent);
-            if (min(interval.y, spanEnd) <= max(interval.x, nearDistance)) continue;
-            bool beforeCursor = interval.x < previousNear || (interval.x == previousNear && index < previousIndex);
-            bool nearerChoice = interval.x > selectedNear || (interval.x == selectedNear && index > selected);
-            if (beforeCursor && (selected == SDF_MAX_VOLUMES || nearerChoice)) {
-                selected = index;
-                selectedNear = interval.x;
+        [unroll] for (uint word = 0u; word < 2u; word++) {
+            uint bits = meets[word];
+
+            [loop] while (bits != 0u) {
+                uint index = ((word * 32u) + firstbitlow(bits));
+                bits &= (bits - 1u);
+                SdfVolumeData v = sdfLoadVolume(index);
+                float2 interval = sdfVolumeSlabInterval(sdfVolumeLocalPoint(v, rayOrigin), sdfVolumeLocalDirection(v, rayDirection), v.halfExtent);
+                bool beforeCursor = interval.x < previousNear || (interval.x == previousNear && index < previousIndex);
+                bool nearerChoice = interval.x > selectedNear || (interval.x == selectedNear && index > selected);
+                if (beforeCursor && (selected == SDF_MAX_VOLUMES || nearerChoice)) {
+                    selected = index;
+                    selectedNear = interval.x;
+                }
             }
         }
         if (selected == SDF_MAX_VOLUMES) break;

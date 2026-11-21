@@ -422,7 +422,10 @@ lights and volumes it reads. `composite` scales with the output's pixels and
 glass draws' fragments (every face of each, front and back) and `glass-shade`
 with the render grid's pixels, a copy for every pixel no glass covers and a
 refracted read, up to eight for a frosted pane, for every pixel glass does;
-`glass-clear` is one buffer clear.
+`glass-clear` clears only the rows of the sums the previous raster could have
+written, from the rows its glass draws' boxes spanned
+(`SdfWorldTables.GlassRows`), so a view whose glass covers a band of the screen
+clears that band rather than the whole buffer.
 
 Each pass exposes `gpu.shapes.evaluated` beside `gpu.march.steps`; on the
 baked-mesh path only `bake` evaluates shapes, so a settled frame counts none.
@@ -746,7 +749,9 @@ Each sum is linear in the samples, so each can be filtered like color. Views
 writes the first, `aᵢ Tᵢ Cᵢ`, as the lit image's color; the alpha holds `aᵢ`.
 The resolve computes each kind's **in-scatter weight** `aᵢ Wᵢₖ`, the fog's, the
 haze's and the medium's, from each sample's own visibility record along the
-output pixel's ray, and reads them beside the color at every tap of the same
+sample's own ray, the ray its color's transmittance was taken along, once per
+sample for an output group's tile of samples, and reads them beside the color at
+every tap of the same
 reconstruction footprint (`reconstruction.hlsli`'s footprint and running sum); the
 temporal path sums them with the same Gaussian weights and reprojects them with
 the same history weights. The composite then adds each `Gₖ` times its resolved

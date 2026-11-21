@@ -252,8 +252,9 @@ public interface IVulkanCommandBufferRecordingApi {
         float blue,
         float alpha
     );
-    /// <summary>Records vkCmdFillBuffer with a zero pattern.</summary>
-    void FillBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes);
+    /// <summary>Records vkCmdFillBuffer with a zero pattern over a range of a buffer, from <paramref name="offsetBytes"/>,
+    /// a multiple of four.</summary>
+    void FillBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, ulong offsetBytes = 0);
     /// <summary>Records <c>vkCmdCopyBuffer</c> with one range of the source into a range of the destination.</summary>
     /// <param name="device">The command table of the logical device.</param>
     /// <param name="commandBufferHandle">The native <c>VkCommandBuffer</c> handle the command is recorded into.</param>
