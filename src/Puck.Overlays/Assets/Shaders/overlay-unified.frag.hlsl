@@ -1,7 +1,3 @@
-// COST MODEL: the overlay is a single linear scan over declared rows — every pixel walks every submitted record
-// with per-record early-outs. Re-measure through the live pass-timing instrument before growing content; the
-// linear scan stays until it does.
-//
 // The unified overlay pass (single-source HLSL; DXC -> SPIR-V for Vulkan AND DXIL for Direct3D 12). ONE pass
 // draws every 2D surface from one packed storage buffer: N PANELS (token chrome — a scrim fill in a rounded rect, a
 // 1px hairline outline, an optional title band + divider, an optional Tier-1 status ring + bloom halo) plus a flat
@@ -22,7 +18,8 @@
 //                          per-glyph metric table (overlay-common.hlsli's OverlayGlyphOrigin/OverlayGlyphAdvance)
 //   [panelBase, elementBase) the panel records · [elementBase, textBase) the element records ·
 //   [textBase, clipBase)   the glyph-code words the text runs index (one pre-resolved index per word) ·
-//   [clipBase, ...)        the clip table (normalized x, y, w, h per rect; record word 9 indexes it, 0 = unclipped).
+//   [clipBase, tileBase)  clip rects and scope ends (record word 9 indexes them, 0 = unclipped).
+//   [tileBase, ...)       the tile index (OverlayFrameBuilder.BuildTileIndex).
 // Panel/element positions are NORMALIZED [0,1] screen space; each record's clip index CONFINES its pixels to a
 // seat's viewport rect (placement inside a viewport is also clipping to it — the split-screen invariant); scalar
 // widths (radii, plate halves, badge offsets) are PIXELS. KEEP IN SYNC with
@@ -72,7 +69,7 @@ float4 sampleFrameSlot(uint slot, float2 uv) {
 }
 
 // The pass block's per-frame values (passGroup):
-// counts: panelCount, elementCount, atlasCellW, atlasCellH (texels)
+// counts: tileBase, element mask word count, atlasCellW, atlasCellH (texels)
 // misc:   textBase (word index), atlasBase (word index), clipBase (word index), glyphCount (this boot's atlas total)
 // sdf:    distanceRange (texels), outlineBand (encoded units), panelBase (word index), elementBase (word index)
 
@@ -105,16 +102,51 @@ float strokeMask(float distance, float width, float aa) {
 
 // Whether the record's clip rect (word 9's index into the clip table; 0 = unclipped) rejects this pixel — the
 // per-seat viewport confinement contract (see OverlayFrameBuilder.BeginClip).
-bool clipRejects(uint clipIndex, float2 fragXy, uint clipBase, float2 dims) {
-    if (clipIndex == 0u) {
-        return false;
-    }
-
-    uint o = (clipBase + ((clipIndex - 1u) * 4u));
+bool clipRejects(uint o, float2 fragXy, float2 dims) {
     float2 clipXy = (float2(OverlayFloat(overlayData, o), OverlayFloat(overlayData, (o + 1u))) * dims);
     float2 clipWh = (float2(OverlayFloat(overlayData, (o + 2u)), OverlayFloat(overlayData, (o + 3u))) * dims);
 
     return ((fragXy.x < clipXy.x) || (fragXy.y < clipXy.y) || (fragXy.x >= (clipXy.x + clipWh.x)) || (fragXy.y >= (clipXy.y + clipWh.y)));
+}
+
+struct OverlayTileElements {
+    uint summary;
+    uint groups;
+    uint word;
+    uint pending;
+};
+
+// Iterate the intersection of the column and row masks in submission order. The summary lets empty blocks
+// of 32 elements pass without touching their masks or the records they index.
+bool nextOverlayElement(uint2 axes, uint summaryWords, uint maskBase, bool masks, uint minimum,
+    inout OverlayTileElements iterator, out uint index) {
+    while (true) {
+        if (iterator.pending != 0u) {
+            uint bit = firstbitlow(iterator.pending);
+            iterator.pending &= iterator.pending - 1u;
+            index = iterator.word * 32u + bit;
+            if (index >= minimum) { return true; }
+            uint skip = minimum - iterator.word * 32u;
+            iterator.pending = skip < 32u ? (iterator.pending & (0xffffffffu << skip)) : 0u;
+        }
+        if (iterator.pending != 0u) { continue; }
+        while (iterator.groups == 0u) {
+            if (iterator.summary == summaryWords) {
+                index = 0u;
+                return false;
+            }
+            iterator.summary++;
+            iterator.groups = OverlayWord(overlayData, axes.x + iterator.summary) &
+                OverlayWord(overlayData, axes.y + iterator.summary);
+        }
+        iterator.word = (iterator.summary - 1u) * 32u + firstbitlow(iterator.groups);
+        iterator.groups &= iterator.groups - 1u;
+        if (iterator.word < minimum / 32u) { continue; }
+        uint offset = 1u + summaryWords + iterator.word;
+        uint mask = OverlayWord(overlayData, maskBase + iterator.word);
+        iterator.pending = OverlayWord(overlayData, axes.x + offset) & OverlayWord(overlayData, axes.y + offset) &
+            (masks ? mask : ~mask);
+    }
 }
 
 // A label of one or two atlas glyphs (glyph1 < 0 for one) in a glyph-local frame where a glyph cell is 2 * halfH units
@@ -178,8 +210,13 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     uint atlasBase = (uint)passGroup.misc.y;
     uint clipBase = (uint)passGroup.misc.z;
     int glyphCount = (int)passGroup.misc.w;
-    int panelCount = (int)passGroup.counts.x;
-    int elementCount = (int)passGroup.counts.y;
+    uint tileBase = (uint)passGroup.counts.x;
+    uint elementWords = (uint)passGroup.counts.y;
+    uint summaryWords = (elementWords + 31u) / 32u;
+    uint maskBase = tileBase + 2u;
+    uint2 tile = uint2(fragCoord.xy) / 16u;
+    uint2 axes = (maskBase + elementWords) + uint2(tile.x, OverlayWord(overlayData, tileBase) + tile.y) *
+        (1u + summaryWords + elementWords);
     int atlasCellW = (int)passGroup.counts.z;
     int atlasCellH = (int)passGroup.counts.w;
 
@@ -187,15 +224,20 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     // the dedicated diagnostic channel; no diagnostic stroke, badge or focus treatment can paint these pixels.
     bool diagnosticProtected = false;
     bool diagnosticFocus = false;
-    for (int maskIndex = 0; maskIndex < elementCount; maskIndex++) {
-        uint maskOffset = elementBase + (uint)maskIndex * ELEMENT_WORDS;
-        uint maskKind = OverlayWord(overlayData, maskOffset + 4u) & 0xFu;
-        if ((maskKind != 6u) && (maskKind != 7u)) { continue; }
-        float2 low = float2(OverlayFloat(overlayData, maskOffset), OverlayFloat(overlayData, maskOffset + 1u));
-        float2 size = float2(OverlayFloat(overlayData, maskOffset + 2u), OverlayFloat(overlayData, maskOffset + 3u));
-        bool inside = all(uv >= low) && all(uv <= low + size);
-        diagnosticProtected = diagnosticProtected || ((maskKind == 6u) && inside);
-        diagnosticFocus = diagnosticFocus || ((maskKind == 7u) && inside);
+    uint visited = 0u;
+    if (OverlayWord(overlayData, tileBase + 1u) != 0u) {
+        OverlayTileElements masks = (OverlayTileElements)0;
+        uint maskIndex;
+        while (nextOverlayElement(axes, summaryWords, maskBase, true, 0u, masks, maskIndex)) {
+            visited++;
+            uint maskOffset = elementBase + maskIndex * ELEMENT_WORDS;
+            uint maskKind = OverlayWord(overlayData, maskOffset + 4u) & 0xFu;
+            float2 low = float2(OverlayFloat(overlayData, maskOffset), OverlayFloat(overlayData, maskOffset + 1u));
+            float2 size = float2(OverlayFloat(overlayData, maskOffset + 2u), OverlayFloat(overlayData, maskOffset + 3u));
+            bool inside = all(uv >= low) && all(uv <= low + size);
+            diagnosticProtected = diagnosticProtected || ((maskKind == 6u) && inside);
+            diagnosticFocus = diagnosticFocus || ((maskKind == 7u) && inside);
+        }
     }
     if (diagnosticFocus && !diagnosticProtected) {
         float luma = dot(color, PuckRec709Luminance);
@@ -217,19 +259,27 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     //   6     ring role (uint: 0 = none, else a token color-role index — the Tier-1 bloom ring + halo hue)
     //   7     title band height (float, normalized y)
     //   8     panel alpha (float — the toast's content-tick fade scales its whole chrome)
-    //   9..11 reserved
-    for (int p = 0; (p < panelCount); p++) {
-        uint o = (panelBase + ((uint)p * PANEL_WORDS));
+    //   9     clip index
+    uint panels = OverlayWord(overlayData, axes.x) & OverlayWord(overlayData, axes.y);
+    while (panels != 0u) {
+        uint p = firstbitlow(panels);
+        panels &= panels - 1u;
+        visited++;
+        uint o = panelBase + p * PANEL_WORDS;
+        uint clip = OverlayWord(overlayData, o + 9u);
+        if (clip != 0u) {
+            uint clipRow = clipBase + (clip - 1u) * 6u;
+            if (clipRejects(clipRow, fragCoord.xy, dims)) {
+                panels &= 0xffffffffu << OverlayWord(overlayData, clipRow + 4u);
+                continue;
+            }
+        }
         float4 rect = (float4(OverlayFloat(overlayData, o), OverlayFloat(overlayData, (o + 1u)), OverlayFloat(overlayData, (o + 2u)), OverlayFloat(overlayData, (o + 3u))) * dims.xyxy);
         uint flags = OverlayWord(overlayData, (o + 4u));
         uint styleKind = OverlayWord(overlayData, (o + 5u));
         uint ringRole = OverlayWord(overlayData, (o + 6u));
         float bandHeight = (OverlayFloat(overlayData, (o + 7u)) * dims.y);
         float panelAlpha = OverlayFloat(overlayData, (o + 8u));
-
-        if (clipRejects(OverlayWord(overlayData, (o + 9u)), fragCoord.xy, clipBase, dims)) {
-            continue;
-        }
 
         float2 local = (fragCoord.xy - rect.xy);
         // The Tier-1 halo legitimately bleeds past the rect; use its reach as the slack when a ring is lit.
@@ -298,16 +348,24 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     //             OverlayFrameSlots slot sampled into a rounded rect (the HUD picture-in-picture, e.g. a face cam),
     //             cross-faded from frameSlotB when present: both slots take the same fit/mirror uv and blend as
     //             lerp(slotB, slot, mix) before the single composite; see frameSlotDimensions/sampleFrameSlot.
-    for (int e = 0; (e < elementCount); e++) {
-        uint o = (elementBase + ((uint)e * ELEMENT_WORDS));
-
-        if (clipRejects(OverlayWord(overlayData, (o + 9u)), fragCoord.xy, clipBase, dims)) {
-            continue;
+    OverlayTileElements elements = (OverlayTileElements)0;
+    uint minimum = 0u;
+    uint e;
+    while (nextOverlayElement(axes, summaryWords, maskBase, false, minimum, elements, e)) {
+        visited++;
+        uint o = elementBase + e * ELEMENT_WORDS;
+        uint clip = OverlayWord(overlayData, o + 9u);
+        if (clip != 0u) {
+            uint clipRow = clipBase + (clip - 1u) * 6u;
+            if (clipRejects(clipRow, fragCoord.xy, dims)) {
+                minimum = max(minimum, OverlayWord(overlayData, clipRow + 5u));
+                continue;
+            }
         }
 
         uint packed = OverlayWord(overlayData, (o + 4u));
         uint kind = (packed & 0xFu);
-        if ((kind == 6u) || (kind == 7u) || (diagnosticProtected && ((packed & 0x80000000u) != 0u))) { continue; }
+        if (diagnosticProtected && ((packed & 0x80000000u) != 0u)) { continue; }
         uint role = ((packed >> 4u) & 0xFFu);
         float2 origin = (float2(OverlayFloat(overlayData, o), OverlayFloat(overlayData, (o + 1u))) * dims);
         float2 ab = float2(OverlayFloat(overlayData, (o + 2u)), OverlayFloat(overlayData, (o + 3u)));
@@ -315,6 +373,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
 
         if (kind == 8u) {
             float2 delta = ab * dims - origin;
+            if (any(local < min(0.0, delta) - 1.5) || any(local > max(0.0, delta) + 1.5)) { continue; }
             float along = saturate(dot(local, delta) / max(dot(delta, delta), 1.0e-8));
             float distance = length(local - delta * along);
             float mask = 1.0 - smoothstep(0.5, 1.5, distance);
@@ -651,7 +710,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
         }
     }
 
-    puckCountFragmentWork(0u, 1u);
+    puckCountFragmentWork(visited, 1u);
 
     return float4(color, 1.0);
 }

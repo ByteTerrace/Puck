@@ -6,6 +6,7 @@
 #include "../frame/sdf-mesh.hlsli"
 #include "../frame/sdf-mesh-raster.hlsli"
 #include "../frame/sdf-optical-depth.hlsli"
+#include "../frame/sdf-shadow-optical.hlsli"
 #include "../field/sdf-program.hlsli"
 #include "../shade/sdf-material.hlsli"
 
@@ -26,7 +27,12 @@ float PSMain(MeshRasterVertex input) : SV_Depth {
         uint width;
         uint height;
         meshVisibility.GetDimensions(width, height);
-        uint word = 3u * (pixel.y * width + pixel.x);
+        uint2 tile = pixel / SDF_SHADOW_OPTICAL_TILE_EDGE;
+        uint index = tile.y * sdfShadowOpticalTilesAcross(width) + tile.x;
+        if (!WaveActiveAllEqual(index) || WaveIsFirstLane()) {
+            InterlockedOr(sdfGlassSumsRW[sdfShadowOpticalBitmap(width) + index / 32u], 1u << (index % 32u));
+        }
+        uint word = sdfShadowOpticalWord(width, pixel);
         sdfOpticalDepthAccumulate(sdfGlassSumsRW, word, t, receiver, front, density);
         if (front) {
             uint ignored;

@@ -473,8 +473,8 @@ public sealed class RenderGraphPackageCatalog {
     );
 
     /// <summary>Gets what <see cref="Overlay"/>'s fragment stage reads from its pass group beside the extent: three
-    /// per-frame values its recorder writes, which the pass block holds in name order as it holds config fields (<c>counts</c>: panel and
-    /// element counts and the atlas cell's width and height; <c>misc</c>: the text, atlas and clip bases and the glyph
+    /// per-frame values its recorder writes, which the pass block holds in name order as it holds config fields (<c>counts</c>: the tile
+    /// index base, element mask words and the atlas cell's width and height; <c>misc</c>: the text, atlas and clip bases and the glyph
     /// count; <c>sdf</c>: the distance range, the outline band and the panel and element bases), then its input image, its
     /// frame slot images, the one sampler they are all read through, its storage buffer, and the work counters it counts
     /// every texel it writes into.</summary>

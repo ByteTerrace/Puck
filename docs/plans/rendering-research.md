@@ -2595,12 +2595,10 @@ CPU thread reads to learn that work on a queue has finished.
   capability, as decision 15 plans.
 - *Cost.* Medium, in the Vulkan presenter.
 
-**13. Shadow depth with no fragment stage, and pipeline statistics.**
+**13. Pipeline statistics for shadow depth.**
 
-- *What it speeds up.* The shadow pass's fragment shader exists only to
-  count fragments (`sdf-mesh-shadow.frag.hlsl`). An occlusion query counts
-  the same samples with no pixel shader. That a depth pass with no fragment
-  stage is faster is the researcher's inference, unverified.
+- *What it measures.* The depth-only shadow passes count draws and vertices in
+  selection. A separate occlusion query could measure depth-passing samples.
 - *What it adds.* A pipeline statistics query reports vertex shader
   invocations
   (<https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ns-d3d12-d3d12_query_data_pipeline_statistics>).

@@ -64,7 +64,7 @@ internal sealed class RefusingGpuDevice :
     IGpuFramebuffer IGpuRenderPassFactory.CreateFramebuffer(IGpuRenderPass renderPass, IReadOnlyList<IGpuImage> colors, IGpuImage? depth) => throw Reach(member: "IGpuRenderPassFactory.CreateFramebuffer");
     IGpuCommandPool IGpuCommandPoolFactory.Create(in GpuObjectName name) => throw Reach(member: "IGpuCommandPoolFactory.Create");
     IGpuComputePipeline IGpuPipelineFactory.Create(IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description, in GpuObjectName name) => throw Reach(member: "IGpuPipelineFactory.Create(compute)");
-    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) => throw Reach(member: "IGpuPipelineFactory.Create(graphics)");
+    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule? fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) => throw Reach(member: "IGpuPipelineFactory.Create(graphics)");
     void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) => throw Reach(member: "IGpuRecorder.BeginCommandBuffer");
     void IGpuRecorder.EndCommandBuffer(nint commandBufferHandle) => throw Reach(member: "IGpuRecorder.EndCommandBuffer");
     void IGpuRecorder.BeginDebugGroup(nint commandBufferHandle, string label) => throw Reach(member: "IGpuRecorder.BeginDebugGroup");

@@ -641,9 +641,9 @@ public static partial class SdfWorldPackage {
         OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
         Outputs: [new ResourceReference(Name: depth), new ResourceReference(Name: exit)]
     );
-    // Three words per cascade texel: signed 64-bit optical depth and complemented nearest entry distance.
+    // Signed 64-bit optical depth and complemented nearest entry distance, followed by a bit per clear tile.
     private static ShaderPipelineResource ShadowOptical(string name, int texels) =>
-        Buffer(count: null, name: name, sizeBytes: checked((ulong)texels * (ulong)texels * 3u * sizeof(uint)), strideBytes: sizeof(uint));
+        Buffer(count: null, name: name, sizeBytes: checked(((ulong)texels * (ulong)texels * ShadowOpticalTexelWords + ShadowOpticalBitmapWords((uint)texels)) * sizeof(uint)), strideBytes: sizeof(uint));
     // A cascade's depth, texels a side, which its raster pass writes and the surface pass samples.
     private static ShaderPipelineResource ShadowDepth(string name, int texels) => new(
         ClearDepth: MeshClearDepth,

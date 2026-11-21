@@ -591,7 +591,7 @@ file sealed class FaultingPipelineFactory(IGpuPipelineFactory inner, GpuCreation
             name: name
         );
     }
-    public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) {
+    public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule? fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) {
         Enter(kind: GpuCreationKind.Pipeline);
 
         return inner.Create(
