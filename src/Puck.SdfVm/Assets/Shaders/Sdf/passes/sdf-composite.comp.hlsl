@@ -172,7 +172,6 @@ bool sdfCompositePixel(uint3 id, uint2 volumes, out float exposed, out float cov
     // quantizes it.
     output[id.xy] = float4(min(color, SDF_LUMINANCE_CEILING), (geometryOnly ? litColor.a : 1.0));
     sdfWorkTexels = 1u;
-    puckCountWork(sdfWorkSteps, sdfWorkTexels);
     return true;
 }
 
@@ -218,4 +217,5 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint lan
             InterlockedAdd(exposureMeterRW[bin], weight);
         }
     }
+    puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

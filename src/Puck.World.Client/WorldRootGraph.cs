@@ -199,7 +199,12 @@ public sealed class WorldRootGraph {
                 ? FrameVersion
                 : StageVersion(index: (index + 1)));
 
+            // The stages ping-pong between two images: a stage forwards the one two passes back, which only the pass
+            // before this one read, so the chain holds two stages whatever its length. The frame is its own image.
             resources.Add(item: Image(
+                from: (((index >= 2) && (index < (passCount - 1)))
+                    ? StageVersion(index: (index - 1))
+                    : null),
                 initialization: ShaderPipelineInitialization.Undefined,
                 name: output
             ));
@@ -453,9 +458,10 @@ public sealed class WorldRootGraph {
     }
     // Every version the root declares is a working image; a pane or view it places binds whatever image its instance
     // publishes, which the place pass samples.
-    private static ShaderPipelineResource Image(string name, ShaderPipelineInitialization initialization) => new(
+    private static ShaderPipelineResource Image(string name, ShaderPipelineInitialization initialization, string? from = null) => new(
         Dimensions: ShaderPipelineDimensions.Relative(),
         Format: RenderGraphPackageCatalog.WorkingFormat.ToString(),
+        From: from,
         Initialization: initialization,
         Name: name
     );

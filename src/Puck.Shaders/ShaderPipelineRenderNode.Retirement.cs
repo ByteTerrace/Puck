@@ -114,12 +114,11 @@ public sealed partial class ShaderPipelineRenderNode {
                 }
             }
             foreach (var region in (pass?.RowRegions ?? []).Select(selector: static row => row.Region).Concat(second: (pass?.Regions ?? []))) {
+                // What the live region holds now, its staging ring included, not the estimate a planned one is admitted by.
                 if (region is not null) {
-                    bytes = checked((bytes + GpuRegion.BytesOf(
-                        byteCount: region.ByteCount,
-                        policy: region.Policy,
-                        slotCount: region.SlotCount
-                    )));
+                    var owned = region.OwnedBytes;
+
+                    bytes = checked(((bytes + owned.DeviceLocal) + owned.HostVisible));
                 }
             }
         }

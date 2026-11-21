@@ -26,23 +26,11 @@ public sealed partial class WorldFramePresenter {
     public bool TrySurface(SourceRay ray, Vector3 from, out FixedVector3 point) {
         point = default;
 
-        var reach = (FixedQ4816.FromDouble(value: WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render)) - (ray.Origin - FixedVector3.FromVector3(value: from)).Length);
-
-        if (
-            (m_client.StaticField is not { } field) ||
-            (reach <= FixedQ4816.Zero) ||
-            !field.Raycast(
-                dir: ray.Direction,
-                hit: out var hit,
-                maxDist: reach,
-                origin: FixedPosition.FromLocal(local: ray.Origin)
-            ) ||
-            (hit.Confidence != WorldQueryConfidence.Exact)
-        ) {
+        if (!WorldFieldSurface.TryMeet(farDistance: WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render), field: m_client.StaticField, from: from, point: out var met, ray: ray)) {
             return false;
         }
 
-        point = (hit.Point - FixedPosition.Zero);
+        point = (met - FixedPosition.Zero);
 
         return true;
     }

@@ -40,6 +40,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
     /// reports.</summary>
     public const string ReadWindow = "world.counters.read";
 
+    private const string ArmWord = "arm";
     private const string ClearPeaksWord = "clear-peaks";
     private const string CounterWord = "counter";
     private const string JsonFlag = "--json";
@@ -49,7 +50,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
     private const string TransfersWord = "transfers";
     private const string Form = "[<source-or-prefix>] [node <name>] [pass <label>] [counter <prefix>] [summary|transfers] [--json]";
     private const string Verb = "world.counters";
-    private static readonly CommandForms WorldCountersForms = CommandForms.Of(verb: "world.counters", Form, "[<source-or-prefix>] clear-peaks");
+    private static readonly CommandForms WorldCountersForms = CommandForms.Of(verb: "world.counters", Form, "[<source-or-prefix>] clear-peaks", "arm");
 
     private readonly IWorkCounterSource[] m_sources = [.. sources.OrderBy(
         comparer: StringComparer.Ordinal,
@@ -80,6 +81,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
         string? filter = null;
         string? node = null;
         string? pass = null;
+        var arm = false;
         var clearPeaks = false;
         var json = false;
         var summary = false;
@@ -91,6 +93,8 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
                 value: JsonFlag
             )) {
                 json = true;
+            } else if (args.Is(index: index, value: ArmWord)) {
+                arm = true;
             } else if (args.Is(index: index, value: ClearPeaksWord)) {
                 clearPeaks = true;
             } else if (args.Is(index: index, value: TransfersWord)) {
@@ -140,6 +144,11 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
             }
         }
 
+        if (arm) {
+            return ((clearPeaks || json || summary || transfers || (filter is not null) || (node is not null) || (pass is not null) || (counter is not null))
+                ? WorldCountersForms.Refuse()
+                : Arm());
+        }
         if (clearPeaks) {
             return ((json || summary || transfers || (node is not null) || (pass is not null) || (counter is not null))
                 ? WorldCountersForms.Refuse()
@@ -226,6 +235,18 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
                 selected: selected
             )
         ));
+    }
+    // Asks every GPU node to count its passes' kernel work for a while (IGpuWorkSource.DemandKernelCounting), which a
+    // reading of the gpu section also does; a script that takes one reading arms first and waits, so that reading
+    // finds the counts instead of the quiet frames before it.
+    private CommandResult Arm() {
+        var nodes = GpuNodes();
+
+        foreach (var node in nodes) {
+            node.Work.DemandKernelCounting();
+        }
+
+        return new CommandResult(Output: $"[{Verb}: armed kernel work counting on {nodes.Count} gpu node(s); read after a few frames]");
     }
     // Clears the peaks of every source the filter selects, opening a reading's window: its peak kinds read the largest
     // value raised after the call (WorkKind.IsPeak), and its totals stand.
@@ -634,7 +655,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Host,
             bindability: CommandBindability.Unbindable,
-            description: $"Echoes every registered work counter: {WorldCountersForms.Spelling}. One section per counter source, sorted by name — the source's dotted name, then a `<kind> <value>` line per kind it counts (a total only goes up, so a reader diffs two reads; a peak kind, `\"peak\":true` in the --json legend, holds the largest value one step of its owner's work raised since `world.counters <source-or-prefix> clear-peaks` cleared that source's peaks, so a reading clears them at the start of its window and reads them at its end). The `{GpuSection}` section's header names the device (backend, adapter, vendor and device ids, driver version, API version), then a `capabilities` line names what it can bind (descriptor sets or root-signature words, push-constant bytes, per-stage descriptor limits, and on Direct3D 12 the binding tier, root signature version, shader model and heap sizes), then it holds each render node's GPU work for its newest completed submission: per node (world first, then its hosted pipelines, overlay, view:<name>) a `node <name> work submission=S revision=R` line, one `work <pass> executed|skipped|not-reached` line per pass with its counts, `work outside` for work between passes, and `work lifetime` for created objects; `work unavailable` until a submission completes. A full `{GpuSection}` answer runs to hundreds of kilobytes in a large world, so narrow it: `node <name>` keeps one node (and the nodes under it, `session$26` keeps `session$26$24`), `pass <label>` keeps one pass (`sdf.world$mesh`, or `sdf.world` for every pass under it) in every node that has it and drops the lifetime, owned-bytes and outside lines, `counter <prefix>` keeps the counts whose name starts with the prefix (`draws` keeps draws and draws.indirect; `vertices`, `texels`), and `summary` prints one `node <name> draws=N vertices=N texels=N dispatches=N` line per node (dispatches are direct and indirect together; with `pass`, only that pass). `transfers` reports cumulative host-write/copy work at submission/discard checkpoints, accepted submissions and known completion by ordered ledger domain. Open records are excluded; image-copy bytes and physical bus traffic are not inferred. Coverage is limited to reported render-device ledger domains, excluding external-source threads/devices. It takes node but not pass/counter/summary. The other options combine; node, pass and counter select the `{GpuSection}` section by themselves. Bare summary keeps every available source and summarizes GPU nodes when present, including on a headless host. A text `{GpuSection}` section that would pass {GpuTextBudget} characters prints the summary form under a note saying so. The `{AllocationSection}` section names the GC mode and the fewest managed bytes one read of every count allocated ({ReadWindow}, the least of up to {AllocationWindow.MaximumWindows} reads; only zero or not zero means anything). A filter selects the sections named by it or under it by whole dotted segments (world.counters {GpuSection}, world.counters state). --json prints one line of JSON: {{\"sources\":[{{\"name\":…,\"counts\":{{\"<kind>\":<value>}}}}],\"{GpuSection}\":{{\"device\":{{…}},\"capabilities\":{{…}},\"nodes\":[…]}},\"{AllocationSection}\":{{\"gcMode\":…,\"windows\":{{\"{ReadWindow}\":<bytes>}}}},\"kinds\":{{\"<kind>\":{{\"unit\":…,\"class\":\"deterministic|per-backend-deterministic|pacing\",\"peak\":true for a peak}}}}}}; the options narrow its nodes the same way and `summary` writes each node as {{\"name\":…,\"summary\":{{\"draws\":…,\"vertices\":…,\"texels\":…,\"dispatches\":…}}}}, and the JSON is never replaced by a summary. Counts run always.",
+            description: $"Echoes every registered work counter: {WorldCountersForms.Spelling}. One section per counter source, sorted by name — the source's dotted name, then a `<kind> <value>` line per kind it counts (a total only goes up, so a reader diffs two reads; a peak kind, `\"peak\":true` in the --json legend, holds the largest value one step of its owner's work raised since `world.counters <source-or-prefix> clear-peaks` cleared that source's peaks, so a reading clears them at the start of its window and reads them at its end). The `{GpuSection}` section's header names the device (backend, adapter, vendor and device ids, driver version, API version), then a `capabilities` line names what it can bind (descriptor sets or root-signature words, push-constant bytes, per-stage descriptor limits, and on Direct3D 12 the binding tier, root signature version, shader model and heap sizes), then it holds each render node's GPU work for its newest completed submission: per node (world first, then its hosted pipelines, overlay, view:<name>) a `node <name> work submission=S revision=R` line, one `work <pass> executed|skipped|not-reached` line per pass with its counts, `work outside` for work between passes, and `work lifetime` for created objects; `work unavailable` until a submission completes. A full `{GpuSection}` answer runs to hundreds of kilobytes in a large world, so narrow it: `node <name>` keeps one node (and the nodes under it, `session$26` keeps `session$26$24`), `pass <label>` keeps one pass (`sdf.world$mesh`, or `sdf.world` for every pass under it) in every node that has it and drops the lifetime, owned-bytes and outside lines, `counter <prefix>` keeps the counts whose name starts with the prefix (`draws` keeps draws and draws.indirect; `vertices`, `texels`), and `summary` prints one `node <name> draws=N vertices=N texels=N dispatches=N` line per node (dispatches are direct and indirect together; with `pass`, only that pass). `transfers` reports cumulative host-write/copy work at submission/discard checkpoints, accepted submissions and known completion by ordered ledger domain. Open records are excluded; image-copy bytes and physical bus traffic are not inferred. Coverage is limited to reported render-device ledger domains, excluding external-source threads/devices. It takes node but not pass/counter/summary. The other options combine; node, pass and counter select the `{GpuSection}` section by themselves. Bare summary keeps every available source and summarizes GPU nodes when present, including on a headless host. A text `{GpuSection}` section that would pass {GpuTextBudget} characters prints the summary form under a note saying so. The `{AllocationSection}` section names the GC mode and the fewest managed bytes one read of every count allocated ({ReadWindow}, the least of up to {AllocationWindow.MaximumWindows} reads; only zero or not zero means anything). A filter selects the sections named by it or under it by whole dotted segments (world.counters {GpuSection}, world.counters state). --json prints one line of JSON: {{\"sources\":[{{\"name\":…,\"counts\":{{\"<kind>\":<value>}}}}],\"{GpuSection}\":{{\"device\":{{…}},\"capabilities\":{{…}},\"nodes\":[…]}},\"{AllocationSection}\":{{\"gcMode\":…,\"windows\":{{\"{ReadWindow}\":<bytes>}}}},\"kinds\":{{\"<kind>\":{{\"unit\":…,\"class\":\"deterministic|per-backend-deterministic|pacing\",\"peak\":true for a peak}}}}}}; the options narrow its nodes the same way and `summary` writes each node as {{\"name\":…,\"summary\":{{\"draws\":…,\"vertices\":…,\"texels\":…,\"dispatches\":…}}}}, and the JSON is never replaced by a summary. Each pass counts its own kernel work (steps, texels, shapes, rejected hits, the occlusion draws) only while a reading demands it, so a frame outside a reading pays nothing for it: a reading of the {GpuSection} section demands counting for the next frames, and a sample recorded before reads `kernel-counts=off` (`\"kernelCounts\":false` in --json) with those counts zero, so read again after a few frames; `world.counters arm` demands it without reading, for a script that takes one reading. Host-recorded counts (dispatches, uploads, draw calls) and the named detail rows run always.",
             forms: WorldCountersForms,
             handler: (_, args) => Describe(args: args),
             name: Verb

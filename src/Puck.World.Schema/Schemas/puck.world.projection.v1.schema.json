@@ -433,6 +433,42 @@
                 "title": "WorldNestedViewQuality"
               },
               "default": null
+            },
+            "indirectBudget": {
+              "description": "The irradiance work each presented frame grants the volume on this device (WorldRenderIndirectBudget), in place of the world\u0027s render.indirect.budget, so each device chooses how much lighting work it affords a frame. Absent runs the world\u0027s budget.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "relightPerFrame": {
+                  "description": "The probes relit each presented frame, at least one.",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "tracePerFrame": {
+                  "description": "The probes whose hits are traced each presented frame, at least one.",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "age": {
+                  "description": "The lighting age, in seconds, past which the volume reports it is behind; positive.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldRenderIndirectBudget"
             }
           },
           "required": [
@@ -589,6 +625,10 @@
             "nested": {
               "$ref": "#/properties/render/properties/low/properties/nested",
               "default": null
+            },
+            "indirectBudget": {
+              "$ref": "#/properties/render/properties/low/properties/indirectBudget",
+              "default": null
             }
           },
           "required": [
@@ -744,6 +784,10 @@
             },
             "nested": {
               "$ref": "#/properties/render/properties/low/properties/nested",
+              "default": null
+            },
+            "indirectBudget": {
+              "$ref": "#/properties/render/properties/low/properties/indirectBudget",
               "default": null
             }
           },
@@ -10812,16 +10856,16 @@
                 "null"
               ],
               "properties": {
-                "relightPerSecond": {
-                  "description": "The probes relit each second, at least one.",
+                "relightPerFrame": {
+                  "description": "The probes relit each presented frame, at least one.",
                   "type": [
                     "integer",
                     "null"
                   ],
                   "default": null
                 },
-                "tracePerSecond": {
-                  "description": "The probes whose hits are traced each second, at least one.",
+                "tracePerFrame": {
+                  "description": "The probes whose hits are traced each presented frame, at least one.",
                   "type": [
                     "integer",
                     "null"
@@ -12245,6 +12289,10 @@
                   },
                   "nested": {
                     "$ref": "#/properties/render/properties/low/properties/nested",
+                    "default": null
+                  },
+                  "indirectBudget": {
+                    "$ref": "#/properties/render/properties/low/properties/indirectBudget",
                     "default": null
                   }
                 },

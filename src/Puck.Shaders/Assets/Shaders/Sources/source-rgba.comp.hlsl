@@ -11,13 +11,13 @@
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     ImageSourceHeader header = imageSourceHeader(region);
+    uint texels = 0u;
 
-    if ((id.x >= header.width) || (id.y >= header.height)) {
-        return;
+    if ((id.x < header.width) && (id.y < header.height)) {
+        float4 pixel = imageSourceUnpackRgba8(region.Load(header.plane0 + (id.y * header.stride0) + (id.x * 4u)));
+
+        image[id.xy] = ((header.format == IMAGE_FORMAT_B8G8R8A8) ? pixel.bgra : pixel);
+        texels = 1u;
     }
-
-    float4 pixel = imageSourceUnpackRgba8(region.Load(header.plane0 + (id.y * header.stride0) + (id.x * 4u)));
-
-    image[id.xy] = ((header.format == IMAGE_FORMAT_B8G8R8A8) ? pixel.bgra : pixel);
-    puckCountWork(0u, 1u);
+    puckCountWork(0u, texels);
 }

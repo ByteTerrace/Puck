@@ -528,7 +528,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 IndirectSources = environment.Indirect.Gains.Sources,
                 IndirectGains = environment.Indirect.Gains,
                 IndirectBounces = environment.Indirect.Bounces,
-                IndirectBudget = environment.Indirect.Budget,
+                // What a frame may spend on lighting is the presenting device's row, as the distant map's and the rays are.
+                IndirectBudget = WorldRenderSettings.ResolveIndirectBudget(authored: environment.Indirect.Budget, row: Session?.IndirectBudget),
                 // What the presenting session's nested-view table keeps of the volume at the glass's presented size, and
                 // the share of the display the glass covers, which weighs this world's background work against the
                 // others'.
@@ -802,37 +803,19 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             m_dressedFieldProgram = program;
 
             try {
-                m_dressedField = new SdfFieldEvaluator(program: builder.Build());
+                m_dressedField = new SdfFieldEvaluator(program: builder.Build(), reading: SdfFieldReading.Contact, regional: true);
             } catch (ArgumentException) {
                 // A static placement the fixed-point evaluator does not interpret (a path, a non-uniform scale).
                 m_dressedField = null;
             }
         }
 
-        // The far distance is measured from the camera's position; the ray's origin already lies this far along it.
-        var reach = (FixedQ4816.FromDouble(value: m_dressedFarDistance) - (ray.Origin - FixedVector3.FromVector3(value: from)).Length);
-
-        if (
-            (m_dressedField is not { } field) ||
-            (reach <= FixedQ4816.Zero) ||
-            !field.Raycast(
-                dir: ray.Direction,
-                hit: out var hit,
-                maxDist: reach,
-                origin: FixedPosition.FromLocal(local: ray.Origin)
-            ) ||
-            (hit.Confidence != WorldQueryConfidence.Exact)
-        ) {
+        if (!WorldFieldSurface.TryMeet(farDistance: m_dressedFarDistance, field: m_dressedField, from: from, point: out var met, ray: ray)) {
             return false;
         }
 
-        point = (hit.Point - FixedPosition.Zero);
-
-        if (field.TryFieldGradient(gradient: out var gradient, position: hit.Point)) {
-            var unit = Vector3.Normalize(value: gradient.ToVector3());
-
-            normal = (VectorFunctions.IsFinite(vector: unit) ? unit : Vector3.Zero);
-        }
+        point = (met - FixedPosition.Zero);
+        normal = WorldFieldSurface.NormalAt(field: m_dressedField!, point: met);
 
         return true;
     }

@@ -121,7 +121,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private ShaderPipelineRenderNode?[] m_nodes;
     private IRenderGraphExternalProducer?[] m_producers;
     private DeliveryLabel[] m_routes;
-    private DeliveryLabel[] m_boundLabels;
     private DeliveryLatch m_latch;
     private bool m_frameLatched;
     private int m_root;
@@ -179,7 +178,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_nodes = nodes;
         m_producers = producers;
         m_routes = new DeliveryLabel[nodes.Length];
-        m_boundLabels = new DeliveryLabel[nodes.Length];
         m_root = root;
         m_sources = sources;
         m_schedules = [
@@ -198,7 +196,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         var hostLabel = DeliveryLabel.ForSource(source: DeliveryPublicSource.Host);
 
         Array.Fill(array: m_routes, value: hostLabel);
-        Array.Fill(array: m_boundLabels, value: hostLabel);
         RebuildSetTables();
     }
 
@@ -916,13 +913,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         m_standInReads[index] = null;
         m_taintedReads[index] = null;
-        m_boundLabels[index] = m_routes[index];
 
+        var node = m_nodes[index]!;
+
+        node.Route = m_routes[index];
         if (bindings.Length == 0) {
             return true;
         }
-
-        var node = m_nodes[index]!;
 
         foreach (var binding in bindings) {
             if (binding.Kind != ShaderPipelineResourceKind.Buffer) {
@@ -943,7 +940,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 return false;
             }
 
-            m_boundLabels[index] = m_boundLabels[index].Union(other: buffered.Label);
             NoteTaint(
                 index: index,
                 producer: binding.ProducerName,
@@ -996,7 +992,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 }
 
                 if (acquired) {
-                    m_boundLabels[index] = m_boundLabels[index].Union(other: externalLabel);
                     NoteTaint(
                         index: index,
                         producer: binding.ProducerName,
@@ -1062,7 +1057,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     name: binding.Version
                 );
             } else if (output.Image.IsSameDeviceImage) {
-                m_boundLabels[index] = m_boundLabels[index].Union(other: output.Label);
                 NoteTaint(
                     index: index,
                     producer: binding.ProducerName,
@@ -1547,9 +1541,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     index: index,
                     schedule: schedule
                 );
-                if (node.Reads is { } unboundReads) {
-                    m_boundLabels[index] = m_boundLabels[index].Union(other: unboundReads.Label);
-                }
                 // A source's graph renders at the extent its descriptor fixed, which it declared to the scheduler.
                 if (
                     (source is null) &&
@@ -1574,6 +1565,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     (m_standInReads[index] is null) &&
                     (m_taintedReads[index] is null) &&
                     !HasPackageTaint(index: index) &&
+                    !m_outputs.HasEnded(index: index, latch: in m_latch) &&
                     (m_outputs.StandsFor(index: index).IsOwn || (LatestOf(index: index, latch: in m_latch).Frame >= 0)) &&
                     !MarkReadStale(index: index, schedule: schedule)
                 ) {

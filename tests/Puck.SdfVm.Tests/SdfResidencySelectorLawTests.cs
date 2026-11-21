@@ -339,6 +339,36 @@ public sealed class SdfResidencySelectorLawTests {
         Assert.True(condition: (budget.GpuCredit <= (SdfGpuWorkBudget.MostBankSeconds * SdfGpuWork.GpuShare)), userMessage: $"the credit rose to {budget.GpuCredit}");
     }
     [Fact]
+    public void AFrameOverItsPeriodHoldsEvenAJobWithNothingQueuedToTheFrameAllowance() {
+        const double Period = (1.0 / 60.0);
+        var budget = new SdfGpuWorkBudget(time: VirtualClock.ForDevice());
+
+        void Frames(double frameSeconds) {
+            for (var frame = 0; (frame < SdfGpuWorkBudget.FollowFrames); frame++) { budget.Observe(frameSeconds: frameSeconds, periodSeconds: Period); }
+        }
+
+        // Unread, and under a light frame, a job with nothing queued is admitted whatever its price.
+        Assert.False(condition: budget.FrameOver);
+        Assert.True(condition: budget.Allowance.Admits(seconds: (10.0 * Period)));
+        Frames(frameSeconds: 0.002);
+        Assert.False(condition: budget.FrameOver);
+        Assert.True(condition: budget.Allowance.Admits(seconds: (10.0 * Period)));
+        // A frame whose own work fills the period leaves the frame no room: the job must fit the allowance, nothing queued.
+        Frames(frameSeconds: (25.0 / 1000.0));
+        Assert.True(condition: budget.FrameOver);
+        Assert.Equal(expected: new SdfGpuWorkAllowance(Queued: true, Seconds: SdfGpuWorkBudget.LeastFrameSeconds), actual: budget.Allowance);
+        Assert.False(condition: budget.Allowance.Admits(seconds: (10.0 * Period)));
+        Assert.True(condition: budget.Allowance.Admits(seconds: (0.5 * SdfGpuWorkBudget.LeastFrameSeconds)));
+        // A held job comes back after a period, since nothing queued will wake it.
+        Assert.Equal(expected: Period, actual: budget.DeadlineRetrySeconds, precision: 12);
+        // The work the frame owes is the frame's own and is not held.
+        Assert.False(condition: budget.OwedAllowance.Queued);
+        // The frame comes back under its period and the exception returns.
+        Frames(frameSeconds: 0.002);
+        Assert.False(condition: budget.FrameOver);
+        Assert.True(condition: budget.Allowance.Admits(seconds: (10.0 * Period)));
+    }
+    [Fact]
     public void TheJobsQueuedAheadOfAFrameFitOneFrameAllowanceWhateverTheBankHolds() {
         var clock = VirtualClock.ForDevice();
         var budget = new SdfGpuWorkBudget(time: clock);

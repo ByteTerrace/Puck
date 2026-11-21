@@ -15,9 +15,17 @@ namespace Puck.Shaders;
 public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCounterSource {
     private readonly GpuWorkLedger m_work;
 
+    /// <summary>The submissions a <see cref="DemandKernelCounting"/> keeps the passes' kernels counting their own work
+    /// for: long enough that a reader polling the counts every few seconds finds each sample counted, short enough that
+    /// a frame outside a reading pays for none of it.</summary>
+    public const int KernelCountingHold = 600;
+
+    private long m_kernelCountingUntil;
     private long m_resetSubmission;
     private long m_revision;
     private long m_submissions;
+    // Whether the frame being recorded has its counting passes add their work to their rows; set once per recording.
+    private bool m_kernelCounting;
 
     /// <summary>Gets the identity of the last submission the node made before its most recent <see cref="Reset"/>, or
     /// zero when it was never reset. The nth submission since that reset has identity
@@ -27,6 +35,15 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
     /// <summary>Gets the revision the next submission's pass configuration is counted under: one after the first graph
     /// is installed, increasing by one per install, whether a reload or a resize; zero before any install.</summary>
     public long WorkRevision => m_revision;
+
+    /// <summary>Asks the passes' kernels to count their own work (the steps, texels, shapes and rejected hits of each pass
+    /// row) for the next <see cref="KernelCountingHold"/> submissions. A frame with no demand standing records every
+    /// counting pass with <see cref="GpuKernelCounters.DisabledRow"/>, so its kernels skip counting uniformly and add
+    /// nothing, and its sample reads <see cref="GpuWorkSample.KernelCountsIncluded"/> false; a reading that wants the
+    /// counts demands them and reads again once a submission recorded under the demand completes. Named detail rows
+    /// are not gated: a consumer that decides from them (the infinity views' demand) reads them every frame.</summary>
+    public void DemandKernelCounting() =>
+        Volatile.Write(location: ref m_kernelCountingUntil, value: (m_submissions + KernelCountingHold));
 
     /// <inheritdoc/>
     string IWorkCounterSource.Name =>
@@ -91,6 +108,11 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
 
         try {
             PrepareWorkDetails(context: in context, counters: counters, slot: slot);
+            // A node with no counting pass has no kernel counts to miss. The rest count while a reading's demand stands,
+            // and otherwise record only the named detail rows some consumer decides from; a frame with neither needs no
+            // counter clear, copy or readback.
+            m_kernelCounting = ((counters is null) || (m_submissions < Volatile.Read(location: ref m_kernelCountingUntil)));
+            var countersNeeded = (m_kernelCounting || passes.Any(predicate: static pass => (pass.WorkDetailRow != 0u)));
             var countersWritten = false;
             var (recorded, stood, skipped) = (0, 0, 0);
 
@@ -119,7 +141,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                     stood++;
                     continue;
                 }
-                if (!countersWritten && counters is not null) {
+                if (!countersWritten && counters is not null && countersNeeded) {
                     counters.RecordClear(commandBuffer: command, recorder: m_gpu.Recorder, slot: slot);
                     countersWritten = true;
                 }
@@ -152,6 +174,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                     slot: slot
                 );
             }
+            m_work.MarkKernelCounts(counted: m_kernelCounting);
         } catch {
             m_work.Invalidate();
 

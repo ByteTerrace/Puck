@@ -524,40 +524,9 @@
           }
         },
         "budget": {
+          "$ref": "./common.schema.json#/$defs/WorldRenderIndirectBudget",
           "description": "The irradiance work each second grants the volume and the lighting age it reports past; absent bounds nothing.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "properties": {
-            "relightPerSecond": {
-              "description": "The probes relit each second, at least one.",
-              "type": [
-                "integer",
-                "null"
-              ],
-              "default": null
-            },
-            "tracePerSecond": {
-              "description": "The probes whose hits are traced each second, at least one.",
-              "type": [
-                "integer",
-                "null"
-              ],
-              "default": null
-            },
-            "age": {
-              "description": "The lighting age, in seconds, past which the volume reports it is behind; positive.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
-            }
-          },
-          "additionalProperties": false,
-          "default": null,
-          "title": "WorldRenderIndirectBudget"
+          "default": null
         },
         "lightingGrid": {
           "description": "Fixed angular and radiometric grids for indirect captures; absent leaves them continuous.",

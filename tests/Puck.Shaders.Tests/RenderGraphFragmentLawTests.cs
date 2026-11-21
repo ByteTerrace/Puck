@@ -452,6 +452,16 @@ public sealed class RenderGraphFragmentLawTests {
 
         node.ProduceUntilInstalled();
 
+        // With no reading demanding the counts, a counting pass is handed the disabled row and the frame records no clear
+        // or copy of the counters.
+        gpu.Recording = true;
+        recordings.Clear();
+        node.ProduceFrame(context: default);
+        Assert.Equal(actual: recordings.Single(predicate: static recording => (recording.Pass == "counted$count")).Counters!.Value.Row, expected: GpuKernelCounters.DisabledRow);
+        Assert.DoesNotContain(collection: gpu.Events, filter: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "clear buffer"));
+
+        node.DemandKernelCounting();
+
         // Three frame slots of a counter and a readback, two rows and their drawn counts each.
         var rowBytes = GpuKernelCounters.SlotBytesOf(rows: 2);
 
@@ -460,8 +470,8 @@ public sealed class RenderGraphFragmentLawTests {
             expected: 6
         );
 
-        gpu.Recording = true;
         recordings.Clear();
+        gpu.Events.Clear();
         node.ProduceFrame(context: default);
 
         var counted = recordings.Single(predicate: static recording => (recording.Pass == "counted$count")).Counters!.Value;

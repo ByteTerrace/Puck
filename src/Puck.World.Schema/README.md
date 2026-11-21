@@ -1848,11 +1848,22 @@ gives each server its own projection: every referenced value is replaced by one
 bound to the server's `WorldLiveValues`, which reads whichever arena the server
 holds when the value is read, so an arena the server replaces needs no new
 binding. A value already bound to that store is kept, and a row or section the
-previous bind left fully bound is kept without being entered, so binding a
-candidate composed over the installed projection costs what the composition
-replaced. The state section is never rewritten by a bind. A live mutation
-touching a referenced row resolves that row's values against the candidate's
-own state (`TryRefresh`) before validation.
+previous bind met is answered with what it became then without being entered,
+so binding a candidate composed over the installed projection costs what the
+composition replaced. The state section is never rewritten by a bind. A live
+mutation touching a referenced row resolves that row's values against the
+candidate's own state (`TryRefresh`) before validation.
+
+**A client's delivered document reads only what it was delivered.** The server
+delivers its own bound projection, so a client never keeps it: each sink that
+receives documents (`WorldClient`, `WorldSessionMirror`) adopts every one
+through its state view (`WorldDocumentStateView.Adopt`), which binds the same
+document again to a `WorldLiveValues` of the sink's own, over the arena its
+snapshots' cells fill and the tick it was last delivered; a document holding no
+value bound elsewhere and bound to no arena is kept as it is. A value delivered
+unchanged comes back as the copy adopted before, so comparing two delivered
+documents by reference still sees only what changed. A sink's document is never
+registered with `WorldStateReader.Bind`; only the server binds its own.
 
 **Binding-group identifiers may be state-backed too.** A chord row, context
 row, or wheel may name its group literally or with the same
