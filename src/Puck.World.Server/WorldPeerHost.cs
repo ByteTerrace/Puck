@@ -648,12 +648,17 @@ public sealed class WorldPeerHost : IDisposable {
                 return;
             }
 
+            Connection? activeConnection = null;
             var initialTrustIdentity = outcome.Verdict!.TrustIdentity;
             using var peerCredential = new Credential(this, admissionEntriesAtVerify, new(outcome.Domain!, outcome.ValidThrough), (policy, _) => {
                 var next = WorldAdmissionDoor.TryAdmit(policy, challenge, clientKeyHash, serverKeyHash, claimAttestation, chainAttestations, m_timeProvider.GetUtcNow());
-                return new ValueTask<VerifiedPeerIdentity?>((next.Admitted && (next.Verdict!.TrustIdentity == initialTrustIdentity))
-                    ? new VerifiedPeerIdentity(next.Domain!, next.ValidThrough)
-                    : null);
+                if (!next.Admitted || (next.Verdict!.TrustIdentity != initialTrustIdentity)) {
+                    return new ValueTask<VerifiedPeerIdentity?>(result: null);
+                }
+                if (Volatile.Read(location: ref activeConnection) is { } live) {
+                    live.Tier = next.Tier;
+                }
+                return new ValueTask<VerifiedPeerIdentity?>(result: new VerifiedPeerIdentity(next.Domain!, next.ValidThrough));
             }, ct);
 
             // Population/grant admission runs through the ordered-domain path, fed the verified identity's own
@@ -699,6 +704,7 @@ public sealed class WorldPeerHost : IDisposable {
                 tier: outcome.Tier,
                 credential: peerCredential
             );
+            Volatile.Write(location: ref activeConnection, value: connection);
 
             lock (m_connectionsLock) {
                 m_connections.Add(item: connection);
@@ -2049,6 +2055,7 @@ public sealed class WorldPeerHost : IDisposable {
     private sealed class Connection(int id, int peerIndex, int generation, PeerStream client, Stream stream, string remoteEndpoint, string identityDomain, string identitySubject, WorldDisclosureTier tier, Credential credential) {
         private long m_correlationId;
         private long m_sequence;
+        private int m_tier = ((int)tier);
 
         public int Id { get; } = id;
         public int PeerIndex { get; } = peerIndex;
@@ -2058,7 +2065,10 @@ public sealed class WorldPeerHost : IDisposable {
         public string RemoteEndpoint { get; } = remoteEndpoint;
         public string IdentityDomain { get; } = identityDomain;
         public string IdentitySubject { get; } = identitySubject;
-        public WorldDisclosureTier Tier { get; } = tier;
+        public WorldDisclosureTier Tier {
+            get => ((WorldDisclosureTier)Volatile.Read(location: ref m_tier));
+            set => Volatile.Write(location: ref m_tier, value: ((int)value));
+        }
         public Credential Credential { get; } = credential;
 
         public Principal Principal => Principal.Peer(
