@@ -63,20 +63,12 @@ public sealed partial class SdfWorldTables {
     // The transforms the frame being staged poses its skins from.
     private IReadOnlyList<DynamicTransform> m_motionTransforms = [];
 
-    // One reader of a slot: its box in the slot's frame, a center, a turn and half extents along the turned axes. A
-    // half extent that is not finite reaches everywhere.
+    // One reader of a slot: its box in the slot's frame, as a turn of that frame, then a center and half extents along
+    // the turned axes. A half extent that is not finite reaches everywhere.
     private readonly record struct SlotReader(int Slot, string Reader, Vector3 Center, Quaternion Turn, Vector3 Half) {
-        public SdfMeshBox? BoxAt(Vector3 position, Quaternion orientation) {
-            if (!float.IsFinite(f: Half.LengthSquared())) { return null; }
-            var turn = (orientation * Turn);
-
-            return new SdfMeshBox(
-                Center: (position + Vector3.Transform(value: Center, rotation: orientation)),
-                HalfX: Vector3.Transform(value: new Vector3(x: Half.X, y: 0f, z: 0f), rotation: turn),
-                HalfY: Vector3.Transform(value: new Vector3(x: 0f, y: Half.Y, z: 0f), rotation: turn),
-                HalfZ: Vector3.Transform(value: new Vector3(x: 0f, y: 0f, z: Half.Z), rotation: turn)
-            );
-        }
+        public SdfMeshBox? BoxAt(Vector3 position, Quaternion orientation) => (float.IsFinite(f: Half.LengthSquared())
+            ? SdfMeshBox.Turned(center: Center, half: Half, offset: position, turn: (orientation * Turn))
+            : null);
     }
     private struct SkinRow {
         public int Order;
@@ -191,7 +183,9 @@ public sealed partial class SdfWorldTables {
             var volume = frame.Volumes[index];
 
             if (volume.DynamicSlot >= 0) {
-                m_frameReaders.Add(item: new(Center: volume.Position, Half: volume.HalfExtent, Reader: "medium", Slot: volume.DynamicSlot, Turn: Quaternion.Normalize(value: volume.Rotation)));
+                var turn = Quaternion.Normalize(value: volume.Rotation);
+
+                m_frameReaders.Add(item: new(Center: Vector3.Transform(value: volume.Position, rotation: Quaternion.Conjugate(value: turn)), Half: volume.HalfExtent, Reader: "medium", Slot: volume.DynamicSlot, Turn: turn));
             }
         }
         foreach (var reader in m_frameReaders) { Mark(slot: reader.Slot, mark: FrameMark, set: true); }
@@ -224,7 +218,7 @@ public sealed partial class SdfWorldTables {
             var bound = paint.Shape.Bound;
 
             readers[index] = new(
-                Center: (paint.Origin + Vector3.Transform(value: (bound.IsUnbounded ? default : bound.Center), rotation: turn)),
+                Center: (Vector3.Transform(value: paint.Origin, rotation: Quaternion.Conjugate(value: turn)) + (bound.IsUnbounded ? default : bound.Center)),
                 Half: (bound.IsUnbounded ? new(value: float.PositiveInfinity) : (bound.HalfExtents + new Vector3(value: paint.Stroke))),
                 Reader: "paint",
                 Slot: paint.Slot,
