@@ -533,8 +533,10 @@ public sealed partial class SdfWorldPassesLawTests {
         private readonly VirtualClock m_clock = VirtualClock.ForDevice();
         // The frames that carry the clock past the volume's lighting interval (a tenth of a second).
         private const int SettledFrames = 8;
-        // The most frames the volume's first lighting, or a relight, may take to settle.
-        private const int SettleFrames = 600;
+        // The most frames the volume's first lighting, or a relight, may take to settle. Each frame is a round trip of the
+        // probe service's jobs (the rig waits out host work between frames), and a first lighting traces and relights every
+        // probe of the window at the jobs' unmeasured prior rates.
+        private const int SettleFrames = 200_000;
         private readonly UploadModelGpu m_gpu;
 
         private readonly FrameContext m_context;
@@ -662,11 +664,13 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         // Produces frames until the irradiance volume's lighting has settled, which a lighting change relights over the
         // frames it is granted: a view stands only once its lighting has (SdfWorldResidency.IsUnchanged).
-        // The frames bound it, not the clock: a volume that never settles fails the law within them.
+        // The frames bound it, not the clock: after each frame the rig waits out the volume's host work (a scene build, the
+        // worker between device jobs), so a volume that never settles fails the law within them however the pool runs.
         public void SettleLighting() => TestLiveness.Within(frames: SettleFrames, step: () => {
             Produce();
             return !(Selected.MeshIrradiance.Settling || (Second?.MeshIrradiance.Settling ?? false));
-        }, building: static () => false, reason: () => $"The irradiance volume's lighting never settled within {SettleFrames} frames.");
+        }, building: () => (Selected.MeshIrradiance.HostWorking || (Second?.MeshIrradiance.HostWorking ?? false)),
+            reason: () => $"The irradiance volume's lighting never settled within {SettleFrames} frames: {Selected.MeshIrradiance.Describe()}");
         // Whether the latest frame let the view's previous output stand.
         public bool Stood() => (World.FrameCounter == m_rendered);
         // Refuses the next frame's render submission, after its passes recorded: the residency's table upload is the

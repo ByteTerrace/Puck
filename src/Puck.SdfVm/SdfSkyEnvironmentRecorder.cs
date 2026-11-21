@@ -61,17 +61,10 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
         var set = m_sets.PassSet(slot: recording.Slot);
 
         tables.BindSkyEnvironment(set: set, bindings: m_context.Services.Bindings);
-        var emissionMask = 0u;
-
-        for (var screen = 0; (screen < SdfWorldTables.MaxScreenSurfaces); screen++) {
-            var image = ((!Reduces && (Screens ? tables.ScreenEmissionScreens[screen] : tables.SkyEnvironmentScreens[screen]))
-                ? m_built.Residency.ScreenImage(view: m_built.View, screen: screen, reads: recording.Reads, leases: recording.Leases) : 0);
-
-            if (image != 0) { emissionMask |= (1u << screen); }
-            m_context.Services.Bindings.WriteSampledImage(arrayElement: ((uint)screen),
-                binding: m_sets.BindingOf(member: SdfWorldPackage.ScreenSources), descriptorSetHandle: set,
-                imageViewHandle: ((image != 0) ? image : tables.SampledFiller.ImageViewHandle));
-        }
+        var emissionMask = m_built.Residency.BindScreenImages(view: m_built.View,
+            shown: (Reduces ? default : (Screens ? tables.ScreenEmissionScreens : tables.SkyEnvironmentScreens)), recording: in recording,
+            bindings: m_context.Services.Bindings, binding: m_sets.BindingOf(member: SdfWorldPackage.ScreenSources), set: set,
+            filler: tables.SampledFiller.ImageViewHandle, bound: default);
         SdfWorldInterfaces.EnvironmentParameters.WriteExtent(block: recording.PassBlock, width: SdfSkyEnvironment.Size, height: SdfSkyEnvironment.Size);
         BinaryPrimitives.WriteUInt32LittleEndian(destination: recording.PassBlock[((int)SdfWorldInterfaces.EnvironmentParameters.BlockOffsetOf(member: SdfKernelInterfaces.ScreenEmissionMask))..], value: emissionMask);
         m_work.Write(passSet: set, recording: recording);
