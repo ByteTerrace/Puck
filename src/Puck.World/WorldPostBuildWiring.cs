@@ -75,10 +75,11 @@ public static class WorldPostBuildWiring {
             return false;
         }
 
-        // host.log stamps each line with the boot world's completed tick, the tick world.at and world.wait count in.
-        var bootServer = services.GetRequiredService<WorldServer>();
+        // host.log stamps each line with the boot world's completed tick, the tick world.at and world.wait count in. Any
+        // thread writes a line, so the stamp is the tick the tick-complete hook published, never a read of the authority.
+        var publishedTicks = services.GetRequiredService<WorldTickScript>();
 
-        services.GetRequiredService<Puck.Hosting.HostLog>().Anchor(completedTick: () => (bootServer.NextInputTick - 1UL));
+        services.GetRequiredService<Puck.Hosting.HostLog>().Anchor(completedTick: () => publishedTicks.PublishedTick);
 
         // The affordance vocabulary goes live here — the first post-container point on the boot path where the built
         // registry exists (whichever verbs THIS boot shape actually composed). From now on every binding door

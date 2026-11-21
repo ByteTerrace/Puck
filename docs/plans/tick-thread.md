@@ -679,21 +679,39 @@ separate lanes.
 
 **Stage one: no behaviour moves.**
 
-1. **The frame's cheap readers.** `WorldClient.UpdateRenderPoses` interpolates
-   the moving set, and `HostLoop` resolves the step rate once an iteration.
-   Check: `world.counters` reads the poses a frame interpolated beside the
-   active bodies, and at rest the first is zero.
-2. **Published host values.** `WorldHostStep` publishes the completed boot
-   tick, the step rate and the stall flag at each collect, and `HostLog`'s
-   anchor, `WorldTickScript` and `HostLoop` read those. Check: `puck
-   references` finds no reader of `WorldServer.NextInputTick` or
-   `WorldServer.Configuration` in a closure the frame or another thread calls.
+Step 1, the frame's cheap readers, is built. So is the first half of step 2:
+the completed boot tick is published by the tick-complete hook
+(`WorldTickScript.PublishedTick`), and the host log's anchor, the frame
+recording and the `benchmark.tick` reading read it.
+
+2. **Published host values, the rest.** `WorldHostStep` publishes the step
+   rate and the stall flag with each wave's result, and
+   `WorldHostStep.RatePerSecond` and `WorldHostStep.StepInterrupted` answer
+   from those while a wave is in flight. Until stage three no wave is in
+   flight when the loop asks, so this lands with step 3. Check: `puck
+   references` finds no reader of `WorldServer.Configuration` in a closure
+   the frame or another thread calls.
 3. **Three parts and the step thread, with the pump waiting.**
    `WorldServerStepShell` splits into prepare, execute and collect.
    `WorldInstanceHost` owns the step thread and hands it each execute, and the
    pump waits for it exactly as long as it runs the tick today, so nothing
-   overlaps. The timeline's tick lane is measured on the step thread. Check:
-   the headless debug world boots and answers `body.where`; `puck test
+   overlaps. The timeline's tick lane is measured on the step thread. Two
+   things in the tick assume the thread that runs it is the pump, and both
+   must keep meaning the pump:
+   - A tick held across wait slices names its owner, the one thread that
+     never waits for the tick's boundary (the owner in `WorldTick`'s held-tick
+     record, read by `WorldServer.EnterAtTickBoundary`). The owner stays the
+     thread that hands the tick over. If it became the step thread, a console
+     line the pump runs against a held tick would wait for a boundary only
+     the pump can bring.
+   - The pump's wait for the step thread is the tick's own work, not a wait
+     on another subsystem. It is not charged to the pump's wait allowance
+     (`HostWaits.PumpAllowance`), or every tick would spend the allowance the
+     frame's waits are sliced from, and frames would answer waiting more
+     often. The door gains a form for it, bounded by the tick's stall
+     deadline.
+
+   Check: the headless debug world boots and answers `body.where`; `puck test
    --reproduce` passes at `--jobs 1` and at other worker counts with the
    base's state hashes, since this step claims to change nothing.
 
