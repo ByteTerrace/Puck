@@ -17,8 +17,12 @@ public sealed class WorldKeyedDrawLawTests {
     )!;
     // A mutation submission carries an operation id: the ingress door binds one to the stamped actor and the
     // canonical payload, and refuses an envelope that leaves it empty before anything composes.
-    private static WorldMutationOutcome Generate(WorldFixture fixture, long sequence, IReadOnlyList<string>? keys = null) {
+    private static WorldMutationOutcome Generate(WorldFixture fixture, long sequence, IReadOnlyList<string>? keys = null, bool mixedBatch = false) {
         WorldSubmissionResult? result = null;
+        WorldMutation generate = new WorldMutation.Generate(Principal.Console, "dice", keys);
+        if (mixedBatch) {
+            generate = new WorldMutation.Batch(Principal.Console, [generate, new WorldMutation.SetAudioDefaults(Principal.Console, WorldAudioDefaults.Absent with { DefaultSpeakerRadius = 1 })]);
+        }
 
         fixture.Server.Submit(
             new(
@@ -27,11 +31,7 @@ public sealed class WorldKeyedDrawLawTests {
                 sequence,
                 sequence,
                 Principal.Console,
-                new WorldSubmissionPayload.Mutation(Value: new WorldMutation.Generate(
-                    Principal.Console,
-                    "dice",
-                    keys
-                )),
+                new WorldSubmissionPayload.Mutation(Value: generate),
                 Guid.NewGuid()
             ),
             completed => result = completed
@@ -68,7 +68,7 @@ public sealed class WorldKeyedDrawLawTests {
                 count: 5,
                 start: 1
             ).Select(selector: i => Cell(
-                key: $"d{i}",
+                key: $"d{6 - i}",
                 value: 1
             )).ToArray(),
             Draw: new Draw(
@@ -138,7 +138,8 @@ public sealed class WorldKeyedDrawLawTests {
         using var twin = Fixtures.FreshServer(definition: rolled);
         var replayed = Generate(
             fixture: twin,
-            keys: ["d2", "d4"],
+            mixedBatch: true,
+            keys: ["d4", "d2"],
             sequence: 1
         );
 
@@ -264,7 +265,7 @@ public sealed class WorldKeyedDrawLawTests {
             dice.DrawCursor
         );
         Assert.Equal(
-            new[] { "d1", "d2", "d3", "d4", "d5" },
+            Find(definition, "dice").Cells!.Select(static cell => cell.Key.Value),
             dice.Cells!.Select(selector: c => c.Key.Value)
         );
         Assert.All(

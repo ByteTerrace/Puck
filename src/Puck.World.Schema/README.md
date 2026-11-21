@@ -1561,7 +1561,7 @@ row only while it carries no cell yet (first fill: process boot, or a fresh
 `world.instance.start`), keeps the facet and cursor, and resumes on reload
 rather than re-rolling a value the player already saw; nothing settles into a
 bare literal and nothing is cleared. A KEYED row may be a site too—a dice
-tray: its numeric source fills one sample per authored cell in cell order at
+tray: its numeric source fills one sample per authored cell in ordinal key-name order at
 its first fill (cursor zero), and `world.generate <row> [key ...]` /
 `WorldMutation.Generate(row, keys)` redraws every cell or only the named ones
 with the rest held, advancing the cursor by the raw words consumed. A text source

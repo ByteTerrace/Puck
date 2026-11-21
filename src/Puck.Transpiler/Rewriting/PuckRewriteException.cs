@@ -2,8 +2,8 @@ using Puck.Transpiler.Ast;
 
 namespace Puck.Transpiler.Rewriting;
 
-/// <summary>Thrown when a rewrite cannot be carried out: the tree carries a node kind the descent has no arm for,
-/// or a hook answered a typed position with a node that position cannot hold.</summary>
+/// <summary>Thrown when a rewrite cannot be carried out: a hook answered a typed position with a node that position
+/// cannot hold, or replaced a value while keeping the author's own text beside it.</summary>
 /// <remarks>Both are defects in the rewrite rather than refusals about a source, so a caller reports them against
 /// the migration and never against the file it was applied to.</remarks>
 public sealed class PuckRewriteException : Exception {
@@ -17,18 +17,6 @@ public sealed class PuckRewriteException : Exception {
     ) {
     }
 
-    /// <summary>Returns the refusal for a node kind <see cref="PuckSyntaxRewriter"/>'s descent has no arm for.</summary>
-    /// <param name="node">The node the descent reached.</param>
-    /// <returns>The exception to throw.</returns>
-    /// <remarks>A new syntax node type raises this on its first rewrite rather than passing through with its own
-    /// children unvisited, so the rewriter cannot silently fall behind the tree it walks.</remarks>
-    public static PuckRewriteException UnknownKind(SyntaxNode node) {
-        ArgumentNullException.ThrowIfNull(argument: node);
-
-        return new PuckRewriteException(
-            message: $"PuckSyntaxRewriter has no descent arm for '{node.GetType().Name}' at line {node.Line}, column {node.Column}: add one so the node's own children are rewritten."
-        );
-    }
     /// <summary>Returns the refusal for a rewrite that replaced a value while keeping the author's own text beside
     /// it, which a consumer reads in preference to the value.</summary>
     /// <param name="node">The node as it stood before the rewrite.</param>

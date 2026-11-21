@@ -10,7 +10,9 @@ namespace Puck.Hosting;
 /// assembly the host carries at a compatible version, from <see cref="AssemblyLoadContext.Default"/>, so every contract
 /// a host and its extensions exchange has one identity; a dependency that an upstream installed extension (one whose
 /// assembly this extension references) resolves, from that extension's context; and finally this extension's own
-/// published dependency graph.
+/// published dependency graph. The host's version is compatible when it is at least the one the published graph
+/// (upstream, else this extension's own) carries, so every reference to one name binds the same copy whatever version
+/// it was compiled against.
 /// </summary>
 /// <remarks>Contexts are not collectible. Discovery installs contributions for the host's lifetime and returns no unload
 /// owner; a collectible context could be finalized before a later hosted-service callback resolves one of its
@@ -85,11 +87,30 @@ public sealed class PuckExtensionLoadContext : AssemblyLoadContext {
         )) {
             return owner.Primary;
         }
-        if (FromHost(assemblyName: assemblyName) is { } shared) { return shared; }
+        PuckExtensionLoadContext? carrier = null;
+        string? path = null;
+
         foreach (var upstream in m_upstream.Value) {
-            if (upstream.m_resolver.ResolveAssemblyToPath(assemblyName: assemblyName) is not null) { return upstream.LoadFromAssemblyName(assemblyName: assemblyName); }
+            if (upstream.m_resolver.ResolveAssemblyToPath(assemblyName: assemblyName) is { } upstreamPath) {
+                carrier = upstream;
+                path = upstreamPath;
+                break;
+            }
         }
-        return ((m_resolver.ResolveAssemblyToPath(assemblyName: assemblyName) is { } path)
+        path ??= m_resolver.ResolveAssemblyToPath(assemblyName: assemblyName);
+        // One name binds one copy whatever version a reference asks for, so the host is asked for the version the
+        // published graph carries. Asked per request, a host older than the graph would answer the references compiled
+        // against older versions and the graph the rest: two copies whose types differ, where a call whose signature
+        // names one copy's type finds no such member on the other (MissingMethodException).
+        var floor = assemblyName;
+
+        if ((path is not null) && (AssemblyName.GetAssemblyName(assemblyFile: path).Version is { } carried) && ((assemblyName.Version is null) || (carried > assemblyName.Version))) {
+            floor = ((AssemblyName)assemblyName.Clone());
+            floor.Version = carried;
+        }
+        if (FromHost(assemblyName: floor) is { } shared) { return shared; }
+        if (carrier is not null) { return carrier.LoadFromAssemblyName(assemblyName: assemblyName); }
+        return ((path is not null)
             ? LoadFromAssemblyPath(assemblyPath: path)
             : null
         );

@@ -79,7 +79,9 @@ public static class SourceLexemes {
     /// <summary>Finds the exclusive end of a string, backquoted identifier, or comment at an offset.</summary>
     /// <param name="source">The source text.</param>
     /// <param name="offset">An index within the source text.</param>
-    /// <returns>The exclusive end, or the original offset when no quoted token or comment starts there. An unterminated token extends to the end of the source.</returns>
+    /// <returns>The exclusive end, or the original offset when no quoted token or comment starts there. A plain
+    /// string that never closes ends with its line, which is as far as the grammar lets one run
+    /// (<see cref="PuckStrings.TryRead"/>); any other unterminated token extends to the end of the source.</returns>
     public static int End(string source, int offset) {
         var start = offset;
 
@@ -101,8 +103,10 @@ public static class SourceLexemes {
                     : (close + 3)
                 );
             }
+            var plain = (offset == start);
+
             for (++offset; (offset < source.Length); ++offset) {
-                if (source[offset] == '\\') { ++offset; } else if (source[offset] == '"') { return (offset + 1); }
+                if (source[offset] == '\\') { ++offset; } else if (source[offset] == '"') { return (offset + 1); } else if (plain && (source[offset] is '\n' or '\r')) { return offset; }
             }
             return source.Length;
         }

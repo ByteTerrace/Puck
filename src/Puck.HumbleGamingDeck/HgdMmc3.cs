@@ -25,11 +25,9 @@ namespace Puck.HumbleGamingDeck;
 /// clear.
 /// </para>
 /// </summary>
-public sealed class HgdMmc3 : IHgdMapper {
+public sealed class HgdMmc3 : HgdBoard {
     private const byte FilterFalls = 3;
 
-    private readonly HgdCartridge m_cartridge;
-    private readonly HgdBoardMemory m_memory;
     private readonly byte[] m_registers = [0, 2, 4, 5, 6, 7, 0, 1];
     private readonly int m_prgBanks;
     private readonly bool m_revisionA;
@@ -50,51 +48,42 @@ public sealed class HgdMmc3 : IHgdMapper {
     /// trainer at $7000 when present.</summary>
     /// <param name="cartridge">The validated, immutable MMC3 image.</param>
     /// <exception cref="ArgumentNullException"><paramref name="cartridge"/> is <see langword="null"/>.</exception>
-    public HgdMmc3(HgdCartridge cartridge) {
-        ArgumentNullException.ThrowIfNull(argument: cartridge);
-        m_cartridge = cartridge;
-        m_memory = new(cartridge: cartridge);
-        m_prgBanks = (m_memory.PrgRom.Length >> 13);
+    public HgdMmc3(HgdCartridge cartridge)
+        : base(cartridge: cartridge) {
+        m_prgBanks = (Memory.PrgLength >> 13);
         m_revisionA = (cartridge.Header.Submapper == 4);
         m_mirroring = ((cartridge.Header.Mirroring == HgdMirroring.Horizontal) ? (byte)1 : (byte)0);
+        MapBanks();
+        MapWiring();
     }
 
     /// <inheritdoc/>
-    public HgdCartridgeHeader Header => m_cartridge.Header;
+    public override bool Irq => m_irqPending;
     /// <inheritdoc/>
-    public bool Irq => m_irqPending;
-    /// <inheritdoc/>
-    /// <remarks>The save contains declared PRG NVRAM followed by CHR NVRAM; volatile RAM is excluded.</remarks>
-    public Span<byte> BatteryRam => m_memory.BatteryRam;
+    public override bool TimesOnEdges => true;
     /// <summary>Gets the scanline counter's current value.</summary>
     public byte IrqCounter => m_irqCounter;
 
     /// <inheritdoc/>
-    public byte CpuRead(ushort address, byte openBus) =>
-        CpuPeek(
-            address: address,
-            openBus: openBus
-        );
-    /// <inheritdoc/>
-    public byte CpuPeek(ushort address, byte openBus) {
+    public override byte CpuPeek(ushort address, byte openBus) {
         if (address >= 0x8000) {
-            return m_memory.PrgRom[PrgOffset(address: address)];
+            return Memory.ReadPrg(address: address);
         }
 
-        var size = m_memory.PrgRamLength;
+        var size = Memory.PrgRamLength;
 
         return (((address < 0x6000) || (size == 0) || ((m_prgRamProtect & 0x80) == 0))
             ? openBus
-            : m_memory.ReadPrgRam(offset: address & (size - 1))
+            : Memory.ReadPrgRam(offset: address & (size - 1))
         );
     }
     /// <inheritdoc/>
-    public void CpuWrite(ushort address, byte value) {
+    public override void CpuWrite(ushort address, byte value) {
         if (address < 0x8000) {
-            var size = m_memory.PrgRamLength;
+            var size = Memory.PrgRamLength;
 
             if ((address >= 0x6000) && (size != 0) && ((m_prgRamProtect & 0xC0) == 0x80)) {
-                m_memory.WritePrgRam(
+                Memory.WritePrgRam(
                     offset: address & (size - 1),
                     value: value
                 );
@@ -105,14 +94,17 @@ public sealed class HgdMmc3 : IHgdMapper {
         switch (address & 0xE001) {
             case 0x8000:
                 m_bankSelect = value;
+                MapBanks();
 
                 break;
             case 0x8001:
                 m_registers[m_bankSelect & 7] = value;
+                MapBanks();
 
                 break;
             case 0xA000:
                 m_mirroring = ((byte)(value & 1));
+                MapWiring();
 
                 break;
             case 0xA001:
@@ -140,39 +132,7 @@ public sealed class HgdMmc3 : IHgdMapper {
         }
     }
     /// <inheritdoc/>
-    public byte PpuRead(ushort address, HgdNametableRam nametables) =>
-        PpuPeek(
-            address: address,
-            nametables: nametables
-        );
-    /// <inheritdoc/>
-    public byte PpuPeek(ushort address, HgdNametableRam nametables) =>
-        ((address < 0x2000)
-            ? m_memory.ReadChr(offset: ChrOffset(address: address))
-            : m_memory.ReadNametable(
-                address: address,
-                nametables: nametables,
-                page: Page(address: address)
-            )
-        );
-    /// <inheritdoc/>
-    public void PpuWrite(ushort address, byte value, HgdNametableRam nametables) {
-        if (address < 0x2000) {
-            m_memory.WriteChr(
-                offset: ChrOffset(address: address),
-                value: value
-            );
-        } else {
-            m_memory.WriteNametable(
-                address: address,
-                nametables: nametables,
-                page: Page(address: address),
-                value: value
-            );
-        }
-    }
-    /// <inheritdoc/>
-    public void ObservePpuAddress(ushort address, ulong masterTick) {
+    public override void ObservePpuAddress(ushort address, ulong masterTick) {
         var high = ((address & 0x1000) != 0);
 
         if (!high) {
@@ -188,7 +148,7 @@ public sealed class HgdMmc3 : IHgdMapper {
         m_a12LowAtRise = false;
     }
     /// <inheritdoc/>
-    public void ObserveM2(bool high, ulong masterHalfTick) {
+    public override void ObserveM2(bool high, ulong masterHalfTick) {
         if (high) {
             m_a12LowAtRise = !m_ppuA12;
         } else if (m_a12LowAtRise && !m_ppuA12 && (m_a12LowFalls < FilterFalls)) {
@@ -196,16 +156,18 @@ public sealed class HgdMmc3 : IHgdMapper {
         }
     }
     /// <inheritdoc/>
-    public void SaveState(StateWriter writer) =>
+    public override void SaveState(StateWriter writer) =>
         TransferState(transfer: new StateSaveTransfer(writer: writer));
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">The reader does not contain the complete board state.</exception>
     /// <exception cref="InvalidDataException">The serialized A12 filter count is out of range.</exception>
-    public void LoadState(StateReader reader) {
+    public override void LoadState(StateReader reader) {
         TransferState(transfer: new StateLoadTransfer(reader: reader));
         if (m_a12LowFalls > FilterFalls) {
             throw new InvalidDataException(message: "Snapshot MMC3 A12 filter count is out of range.");
         }
+        MapBanks();
+        MapWiring();
     }
 
     private void ClockCounter() {
@@ -221,38 +183,54 @@ public sealed class HgdMmc3 : IHgdMapper {
         }
         m_irqReload = false;
     }
-    private int PrgOffset(ushort address) {
+    // Invariant: the windows equal what the bank select and the bank registers choose. Every write to either, a restore
+    // and construction map them again; the registers have no other writer.
+    private void MapBanks() {
         var swapped = ((m_bankSelect & 0x40) != 0);
-        var bank = ((address >> 13) & 3) switch {
-            0 => (swapped ? (m_prgBanks - 2) : (m_registers[6] & 0x3F)),
-            1 => (m_registers[7] & 0x3F),
-            2 => (swapped ? (m_registers[6] & 0x3F) : (m_prgBanks - 2)),
-            _ => (m_prgBanks - 1),
-        };
 
-        return (((bank % m_prgBanks) << 13) | (address & 0x1FFF));
-    }
-    private int ChrOffset(ushort address) {
-        var window = ((address ^ (((m_bankSelect & 0x80) != 0) ? 0x1000 : 0)) >> 10) & 7;
-        var bank = window switch {
-            0 => (m_registers[0] & 0xFE),
-            1 => (m_registers[0] | 1),
-            2 => (m_registers[1] & 0xFE),
-            3 => (m_registers[1] | 1),
-            _ => m_registers[(window - 2)],
-        };
+        for (var window = 0; (window < 4); ++window) {
+            var bank = window switch {
+                0 => (swapped ? (m_prgBanks - 2) : (m_registers[6] & 0x3F)),
+                1 => (m_registers[7] & 0x3F),
+                2 => (swapped ? (m_registers[6] & 0x3F) : (m_prgBanks - 2)),
+                _ => (m_prgBanks - 1),
+            };
 
-        return (((bank << 10) | (address & 0x3FF)) % m_memory.ChrLength);
+            Memory.MapPrg(
+                count: 1,
+                firstWindow: window,
+                offset: ((bank % m_prgBanks) << 13)
+            );
+        }
+
+        var inverted = ((m_bankSelect & 0x80) != 0);
+
+        for (var slot = 0; (slot < 8); ++slot) {
+            var window = (inverted ? (slot ^ 4) : slot);
+            var bank = window switch {
+                0 => (m_registers[0] & 0xFE),
+                1 => (m_registers[0] | 1),
+                2 => (m_registers[1] & 0xFE),
+                3 => (m_registers[1] | 1),
+                _ => m_registers[(window - 2)],
+            };
+
+            Memory.MapChr(
+                count: 1,
+                firstWindow: slot,
+                offset: (bank << 10)
+            );
+        }
     }
-    // $A000 bit 0: vertical (CIRAM A10 = PPU A10) or horizontal (CIRAM A10 = PPU A11); a four-screen image's lower
-    // nametables are wired vertically.
-    private int Page(ushort address) =>
-        (((m_mirroring == 0) || (Header.Mirroring == HgdMirroring.FourScreen))
-            ? ((address >> 10) & 1)
-            : ((address >> 11) & 1)
+    // $A000 bit 0: vertical or horizontal; a four-screen image's lower nametables are wired vertically. Invariant: the
+    // wiring follows m_mirroring, which only $A000, a restore and construction set, and each maps it.
+    private void MapWiring() =>
+        Wiring = (((m_mirroring == 0) || (Header.Mirroring == HgdMirroring.FourScreen))
+            ? HgdNametableWiring.Vertical
+            : HgdNametableWiring.Horizontal
         );
     private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {
-        m_memory.Transfer(transfer: transfer);
+        Memory.Transfer(transfer: transfer);
         transfer.Block(values: m_registers.AsSpan());
         transfer.Byte(value: ref m_bankSelect);
         transfer.Byte(value: ref m_mirroring);

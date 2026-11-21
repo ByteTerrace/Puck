@@ -1,7 +1,6 @@
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Rewriting;
 
 namespace Puck.World.Transpiler.Validation;
 
@@ -56,7 +55,7 @@ public static partial class PuckLinter {
         // 3. Pass 3: Check for unused declarations: the source's own, and none of a library's, whose every
         // declaration is for its importers. A statement the parser could not read may hold the use, so nothing is
         // reported unused until the source parses whole.
-        if (library || (diagnostics.HasErrors && UnreadStatementFinder.Holds(document: document))) {
+        if (library || (diagnostics.HasErrors && HoldsUnreadStatement(node: document))) {
             return;
         }
 
@@ -80,9 +79,10 @@ public static partial class PuckLinter {
             }
         }
     }
+    private static bool HoldsUnreadStatement(SyntaxNode node) => ((node is ErrorStatementNode) || node.Children().Any(predicate: HoldsUnreadStatement));
     private static bool IsImported(StatementNode statement) => (statement is LetNode { DefinitionPath: not null } or TemplateNode { DefinitionPath: not null });
 
-    // Every node is walked through SyntaxWalk.Children; the arms below are only the nodes that name something, report
+    // Every node is walked through its own children; the arms below are only the nodes that name something, report
     // something, or read a key as text. A colour literal written directly into a `let`'s value — through calls,
     // indexing, lambdas and interpolation, but not inside an array, object or arithmetic — is the constant it names,
     // so it is not reported.
@@ -139,7 +139,7 @@ public static partial class PuckLinter {
                 // Check if hardcoded color literal could be hoisted to a constant
                 if (!inLet) {
                     diagnostics.ReportInformation(
-                        code: PuckDiagnosticCodes.LintShadowedDeclaration,
+                        code: PuckDiagnosticCodes.LintInlineColor,
                         message: $"Inline color literal '{color.Hex}' — consider declaring as a named 'let' constant",
                         span: color.Span
                     );
@@ -148,7 +148,7 @@ public static partial class PuckLinter {
 
             case LiteralExpressionNode { Value: string strVal } lit when (!inLet && strVal.StartsWith(value: '#') && ((strVal.Length == 7) || (strVal.Length == 9))):
                 diagnostics.ReportInformation(
-                    code: PuckDiagnosticCodes.LintShadowedDeclaration,
+                    code: PuckDiagnosticCodes.LintInlineColor,
                     message: $"Inline color literal '{strVal}' — consider declaring as a named 'let' constant",
                     span: lit.Span
                 );
@@ -157,7 +157,7 @@ public static partial class PuckLinter {
 
         var childInLet = ((node is LetNode) || (inLet && (node is CallExpressionNode or ArgumentNode or IndexExpressionNode or LambdaExpressionNode or OperandExpressionNode or InterpolatedStringNode)));
 
-        foreach (var child in SyntaxWalk.Children(node: node)) {
+        foreach (var child in node.Children()) {
             CollectReferences(
                 diagnostics: diagnostics,
                 inLet: childInLet,
@@ -248,24 +248,6 @@ public static partial class PuckLinter {
                     span: span
                 );
             }
-        }
-    }
-
-    private sealed class UnreadStatementFinder : PuckSyntaxRewriter {
-        private bool m_found;
-
-        public static bool Holds(DocumentNode document) {
-            var finder = new UnreadStatementFinder();
-
-            _ = finder.Rewrite(document: document);
-
-            return finder.m_found;
-        }
-
-        protected override StatementNode? RewriteStatement(StatementNode statement) {
-            m_found |= (statement is ErrorStatementNode);
-
-            return base.RewriteStatement(statement: statement);
         }
     }
 }

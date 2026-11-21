@@ -29,8 +29,7 @@ public sealed class ClosedBitset256LawTests {
                 condition: GeneratorEngine.TryFire(
                     generator,
                     CellKind.Int,
-                    123,
-                    7,
+                    new DrawSeed(123, 7),
                     cursor,
                     masks,
                     out var draw,
@@ -47,8 +46,7 @@ public sealed class ClosedBitset256LawTests {
                 condition: GeneratorEngine.TryFire(
                     generator,
                     CellKind.Int,
-                    123,
-                    7,
+                    new DrawSeed(123, 7),
                     cursor,
                     masks,
                     out var replay,
@@ -69,8 +67,7 @@ public sealed class ClosedBitset256LawTests {
         Assert.False(condition: GeneratorEngine.TryFire(
             generator,
             CellKind.Int,
-            123,
-            7,
+            new DrawSeed(123, 7),
             count,
             masks,
             out _,

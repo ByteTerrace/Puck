@@ -67,8 +67,8 @@ public static class PuckDiagnosticCodes {
     /// <summary>PUCK042: a lambda written where no builtin takes one. A lambda is an argument to an array builtin
     /// and nothing else.</summary>
     public const string LambdaOutsideBuiltin = "PUCK042";
-    /// <summary>A shadowed declaration.</summary>
-    public const string LintShadowedDeclaration = "PUCK_LINT_003";
+    /// <summary>An inline colour literal.</summary>
+    public const string LintInlineColor = "PUCK_LINT_004";
     /// <summary>A reserved-channel prefix matching no known channel.</summary>
     public const string LintUnknownChannelPrefix = "PUCK_LINT_009";
     /// <summary>An unresolved placement parent.</summary>

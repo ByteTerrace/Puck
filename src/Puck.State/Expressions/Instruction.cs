@@ -163,6 +163,10 @@ public abstract record InstructionPayload {
 public abstract record VectorOperand {
     private VectorOperand() { }
 
+    /// <summary>Reads the row and optional key of a vector cell spelling.</summary>
+    public static Cell? CellOf(string? spelling) =>
+        ExpressionSpelling.TryParseVector(spelling, out var operand, out _) ? operand as Cell : null;
+
     /// <summary>A vector state cell operand.</summary>
     /// <param name="Name">The state row name.</param>
     /// <param name="Key">The key or key indirection, or <see langword="null"/>.</param>

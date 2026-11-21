@@ -275,7 +275,7 @@ template freecellGather(step, pile) {
       solitaireFreecell.stage == 1 and
       solitaireFreecell.gatherStep == step and
       count(pile) > 0)
-    transform transfer(from: pile, to: solitaireFreecellDeck, selector: First)
+    draw pile to solitaireFreecellDeck
   }
   rule $"solitaireFreecell-gather-advance-{step}" {
     when (solitaire.table == 2 and
@@ -309,7 +309,7 @@ rule "solitaireFreecell-shuffle" {
 template freecellDeal(step, pile) {
   rule $"solitaireFreecell-deal-{step}" {
     when solitaire.table == 2 and solitaireFreecell.stage == 3 and solitaireFreecell.dealStep == step
-    transform transfer(from: solitaireFreecellDeck, to: pile, selector: First)
+    draw solitaireFreecellDeck to pile
   }
 }
 

@@ -28,11 +28,14 @@ public sealed partial class HgdPpu : ISnapshotable {
     private const int MaskDelayDots = 2;
 
     private readonly IHgdMapper m_mapper;
+    private readonly bool m_boardTimes;
     private readonly HgdNametableRam m_nametables;
 
     private readonly byte[] m_palette = new byte[32];
     private readonly byte[] m_oam = new byte[256];
     private readonly byte[] m_secondaryOam = new byte[32];
+    // The picture being drawn is state. The completed frame is its hand-off copy for readers: derived at vertical blank
+    // and on a restore, never serialized.
     private readonly ushort[] m_frame = new ushort[(Width * Height)];
     private readonly ushort[] m_completedFrame = new ushort[(Width * Height)];
 
@@ -72,6 +75,7 @@ public sealed partial class HgdPpu : ISnapshotable {
         ArgumentNullException.ThrowIfNull(argument: nametables);
 
         m_mapper = mapper;
+        m_boardTimes = mapper.TimesOnEdges;
         m_nametables = nametables;
     }
 
@@ -98,7 +102,8 @@ public sealed partial class HgdPpu : ISnapshotable {
     public ReadOnlySpan<byte> ObjectMemory => m_oam;
     /// <summary>Gets the last completed picture: <see cref="Width"/> by <see cref="Height"/> row-major pixel codes, each
     /// six palette bits with the three emphasis bits of $2001 above them, copied as vertical blank begins so a reader never
-    /// sees a frame the PPU is still drawing.</summary>
+    /// sees a frame the PPU is still drawing. A snapshot carries only the picture being drawn, so a restore presents that
+    /// until the next vertical blank.</summary>
     public ReadOnlySpan<ushort> Frame => m_completedFrame;
 
     private bool RenderingEnabled => ((m_mask & 0x18) != 0);
@@ -207,10 +212,7 @@ public sealed partial class HgdPpu : ISnapshotable {
                     } else {
                         m_t = ((ushort)((m_t & 0x7F00) | value));
                         m_v = m_t;
-                        m_mapper.ObservePpuAddress(
-                            address: ((ushort)(m_v & 0x3FFF)),
-                            masterTick: m_masterTick
-                        );
+                        ObserveAddress(address: ((ushort)(m_v & 0x3FFF)));
                     }
                     m_writeToggle = !m_writeToggle;
                 }
@@ -283,6 +285,9 @@ public sealed partial class HgdPpu : ISnapshotable {
     /// range.</exception>
     public void LoadState(StateReader reader) {
         TransferState(transfer: new StateLoadTransfer(reader: reader));
+        // The picture a restore presents is the drawn one: whole from vertical blank until the next frame's first line,
+        // and a restore inside the visible lines shows the lines drawn so far over the previous frame's rest.
+        m_frame.CopyTo(array: m_completedFrame, index: 0);
         if (
             (((uint)m_dot) >= DotsPerLine) ||
             (((uint)m_line) > PreRenderLine) ||
@@ -307,10 +312,7 @@ public sealed partial class HgdPpu : ISnapshotable {
     private byte ReadPalette(ushort address) =>
         m_palette[PaletteIndex(address: address)];
     private byte ReadMemory(ushort address) {
-        m_mapper.ObservePpuAddress(
-            address: address,
-            masterTick: m_masterTick
-        );
+        ObserveAddress(address: address);
 
         return m_mapper.PpuRead(
             address: address,
@@ -326,8 +328,14 @@ public sealed partial class HgdPpu : ISnapshotable {
         } else {
             m_v = ((ushort)((m_v + (((m_control & 4) != 0) ? 32 : 1)) & 0x7FFF));
             // Outside rendering the address bus rests on v, so the increment reaches the board.
+            ObserveAddress(address: ((ushort)(m_v & 0x3FFF)));
+        }
+    }
+    // Only a board that times on edges sees the address lines move.
+    private void ObserveAddress(ushort address) {
+        if (m_boardTimes) {
             m_mapper.ObservePpuAddress(
-                address: ((ushort)(m_v & 0x3FFF)),
+                address: address,
                 masterTick: m_masterTick
             );
         }
@@ -377,7 +385,6 @@ public sealed partial class HgdPpu : ISnapshotable {
         transfer.Block(values: m_oam.AsSpan());
         transfer.Block(values: m_secondaryOam.AsSpan());
         transfer.Block(values: m_frame.AsSpan());
-        transfer.Block(values: m_completedFrame.AsSpan());
         TransferBackgroundState(transfer: transfer);
         TransferSpriteState(transfer: transfer);
     }
