@@ -34,188 +34,312 @@ How the file stays usable:
 The lead session orchestrates on the integration branch `lead/rendering`, and
 every lane lands there. The next lead rewrites this section when it hands off.
 
-- **The rhythm** ([orchestration](../../.claude/skills/orchestration/SKILL.md)):
-  lanes write code and hand back after building what they touched and booting
-  the debug world. The lead is the central builder and tester. It verifies in
-  bulk windows on the lead machine's RTX 4070, takes no timing reading on a
-  shared machine, and may push `main` after a green bulk window and its
-  validation (the owner's standing approval). A windowed boot never holds a
-  push back.
-- **Optimizations are fixed as they are found**, each by the cheapest model
-  that can do it well (AGENTS.md). A hunt's findings go straight to lanes;
-  the packets hold only what no lane has taken yet.
-- **The RTX 2060 machine is a consumer release target.** It installs the
-  player build through the launcher from the hosted `player` channel and runs
-  only what a player runs. It never builds, compiles a cartridge or cold-bakes.
-  The lead machine produces each backend's prewarmed cache set and creates its
-  tag, and CI releases what is pushed to `main`. Its partner session also
-  reads code for the lead between releases; its hunts are the source of most
-  of tonight's packet items.
-- **In flight:** `bake-latency` (the bake's critical path between GPU
-  dispatches), `bake-garbage` (the bake's managed allocation), `bake-cpu` (the
-  bake's repeated CPU work and indexes), `field-4`, `frame-records` and
-  `device-removed` (a Direct3D 12 device removal on the integration tip, under
-  diagnosis). Their packet items say "in a lane".
-- **What is unknown and gates ranking:** the RTX 2060 has no reading on
-  current code. Its only figures came from a source build before the device
-  table applied and before the far and distant shadow work landed, so its
-  frame and memory are ranked on where they pointed, not on numbers. The
-  first consumer release and its reading come first
-  ([delivery](#delivery-launcher-and-ci)).
-- **Before the owner pushes `main`:** the device removal is diagnosed and
-  fixed, the production deploy's catalog listing is fixed, and the
-  [security review](#security-review)'s write-door leaks stay high work (the
-  owner deferred them for an earlier push). The hosted dev store is reset at
-  that deploy.
-- **Restored branches awaiting the owner's word:** `lane/g5` (the
-  occlusion-aware rate floor, review answered, needs a merge and its windowed
-  check), `lane/toon-3` (the third cel model, prior art),
-  `lane/companion-v1` (prior art for custody steps 9 and 10), and
-  `lane/moth-suit`, `lane/moth-pilot` and `lane/swallow-7` (the owner's pair
-  session; their rotation libraries are prior art).
+- **The aim is structural change** (the owner's ruling, AGENTS.md "Change is
+  the default"). This effort exists to raise what the engine can do, so a
+  system whose shape is the limit is replaced, not tuned. [Next](#next) leads
+  with replacements, and a packet that would shave such a system names its
+  replacement first.
+- **The rhythm** ([orchestration](../../.claude/skills/orchestration/SKILL.md#the-rhythm)).
+  Lanes write code and hand back after compiling what they changed. The lead
+  merges, then builds and tests in bulk windows on the lead machine's RTX
+  4070. A green window and a green Azure validation run let the lead push the
+  integration branch to `main`, which deploys (the owner's standing approval).
+  The RTX 2060 machine then plays the release as a player does. No lane takes
+  a timing reading on a shared machine, and a windowed check never holds a
+  landing or a push back.
+- **Both bars fail on both machines, and nothing on the head is measured.**
+  - RTX 4070 at 2560 by 1440, authority in process, prewarmed, on a quiet
+    machine: about 16 to 17 FPS on each backend against 60. The frame is
+    CPU-bound: one thread steps the world and then produces the frame.
+  - RTX 2060 at 1920 by 1080, authority in process, a prerelease player
+    build: 9 to 14 FPS over the route against 60, and about twice its 6 GiB
+    host-memory bar. It also baked while it played, which a player build must
+    never do. The logs are on `origin/test/2060-local`, under
+    `test-results/2060-local/`.
+  - The lanes that answered those readings landed after them: `cpu-frame`,
+    `cpu-frame-2`, `memory-bar`, the three hunt 14 GPU lanes, `motion-scope`
+    and `standing-2`. Neither machine has a reading against the hosted
+    authority.
+- **In flight:** one lane, `cache-complete`, on branch
+  `worktree-agent-a726bd8743cbcaaff` with work-in-progress commits
+  ([the player build never bakes](#the-player-build-never-bakes)).
+- **The RTX 2060 partner session is idle.** It waits for the lead to tell it
+  the release is on the player channel and to install it
+  ([the release](#the-release), step 4). Between releases it reads code for
+  the lead: its hunts 12 to 14 are filed in the packets below.
+- **The owner set two milestones,** and [Next](#next) opens with them. M1:
+  the debug world is hosted on Azure and the RTX 2060 plays in it as a
+  consumer. M2: four-player split screen on the RTX 4070, with all four seats
+  joined to one remote host.
+- **Start here, in order:** the bulk window on the head, which runs the
+  [verification debts](#verification-debts); the [release](#the-release);
+  the check of what [a hosted world shows on a client](#a-hosted-world-on-a-client);
+  then [the CPU frame](#the-cpu-frame)'s trace and its two design lanes.
+
+### The release
+
+The last release run from `main` committed and admitted the hosted world, the
+first run to do so, and failed one step later: the public QUIC probe timed
+out. Public `/healthz` was answering unhealthy because checkpoint
+retention failed, retention failed because the store's role could not delete
+blobs, and the role lacked that right because a Template Spec's source had
+changed under a version already published.
+
+Fixed on `lead/rendering` since, and not yet deployed:
+
+- Template Specs `world-silo` 0.0.7 and `public-flex-api` 0.0.6 are published.
+  The lead publishes and republishes them in place (AGENTS.md), and
+  `puck azure build-infrastructure` refuses a pinned version that differs from
+  its source ([CI](../development/ci.md#build-and-validate)).
+- A retention failure no longer fails public health (`WorldSiloHost`'s health
+  answer); private health still reports it.
+- The MCP front's TLS state persists across workers.
+- The documentation link the run's link check failed on.
+
+What to do next:
+
+1. Run the bulk window on the head. If `cache-complete` has landed, produce
+   each backend's cache set for the commit being pushed
+   ([the player channel](../development/ci.md#the-player-channel) has the two
+   commands). The bake identity has moved since the last set, so without new
+   sets the `player` job holds its publish and names what to run.
+2. Start the validation run without deploying:
+   `gh workflow run azure.yml --ref lead/rendering -f deploy=false`.
+3. When the window and that run are green, push `lead/rendering` to `main` and
+   watch the release to its end. It should deploy, pass the public probe
+   (`puck azure test-production` reads the worker's `/healthz` first, so a
+   withheld readiness names its reason) and publish the player channel. A red
+   step is fixed on `lead/rendering` as ordinary work. The hosted dev store is
+   scratch and resets at this deploy.
+4. Tell the RTX 2060 session to install the release through the launcher from
+   the player channel and to run its two legs at 1920 by 1080 on both
+   backends: local, and against the hosted authority. Its readings are
+   `world.device-profile`, `world.quality`, `world.iteration`, `host.frames`,
+   `world.gpu-timing`, `world.rates`, `host.memory` and a `gc-verbose` trace,
+   over `world.benchmark run debug`.
+5. [Delivery](#delivery-launcher-and-ci) holds what to check on the deployed
+   worker afterwards.
+
+### Verification debts
+
+Windowed checks lanes asked for and nobody has run. Run them in one bulk
+window on the head: boot each backend once, read every request for that
+backend in the one World, and hold new builds while it runs
+([tooling caveats](#tooling-caveats)). A packet's own checks stay in the
+packet; these are the ones owed now, most valuable first.
+
+1. **Two defects to diagnose, on both backends.**
+   - The gallery's exhibits render near-black in daylight
+     ([lighting](#lighting-and-gi)). At a shape exhibit
+     (`gallery.go shape-superellipsoid-8`), capture beauty, then
+     `world.debug-view indirect`, `world.shadows off` and `world.indirect off`
+     in turn, and read `world.probe` at the subject.
+   - A still view shimmers on an 8-frame cycle
+     ([temporal](#temporal-shimmer-and-cadence-flicker)). After
+     `world.wait bakes 300` at the stage, with nothing moving:
+     `world.screenshot <path>.png presented 16`, then `world.wait captures 30`.
+     The report's changed-pixel count per frame shows the cycle or its absence.
+2. **The readings that rank [Next](#next).** On a quiet machine, with no lane
+   building:
+   - The frame bar:
+     `puck lease quiet --wait 600 -- puck benchmark --route debug --backend directx vulkan`
+     (its window defaults to 2560 by 1440).
+   - The frame thread, during that route:
+     `dotnet-trace collect -p <pid> --profile dotnet-sampled-thread-time`, and
+     a second run with `--profile gc-verbose`. The first orders
+     [the CPU frame](#the-cpu-frame)'s replacements; the second decides the
+     collector's settings.
+   - Memory: `host.memory`, `world.residency` and `world.budget` in the same
+     World, and `puck host heap --pid <pid>` for the large object heap
+     ([memory](#memory-on-the-deck-tier)).
+3. **`cpu-frame-2`.** `world.rows check on` reports no mismatch while bodies
+   move; standing still at the rate range, `world.counters world.field-queries`
+   shows resting feet reusing their probes and `sdf.instances.records.posed`
+   counts the records a moving body restages; captures of the Moth's feet on
+   a slope and on the stairs (`debug.go stairs`) show them planted.
+4. **The hunt 14 lanes.** `world.gpu-timing` (now per-frame milliseconds, stale
+   rows marked) at the pool, the valley and the gallery entrance;
+   `world.rates` for `shadow-far.static`, `.rendered` and `.held` over the
+   route; a portal that a wall hides stays hidden while the camera moves; and
+   the nested views' look at render scales 0.75 and 0.5. The paired before and
+   after on the RTX 2060 rides its hosted leg.
+5. **`part-text`.** A Vulkan boot at `debug.go press`: the slugs carry their
+   words and the seated view frames the bench.
+6. **`memory-bar`.** Its final-head reading is item 2's memory line; the
+   checkpoint keys and trace-judge fixes it carries have not run windowed.
+7. **Carried from earlier windows,** each still owed unless a later change
+   removed its subject:
+   - `far-shadows`: at the valley rim (`body.pose 0 386 470 0 0 0`) with the
+     sun moving, ridge shadows reach the far south walls with no hard
+     hand-over line and no swim; `world.rates` reads `shadow-distant.held` far
+     above `.rendered`.
+   - `light-moving`: `[sdf.mesh-gi]`'s `behind` and relight counts under the
+     day cycle at speed; `world.iteration`'s `lit=` after a teleport; valley
+     stills at dawn and dusk.
+   - `tick-rest`: an idle card or piece wakes when it is touched, dealt or
+     moved, and the hall lift carries its riders.
+   - `row-identity`: save an `auctionChip` colour, then `world.undo`: it
+     recolours and reverts with no full install (`world.iteration`).
+   - `withdraw-1-fix`, in the painting wing: `world.revoke <session> observe all`
+     shows the fallback colour and `world.grant` redraws.
+   - `pose-reach`: the Moth's walk, jump and stop on the gallery's uneven
+     ground show no foot pop.
+   - `rays`: with hardware ray queries on, `world.rays off` and `on` agree at
+     the teal corner (`world.probe`), and `--withhold-gpu ray-query` falls
+     back and still converges. Direct3D 12 traced about four times slower
+     than Vulkan through the same structures; a PIX and an Nsight capture of
+     one trace job on each backend is owed before that gap is named.
+   - The arrival rows' requests R1a, R1h, R1b and R1c
+     ([arrival work](arrival-proportional.md#windowed-r1b-verification-request)),
+     `lane/g5`'s recipe, and the moving-blend bursts over a whole cycle on
+     every exhibit.
+   - A cold bake per backend from a fresh `--cache-dir`, paused and under
+     lockstep, reading the `[sdf.mesh-bake] done` line: its counts are the
+     reference the next cache sets are checked against, and the 24 tour
+     exhibits' stored meshes are audited from it
+     ([bake detail](#bake-detail)).
+
+### Tooling caveats
+
+What this session met on the lead machine; each is true until the named fix.
+
+- **The installed global `puck` is stale.** It speaks lease protocol 4 and the
+  tree is at 5 (`CliLease.Protocol`), so it is refused at the lease root. Run
+  `dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll <verb>` from a CLI
+  built at the tip, or reinstall the tool
+  ([contributing](../development/contributing.md#setting-up-a-machine)).
+- **The Azure verbs are an extension.** Install it after a change to it:
+  `dotnet publish src/Puck.Cli.Azure -c Release -o extensions/Puck.Cli.Azure`.
+- **One windowed World at a time.** Windowed admission now expects about 22 GB
+  of headroom, learned from one large start, which blocks a second World
+  beside it, and the GPU lease is exclusive. Lanes waited up to two hours for
+  a window this session and handed back unverified. Grant no lane a window
+  unless seeing is its work, and run the rest in the bulk window
+  ([the admission defect](#cli-and-lease-machinery)).
+- **Local Bicep is older than CI's.** A Bicep build that passes locally can
+  differ from CI's; CI's result decides.
 
 ## Next
 
-Ranked whole at this batch by what limits the bars now. The frame bar, the
-cold-bake bar and the visual bar are one campaign (AGENTS.md), and rapid
-iteration is the first fundamental, so their packets interleave. Work whose
-correctness rests on an invariant is designed and reviewed before code
+Ranked whole, by what limits the bars now. Structural replacements come first
+(the owner's ruling): where a system's shape is the limit, its item names the
+replacement, and tuning that system waits. Work whose correctness rests on an
+invariant is designed and reviewed before code
 ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
 
-1. [high; in a lane, before `main`] [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
-   the Direct3D 12 device removal on the integration tip (`device-removed`).
-   A device that is lost mid-play is a player-facing failure on every target,
-   and no push carries it.
-2. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): the
-   production deploy's catalog listing, which every push to `main` and every
-   player release needs; then the first consumer release to the RTX 2060
-   through the player channel with a cache set per backend, which the lead
-   produces for the build being released
-   ([the hold](../development/ci.md#the-player-channel) refuses a release
-   without one). Every 2060 reading waits on this.
-3. [high] [The RTX 2060's frame](rendering.md#the-rtx-2060s-frame): step 1's
-   reading of the player build at 1920 by 1080 on both backends, with a
-   CPU-sampling and verbose GC trace beside it. That one trace settles what the
-   tick's 30 ms spends, which threads allocate when nothing bakes, and whether
-   `ConserveMemory` should change. Then, by what the reading shows: the views
-   pass (about 21 ms by arithmetic at the table's render scale, past the
-   whole frame on its own), the resolve's capture, device and host memory.
-   Step 4's shadow check runs now, on the 4070, since the far and distant
-   shadow work landed without a windowed run.
-4. [high] [Edit to running](#edit-to-running-hot-reload-and-boot): make
-   validation proportional to the edit
-   ([authoring loop step 5](iteration/authoring-loop.md#build-order)).
-5. [high; in lanes] [Bake proportional to change](#bake-proportional-to-change):
-   the cold bake runs at about twice the minute figure on the lead machine,
-   and its kernel is a small share of the wall time. The three bake lanes take
-   the critical path between dispatches, the managed garbage and the repeated
-   CPU work. Then the quiet cold-bake reading per backend on the lead machine,
-   which also paces releases (each bake-identity move costs the lead a cold
-   bake per backend to produce cache sets). Then one store for both backends.
-6. [high] [Residency and streaming](#residency-and-streaming) and
-   [memory on the Deck tier](#memory-on-the-deck-tier): a host-memory bar for
-   a 16 GB machine, which no plan sets and which the 2060 ran out of; the
-   2060's region refusals with its table applied; then the
-   [streaming campaign](streaming-and-memory.md#the-build-order)'s next step.
-7. [high] [Engine job system](#engine-job-system): finish bounded waits, then the pool's
-   design (J1), which folds in the bake's private worker pool; then rows as
-   jobs (T4) for the silo. The frame thread still steps the authority and
-   emits the whole program; the 2060 trace in item 3 sizes both.
-8. [high, before the hosted world admits players] [Security review](#security-review): the write door's footprint is
-   derived from the name registry
-   ([checkpoint](disclosure.md#write-door-footprint-checkpoint)), so a
-   submission naming a withheld row at any position answers as one naming an
-   absent row; checks that read past the declared relation wait on the
-   restricted transaction (D0b1 to D0c).
+The owner's two milestones come ahead of the ranked list, and each names the
+packets it needs in order:
+
+- **M1 [high]: the debug world is hosted on Azure and the RTX 2060 plays in
+  it as a consumer.** It is met when a release installed through the launcher
+  joins the hosted authority, shows the whole debug world there and meets the
+  2060's own bars.
+  1. [Delivery](#delivery-launcher-and-ci): [the release](#the-release), so
+     the world is hosted and the player channel publishes.
+  2. [A hosted world on a client](#a-hosted-world-on-a-client): a world
+     delivered from another authority shows no text, no machines and no
+     session screens, and a remote seat's input does not move its body. Until
+     both are closed the 2060 would join a debug world whose paintings, press,
+     cabinets and chess screens are blank.
+  3. [The player build never bakes](#the-player-build-never-bakes), in a lane.
+  4. The 2060's own bars: [the CPU frame](#the-cpu-frame) and
+     [memory](#memory-on-the-deck-tier), items 1 and 3 below.
+- **M2 [high]: four-player split screen on the RTX 4070, all four seats
+  joined to one remote host.** It is met when one client process carries four
+  seats, each admitted to the same remote authority under its own identity,
+  and the four views together hold the 4070's frame bar.
+  1. [A multi-seat client](#a-multi-seat-client): seats exist today only in
+     the authority's own process, and a remote client is one peer with one
+     body.
+  2. [The CPU frame](#the-cpu-frame), a prerequisite: four seats multiply the
+     capture and the view recording the frame thread does alone.
+  3. [The benchmark](#the-benchmark): a four-seat route against a remote
+     authority, without which no verdict on this milestone can be given.
+
+1. [high] [The CPU frame](#the-cpu-frame). Both machines are CPU-bound, and
+   one thread both steps the world and produces the frame. First the
+   frame-thread trace on the head; then the authority's step on its own
+   thread (a design lane first, since it touches determinism), the frame
+   fork over one pool, draw records that read their slot's transform, and
+   presentation field queries that no longer interpret the field on the CPU
+   (a design lane first).
+2. [high] [Lighting and GI](#lighting-and-gi): the gallery's exhibits render
+   near-black in daylight on both backends. The gallery is the engine's
+   self-test, so this is diagnosed before any look work reads an exhibit.
+3. [high] [Memory](#memory-on-the-deck-tier): the RTX 2060 holds about twice
+   its host bar and the RTX 4070 holds more than 20 GiB. The large tenants
+   move to owned storage under the one account, and a program's field splits
+   from its appearance, ahead of trimming tenants one by one.
+4. [high; in a lane] [The player build never bakes](#the-player-build-never-bakes):
+   `cache-complete`. A cache set holds every tier of every group a player's
+   route reaches, and a miss in a player build is drawn from what is stored,
+   never baked.
+5. [high] [Delivery](#delivery-launcher-and-ci): the next push to `main`
+   ([the release](#the-release)), then the RTX 2060's hosted leg, the first
+   reading of either bar against the hosted authority.
+6. [high] [Temporal](#temporal-shimmer-and-cadence-flicker): a still view
+   shimmers on an 8-frame cycle. The fix is the reconstruction's
+   ([rendering P15](rendering.md#p15--temporal-reconstruction)): a jitter
+   period that follows the render scale and history clipped by variance.
+7. [high] [The visual bar](#the-visual-bar)'s engine gaps, each ahead of any
+   look lane that would sculpt around it: the water's gaps 5, 6 and 9
+   ([water](#water)), the terrain pass's steps
+   ([the valley's terrain](#the-valleys-terrain)), the contour rule and the
+   moving cutter ([bake detail](#bake-detail)). The order among them is
+   [the owner's call](#owner-decisions); until it is made they run in the
+   order written here.
+8. [high] [Bake proportional to change](#bake-proportional-to-change): the
+   bake samples a dense lattice in about twenty round trips a group. Its
+   replacement is sampling in one round trip a stage from one root-search
+   source, with coarse-to-fine pruning; the remaining CPU-stage cuts follow
+   it.
 9. [high] [Transfers, federation and server](#transfers-federation-and-server):
-   local games reveal the MMO, so the hosted authority is ordinary work.
-   Interest management first (every body goes to every session every tick),
-   beside the custody protocol's steps 6 to 10; then whole-document delivery
-   and checkpoint stalls.
-10. [high] [Bake detail](#bake-detail): its engine gaps first (a feature
-    thinner than a bake cell, a scaled primitive's bound, moving blends step
-    4), then the contour's triangles still turned from the field, which keep
-    six blend exhibits and the Moth's shin groups red.
-11. [high] [The visual bar](#the-visual-bar): the engine gaps behind its
-    misses first (the valley's walls, the water, the moving cutter), then the
-    caldera water as its first proof, built by [Water](#water)'s lanes A3 to
-    A5.
-12. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
-    under a moving sun, then a cold area lit the moment a view arrives.
-13. [high] [Refactoring campaign](#refactoring-campaign): the duplication
-    backlog, as parallel lanes beside everything above.
-14. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
-    work proportional to change: R1h through R1c's windowed checks, then S2 of
-    [its memo](arrival-proportional.md), then the frame thread's field
-    queries and the whole-program emission.
-15. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
-    repeated CPU dependency work, then memory attribution.
-16. [high] [Transmission](transmission.md): its implementation lanes in order;
-    the defects it closes are in [Lighting and GI](#lighting-and-gi).
-17. [high, before `main`] [Disclosure](disclosure.md#the-build-order): steps 5
-    and 6, with step 0's fuzzer and step 0b's principals.
-18. [high, before `main`] [Rule faults](rule-faults.md): what its page lists
-    as not built.
-19. [high] [The benchmark](#the-benchmark): stage 3's remaining work (the
-    comparer's conditions, folding a consumer `run.json` into a report), then
-    the windowed reading of `puck benchmark` on both backends.
-20. [high] [Test runner and replay](#test-runner-and-replay): the body's write
-    door from step D5.
-21. [medium] [Collision versus drawn mesh](#collision-versus-drawn-mesh):
-    sub-cell seams where boxes touch, then the valley sectors' buried
-    colliders.
-22. [medium] [Certified field contact](#certified-field-contact): box and
-    ellipsoid bodies, then clearance close to a slope.
-23. [medium] [Language and authoring](#language-and-authoring) and
-    [author leaks to the standard](#author-leaks-to-the-standard): the cost
-    corpus and the overlay text advance.
-24. [high] [Rendering research](rendering-research.md#the-build-order): its
-    order across the residency, lighting, bake, job-system and visibility
-    packets above, run as lanes side by side; its
-    [engine gaps](rendering-research.md#engine-gaps-filled-first) first.
-25. Then, by ordinary priority:
-    [the port](#port-the-experimental-worlds-missing-features) (each lane
-    ahead of the job-system step it proves),
-    [the valley's terrain](#the-valleys-terrain),
+   the wire rewrites a moving body whole, in floats, to every recipient.
+   [Replication](replication.md#the-build-order)'s step 1, the generated
+   records, replaces the hand-written codecs and is also
+   [code size](code-size.md#the-build-order)'s step 3. Beside it,
+   [the debug world at MMO scale](#the-debug-world-at-mmo-scale): the crowd of
+   bot peers that measures replication first, then the town, a moon on
+   another authority and live authoring on the hosted world.
+10. [high, before the hosted world admits players] [Security review](#security-review):
+    the write door's remaining leaks, then
+    [disclosure](disclosure.md#the-build-order)'s next steps and what
+    [rule faults](rule-faults.md) lists as not built.
+11. [high] [Edit to running](#edit-to-running-hot-reload-and-boot):
+    [the authoring loop](iteration/authoring-loop.md#build-order)'s step 5,
+    then step 9, one built CLI, which removes the stale-tool and lane-copy
+    procedures the caveats above work around.
+12. [high] [Residency and streaming](#residency-and-streaming):
+    [the streaming plan](streaming-and-memory.md#the-build-order)'s next step,
+    and the mesh region's growth without a second buffer on Vulkan.
+13. [high] [Lighting and GI](#lighting-and-gi), after item 2: emitters
+    integrated over their solid angle, then what the GPU trace still owes
+    under a moving sun.
+14. [high] [Refactoring campaign](#refactoring-campaign) and
+    [code size](code-size.md#the-build-order): the generator families, as
+    parallel lanes beside everything above.
+15. [high] [The benchmark](#the-benchmark): what the milestones leave of it,
+    the owner's windowed watch of the route and stage 4's remainder.
+16. [high] [Dense landscapes](#dense-landscapes),
+    [transmission](transmission.md) and
+    [test runner and replay](#test-runner-and-replay) (the body's write door
+    from step D5), each at its plan's next step.
+17. [medium] [Collision versus drawn mesh](#collision-versus-drawn-mesh),
+    [certified field contact](#certified-field-contact),
+    [language and authoring](#language-and-authoring) and
+    [author leaks to the standard](#author-leaks-to-the-standard).
+18. Then, by ordinary priority:
+    [the port](#port-the-experimental-worlds-missing-features),
     [rigid bodies](#rigid-bodies-and-physics),
     [CLI](#cli-and-lease-machinery), [MCP](#mcp-and-the-operator-attachment),
     [sweep](#sweep-and-visual-checks), [card tables](#card-tables-in-the-board-game-room),
-    [debug tools](#debug-tools),
-    [temporal](#temporal-shimmer-and-cadence-flicker), and
-    [depth of field](#depth-of-field) once the frame bar is known.
+    [debug tools](#debug-tools) and [depth of field](#depth-of-field).
 
 ## Beside the queue
 
 Unranked work that runs next to the queue. Read-only and headless work runs
-beside the GPU-bound lanes, and no more than one lane besides the lead's
-batched window holds the GPU at once.
-
-**Windowed readings owed** to the lead's next GPU window, on the integration
-head, each named by the lane whose landing waits on it:
-
-- crease1: the 24 tour exhibits' stored meshes against their CPU bakes, from
-  a cold boot per backend with a fresh `--cache-dir` (the Moth is read; see
-  [bake detail](#bake-detail)).
-- js1 at `debug.go overlook` (the desktop reading is taken), and vrr1's
-  `world.rates` burst at `debug.go desktop` on the variable-rate display
-  (expect `screens` at most 4).
-- relief1: a World boot and captures of a noise-relieved creation moving as a
-  whole, on both backends.
-- c03: the converged still at a lockstep stop against the build before c03,
-  on both backends (the control gap is read on both).
-- c04: a `world.reload` that changes the slot layout (an edit that adds an
-  animated placement, unverified as the shortest one), windowed on both backends, plain and under
-  `world.lockstep on`: `host.frames 300` around it reads the control gap under
-  the wait budget plus a pacer period, `world.wait ready 5` issued right after
-  the reload either reports ready or names the composition's build, and the
-  first boot shows the window's first image after the encode builds, with no
-  error line.
-- sm3r, on the lead machine: the slow-present reading (`world.target 10`,
-  then 5, then 20, from a cold store, both backends) and the quiet cold bake, as
-  [step 3's check](streaming-and-memory.md#step-3-one-reservation) states
-  what each should show.
-- The collection pauses behind the slow frames (Engine job system): a
-  `dotnet-trace --profile gc-verbose` attribution on the windowed debug world.
+beside the GPU-bound lanes. The windowed checks owed are
+[the hand-off's list](#verification-debts).
 
 **Reviews owed**, findings-only, each by another family than its author, on
 landed work in the review-only classes of
@@ -235,23 +359,6 @@ landed work in the review-only classes of
 - Area fix passes owed: the dense-landscapes packet's code, and the
   reserved-component packing and pattern filtering in it.
 
-**Verification requests** for the lead's batched windowed window. A packet's
-own windowed checks stay in the packet; these cross packets:
-
-- A burst capture across one hand-over with the group in every frame, and the
-  views recorded per frame across one boot-time resample
-  ([frame-time findings](#other-frame-time-findings)).
-- Three cold bakes per backend from an empty `--cache-dir` with `paused` and
-  `lockstep`, to show whether a late retier changes which tiers are stored.
-- The moving-blend bursts over a whole cycle on every exhibit: only
-  `motion-nod` ran one, and the others showed 16 to 20 frames.
-- A body on a twisted static solid, repeated in a windowed World.
-- `lane/g5`'s windowed recipe, on the
-  [virtual geometry plan](virtual-geometry.md)'s G5 row.
-- `world.wait` and `world.reload` over MCP against a windowed World on the
-  mesh path at quality high, where frames are slowest; only headless runs
-  have shown them.
-
 **Measurement requests** for one quiet window, with no other lane building or
 running a World. A tip-only reading runs
 `puck lease quiet --wait 600 -- puck bench frames …`
@@ -263,21 +370,23 @@ is filed with `puck measure`.
   refuses them; freeze the affected World builds again after it. A longer
   harness wait does not establish residency.
 - The Steam Deck's frame-bar reading, which the [rendering plan](rendering.md)
-  still owes and which waits for a Linux player build. The RTX 2060's reading is
-  not a quiet-window request: it is taken on the consumer machine from the
-  player build ([Next](#next) item 3).
-- The cold bake against the one-minute bar,
+  still owes and which waits for a Linux player build.
+- The cold bake against the one-minute figure,
   `bench startup worlds/debug --bake --backend <backend>` through
-  `puck measure`: a cold windowed boot beside two writing lanes read the
-  world residency's bake over the bar on both backends; and the cold-bake
-  pause comparison, at least three
-  alternating runs with collections read from the trace.
+  `puck measure`, and the cold-bake pause comparison, at least three
+  alternating runs with collections read from the trace. The cold-bake
+  measurement harness itself fails first
+  ([CLI](#cli-and-lease-machinery)).
 - The field-query counts ([frame-time findings](#other-frame-time-findings)),
   and the gen2 count and pause per 45 s settled, standing and walking.
 - The shade matrix's remaining device rows (author shaders step 2) and the
   cascades' exit-layer frame time ([lighting](#lighting-and-gi)).
 - The views pass and the relight's local part against an EV 7 exposure floor
   ([lighting](#lighting-and-gi)).
+- The slow-present reading (`world.target 10`, then 5, then 20, from a cold
+  store, both backends), as
+  [step 3's check](streaming-and-memory.md#step-3-one-reservation) states
+  what each should show.
 
 **Unlanded branches on origin**, each kept on purpose:
 
@@ -289,6 +398,8 @@ is filed with `puck measure`.
 | `lane/moth-pilot` | the off-suit pilot; `worlds/standard/turns.puck` | the owner's pair session |
 | `lane/swallow-7` | the swallow rebuilt to a cited reference document | the owner's pair session |
 | `lane/companion-v1` | prior art for the custody protocol's steps 9 and 10 ([transfers](#transfers-federation-and-server)) | step 9 porting it |
+| `test/2060-local` | the RTX 2060's local run of the prerelease player build: its report, logs, `run.json` files and a `gc-verbose` trace | the readings on the head that supersede it |
+| `hunt/12-duplication`, `hunt/13-language`, `hunt/14-gpu`, `research/replication` | the partner session's hunts and the replication research, each filed in its packet or plan | nothing; the lead deletes them |
 
 ## Owner decisions
 
@@ -301,25 +412,31 @@ engineering call is the lead's and sits in its packet as a "Decide" line.
 
 Owner-only actions:
 
-- **Pushing `main`**, which deploys to Azure. `lead/rendering` holds the
-  rendering wave's work. Push once the read-door leaks ([Next](#next), line 1) and the
-  Azure release's causes ([delivery](#delivery-launcher-and-ci)) are fixed and
-  the milestone's riskiest areas have had a fresh fix pass (AGENTS.md); red
-  tests hold nothing back while test requirements are suspended.
+- **Pushing `main`** is the owner's, with the standing exception that the
+  lead pushes the integration branch after a green bulk window and a green
+  validation run (AGENTS.md). The
+  [security review](#security-review)'s remainder blocks admitting players to
+  the hosted world, not a development deploy.
 - **Reporting the .NET 11 JIT GC-hole** to dotnet/runtime, with the BCL-only
   reproduction ([delivery](#delivery-launcher-and-ci)).
 - **An Azure OpenAI chat and embedding deployment**, which real-model runs of
   the agent harness and embeddings need
   ([debug world content](#debug-world-content)).
 - **Restoring test requirements** and the suite's keep-list: which of the
-  deleted guards over non-code files return, if any ([tests](#tests-suspended)).
+  deleted guards over non-code files return, if any
+  ([tests](#tests-suspended)). One keep-list candidate went with its subject:
+  the music replay law was deleted when the authority's music director was
+  removed.
 - **Calling for qualification**, which returns the
   [quarantined gates](#quarantined-gates).
 - **Hardware for the rendering measurements**: a Steam Deck and an HDR
-  display, once the engine meets both bars on the RTX 4070 (the RTX 2060 is on
-  hand as a consumer release target, AGENTS.md). No
-  fundamental work waits for them
+  display, once the engine meets both bars on the RTX 4070. No fundamental
+  work waits for them
   ([rendering research](rendering-research.md#the-bars-and-the-budget)).
+- **Playing with real devices.** Every agent's World boots with
+  `--devices none`, so two wired capabilities have only been read, not felt:
+  the press's keyboard lamps and the bard's pad pulse on the beat. Both show
+  in a World the owner starts with `--devices all`.
 
 Sittings, each the owner's eye on a running World:
 
@@ -339,6 +456,24 @@ Sittings, each the owner's eye on a running World:
 
 Open calls, each with its sides:
 
+- **A replication bar.** Whether replication gets a bar with the frame bar's
+  standing, and at what scale the debug world proves it: how many moving
+  bodies one recipient sees at once, and how many recipients one world
+  serves. Set it now, before any measurement, or set it from the plan's step
+  3 measurement, which the plan recommends
+  ([replication](replication.md#owner-questions)). No step waits on it.
+- **The order of the visual bar's engine gaps.** The water's depth, flow and
+  re-carving cutter, the terrain pass's relief and materials, the contour
+  rule that the Moth and the blend exhibits wait on, and the glacier's moving
+  cutter all stand ahead of look work, and they compete for the same
+  rendering lanes. The lead's order is [Next](#next) item 7's; the owner may
+  put the place they most want to see first.
+- **Latency for a tick on its own thread.** [The CPU frame](#the-cpu-frame)'s
+  first design may show the world the player acts in a tick later than today.
+  The register rules that a frame of latency is never the fix for a missed
+  bar, so if the design adds any, it comes to the owner with the measured
+  input-to-display time on both sides. Nothing is asked until that
+  measurement exists.
 - **The mirror construct.** G16 as recorded: each limb a template over `side`,
   with nothing new in the language. Or the
   [modeling authoring plan](modeling-authoring.md)'s `mirror` block, lowered
@@ -389,6 +524,240 @@ Open calls, each with its sides:
 - The ideas [awaiting review](#awaiting-the-owners-review).
 
 ## Work packets
+
+### The CPU frame
+
+Owner: the lead; a principal designs items 1 and 4 and another family reviews
+each design before code; specialists build · high · Next: the frame-thread
+trace on the integration head ([verification debts](#verification-debts),
+item 2), which orders items 1 to 3. The two design lanes start beside it.
+
+Both machines are CPU-bound. `HostLoop.Run` steps the world
+(`FixedStepPump.Advance`) and then produces the frame on the same thread, so a
+frame costs the tick plus the produce, a slow frame owes more steps, and the
+next frame is slower again. Five replacements change that shape. The cuts in
+[frame-time findings](#other-frame-time-findings) that tune what these replace
+wait behind them.
+
+1. **The authority's step leaves the frame thread.** The in-process authority
+   steps on a thread of its own and the frame presents the latest completed
+   tick, as a client of a remote authority already does. A frame then costs
+   the longer of the tick and the produce, not their sum. This is
+   [the job system's open question 7](engine-job-system.md#open-questions),
+   and the design lane answers it before any code. What the design must
+   state: the frame reads only a completed tick's published state
+   ([the presentation view](runtime-and-delivery.md#the-presentation-view)),
+   so no thread timing can change simulation state (AGENTS.md rule 4), and
+   what enforces that; where input is sampled, with the input-to-display time
+   measured before and after
+   ([the latency call](#owner-decisions)). Check: `host.frames` shows the
+   step outside the frame's interval on the route, and
+   `puck test --reproduce` passes at every worker count. At scale: every
+   world a client runs steps on its own thread, which is the shape the silo's
+   rows as jobs (the memo's T4) need too, so a hub of a dozen live worlds
+   costs the frame nothing per world.
+2. **The frame fork.** Capture, pack and view recording run across one pool,
+   partitioned by registration: the pool
+   ([J1](engine-job-system.md#6-build-order)), then the pose pack's fork and
+   recording in dependency waves
+   ([the memo](engine-job-system.md#3-parallel-view-recording)). The memo
+   holds wave recording until its serial sum pays; four seats' views (M2)
+   multiply that sum, so read it with four views before deciding. Check: the
+   memo's, per step.
+3. **A draw record reads its slot's transform.** A draw's record is
+   `SdfMeshRecord.DrawWords` words that hold its matrix, its normal matrix and
+   its world box (`SdfMesh`'s `WritePose`), and the CPU rewrites those words
+   whenever the body moves. `cpu-frame-2` cut that to the pose words alone.
+   The replacement stores the slot's index in the record and has the kernels
+   read the transform row the frame already uploads (`sdfDynamicTransformRow`)
+   and derive the normal matrix and the box on the GPU, so a moving body
+   writes one row. Check: `world.counters`' `sdf.instances.records.posed`
+   counts no record for a body that only moved, and the route's stills are
+   unchanged within the noise floor. At scale: hundreds of
+   moving bodies cost rows, not records.
+4. **Presentation queries stop interpreting the field on the CPU.** The
+   creation effectors' surface probes (`WorldCreationInstances.ApplyEffectors`)
+   and the chase camera's clearance march (`WorldCameraClearance.March`) walk
+   `SdfFieldEvaluator` on the frame thread, and the clearance keeps a whole
+   CPU evaluator alive for it. A design lane weighs two replacements. Batch
+   the probes onto the GPU and answer them a frame late: the kernels already
+   evaluate the same program, and the cost is a frame of lag in feet and
+   camera. Or compile the CPU evaluator to vectorized native code from the
+   one definition per field op the
+   [field programs](field-programs.md#build-order) plan generates readers
+   from, which also serves contact and the bake's CPU twin. These are
+   presentation queries; the simulation's fixed-point contact is not moved.
+   Check: `world.counters world.field-queries` and the frame thread's share
+   in the trace, with the feet captures of the verification debts unchanged.
+   At scale: a town's feet are hundreds of probes a frame, which only a batch
+   or compiled code can answer.
+5. **Background garbage leaves the shared heap.** A bake's and a worker's
+   scratch is rented or owned (`RentedArrays`, `RentedScope`, `IAllocator`),
+   so background work cannot pause the frame thread with a collection, and
+   the `gc-verbose` trace decides the collector's settings
+   ([the churn list](#engine-job-system) names what still allocates). Check:
+   the trace's pauses during a cold bake, by generation and by allocating
+   thread.
+
+### A hosted world on a client
+
+Owner: federation and presentation; a principal's design, reviewed by another
+family, before code · high, M1 · Next: read it on a real pair. Boot a
+listening World and a `--connect` client on one staged document
+([the benchmark](#the-benchmark) holds the staging), and on the client read
+`world.nesting` and capture the press, an emulator cabinet, a chess screen and
+a gallery painting.
+
+- [high] A world delivered from another authority shows no text, no machines
+  and no session screens on the client that presents it
+  ([worlds](../architecture/worlds.md#observation-and-display)). Read in the
+  code: a machine screen asks the machine host of a world this process runs
+  and gets none for a remote one (`WorldScreenBinder.MachinesOf`), and a
+  delivered world's fonts resolve beside a document directory it does not
+  carry (`WorldTextCatalog`, `WorldDefinition.DocumentDirectory`). The session
+  screens' half is the architecture page's statement and was not traced. On
+  the RTX 2060 against the hosted authority this would blank every gallery
+  painting, the press, the emulator cabinets and the chess screens, so the
+  debug world would stop proving the idea in the topology M1 is about. The
+  design weighs two answers and may take one per kind:
+  - *The client runs them from its own package.* A player build ships the
+    world's package, so fonts and other content resolve by content pin from
+    it. A deterministic machine runs on the client from the cartridge it
+    ships, driven by the inputs the authority replicates, and a session
+    screen's world runs as a local replica the way a routed session already
+    renders through its own residency. It costs the authority nothing per
+    viewer and needs every machine input on the wire and a way to join a
+    machine in progress (its saved image).
+  - *The authority streams them.* The authority sends machine frames and
+    screen images. It needs no determinism on the client, and it costs
+    encoded video per viewer per screen, which does not survive a town's
+    worth of viewers.
+  Check: the capture set above on the client matches the same set taken in
+  process. At scale: a hub of a dozen worlds shows a dozen worlds' screens, so
+  the answer must cost by what a viewer looks at.
+- [high] A remote seat does not play. The defects are read and listed in
+  [the benchmark](#the-benchmark)'s remote-authority item: a `--connect`
+  traveller's input does not move its body, the debug world admits no remote
+  player, a replica travels as one capped message, a replica that names
+  content by relative path fails validation, and the client still steps its
+  whole boot world. M1 needs each closed, not worked around per world.
+
+### A multi-seat client
+
+Owner: a principal writes the design memo, another family reviews it, then
+specialists build · high, M2 · Next: the design memo, before any code.
+
+The owner's direction: "come up with an intelligent way to handle the four
+player local split screen connected to remote scenario. In some cases players
+could be restricted by authors so that they're all within some acceptable
+limited range. Other authors might want to allow all four players to be in
+vastly different areas of the MMO (which might move to a different server)."
+
+Today local seats exist only in the authority's own process
+(`WorldBodiesLimits.LocalSeatCount`, `bodies.localSeats`), and a remote client
+is one peer with one body: "a federation reservation has no field that could
+ask for a local seat, so it is always a peer admission"
+([worlds](../architecture/worlds.md#joining-authority-and-admission)).
+
+The direction the memo designs to:
+
+1. **One client, many seats, one replica per world.** The client holds one
+   replica of each world any of its seats is in. Seats in one world share
+   that replica's mirror, its residency and its mesh store. Residency already
+   unites seats' demand
+   ([the decision](../decisions/residency.md#only-presentation-follows-the-observer)).
+2. **One connection per authority, not per seat.** Seats in one world are
+   multiplexed over one peer connection. Each keeps its own identity and
+   attestation and spends one of the host's `networkPlayers`. The authority
+   discloses the union of those seats' interest once, so a party standing
+   together costs about one player's egress.
+3. **A seat in another world uses the portal mechanism.** The client already
+   renders another world through its own residency. A seat that crosses to a
+   world on another server opens that world's replica and connection, and the
+   other seats are untouched. Four seats in four worlds are four replicas and
+   four connections; four seats together are one of each. Cost follows how
+   far apart the party is.
+4. **Authors decide the range; the engine supplies the mechanisms.** A party
+   leash (the tether the body step already has, or a range constraint);
+   whether a portal or party door carries the whole local party or one seat;
+   whether seats that stand close merge into one shared view. The policy is
+   `.puck`, the standard package picks the defaults, and no mode is built
+   into the engine.
+5. **Rendering scales with separation.** One merged view when the party is
+   close, four panes when it is apart, each pane on the quality table's
+   nested rows. The fixed CPU cost per view is
+   [the frame fork](#the-cpu-frame)'s to remove.
+
+What the memo delivers: the systems it reuses, each cited (seats, peers,
+routed sessions, residency, the tether, party doors, panes); a design for
+each gap below; how each answer behaves in a town and when one seat moves to
+another server; and the delegate skill's requirements of a design (its
+invariant, what enforces it, a check per step).
+
+- [high] Seats multiplexed on one connection, with the union of their
+  interest disclosed once. It meets
+  [replication](replication.md#decision-6-interest-and-priority-under-a-byte-budget)'s
+  interest design and must not let one seat read what only another may see.
+- [high] Several seat identities from one client process, each attested. This
+  is a trust boundary, so its review is another family's.
+- [high] One image per screen index cannot show different destinations to
+  split-screen viewers
+  ([worlds](../architecture/worlds.md#observation-and-display)): a
+  destination scoped to a user or group needs per-viewport bindings or
+  distinct passes.
+- [high] No route reads the frame bar with four views. The bar is the RTX
+  4070's own (AGENTS.md), read at 2560 by 1440 with all four panes drawn;
+  [the benchmark](#the-benchmark) needs a four-seat route against a remote
+  authority.
+- [medium] Pose clips are off for a multi-seat client: predicting a seat's own
+  body needs the last answered input sequence per owner on the wire, which
+  [replication](replication.md#decision-7-the-seats-own-body)'s continuation
+  carries.
+- [Panes](#panes-split-screens-the-player-drives) holds the local split
+  views' own open items.
+
+### The debug world at MMO scale
+
+Owner: the lead, a lane per item; each place under the valley art direction
+([composition](debug-world-composition.md)) · high · Next: the crowd of bot
+peers, since its counts set [the replication bar](#owner-decisions).
+
+The debug world must stress the idea it proves: many players, many
+inhabitants and many worlds on more than one authority. Each item is a place
+or a tool in the debug world, built on the engine's systems so it loads them
+as real use does (AGENTS.md).
+
+- [high] **Crowds of players.** Nothing connects many peers to one authority.
+  Build a `puck` verb that connects N headless bot peers to an authority, the
+  hosted one included, each with scripted movement, reusing the federation
+  link and the companion the canary starts (`AuthorityCompanion`). It reports
+  bytes and bodies per recipient (`world.counters`' `world.tick.interest-bytes`
+  over `world.tick.interest-bodies`) and the authority's tick. Check: the
+  hosted debug world holds its tick with the crowd connected, and the counts
+  fill [replication](replication.md#measurements-to-take)'s table.
+- [high] **A town.** A populated place in the valley with hundreds of
+  autonomous inhabitants whose behaviour is Puck programs (schedules, paths
+  between places, feet on the ground), drawn and lit as everything else is.
+  The nearest workload is `worlds/debug/garden-crowd.puck`, 128 creatures
+  measured headless only. A town drives the serial kit-body advance
+  ([job system](#engine-job-system)), the frame's field queries and draw
+  records ([the CPU frame](#the-cpu-frame)), interest, and a crowd of
+  distinct looks in residency. Check: the route crosses it at the frame bar.
+- [high] **A moon on another authority.** Every federation run so far is a
+  loopback pair on one machine. Host a moon's world elsewhere (a second silo,
+  or a player's host) and reach it through a portal across the two
+  authorities ([valley and moons](valley-and-moons.md),
+  [portals in play](portals-in-play.md#4-a-door-onto-another-world-opened-in-play)).
+  Check: a body walks through and back with its custody and state intact, and
+  the far world draws through the door before the crossing.
+- [high] **Live authoring on the hosted world.** A granted author may
+  live-edit a published world
+  ([the ruling](iteration/authoring-loop.md#what-the-owner-settled)). A saved
+  edit already reaches a local World through the source watch
+  (`WorldSourceWatch`) and the silo has a reload door, but no path carries an
+  author's edit to the hosted authority and on to every connected client.
+  Check: a colour saved on the author's machine shows on the RTX 2060's
+  client of the hosted world, as rows, with no redeploy.
 
 ### Dense landscapes
 
