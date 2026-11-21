@@ -128,7 +128,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private readonly System.Collections.Concurrent.ConcurrentDictionary<WorldRemoteAuthority, byte> m_remoteCustodyPeers = new();
     private readonly Dictionary<(string Source, string Destination, string Endpoint), WorldRemoteAuthority> m_recoveredRemoteAuthorities = new();
     private readonly Dictionary<string, WorldAuthorityEndpoint> m_authorityEndpoints = new(comparer: StringComparer.Ordinal);
-    private readonly HashSet<WorldAuthorityEndpoint> m_submittedEndpoints = [];
+    // The tick's scratch list of the remote authorities seats are routed to; a process seats a handful.
+    private readonly List<WorldAuthorityEndpoint> m_remoteSeatEndpoints = [];
     // Socket ingress reads onward routes while the tick thread publishes a just-committed handoff. The table itself
     // must therefore be concurrent even though every mutation still comes from the host's ordinary commit path.
     private readonly ConcurrentDictionary<(WorldServer Server, WorldEntityAddress Incarnation), ForwardedBody> m_forwardedBodies = [];
@@ -892,26 +893,18 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return;
         }
 
-        var submitted = m_submittedEndpoints;
+        var remote = m_remoteSeatEndpoints;
 
-        submitted.Clear();
+        remote.Clear();
+        AddRemoteSeatEndpoints(endpoints: remote);
 
-        for (var slot = 0; (slot < m_seats.SeatCount); slot++) {
-            if (m_seats.RoutedEndpoint(slot: slot) is not { } endpoint) {
-                continue;
-            }
-
-            if (
-                !endpoint.ClockOwnedHere &&
-                submitted.Add(item: endpoint)
-            ) {
-                m_seats.SubmitAuthorityIntents(
-                    endpoint: endpoint,
-                    tick: endpoint.NextInputTick
-                );
-            }
+        foreach (var endpoint in remote) {
+            m_seats.SubmitAuthorityIntents(
+                endpoint: endpoint,
+                tick: endpoint.NextInputTick
+            );
         }
-        submitted.Clear();
+        remote.Clear();
     }
     /// <summary>Looks up the endpoint a running local instance is observed and driven through: the one every seat routed to
     /// it and every view presented in it shares, whose mirror follows the instance's whole replica.</summary>
