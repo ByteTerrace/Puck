@@ -264,8 +264,8 @@ public sealed class CreationLeadGuessLawTests {
         Assert.True(condition: layer.TryLead(level: out var level, read: lead, seconds: LeadSeconds));
         Assert.Equal(expected: 1f, actual: level);
     }
-    // A body at rest that a rate tier holds: the shared pose holds as it would without a guess, and the guess layer still
-    // poses the press in that frame.
+    // A body at rest, once its part speed is measured, that a rate tier holds: the shared pose holds as it would without
+    // a guess, and the guess layer still poses the press in that frame.
     [Fact]
     public void ARateTierHoldsTheSharedPoseAndTheLayerStillPosesTheGuess() {
         var (client, pool) = Stage();
@@ -279,17 +279,29 @@ public sealed class CreationLeadGuessLawTests {
         pool.PresentAt(rate: Paced60, rates: SdfUpdateRates.All);
         pool.RateBy(counts: counts, height: 900U, intervals: null, views: [view]);
 
-        // The 15 Hz tier packs the first frame and every fourth after it, so frame 3 is a held one.
-        var posed = new List<long>();
-        Reading? last = null;
+        // A body poses in full while its part speed is unmeasured (its first two frames), and at rest then takes the
+        // tier its measured speed allows. The frames after those are a mix of packs and holds, which the tier's period
+        // and the body's phase within it place.
+        _ = Present(client: client, guess: guess, pool: pool, tick: 1UL);
+        _ = Present(client: client, guess: guess, pool: pool, tick: 2UL);
+        Assert.Equal(expected: 2L, actual: counts.Read(kind: SdfUpdateRateCounts.BodiesPosed));
 
-        for (var tick = 1UL; (tick <= 3UL); tick++) {
-            guess.InForce = (tick >= 2UL);
-            last = Present(client: client, guess: guess, pool: pool, tick: tick);
-            posed.Add(item: counts.Read(kind: SdfUpdateRateCounts.BodiesPosed));
+        var held = 0;
+
+        guess.InForce = true;
+
+        for (var tick = 3UL; (tick <= 12UL); tick++) {
+            var before = counts.Read(kind: SdfUpdateRateCounts.BodiesPosed);
+            var reading = Present(client: client, guess: guess, pool: pool, tick: tick);
+
+            // The guess layer poses the press on every frame, the ones the shared pose holds included.
+            Assert.Equal(expected: WorldRigDriver.SourceLead, actual: reading.Guess!.Value.Source);
+            if (counts.Read(kind: SdfUpdateRateCounts.BodiesPosed) == before) {
+                held++;
+                Assert.Equal(expected: (0f, WorldRigDriver.SourceCell), actual: reading.Shared);
+            }
         }
 
-        Assert.Equal(expected: new long[] { 1L, 1L, 1L }, actual: posed.ToArray());
-        Assert.Equal(expected: WorldRigDriver.SourceLead, actual: last!.Guess!.Value.Source);
+        Assert.True(condition: (held >= 4), userMessage: $"held frames {held}");
     }
 }

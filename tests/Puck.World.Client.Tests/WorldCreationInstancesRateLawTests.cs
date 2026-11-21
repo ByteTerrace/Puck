@@ -133,12 +133,15 @@ public sealed class WorldCreationInstancesRateLawTests {
             offsets.Add(item: (pool.BodyShapePose(bodyIndex: 0, shapeIndex: 1).Position - transforms[0].Position));
         }
 
-        // The first frame packs, the next three hold, the fifth packs the four frames' time at once, and so on.
+        // A body's part speed is unmeasured until a second full pack closes an interval, and an unmeasured body poses
+        // every frame, so the first two frames pose. Its measured speed then allows the 15 Hz tier: the next three hold,
+        // the sixth packs the four frames' time at once, and so on.
         Assert.Equal(expected: 3L, actual: counts.Read(kind: SdfUpdateRateCounts.BodiesPosed));
         Assert.Equal(expected: 6L, actual: counts.Read(kind: SdfUpdateRateCounts.BodiesHeld));
-        Assert.Equal(expected: phases[0], actual: phases[3]);
-        Assert.Equal(expected: (phases[0] + (4f * Frame)), actual: phases[4], tolerance: 1e-4f);
-        // Each full pack after the first closes an interval of four frames, recorded under the 15 Hz tier.
+        Assert.Equal(expected: (phases[0] + Frame), actual: phases[1], tolerance: 1e-4f);
+        Assert.Equal(expected: phases[1], actual: phases[4]);
+        Assert.Equal(expected: (phases[1] + (4f * Frame)), actual: phases[5], tolerance: 1e-4f);
+        // Each full pack after the measuring two closes an interval of four frames, recorded under the 15 Hz tier.
         Assert.Equal(expected: (4d / 60d), actual: (intervals.Longest(hertz: 15, lever: SdfUpdateRates.Bodies) ?? 0d), tolerance: 1e-6d);
         Assert.Null(@object: intervals.Longest(hertz: 30, lever: SdfUpdateRates.Bodies));
 
@@ -310,10 +313,12 @@ public sealed class WorldCreationInstancesRateLawTests {
             Assert.Equal(expected: pool.SlotRateCodes.Span[0], actual: pool.SlotRateCodes.Span[1]);
         }
 
-        var posed = SdfUpdateRateTiers.CodeOf(hertz: 15, updated: true);
+        // A body poses in full on each of the frames its part speed is unmeasured (the first two), then holds at the tier
+        // that measured speed allows.
+        var every = SdfUpdateRateTiers.CodeOf(hertz: 60, updated: true);
         var held = SdfUpdateRateTiers.CodeOf(hertz: 15, updated: false);
 
-        Assert.Equal(actual: codes, expected: [posed, held, held, held, posed]);
+        Assert.Equal(actual: codes, expected: [every, every, held, held, held]);
 
         var reading = Assert.Single(collection: readings.Latest(lever: SdfUpdateRates.Bodies));
 
