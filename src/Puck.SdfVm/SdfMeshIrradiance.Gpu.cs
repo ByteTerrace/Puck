@@ -18,8 +18,9 @@ public sealed partial class SdfMeshIrradiance {
         Span<uint> visibility = stackalloc uint[SdfMeshIrradianceProbe.LightWords];
         Span<uint> hits = stackalloc uint[SdfMeshProbeDepth.HitWords];
         SdfMeshProbeDepth.TraceHits(scene, origin, m_layout.Reach, hits, out _);
+        using var hold = m_blocks.Enter();
         Relight(origin, hits, m_layout, m_lighting!, Lows(), scene, m_lighting!.Feedback && m_layout.Bounce,
-            radiance, local, sky, false, visibility);
+            radiance, local, sky, false, visibility, in hold);
         var localError = 0f;
         var relightError = 0f;
         var skyError = 0f;
@@ -96,12 +97,22 @@ public sealed partial class SdfMeshIrradiance {
     // `force`; selection has no use for their hits, and a later visit retraces them.
     private void TrimGpuHits(Layout layout, (int X, int Y, int Z)[] lows, bool force = false) {
         if (!force && m_hitOwners.Count <= layout.TotalCount) { return; }
-        var dropped = m_hitOwners.Where(entry => {
-            var (level, cell) = entry.Key;
+        var dropped = m_droppedHits;
+
+        dropped.Clear();
+        foreach (var (key, owner) in m_hitOwners) {
+            var (level, cell) = key;
             var low = lows[level]; var dims = layout.DimsOf(level);
-            return cell.X < low.X || cell.Y < low.Y || cell.Z < low.Z || cell.X >= low.X + dims.X || cell.Y >= low.Y + dims.Y || cell.Z >= low.Z + dims.Z;
-        }).OrderByDescending(entry => entry.Value.Slot).ToArray();
-        foreach (var entry in dropped) { m_hitSlots.Free(entry.Value.Slot); m_hitOwners.Remove(entry.Key); }
+            if (cell.X < low.X || cell.Y < low.Y || cell.Z < low.Z || cell.X >= low.X + dims.X || cell.Y >= low.Y + dims.Y || cell.Z >= low.Z + dims.Z) { dropped.Add((owner.Slot, key)); }
+        }
+        // Freed from the highest slot down, as the range allocator merges them.
+        System.Runtime.InteropServices.CollectionsMarshal.AsSpan(dropped).Sort(comparer: default(SlotsDescending));
+        foreach (var (slot, key) in dropped) { m_hitSlots.Free(slot); m_hitOwners.Remove(key); }
+        dropped.Clear();
+    }
+    private readonly List<(uint Slot, (int Level, (int X, int Y, int Z) Cell) Key)> m_droppedHits = [];
+    private readonly struct SlotsDescending : IComparer<(uint Slot, (int Level, (int X, int Y, int Z) Cell) Key)> {
+        public int Compare((uint Slot, (int Level, (int X, int Y, int Z) Cell) Key) x, (uint Slot, (int Level, (int X, int Y, int Z) Cell) Key) y) => y.Slot.CompareTo(x.Slot);
     }
 
     // A fresh slot the trace writes a placed probe's hits into; the probe's relight adopts it (AdoptGpuHits).
@@ -132,6 +143,7 @@ public sealed partial class SdfMeshIrradiance {
 
     private bool ListGpu(in Snapshot snapshot, bool all, List<Candidate> candidates, List<float>? ages, bool interleave) {
         var layout = snapshot.Layout;
+        using var hold = m_blocks.Enter();
         uint[] records;
         lock (m_gate) {
             if (!Stands(in snapshot)) { throw new OperationCanceledException(); }
@@ -160,7 +172,7 @@ public sealed partial class SdfMeshIrradiance {
             for (var z = low.Z; z < low.Z + dims.Z; z++) {
                 for (var y = low.Y; y < low.Y + dims.Y; y++) {
                     for (var x = low.X; x < low.X + dims.X; x++) {
-                        var present = m_levels[level].Cache.TryGetValue((x, y, z), out var probe);
+                        var present = m_levels[level].Cache.TryGetValue((x, y, z), out var probe, hold: in hold);
                         var center = new Vector3(x + .5f, y + .5f, z + .5f) * spacing;
                         var slot = layout.OffsetOf(level) + SlotOf(x, y, z, dims);
                         var written = Holds(records.AsSpan(slot * SdfMeshIrradianceProbe.ProbeWords), (x, y, z));
@@ -274,7 +286,7 @@ public sealed partial class SdfMeshIrradiance {
     // every probe of the batch reads the bounce the volume held before the batch, as the CPU reference's batch does.
     // False when the snapshot no longer stands before the batch is handed over.
     private bool RelightGpu(List<Candidate> candidates, int first, int count, ProbeData[] probes, LightBlock lights,
-        Lighting lighting, in Snapshot snapshot, bool feedback) {
+        Lighting lighting, in Snapshot snapshot, bool feedback, in ReaderEpochs<Reclaimable>.Hold hold) {
         var rows = (m_gpuLightingRows = LightingRows(lighting, in snapshot, feedback, rows: m_gpuLightingRows));
         var inputWords = (count * SdfMeshProbeRelight.InputWords);
         ArrayCapacity.EnsureScratch(ref m_gpuOrigins, count);
@@ -309,7 +321,7 @@ public sealed partial class SdfMeshIrradiance {
             row[3] = probe.GpuSlot;
             Compose(in probe, candidate.Cell, row[SdfMeshProbeRelight.RecordInputWord..]);
             var reuses = false;
-            if (!candidate.Trace && m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) &&
+            if (!candidate.Trace && m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous, hold: in hold) &&
                 ReusesLocal(changes: snapshot.Changes, geometry: snapshot.Geometry, lighting: lighting, origin: new Vector3(origins[i].X, origins[i].Y, origins[i].Z), previous: in previous, trace: false)) {
                 row[0] |= 2;
                 reuses = true;
@@ -385,7 +397,7 @@ public sealed partial class SdfMeshIrradiance {
             row.Slice(36, SdfMeshIrradianceProbe.LightWords).CopyTo(lights.Lights(i));
             MemoryMarshal.Cast<uint, Vector3>(row.Slice(SdfMeshProbeRelight.SkyOutputWord, 18)).CopyTo(lights.SkyLight(i));
             var candidate = candidates[first + i];
-            probes[i] = probe with { Moved = Moves(candidate.Trace, m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) ? previous : null, lights.Radiance(i), lights.SkyLight(i)) };
+            probes[i] = probe with { Moved = Moves(candidate.Trace, m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous, hold: in hold) ? previous : null, lights.Radiance(i), lights.SkyLight(i)) };
         }
         return true;
     }
