@@ -1,19 +1,26 @@
 // The press: a typesetter's bench in the gallery lobby where a seat sets type by typing it. Slugs of type, each
 // carrying a word, come down the bench's three channels on the score's beat; typing a slug's word sets it and it drops
 // back into the bed, and a slug that reaches the stick unset is lost. The game is the standard's typing play
-// (../standard/typing.puck): this file authors only what is the press's own, which is its bench, its words, the panel
-// that shows them, the keys that light, its sound and the still it keeps of a record. press.md beside it says how to
-// play and how to read each part over the console.
+// (../standard/typing.puck): this file authors only what is the press's own, which is its bench, its words and the
+// lettering that puts them on the slugs, the proof that keeps the score, the seated view of the bed, the keys that
+// light, its sound and the still it keeps of a record. press.md beside it says how to play and how to read each part
+// over the console.
 
 import "../standard/typing"
 import "shapes"
 import "score"
 
 // Where the bench stands (its creation's floor, against the lobby's west wall whose inner face is x = 10.3, between
-// the hanging map board and the desktop computer), and where the seat stands to work it: out from the wall and a step
-// south of the bench, so the chase camera behind her shows the bed beside her rather than her back.
+// the hanging map board and the desktop computer), and where the seat stands to work it: square in front of the bed,
+// an arm's length out from its foot. The bench faces +X into the room, so its own +Z is the world's +X.
 let pressAt = [11.15, galleryFloor[0], 20.2]
-let pressStand = [13, galleryFloor[0], 18.8]
+let pressStand = [12.6, galleryFloor[0], 20.2]
+
+// The seated view: an eye over the seat's shoulder looking down the bed, so a slug's word reads upright and the
+// proof stands behind it. `pressNear` stops short of the bed, so the seated body draws nothing between the two.
+let pressEye = [pressAt[0] + 1.18, pressAt[1] + 2.08, pressAt[2]]
+let pressLook = [pressAt[0] + 0.02, pressAt[1] + 1.12, pressAt[2]]
+let pressNear = 0.55
 
 // The bed tilts 15 degrees toward the seat, and a slug travels this far down it in `pressSteps` steps.
 let pressTravel = 0.96
@@ -38,10 +45,59 @@ let pressWords = [
 
 typingPlay(music: score, bench: pressStand, words: pressWords, steps: pressSteps, radius: 1.5)
 
-// A slug settles into each step and a little past it, like a part dropped into a notch.
+// A slug settles into each step and a little past it, like a part dropped into a notch; the camera leans in to the bed
+// and back without overshoot.
 dynamics [
   { name: "press-slug", f: 5, r: 0, zeta: 0.55 }
+  { name: "press-seat", f: 1.4, r: 0, zeta: 1 }
 ]
+
+// Sitting down eases the seat's camera onto the bed, and standing up eases it back to the chase camera.
+views {
+  programs [
+    {
+      name: "press-seat"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: worldPoint(point: pressEye))
+        lookAt(focusDistance: 1.5, subject: worldPoint(point: pressLook), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 0.82)
+        dynamics(row: `press-seat`)
+      ]
+    }
+  ]
+  framings [
+    { id: "press", program: "press-seat", when: "state.typingSeat", near: pressNear }
+  ]
+}
+
+// A slug's word, drawn on its face by the lane's own effect: its typed letters faded into the brass, the next one
+// lifted, and the whole word shaken for a moment after a wrong letter. A lane's text is markup whose tag is the effect
+// the lane's `typingStyle` cell names and whose `at` is the letters typed so far.
+let pressLaneText = [
+  "[{state.typingStyle.0} at={state.typingTyped.0}]{state.typingShown.0}[/{state.typingStyle.0}]"
+  "[{state.typingStyle.1} at={state.typingTyped.1}]{state.typingShown.1}[/{state.typingStyle.1}]"
+  "[{state.typingStyle.2} at={state.typingTyped.2}]{state.typingShown.2}[/{state.typingStyle.2}]"
+]
+
+// A slug's half-extents, and the turn that lays lettering flat on its top face: advance along the slug, ascent up
+// the bed away from the seat.
+let pressSlug = [0.155, 0.045, 0.07]
+let pressFaceUp = [-0.707107, 0, 0, 0.707107]
+
+// The upper case behind the bed: its compartments' walls, as offsets from its middle.
+let pressCaseAt = [-0.21, 1.66, -0.52]
+let pressCaseHalf = [0.45, 0.4]
+let pressCaseColumns = [-0.3, -0.15, 0, 0.15, 0.3]
+let pressCaseRows = [-0.2, 0, 0.2]
+
+let pressWood = 0
+let pressIron = 1
+let pressSteel = 2
+let pressBrass = 3
+let pressCaseWood = 4
+let pressPaper = 5
+let pressType = 6
 
 prototypes {
   // The creation's origin is on the floor under the bed's middle; +Z is the seat's side. Each slug rests inside the
@@ -52,47 +108,153 @@ prototypes {
       name: "press"
       schema: "puck.creation.v1"
       palette [
-        { color: "#5B3A23", roughness: 0.62, specular: 0.14 }
-        { color: "#2C2C33", roughness: 0.42, specular: 0.35 }
-        { color: "#B9B4A8", roughness: 0.38, specular: 0.5 }
-        { color: "#E8B04A", roughness: 0.4, specular: 0.4 }
+        // The cabinet: dark walnut, its front three drawers' seams and brass pulls painted on.
+        {
+          color: "#4E3120"
+          roughness: 0.6
+          specular: 0.12
+          paints: concat(
+            map([0.14, -0.12], y => {
+              parent: "cabinet"
+              type: "Box"
+              position [0, y, 0.5]
+              scale [0.6, 0.005, 0.02]
+              color: "#23150D"
+            }),
+            map([0.25, 0.01, -0.25], y => {
+              parent: "cabinet"
+              type: "Box"
+              position [0, y, 0.5]
+              scale [0.09, 0.016, 0.02]
+              rounding: 0.012
+              color: "#C99A3A"
+            })
+          )
+        }
+        { color: "#26272D", roughness: 0.42, specular: 0.4 }
+        { color: "#B9B4A8", roughness: 0.34, specular: 0.55 }
+        // The slugs: brass, each carrying its lane's word on its face.
+        {
+          color: "#E3AC48"
+          roughness: 0.36
+          specular: 0.45
+          paints: map(range(0, length(pressLanes)), lane => {
+            parent: $"slug-{lane}"
+            type: "Box"
+            position [0, pressSlug[1], 0]
+            rotation: pressFaceUp
+            scale [(pressSlug[0] - 0.014), (pressSlug[2] - 0.012), 0.02]
+            color: "#1A110A"
+            text { template: pressLaneText[lane], markup: true, emHeight: 0.092, fit: true }
+          })
+        }
+        { color: "#8B6238", roughness: 0.58, specular: 0.1 }
+        // The proof pinned beside the case: the run, set in ink on paper.
+        {
+          color: "#EDE5CF"
+          roughness: 0.8
+          specular: 0.04
+          paints [
+            {
+              parent: "proof"
+              type: "Box"
+              position [0, 0, 0]
+              scale [0.17, 0.25, 0.02]
+              color: "#1E1A16"
+              text {
+                template: "PAGE {state.typing.wave}\nSCORE {state.typing.score}\nBEST {state.typing.best}\nSLUGS {state.typing.lives}"
+                emHeight: 0.075
+                lineSpacing: 1.15
+                fit: true
+              }
+            }
+          ]
+        }
+        { color: "#6F6A62", roughness: 0.4, specular: 0.5 }
       ]
       drivers: flatMap(range(0, length(pressLanes)), lane => [
         { name: $"step-{lane}", signal: $"state.typingStep.{lane}", cadence: (1 / pressSteps), dynamics: "press-slug" }
         { name: $"live-{lane}", signal: $"state.typingLive.{lane}", cadence: 1, dynamics: "press-slug" }
       ])
       shape Box "cabinet" {
-        material: 0
+        material: pressWood
+        group: 1
         position [0, 0.42, -0.05]
         scale [0.66, 0.42, 0.5]
+        rounding: 0.012
       }
       shape Box "bed" {
-        material: 1
+        material: pressIron
+        group: 1
         position [0, 0.98, 0]
         rotation: pressTurn
         scale [0.62, 0.11, 0.6]
+        rounding: 0.008
       }
       // The stick at the foot of the bed, where set type would be gathered and an unset slug is lost.
       shape Box "stick" {
-        material: 2
+        material: pressSteel
+        group: 1
         position [0, 0.905, 0.6]
         rotation: pressTurn
         scale [0.62, 0.035, 0.03]
       }
       for x in [-0.54, -0.18, 0.18, 0.54] {
         shape Box $"rail{x}" {
-          material: 2
+          material: pressSteel
+          group: 1
           position [x, 1.1, 0.03]
           rotation: pressTurn
           scale [0.012, 0.022, 0.58]
         }
       }
+      // The upper case stands behind the bed: a shallow tray of compartments, a dull sort lying in each.
+      shape Box "case" {
+        material: pressCaseWood
+        group: 1
+        position: pressCaseAt
+        scale [pressCaseHalf[0], pressCaseHalf[1], 0.02]
+      }
+      for (y, row) in [-pressCaseHalf[1], pressCaseRows[0], pressCaseRows[1], pressCaseRows[2], pressCaseHalf[1]] {
+        shape Box $"case-shelf-{row}" {
+          material: pressCaseWood
+          group: 1
+          position [pressCaseAt[0], (pressCaseAt[1] + y), (pressCaseAt[2] + 0.045)]
+          scale [(pressCaseHalf[0] + 0.012), 0.012, 0.045]
+        }
+      }
+      for (x, column) in [-pressCaseHalf[0], pressCaseColumns[0], pressCaseColumns[1], pressCaseColumns[2], pressCaseColumns[3], pressCaseColumns[4], pressCaseHalf[0]] {
+        shape Box $"case-wall-{column}" {
+          material: pressCaseWood
+          group: 1
+          position [(pressCaseAt[0] + x), pressCaseAt[1], (pressCaseAt[2] + 0.045)]
+          scale [0.012, pressCaseHalf[1], 0.045]
+        }
+      }
+      for (y, row) in [-0.3, -0.1, 0.1, 0.3] {
+        for (x, column) in [-0.375, -0.225, -0.075, 0.075, 0.225, 0.375] {
+          shape Box $"sort-{row}-{column}" {
+            material: pressType
+            group: 1
+            position [(pressCaseAt[0] + x), ((pressCaseAt[1] + y) - 0.06), (pressCaseAt[2] + 0.04)]
+            scale [0.045, 0.028, 0.02]
+          }
+        }
+      }
+      // The proof: a sheet pinned to the wall beside the case, which the run is set on.
+      shape Box "proof" {
+        material: pressPaper
+        group: 1
+        position [0.45, 1.66, -0.5]
+        scale [0.19, 0.27, 0.004]
+      }
       for (x, lane) in pressLanes {
         shape Box $"slug-{lane}" {
-          material: 3
+          material: pressBrass
           position [x, 1.0995, -0.4443]
           rotation: pressTurn
-          scale [0.13, 0.045, 0.06]
+          scale: pressSlug
+          rounding: 0.006
           slides [
             { driver: $"live-{lane}", axis: pressOut, amplitude: 0.16, wave: "linear" }
             { driver: $"step-{lane}", axis: pressDown, amplitude: pressTravel, wave: "linear" }
@@ -107,7 +269,7 @@ prototypes {
           emHeight: 0.11
           depth: 0.008
           mode: "emboss"
-          material: 2
+          material: pressSteel
           align: "center"
         }
       ]
@@ -129,43 +291,9 @@ spawnPoints [
   { id: "press", position: pressStand, yawDegrees: 90 }
 ]
 
-// One word a channel, drawn by the lane's own effect: its typed letters dimmed, the next one lifted, and the whole
-// word shaken for a moment after a wrong letter. The line under them is the run. A lane's text is markup whose tag is
-// the effect the lane's `typingStyle` cell names and whose `at` is the letters typed so far.
-let pressLaneText = [
-  "[{state.typingStyle.0} at={state.typingTyped.0}]{state.typingShown.0}[/{state.typingStyle.0}]"
-  "[{state.typingStyle.1} at={state.typingTyped.1}]{state.typingShown.1}[/{state.typingStyle.1}]"
-  "[{state.typingStyle.2} at={state.typingTyped.2}]{state.typingShown.2}[/{state.typingStyle.2}]"
-]
-
+// The words are on the slugs and the run is on the proof, so the bench shows no panel while a run lasts.
 hud {
   panels [
-    {
-      id: "press"
-      rect { x: 0.24, y: 0.68, width: 0.52, height: 0.15 }
-      layer: Over
-      style: Panel
-      visible { $type: "state", binding: "state.typingSeat", comparison: Equal, value: 1 }
-      elements: concat(
-        map(range(0, length(pressLanes)), lane => {
-          id: $"lane-{lane}"
-          kind: Text
-          rect { x: (0.04 + (0.32 * lane)), y: 0.14, width: 0.3, height: 0.36 }
-          style: Primary
-          markup: true
-          template: pressLaneText[lane]
-        }),
-        [
-          {
-            id: "run"
-            kind: Text
-            rect { x: 0.04, y: 0.66, width: 0.92, height: 0.17 }
-            style: Dim
-            template: "SCORE {state.typing.score}  RUN {state.typing.streak}  PAGE {state.typing.wave}  SLUGS {state.typing.lives}  BEST {state.typing.best}"
-          }
-        ]
-      )
-    }
     // The run's last word, spoken once as the panel arrives.
     {
       id: "press-over"
@@ -193,7 +321,7 @@ hud {
   ]
 }
 
-// The keyboard is the bench's second panel: dark while the seat types but for the letter to strike, the two after it,
+// The keyboard is the bench's second face: dark while the seat types but for the letter to strike, the two after it,
 // each waiting word's first letter and the key that stands her up. Standing in reach, the context button's own key
 // glows instead.
 let pressLetters = map(
