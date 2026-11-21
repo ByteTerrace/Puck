@@ -42,6 +42,14 @@ public sealed partial class SdfFieldEvaluator {
     // under a tenth of a raw for every radius past SmoothRadiusMin, plus k·2⁻¹⁸ raws for a radius past one metre.
     private const long ScopeBlendRoundingRaws = 8L;
 
+    // How far past the accumulator, in raws, a smooth union's candidate must stand for the blend to return the
+    // accumulator to the bit: its radius k, floored as the blend floors it, plus k·2⁻¹⁵ + 16 raws, at which both walks
+    // round the blend weight to exactly one.
+    private static Int128 SmoothUnionIdentityMargin(FixedQ4816 smoothRadius) {
+        var k = FixedQ4816.Max(x: smoothRadius, y: SmoothRadiusMin);
+
+        return ((((Int128)k.Value) + (k.Value >> 15)) + 16L);
+    }
     // The rounding allowance, in raws, of one soft blend of radius k (see ScopeBlendRoundingRaws).
     private static long SmoothBlendRoundingRaws(FixedQ4816 k) =>
         (ScopeBlendRoundingRaws + (k.Value >> (FixedQ4816.FractionBitCount + 18)));
@@ -341,50 +349,6 @@ public sealed partial class SdfFieldEvaluator {
 
         return true;
     }
-    // Whether every compose outside a scope is a hard union and nothing outside a scope edits the accumulator: then the
-    // answer is the least of the top-level candidates, each instance's own answer is the least of its own, and any one
-    // of them bounds the answer from above.
-    private static bool ComposesByHardUnion(CompiledInstruction[] compiled) {
-        var depth = 0;
-
-        foreach (ref readonly var instruction in compiled.AsSpan()) {
-            switch (SdfFieldOps.CullInstancesOf(value: instruction.Op)) {
-                case SdfCullInstancesAction.PushField: {
-                        depth++;
-                        break;
-                    }
-                case SdfCullInstancesAction.PopField: {
-                        depth--;
-
-                        if ((depth == 0) && (instruction.Blend != ((uint)SdfBlendOp.Union))) {
-                            return false;
-                        }
-
-                        break;
-                    }
-                case SdfCullInstancesAction.ShapeBlend: {
-                        if ((depth == 0) && !instruction.Detail && (instruction.Blend != ((uint)SdfBlendOp.Union))) {
-                            return false;
-                        }
-
-                        break;
-                    }
-                case SdfCullInstancesAction.EditsField: {
-                        if (depth == 0) {
-                            return false;
-                        }
-
-                        break;
-                    }
-                case SdfCullInstancesAction.Ignore:
-                    break;
-                default:
-                    throw new InvalidOperationException(message: "Invalid CullInstances action.");
-            }
-        }
-
-        return true;
-    }
     // The segment table: for each ResetPoint opening a chain a walk may skip whole, the chain's end and the certificate
     // around its shapes'. A chain qualifies when it runs from its ResetPoint to the next ResetPoint, instance boundary,
     // scope edge or the stream's end through point transforms and shapes alone, with no point read past a scope edge
@@ -451,8 +415,7 @@ public sealed partial class SdfFieldEvaluator {
                                 break;
                             }
                         case SdfCullGuardAction.SmoothUnion: {
-                                var k = FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin);
-                                var required = ((((Int128)k.Value) + (k.Value >> 15)) + 16L);
+                                var required = SmoothUnionIdentityMargin(smoothRadius: instruction.Data1X);
 
                                 // The radius can fit while its exact-identity margin does not. Such a chain has no
                                 // representable certificate; never wrap its margin into a smaller threshold.

@@ -28,11 +28,14 @@ owner authorized the design round.
   silhouette coverage and curvature finer than the bake's cell. This is the
   mesh-first trade more than the interpreter, and is recorded here because a
   better field pipeline may recover some of it.
-- **CPU queries on the frame thread.** The camera's clearance and the
-  effectors' probes walk the whole static world's program at every sample.
-  [Presentation field queries](field-queries.md) designs their replacement:
-  a third reader, in single precision and vector width, that the shared
-  formulas generate, over tapes pruned per cell of the world.
+- **The stream's semantics are written twice.** The shared formulas cover
+  shapes and blends. A fold, a field edit, the masked relief and a scope's pop
+  are still one body in `SdfFieldEvaluator` and one in the kernels. A morph
+  pop shows the cost: the kernels read its lane and the evaluator reads zero,
+  a convention no shared definition states.
+  [Presentation field queries](field-queries.md#the-float-reader)
+  moves them into shared definitions before it adds a third reader in vector
+  width.
 
 The two readers no longer drift apart by construction. One catalogue entry per
 op, shape, blend and relief-row kind (`SdfFieldOps`, `SdfFieldShapes`,

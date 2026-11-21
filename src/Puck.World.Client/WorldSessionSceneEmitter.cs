@@ -802,7 +802,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             m_dressedFieldProgram = program;
 
             try {
-                m_dressedField = new SdfFieldEvaluator(program: builder.Build());
+                m_dressedField = new SdfFieldEvaluator(program: builder.Build(), reading: SdfFieldReading.Contact, regional: true);
             } catch (ArgumentException) {
                 // A static placement the fixed-point evaluator does not interpret (a path, a non-uniform scale).
                 m_dressedField = null;

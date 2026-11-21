@@ -582,7 +582,11 @@ rooms the current question finds at `r` and at `r + 2m`, so the eye never comes
 nearer geometry than `r`. A target inside geometry (the obstructed overlap
 test) keeps exact inputs. `world.counters world.field-queries` reads requests,
 skipped, reused and marched per family; a headless World poses no creation and
-places no camera, so it counts none.
+places no camera, so it counts none. The field itself is a regional evaluator
+(`SdfFieldEvaluator.IndexesRegions`): a march's samples walk the chains near
+them, not the whole static world, to the same answers. `world.counters
+sdf.point` reads instructions a sample and `sdf.regions` the regions recorded
+([region tapes](../../../docs/rendering/sdf/handbook/queries-and-determinism.md#region-tapes)).
 
 **Mint generated names through `GeneratedName`** (`$` inside a document, `~` in
 a path), never by concatenation.

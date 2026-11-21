@@ -46,6 +46,12 @@ public sealed partial class SdfFieldEvaluator {
             return false;
         }
 
+        if (m_regions is not null) {
+            (distance, material, instructionsWalked) = WalkPoint(candidate: -1, reaches: [], tape: RegionTape(point: worldPosition), worldPosition: worldPosition);
+
+            return true;
+        }
+
         var candidate = FillPointReaches(margin: 0L, reaches: out var reaches, worldPosition: worldPosition);
 
         (distance, material, instructionsWalked) = WalkPoint(candidate: candidate, reaches: reaches, worldPosition: worldPosition);
@@ -89,8 +95,9 @@ public sealed partial class SdfFieldEvaluator {
 
         return candidate;
     }
-    // Walks the whole program at one point over reaches FillPointReaches filled, and counts the evaluation.
-    private (FixedQ4816 Distance, int Material, int InstructionsWalked) WalkPoint(FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, int candidate) {
+    // Walks the whole program at one point over reaches FillPointReaches filled, or the tape of the point's region with
+    // no reaches (SdfFieldEvaluator.Regions.cs), and counts the evaluation.
+    private (FixedQ4816 Distance, int Material, int InstructionsWalked) WalkPoint(FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, int candidate, ReadOnlySpan<int> tape = default) {
         var primer = PointPrimer.None;
         var walked = 0L;
         var powerWork = new PowerWork();
@@ -103,6 +110,7 @@ public sealed partial class SdfFieldEvaluator {
             primer: ref primer,
             powerWork: ref powerWork,
             reaches: reaches,
+            tape: tape,
             walked: ref walked,
             worldPosition: worldPosition
         );
@@ -117,8 +125,9 @@ public sealed partial class SdfFieldEvaluator {
     // each cullable instance as it meets it: an instance whose reach clears the running answer, or exceeds the primer's
     // answer, is skipped. The first instance the running answer cannot skip first walks the nearest instance on its own,
     // the primer, whose answer then joins where that instance stands in the stream. Without reaches it walks every
-    // instance in the range, as the primer's own walk does.
-    private (FixedQ4816 Distance, int Material) WalkPoints(int first, int end, FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, ref PointPrimer primer, ref long walked, ref PowerWork powerWork, InfluenceWalk? influence = null) {
+    // instance in the range, as the primer's own walk does. With a tape it walks the tape's ranges in stream order in
+    // place of [first, end), one accumulator across them all.
+    private (FixedQ4816 Distance, int Material) WalkPoints(int first, int end, FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, ref PointPrimer primer, ref long walked, ref PowerWork powerWork, InfluenceWalk? influence = null, ReadOnlySpan<int> tape = default) {
         var resultDistance = FarDistance;
         var resultMaterial = 0;
         var visited = 0L;
@@ -137,8 +146,13 @@ public sealed partial class SdfFieldEvaluator {
         Span<(FixedQ4816 Distance, int Material)> scopes = stackalloc (FixedQ4816, int)[SdfProgramBuilder.MaxFieldScopeDepth];
         var scopeDepth = 0;
         var cullIndex = (reaches.IsEmpty ? cullBounds.Length : 0);
+        var tapeAt = 0;
 
-        for (var index = first; (index < end); index++) {
+        if (!tape.IsEmpty) {
+            (first, end, tapeAt) = (tape[0], tape[1], 2);
+        }
+
+        for (var index = first; NextLive(at: ref tapeAt, end: ref end, index: ref index, tape: tape); index++) {
             if (
                 (cullIndex < cullBounds.Length) &&
                 (cullBounds[cullIndex].First == index)

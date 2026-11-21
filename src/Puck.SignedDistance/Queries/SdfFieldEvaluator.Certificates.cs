@@ -580,6 +580,23 @@ public sealed partial class SdfFieldEvaluator {
 
             return Clamp(value: (((Int128)Scaled(magnitude: axis, factor: Gain)) - Radius));
         }
+        // Whether every candidate the certificate bounds is at least threshold raws at every point of the box: the point
+        // test at the box's nearest point to the centre, which no point of the box stands nearer than.
+        public bool RegionClears(in BoxQuery query, Int128 threshold) {
+            var least = Least(inverseGain: InverseGain, required: (threshold + Radius));
+
+            if (least <= 0L) {
+                return true;
+            }
+
+            return ((least < LeastLimit) && Reaches(least: ((UInt128)least), x: Gap(axis: query.Box.X, centre: CenterX), y: Gap(axis: query.Box.Y, centre: CenterY), z: Gap(axis: query.Box.Z, centre: CenterZ)));
+        }
+        // The point bound over a box read off the largest axis gap alone, no greater than the bound at any point of it.
+        public long CheapRegionReach(in BoxQuery query) {
+            var axis = Math.Max(val1: Gap(axis: query.Box.X, centre: CenterX), val2: Math.Max(val1: Gap(axis: query.Box.Y, centre: CenterY), val2: Gap(axis: query.Box.Z, centre: CenterZ)));
+
+            return Clamp(value: (((Int128)Scaled(magnitude: axis, factor: Gain)) - Radius));
+        }
         // The most CheapPointReach can fall, in raws, between two points whose largest axis distances from any centre
         // differ by at most `move` raws: the gain is at most MaxGain, the floor in Scaled adds one raw, and the clamp only
         // narrows a difference.
