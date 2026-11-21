@@ -298,7 +298,11 @@ rows, [the checks](#checks) below are owed.
 - **Undo follows the accepted edit.** A local file reload appends the overlay
   that actually installed to the same journal as console mutations
   (`WorldJournalEntry.TryCompose`). An unchanged reload advances the source
-  revision without adding an entry. An undo whose dropped entries changed only
+  revision without adding an entry. `world.undo` drops the last entries a
+  principal authored and replays the World's own (its sweeps, searches, field
+  writes and rule effects, and scoped replays), so the author's edit is undone
+  however many of those followed it; a replayed overlay reads again only the
+  rows it names (`WorldDefinitionMembers.ApplyPatch`). An undo whose dropped entries changed only
   state row values, or only creations in what shading reads and shade programs,
   sets those rows back on the live document and takes the install a reload of
   that change takes (`WorldPersistence.DroppedEdit`), keeping the session's

@@ -417,8 +417,8 @@ rebuild and undo are authority-only at their apply doors, as well as operator-on
 Step 3 also closes the whole-document write doors. `world.load`, `world.reload`,
 `world.reset` and `world.undo` are operator verbs, and `WorldDocument.ApplyRebuild`
 and `WorldPersistence.ApplyUndo` refuse a recipient before inspecting the source or journal.
-The every-section Mutate hold alone did not protect hidden state: undo drops the tail
-of the authority's journal and replays what remains, including mutations hidden from a seat.
+The every-section Mutate hold alone did not protect hidden state: undo drops entries
+from the authority's journal and replays what remains, including mutations hidden from a seat.
 
 A sealed bid is a write into a row the writer may not read. The first draft of
 this plan admitted such writes blind (a pure `Set`, one `accepted` receipt, the

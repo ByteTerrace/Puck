@@ -819,11 +819,16 @@ stage order is in [the duplicates](#duplicates-to-remove).
    changed rows, and `WorldDefinitionMembers.Replace` shares unchanged rows after
    reading and resolving a replacement. Presentation delivery therefore
    carries only the changed creation and shade rows, and
-   value delivery uses changed snapshot rows. `world.undo` of a value or
-   presentation edit is the same narrow install: the dropped journal tail is
-   composed again over the restored document, and when it changed only state
-   row values, or only creations in what shading reads and shade programs,
-   exactly those rows are set back on the live document
+   value delivery uses changed snapshot rows. `world.undo` drops the author's
+   last edit, not the World's entries recorded after it (sweeps, searches,
+   field writes, rule effects and scoped replays are replayed, never undone),
+   and a replayed patch reads again only the rows it names
+   (`WorldDefinitionMembers.ApplyPatch`, `world.boot.patch-rows-read`). An undo
+   of a value or presentation edit is the same narrow install: the dropped
+   entries are composed alone again over the replay's document at the first of
+   them, and when they changed only state row values, or only creations in what
+   shading reads and shade programs, exactly those rows are set on the live
+   document to the replay's values
    (`WorldPersistence.DroppedEdit`) and installed through the narrow install a
    reload uses (`WorldDocument.TryInstallEdit`, kind named by
    `WorldDocument.ReloadInstallKindOf`). The session's arena, deals and draws
@@ -835,7 +840,8 @@ stage order is in [the duplicates](#duplicates-to-remove).
    (`world.boot.presentation-rows-delivered` over
    `world.boot.presentation-deliveries`), and undoing it adds one
    presentation install and no full install; a one-value save and its undo add
-   one value install each.
+   one value install each, the undo one `world.boot.undo-narrow-installs` and
+   one `world.boot.patch-rows-read` per patch replayed.
 5. **Narrow the remaining document checks** for the delta and for
    `world.row.set` alike. Start with state declarations and the shared checks
    still in the `document` partition, then make a full reload validate its

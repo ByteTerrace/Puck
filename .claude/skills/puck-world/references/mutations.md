@@ -280,20 +280,30 @@ its own.
   replay-compatible: the trio rides the tape, CAS-pinned, and applies while a
   `replay.record` is armed — see [replay.md](replay.md).
 - **Undo** (`ApplyUndo`, the `world.undo [count]` path): Mutate over every
-  section; `count` clamps to `1..journal.Count`. Restores the base and
-  deterministically replays journal-minus-tail through the SAME per-entry
+  section. The journal is the whole document history over its base, but undo
+  is an author's: it drops the last `count` entries a principal authored
+  (`WorldJournalEntry.Authored`: a source edit, or a mutation a session
+  submitted; `count` clamps to `1..` that many) and never an entry the World
+  applied itself (a sweep's, a search's, a field's or a rule's document write
+  under `Principal.World`, or a `Played` one a scoped replay or an addon guest
+  applied in a principal's name). Restores the base and
+  deterministically replays every other entry, the World's own after the
+  dropped ones included, through the SAME per-entry
   gates a live mutation passes (compose, whole-document validate, envelope,
   solid buildability — everything but the per-entry authority check, which the
   every-section hold already re-proves). ALL-OR-NOTHING: any entry failing any
   gate refuses the whole undo, names the failing entry's index and reason on
   stderr, and installs NOTHING. Either outcome echoes through `EchoTap`
-  (an acceptance as `dropped <n>, <m> remaining`, then the install it took and
-  the parts it changed), so `world.undo` answers its own line like every
-  registered verb. There is no per-mutation inverse. When the dropped tail,
-  composed again over the restored document, changed only state row values, or
-  only creations in what shading reads and shade programs, the undo sets
-  exactly those rows back on the live document and takes the install a reload
-  of that change takes (`WorldPersistence.DroppedEdit`,
+  (an acceptance as `dropped <n> (<entries>), <m> remaining`, then the install
+  it took and the parts it changed), so `world.undo` answers its own line like
+  every registered verb. There is no per-mutation inverse. A reload entry's
+  patch replays row by row (`WorldDefinitionMembers.ApplyPatch`): only the rows
+  it names are read again (`world.boot.patch-rows-read`). When the dropped
+  entries, composed alone again over the replay's document at the first of
+  them, changed only state row values, or only creations in what shading reads
+  and shade programs, the undo sets exactly those rows on the live document to
+  the replay's values and takes the install a reload of that change takes
+  (counted as `world.boot.undo-narrow-installs`; `WorldPersistence.DroppedEdit`,
   `WorldDocument.ReloadInstallKindOf`, `WorldDocument.TryInstallEdit`): the
   arena, deals, draws and every compiled product but the envelope's fit stay,
   and only the changed rows are delivered. Any other undo installs the replayed
