@@ -319,7 +319,12 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         // and a primer delivered here would re-enter DeliverSnapshot.
         if (m_deliveringSnapshot) { return; }
         FollowObserverDetach();
-        if (DetachReason is null) { DeliverSnapshot(snapshot: server.Document.BuildPrimerSnapshot(), stream: WorldStreamStamp.Unspanned); }
+        if (DetachReason is null) {
+            var primer = server.Document.BuildPrimerSnapshot();
+            WorldBootWork.Count(WorldBootWork.SessionPrimers);
+            WorldBootWork.Count(WorldBootWork.SessionPrimerCells, primer.FieldCells.Length);
+            DeliverSnapshot(snapshot: primer, stream: WorldStreamStamp.Unspanned);
+        }
     }
 
     /// <summary>Discloses a definition as a tier shows it: verbatim at <see cref="WorldDisclosureTier.Replica"/>, a
@@ -492,6 +497,9 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             redacted = redacted with { Revision = m_roster.Observe(frame.Roster(bodies, redacted.Entries.Span)) };
             redacted = server.PresentCues(redacted, m_view,
                 fullBodies: bodies.IsFull);
+            WorldBootWork.Count(WorldBootWork.SessionCellsDelivered, redacted.FieldCells.Length);
+            WorldBootWork.Count(WorldBootWork.SessionEntriesDelivered, redacted.Entries.Length);
+            WorldBootWork.Count(WorldBootWork.ReprimeWireBytes, WorldFederationCodec.EncodeSnapshot(in redacted).Length); // TEMP
             inner.DeliverSnapshot(snapshot: in redacted, stream: m_cursor.Stamp());
             observation.SettleSceneProof(tick: tick);
             FollowObserverDetach();
