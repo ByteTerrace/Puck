@@ -10,6 +10,10 @@ namespace Puck.Shaders;
 public interface IRenderGraphInstances {
     /// <summary>Gets the instance set the runtime schedules, which a hit walk continues through.</summary>
     RenderGraphInstanceSet Instances { get; }
+    /// <summary>Gets each instance's render node in <see cref="Instances"/> order, or <see langword="null"/> at the
+    /// ordinal of an external producer's instance. Always reflects the runtime's live nodes, including when a drifted
+    /// source replaces a node on the same instance set.</summary>
+    ReadOnlySpan<ShaderPipelineRenderNode?> Nodes { get; }
     /// <summary>Gets the latest frame's schedule, whose rows state the extent each instance renders at, or
     /// <see langword="null"/> before the first frame the current set scheduled.</summary>
     RenderGraphSchedule? Latest { get; }
@@ -26,13 +30,15 @@ public interface IRenderGraphInstances {
     /// <param name="instance">The instance's name.</param>
     /// <returns>The node.</returns>
     ShaderPipelineRenderNode? NodeOf(string instance);
-    /// <summary>Sets the provenance route an instance renders under, carried into every output the instance completes.</summary>
-    /// <param name="instance">The instance's name.</param>
-    /// <param name="route">The classified delivery label of the route.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="instance"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The set has no instance of that name, or <paramref name="route"/> is
-    /// unclassified.</exception>
-    void SetRoute(string instance, DeliveryLabel route);
+    /// <summary>Sets the route an instance renders under: the label every output it completes from then on carries, with
+    /// the labels of everything it bound. An output whose label names a span that has since ended is read by no reader,
+    /// capture or display. Outputs completed earlier keep the label they were made under.</summary>
+    /// <param name="instance">The instance's ordinal in <see cref="Instances"/>.</param>
+    /// <param name="route">The classified label of the route.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="instance"/> is not an ordinal of
+    /// <see cref="Instances"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="route"/> is unclassified.</exception>
+    void SetRoute(int instance, DeliveryLabel route);
     /// <summary>Withdraws every picture an instance published, from the next frame the runtime produces: the image its
     /// node publishes, the outputs the runtime records for it, and every output another instance rendered over them, so
     /// no reader, capture or display binds any of them again. Each instance withdrawn renders again before anything

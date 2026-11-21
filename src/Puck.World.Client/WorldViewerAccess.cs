@@ -15,15 +15,17 @@ public enum WorldSessionAccess : byte {
 /// One viewer's access to its destination, settled once a frame on the frame thread before any view of it is bound. Its
 /// <see cref="Epoch"/> and <see cref="Span"/> name the pictures the viewer may still be shown: they move whenever the
 /// access narrows (to less than before) or the session behind it is replaced, and never otherwise.
-/// <para>Invariant: a picture made under one epoch is never shown under a later one. The epoch is the one signal of a
-/// narrowing; the view graph host updates the view's route and withdraws every published output of a view whose epoch
-/// moved (<see cref="WorldViewGraphHost.BeginFrame"/>, through <see cref="Puck.Shaders.IRenderGraphInstances.Withdraw"/>),
-/// and the screen binder releases the private residency and frame source made under the old epoch, so no job either
-/// submitted can install into what the viewer now reads.</para>
-/// <para>Every epoch any tracker takes is new to the process, so a view whose tracker is replaced (a session closed and
-/// opened again under the same name) reads a different epoch too, and the epochs and spans of a chain of trackers
-/// combine (<see cref="WorldViewAccess.Join"/>): any narrowing anywhere in the chain ends the route's span and raises
-/// its epoch.</para>
+/// <para>Invariant: a picture made under one epoch is never shown under a later one. Two guards hold it side by side. The
+/// view graph host withdraws every published output of a view whose epoch moved
+/// (<see cref="WorldViewGraphHost.BeginFrame"/>, through <see cref="Puck.Shaders.IRenderGraphInstances.Withdraw"/>), and
+/// the screen binder releases the private residency and frame source made under the old epoch, so no job either
+/// submitted can install into what the viewer now reads. And every picture carries the span it was made under in its
+/// label (<see cref="Puck.Shaders.IRenderGraphInstances.SetRoute"/>), which no reader is given once the span has
+/// ended.</para>
+/// <para>Every epoch any tracker takes is new to the process, and every tracker has spans of its own, so a view whose
+/// tracker is replaced (a session closed and opened again under the same name) reads a different epoch and span too. A
+/// view seen through a chain of trackers is available only while every one is, at the latest epoch among them, under a
+/// route of every one's span, so any narrowing anywhere in the chain raises its epoch and ends its route.</para>
 /// </summary>
 public sealed class WorldViewerAccess {
     // The last epoch any tracker took; presentation state, never simulation state.
@@ -83,20 +85,4 @@ public readonly record struct WorldViewAccess(bool Available, long Epoch, Delive
         Epoch: long.MaxValue,
         Route: DeliveryLabel.Of(span: DeliverySpan.Ended)
     );
-
-    /// <summary>Combines this access with another the view also depends on: available only when both are, at the later
-    /// epoch, under the union of their routes.</summary>
-    /// <param name="other">The other access.</param>
-    /// <returns>The combined access.</returns>
-    public WorldViewAccess Join(WorldViewAccess other) {
-        var available = (Available && other.Available);
-
-        return new WorldViewAccess(
-            Available: available,
-            Epoch: Math.Max(val1: Epoch, val2: other.Epoch),
-            Route: (available
-                ? Route.Union(other: other.Route)
-                : DeliveryLabel.Of(span: DeliverySpan.Ended))
-        );
-    }
 }

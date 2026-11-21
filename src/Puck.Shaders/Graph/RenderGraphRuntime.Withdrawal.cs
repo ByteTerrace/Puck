@@ -26,18 +26,18 @@ public sealed partial class RenderGraphRuntime {
 
     /// <inheritdoc/>
     /// <exception cref="ObjectDisposedException">The runtime is disposed.</exception>
-    public void SetRoute(string instance, DeliveryLabel route) {
+    public void SetRoute(int instance, DeliveryLabel route) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        var index = IndexOf(instance: instance);
-
+        ArgumentOutOfRangeException.ThrowIfNegative(instance);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(instance, m_routes.Length);
         if (!route.IsClassified) {
             throw new ArgumentException(
-                message: $"Route for instance '{instance}' has an unclassified delivery label.",
+                message: $"The route of instance '{m_set.Instances[instance].Name}' is unclassified.",
                 paramName: nameof(route)
             );
         }
 
-        m_routes[index] = route;
+        m_routes[instance] = route;
     }
 
     /// <inheritdoc/>

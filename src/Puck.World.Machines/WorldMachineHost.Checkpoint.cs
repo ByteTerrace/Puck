@@ -262,6 +262,7 @@ public sealed partial class WorldMachineHost : IWorldMachineCheckpointHost {
             m_host.m_instanceRevision = m_checkpoint.Revision;
             m_host.m_nextInstanceGeneration = m_checkpoint.NextGeneration;
             m_host.AnyEverPumped = m_checkpoint.AnyEverPumped;
+            m_host.NotifyMachinesChanged();
         }
     }
 }

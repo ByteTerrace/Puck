@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
@@ -16,8 +17,8 @@ namespace Puck.Shaders;
 // declared unchanged, since only a render serves it.
 public sealed partial class RenderGraphRuntime {
 
-    // The instances the frame being scheduled declares unchanged, reused frame to frame.
-    private readonly List<string> m_unchanged = [];
+    // The ordinals of instances the runtime declares unchanged this frame, reused frame to frame.
+    private readonly MarkedIndexSet m_unchangedIndices = new();
     // Whether an instance renders its package's graph on a node: an external instance whose package no producer or upload
     // serves and a recorder does.
     private static bool RunsPackage(RenderGraphInstance instance, RenderGraphPackageRecorders packages) => (
@@ -119,53 +120,36 @@ public sealed partial class RenderGraphRuntime {
         }
         return selected;
     }
-    // The frame the scheduler reads: the frame as given, with the instances whose packages saw nothing change since their
-    // latest completed render declared unchanged beside any the host declares. A frame waiting on a source still
-    // demands that source even when its package's local content did not change. Only an instance the frame reads
-    // (PrepareReaders) is asked: no schedule of the frame renders any other, so its answer could change nothing.
-    private RenderGraphFrame WithUnchanged(in RenderGraphFrame frame, in FrameContext context) {
-        m_unchanged.Clear();
+    // Collects the ordinals of read instances whose packages saw nothing change since their latest completed render.
+    // Iterates only m_readOrder (already sorted in render order by PrepareReaders) so unread instances cost nothing,
+    // checks inputs in O(1) by ordinal, and asks each distinct package factory once per instance instead of per pass.
+    private ReadOnlySpan<int> CollectUnchanged(in RenderGraphFrame frame, in FrameContext context, int captured) {
+        m_unchangedIndices.Clear();
 
-        var captured = CapturedInstance();
-
-        for (var position = 0; (position < m_set.Order.Count); position++) {
-            var index = m_set.Order[position];
+        for (var position = 0; (position < m_readOrder.Count); position++) {
+            var index = m_readOrder[position];
 
             if (
-                IsRead(index: index) &&
                 (index != captured) &&
+                m_allPassesArePackages[index] &&
                 !IsConverging(index: index) &&
                 !m_outputs.HasEnded(index: index, latch: in m_latch) &&
                 (m_stale[index] is null) &&
                 (m_sources[index] is null) &&
                 InputsUnchanged(index: index) &&
-                (m_graphs[index] is { } graph) &&
                 PackagesUnchanged(
                     context: in context,
+                    index: index,
                     instance: m_set.Instances[index].Name,
-                    plan: graph.Pipeline.Plan,
                     unreadFrames: m_unreadFrames[index]
                 ) &&
                 MatchesAllocatedExtent(frame: in frame, index: index)
             ) {
-                m_unchanged.Add(item: m_set.Instances[index].Name);
+                _ = m_unchangedIndices.Add(index: index);
             }
         }
 
-        if (m_unchanged.Count == 0) {
-            return frame;
-        }
-        if (frame.Unchanged is { } declared) {
-            foreach (var name in declared) {
-                if (!m_unchanged.Contains(item: name)) {
-                    m_unchanged.Add(item: name);
-                }
-            }
-        }
-
-        return (frame with {
-            Unchanged = m_unchanged,
-        });
+        return m_unchangedIndices.Members;
     }
     private bool InputsUnchanged(int index) {
         var inputs = m_inputs[index];
@@ -173,7 +157,7 @@ public sealed partial class RenderGraphRuntime {
         for (var position = 0; (position < inputs.Length); position++) {
             var input = inputs[position];
 
-            if (input.PreviousFrame || !m_unchanged.Contains(item: input.ProducerName)) { return false; }
+            if (input.PreviousFrame || !m_unchangedIndices.Contains(index: input.Producer)) { return false; }
         }
         return true;
     }
@@ -205,42 +189,29 @@ public sealed partial class RenderGraphRuntime {
             ))
         );
     }
-    // Whether a plan runs only package passes, each of whose packages says nothing the instance renders from changed.
-    private bool PackagesUnchanged(ShaderPipelinePlan plan, string instance, long unreadFrames, in FrameContext context) {
-        var passes = plan.Passes;
+    // Whether every distinct package factory of a package-only graph says nothing the instance renders from changed.
+    private bool PackagesUnchanged(int index, string instance, long unreadFrames, in FrameContext context) {
+        var factories = m_instanceFactories[index];
 
-        if (passes.Count == 0) {
-            return false;
-        }
-
-        for (var position = 0; (position < passes.Count); position++) {
-            if (
-                (passes[position].Package is not { } step) ||
-                !m_packages.TryGetFactory(
-                    factory: out var factory,
-                    package: step.Package
-                ) ||
-                !factory.IsUnchanged(
-                    context: in context,
-                    instance: instance,
-                    unreadFrames: unreadFrames
-                )
-            ) {
+        for (var position = 0; (position < factories.Length); position++) {
+            if (!factories[position].IsUnchanged(
+                context: in context,
+                instance: instance,
+                unreadFrames: unreadFrames
+            )) {
                 return false;
             }
         }
 
         return true;
     }
-    // Counts the frames an instance stays unread: nothing the display shows reaches it, though something still names it. The
-    // scheduler already keeps an instance a held consumer shows or reads waiting, so only a parked row is unread.
+    // Counts the frames an instance stays unread: nothing the display shows reaches it, though something still names it.
+    // Iterates only schedule.Unread populated during scheduling, never all instances.
     private void CountUnread(RenderGraphSchedule schedule) {
-        var instances = schedule.Instances;
+        var unread = schedule.Unread;
 
-        for (var index = 0; (index < instances.Count); index++) {
-            if (instances[index].Status == RenderGraphInstanceStatus.Unread) {
-                m_unreadFrames[index]++;
-            }
+        for (var position = 0; (position < unread.Count); position++) {
+            m_unreadFrames[unread[position]]++;
         }
     }
     // Tells every package's factory the device was lost.
@@ -292,9 +263,6 @@ public sealed partial class RenderGraphRuntime {
         return true;
     }
 
-    // The factories already asked to prepare the render being walked, reused frame to frame.
-    private readonly List<IRenderGraphPackageFactory> m_preparing = [];
-
     // Asks the factory of every package pass of every scheduled render to prepare it (IRenderGraphPackageFactory.PrepareRender),
     // once per factory and render, before any render records. An external producer's or an uploaded source's render runs
     // no package pass, and a render a held capture withholds this frame (holdingConvergence) records nothing.
@@ -305,33 +273,25 @@ public sealed partial class RenderGraphRuntime {
             var index = renders[position];
 
             if (
-                (m_producers[index] is not null) || (m_sources[index] is not null) || (m_graphs[index] is not { } graph) ||
+                (m_producers[index] is not null) || (m_sources[index] is not null) ||
                 (holdingConvergence && m_convergenceInstances.Contains(item: index))
             ) {
                 continue;
             }
 
+            var factories = m_instanceFactories[index];
+
+            if (factories.Length == 0) {
+                continue;
+            }
+
             var instance = m_set.Instances[index].Name;
 
-            FactoriesOf(graph: graph, into: m_preparing);
-            foreach (var factory in m_preparing) { factory.PrepareRender(context: in context, instance: instance); }
-        }
-        RenderRecordWork.Process.PreparedPackages(ticks: (System.Diagnostics.Stopwatch.GetTimestamp() - began));
-    }
-    // Fills a list with the factory of each package a graph's passes run, once each, in pass order.
-    private void FactoriesOf(RenderGraphRuntimeGraph graph, List<IRenderGraphPackageFactory> into) {
-        var passes = graph.Pipeline.Plan.Passes;
-
-        into.Clear();
-        for (var pass = 0; (pass < passes.Count); pass++) {
-            if (
-                (passes[pass].Package is { } step) &&
-                m_packages.TryGetFactory(factory: out var factory, package: step.Package) &&
-                !into.Contains(item: factory)
-            ) {
-                into.Add(item: factory);
+            for (var factoryIndex = 0; (factoryIndex < factories.Length); factoryIndex++) {
+                factories[factoryIndex].PrepareRender(context: in context, instance: instance);
             }
         }
+        RenderRecordWork.Process.PreparedPackages(ticks: (System.Diagnostics.Stopwatch.GetTimestamp() - began));
     }
     // Starts the frame for every package's factory.
     private void PackagesBeginFrame(in FrameContext context) {

@@ -49,18 +49,21 @@ public sealed partial class RenderGraphRuntime {
     // presented capture then skips the presentations the state needs to converge again, so the burst reads the steady
     // image rather than its reconvergence. A presented capture that holds every frame discards nothing more.
     private void DiscardCaptureTaint(int index) {
-        if ((m_presented is { Claimed: true }) || (m_graphs[index] is not { } graph)) {
+        if (m_presented is { Claimed: true }) {
+            return;
+        }
+
+        var factories = m_instanceFactories[index];
+
+        if (factories.Length == 0) {
             return;
         }
 
         var name = m_set.Instances[index].Name;
-        var passes = graph.Pipeline.Plan.Passes;
         var settling = 0;
 
-        for (var position = 0; (position < passes.Count); position++) {
-            if ((passes[position].Package is { } step) && m_packages.TryGetFactory(step.Package, out var factory)) {
-                settling = Math.Max(val1: settling, val2: factory.DiscardTaintedState(instance: name));
-            }
+        for (var position = 0; (position < factories.Length); position++) {
+            settling = Math.Max(val1: settling, val2: factories[position].DiscardTaintedState(instance: name));
         }
 
         m_presentedWarmup = ((m_presented is null) ? 0 : Math.Max(val1: m_presentedWarmup, val2: settling));

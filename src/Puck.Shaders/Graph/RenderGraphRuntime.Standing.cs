@@ -7,18 +7,45 @@ namespace Puck.Shaders;
 // An output standing for another instance's image. A package pass that draws nothing publishes its input in its output's
 // place (RenderGraphPackageOutcome.DrewNothing), so an instance's output may be an image another instance owns. Such an
 // output is never a copy of that image's handle: it records whose output it stands for, and every read resolves it
-// (Resolve) through OutputRecords, whose private arrays enforce that every output read passes the frame's latch.
+// (Resolve).
+//
+// - An output standing for a graph instance's output is that producer's output: read at a frame, it is the producer's
+//   newest output no newer than that frame, or than the frame before it when the instance read the producer's previous
+//   frame, as a read of the producer would be. A drawn-nothing output equals its input, so it follows the producer at
+//   the producer's cadence and its own instance keeps its refresh: nothing renders again to keep it current. Once the
+//   producer is released because nothing names it, or retires in a reconfiguration, the output resolves to nothing.
+// - An output standing for an image bound for one frame only, an external producer's leased output or a binding a
+//   retired producer's hold keeps, resolves within that frame and to nothing after it.
+//
+// Feedback never stands for itself: a node refuses to stand for an image it owns (ShaderPipelineRenderNode
+// .OwnImageInput), since it renders into its own images again a few frames later, so an instance reading its own
+// previous frame, or a loop of instances reading each other, draws where it would close the loop. Every chain therefore
+// ends at another instance's own output, which the image leases keep alive for each reader that bound it
+// (RenderGraphRuntime.Leases.cs).
+//
+// A reader of an output that resolves to nothing binds a stand-in. So that the display never shows nothing in its place,
+// the instance whose output resolves to nothing, or would after this frame, renders again whenever something shows it:
+// CollectRerenders names it, and a frame that releases an instance another's output stood for is scheduled again
+// (RescheduleAfterRelease), so the reader binds the released producer's stand-in in the same frame. Only an output
+// standing for a one-frame image costs a render every frame it is shown.
+//
+// Every record carries the label of what it was rendered from (DeliveryLabel), and the records are private to
+// OutputRecords, whose reads answer nothing for a record whose label the frame's latch refuses. A resolved output
+// carries the union of every hop's label, so an output standing for an ended producer resolves to nothing too.
 public sealed partial class RenderGraphRuntime {
     // The frame outputs are read at, retained when a reconfiguration replaces the scheduling history.
     private long m_readFrame = -1;
 
-    // The instances whose latest output resolves to nothing, or stands for a one-frame image, reused from frame to frame.
-    private readonly List<string> m_standing = [];
+    // The ordinals of instances whose latest output must render again to stay shown, reused from frame to frame.
+    private readonly MarkedIndexSet m_standingIndices = new();
+    // Sparse candidates whose current output stands for another image or carries a span that can end (tracked on write,
+    // lazily pruned once it is neither).
+    private readonly List<int> m_standingCandidates = [];
+    private bool[] m_standingCandidateMark = [];
     // The instances the frame's release forgot, reused from frame to frame.
     private readonly List<int> m_released = [];
 
-    // Owns the completed output records so no caller outside this type can index m_current or m_previous without a
-    // DeliveryLatch, and only RememberOutput writes new records.
+    // The completed output records: every read passes a DeliveryLatch, and RememberOutput is the one writer.
     private sealed class OutputRecords {
         private Output[] m_current;
         private Output[] m_previous;
@@ -101,17 +128,47 @@ public sealed partial class RenderGraphRuntime {
             m_current = current;
             m_previous = previous;
         }
-        public bool StandsForRetired(int index) => m_current[index].StandsFor.IsRetired;
-        public bool StandsForOwn(int index) => m_current[index].StandsFor.IsOwn;
-        public bool StandsForOneFrame(int index) => m_current[index].StandsFor.IsOneFrame;
+        public int Count => m_current.Length;
+        // What the current record stands for, which says nothing of its content.
+        public Standing StandsFor(int index) => m_current[index].StandsFor;
+        // The producer the current record stands for, or -1 when it stands for none or the latch refuses it.
         public int StandsForProducer(int index, in DeliveryLatch latch) =>
             (m_current[index].Label.Allows(latch: in latch)
                 ? m_current[index].StandsFor.Producer
                 : -1);
+        // Whether the current record must stay a standing candidate: it stands for another image, or its label names a
+        // span that can end.
+        public bool IsStandingCandidate(int index) => (
+            !m_current[index].StandsFor.IsOwn ||
+            ((m_current[index].Frame >= 0) && (m_current[index].Label.SpanCount != 0))
+        );
         public bool HasEnded(int index, in DeliveryLatch latch) =>
             ((m_current[index].Frame >= 0) && !m_current[index].Label.Allows(latch: in latch));
         public bool ExternalAt(int index, in DeliveryLatch latch) =>
             (m_current[index].Label.Allows(latch: in latch) && m_current[index].Label.External);
+    }
+
+    private void TrackStandingCandidate(int index) {
+        if (!m_standingCandidateMark[index]) {
+            m_standingCandidateMark[index] = true;
+            m_standingCandidates.Add(item: index);
+        }
+    }
+    private void RebuildStandingCandidates() {
+        m_standingCandidates.Clear();
+        m_standingCandidateMark = new bool[m_outputs.Count];
+
+        for (var index = 0; (index < m_outputs.Count); index++) {
+            if (m_outputs.IsStandingCandidate(index: index)) {
+                TrackStandingCandidate(index: index);
+            }
+        }
+    }
+    private void ClearStandingCandidates() {
+        for (var position = 0; (position < m_standingCandidates.Count); position++) {
+            m_standingCandidateMark[m_standingCandidates[position]] = false;
+        }
+        m_standingCandidates.Clear();
     }
 
     // What an output's image is when it is not the instance's own: another graph instance's output (Producer at least
@@ -139,7 +196,8 @@ public sealed partial class RenderGraphRuntime {
     // An output as a reader at a frame sees it: an instance's own output as it is; one standing for a producer's output,
     // that producer's output no newer than the frame (the frame before it for a previous-frame read), resolved in turn
     // with every standing hop's label unioned; one standing for a one-frame image, itself within that frame. Nothing
-    // when what it stands for is gone or disallowed at the latch.
+    // when what it stands for is gone or refused at the latch. A node never stands for its own image, so a chain ends at
+    // another instance's own output; the bound only guards the walk.
     private Output Resolve(in Output output, long frame, in DeliveryLatch latch) {
         if (output.Frame < 0) {
             return Output.None;
@@ -184,7 +242,9 @@ public sealed partial class RenderGraphRuntime {
         output: m_outputs.ReadCurrent(index: index, latch: in latch)
     );
     // What an instance's new output stands for: nothing when its node published an image of its own, otherwise the
-    // producer of the image this frame bound to the external version its node published in its output's place.
+    // producer of the image this frame bound to the external version its node published in its output's place. A stand-in
+    // bound there is the runtime's own; an external producer's leased image, or a name the instance's inputs no longer
+    // bind (a retired producer's hold), is bound for this frame only.
     private Standing StandingOf(int index, ShaderPipelineRenderNode node, RenderGraphSchedule schedule, in Surface surface) {
         if (node.PublishedBinding is not { } version) {
             return Standing.Own;
@@ -203,10 +263,9 @@ public sealed partial class RenderGraphRuntime {
             }
 
             var bound = OutputAt(
-                frame: FrameOf(
-                    consumer: m_set.Instances[index].Name,
-                    producer: binding.ProducerName,
-                    schedule: schedule
+                frame: schedule.ReadFrame(
+                    consumer: index,
+                    producer: binding.Producer
                 ),
                 latch: in m_latch,
                 producer: binding.Producer,
@@ -227,35 +286,54 @@ public sealed partial class RenderGraphRuntime {
             Producer: -1
         );
     }
-    // Whether an instance's latest output must render again to stay shown: its outputs were withdrawn, its recorded
-    // output's span ended at the latch, it resolves to nothing, or it stands for a one-frame image.
-    private bool RendersToStayShown(int index) => (
-        (m_sources[index] is null) &&
-        (
-            IsWithdrawing(index: index) ||
-            m_outputs.HasEnded(index: index, latch: in m_latch) ||
-            (
-                !m_outputs.StandsForOwn(index: index) &&
-                (m_outputs.StandsForOneFrame(index: index) || (LatestOf(index: index, latch: in m_latch).Frame < 0))
-            )
-        )
-    );
-    // Collects every instance whose latest output must render again to stay shown, returning whether there is any.
+    // Collects every instance whose latest output must render again to stay shown, returning whether there is any: its
+    // outputs were withdrawn (RenderGraphRuntime.Withdrawal.cs), its label names a span the frame's latch refuses, it
+    // resolves to nothing, or it stands for a one-frame image, which resolves to nothing once the frame it was bound in
+    // has passed. Only the sparse standing candidates are visited, and withdrawing instances only while there are any.
     private bool CollectStanding() {
-        m_standing.Clear();
+        m_standingIndices.Clear();
 
-        for (var index = 0; (index < m_nodes.Length); index++) {
-            if (RendersToStayShown(index: index)) {
-                m_standing.Add(item: m_set.Instances[index].Name);
+        for (var position = (m_standingCandidates.Count - 1); (position >= 0); position--) {
+            var index = m_standingCandidates[position];
+            var standing = m_outputs.StandsFor(index: index);
+
+            if (!m_outputs.IsStandingCandidate(index: index)) {
+                m_standingCandidateMark[index] = false;
+                var last = (m_standingCandidates.Count - 1);
+
+                m_standingCandidates[position] = m_standingCandidates[last];
+                m_standingCandidates.RemoveAt(index: last);
+
+                continue;
+            }
+            if (
+                (m_sources[index] is null) &&
+                (
+                    m_outputs.HasEnded(index: index, latch: in m_latch) ||
+                    (
+                        !standing.IsOwn &&
+                        (standing.IsOneFrame || (LatestOf(index: index, latch: in m_latch).Frame < 0))
+                    )
+                )
+            ) {
+                _ = m_standingIndices.Add(index: index);
+            }
+        }
+        if (m_withdrawing.Count != 0) {
+            for (var index = 0; (index < m_nodes.Length); index++) {
+                if ((m_sources[index] is null) && IsWithdrawing(index: index)) {
+                    _ = m_standingIndices.Add(index: index);
+                }
             }
         }
 
-        return (m_standing.Count != 0);
+        return (m_standingIndices.Count != 0);
     }
     // Schedules a frame again after its release left an output standing for a released instance, naming that output's
     // instance to render again, so the display and every reader bind the released producer's stand-in this frame rather
-    // than an empty image.
-    private void RescheduleAfterRelease(RenderGraphSchedule schedule, RenderGraphHistory prior, in RenderGraphFrame frame) {
+    // than an empty image. The release does not depend on what renders, so the second schedule releases nothing more; the
+    // released instances are forgotten again in its history.
+    private void RescheduleAfterRelease(RenderGraphSchedule schedule, RenderGraphHistory prior, in RenderGraphFrame frame, in RenderGraphOrdinalOverlay overlay) {
         if (
             (m_released.Count == 0) ||
             !CollectStanding()
@@ -263,27 +341,23 @@ public sealed partial class RenderGraphRuntime {
             return;
         }
 
-        if (!ReferenceEquals(
-            objA: frame.Rerender,
-            objB: m_rerender
-        )) {
-            m_rerender.Clear();
+        var standingMembers = m_standingIndices.Members;
 
-            if (frame.Rerender is { } declared) {
-                m_rerender.AddRange(collection: declared);
-            }
-        }
-        foreach (var name in m_standing) {
-            if (!m_rerender.Contains(item: name)) {
-                m_rerender.Add(item: name);
-            }
+        for (var position = 0; (position < standingMembers.Length); position++) {
+            _ = m_rerenderIndices.Add(index: standingMembers[position]);
         }
 
-        RenderGraphScheduler.Schedule(
-            frame: (frame with {
-                Rerender = m_rerender,
-            }),
+        var updated = new RenderGraphOrdinalOverlay {
+            Rerender = m_rerenderIndices.Members,
+            Sources = overlay.Sources,
+            Stale = overlay.Stale,
+            Unchanged = overlay.Unchanged,
+        };
+
+        RenderGraphScheduler.ScheduleOrdinal(
+            frame: frame,
             history: prior,
+            overlay: in updated,
             schedule: schedule,
             set: m_set
         );
@@ -293,7 +367,8 @@ public sealed partial class RenderGraphRuntime {
         }
     }
     // A kept instance's output in a reconfigured set: what it stands for renumbered into the new set, or, when its
-    // producer retires, an output standing for a retired image, which resolves to nothing.
+    // producer retires, an output standing for a retired image, which resolves to nothing and is never the instance's own,
+    // so no reader binds it and no capture moves to the node still publishing it.
     private static Output Renumbered(in Output output, int[] renumbered) {
         var standing = output.StandsFor;
 

@@ -162,9 +162,28 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly OverlayMarkerChip[][] m_markerChips = new OverlayMarkerChip[PlayerRoster.MaxSlots][];
     private readonly OverlayMarkerSeat[] m_markerSeats = new OverlayMarkerSeat[PlayerRoster.MaxSlots];
     private readonly List<MarkerCandidate> m_markerCandidates = [];
+    // Cached marker templates and slots per definition/state revision so steady frames skip icon/alpha/color
+    // resolution and static speaker posing, re-posing only moving anchored speakers.
+    private readonly List<MarkerRowCache> m_markerRowCache = [];
+    private readonly List<MarkerSlotCache> m_markerSlotCache = [];
+    private readonly List<int> m_dynamicMarkerSlots = [];
+    private int m_markerDefinitionRevision = int.MinValue;
+    private int m_markerStateRevision = int.MinValue;
+    private int m_markerStateInstalls = int.MinValue;
+    private int m_markerStateLifetime = int.MinValue;
+    private int m_markerColorRevision = int.MinValue;
+    private PresentedTick m_markerStatePresented;
+    private long m_markerPoseClientRevision = long.MinValue;
+    private long m_markerPoseAnimatorRevision = long.MinValue;
+    private bool m_markersHaveStateBound;
+    private bool m_markersHaveKeyed;
     // This frame's bounded volumes: the static placements' baked ones, then the stamp pool's slot-riding ones, in
-    // that order up to the engine's ceiling (SdfProgramBuilder.MaxVolumes) — reused across frames.
+    // that order up to the engine's ceiling (SdfProgramBuilder.MaxVolumes) — reused across frames and rebuilt only
+    // when one of its three source revisions moves.
     private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
+    private long m_volumesStaticRevision = long.MinValue;
+    private long m_volumesPoolRevision = long.MinValue;
+    private long m_volumesRigidRevision = long.MinValue;
 
     // The client's document version as the dressed frames' diagnostic source carries it, boxed.
     private Puck.World.Protocol.WorldDocumentVersion m_diagnosticVersion;
@@ -288,22 +307,158 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         };
     }
 
-    // Builds this frame's candidate marker instances ONCE (not once per seat): every authored `markers` row
-    // resolves its look (icon, alpha, size, ring color/alpha) a single time, then fans out into one candidate per
-    // tracked source instance — every declared speaker row for a Speakers source, or the one authored point for a
-    // Point source. A speaker's pose is the SAME one the audio director hears (m_audio.TryResolveSpeakerPose), so a
-    // marker chip never disagrees with what the mix plays from. A ring's world-space radius reads a Bed speaker's
-    // own support radius; every other speaker kind (and every Point source) carries none.
+    // Maintains this frame's candidate marker instances ONCE (not once per seat): icons, static styles, Point markers
+    // and fixed/bed speakers are resolved once per definition delivery; state-bound/keyed alphas and ring colors
+    // refresh only when the mirror revision they read moves; only dynamic anchored speakers re-pose when body/stamp
+    // poses move. A speaker's pose is the SAME one the audio director hears (m_audio.TryResolveSpeakerPose), so a
+    // marker chip never disagrees with what the mix plays from.
     private void ComposeMarkerCandidates(WorldDefinition definition) {
+        var mirror = m_client.StateMirror;
+        var definitionRevision = m_client.DefinitionRevision;
+
+        if (definitionRevision != m_markerDefinitionRevision) {
+            RebuildMarkerCache(definition: definition, mirror: mirror);
+            m_markerDefinitionRevision = definitionRevision;
+            m_markerStateRevision = mirror.Revision;
+            m_markerStateInstalls = mirror.Installs;
+            m_markerStateLifetime = mirror.Lifetime;
+            m_markerColorRevision = mirror.ColorRevision;
+            m_markerStatePresented = mirror.Presented;
+            m_markerPoseClientRevision = m_client.RenderPoseRevision;
+            m_markerPoseAnimatorRevision = m_animator.PoseRevision;
+
+            return;
+        }
+
+        if (m_markerSlotCache.Count == 0) {
+            return;
+        }
+
+        var stateChanged = (
+            (m_markersHaveStateBound && (
+                (mirror.Revision != m_markerStateRevision) ||
+                (mirror.Installs != m_markerStateInstalls) ||
+                (mirror.Lifetime != m_markerStateLifetime) ||
+                (mirror.ColorRevision != m_markerColorRevision) ||
+                (mirror.HasMovingSlots && (mirror.Presented != m_markerStatePresented))
+            )) ||
+            (m_markersHaveKeyed && (
+                (mirror.Revision != m_markerStateRevision) ||
+                (mirror.Installs != m_markerStateInstalls) ||
+                (mirror.Lifetime != m_markerStateLifetime) ||
+                (mirror.Presented != m_markerStatePresented)
+            ))
+        );
+
+        var posesChanged = (
+            (m_dynamicMarkerSlots.Count > 0) &&
+            ((m_client.RenderPoseRevision != m_markerPoseClientRevision) || (m_animator.PoseRevision != m_markerPoseAnimatorRevision))
+        );
+
+        if (!stateChanged && !posesChanged) {
+            return;
+        }
+
+        var compactNeeded = false;
+
+        if (stateChanged) {
+            var markers = definition.Markers;
+
+            for (var rowIndex = 0; (rowIndex < m_markerRowCache.Count); rowIndex++) {
+                var row = m_markerRowCache[rowIndex];
+
+                if (!row.HasDynamicStyle) {
+                    continue;
+                }
+
+                var marker = markers[rowIndex];
+                var (chipAlpha, ringAlpha) = WorldMarkerAlphas.Resolve(
+                    domains: m_domains,
+                    index: rowIndex,
+                    marker: marker,
+                    mirror: mirror
+                );
+                var ringColor = (row.WantsRing
+                    ? ResolveMarkerColor(
+                        color: marker.Style.RingColor,
+                        mirror: mirror
+                    )
+                    : default
+                );
+
+                row.ChipAlpha = chipAlpha;
+                row.RingAlpha = ringAlpha;
+                row.RingColor = ringColor;
+                m_markerRowCache[rowIndex] = row;
+
+                for (var slotIndex = row.FirstSlot; (slotIndex < row.EndSlot); slotIndex++) {
+                    var slot = m_markerSlotCache[slotIndex];
+
+                    if (slot.CandidateIndex >= 0) {
+                        var candidate = m_markerCandidates[slot.CandidateIndex];
+
+                        m_markerCandidates[slot.CandidateIndex] = candidate with {
+                            ChipAlpha = chipAlpha,
+                            RingAlpha = ringAlpha,
+                            RingColor = ringColor,
+                        };
+                    }
+                }
+            }
+
+            m_markerStateRevision = mirror.Revision;
+            m_markerStateInstalls = mirror.Installs;
+            m_markerStateLifetime = mirror.Lifetime;
+            m_markerColorRevision = mirror.ColorRevision;
+            m_markerStatePresented = mirror.Presented;
+        }
+
+        if (posesChanged) {
+            for (var index = 0; (index < m_dynamicMarkerSlots.Count); index++) {
+                var slotIndex = m_dynamicMarkerSlots[index];
+                var slot = m_markerSlotCache[slotIndex];
+                var resolved = m_audio.TryResolveSpeakerPose(
+                    position: out var position,
+                    speaker: slot.Speaker!,
+                    transforms: m_transforms
+                );
+
+                if (resolved != slot.Resolved) {
+                    slot.Resolved = resolved;
+                    slot.Position = position;
+                    m_markerSlotCache[slotIndex] = slot;
+                    compactNeeded = true;
+                } else if (resolved && (position != slot.Position)) {
+                    slot.Position = position;
+                    m_markerSlotCache[slotIndex] = slot;
+                    if (slot.CandidateIndex >= 0) {
+                        m_markerCandidates[slot.CandidateIndex] = (m_markerCandidates[slot.CandidateIndex] with { Position = position });
+                    }
+                }
+            }
+
+            m_markerPoseClientRevision = m_client.RenderPoseRevision;
+            m_markerPoseAnimatorRevision = m_animator.PoseRevision;
+        }
+
+        if (compactNeeded) {
+            CompactMarkerCandidates();
+        }
+    }
+    private void RebuildMarkerCache(WorldDefinition definition, WorldStateMirror mirror) {
+        m_markerRowCache.Clear();
+        m_markerSlotCache.Clear();
+        m_dynamicMarkerSlots.Clear();
         m_markerCandidates.Clear();
+        m_markersHaveStateBound = false;
+        m_markersHaveKeyed = false;
 
         var markers = definition.Markers;
-        var mirror = m_client.StateMirror;
+        var speakers = definition.Speakers;
 
         for (var index = 0; (index < markers.Count); index++) {
             var marker = markers[index];
             var icon = m_resolveIcon(marker.Icon);
-
             var (chipAlpha, ringAlpha) = WorldMarkerAlphas.Resolve(
                 domains: m_domains,
                 index: index,
@@ -318,38 +473,69 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 )
                 : default
             );
+            var hasStateBound = (
+                (marker.Style.ChipAlpha.State is not null) ||
+                (wantsRing && (marker.Style.RingAlpha is { State: not null })) ||
+                (wantsRing && (marker.Style.RingColor is { State: not null }))
+            );
+            var hasKeyed = (
+                (marker.Style.ChipAlpha.Keys is not null) ||
+                (wantsRing && (marker.Style.RingAlpha is { Keys: not null })) ||
+                (wantsRing && (marker.Style.RingColor is { Keys: not null }))
+            );
+
+            m_markersHaveStateBound |= hasStateBound;
+            m_markersHaveKeyed |= hasKeyed;
+
+            var firstSlot = m_markerSlotCache.Count;
 
             if (marker.Source is WorldMarkerSource.Speakers) {
-                var speakers = definition.Speakers;
-
                 for (var speakerIndex = 0; (speakerIndex < speakers.Count); speakerIndex++) {
                     var speaker = speakers[speakerIndex];
-
-                    if (!m_audio.TryResolveSpeakerPose(
+                    var isDynamic = (speaker is WorldSpeaker.Anchored);
+                    var resolved = m_audio.TryResolveSpeakerPose(
                         position: out var position,
                         speaker: speaker,
                         transforms: m_transforms
-                    )) {
-                        continue;
-                    }
-
+                    );
                     var ringRadius = ((wantsRing && (speaker is WorldSpeaker.Bed bed))
                         ? bed.Radius
                         : 0f
                     );
+                    var slotIndex = m_markerSlotCache.Count;
 
-                    m_markerCandidates.Add(item: new MarkerCandidate(
-                        ChipAlpha: chipAlpha,
-                        IconGlyph0: icon.Glyph0,
-                        IconGlyph1: icon.Glyph1,
-                        Position: position,
-                        RingAlpha: ringAlpha,
-                        RingColor: ringColor,
-                        RingRadiusWorld: ringRadius,
-                        Size: marker.Style.Size
-                    ));
+                    if (isDynamic) {
+                        m_dynamicMarkerSlots.Add(item: slotIndex);
+                    }
+
+                    var candidateIndex = -1;
+
+                    if (resolved) {
+                        candidateIndex = m_markerCandidates.Count;
+                        m_markerCandidates.Add(item: new MarkerCandidate(
+                            ChipAlpha: chipAlpha,
+                            IconGlyph0: icon.Glyph0,
+                            IconGlyph1: icon.Glyph1,
+                            Position: position,
+                            RingAlpha: ringAlpha,
+                            RingColor: ringColor,
+                            RingRadiusWorld: ringRadius,
+                            Size: marker.Style.Size
+                        ));
+                    }
+
+                    m_markerSlotCache.Add(item: new MarkerSlotCache {
+                        CandidateIndex = candidateIndex,
+                        Position = position,
+                        Resolved = resolved,
+                        RingRadiusWorld = ringRadius,
+                        RowIndex = index,
+                        Speaker = (isDynamic ? speaker : null),
+                    });
                 }
             } else if (marker.Source is WorldMarkerSource.Point point) {
+                var candidateIndex = m_markerCandidates.Count;
+
                 m_markerCandidates.Add(item: new MarkerCandidate(
                     ChipAlpha: chipAlpha,
                     IconGlyph0: icon.Glyph0,
@@ -360,7 +546,56 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     RingRadiusWorld: 0f,
                     Size: marker.Style.Size
                 ));
+                m_markerSlotCache.Add(item: new MarkerSlotCache {
+                    CandidateIndex = candidateIndex,
+                    Position = point.Position,
+                    Resolved = true,
+                    RingRadiusWorld = 0f,
+                    RowIndex = index,
+                    Speaker = null,
+                });
             }
+
+            m_markerRowCache.Add(item: new MarkerRowCache {
+                ChipAlpha = chipAlpha,
+                EndSlot = m_markerSlotCache.Count,
+                FirstSlot = firstSlot,
+                HasDynamicStyle = (hasStateBound || hasKeyed),
+                IconGlyph0 = icon.Glyph0,
+                IconGlyph1 = icon.Glyph1,
+                RingAlpha = ringAlpha,
+                RingColor = ringColor,
+                Size = marker.Style.Size,
+                WantsRing = wantsRing,
+            });
+        }
+    }
+    private void CompactMarkerCandidates() {
+        m_markerCandidates.Clear();
+        for (var slotIndex = 0; (slotIndex < m_markerSlotCache.Count); slotIndex++) {
+            var slot = m_markerSlotCache[slotIndex];
+
+            if (!slot.Resolved) {
+                slot.CandidateIndex = -1;
+                m_markerSlotCache[slotIndex] = slot;
+
+                continue;
+            }
+
+            var row = m_markerRowCache[slot.RowIndex];
+
+            slot.CandidateIndex = m_markerCandidates.Count;
+            m_markerSlotCache[slotIndex] = slot;
+            m_markerCandidates.Add(item: new MarkerCandidate(
+                ChipAlpha: row.ChipAlpha,
+                IconGlyph0: row.IconGlyph0,
+                IconGlyph1: row.IconGlyph1,
+                Position: slot.Position,
+                RingAlpha: row.RingAlpha,
+                RingColor: row.RingColor,
+                RingRadiusWorld: slot.RingRadiusWorld,
+                Size: row.Size
+            ));
         }
     }
     // One seat's marker set: every candidate resolved to a world pose (ComposeMarkerCandidates), projected into
@@ -2179,10 +2414,19 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             skyQuality: WorldSkyLayers.TierOf(tier: m_settings.SkyQuality)
         );
 
-        m_volumes.Clear();
-        AppendVolumes(volumes: m_emitter.StaticVolumes);
-        AppendVolumes(volumes: m_animator.Volumes);
-        AppendVolumes(volumes: m_animator.RigidVolumes);
+        var staticVolumesRev = m_emitter.StaticVolumesRevision;
+        var poolVolumesRev = m_animator.VolumesRevision;
+        var rigidVolumesRev = m_animator.RigidVolumesRevision;
+
+        if ((staticVolumesRev != m_volumesStaticRevision) || (poolVolumesRev != m_volumesPoolRevision) || (rigidVolumesRev != m_volumesRigidRevision)) {
+            m_volumes.Clear();
+            AppendVolumes(volumes: m_emitter.StaticVolumes);
+            AppendVolumes(volumes: m_animator.Volumes);
+            AppendVolumes(volumes: m_animator.RigidVolumes);
+            m_volumesStaticRevision = staticVolumesRev;
+            m_volumesPoolRevision = poolVolumesRev;
+            m_volumesRigidRevision = rigidVolumesRev;
+        }
 
         // The document version a diagnostic compares frames by, boxed once for each version rather than every frame.
         if ((m_diagnosticSource is null) || (m_diagnosticVersion != m_client.DocumentVersion)) {
@@ -2357,6 +2601,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // late into a referenced slot self-heals. Wired here — the produce path's composition point — and only ever
         // invoked from the director's pump-thread Publish.
         audio.MachineSourceResolver = binder.AudioOutput;
+        binder.MachinesChanged += audio.InvalidateMachineBindings;
         m_frameRate = frameRate;
         m_client = client;
         m_decals = new WorldScreenDecals(
@@ -2467,6 +2712,27 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
             WorldClientDiagnostics.Report(channel: "world.presentation", text: $"the creations responses show were not prepared ahead; each compiles when first shown: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
         }
+    }
+
+    private struct MarkerRowCache {
+        public ushort IconGlyph0;
+        public ushort IconGlyph1;
+        public float Size;
+        public bool WantsRing;
+        public bool HasDynamicStyle;
+        public float ChipAlpha;
+        public float RingAlpha;
+        public RgbaColor RingColor;
+        public int FirstSlot;
+        public int EndSlot;
+    }
+    private struct MarkerSlotCache {
+        public int RowIndex;
+        public int CandidateIndex;
+        public WorldSpeaker? Speaker;
+        public Vector3 Position;
+        public float RingRadiusWorld;
+        public bool Resolved;
     }
 
     // One authored `markers` row instance's resolved look, cached once per Dress call (every seat's cull reads the

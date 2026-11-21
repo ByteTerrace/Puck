@@ -199,6 +199,25 @@ public readonly struct DeliveryLabel : IEquatable<DeliveryLabel> {
         );
     }
 
+    /// <summary>Mints a label gated on every span of <paramref name="spans"/>, each named once.</summary>
+    /// <param name="spans">The spans the content was produced under, at least one.</param>
+    /// <param name="external">Whether the content holds external pixels the capture gate did not fill.</param>
+    /// <returns>The classified span label.</returns>
+    /// <exception cref="ArgumentException"><paramref name="spans"/> is empty.</exception>
+    /// <exception cref="ArgumentNullException">An element of <paramref name="spans"/> is <see langword="null"/>.</exception>
+    public static DeliveryLabel Of(ReadOnlySpan<DeliverySpan> spans, bool external = false) {
+        if (spans.IsEmpty) {
+            throw new ArgumentException(message: "A span label names at least one span.", paramName: nameof(spans));
+        }
+
+        var label = Of(external: external, span: spans[0]);
+
+        for (var index = 1; (index < spans.Length); index++) {
+            label = label.Union(other: Of(span: spans[index]));
+        }
+
+        return label;
+    }
     /// <summary>Returns this label with <see cref="External"/> set to <paramref name="external"/>; an unclassified
     /// label stays unclassified.</summary>
     /// <param name="external">Whether the content holds unfilled external pixels.</param>

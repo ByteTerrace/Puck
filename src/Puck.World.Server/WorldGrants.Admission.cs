@@ -453,6 +453,10 @@ public sealed partial class WorldGrants {
                 continue;
             }
 
+            Host.Population.SetPeerAdmissionTier(
+                bodyIndex: index,
+                tier: current.Tier
+            );
             var installedTemplates = new List<WorldAdmissionGrant>();
 
             foreach (var template in current.Templates.OrderByDescending(keySelector: row => (row.Capability == WorldCapability.Operate))) {

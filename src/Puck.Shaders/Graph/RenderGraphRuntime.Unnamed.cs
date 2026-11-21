@@ -23,16 +23,22 @@ public sealed partial class RenderGraphRuntime {
     // that may read it has completed, the instance's own and its consumers' (RenderGraphRuntime.Retiring.cs), and only if
     // it is still unnamed and has rendered nothing since; an instance named again first renders again with the graph it
     // kept.
-    private void ReleaseUnnamed(RenderGraphSchedule schedule) {
-        var captured = CapturedInstance();
+    private void ReleaseUnnamed(RenderGraphSchedule schedule, int captured) {
+        m_released.Clear();
+        if ((m_unnamed.Count == 0) && (schedule.Unnamed.Count == 0)) {
+            return;
+        }
+
         bool? idle = null;
 
-        m_released.Clear();
         ForgetRenamed(schedule: schedule);
 
-        for (var index = 0; (index < m_nodes.Length); index++) {
+        var unnamed = schedule.Unnamed;
+
+        for (var position = 0; (position < unnamed.Count); position++) {
+            var index = unnamed[position];
+
             if (
-                (schedule.Instances[index].Status != RenderGraphInstanceStatus.Unnamed) ||
                 KeepsCapturedOutput(captured: captured, index: index) ||
                 (m_sources[index] is not null) ||
                 (m_nodes[index] is not { HoldsGraphObjects: true, PendingCapturePath: null } node)

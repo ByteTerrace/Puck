@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
@@ -8,18 +9,17 @@ namespace Puck.Shaders;
 // tainted input. A capture frame renders every tainted instance the captured instance reads again, so a slow instance
 // never carries external pixels into a capture, and a capture moves to its instance only over untainted inputs.
 public sealed partial class RenderGraphRuntime {
-    // The instances a capture frame renders again, reused from frame to frame.
-    private readonly List<string> m_rerender = [];
+    // The ordinals of instances a capture or standing recovery forces to render again, reused from frame to frame.
+    private readonly MarkedIndexSet m_rerenderIndices = new();
     // The instances still to visit in the walk up from the captured instance, reused from frame to frame.
     private readonly Stack<int> m_unvisited = new();
+    // The instances the walk up from the captured instance has reached, cleared sparsely.
+    private readonly MarkedIndexSet m_visitedIndices = new();
 
     // Each external producer's delivery label at its latest acquisition, which is what its next consumer would bind.
     private DeliveryLabel[] m_producerLabels;
     // Whether the latest frame began with a capture pending anywhere in the runtime.
     private bool m_capturing;
-
-    // The instances the walk up from the captured instance has reached, sized to the set.
-    private bool[] m_visited = [];
 
     // Whether a read binds nothing this frame: on a capture frame, a previous-frame read of a tainted output. The capture
     // frame renders that producer again only after its reader, if at all, so binding it would carry the taint around a
@@ -56,13 +56,14 @@ public sealed partial class RenderGraphRuntime {
     // The retained package state of an instance that holds unfilled external content, named by the package that holds it
     // (IRenderGraphPackageFactory.TaintOf), or null when none does. It builds a string only while one does.
     private string? PackageTaintOf(int index) {
-        if (m_graphs[index] is not { } graph) { return null; }
-        var name = m_set.Instances[index].Name;
-        var passes = graph.Pipeline.Plan.Passes;
+        var factories = m_instanceFactories[index];
 
-        for (var position = 0; (position < passes.Count); position++) {
-            if ((passes[position].Package is { } step) && m_packages.TryGetFactory(step.Package, out var factory) &&
-                (factory.TaintOf(instance: name) is { } retained)) {
+        if (factories.Length == 0) { return null; }
+
+        var name = m_set.Instances[index].Name;
+
+        for (var position = 0; (position < factories.Length); position++) {
+            if (factories[position].TaintOf(instance: name) is { } retained) {
                 return $"{name}'s retained package state ({retained})";
             }
         }
@@ -92,78 +93,80 @@ public sealed partial class RenderGraphRuntime {
         ? m_producerLabels[index].External
         : m_outputs.ExternalAt(index: index, latch: in m_latch)
     );
-    // The instance the pending capture reads: the one armed on the runtime, or the instance whose node or producer holds
-    // one; -1 when no capture is pending.
-    private int CapturedInstance() {
-        if ((m_capture.PendingPath ?? PresentedPath) is not null) {
-            return m_captureInstance;
+    // The instance whose node or producer currently holds a forwarded or directly armed capture, or -1 when none does.
+    // Steady frames with no capture take O(1) (plus O(external producers)) instead of scanning every node.
+    private int ForwardedCaptureIndex() {
+        if (m_forwardedCaptureIndex is var forwarded and >= 0) {
+            if ((((ICaptureRequestTarget?)m_nodes[forwarded]) ?? m_producers[forwarded])?.PendingCapturePath is not null) {
+                return forwarded;
+            }
+            m_forwardedCaptureIndex = -1;
         }
+        if (Volatile.Read(location: ref m_captureProbeNeeded) != 0) {
+            _ = Interlocked.Exchange(location1: ref m_captureProbeNeeded, value: 0);
+            for (var index = 0; (index < m_nodes.Length); index++) {
+                if (m_nodes[index]?.PendingCapturePath is not null) {
+                    m_forwardedCaptureIndex = index;
 
-        for (var index = 0; (index < m_nodes.Length); index++) {
-            if ((((ICaptureRequestTarget?)m_nodes[index]) ?? m_producers[index])?.PendingCapturePath is not null) {
+                    return index;
+                }
+            }
+        }
+        for (var position = 0; (position < m_externalProducerIndices.Length); position++) {
+            var index = m_externalProducerIndices[position];
+
+            if (m_producers[index]?.PendingCapturePath is not null) {
+                m_forwardedCaptureIndex = index;
+
                 return index;
             }
         }
 
         return -1;
     }
-    // The frame the scheduler reads: the frame naming every instance whose latest output stands for another's image to
-    // render again (RenderGraphRuntime.Standing.cs), and, on a capture frame, every tainted instance the captured instance
-    // reads, itself included; any other frame as given. A source is never named: its consumers resolve its image through
-    // the capture gate as they bind it.
-    private RenderGraphFrame WithRerenders(in RenderGraphFrame frame) {
-        var captured = CapturedInstance();
+    // The instance the pending capture reads: the one armed on the runtime, or the instance whose node or producer holds
+    // one; -1 when no capture is pending.
+    private int CapturedInstance() => (((m_capture.PendingPath ?? PresentedPath) is not null)
+        ? m_captureInstance
+        : ForwardedCaptureIndex());
+    // Collects the ordinals of every instance whose latest output stands for another's image to render again
+    // (RenderGraphRuntime.Standing.cs), and, on a capture frame, every tainted or converging instance the captured
+    // instance reads, itself included. A source is never named: its consumers resolve its image through the capture gate.
+    private ReadOnlySpan<int> CollectRerenders(int captured) {
         var standing = CollectStanding();
 
         m_capturing = (captured >= 0);
+        m_rerenderIndices.Clear();
 
         if (!m_capturing && !standing) {
-            return frame;
+            return [];
         }
 
-        m_rerender.Clear();
+        var standingMembers = m_standingIndices.Members;
 
-        if (frame.Rerender is { } declared) {
-            m_rerender.AddRange(collection: declared);
-        }
-        foreach (var name in m_standing) {
-            if (!m_rerender.Contains(item: name)) {
-                m_rerender.Add(item: name);
-            }
+        for (var position = 0; (position < standingMembers.Length); position++) {
+            _ = m_rerenderIndices.Add(index: standingMembers[position]);
         }
         if (!m_capturing) {
-            return (frame with {
-                Rerender = m_rerender,
-            });
+            return m_rerenderIndices.Members;
         }
 
-        var count = m_set.Instances.Count;
-
-        if (m_visited.Length != count) {
-            m_visited = new bool[count];
-        } else {
-            Array.Clear(array: m_visited);
-        }
-
+        m_visitedIndices.Clear();
         m_unvisited.Clear();
         m_unvisited.Push(item: captured);
 
         while (m_unvisited.TryPop(result: out var index)) {
-            if (m_visited[index]) {
+            if (!m_visitedIndices.Add(index: index)) {
                 continue;
             }
 
-            m_visited[index] = true;
             DiscardCaptureTaint(index: index);
 
-            var instance = m_set.Instances[index];
-
             if (
-                !instance.IsSource &&
-                (IsTainted(index: index) || IsConverging(index: index)) &&
-                !m_rerender.Contains(item: instance.Name)
+                !m_set.Instances[index].IsSource &&
+                (IsTainted(index: index) || IsConverging(index: index))
             ) {
-                m_rerender.Add(item: instance.Name);
+                _ = m_rerenderIndices.Add(index: index);
             }
 
             var reads = m_set.Reads[index];
@@ -173,8 +176,6 @@ public sealed partial class RenderGraphRuntime {
             }
         }
 
-        return (frame with {
-            Rerender = m_rerender,
-        });
+        return m_rerenderIndices.Members;
     }
 }

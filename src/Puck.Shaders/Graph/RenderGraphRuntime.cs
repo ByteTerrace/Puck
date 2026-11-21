@@ -1,5 +1,5 @@
-using Puck.Abstractions.Collections;
 using System.Diagnostics.CodeAnalysis;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -147,8 +147,23 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private int m_unproduced;
     // The nodes whose frame wrote an export this frame, which complete it once the batch has reached the queue.
     private readonly List<ShaderPipelineRenderNode> m_settlementsOwed = [];
+    // Ordinal side tables rebuilt whenever m_set or m_graphs changes so steady frames index by ordinal, never by name.
+    private int[] m_orderPosition = [];
+    private int[] m_uploadSourceIndices = [];
+    private int[] m_activeUploadSourceIndices = [];
+    private int[] m_sourceProducerIndices = [];
+    private int[] m_sourceCheckIndices = [];
+    private int[] m_externalProducerIndices = [];
+    private IRenderGraphPackageFactory?[] m_packageFactory = [];
+    private IRenderGraphPackageFactory[][] m_instanceFactories = [];
+    private bool[] m_allPassesArePackages = [];
+    // Tracks forwarded or direct node captures so steady frames check capture presence in O(1) instead of scanning m_nodes.
+    private readonly Action m_onNodeCaptureArmed;
+    private int m_forwardedCaptureIndex = -1;
+    private int m_captureProbeNeeded;
 
     private RenderGraphRuntime(RenderGraphInstanceSet set, RenderGraphRuntimeGraph?[] graphs, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, SourceGraph?[] sources, Binding[][] inputs, int root, IGpuDeviceContext device, RenderGraphPackageRecorders packages, PackageGraphs packageGraphs, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint inFlightFrames, GpuImageLeases images, RenderGraphStandIns standIns) {
+        m_onNodeCaptureArmed = () => _ = Interlocked.Exchange(location1: ref m_captureProbeNeeded, value: 1);
         m_standIns = standIns;
         m_images = images;
         m_packageGraphs = packageGraphs;
@@ -184,6 +199,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         Array.Fill(array: m_routes, value: hostLabel);
         Array.Fill(array: m_boundLabels, value: hostLabel);
+        RebuildSetTables();
     }
 
     /// <summary>The frames in flight each instance's node keeps when <see cref="TryCreate"/> is given none: a lease a
@@ -196,6 +212,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     public bool IsSettled => ((m_latest is not null) && (m_unproduced == 0));
     /// <summary>Gets the instance set the runtime schedules.</summary>
     public RenderGraphInstanceSet Instances => m_set;
+    /// <inheritdoc/>
+    public ReadOnlySpan<ShaderPipelineRenderNode?> Nodes => m_nodes;
     /// <summary>Gets the latest frame's schedule, or <see langword="null"/> before the first frame.</summary>
     public RenderGraphSchedule? Latest => m_latest;
     /// <inheritdoc/>
@@ -211,13 +229,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 return armed;
             }
 
-            for (var index = 0; (index < m_nodes.Length); index++) {
-                if ((((ICaptureRequestTarget?)m_nodes[index]) ?? m_producers[index])?.PendingCapturePath is { } forwarded) {
-                    return forwarded;
-                }
-            }
+            var forwarded = ForwardedCaptureIndex();
 
-            return null;
+            return ((forwarded >= 0)
+                ? (((ICaptureRequestTarget?)m_nodes[forwarded]) ?? m_producers[forwarded])?.PendingCapturePath
+                : null);
         }
     }
 
@@ -907,7 +923,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         }
 
         var node = m_nodes[index]!;
-        var consumer = m_set.Instances[index].Name;
 
         foreach (var binding in bindings) {
             if (binding.Kind != ShaderPipelineResourceKind.Buffer) {
@@ -916,10 +931,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
             // Named buffers belong to this producer's snapshot even when its default image forwards another node.
             var buffered = RecordedAt(
-                frame: FrameOf(
-                    consumer: consumer,
-                    producer: binding.ProducerName,
-                    schedule: schedule
+                frame: schedule.ReadFrame(
+                    consumer: index,
+                    producer: binding.Producer
                 ),
                 latch: in latch,
                 producer: binding.Producer
@@ -1008,10 +1022,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                         name: binding.Version
                     );
                     NoteStandIn(
-                        frame: FrameOf(
-                            consumer: consumer,
-                            producer: binding.ProducerName,
-                            schedule: schedule
+                        frame: schedule.ReadFrame(
+                            consumer: index,
+                            producer: binding.Producer
                         ),
                         index: index,
                         producer: binding.Producer
@@ -1021,10 +1034,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 continue;
             }
 
-            var frame = FrameOf(
-                consumer: consumer,
-                producer: binding.ProducerName,
-                schedule: schedule
+            var frame = schedule.ReadFrame(
+                consumer: index,
+                producer: binding.Producer
             );
             var output = OutputAt(
                 frame: frame,
@@ -1095,29 +1107,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             m_standInReads[index] = m_set.Instances[producer].Name;
         }
     }
-    // The frame of a producer's output the schedule has a consumer read, or -1 when it names none.
-    private static long FrameOf(RenderGraphSchedule schedule, string consumer, string producer) {
-        var reads = schedule.Reads;
-
-        for (var read = 0; (read < reads.Count); read++) {
-            var row = reads[read];
-
-            if (
-                ReferenceEquals(
-                    objA: row.Consumer,
-                    objB: consumer
-                ) &&
-                ReferenceEquals(
-                    objA: row.Producer,
-                    objB: producer
-                )
-            ) {
-                return row.Frame;
-            }
-        }
-
-        return -1L;
-    }
     // Selects the producer's recorded output at the scheduled frame, then resolves what it stands for at the reader's
     // frame. A slow standing output follows its owner even when its own last render is older than the owner's history.
     private Output OutputAt(int producer, long frame, long readFrame, in DeliveryLatch latch) => Resolve(
@@ -1132,10 +1121,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private void Release() {
         RetireShownLeases();
         m_outputs.Clear();
+        ClearStandingCandidates();
         Array.Clear(array: m_standInReads);
         Array.Clear(array: m_taintedReads);
         ResetStale(count: m_stale.Length);
         Array.Clear(array: m_producerLabels);
+        m_forwardedCaptureIndex = -1;
         m_history = RenderGraphHistory.Empty(set: m_set);
         m_latest = null;
         m_readFrame = -1;
@@ -1157,7 +1148,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         if (m_sources[index]?.Fault is { } fault) {
             return $"the instance '{name}' has produced no output: {fault}";
         }
-        if (m_outputs.StandsForRetired(index: index)) {
+        if (m_outputs.StandsFor(index: index).IsRetired) {
             return $"the instance '{name}' published the image of an instance that retired, and has not rendered since";
         }
         if (
@@ -1326,17 +1317,23 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         var schedule = m_schedules[m_turn];
         var prior = m_history;
-        var sourced = WithSourceStates(frame: in frame);
-        var rerendered = WithRerenders(frame: in sourced);
-        var unchanged = WithUnchanged(
-            context: in context,
-            frame: in rerendered
-        );
-        var scheduled = WithStale(frame: in unchanged);
+        var captured = CapturedInstance();
+        var overlay = new RenderGraphOrdinalOverlay {
+            Rerender = CollectRerenders(captured: captured),
+            Sources = CollectSourceStates(),
+            Stale = StaleOrdinals,
+            Unchanged = CollectUnchanged(
+                captured: captured,
+                context: in context,
+                frame: in frame
+            ),
+        };
+        var priced = (frame with { Costs = this });
 
-        RenderGraphScheduler.Schedule(
-            frame: scheduled with { Costs = this },
+        RenderGraphScheduler.ScheduleOrdinal(
+            frame: priced,
             history: prior,
+            overlay: in overlay,
             schedule: schedule,
             set: m_set
         );
@@ -1344,13 +1341,16 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_history = schedule.Next;
         m_historyPrior = prior;
         m_historySchedule = schedule;
-        Array.Clear(array: m_historySucceeded);
         m_latest = schedule;
         m_readFrame = frame.Index;
         m_unproduced = 0;
-        ReleaseUnnamed(schedule: schedule);
+        ReleaseUnnamed(
+            captured: captured,
+            schedule: schedule
+        );
         RescheduleAfterRelease(
-            frame: scheduled with { Costs = this },
+            frame: in priced,
+            overlay: in overlay,
             prior: prior,
             schedule: schedule
         );
@@ -1358,7 +1358,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         // A source with no conversion graph is never scheduled. Its opening or descriptor fault still refuses any
         // same-frame consumer that shows it, rather than certifying a stand-in as a completed frame.
-        for (var index = 0; (index < m_sources.Length); index++) {
+        for (var position = 0; (position < m_sourceCheckIndices.Length); position++) {
+            var index = m_sourceCheckIndices[position];
+
             if (IsAbsent(index: index)) {
                 MarkCurrent(index: index);
             } else if (m_sources[index] is { Graph: null }) {
@@ -1436,6 +1438,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                         !MarkReadStale(index: index, schedule: schedule)
                     ) {
                         m_capture.Forward(target: producer);
+                        m_forwardedCaptureIndex = index;
                     }
 
                     var produced = (((row.Width > 0) && (row.Height > 0))
@@ -1571,10 +1574,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     (m_standInReads[index] is null) &&
                     (m_taintedReads[index] is null) &&
                     !HasPackageTaint(index: index) &&
-                    (m_outputs.StandsForOwn(index: index) || (LatestOf(index: index, latch: in m_latch).Frame >= 0)) &&
+                    (m_outputs.StandsFor(index: index).IsOwn || (LatestOf(index: index, latch: in m_latch).Frame >= 0)) &&
                     !MarkReadStale(index: index, schedule: schedule)
                 ) {
                     m_capture.Forward(target: node);
+                    m_forwardedCaptureIndex = index;
                 }
 
                 OfferCaptureSource(

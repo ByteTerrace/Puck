@@ -312,6 +312,7 @@ public sealed partial class RenderGraphRuntime {
         var captureStillArmed = ((m_capture.PendingPath ?? PresentedPath) is not null);
 
         m_captureInstance = ((captureStillArmed && m_captureFollowsRoot) ? rootIndex : set.IndexOf(name: captured));
+        m_forwardedCaptureIndex = ((m_forwardedCaptureIndex >= 0) ? renumbered[m_forwardedCaptureIndex] : -1);
 
         if (!captureStillArmed) { RemapForwardedConvergence(set: set); }
 
@@ -348,6 +349,7 @@ public sealed partial class RenderGraphRuntime {
         ForgetRemovedNarrations();
         m_unproduced = 0;
         m_unreadFrames = unreadFrames;
+        RebuildSetTables();
         refusal = null;
 
         // The pending request follows this composition's indices and dependency closure. A changed composition
@@ -447,8 +449,117 @@ public sealed partial class RenderGraphRuntime {
 
         m_graphs = graphs;
         m_inputs = inputs;
+        UpdateGraphTable(index: index);
 
         return true;
+    }
+    // Rebuilds every ordinal side table derived from the running set, nodes, sources, producers and graphs so steady
+    // frames index by ordinal and visit only active subsets instead of scanning every instance or hashing by name.
+    private void RebuildSetTables() {
+        var count = m_set.Instances.Count;
+
+        m_orderPosition = new int[count];
+        for (var position = 0; (position < count); position++) {
+            m_orderPosition[m_set.Order[position]] = position;
+        }
+
+        var uploadSources = new List<int>();
+        var activeUploadSources = new List<int>();
+        var sourceProducers = new List<int>();
+        var sourceChecks = new List<int>();
+        var externalProducers = new List<int>();
+        var packageInstances = new List<PackageInstanceSlot>();
+
+        m_packageFactory = new IRenderGraphPackageFactory?[count];
+        m_instanceFactories = new IRenderGraphPackageFactory[count][];
+        m_allPassesArePackages = new bool[count];
+        m_installedFragments = new RenderGraphPackageFragment?[count];
+
+        for (var index = 0; (index < count); index++) {
+            var instance = m_set.Instances[index];
+
+            if (m_nodes[index] is { } node) {
+                node.CaptureArmed = m_onNodeCaptureArmed;
+            }
+            if (m_sources[index] is { } source) {
+                uploadSources.Add(item: index);
+                sourceChecks.Add(item: index);
+                if (source.State is not null) {
+                    activeUploadSources.Add(item: index);
+                }
+            }
+            if (m_producers[index] is { } producer) {
+                externalProducers.Add(item: index);
+                if (instance.IsSource && (producer is IRenderGraphSourceProducer)) {
+                    sourceProducers.Add(item: index);
+                    if (m_sources[index] is null) {
+                        sourceChecks.Add(item: index);
+                    }
+                }
+            }
+            if (RunsPackage(instance: instance, packages: m_packages) &&
+                m_packages.TryGetFactory(factory: out var factory, package: instance.ExternalPackage!)) {
+                m_packageFactory[index] = factory;
+                var defaultFragment = (RenderGraphPackageCatalog.Engine.TryGet(id: instance.ExternalPackage!, package: out var declared)
+                    ? declared.Fragment
+                    : null);
+
+                packageInstances.Add(item: new PackageInstanceSlot(
+                    DefaultFragment: defaultFragment,
+                    Factory: factory,
+                    Index: index,
+                    Name: instance.Name,
+                    Package: instance.ExternalPackage!
+                ));
+                if (m_packageGraphs.Fragments.TryGetValue(key: instance.Name, value: out var installed)) {
+                    m_installedFragments[index] = installed;
+                }
+            }
+            UpdateGraphTable(index: index);
+        }
+
+        m_uploadSourceIndices = [.. uploadSources];
+        m_activeUploadSourceIndices = [.. activeUploadSources];
+        m_sourceProducerIndices = [.. sourceProducers];
+        m_sourceCheckIndices = [.. sourceChecks];
+        m_externalProducerIndices = [.. externalProducers];
+        m_packageInstances = [.. packageInstances];
+        RebuildStandingCandidates();
+    }
+    // Precomputes the distinct package factories and package-only flag for one instance's installed graph.
+    private void UpdateGraphTable(int index) {
+        if (m_graphs[index] is not { } graph) {
+            m_instanceFactories[index] = [];
+            m_allPassesArePackages[index] = false;
+
+            return;
+        }
+
+        var passes = graph.Pipeline.Plan.Passes;
+
+        if (passes.Count == 0) {
+            m_instanceFactories[index] = [];
+            m_allPassesArePackages[index] = false;
+
+            return;
+        }
+
+        var allPackages = true;
+        List<IRenderGraphPackageFactory>? distinct = null;
+
+        for (var pass = 0; (pass < passes.Count); pass++) {
+            if ((passes[pass].Package is { } step) && m_packages.TryGetFactory(factory: out var factory, package: step.Package)) {
+                distinct ??= [];
+                if (!distinct.Contains(item: factory)) {
+                    distinct.Add(item: factory);
+                }
+            } else {
+                allPackages = false;
+            }
+        }
+
+        m_instanceFactories[index] = ((distinct is null) ? [] : [.. distinct]);
+        m_allPassesArePackages[index] = allPackages;
     }
     /// <summary>Returns the node a graph instance renders through, or <see langword="null"/> when the set has no graph
     /// instance of that name.</summary>

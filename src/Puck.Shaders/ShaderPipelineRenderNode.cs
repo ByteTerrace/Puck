@@ -2205,6 +2205,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         return m_lastSurface;
     }
 
+    // Invoked after a capture request arms on this node so an owning RenderGraphRuntime observes direct captures
+    // without scanning every node on each frame.
+    internal Action? CaptureArmed { get; set; }
+
     /// <summary>Requests a capture of the next completed output frame, an image no surface carries through the display
     /// encode's SDR (<see cref="SurfaceEncoder"/>).</summary>
     public void RequestCapture(FrameCaptureRequest request) {
@@ -2216,6 +2220,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             request,
             PendingCapturePath
         );
+        CaptureArmed?.Invoke();
     }
     /// <summary>Withdraws the node's published image and buffers, as a device loss does, without releasing its graph:
     /// it publishes nothing until it renders again, a paused node presents nothing and owes no initialization frame, a

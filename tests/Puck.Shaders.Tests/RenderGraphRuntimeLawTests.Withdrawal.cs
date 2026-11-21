@@ -34,7 +34,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var spans = new DeliverySpanSource();
         var cutSpan = spans.Span;
 
-        scene.Runtime.SetRoute(instance: "camera", route: DeliveryLabel.Of(span: cutSpan));
+        scene.Runtime.SetRoute(instance: scene.Runtime.Instances.IndexOf(name: "camera"), route: DeliveryLabel.Of(span: cutSpan));
 
         RenderGraphFootprint[] beforeFootprints = [
             new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "consumer", Width: 1.0),
@@ -307,7 +307,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         var spans = new DeliverySpanSource();
 
-        scene.Runtime.SetRoute(instance: "camera", route: DeliveryLabel.Of(span: spans.Span));
+        scene.Runtime.SetRoute(instance: scene.Runtime.Instances.IndexOf(name: "camera"), route: DeliveryLabel.Of(span: spans.Span));
 
         RenderGraphFootprint[] filmed = [
             new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "view", Width: 1.0),

@@ -116,7 +116,7 @@ things the test reads, so it is never noticed either.
 
 Confirmed. The frame reconciles the instance set before it binds access:
 
-`src/Puck.World.Client/WorldViewGraphHost.cs:629-632`
+`src/Puck.World.Client/WorldViewGraphHost.cs:642-645`
 
 ```csharp
         Reconcile(views: views);
@@ -127,15 +127,20 @@ Confirmed. The frame reconciles the instance set before it binds access:
 
 `Reconcile` reconfigures the runtime in the same call when the screens' views
 changed (`src/Puck.World.Client/WorldViewGraphHost.cs:1297`). A session view
-that ended is by then absent from the set, and `BindAccess` only forgets its
-epoch:
+that ended is by then absent from the set, and `EnsureAccessTables` only carries
+surviving instances' epochs into the new ordinal table:
 
-`src/Puck.World.Client/WorldViewGraphHost.cs:649-651`
+`src/Puck.World.Client/WorldViewGraphHost.cs:664-671`
 
 ```csharp
-            foreach (var name in m_accessEpochs.Keys.ToArray()) {
-                if (set.IndexOf(name: name) < 0) { _ = m_accessEpochs.Remove(key: name); }
-            }
+                for (var index = 0; (index < count); index++) {
+                    var old = previous.IndexOf(name: instances[index].Name);
+
+                    if ((old >= 0) && m_accessSeen[old]) {
+                        nextEpochs[index] = m_accessEpochs[old];
+                        nextSeen[index] = true;
+                    }
+                }
 ```
 
 The reconfiguration keeps every surviving consumer's own outputs as they are
@@ -153,7 +158,7 @@ keeps showing it.
 Confirmed in the code. The epoch moves when the observation object changes, but
 the residency's guard is not told about the observation at all:
 
-`src/Puck.World/WorldScreenBinder.Availability.cs:119`
+`src/Puck.World/WorldScreenBinder.Availability.cs:205`
 
 ```csharp
             return ((access != WorldSessionAccess.None) && (access < Source));

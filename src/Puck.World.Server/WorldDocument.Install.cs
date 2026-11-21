@@ -88,6 +88,9 @@ public sealed partial class WorldDocument {
         internal void Finish(WorldServer host) {
             if (m_addonCommitted) { host.Addons!.Finish(plan: AddonPlan!); }
             if (m_machineCommitted) { host.Machines.Finish(plan: MachinePlan!); }
+            if (!ReferenceEquals(objA: Request.Current.Admission, objB: Request.Candidate.Admission)) {
+                host.NotifyAdmissionChanged();
+            }
         }
         /// <summary>Releases each plan no host committed. A committed plan is its host's, which
         /// <see cref="FinishInstall"/> finishes.</summary>

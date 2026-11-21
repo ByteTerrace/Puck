@@ -119,6 +119,7 @@ public sealed partial class WorldScreenBinder {
     // residency of its own builds its frame source the first time it does (OwnSourceOf).
     private void RegisterSessionView(SessionFeed feed) {
         feed.Registered = true;
+        m_accessBindingsVersion++;
         feed.WindowFit = ((feed.Projection == WorldScreenProjection.Window)
             ? FitWindow(feed: feed)
             : null);
@@ -129,7 +130,9 @@ public sealed partial class WorldScreenBinder {
     // sessions it opens and ends, and a portal crossing would otherwise narrate every view of every level it tears down.
     private void ReleaseSession(SessionFeed feed, int index, string? reason) {
         if (feed.Nested is { } screens) {
-            _ = m_nestedOwners.Remove(key: screens);
+            if (m_nestedOwners.Remove(key: screens)) {
+                m_accessBindingsVersion++;
+            }
             screens.Close(sessions: NestedSessionsOf());
             feed.Nested = null;
         }
