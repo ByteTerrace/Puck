@@ -510,7 +510,7 @@ public sealed class SdfBoundAlgebraLawTests {
 
         Assert.Equal(expected: SdfOpRole.Lattice, actual: SdfOpRoles.Of(op: SdfOp.CellJitter));
         Assert.Equal(expected: SdfOpRole.Lattice, actual: SdfOpRoles.Of(op: SdfOp.LogSphere));
-        _ = Assert.Throws<InvalidOperationException>(testCode: () => SdfOpRoles.Of(op: ((SdfOp)999u)));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SdfOpRoles.Of(op: ((SdfOp)999u)));
     }
     // The authored radius SdfBoundAlgebra.Unbounded is the declaration that nothing bounds the instance, wherever the tree
     // it covers is bounded; no other non-finite or negative radius is admitted.

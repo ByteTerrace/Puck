@@ -134,12 +134,17 @@ every op, shape and blend. Against that interval the walk drops three things:
 - an instance or a chain whose cull certificate clears the interval's upper
   end at every point of the cube (the point walk's own skip, asked at the
   cube's nearest point to the certificate's centre);
-- a chain whose every join it finds inert, because the candidate it enclosed
-  over the cube stands past the accumulator's upper end by the margin at which
-  the blend returns the accumulator to the bit;
-- everything before a chain whose join takes the root accumulator over,
-  because the accumulator's lower end stands past its candidate by the same
-  margin.
+- a join it finds inert, because the candidate it enclosed over the cube
+  stands past the accumulator's upper end by the margin at which the blend
+  returns the accumulator to the bit: the whole chain when every join is
+  inert, and otherwise the inert joins that stand before the chain's first
+  join that is not;
+- everything before a chain whose first join that is not inert takes the root
+  accumulator over, because the candidate stands below the accumulator's lower
+  end, and below the far seed a walk starts from, by the same margin. A chain
+  that has joined by another blend, edited the field or crossed a scope takes
+  nothing over ([the handbook](../rendering/sdf/handbook/queries-and-determinism.md#region-tapes)
+  holds the argument).
 
 Each of those leaves every point walk in the cube with the distance and
 material it had. Nothing is dropped on a tolerance, a Lipschitz bound or a
@@ -226,7 +231,7 @@ a foot's standoff moves by centimetres with it.
 |---|---|---|
 | A regional evaluator answers what the plain one answers, to the bit, in distance and material. | A tape is made only by the regional box walk (`SdfFieldEvaluator`'s `WalkBounds` with a record), and each of its three drops is one predicate stated against the enclosing interval. `SdfFieldEvaluatorRegionLawTests` holds the two evaluators to each other on a fold across its seam, tied candidates, a staircase of smooth unions, relieved scopes and carves, and on the raws either side of every region face. | It is an exactness-preserving skip, the class [silent invariants](../development/hazards.md#silent-invariants) marks review-only: sampled agreement can miss an arithmetic edge. It rests on the interval interpreter's inclusion and on the cull certificates, as the plain evaluator's own skips do. |
 | A sample reads the tape of the cube it lies in. | The lookup is the only way to a tape, and it descends by the point's own raws. Each tap of a gradient looks its own cube up. | None known. |
-| The index is bounded. | It counts the regions it records and drops them all at its limit (`sdf.regions.resets`). | A workload that scatters samples over more cubes than the limit rebuilds as it goes; a lattice consumer would need a larger limit or coarser leaves. |
+| The index is bounded, and scattered samples do not churn it. | It counts the cubes it marks and records and drops them all at its limit (`sdf.regions.resets`). A cube is recorded by the second sample that reaches it; the first marks it and reads the cube around it. | A sample that never comes back costs a plain walk. A workload that returns to more cubes than the limit rebuilds as it goes; a lattice consumer would need a larger limit or coarser leaves. |
 | A float answer decides nothing. | To be enforced by its type when it is built: it offers a gradient and a lattice fill, and a march sampler only in the bound role with a certified error. | Not built. |
 | A held answer is reused only over the field it was asked of. | `WorldFieldAnswer.Ask` compares the field instance, as before. | Unchanged. |
 

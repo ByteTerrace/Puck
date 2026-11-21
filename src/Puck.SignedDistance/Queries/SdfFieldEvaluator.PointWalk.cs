@@ -46,8 +46,8 @@ public sealed partial class SdfFieldEvaluator {
             return false;
         }
 
-        if (m_regions is not null) {
-            (distance, material, instructionsWalked) = WalkPoint(candidate: -1, reaches: [], tape: RegionTape(point: worldPosition), worldPosition: worldPosition);
+        if ((m_regions is not null) && TryRegionTape(point: worldPosition, tape: out var tape)) {
+            (distance, material, instructionsWalked) = WalkPoint(candidate: -1, reaches: [], tape: tape, worldPosition: worldPosition);
 
             return true;
         }

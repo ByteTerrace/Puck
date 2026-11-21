@@ -9,6 +9,9 @@ namespace Puck.SignedDistance.Tests;
 // point walk anywhere in the region. Each law builds one program and holds the two evaluators to each other at points
 // chosen to stand where a wrong drop would show.
 public sealed class SdfFieldEvaluatorRegionLawTests {
+    // The walks at one point that reach its least region's tape: two for each of a region's four sizes.
+    private const int Walks = 8;
+
     private static FixedPosition At(double x, double y, double z) =>
         FixedPosition.FromLocal(local: new FixedVector3(X: FixedQ4816.FromDouble(value: x), Y: FixedQ4816.FromDouble(value: y), Z: FixedQ4816.FromDouble(value: z)));
     private static FixedPosition AtRaw(long x, long y, long z) =>
@@ -49,9 +52,13 @@ public sealed class SdfFieldEvaluatorRegionLawTests {
         foreach (var point in points) {
             var answered = plain.TryDistance(distance: out var expected, material: out var expectedMaterial, position: point);
 
-            Assert.Equal(actual: regional.TryDistance(distance: out var actual, material: out var actualMaterial, position: point), expected: answered);
-            Assert.Equal(actual: actual, expected: expected);
-            Assert.Equal(actual: actualMaterial, expected: expectedMaterial);
+            // A region is recorded by the second walk that reaches it, at each of its four sizes: the walks answer from
+            // the whole stream, then from each tape down to the least region's.
+            for (var walk = 0; (walk < Walks); walk++) {
+                Assert.Equal(actual: regional.TryDistance(distance: out var actual, material: out var actualMaterial, position: point), expected: answered);
+                Assert.Equal(actual: actual, expected: expected);
+                Assert.Equal(actual: actualMaterial, expected: expectedMaterial);
+            }
 
             var hasGradient = plain.TryFieldGradient(gradient: out var expectedGradient, position: point);
 
@@ -174,10 +181,56 @@ public sealed class SdfFieldEvaluatorRegionLawTests {
 
         var program = builder.Build();
         var regional = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact, regional: true);
+        var walked = 0;
 
-        Assert.True(condition: regional.TryDistance(distance: out _, instructionsWalked: out var walked, material: out _, position: At(x: 60.5, y: 13.0, z: 61.0)));
+        for (var walk = 0; (walk < Walks); walk++) {
+            Assert.True(condition: regional.TryDistance(distance: out _, instructionsWalked: out walked, material: out _, position: At(x: 60.5, y: 13.0, z: 61.0)));
+        }
+
         Assert.True(condition: ((walked * 50) < program.Instructions.Count), userMessage: $"A walk beside one shape of {program.Instructions.Count} instructions read {walked}.");
 
         AssertSame(points: Lattice(high: new Vector3(x: 64f, y: 15f, z: 64f), low: new Vector3(x: 56f, y: 9f, z: 56f), steps: 8), program: program);
+    }
+    // A chain that joins by a blend the accumulator's size does not order (an exclusive or) before a join that stands
+    // below the accumulator: what the stream read before the chain still reaches the answer through the first join, so
+    // the second takes nothing over.
+    [Fact]
+    public void AChainThatHasJoinedByAnotherBlendTakesNothingOver() {
+        var builder = new SdfProgramBuilder();
+        var first = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        var second = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitX));
+        var third = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitY));
+
+        _ = builder.ResetPoint().Sphere(material: first, radius: 100f);
+        _ = builder.ResetPoint().Sphere(blend: SdfBlendOp.Xor, material: second, radius: 50f).Translate(offset: new Vector3(value: 8f)).Sphere(material: third, radius: 1f);
+
+        AssertSame(points: Lattice(high: new Vector3(value: 3.5f), low: new Vector3(value: 0.5f), steps: 6).Concat(second: Lattice(high: new Vector3(value: 10f), low: new Vector3(value: 6f), steps: 6)), program: builder.Build());
+    }
+    // The same through a scope: the chain's first join is the scope's pop.
+    [Fact]
+    public void AChainThatHasPoppedAScopeTakesNothingOver() {
+        var builder = new SdfProgramBuilder();
+        var first = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        var second = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitX));
+        var third = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitY));
+
+        _ = builder.ResetPoint().Sphere(material: first, radius: 100f);
+        _ = builder.ResetPoint().PushField(compose: SdfBlendOp.Xor).Sphere(material: second, radius: 50f).PopField().Translate(offset: new Vector3(value: 8f)).Sphere(material: third, radius: 1f);
+
+        AssertSame(points: Lattice(high: new Vector3(value: 3.5f), low: new Vector3(value: 0.5f), steps: 6).Concat(second: Lattice(high: new Vector3(value: 10f), low: new Vector3(value: 6f), steps: 6)), program: builder.Build());
+    }
+    // A chain opened inside a scope, then a join after the scope's pop with no ResetPoint between: a tape keeps a scope's
+    // push with its pop, so the point walk's scope stack stays balanced.
+    [Fact]
+    public void AJoinAfterAPopKeepsTheScopesPush() {
+        var builder = new SdfProgramBuilder();
+        var first = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        var second = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitX));
+
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 100f, y: 0f, z: 0f)).Sphere(material: first, radius: 1f);
+        _ = builder.PushField(compose: SdfBlendOp.Union).ResetPoint().Translate(offset: new Vector3(x: 200f, y: 0f, z: 0f)).Sphere(material: second, radius: 0.5f).PopField();
+        _ = builder.Translate(offset: new Vector3(x: -192f, y: 8f, z: 8f)).Sphere(material: second, radius: 1f);
+
+        AssertSame(points: Lattice(high: new Vector3(value: 10f), low: new Vector3(value: 6f), steps: 6).Concat(second: Lattice(high: new Vector3(x: 102f, y: 2f, z: 2f), low: new Vector3(x: 98f, y: -2f, z: -2f), steps: 4)), program: builder.Build());
     }
 }
