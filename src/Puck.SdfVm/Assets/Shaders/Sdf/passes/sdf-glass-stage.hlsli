@@ -200,16 +200,7 @@ float3 sdfGlassTransmission(SdfMaterialData material, float3 opticalDepth, float
     return exp(-opticalDepth) * unscattered;
 }
 
-[numthreads(8, 8, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID) {
-    uint across = (passGroup.extent.x + 7u) / 8u;
-    uint group = pushedIndex.index + id.x / 8u;
-    id.xy = uint2(group % across, group / across) * 8u + uint2(id.x % 8u, id.y);
-    if (any(id.xy >= passGroup.extent)) {
-        return;
-    }
-
-    uint2 pixel = id.xy;
+void sdfGlassPixel(uint2 pixel) {
     uint2 extent = passGroup.imageExtent;
     float4 color = lit.Load(int3(pixel, 0));
     ViewportData view = worldView();
@@ -492,5 +483,15 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         reactivityRW[index] = max(reactivityRW[index], reactive);
     }
     sdfWorkTexels = 1u;
+}
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID) {
+    uint across = (passGroup.extent.x + 7u) / 8u;
+    uint group = pushedIndex.index + id.x / 8u;
+    id.xy = uint2(group % across, group / across) * 8u + uint2(id.x % 8u, id.y);
+    if (all(id.xy < passGroup.extent)) {
+        sdfGlassPixel(id.xy);
+    }
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

@@ -93,6 +93,10 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             return false;
         }
     }
+    /// <summary>Gets whether the currently published sample was recorded with full GPU kernel work counting enabled.</summary>
+    public bool PublishedKernelCounts => m_snapshots[((int)(Volatile.Read(location: ref m_version) & 1L))].KernelCountsIncluded;
+    /// <summary>Gets the submission identity of the most recently published sample, or zero while none is published.</summary>
+    public long PublishedSubmission => Volatile.Read(location: ref m_published);
     /// <inheritdoc/>
     public string Name { get; }
     /// <inheritdoc/>
@@ -240,14 +244,22 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     /// <param name="readback">The counter buffers the submission's passes count into.</param>
     /// <param name="slot">The readback slot the submission copies its counts into, which it must not share with another
     /// submission in flight.</param>
+    /// <param name="kernelCounts">Whether full per-pass GPU kernel counting was active for this submission (rather than
+    /// detail-only counting).</param>
     /// <exception cref="ArgumentNullException"><paramref name="readback"/> is <see langword="null"/>.</exception>
-    public void ReadOnCompletion(IGpuWorkReadback readback, int slot) {
+    public void ReadOnCompletion(IGpuWorkReadback readback, int slot, bool kernelCounts = true) {
         ArgumentNullException.ThrowIfNull(readback);
 
         var record = OpenRecord();
 
         record.Readback = readback;
         record.ReadbackSlot = slot;
+        record.KernelCounts = kernelCounts;
+    }
+    /// <summary>Marks the open submission as having full GPU kernel counting enabled (including when all passes stood or
+    /// skipped, so no counter buffer readback was needed).</summary>
+    public void MarkKernelCounts() {
+        OpenRecord().KernelCounts = true;
     }
     /// <summary>Marks a pass as not run in the work being recorded, so its sample reads skipped rather than zero.</summary>
     /// <param name="pass">The zero-based pass index in the configured labels.</param>
@@ -452,6 +464,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
                 length: (((passCount + record.Details.Length) + 1) * Columns),
                 start: 0
             ),
+            kernelCountsIncluded: record.KernelCounts,
             labels: record.Labels,
             revision: record.Revision,
             states: record.States.AsSpan(
@@ -484,6 +497,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
 
         public GpuWorkCountingFence? Fence;
         public bool HasPassActivity;
+        public bool KernelCounts;
 
         public string[] Labels = [];
         public GpuWorkDetail[] Details = [];
@@ -516,6 +530,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             ).Clear();
             Fence = null;
             HasPassActivity = false;
+            KernelCounts = false;
             Readback = null;
             State = RecordState.Open;
             Submission = 0L;
