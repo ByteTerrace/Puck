@@ -2624,7 +2624,8 @@ invariant and land beside the rendering work that uses them:
   distance-tiered cadence, and the state-of-the-art audit adds a priority
   accumulator under a per-packet byte budget, authored as a `.puck` program
   ([the transfers packet](open-items.md#transfers-federation-and-server) owns
-  the item). Under `All` an unembodied spectator currently
+  the item, and [replication's decision 6](replication.md#decision-6-interest-and-priority-under-a-byte-budget)
+  its design). Under `All` an unembodied spectator currently
   receives every body. Under `Radius` it receives none. Check 5 in
   [the MMO memo](mmo-foundations/synthesis.md#5-how-the-debug-world-proves-each-favoured-option)
   exercises those cases and a body oscillating at the radius.
