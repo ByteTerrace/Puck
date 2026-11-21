@@ -74,9 +74,27 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         return reseeded;
     }
 
-    // The bounded volumes every live registration's creation authors (CreationDocument.Volumes), rebuilt by
-    // PackTransforms each frame and riding the registration's root or a named shape's dynamic slot.
+    // The bounded volumes every live registration's creation authors (CreationDocument.Volumes), rebuilt in
+    // PackTransforms only when a volume-bearing registration's membership, slot base, isolation or scale moves.
     private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
+    private bool m_volumesDirty = true;
+    private bool m_hasAnyVolumes;
+    private int m_volumesSlotBase = -1;
+    private bool[] m_volumeActive = [];
+    private float[] m_volumeScale = [];
+    private bool[]?[] m_volumeHidden = [];
+
+    /// <summary>Gets a monotonic revision bumped whenever <see cref="Volumes"/> is rebuilt.</summary>
+    public long VolumesRevision { get; private set; }
+    /// <summary>Gets a monotonic revision bumped whenever <see cref="RigidVolumes"/> is rebuilt.</summary>
+    public long RigidVolumesRevision => Rigid.VolumesRevision;
+    /// <summary>Gets a monotonic revision bumped whenever pool registrations reconcile or any live registration's
+    /// active carry pose frame changes.</summary>
+    public long CarryRevision { get; private set; }
+    /// <summary>Gets a monotonic revision bumped whenever pool registrations reconcile or any packed transform moves.</summary>
+    public long PoseRevision { get; private set; }
+    /// <summary>Returns whether the pool holds a live registration (animated or attached) for <paramref name="placementId"/>.</summary>
+    public bool HasPlacementRegistration(string placementId) => m_rowSlots.ContainsKey(key: placementId);
 
     // Latched by Tick, consumed once by the next PackTransforms — the frame delta the pool's root/part followers
     // step by (accumulates across a Tick called more than once before a pack, mirroring the replay clock above).
@@ -120,6 +138,11 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         public readonly DynamicTransform[] ShapeTransforms = new DynamicTransform[rig.ShapeCount];
 
         public DynamicTransform? PackedRoot;
+
+        // Whether the rig reads another body (CreationRigReadKind.Body): its wake hashes that body's pose serial and its
+        // pose may read that body's drawn parts, so it is posed after the pack's fork, never inside it. Set with the
+        // reader index at each reconcile (IndexBodyReaders).
+        public bool ReadsBodies;
 
         // The registration's reads of the client's state mirror: every lane operand, driver signal and gate, pose and
         // effector reference the look reads, bound to BodyIndex so a $body key names the wearing body. Released when
@@ -810,6 +833,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
             picks?.Instances(first: firstInstance, end: builder.InstanceCount, target: live.PickTarget);
         }
         Rigid.Emit(builder, colors, (slotBase + ArticulatedSlotCount), textCatalog, (picks ?? new WorldPickMapBuilder()), Isolation);
+        m_volumesDirty = true;
     }
     /// <summary>Whether a live body-rooted creation look owns the entity's part namespace.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
@@ -919,14 +943,17 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     private void IndexBodyReaders() {
         m_bodyReaders.Clear();
         m_selectedBodyReaders.Clear();
+        m_selectedReadersPack = -1L;
         for (var index = 0; (index < m_poolCount); index++) {
             if (m_pool[index] is not { } live) {
                 continue;
             }
+            live.ReadsBodies = false;
             foreach (var read in live.Rig.Reads) {
                 if (read.Kind != CreationRigReadKind.Body) {
                     continue;
                 }
+                live.ReadsBodies = true;
                 if (read.Reference is not null) {
                     m_selectedBodyReaders.Add(item: (live, read));
 
@@ -939,15 +966,39 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
                 readers.Add(item: live);
             }
         }
+    }
+    // Resolves each selected reader to the body its cell names, once a pack: a rate decision then reads a body's selected
+    // readers by index rather than asking every selected reader for every body it rates. The lists are kept between packs
+    // and cleared, so a pack allocates only for a body no selected reader has named before.
+    private void ResolveSelectedReaders() {
+        if (m_selectedReadersPack == m_packCount) {
+            return;
+        }
 
+        m_selectedReadersPack = m_packCount;
+        foreach (var readers in m_selectedReadersByBody.Values) {
+            readers.Clear();
+        }
+        foreach (var (reader, read) in m_selectedBodyReaders) {
+            if (!reader.View.TryBodyIndex(index: out var body, read: read)) {
+                continue;
+            }
+            if (!m_selectedReadersByBody.TryGetValue(key: body, value: out var readers)) {
+                m_selectedReadersByBody.Add(key: body, value: readers = []);
+            }
+            readers.Add(item: reader);
+        }
     }
 
     // The registrations whose rig reads each body (CreationRigReadKind.Body), by the body read, valid while no reconcile
     // is running: the rate decision rates a read body no slower than its readers.
     private readonly Dictionary<int, List<Registration>> m_bodyReaders = [];
     // The registrations whose rig reads a body a state cell selects, with that read: which body it names is resolved
-    // when a rate is decided, through the reader's own view.
+    // once a pack, through the reader's own view (ResolveSelectedReaders).
     private readonly List<(Registration Reader, CreationRigRead Read)> m_selectedBodyReaders = [];
+    // The selected readers by the body each named at the pack m_selectedReadersPack resolved them for.
+    private readonly Dictionary<int, List<Registration>> m_selectedReadersByBody = [];
+    private long m_selectedReadersPack = -1L;
 
     // Zero denotes an empty entry. Live entries store the pool slot plus one.
     private readonly int[] m_bodySlots = new int[WorldBodiesLimits.CapacityCeiling];
@@ -1104,6 +1155,17 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         }
 
         RefillRootSlotOffsets();
+        var hasVolumes = false;
+        for (var index = 0; (index < m_poolCount); index++) {
+            if (m_pool[index]?.Creation.EngineDocument.Volumes is { Count: > 0 }) {
+                hasVolumes = true;
+                break;
+            }
+        }
+        m_hasAnyVolumes = hasVolumes;
+        m_volumesDirty = true;
+        CarryRevision++;
+        PoseRevision++;
     }
 
     /// <summary>Advances every live replay cursor on the render clock (hold-style: each frame holds

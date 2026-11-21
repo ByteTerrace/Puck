@@ -26,13 +26,13 @@ public sealed class SdfGlassLawTests {
         Shape: ((uint)SdfShapeType.Sphere)
     );
     private static Vector4 Row(SdfProgram program, int material, int row) {
-        var word = ((((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) + (SdfAppearance.MaterialVectorsPerEntry * material) + row) * 4);
+        var word = ((((int)program.CopyWords()[SdfProgram.ProgramMaterialOffsetLane]) + (SdfAppearance.MaterialVectorsPerEntry * material) + row) * 4);
 
         return new Vector4(
-            x: BitConverter.UInt32BitsToSingle(value: program.Words[word]),
-            y: BitConverter.UInt32BitsToSingle(value: program.Words[(word + 1)]),
-            z: BitConverter.UInt32BitsToSingle(value: program.Words[(word + 2)]),
-            w: BitConverter.UInt32BitsToSingle(value: program.Words[(word + 3)])
+            x: BitConverter.UInt32BitsToSingle(value: program.CopyWords()[word]),
+            y: BitConverter.UInt32BitsToSingle(value: program.CopyWords()[(word + 1)]),
+            z: BitConverter.UInt32BitsToSingle(value: program.CopyWords()[(word + 2)]),
+            w: BitConverter.UInt32BitsToSingle(value: program.CopyWords()[(word + 3)])
         );
     }
 

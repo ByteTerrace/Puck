@@ -25,6 +25,12 @@ public readonly record struct WorldScreenState(bool Assigned, string? Engine, ni
     long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault, Server.WorldMachineCartridge? Cartridge = null,
     string? Content = null);
 public sealed partial class WorldScreenBinder {
+    /// <inheritdoc/>
+    public event Action? MachinesChanged {
+        add => m_machines.MachinesChanged += value;
+        remove => m_machines.MachinesChanged -= value;
+    }
+
     /// <summary>Returns the live machine on a screen slot as its audio drain seam, or <see langword="null"/> — a facade over
     /// <see cref="Server.WorldMachineHost.AudioMachine"/>.</summary>
     /// <param name="index">The engine screen-surface index.</param>

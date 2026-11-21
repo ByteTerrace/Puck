@@ -7,7 +7,10 @@ namespace Puck.SdfVm;
 /// matrix must start at the current matrix. The same generation validates GPU visibility and detail history.</summary>
 /// <param name="Generation">The observed cell generation, never zero and never reused by that cell.</param>
 /// <param name="Seed">Whether this observation starts a new surface incarnation at its index.</param>
-public readonly record struct SdfMeshObservation(uint Generation, bool Seed);
+/// <param name="PoseCut">Whether the incarnation's pose history starts over too: a seed for any cause but another
+/// mesh, glass or material frame at the same placement (a tier swap keeps its pose moving continuously). A draw riding
+/// its frame slot takes its previous pose from the slot's previous row, which such a cut seeds.</param>
+public readonly record struct SdfMeshObservation(uint Generation, bool Seed, bool PoseCut = false);
 /// <summary>One staged draw table's history owner. Indices are transient addresses; changing an occupant, mesh or
 /// surface frame starts a new nonzero generation. Retirement releases keys and meshes but preserves generations,
 /// so a later grow/reuse cannot adopt the GPU history still stored for a former occupant.</summary>
@@ -48,8 +51,6 @@ public sealed class SdfMeshHistory {
     public static WorkKind RecordsPacked { get; } = Registry.Declare(name: "sdf.instances.records.packed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts bytes assigned by full or dependency-aware record packing, not device transfer bytes.</summary>
     public static WorkKind RecordBytesPacked { get; } = Registry.Declare(name: "sdf.instances.record-bytes.packed", unit: "bytes", workClass: WorkClass.Pacing);
-    /// <summary>Counts normal-matrix derivations, skipped when the exact upper 3 by 3 matrix stands unchanged.</summary>
-    public static WorkKind NormalMatricesComputed { get; } = Registry.Declare(name: "sdf.instances.normal-matrices.computed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts mesh selection-box derivations, skipped when their geometry, matrix and carry stand unchanged.</summary>
     public static WorkKind SelectionBoxesComputed { get; } = Registry.Declare(name: "sdf.instances.selection-boxes.computed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts incremental draw comparisons, including records whose packed bytes stand unchanged.</summary>
@@ -247,10 +248,11 @@ public sealed class SdfMeshHistory {
 
         if (index >= m_cells.Length) { Array.Resize(array: ref m_cells, newSize: Math.Max(val1: (index + 1), val2: Math.Max(val1: 4, val2: (2 * m_cells.Length)))); }
         ref var cell = ref m_cells[index];
-        var seed = (reseat || !ReferenceEquals(objA: cell.Table, objB: table) || (cell.Occupancy != occupancy) || !Equals(objA: cell.Key, objB: key) || !ReferenceEquals(objA: cell.Mesh, objB: draw.Mesh) ||
-            (cell.FrameSlot != draw.FrameSlot) || (cell.UsesRootMaterialFrame != draw.UsesRootMaterialFrame) || (cell.Dynamic != draw.IsDynamic) || (cell.Glass != draw.Glass) ||
+        var poseCut = (reseat || !ReferenceEquals(objA: cell.Table, objB: table) || (cell.Occupancy != occupancy) || !Equals(objA: cell.Key, objB: key) ||
+            (cell.FrameSlot != draw.FrameSlot) || (cell.Dynamic != draw.IsDynamic) ||
             (cell.Clip != draw.ClipPlane) || (cell.CarryRotation != draw.CarryRotation) ||
             (cell.CarryTranslation != draw.CarryTranslation) || (cell.CarryScale != draw.CarryScale));
+        var seed = (poseCut || !ReferenceEquals(objA: cell.Mesh, objB: draw.Mesh) || (cell.UsesRootMaterialFrame != draw.UsesRootMaterialFrame) || (cell.Glass != draw.Glass));
 
         if (seed) {
             if (cell.Generation == uint.MaxValue) { throw new InvalidOperationException(message: "A staged mesh cell exhausted its generation lifetime; its GPU history cannot safely reuse a token."); }
@@ -272,7 +274,7 @@ public sealed class SdfMeshHistory {
         }
         m_activeCount = Math.Max(val1: m_activeCount, val2: (index + 1));
         ProcessWork.Count(kind: Observed);
-        return new(Generation: cell.Generation, Seed: seed);
+        return new(Generation: cell.Generation, PoseCut: poseCut, Seed: seed);
     }
     /// <summary>Retires a vanished suffix without reusing its generations. Passing zero retires an empty draw list.</summary>
     /// <param name="count">The staged table's current extent, including absent rows with no observed cell.</param>

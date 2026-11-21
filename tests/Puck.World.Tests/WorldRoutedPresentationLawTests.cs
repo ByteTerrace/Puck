@@ -130,7 +130,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         var second = Capture(source: scene.FrameSource);
 
         Assert.NotSame(actual: second.Program, expected: first.Program);
-        Assert.False(condition: first.Program.Words.SequenceEqual(other: second.Program.Words));
+        Assert.False(condition: first.Program.CopyWords().AsSpan().SequenceEqual(other: second.Program.CopyWords()));
         var steady = Capture(source: scene.FrameSource);
 
         Assert.Same(actual: steady.Program, expected: second.Program);
@@ -283,7 +283,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         client.UpdateRenderPoses(alpha: 1f);
         var withoutDepartedSeat = Capture(source: source).Program;
 
-        Assert.True(condition: withDepartedSeat.Words.SequenceEqual(other: withoutDepartedSeat.Words));
+        Assert.True(condition: withDepartedSeat.CopyWords().AsSpan().SequenceEqual(other: withoutDepartedSeat.CopyWords()));
     }
     [Fact]
     public void ASameDocumentAuthorityKeepsItsPoseInTheBootFrame() {
@@ -438,7 +438,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
             actual: Assert.Single(collection: frame.Views),
             expected: view
         );
-        Assert.True(condition: frame.Program.Words.SequenceEqual(other: destinationProgram.Words));
-        Assert.False(condition: frame.Program.Words.SequenceEqual(other: bootProgram.Words));
+        Assert.True(condition: frame.Program.CopyWords().AsSpan().SequenceEqual(other: destinationProgram.CopyWords()));
+        Assert.False(condition: frame.Program.CopyWords().AsSpan().SequenceEqual(other: bootProgram.CopyWords()));
     }
 }

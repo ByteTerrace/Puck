@@ -51,6 +51,12 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     IMachineValidationCatalog ValidationCatalog { get; }
     /// <summary>Gets the declared machine names, including instances without display consumers.</summary>
     IEnumerable<string> InstanceNames { get; }
+    /// <summary>Gets a monotonic revision bumped whenever the live machine instance map or any machine runtime lease
+    /// changes (boot, replacement, removal, checkpoint restore or disposal).</summary>
+    ulong InstanceRevision { get; }
+    /// <summary>Raised when a machine instance is added, replaced, removed, restored or disposed, so audio and screen
+    /// consumers rebind on change instead of polling every frame.</summary>
+    event Action? MachinesChanged;
 
     /// <summary>Reads execution and generation state by instance identity.</summary>
     /// <param name="name">The authored instance name.</param>

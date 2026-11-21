@@ -147,7 +147,7 @@ public sealed class SdfWorldResidencyReportLawTests {
 
         Assert.Equal(
             actual: (residency.LiveProgramWords, residency.LiveProgramInstances, residency.LiveProgramStepScale, residency.LiveProgramStepScaleBinder, residency.LiveVolumes),
-            expected: (program.Words.Length, program.Instances.Count, program.StepScale, program.StepScaleBinder, frame.Volumes.Count)
+            expected: (program.WordCount, program.Instances.Count, program.StepScale, program.StepScaleBinder, frame.Volumes.Count)
         );
         Assert.Equal(
             actual: residency.LiveProgramFieldScopeClamps,

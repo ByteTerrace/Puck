@@ -16,7 +16,7 @@ public sealed partial class SdfProgram {
     public const uint PartLeafCountMask = 0xffffu;
 
     /// <summary>Gets the packed-word reservation including worst-case part-program metadata at this program's
-    /// instruction and instance ceilings. Unlike <see cref="Words"/> length, this does not depend on which parts
+    /// instruction and instance ceilings. Unlike <see cref="WordCount"/>, this does not depend on which parts
     /// qualify for compilation or share geometry. Composition capacity probes reserve this value; their existing
     /// source-table and instance ceilings still govern other changes to the program. Includes auxiliary path-table
     /// reservations requested by SdfProgramBuilder.ReservePathTables without allocating dummy tables.</summary>

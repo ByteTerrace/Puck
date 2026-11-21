@@ -245,9 +245,14 @@ public sealed partial class SdfWorldTables {
         ));
     }
     // Writes the program's words into the program region, which owes only the words that differ from the last program.
-    private void WriteProgramWords(SdfProgram program) =>
+    private void WriteProgramWords(SdfProgram program) {
         _ = m_programRegion.Write(
-            bytes: MemoryMarshal.AsBytes(span: program.Words),
+            bytes: MemoryMarshal.AsBytes(span: program.FieldWords),
             offset: 0
         );
+        _ = m_programRegion.Write(
+            bytes: MemoryMarshal.AsBytes(span: program.ShadingWords),
+            offset: checked((program.FieldWords.Length * sizeof(uint)))
+        );
+    }
 }

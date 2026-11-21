@@ -11,12 +11,6 @@ namespace Puck.World.Client;
 /// chaining carries them.
 /// </content>
 public sealed partial class WorldCreationInstances {
-    // Per-solve scratch, sized to the chain ceiling and reused by every effector of every registration — the solve is
-    // single-threaded on the window-pump thread, and these are what keep PackTransforms allocation-free.
-    private readonly Vector3[] m_solveJoints = new Vector3[CreationEffectorDocument.MaxChainBones];
-    private readonly Quaternion[] m_solveParents = new Quaternion[CreationEffectorDocument.MaxChainBones];
-    private readonly Quaternion[] m_solveCorrections = new Quaternion[CreationEffectorDocument.MaxChainBones];
-
     // Solves every effector of the rig, in declaration order, and folds each bone's correction into that bone's own
     // delta. Returns whether any own delta moved, so the caller re-chains only when a solve actually changed something.
     //
@@ -45,6 +39,11 @@ public sealed partial class WorldCreationInstances {
         );
         var corrected = false;
         var solves = 0;
+        // The solve's scratch, sized to the chain ceiling and owned by this call, so registrations posing on several
+        // threads at once share none and the pack allocates nothing.
+        Span<Vector3> solveJoints = stackalloc Vector3[CreationEffectorDocument.MaxChainBones];
+        Span<Quaternion> solveParents = stackalloc Quaternion[CreationEffectorDocument.MaxChainBones];
+        Span<Quaternion> solveCorrections = stackalloc Quaternion[CreationEffectorDocument.MaxChainBones];
 
         for (var index = 0; (index < effectors.Count); index++) {
             var compiled = effectors[index];
@@ -200,18 +199,9 @@ public sealed partial class WorldCreationInstances {
                 value1: posedTip,
                 value2: goalCreation
             );
-            var joints = m_solveJoints.AsSpan(
-                length: bones,
-                start: 0
-            );
-            var parents = m_solveParents.AsSpan(
-                length: bones,
-                start: 0
-            );
-            var corrections = m_solveCorrections.AsSpan(
-                length: bones,
-                start: 0
-            );
+            var joints = solveJoints[..bones];
+            var parents = solveParents[..bones];
+            var corrections = solveCorrections[..bones];
 
             solves++;
             for (var bone = 0; (bone < bones); bone++) {

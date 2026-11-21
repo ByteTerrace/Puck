@@ -27,49 +27,59 @@ bool sdfHistoryReceiverMatches(uint identity, uint previousIdentity, float previ
         (abs(historyT - previousT) <= (SdfHistoryDepthTolerance * previousT)));
 }
 
-// One row of a draw's matrix in the preceding consumed frame. The previous table holds compact matrices rather than
-// geometry/selection records; callers still pass the current mesh record's address.
-float3 sdfMeshPreviousRow(uint record, uint row) {
-    uint word = (((record / SDF_MESH_DRAW_WORDS) * SDF_MESH_MATRIX_WORDS) + (4u * row));
-
+// The first of a draw's pose words in the preceding consumed frame. The previous table holds compact pose words
+// (SdfMeshRecord.PoseWords) rather than geometry/selection records; callers still pass the current mesh record's address.
+uint sdfMeshPreviousPoseWord(uint record) {
+    return ((record / SDF_MESH_DRAW_WORDS) * SDF_MESH_POSE_WORDS);
+}
+float3 sdfMeshPreviousPoseRow(uint word) {
     return asfloat(uint3(sdfPreviousMeshTransforms[word], sdfPreviousMeshTransforms[(word + 1u)], sdfPreviousMeshTransforms[(word + 2u)]));
 }
-// A rigid draw uses the same geometry and carry in both reconstructions. A pose overlay, skin or displacement
-// can move it independently of its matrix.
+// A draw's pose in the preceding consumed frame, as sdfMeshPoseOf reads its current one: a draw riding its frame slot from
+// the slot's previous row, through the view's overlay, at its previous scale; any other from its previous matrix.
+SdfMeshPose sdfMeshPreviousPoseOf(uint record) {
+    uint word = sdfMeshPreviousPoseWord(record);
+    int slot = asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD));
+    if (slot >= 0) {
+        uint shown = sdfViewPoseSlot((uint)slot);
+        return sdfMeshPoseOfRow(sdfPreviousDynamicTransforms[3u * shown], sdfPreviousDynamicTransforms[3u * shown + 1u],
+            asfloat(sdfPreviousMeshTransforms[word + SDF_MESH_SCALE_WORD]));
+    }
+    return sdfMeshPoseOfRows(sdfMeshPreviousPoseRow(word), sdfMeshPreviousPoseRow(word + 3u), sdfMeshPreviousPoseRow(word + 6u), sdfMeshPreviousPoseRow(word + 9u));
+}
+// A rigid draw uses the same geometry and carry in both reconstructions: its pose words and, for a draw riding its slot,
+// the slot's row stand. A pose overlay, skin or displacement can move it independently of them.
 bool sdfMeshDrawUnmoved(uint record) {
     if ((sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_SKIN_FLAG) != 0u ||
         sdfMeshDisplacementEntry(record) != SDF_FRAME_SAMPLED_NONE) return false;
     uint slot = sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD);
     if (sdfViewPoseSlot(slot) != slot) return false;
-    [unroll] for (uint row = 0u; row < 4u; row++) {
-        if (any(sdfMeshRow(record, row) != sdfMeshPreviousRow(record, row))) return false;
+    uint word = sdfMeshPreviousPoseWord(record);
+    [unroll] for (uint at = 0u; at < SDF_MESH_POSE_WORDS; at++) {
+        if (sdfMeshRecordWord(record + at) != sdfPreviousMeshTransforms[word + at]) return false;
+    }
+    if (asint(slot) >= 0) {
+        if (any(asuint(sdfDynamicTransforms[3u * slot].xyz) != asuint(sdfPreviousDynamicTransforms[3u * slot].xyz)) ||
+            any(asuint(sdfDynamicTransforms[3u * slot + 1u]) != asuint(sdfPreviousDynamicTransforms[3u * slot + 1u]))) return false;
     }
     return true;
 }
 // Where a draw's index `k` stood in the preceding consumed frame: displaced by a height field's previous heights, skinned
-// under its members' previous transforms (sdfMeshSkinPose), then under the draw's previous matrix and its carry, as its
+// under its members' previous transforms (sdfMeshSkinPose), then under the draw's previous pose and its carry, as its
 // current position is (sdfMeshWorldVertex).
 float3 sdfMeshPreviousPosition(uint record, uint k) {
+    SdfMeshPose pose = sdfMeshPreviousPoseOf(record);
     float3 unused = float3(0.0, 1.0, 0.0);
     float3 object = sdfMeshDisplaced(record, sdfMeshObjectPosition(record, k), true, unused);
     if ((sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_SKIN_FLAG) != 0u) {
         SdfMeshSkinSlots slots = sdfMeshSkinSlotsOf(record, sdfMeshIndexAt(record, k));
-        object = sdfMeshSkinPose(slots, object, unused, length(sdfMeshPreviousRow(record, 0u)),
+        object = sdfMeshSkinPose(slots, object, unused, sdfMeshPoseScale(pose),
             sdfPreviousDynamicTransforms[3u * slots.root].xyz, sdfPreviousDynamicTransforms[3u * slots.root + 1u],
             sdfPreviousDynamicTransforms[3u * slots.s0].xyz, sdfPreviousDynamicTransforms[3u * slots.s0 + 1u],
             sdfPreviousDynamicTransforms[3u * slots.s1].xyz, sdfPreviousDynamicTransforms[3u * slots.s1 + 1u]);
     }
 
-    float3 position = ((object.x * sdfMeshPreviousRow(record, 0u)) + (object.y * sdfMeshPreviousRow(record, 1u)) +
-        (object.z * sdfMeshPreviousRow(record, 2u)) + sdfMeshPreviousRow(record, 3u));
-    uint frameSlot = asuint(asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD)));
-    uint shown = sdfViewPoseSlot(frameSlot);
-    if (shown != frameSlot) {
-        sdfViewPoseCarry(sdfPreviousDynamicTransforms[3u * frameSlot].xyz, sdfPreviousDynamicTransforms[3u * frameSlot + 1u],
-            sdfPreviousDynamicTransforms[3u * shown].xyz, sdfPreviousDynamicTransforms[3u * shown + 1u], position, unused);
-    }
-
-    return sdfMeshCarryPoint(record, position);
+    return sdfMeshCarryPoint(record, mul(object, pose.basis) + pose.origin);
 }
 // Returns the point carried by the same mesh triangle in the preceding consumed frame: the visibility record's hit (every
 // hit the surface pass writes is a mesh's) resolved through the mesh hit door, which answers no previous point for a hit

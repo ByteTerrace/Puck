@@ -179,8 +179,9 @@ public sealed partial class WorldCreationInstances {
             if (m_bodyReaders.TryGetValue(key: body, value: out var readers)) {
                 foreach (var reader in readers) { hertz = Math.Max(val1: hertz, val2: ReaderHertz(live: live, reader: reader)); }
             }
-            foreach (var (reader, read) in m_selectedBodyReaders) {
-                if (reader.View.TryBodyIndex(index: out var selected, read: read) && (selected == body)) { hertz = Math.Max(val1: hertz, val2: ReaderHertz(live: live, reader: reader)); }
+            ResolveSelectedReaders();
+            if (m_selectedReadersByBody.TryGetValue(key: body, value: out var selected)) {
+                foreach (var reader in selected) { hertz = Math.Max(val1: hertz, val2: ReaderHertz(live: live, reader: reader)); }
             }
 
             live.RateHertz = hertz;

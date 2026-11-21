@@ -22,7 +22,7 @@ public sealed partial class WorldCostLawTests {
         Assert.Equal(expected: (2, 2), actual: (separate.Shapes, separate.Instances));
         Assert.True(condition: (scoped.OwnedWords >= (program.Instances[0].End * 20)));
         Assert.True(condition: (report.SharedWords >= (80 + 4)));
-        Assert.Equal(expected: program.Words.Length,
+        Assert.Equal(expected: program.WordCount,
             actual: ((report.Placements.Sum(selector: row => row.OwnedWords) + report.OtherInstanceWords) + report.SharedWords));
         Assert.Equal(expected: 0, actual: report.OtherInstanceWords);
         Assert.True(condition: report.Placements.All(predicate: row => !row.Unmaskable));

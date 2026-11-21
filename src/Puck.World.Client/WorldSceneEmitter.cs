@@ -87,6 +87,12 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // the set does: a carried screen draws no slab of its own, so picking it up or putting it down rebuilds the program.
     private uint m_carriedScreens;
     private int m_carriedRevision;
+    private bool m_carriedEvaluated;
+    private int m_carriedDefRevision = int.MinValue;
+    private long m_carriedActiveRevision;
+    private long m_carriedCarryRevision;
+    private WorldScreen[] m_carryableScreens = [];
+    private long m_staticVolumesRevision;
 
     // The catalog-look root follower: a NON-stamp-rendered avatar (a Catalog-sourced look, or a Creation look the
     // stamp pool had no free slot for) whose look names a root Motion.Dynamics row lags the whole avatar toward its
@@ -117,8 +123,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var avatarBodyMaterials = bodyMaterials.Span;
         var avatarAccentMaterials = accentMaterials.Span;
 
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (m_catalog.Slots[index] < 0) { continue; }
+        foreach (var index in m_catalog.Bodies) {
             var (rig, look, color) = CatalogAppearance(index);
             WorldMirroredAvatarBand.EmitPalette(
                 builder: builder, look: look, bodyColor: new DisplayColor(rgb: color), catalogRig: rig,
@@ -157,6 +162,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         WorldPlacementStamper.EmitStatic(builder: builder, definition: client.Definition, creations: creations,
             placements: placements, textCatalog: m_text.Catalog, tintFor: null, volumes: m_staticVolumes,
             meshDraws: meshDraws, colors: m_bakedColors, palettes: m_palettes, picks: m_picks, isolation: m_animator.Isolation, sharedAssets: m_animator.Rigid);
+        m_staticVolumesRevision++;
         m_meshDraws.Static = meshDraws;
 
         m_animator.Emit(
@@ -369,13 +375,13 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// animated/body-rooted stamps follow in the replay pool's range. An avatar repacks only while its presented pose,
     /// or pose epoch moves, or its root follower is still settling; a body that stops drawing
     /// parks its range once. Local seats fire one footstep cue per gait half-cycle.</remarks>
-    public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
+    public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) {
         m_animator.SetCatalogSlots(m_catalog.Slots, context.SlotBase);
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (m_catalog.Slots[index] < 0) { continue; }
+        // The catalog's bodies alone, in body order; a body's rows are owed only when its pose wakes it (Wake).
+        foreach (var index in m_catalog.Bodies) {
             if (!TryPresentedPose(
                 address: out var address,
                 index: index,
@@ -513,34 +519,74 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         destination[(WorldClient.RevisionComponentCount + 3)] = m_continuum.PresentationRevision;
         destination[(WorldClient.RevisionComponentCount + 4)] = m_animator.Isolation.Revision;
 
-        var carried = CarriedScreens();
+        var defRevision = m_client.DefinitionRevision;
+        var activeRevision = m_client.ActiveRevision;
+        var carryRevision = m_animator.CarryRevision;
 
-        if (carried != m_carriedScreens) {
-            m_carriedScreens = carried;
-            m_carriedRevision++;
+        if (!m_carriedEvaluated || (defRevision != m_carriedDefRevision) || (activeRevision != m_carriedActiveRevision) || (carryRevision != m_carriedCarryRevision)) {
+            if (defRevision != m_carriedDefRevision) {
+                RefreshCarryableScreens();
+            }
+
+            m_carriedEvaluated = true;
+            m_carriedDefRevision = defRevision;
+            m_carriedActiveRevision = activeRevision;
+            m_carriedCarryRevision = carryRevision;
+
+            var carried = CarriedScreens();
+
+            if (carried != m_carriedScreens) {
+                m_carriedScreens = carried;
+                m_carriedRevision++;
+            }
         }
 
         destination[(WorldClient.RevisionComponentCount + 5)] = m_carriedRevision;
     }
 
-    // The screens a body carries this frame, one bit per screen index (WorldCreationInstances.TryCarriedScreen).
-    private uint CarriedScreens() {
-        var carried = 0u;
+    private void RefreshCarryableScreens() {
         var screens = m_client.Definition.Screens;
+        var count = 0;
 
-        // Indexed: this runs every frame, and enumerating the interface allocates.
         for (var row = 0; (row < screens.Count); row++) {
             var screen = screens[row];
 
-            if (
-                (screen.Carry is not null) &&
-                (((uint)screen.Index) < SdfProgramBuilder.MaxScreenSurfaces) &&
-                m_animator.TryCarriedScreen(
-                    carried: out _,
-                    client: m_client,
-                    screen: screen
-                )
-            ) {
+            if ((screen.Carry is not null) && (((uint)screen.Index) < SdfProgramBuilder.MaxScreenSurfaces)) {
+                count++;
+            }
+        }
+
+        if (count == 0) {
+            m_carryableScreens = [];
+
+            return;
+        }
+
+        var carryable = new WorldScreen[count];
+        var write = 0;
+
+        for (var row = 0; (row < screens.Count); row++) {
+            var screen = screens[row];
+
+            if ((screen.Carry is not null) && (((uint)screen.Index) < SdfProgramBuilder.MaxScreenSurfaces)) {
+                carryable[write++] = screen;
+            }
+        }
+
+        m_carryableScreens = carryable;
+    }
+    // The screens a body carries this frame, one bit per screen index (WorldCreationInstances.IsCarriedScreen).
+    private uint CarriedScreens() {
+        var carried = 0u;
+        var screens = m_carryableScreens;
+
+        for (var row = 0; (row < screens.Length); row++) {
+            var screen = screens[row];
+
+            if (m_animator.IsCarriedScreen(
+                client: m_client,
+                screen: screen
+            )) {
                 carried |= (1u << screen.Index);
             }
         }
@@ -619,6 +665,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 6);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
+    /// <summary>Gets a monotonic revision bumped whenever <see cref="StaticVolumes"/> is rebuilt.</summary>
+    public long StaticVolumesRevision => m_staticVolumesRevision;
     /// <inheritdoc/>
     /// <remarks>One draw per static placement instance of a prototype that carries a mesh, from the last static
     /// rebuild, then the stamp pool's (<see cref="WorldCreationInstances.MeshDraws"/>): an animated, inhabited or attached

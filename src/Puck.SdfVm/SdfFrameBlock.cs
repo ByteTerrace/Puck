@@ -103,11 +103,11 @@ public static partial class SdfFrameBlock {
     // the instance's temporal sample and the preceding view, laid out by this one writer and copied by name, so every pass
     // reads them as the world passes do.
     internal static void WriteInto(Span<byte> passBlock, ReadOnlySpan<Copy> copies, in SdfPassValues tables, SdfFrame frame, int view,
-        uint width, uint height, SdfTemporalHistory temporal, bool temporalEnabled, SdfWorldResidency residency) {
+        uint width, uint height, SdfTemporalHistory temporal, bool temporalEnabled, SdfWorldResidency residency, UInt128? lightMask = null) {
         Span<byte> block = stackalloc byte[SizeBytes];
 
         block.Clear();
-        Write(block: block, tables: tables, frame: frame, view: view, width: width, height: height);
+        Write(block: block, tables: tables, frame: frame, view: view, width: width, height: height, lightMask: lightMask);
         WriteMeshIrradiance(block: block, volume: residency.MeshIrradianceParameters);
         WriteTemporal(block: block, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: temporalEnabled);
         WritePreviousView(block: block, view: temporal.PreviousView, valid: temporal.HasPreviousView);
@@ -186,8 +186,10 @@ public static partial class SdfFrameBlock {
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>
     /// <param name="width">The view's render width, in pixels.</param>
     /// <param name="height">The view's render height, in pixels.</param>
+    /// <param name="lightMask">The view's preselected light mask (<see cref="SdfWorldTables.LightMaskOf"/>), or
+    /// <see langword="null"/> to select lights from <paramref name="frame"/> directly.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
-    public static void Write(Span<byte> block, in SdfPassValues tables, SdfFrame frame, int view, uint width, uint height) {
+    public static void Write(Span<byte> block, in SdfPassValues tables, SdfFrame frame, int view, uint width, uint height, UInt128? lightMask = null) {
         ArgumentNullException.ThrowIfNull(argument: frame);
         SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Blocks);
 
@@ -225,7 +227,14 @@ public static partial class SdfFrameBlock {
         var curvature = lights.Curvature;
 
         WriteUInt32(block: block, offset: LightCount, value: ((uint)lights.Count));
-        var mask = SdfLightSelection.Select(camera: in camera, far: frame.FarDistance, lights: lights);
+        UInt128 mask;
+
+        if (lightMask is { } selected) {
+            mask = selected;
+        } else {
+            SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.LightSelections);
+            mask = SdfLightSelection.Select(camera: in camera, far: frame.FarDistance, lights: lights);
+        }
 
         for (var word = 0; (word < 4); word++) {
             WriteUInt32(block: block, offset: (LightMask + (word * sizeof(uint))), value: ((uint)(mask >> (32 * word))));

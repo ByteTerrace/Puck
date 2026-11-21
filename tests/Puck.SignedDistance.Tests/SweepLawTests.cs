@@ -578,7 +578,7 @@ public sealed class SweepLawTests {
             strandOffset: orbit,
             strands: strands,
             twist: twist
-        ).Words;
+        ).CopyWords();
         var bound = SweepBound(words: words);
         var center = new Vector3(
             x: bound.X,
@@ -699,7 +699,7 @@ public sealed class SweepLawTests {
                     RadiusEnd: 0.1f,
                     Bulge: 0f
                 )]
-        ).Words;
+        ).CopyWords();
         var shapeBound = checked((((int)((words[2] + (2u * words[0])) + (2u * ((uint)shapeIndex)))) * 4));
 
         Assert.Equal(

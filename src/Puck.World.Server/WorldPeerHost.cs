@@ -478,12 +478,18 @@ public sealed class WorldPeerHost : IDisposable {
                     return;
                 }
                 var federationAuthority = identityProof.Authority;
+                var currentProof = identityProof;
                 var hadArrivalAdmission = WorldAdmissionDoor.TryAdmitArrival(verifiedPolicy, federationAuthority, out _) is null;
                 async ValueTask<VerifiedPeerIdentity?> ReverifyAsync(IReadOnlyList<WorldAdmissionEntry>? policy, CancellationToken token) {
-                    if (hadArrivalAdmission && WorldAdmissionDoor.TryAdmitArrival(policy, federationAuthority, out _) is not null) { return null; }
-                    if (identityProof.TrustIsCurrent?.Invoke() != false) { return identityProof; }
+                    var admittedNow = WorldAdmissionDoor.TryAdmitArrival(policy, federationAuthority, out _) is null;
+                    if (hadArrivalAdmission && !admittedNow) { return null; }
+                    hadArrivalAdmission |= admittedNow;
+                    var latest = Volatile.Read(ref currentProof);
+                    if (latest.TrustIsCurrent?.Invoke() != false) { return latest; }
                     var next = await m_authenticator.VerifyAsync(boundChallenge, federationProof, token).ConfigureAwait(false);
-                    return next?.Authority == federationAuthority ? next : null;
+                    if (next?.Authority != federationAuthority) { return null; }
+                    Volatile.Write(ref currentProof, next);
+                    return next;
                 }
                 using var credential = new Credential(this, verifiedPolicy, identityProof, ReverifyAsync, ct);
 
@@ -599,6 +605,8 @@ public sealed class WorldPeerHost : IDisposable {
             // mutation/rebuild that never touches Admission leaves this reference unchanged; one that does mints a
             // new list — see WorldServer.TryAdmitPeerConnection's own remarks on this parameter).
             var admissionEntriesAtVerify = m_server.Definition.Admission;
+            var clientKeyHash = client.Link.RemoteId.KeyHash;
+            var serverKeyHash = m_network.Peer.Id.KeyHash;
 
             Puck.Attestation.SignedAttestation claimAttestation;
             Puck.Attestation.SignedAttestation[] chainAttestations;
@@ -614,6 +622,8 @@ public sealed class WorldPeerHost : IDisposable {
                 outcome = WorldAdmissionDoor.TryAdmit(
                     entries: admissionEntriesAtVerify,
                     challenge: challenge,
+                    clientKeyHash: clientKeyHash,
+                    serverKeyHash: serverKeyHash,
                     claim: claimAttestation,
                     chain: chainAttestations,
                     now: m_timeProvider.GetUtcNow()
@@ -638,9 +648,17 @@ public sealed class WorldPeerHost : IDisposable {
                 return;
             }
 
+            Connection? activeConnection = null;
+            var initialTrustIdentity = outcome.Verdict!.TrustIdentity;
             using var peerCredential = new Credential(this, admissionEntriesAtVerify, new(outcome.Domain!, outcome.ValidThrough), (policy, _) => {
-                var next = WorldAdmissionDoor.TryAdmit(policy, challenge, claimAttestation, chainAttestations, m_timeProvider.GetUtcNow());
-                return new ValueTask<VerifiedPeerIdentity?>(next.Admitted ? new VerifiedPeerIdentity(next.Domain!, next.ValidThrough) : null);
+                var next = WorldAdmissionDoor.TryAdmit(policy, challenge, clientKeyHash, serverKeyHash, claimAttestation, chainAttestations, m_timeProvider.GetUtcNow());
+                if (!next.Admitted || (next.Verdict!.TrustIdentity != initialTrustIdentity)) {
+                    return new ValueTask<VerifiedPeerIdentity?>(result: null);
+                }
+                if (Volatile.Read(location: ref activeConnection) is { } live) {
+                    live.Tier = next.Tier;
+                }
+                return new ValueTask<VerifiedPeerIdentity?>(result: new VerifiedPeerIdentity(next.Domain!, next.ValidThrough));
             }, ct);
 
             // Population/grant admission runs through the ordered-domain path, fed the verified identity's own
@@ -686,6 +704,7 @@ public sealed class WorldPeerHost : IDisposable {
                 tier: outcome.Tier,
                 credential: peerCredential
             );
+            Volatile.Write(location: ref activeConnection, value: connection);
 
             lock (m_connectionsLock) {
                 m_connections.Add(item: connection);
@@ -843,7 +862,9 @@ public sealed class WorldPeerHost : IDisposable {
         }, credential.Token);
 
     private Task<Principal?> TransferredPrincipalAsync(Credential credential, WorldMobilityIdentity mobility, string sourceAuthority) =>
-        ExecuteAuthenticatedAsync<Principal?>(credential, () => m_server.TryTransferredPrincipal(sourceAuthority, mobility, out var principal) ? principal : null);
+        ExecuteAuthenticatedAsync<Principal?>(credential, () =>
+            ((WorldAdmissionDoor.TryAdmitArrival(m_server.Definition.Admission, sourceAuthority, out _) is null) &&
+            m_server.TryTransferredPrincipal(sourceAuthority, mobility, out var principal)) ? principal : null);
 
     // A destination asks this authority, as a companion's title authority, whether a hop is currently granted to it.
     // The destination is the namespace this connection authenticated as, never one the body names.
@@ -1708,7 +1729,9 @@ public sealed class WorldPeerHost : IDisposable {
                     return;
                 }
                 var (resolved, accepted) = await ExecuteAuthenticatedAsync(credential, () =>
-                    WorldLocalForwardedAuthority.TryApplyIntent(m_server, sourceAuthority, in mobility, leaseId, in submission)
+                    (WorldAdmissionDoor.TryAdmitArrival(m_server.Definition.Admission, sourceAuthority, out _) is null)
+                        ? WorldLocalForwardedAuthority.TryApplyIntent(m_server, sourceAuthority, in mobility, leaseId, in submission)
+                        : (null, false)
                 ).ConfigureAwait(false);
                 if (resolved is not { } stamped) {
                     await WriteFederationRefusal(
@@ -1731,12 +1754,14 @@ public sealed class WorldPeerHost : IDisposable {
                         mobility: mobility
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     credential.RequireValid();
-                    accepted = await ExecuteAuthenticatedAsync(credential, () => forwarder.TryForwardIntent(
-                        mobility: in mobility,
-                        reason: out reason,
-                        source: m_server,
-                        submission: in stamped
-                    )).ConfigureAwait(false);
+                    accepted = await ExecuteAuthenticatedAsync(credential, () =>
+                        (WorldAdmissionDoor.TryAdmitArrival(m_server.Definition.Admission, sourceAuthority, out _) is null) &&
+                        forwarder.TryForwardIntent(
+                            mobility: in mobility,
+                            reason: out reason,
+                            source: m_server,
+                            submission: in stamped
+                        )).ConfigureAwait(false);
                 }
 
                 if (!accepted) {
@@ -2030,6 +2055,7 @@ public sealed class WorldPeerHost : IDisposable {
     private sealed class Connection(int id, int peerIndex, int generation, PeerStream client, Stream stream, string remoteEndpoint, string identityDomain, string identitySubject, WorldDisclosureTier tier, Credential credential) {
         private long m_correlationId;
         private long m_sequence;
+        private int m_tier = ((int)tier);
 
         public int Id { get; } = id;
         public int PeerIndex { get; } = peerIndex;
@@ -2039,7 +2065,10 @@ public sealed class WorldPeerHost : IDisposable {
         public string RemoteEndpoint { get; } = remoteEndpoint;
         public string IdentityDomain { get; } = identityDomain;
         public string IdentitySubject { get; } = identitySubject;
-        public WorldDisclosureTier Tier { get; } = tier;
+        public WorldDisclosureTier Tier {
+            get => ((WorldDisclosureTier)Volatile.Read(location: ref m_tier));
+            set => Volatile.Write(location: ref m_tier, value: ((int)value));
+        }
         public Credential Credential { get; } = credential;
 
         public Principal Principal => Principal.Peer(

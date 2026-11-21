@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Hosting.Jobs;
 using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance;
@@ -8,6 +9,18 @@ using Puck.World.Protocol;
 namespace Puck.World.Client;
 
 public sealed partial class WorldCreationInstances {
+    /// <summary>Initializes a new instance of the <see cref="WorldCreationInstances"/> class.</summary>
+    /// <param name="jobs">The pool each <see cref="PackTransforms"/> forks its registrations' full poses across, or
+    /// <see langword="null"/> to pose them on the calling thread.</param>
+    public WorldCreationInstances(JobPool? jobs = null) {
+        Jobs = jobs;
+        m_posePartitions = new PosePartitions(owner: this);
+    }
+
+    /// <summary>Gets the pool the pose pack forks across, or <see langword="null"/> when it poses on the calling thread;
+    /// a presentation that builds pools of its own (a session's, a routed scene's) hands them this one.</summary>
+    public JobPool? Jobs { get; }
+
     private readonly WorldTransformOwners m_owners = new(capacity: 0);
     // The registration each pool entry was last packed for: a swapped registration repacks and parks its unused slots.
     private Registration?[] m_packedRegistrations = [];
@@ -130,6 +143,14 @@ public sealed partial class WorldCreationInstances {
     /// A registration repacks only while restless: its root pose, pose epoch, body facts or replay cursor moved, a
     /// state mirror slot its reads hold (lanes, drivers, poses, effectors) changed, or its last repack still changed
     /// its slots. Every live registration's volumes are appended each frame.
+    /// </para>
+    /// <para>
+    /// The pack runs in three passes. A serial pass decides, in pool order, which registrations park, retain, hold or
+    /// pose in full; the full poses then run across <see cref="Jobs"/> as one <see cref="JobClass.Frame"/> fork, a
+    /// partition a registration, each writing only its own registration's state and slot range; a last serial pass
+    /// settles every registration in pool order. A registration whose rig reads another body
+    /// (<see cref="CreationRigReadKind.Body"/>) is decided and posed in that last pass, so it reads every body it may read
+    /// as this frame posed it.
     /// </para></summary>
     /// <param name="transforms">The unified dynamic-transform table (the pool writes its own slot range).</param>
     /// <param name="client">The client whose interpolated body poses root the body-rooted and attached stamps.</param>
@@ -138,263 +159,109 @@ public sealed partial class WorldCreationInstances {
     /// emitter that owns the pool (see <see cref="Emit"/>).</param>
     /// <param name="parkPosition">Where an unused slot — or an attached row whose target body is not live this
     /// frame — parks, hidden below the floor (<see cref="SdfEmitContext.ParkPosition"/>).</param>
-    public void PackTransforms(Span<DynamicTransform> transforms, IWorldStampSource client, SdfMovedTransforms moved, int slotBase, Vector3 parkPosition) {
+    /// <exception cref="ArgumentNullException"><paramref name="transforms"/>, <paramref name="client"/> or
+    /// <paramref name="moved"/> is <see langword="null"/>.</exception>
+    public void PackTransforms(DynamicTransform[] transforms, IWorldStampSource client, SdfMovedTransforms moved, int slotBase, Vector3 parkPosition) {
+        ArgumentNullException.ThrowIfNull(argument: transforms);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: moved);
 
         m_packedSlotBase = slotBase;
-        m_volumes.Clear();
+        var volumesNeedRebuild = (m_volumesDirty || (slotBase != m_volumesSlotBase));
+        if (m_hasAnyVolumes && (m_volumeActive.Length < m_poolCount)) {
+            m_volumeActive = new bool[m_poolCount];
+            m_volumeScale = new float[m_poolCount];
+            m_volumeHidden = new bool[]?[m_poolCount];
+            volumesNeedRebuild = true;
+        }
+        m_packVolumesChanged = false;
+        m_packPoseMoved = false;
         m_slotClipRun.Clear();
         m_slotClipBodies.Clear();
         m_packCount++;
         BeginRateCodes(slotBase: slotBase);
 
         var doors = WorldPortalStraddle.Doors(definition: client.Definition);
-
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
+        if (m_steps.Length < m_poolCount) {
+            Array.Resize(array: ref m_steps, newSize: m_poolCount);
+            Array.Resize(array: ref m_poseOrder, newSize: m_poolCount);
+        }
+
+        var poses = 0;
 
         for (var index = 0; (index < m_poolCount); index++) {
-            var rootSlot = (slotBase + RootSlotOffset(index: index));
-            var slots = SlotsAt(index: index);
-            var live = m_pool[index];
-
-            // An attached row whose body is not active contributes nothing this frame — the presentation mirror of
-            // WorldPlacementAttachment.TryResolve's inactive-body verdict (which world.attachments echoes by reason).
-            // The registration keeps its slot: occupancy changes tick to tick and a rebuild is not owed for one. The
-            // range test is a belt-and-braces guard, not a live gap: WorldBodiesLimits.CapacityCeiling is
-            // WorldClient.EntityCapacity, so the document validator's bound on population.capacity already keeps
-            // every body index inside this client's view.
-            if (
-                (live is { Row.Attach: { } parked }) &&
-                ((((uint)parked.BodyIndex) >= ((uint)WorldClient.EntityCapacity)) || !client.IsActive(index: parked.BodyIndex))
-            ) {
-                // A parked row is drawn nowhere, so it rates no body it reads (ReaderHertz reads PackedRoot).
-                live.PackedRoot = null;
-                live = null;
-            }
-
-            if (live is null) {
-                m_packedRegistrations[index] = null;
-                SetMeshDraw(
-                    draw: null,
-                    index: index
-                );
-
-                if (m_owners.Vacate(
-                    moved: moved,
-                    owner: index
-                )) {
-                    WorldTransformOwners.Park(
-                        count: slots,
-                        moved: moved,
-                        parkPosition: parkPosition,
-                        start: rootSlot,
-                        table: transforms
-                    );
-                }
+            if (m_pool[index] is { ReadsBodies: true }) {
+                m_steps[index].Stage = PackStage.Deferred;
 
                 continue;
             }
 
-            WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Visited);
-            var (rootPosition, rootRotation, placementScale) = RootPose(
-                client: client,
-                live: live
-            );
-            var document = live.Creation.EngineDocument;
-            var shapeCount = (document.Shapes?.Count ?? 0);
-
-            if (m_partSpheres.Length < shapeCount) { Array.Resize(array: ref m_partSpheres, newSize: shapeCount); }
-            // The root, the shapes, and the slot text baked apart rides (TextApart).
-            var packedSlots = live.Slots;
-
-            if (
-                !moved.Everything &&
-                !ReferenceEquals(
-                objA: m_packedRegistrations[index],
-                objB: live
-            )
-            ) {
-                WorldTransformOwners.Park(
-                    count: (slots - packedSlots),
-                    moved: moved,
-                    parkPosition: parkPosition,
-                    start: (rootSlot + packedSlots),
-                    table: transforms
-                );
+            BeginStep(client: client, deltaSeconds: deltaSeconds, index: index, moved: moved, parkPosition: parkPosition, slotBase: slotBase, transforms: transforms);
+            if (m_steps[index].Stage == PackStage.Posed) {
+                m_poseOrder[poses++] = index;
             }
-
-            var packedBefore = ReferenceEquals(objA: m_packedRegistrations[index], objB: live);
-            var posed = false;
-            var woken = Wake(
-                client: client,
-                deltaSeconds: deltaSeconds,
-                index: index,
-                live: live,
-                moved: moved,
-                rootPosition: rootPosition,
-                rootRotation: rootRotation
-            );
-
-            NoteMotion(live: live, rootPosition: rootPosition, rootRotation: rootRotation);
-            if (woken || live.RateOwed) {
-                // A pose holds between its rated packs, except on the frame its slots change owner or the whole table is
-                // owed (WorldCreationInstances.Rates, whose one decision gives a placed creation only the held tier).
-                var mayHold = (
-                    packedBefore &&
-                    (document.SizeBy is null) &&
-                    !moved.Everything &&
-                    !m_owners.Reseats(owner: index) &&
-                    // A held pose carries its slots rigidly, so a registration whose scale changed packs in full.
-                    (transforms[rootSlot].Scale == placementScale) &&
-                    // A rig with no finite reach cannot be judged unseen by its sphere, so a changed read poses it in
-                    // full: a part the read moves may be the one a view would see.
-                    (float.IsFinite(f: live.Rig.Reach) || (live.WakeRevision == live.ReadRevision))
-                );
-
-                if (!mayHold) {
-                    ForgetPhase(live: live);
-                }
-
-                // A body that starts moving poses on the frame it starts, whatever tier its rest held it at (StartsMoving).
-                var holds = (mayHold && !StartsMoving(live: live) && HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, placementScale: placementScale, radius: RateReach(live: live, placementScale: placementScale)));
-                // A held pose whose root has not moved moves no slot, so nothing is carried or compared.
-                var (heldPosition, heldRotation) = (rootPosition, rootRotation);
-                var still = false;
-                // Whether this pack changed a slot: every write goes through SdfMovedTransforms.Write, which compares as
-                // it writes, so the pack keeps no copy of the slots it rewrites.
-                var slotsMoved = false;
-
-                if (holds) {
-                    (heldPosition, heldRotation) = FollowHeldRoot(deltaSeconds: deltaSeconds, live: live, rootPosition: rootPosition, rootRotation: rootRotation);
-                    still = HeldRootStill(root: in transforms[rootSlot], rootPosition: heldPosition, rootRotation: heldRotation);
-                }
-
-                if (holds) {
-                    if (!still) {
-                        slotsMoved = CarryPose(
-                            live: live,
-                            packedSlots: packedSlots,
-                            rootPosition: heldPosition,
-                            rootRotation: heldRotation,
-                            rootSlot: rootSlot,
-                            transforms: transforms
-                        );
-                    }
-                    live.RateSeconds += deltaSeconds;
-                    live.RateOwed = true;
-                    m_rateCounts?.Count(kind: ((live.BodyIndex is not null) ? SdfUpdateRateCounts.BodiesHeld : SdfUpdateRateCounts.PlacementsHeld));
-                    WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.RateHeld);
-                    WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsRetained);
-                } else {
-                    // A pose held while nothing could show it resumes as a continuity cut: its followers, plants and
-                    // drivers relatch where the body is now, as after a teleport, rather than advancing over every
-                    // second it held.
-                    var unseen = (live.RateSlowest == SdfUpdateRateTiers.HeldHertz);
-
-                    if (unseen) {
-                        live.RootEpoch = -1;
-                    }
-
-                    WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Posed);
-                    WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsPosed);
-                    var elapsedSeconds = (live.RateSeconds + deltaSeconds);
-
-                    slotsMoved = PackRegistration(
-                        client: client,
-                        deltaSeconds: (unseen ? deltaSeconds : (live.RateSeconds + deltaSeconds)),
-                        live: live,
-                        parkPosition: parkPosition,
-                        placementScale: placementScale,
-                        rootDeltaSeconds: deltaSeconds,
-                        rootPosition: rootPosition,
-                        rootRotation: rootRotation,
-                        rootSlot: rootSlot,
-                        shapeCount: shapeCount,
-                        transforms: transforms
-                    );
-                    RecordPose(deltaSeconds: deltaSeconds, live: live);
-                    live.ReadRevision = live.WakeRevision;
-                    if (slotsMoved) { live.PoseSerial++; }
-                    WidenMotionReach(live: live, placementScale: placementScale, rootPosition: transforms[rootSlot].Position, shapeCount: shapeCount, transforms: transforms, rootSlot: rootSlot);
-                    // A pack that may not hold (a new owner, a reseat, a scale change, the whole table owed) or that
-                    // resumes an unseen hold is a cut the part speed is not measured across.
-                    MeasurePartSpeed(continuous: (mayHold && !unseen), elapsedSeconds: elapsedSeconds, live: live, root: in transforms[rootSlot], shapeCount: shapeCount);
-                    PosedMotion(live: live, rootPosition: rootPosition, rootRotation: rootRotation);
-                    m_rateCounts?.Count(kind: ((live.BodyIndex is not null) ? SdfUpdateRateCounts.BodiesPosed : SdfUpdateRateCounts.PlacementsPosed));
-                    posed = true;
-                    live.RateSeconds = 0f;
-                    live.RateOwed = false;
-                }
-                m_owners.Settle(
-                    deltaSeconds: deltaSeconds,
-                    moved: (!still && moved.Commit(
-                    count: packedSlots,
-                    moved: slotsMoved,
-                    reseat: m_owners.Reseats(owner: index),
-                    start: rootSlot
-                )),
-                    owner: index
-                );
-            } else {
-                WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Retained);
-                WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsRetained);
-            }
-
-            NoteRate(center: rootPosition, live: live, packedSlots: packedSlots, placementScale: placementScale, posed: posed, radius: RateReach(live: live, placementScale: placementScale), rootSlot: rootSlot);
-            live.PackedRoot = transforms[rootSlot];
-            placementScale = transforms[rootSlot].Scale;
-            AppendVolumes(
-                document: document,
-                hidden: live.Hidden,
-                live: live,
-                placementScale: placementScale,
-                rootSlot: rootSlot
-            );
-
-            // A body straddling a portal whose counterpart stands in this world is drawn on both sides of it. The rest
-            // bound screens out the bodies nowhere near a door; the posed parts decide.
-            if (
-                (live.BodyIndex is { } straddler) &&
-                (doors.Count > 0) &&
-                (WorldPortalStraddle.Clip(
-                    center: transforms[rootSlot].Position,
-                    doors: doors,
-                    firstSlot: rootSlot,
-                    radius: (ReachOf(live: live) * placementScale),
-                    slotCount: slots
-                ) is not null) &&
-                (WorldPortalStraddle.Clip(
-                    doors: doors,
-                    firstSlot: rootSlot,
-                    slotCount: slots,
-                    spheres: m_partSpheres.AsSpan(start: 0, length: PartSpheres(live: live, placementScale: placementScale, rootSlot: rootSlot, shapeCount: shapeCount, transforms: transforms))
-                ) is { } clip)
-            ) {
-                m_slotClipRun.Add(item: clip);
-                m_slotClipBodies.Add(item: straddler);
-            }
-
-            // The root slot holds the pose the shapes were packed under, followers included, whether or not this frame
-            // repacked it.
-            SetMeshDraw(
-                draw: ((live.Mesh is { } mesh)
-                    ? WorldPlacementStamper.MeshDrawOf(
-                        identity: live,
-                        material: live.MeshMaterial,
-                        mesh: mesh,
-                        origin: transforms[rootSlot].Position,
-                        rotation: transforms[rootSlot].Orientation,
-                        scale: placementScale
-                    ) with { IsDynamic = true, FrameSlot = rootSlot, UsesRootMaterialFrame = false }
-                    : null),
-                index: index
-            );
         }
 
+        m_posePartitions.Begin(client: client, deltaSeconds: deltaSeconds, parkPosition: parkPosition, transforms: transforms);
+        try {
+            if (Jobs is { } jobs) {
+                jobs.Fork(body: m_posePartitions, jobClass: JobClass.Frame, partitions: poses);
+            } else {
+                for (var partition = 0; (partition < poses); partition++) {
+                    m_posePartitions.Run(partition: partition);
+                }
+            }
+        } finally {
+            m_posePartitions.End();
+        }
+        WorldCreationWork.ProcessWork.Add(amount: poses, kind: WorldCreationWork.Forked);
+
+        for (var index = 0; (index < m_poolCount); index++) {
+            if (m_steps[index].Stage == PackStage.Deferred) {
+                BeginStep(client: client, deltaSeconds: deltaSeconds, index: index, moved: moved, parkPosition: parkPosition, slotBase: slotBase, transforms: transforms);
+                if (m_steps[index].Stage == PackStage.Posed) {
+                    Pose(client: client, deltaSeconds: deltaSeconds, index: index, parkPosition: parkPosition, transforms: transforms);
+                }
+            }
+
+            EndStep(deltaSeconds: deltaSeconds, doors: doors, index: index, moved: moved, transforms: transforms);
+        }
+
+        if (volumesNeedRebuild || m_packVolumesChanged) {
+            if (m_hasAnyVolumes || (m_volumes.Count > 0)) {
+                m_volumes.Clear();
+                if (m_hasAnyVolumes) {
+                    for (var index = 0; (index < m_poolCount); index++) {
+                        if (!m_volumeActive[index] || (m_pool[index] is not { } live) || (live.PackedRoot is null)) {
+                            continue;
+                        }
+
+                        var rootSlot = (slotBase + RootSlotOffset(index: index));
+
+                        AppendVolumes(
+                            document: live.Creation.EngineDocument,
+                            hidden: live.Hidden,
+                            live: live,
+                            placementScale: m_volumeScale[index],
+                            rootSlot: rootSlot
+                        );
+                    }
+                }
+                VolumesRevision++;
+            }
+            m_volumesSlotBase = slotBase;
+            m_volumesDirty = false;
+        }
+
+        var rigidPoseBefore = Rigid.PoseRevision;
+
         Rigid.Pack(transforms, client, (slotBase + ArticulatedSlotCount), deltaSeconds);
+        if (m_packPoseMoved || (Rigid.PoseRevision != rigidPoseBefore)) {
+            PoseRevision++;
+        }
         PackGuess(client: client, deltaSeconds: deltaSeconds, moved: moved, parkPosition: parkPosition, slotBase: slotBase, transforms: transforms);
         WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Packs);
         EndRateCodes();
@@ -439,6 +306,378 @@ public sealed partial class WorldCreationInstances {
             m_meshDrawsRevision++;
             m_meshDrawsChanged = false;
         }
+    }
+
+    // What the first serial pass decided for a pool entry this pack.
+    private enum PackStage : byte {
+        // No live registration: its slots were vacated.
+        Vacant,
+        // Nothing it reads moved and it owes no rated pack: its slots stand.
+        Retained,
+        // Its tier holds its pose: its slots rode its root.
+        Held,
+        // It poses in full, in the fork or, deferred, in the last pass.
+        Posed,
+        // Its rig reads another body, so the last pass decides it.
+        Deferred,
+    }
+    // One pool entry's pack between its passes: what the first pass decided and read, and what its pose changed.
+    private struct PackStep {
+        public PackStage Stage;
+        public int RootSlot;
+        public int Slots;
+        public int PackedSlots;
+        public int ShapeCount;
+        public Vector3 RootPosition;
+        public Quaternion RootRotation;
+        public float PlacementScale;
+        // Whether the pose could have held (the cut test MeasurePartSpeed reads) and whether it resumes an unseen hold.
+        public bool MayHold;
+        public bool Unseen;
+        // A held pose whose root stood still, which owes nothing.
+        public bool Still;
+        public bool SlotsMoved;
+        // Whether the full pose switched the registration's active pose frame (CarryRevision).
+        public bool PoseFrameChanged;
+        // The seconds the full pose advances its drivers by, and the seconds since its previous full pose.
+        public float PoseSeconds;
+        public float ElapsedSeconds;
+    }
+
+    // What the serial passes learned this pack, folded into the volume list and PoseRevision after them. Only BeginStep
+    // and EndStep write them, never a pose partition.
+    private bool m_packVolumesChanged;
+    private bool m_packPoseMoved;
+
+    private PackStep[] m_steps = [];
+    // The pool entries the first pass found posing in full, in pool order: partition i poses m_poseOrder[i].
+    private int[] m_poseOrder = [];
+
+    // The pose fork's partitions: one registration's full pose each. Every partition writes only its registration
+    // (its fields, its effectors' held answers, its pack step) and that registration's slot range of the table, and
+    // reads the client, the definition and the state mirror, which nothing writes during the fork but a lease's first
+    // acquisition of a slot, which the mirror serializes (WorldStateMirror.Acquire). A rig that reads another body is
+    // never in the fork, so no partition reads another registration's pose.
+    private sealed class PosePartitions(WorldCreationInstances owner) : Puck.Hosting.Jobs.IJobPartitions {
+        private IWorldStampSource? m_client;
+        private DynamicTransform[] m_transforms = [];
+        private float m_deltaSeconds;
+        private Vector3 m_parkPosition;
+
+        public void Begin(IWorldStampSource client, float deltaSeconds, Vector3 parkPosition, DynamicTransform[] transforms) {
+            m_client = client;
+            m_deltaSeconds = deltaSeconds;
+            m_parkPosition = parkPosition;
+            m_transforms = transforms;
+        }
+        public void End() {
+            m_client = null;
+            m_transforms = [];
+        }
+        public void Run(int partition) => owner.Pose(
+            client: m_client!,
+            deltaSeconds: m_deltaSeconds,
+            index: owner.m_poseOrder[partition],
+            parkPosition: m_parkPosition,
+            transforms: m_transforms
+        );
+    }
+
+    private readonly PosePartitions m_posePartitions;
+
+    // The first pass for one pool entry: vacates an empty entry, and for a live registration reads its root, parks the
+    // slots a swapped registration leaves, wakes it, and decides whether it retains, holds (carrying its slots with its
+    // root) or poses in full.
+    private void BeginStep(IWorldStampSource client, float deltaSeconds, int index, SdfMovedTransforms moved, Vector3 parkPosition, int slotBase, Span<DynamicTransform> transforms) {
+        ref var step = ref m_steps[index];
+        var rootSlot = (slotBase + RootSlotOffset(index: index));
+        var slots = SlotsAt(index: index);
+        var live = m_pool[index];
+
+        step = new PackStep { RootSlot = rootSlot, Slots = slots };
+
+        // An attached row whose body is not active contributes nothing this frame — the presentation mirror of
+        // WorldPlacementAttachment.TryResolve's inactive-body verdict (which world.attachments echoes by reason).
+        // The registration keeps its slot: occupancy changes tick to tick and a rebuild is not owed for one. The
+        // range test is a belt-and-braces guard, not a live gap: WorldBodiesLimits.CapacityCeiling is
+        // WorldClient.EntityCapacity, so the document validator's bound on population.capacity already keeps
+        // every body index inside this client's view.
+        if (
+            (live is { Row.Attach: { } parked }) &&
+            ((((uint)parked.BodyIndex) >= ((uint)WorldClient.EntityCapacity)) || !client.IsActive(index: parked.BodyIndex))
+        ) {
+            // A parked row is drawn nowhere, so it rates no body it reads (ReaderHertz reads PackedRoot).
+            live.PackedRoot = null;
+            live = null;
+        }
+
+        if (live is null) {
+            if (m_hasAnyVolumes && m_volumeActive[index]) {
+                m_volumeActive[index] = false;
+                m_packVolumesChanged = true;
+            }
+            m_packedRegistrations[index] = null;
+            SetMeshDraw(
+                draw: null,
+                index: index
+            );
+
+            if (m_owners.Vacate(
+                moved: moved,
+                owner: index
+            )) {
+                m_packPoseMoved = true;
+                WorldTransformOwners.Park(
+                    count: slots,
+                    moved: moved,
+                    parkPosition: parkPosition,
+                    start: rootSlot,
+                    table: transforms
+                );
+            }
+
+            step.Stage = PackStage.Vacant;
+
+            return;
+        }
+
+        WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Visited);
+        var (rootPosition, rootRotation, placementScale) = RootPose(
+            client: client,
+            live: live
+        );
+        var document = live.Creation.EngineDocument;
+        var shapeCount = (document.Shapes?.Count ?? 0);
+
+        if (m_partSpheres.Length < shapeCount) { Array.Resize(array: ref m_partSpheres, newSize: shapeCount); }
+        // The root, the shapes, and the slot text baked apart rides (TextApart).
+        var packedSlots = live.Slots;
+
+        step.RootPosition = rootPosition;
+        step.RootRotation = rootRotation;
+        step.PlacementScale = placementScale;
+        step.PackedSlots = packedSlots;
+        step.ShapeCount = shapeCount;
+
+        if (
+            !moved.Everything &&
+            !ReferenceEquals(
+            objA: m_packedRegistrations[index],
+            objB: live
+        )
+        ) {
+            WorldTransformOwners.Park(
+                count: (slots - packedSlots),
+                moved: moved,
+                parkPosition: parkPosition,
+                start: (rootSlot + packedSlots),
+                table: transforms
+            );
+        }
+
+        var packedBefore = ReferenceEquals(objA: m_packedRegistrations[index], objB: live);
+        var woken = Wake(
+            client: client,
+            deltaSeconds: deltaSeconds,
+            index: index,
+            live: live,
+            moved: moved,
+            rootPosition: rootPosition,
+            rootRotation: rootRotation
+        );
+
+        NoteMotion(live: live, rootPosition: rootPosition, rootRotation: rootRotation);
+        if (!woken && !live.RateOwed) {
+            WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Retained);
+            WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsRetained);
+            step.Stage = PackStage.Retained;
+
+            return;
+        }
+
+        // A pose holds between its rated packs, except on the frame its slots change owner or the whole table is
+        // owed (WorldCreationInstances.Rates, whose one decision gives a placed creation only the held tier).
+        var mayHold = (
+            packedBefore &&
+            (document.SizeBy is null) &&
+            !moved.Everything &&
+            !m_owners.Reseats(owner: index) &&
+            // A held pose carries its slots rigidly, so a registration whose scale changed packs in full.
+            (transforms[rootSlot].Scale == placementScale) &&
+            // A rig with no finite reach cannot be judged unseen by its sphere, so a changed read poses it in
+            // full: a part the read moves may be the one a view would see.
+            (float.IsFinite(f: live.Rig.Reach) || (live.WakeRevision == live.ReadRevision))
+        );
+
+        if (!mayHold) {
+            ForgetPhase(live: live);
+        }
+
+        step.MayHold = mayHold;
+
+        // A body that starts moving poses on the frame it starts, whatever tier its rest held it at (StartsMoving).
+        if (mayHold && !StartsMoving(live: live) && HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, placementScale: placementScale, radius: RateReach(live: live, placementScale: placementScale))) {
+            var (heldPosition, heldRotation) = FollowHeldRoot(deltaSeconds: deltaSeconds, live: live, rootPosition: rootPosition, rootRotation: rootRotation);
+
+            // A held pose whose root has not moved moves no slot, so nothing is carried or compared. Every write goes
+            // through SdfMovedTransforms.Write, which compares as it writes, so the pack keeps no copy of the slots.
+            step.Still = HeldRootStill(root: in transforms[rootSlot], rootPosition: heldPosition, rootRotation: heldRotation);
+            if (!step.Still) {
+                step.SlotsMoved = CarryPose(
+                    live: live,
+                    packedSlots: packedSlots,
+                    rootPosition: heldPosition,
+                    rootRotation: heldRotation,
+                    rootSlot: rootSlot,
+                    transforms: transforms
+                );
+            }
+            live.RateSeconds += deltaSeconds;
+            live.RateOwed = true;
+            m_rateCounts?.Count(kind: ((live.BodyIndex is not null) ? SdfUpdateRateCounts.BodiesHeld : SdfUpdateRateCounts.PlacementsHeld));
+            WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.RateHeld);
+            WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsRetained);
+            step.Stage = PackStage.Held;
+
+            return;
+        }
+
+        // A pose held while nothing could show it resumes as a continuity cut: its followers, plants and drivers
+        // relatch where the body is now, as after a teleport, rather than advancing over every second it held.
+        step.Unseen = (live.RateSlowest == SdfUpdateRateTiers.HeldHertz);
+        if (step.Unseen) {
+            live.RootEpoch = -1;
+        }
+
+        WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Posed);
+        WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsPosed);
+        step.ElapsedSeconds = (live.RateSeconds + deltaSeconds);
+        step.PoseSeconds = (step.Unseen ? deltaSeconds : step.ElapsedSeconds);
+        step.Stage = PackStage.Posed;
+    }
+    // One registration's full pose, in a partition of the pose fork or, for a rig that reads another body, in the last
+    // pass: writes only the registration and its own slot range.
+    private void Pose(IWorldStampSource client, float deltaSeconds, int index, Vector3 parkPosition, Span<DynamicTransform> transforms) {
+        ref var step = ref m_steps[index];
+        var live = m_pool[index]!;
+        var poseFrameBefore = live.PoseFrame;
+
+        step.SlotsMoved = PackRegistration(
+            client: client,
+            deltaSeconds: step.PoseSeconds,
+            live: live,
+            parkPosition: parkPosition,
+            placementScale: step.PlacementScale,
+            rootDeltaSeconds: deltaSeconds,
+            rootPosition: step.RootPosition,
+            rootRotation: step.RootRotation,
+            rootSlot: step.RootSlot,
+            shapeCount: step.ShapeCount,
+            transforms: transforms
+        );
+        step.PoseFrameChanged = (live.PoseFrame != poseFrameBefore);
+        if (step.SlotsMoved) {
+            live.PoseSerial++;
+        }
+    }
+    // The last pass for one pool entry: settles a full or held pose with the moved set and its rate records, then notes
+    // the registration's tier, volumes, door straddle and mesh draw, which every live registration contributes each frame.
+    private void EndStep(float deltaSeconds, IReadOnlyList<WorldPortalStraddle.Door> doors, int index, SdfMovedTransforms moved, Span<DynamicTransform> transforms) {
+        ref var step = ref m_steps[index];
+
+        if (step.Stage == PackStage.Vacant) {
+            return;
+        }
+
+        var live = m_pool[index]!;
+        var rootSlot = step.RootSlot;
+        var posed = (step.Stage == PackStage.Posed);
+
+        if (posed) {
+            RecordPose(deltaSeconds: deltaSeconds, live: live);
+            live.ReadRevision = live.WakeRevision;
+            WidenMotionReach(live: live, placementScale: step.PlacementScale, rootPosition: transforms[rootSlot].Position, shapeCount: step.ShapeCount, transforms: transforms, rootSlot: rootSlot);
+            // A pack that may not hold (a new owner, a reseat, a scale change, the whole table owed) or that resumes an
+            // unseen hold is a cut the part speed is not measured across.
+            MeasurePartSpeed(continuous: (step.MayHold && !step.Unseen), elapsedSeconds: step.ElapsedSeconds, live: live, root: in transforms[rootSlot], shapeCount: step.ShapeCount);
+            PosedMotion(live: live, rootPosition: step.RootPosition, rootRotation: step.RootRotation);
+            m_rateCounts?.Count(kind: ((live.BodyIndex is not null) ? SdfUpdateRateCounts.BodiesPosed : SdfUpdateRateCounts.PlacementsPosed));
+            live.RateSeconds = 0f;
+            live.RateOwed = false;
+        }
+        if (step.PoseFrameChanged) {
+            CarryRevision++;
+        }
+        if (posed || (step.Stage == PackStage.Held)) {
+            if (step.SlotsMoved) {
+                m_packPoseMoved = true;
+            }
+            m_owners.Settle(
+                deltaSeconds: deltaSeconds,
+                moved: (!step.Still && moved.Commit(
+                count: step.PackedSlots,
+                moved: step.SlotsMoved,
+                reseat: m_owners.Reseats(owner: index),
+                start: rootSlot
+            )),
+                owner: index
+            );
+        }
+
+        NoteRate(center: step.RootPosition, live: live, packedSlots: step.PackedSlots, placementScale: step.PlacementScale, posed: posed, radius: RateReach(live: live, placementScale: step.PlacementScale), rootSlot: rootSlot);
+        live.PackedRoot = transforms[rootSlot];
+
+        var placementScale = transforms[rootSlot].Scale;
+
+        // The volume list is rebuilt (PackTransforms) only when a volume-bearing registration's membership, scale or
+        // hidden set changed, so each registration only compares itself here.
+        if (m_hasAnyVolumes && (live.Creation.EngineDocument.Volumes is { Count: > 0 })) {
+            if (!m_volumeActive[index] || (m_volumeScale[index] != placementScale) || !ReferenceEquals(objA: m_volumeHidden[index], objB: live.Hidden)) {
+                m_volumeActive[index] = true;
+                m_volumeScale[index] = placementScale;
+                m_volumeHidden[index] = live.Hidden;
+                m_packVolumesChanged = true;
+            }
+        }
+
+        // A body straddling a portal whose counterpart stands in this world is drawn on both sides of it. The rest
+        // bound screens out the bodies nowhere near a door; the posed parts decide.
+        if (
+            (live.BodyIndex is { } straddler) &&
+            (doors.Count > 0) &&
+            (WorldPortalStraddle.Clip(
+                center: transforms[rootSlot].Position,
+                doors: doors,
+                firstSlot: rootSlot,
+                radius: (ReachOf(live: live) * placementScale),
+                slotCount: step.Slots
+            ) is not null) &&
+            (WorldPortalStraddle.Clip(
+                doors: doors,
+                firstSlot: rootSlot,
+                slotCount: step.Slots,
+                spheres: m_partSpheres.AsSpan(start: 0, length: PartSpheres(live: live, placementScale: placementScale, rootSlot: rootSlot, shapeCount: step.ShapeCount, transforms: transforms))
+            ) is { } clip)
+        ) {
+            m_slotClipRun.Add(item: clip);
+            m_slotClipBodies.Add(item: straddler);
+        }
+
+        // The root slot holds the pose the shapes were packed under, followers included, whether or not this frame
+        // repacked it.
+        SetMeshDraw(
+            draw: ((live.Mesh is { } mesh)
+                ? WorldPlacementStamper.MeshDrawOf(
+                    identity: live,
+                    material: live.MeshMaterial,
+                    mesh: mesh,
+                    origin: transforms[rootSlot].Position,
+                    rotation: transforms[rootSlot].Orientation,
+                    scale: placementScale
+                ) with { IsDynamic = true, FrameSlot = rootSlot, UsesRootMaterialFrame = false }
+                : null),
+            index: index
+        );
     }
 
     private static float SizeOf(Registration live, IWorldStampSource client) =>

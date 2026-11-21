@@ -137,7 +137,7 @@ public sealed class WorldRigidAssetLawTests {
 
         public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) => m_assets.Emit(builder,
             WorldBakedColors.Of(definition: m_source.Definition), context.SlotBase, null, m_picks);
-        public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) =>
+        public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) =>
             m_assets.Pack(slots, m_source, context.SlotBase);
     }
     private sealed class Dresser : ISdfFrameDresser {

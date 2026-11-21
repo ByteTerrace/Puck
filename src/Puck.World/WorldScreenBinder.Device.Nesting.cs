@@ -43,7 +43,9 @@ public sealed partial class WorldScreenBinder {
                 value: out var retired
             )) {
                 retired.Close(sessions: sessions);
-                _ = m_nestedOwners.Remove(key: retired);
+                if (m_nestedOwners.Remove(key: retired)) {
+                    m_accessBindingsVersion++;
+                }
                 moved = true;
             }
         }
@@ -89,6 +91,7 @@ public sealed partial class WorldScreenBinder {
                 Scene: scene
             )
         );
+        m_accessBindingsVersion++;
     }
     // Lists the feeds of the levels the presentation shows beside the boot world's sessions.
     private void AddPresentedFeeds() {

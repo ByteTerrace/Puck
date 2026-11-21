@@ -97,7 +97,7 @@ thread's own allocation, `frameThreadAllocatedBytes`, beside every thread's):
 
 - **Captures and prepares during produce, counted by cause**: a scheduled
   render, an owed upload, a consumer minimum, or a freshness check
-  (`RenderGraphRuntime.WithUnchanged`), feeding the
+  (`RenderGraphRuntime.CollectUnchanged`), feeding the
   [streaming plan's capture order](streaming-and-memory.md#decision-4-a-residency-is-staged-by-its-demand-not-by-a-render).
 - **Garbage collections and bytes allocated per iteration, by source**, across
   both backends.
@@ -181,22 +181,27 @@ The worker count itself is `JobWorkers`, which T0 registers from
 pool never oversubscribes the machine, which is what today's independent
 worker counts do during a cold bake.
 
-The pool's first part, the one the tick needs, exists: `JobPool`
-(`Puck.Hosting.Jobs`, a container singleton `AddWorldBoot` registers and every
-authority's server receives) holds `JobWorkers.Count - 1` threads at normal
-priority, idle on an operating-system semaphore, and its `Fork(partitions,
-IJobPartitions)` hands out partition indices from one counter to those
-threads and the forking thread, which then waits on an event for the
-partitions others still hold. One fork runs at a time; a second concurrent
-fork, a fork of one partition and every fork of a serial pool run inline in
-partition order. Both paths share one completion and error policy: every
-partition runs, then the lowest-numbered failing partition's exception is
-rethrown, so what a fork completes never depends on the worker count, and the
-inline path keeps that state local to its call. A fork tops the untaken wake
-signals up to the workers it can use rather than adding to them, so they never
-exceed the worker count however many forks have run (`PendingWakes`). J1 grows this object into the class-ordered pool above (the
-classes and comparers, bounded background units, channels, and `0`'s count
-reconciled with `max(2, ProcessorCount - 2)`); it does not add another.
+The pool's foreground part exists: `JobPool` (`Puck.Hosting.Jobs`, a
+container singleton `AddWorldBoot` registers, which every authority's server
+and the presentation's stamp pools receive) holds `JobWorkers.Count - 1`
+threads at normal priority, idle on an operating-system semaphore. Its `Fork`
+takes a `JobClass` (`Frame`, then `Tick`) and hands out partition indices from
+that fork's own counter to those threads and the forking thread, which drains
+only its own fork and then waits on the fork's event for the partitions others
+still hold. Each class holds one fork across the workers at a time, so the
+frame thread's pose pack and a tick thread's snapshot run side by side, and a
+worker takes its next partition from the highest class with one left. A second
+fork of a class in flight, a fork of one partition and every fork of a serial
+pool run inline in partition order. Both paths share one completion and error
+policy: every partition runs, then the lowest-numbered failing partition's
+exception is rethrown, so what a fork completes never depends on the worker
+count, and the inline path keeps that state local to its call. A fork tops the
+untaken wake signals up to the workers it can use rather than adding to them,
+so they never exceed the worker count however many forks have run
+(`PendingWakes`). `JobWorkers`' `0` is `JobWorkers.MachineWorkers`, the
+`max(2, ProcessorCount - 2)` above, plus the forking thread. J1 grows this
+object into the rest of the class-ordered pool (the background classes and
+their comparers, bounded units, channels); it does not add another.
 
 The pool lives in `Puck.Hosting` because every consumer already reaches it:
 `Puck.Shaders`, `Puck.SdfVm`, `Puck.World.Server` and `Puck.World.Client`
@@ -1420,8 +1425,13 @@ requirements are lifted for the campaign (AGENTS.md); each step is verified by
 building what it touched and running the check named, and each check is chosen
 to fail when the step's main risk is real. Built: the scheduling stage (S1),
 C0.1 to C0.5, the memory account, native movers 1 and 2, the worker-count
-harness (T0: `--workers` and `puck test --workers`), snapshot partitions (T1)
-and GPU culling in the indirect path (R2).
+harness (T0: `--workers` and `puck test --workers`), snapshot partitions (T1),
+GPU culling in the indirect path (R2), J1's foreground classes (`Frame` and
+`Tick` forks side by side) and the pose pack's fork
+(`WorldCreationInstances.PackTransforms`: a serial pass decides each
+registration, the full poses fork one partition a registration, a serial pass
+settles them in pool order; a rig that reads another body poses after the
+fork; `sdf.creations.registrations.forked` counts the forked poses).
 
 This table is the one statement of the job system's order; the
 [packet](open-items.md#engine-job-system) and the shared queue point at "the
@@ -1455,8 +1465,8 @@ as `puck mesh audit` for bake defects.
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas (note: 32 seats per partition saves nothing in today's debug world with a handful of seats, so the tick breakdown ranks this against serial tick fixes below). | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share is read from the tick breakdown first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read. |
 | **T4 Rows as jobs** | A silo steps every row in turn on its one simulation thread (`WorldSiloSimulation.Step` calls `WorldInstanceHost.StepInstances`), each row holding its authority gate for its whole step (`WorldServerStepShell.Step`), though rows never observe one another (the remark in `StepInstances` says so). Each row's step becomes a `Tick` job, forked after the serial drain of pending transfers (`WorldInstanceHost.DrainPendingTransfers`) and joined before the extensions pump; a row reads a neighbour only through what was published before the fork. The silo registers the pool, which today only the desktop boot does (`AddWorldBoot`). Socket handlers already marshal into the row's mailbox (`WorldServer.RunOnTickThreadAsync`); the operator and grant paths that still take the gate synchronously move into the mailbox too. A cadence checkpoint stops stalling every row on one step: rows are staggered over the cadence, and each encodes from a captured copy off its step rather than under its gate (`WorldSiloHost.TryCaptureRow`). The same fork serves the desktop's instance host once open question 7 settles where its tick runs. | A silo fixture with several rows: each row's per-tick hash sequence identical at one worker and at the machine's count, and against the serial build; the master step reads near the longest row's step plus the fork in the per-world parts (`HostWorldWork`), not their sum; on a cadence tick no step carries more than one row's capture. |
-| **Serial tick and produce cuts** | Fix the tick's serial bottlenecks ranked by the tick breakdown — in particular the bounds cache missing for every box of a moving body (`BodySupportMemo.Query`, `SdfBoundsCache`) and scanning every body's facts on every rule pass (`WorldRuleHost.DeriveFacts`). A shape change's whole-document delivery on the frame thread (`WorldDeliveryCursor.DeliverDefinition` serializing and hashing per sink) is the [authoring loop's step 4](iteration/authoring-loop.md#build-order), delivering only the changed rows, and is not repeated here. On the produce side, cut the largest named parts in breakdown order: field queries are about a third of the meadow's frame (measured once), so first replace the 6-sample field gradient (`SdfFieldEvaluator.TryFieldGradient`) with the 4-sample form without building a second cache beside `WorldFieldAnswer`, eliminate redundant draw-record uploads ([visibility](visibility.md#the-build-order)), move interpreted motion to compiled programs ([dense landscapes](dense-landscapes.md)), and run remaining pose packing (`WorldCreationInstances.PackTransforms`) in parallel on the J1 pool. | Each cut reports the breakdown drop it claimed on the benchmark route; deterministic tick hashes hold for the tick cuts, and field-query counts drop on the meadow chapter. |
-| **R1 Parallel recording in waves** (held until it pays) | Admission first: recording is taken only on a workload whose serial record sum (`world.counters render.record`, `record-microseconds` over `frames`) is several milliseconds with the critical path (`longest-microseconds` over `frames`) well below it; with residency staging moved into package preparation the debug world's sum is about a millisecond, so concurrency could save about half of one and is not yet worth workers. When admitted: waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission, the pose pack fork; and before it is safe, a thread-safe pipeline cache lookup, a counting recorder and per-worker command pools, with queue operations still serialized and the join before commit. The prepare, record and commit separation of a node's frame stays whether or not recording forks. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
+| **Serial tick and produce cuts** | Fix the tick's serial bottlenecks ranked by the tick breakdown — in particular the bounds cache missing for every box of a moving body (`BodySupportMemo.Query`, `SdfBoundsCache`) and scanning every body's facts on every rule pass (`WorldRuleHost.DeriveFacts`). A shape change's whole-document delivery on the frame thread (`WorldDeliveryCursor.DeliverDefinition` serializing and hashing per sink) is the [authoring loop's step 4](iteration/authoring-loop.md#build-order), delivering only the changed rows, and is not repeated here. On the produce side, cut the largest named parts in breakdown order: field queries are about a third of the meadow's frame (measured once), so first replace the 6-sample field gradient (`SdfFieldEvaluator.TryFieldGradient`) with the 4-sample form without building a second cache beside `WorldFieldAnswer`, eliminate redundant draw-record uploads ([visibility](visibility.md#the-build-order)), and move interpreted motion to compiled programs ([dense landscapes](dense-landscapes.md)). | Each cut reports the breakdown drop it claimed on the benchmark route; deterministic tick hashes hold for the tick cuts, and field-query counts drop on the meadow chapter. |
+| **R1 Parallel recording in waves** (held until it pays) | Admission first: recording is taken only on a workload whose serial record sum (`world.counters render.record`, `record-microseconds` over `frames`) is several milliseconds with the critical path (`longest-microseconds` over `frames`) well below it; with residency staging moved into package preparation the debug world's sum is about a millisecond, so concurrency could save about half of one and is not yet worth workers. The admission reading is taken with four split-screen seats (M2), whose views multiply the sum, beside the one-seat reading; the `Frame` class it forks on is built. When admitted: waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission; and before it is safe, a thread-safe pipeline cache lookup, a counting recorder and per-worker command pools, with queue operations still serialized and the join before commit. The prepare, record and commit separation of a node's frame stays whether or not recording forks. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
 | **B1 GI's CPU work as jobs** | The change-set closure is built; what lands is the scene build, placement and selection as `Lighting` jobs under J1's pool. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's (the windowed check the closure still owes); `[sdf.mesh-gi]` probes traced against the whole window; no `Parallel.For` left in the irradiance code. |
 | **M3 Native movers 4 and 5** | Unmanaged scratch leases, the split journal, numeric columns; the tick's deliveries. | T0 at every count; `puck bench world` unchanged; a scratch world whose rules overwrite text cells and rewind (`world.undo`) reads the restored text. |
 

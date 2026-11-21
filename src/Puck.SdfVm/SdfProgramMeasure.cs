@@ -18,6 +18,6 @@ public static class SdfProgramMeasure {
 
         var built = builder.Build();
 
-        return (Words: built.Words.Length, Instances: built.Instances.Count);
+        return (Words: built.WordCount, Instances: built.Instances.Count);
     }
 }

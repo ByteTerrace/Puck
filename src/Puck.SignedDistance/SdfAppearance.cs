@@ -48,6 +48,8 @@ public sealed class SdfAppearance {
     private readonly SdfMaterial[] m_materials;
     private readonly SdfScreenSurface[] m_screenSurfaces;
     private readonly uint[] m_screenSurfaceWords;
+    private readonly SdfShadeProgram[] m_shadingPrograms;
+    private readonly SdfShadeReads m_shadeReadsAll;
 
     private (SdfShadeReads Layers, SdfShadeReads Authored, SdfShadeReads Unshaded, SdfShadeReads Emission, bool Inherits)? m_shadeReads;
 
@@ -117,13 +119,35 @@ public sealed class SdfAppearance {
 
         var screens = RequireScreenSurfaces(paramName: nameof(screenSurfaces));
         var glass = new bool[m_materials.Length];
+        var shadeCount = 0;
+        var shadeReads = SdfShadeReads.None;
 
         for (var index = 0; (index < glass.Length); index++) {
-            glass[index] = m_materials[index].IsGlass;
+            var material = m_materials[index];
+
+            glass[index] = material.IsGlass;
+            if (material.Shade is { } shade) {
+                shadeCount++;
+                shadeReads |= shade.Reads;
+            }
         }
+        if (shadeCount == 0) {
+            m_shadingPrograms = [];
+        } else {
+            m_shadingPrograms = new SdfShadeProgram[shadeCount];
+            var write = 0;
+
+            for (var index = 0; (index < m_materials.Length); index++) {
+                if (m_materials[index].Shade is { } shade) {
+                    m_shadingPrograms[write++] = shade;
+                }
+            }
+        }
+        m_shadeReadsAll = shadeReads;
 
         Materials = Array.AsReadOnly(array: m_materials);
         ScreenSurfaces = Array.AsReadOnly(array: m_screenSurfaces);
+        ShadingPrograms = Array.AsReadOnly(array: m_shadingPrograms);
         Outline = new SdfAppearanceOutline(glass: glass, screens: screens, vectors: VectorsOf(materials: m_materials));
         m_screenSurfaceWords = PackScreenSurfaces();
     }
@@ -142,9 +166,9 @@ public sealed class SdfAppearance {
     /// <summary>Gets what a field may know of this appearance (<see cref="SdfAppearanceOutline"/>).</summary>
     public SdfAppearanceOutline Outline { get; }
     /// <summary>Gets the aggregate authored-input reads, derived from admitted programs.</summary>
-    public SdfShadeReads ShadeReads => m_materials.Aggregate(SdfShadeReads.None, static (reads, material) => reads | (material.Shade?.Reads ?? SdfShadeReads.None));
+    public SdfShadeReads ShadeReads => m_shadeReadsAll;
     /// <summary>Gets the authored programs carried by this appearance, including different runtime data for one identity.</summary>
-    public IEnumerable<SdfShadeProgram> ShadingPrograms => m_materials.Where(predicate: static m => (m.Shade is not null)).Select(selector: static m => m.Shade!);
+    public IReadOnlyList<SdfShadeProgram> ShadingPrograms { get; }
 
     /// <summary>Returns the vectors a palette's packed tables span: each material's <see cref="MaterialVectorsPerEntry"/>,
     /// then each paint's <see cref="PaintVectorsPerEntry"/> and its variable side table. The one statement of the appearance section's size, which a
@@ -341,12 +365,14 @@ public sealed class SdfAppearance {
     // pattern scale), 28 (stretch, cycles per clock period, tilt, coverage), 29 (revealed colour, softness), 30 (revealed
     // roughness, revealed metal, seed bits, control bits: FlowControl); all zero for a material with no flow, which a zero
     // scale says.
-    /// <summary>Writes the material table at a vector of a program's word stream, then the paints after it, every paint
-    /// and side-table reference naming its absolute vector: the stream's appearance section, which follows every table
-    /// the field interpreter reads.</summary>
-    /// <param name="words">The program's whole word stream.</param>
+    /// <summary>Writes the stream's appearance section, which follows every table the field interpreter reads: the
+    /// material table, then the paints after it, every paint and side-table reference naming its absolute vector in the
+    /// whole stream. The section is a buffer of its own, so programs that share a field share its words
+    /// (<see cref="SdfProgram.SharesField"/>) and each holds only this section.</summary>
+    /// <param name="section">The appearance section, <see cref="SdfAppearanceOutline.Vectors"/> vectors long, cleared;
+    /// its first word is the stream's word <paramref name="materialVector"/> times four.</param>
     /// <param name="materialVector">The vector the material table starts at (the header's material offset).</param>
-    internal void Pack(uint[] words, int materialVector) {
+    internal void Pack(Span<uint> section, int materialVector) {
         var paintCursor = (materialVector + (MaterialVectorsPerEntry * m_materials.Length));
         var tableCursor = checked((paintCursor + m_materials.Sum(selector: static m => ((m.Paints?.Count ?? 0) * PaintVectorsPerEntry))));
         var shadeCursor = checked((tableCursor + m_materials.Sum(selector: static m => (m.Paints?.Sum(selector: PaintSideVectors) ?? 0))));
@@ -355,9 +381,9 @@ public sealed class SdfAppearance {
         for (var index = 0; (index < m_materials.Length); index++) {
             var m = m_materials[index];
             var bleed = (m.Bleed ?? Vector3.One);
-            var materialBase = ((materialVector + (MaterialVectorsPerEntry * index)) * WordsPerVector);
+            var materialBase = ((MaterialVectorsPerEntry * index) * WordsPerVector);
 
-            void Row(int row, Vector4 value) => SdfProgram.WriteVector4(
+            void Row(Span<uint> words, int row, Vector4 value) => SdfProgram.WriteVector4(
                 baseIndex: (materialBase + (row * WordsPerVector)),
                 w: value.W,
                 words: words,
@@ -365,24 +391,25 @@ public sealed class SdfAppearance {
                 y: value.Y,
                 z: value.Z
             );
-            Row(row: 0, value: new(value: m.Albedo, w: m.Emissive));
-            Row(row: 1, value: new(m.Specular, m.Roughness, m.Sheen, m.Metal));
-            Row(row: 2, value: new(m.Coat, m.Wrap, m.Soften, bleed.X));
-            Row(row: 3, value: new(value: m.Fill, w: m.Receive));
+            Row(words: section, row: 0, value: new(value: m.Albedo, w: m.Emissive));
+            Row(words: section, row: 1, value: new(m.Specular, m.Roughness, m.Sheen, m.Metal));
+            Row(words: section, row: 2, value: new(m.Coat, m.Wrap, m.Soften, bleed.X));
+            Row(words: section, row: 3, value: new(value: m.Fill, w: m.Receive));
             if (m.Shade is { } shade) {
                 var length = (shade.Words.Length / WordsPerVector);
 
-                shade.Words.CopyTo(destination: words.AsSpan(start: (shadeCursor * WordsPerVector)));
-                shade.ParameterWords.CopyTo(destination: words.AsSpan(start: ((shadeCursor + length) * WordsPerVector)));
-                Row(row: 32, value: new(BitConverter.UInt32BitsToSingle(value: ((uint)shadeCursor)), BitConverter.UInt32BitsToSingle(value: ((uint)length)),
+                shade.Words.CopyTo(destination: section[((shadeCursor - materialVector) * WordsPerVector)..]);
+                shade.ParameterWords.CopyTo(destination: section[(((shadeCursor + length) - materialVector) * WordsPerVector)..]);
+                Row(words: section, row: 32, value: new(BitConverter.UInt32BitsToSingle(value: ((uint)shadeCursor)), BitConverter.UInt32BitsToSingle(value: ((uint)length)),
                     BitConverter.UInt32BitsToSingle(value: ((uint)(shadeCursor + length))), BitConverter.UInt32BitsToSingle(value: ((uint)shade.ParameterLayout.Count))));
-                Row(row: 33, value: new(shade.Demand.Cosine(baseWrap: m.Wrap), BitConverter.UInt32BitsToSingle(value: ((uint)shade.Reads)), 0, 0));
+                Row(words: section, row: 33, value: new(shade.Demand.Cosine(baseWrap: m.Wrap), BitConverter.UInt32BitsToSingle(value: ((uint)shade.Reads)), 0, 0));
                 shadeCursor = checked(((shadeCursor + length) + (shade.ParameterWords.Length / WordsPerVector)));
             }
-            Row(row: 7, value: new Vector4(w: bleed.Z, x: 0, y: 0, z: bleed.Y));
+            Row(words: section, row: 7, value: new Vector4(w: bleed.Z, x: 0, y: 0, z: bleed.Y));
             var paints = (m.Paints ?? []);
 
             Row(
+                words: section,
                 row: 20,
                 value: new(
                     x: BitConverter.UInt32BitsToSingle(value: ((paints.Count > 0) ? (uint)paintCursor : 0u)),
@@ -394,26 +421,27 @@ public sealed class SdfAppearance {
                 )
             );
             foreach (var paint in paints) {
-                PackPaint(paint: paint, paintVector: paintCursor, tableVector: tableCursor, words: words);
+                PackPaint(origin: materialVector, paint: paint, paintVector: paintCursor, section: section, tableVector: tableCursor);
                 tableCursor += PaintSideVectors(paint: paint);
                 paintCursor += PaintVectorsPerEntry;
             }
             if (m.Toon is { } toon) {
                 toon.WriteRows(inkW: (m.Glass?.ShadowDensity ?? 0f), mode: (toon.Enabled ? 1f : -1f), rows: toonRows);
-                Row(row: 22, value: toonRows[0]);
-                Row(row: 25, value: toonRows[1]);
+                Row(words: section, row: 22, value: toonRows[0]);
+                Row(words: section, row: 25, value: toonRows[1]);
             }
             if (m.Flow is { } flow) {
                 var revealed = (flow.Surface ?? default);
 
-                Row(row: 27, value: new(value: flow.Velocity, w: flow.Scale));
-                Row(row: 28, value: new(flow.Stretch, flow.CyclesPerClock, flow.Tilt, flow.Coverage));
+                Row(words: section, row: 27, value: new(value: flow.Velocity, w: flow.Scale));
+                Row(words: section, row: 28, value: new(flow.Stretch, flow.CyclesPerClock, flow.Tilt, flow.Coverage));
                 if (flow.Region is { } region) {
-                    Row(row: 34, value: new(value: region.Center, w: region.Radius));
-                    Row(row: 35, value: new(value: region.Velocity, w: 0f));
+                    Row(words: section, row: 34, value: new(value: region.Center, w: region.Radius));
+                    Row(words: section, row: 35, value: new(value: region.Velocity, w: 0f));
                 }
-                Row(row: 29, value: new(value: revealed.Color, w: flow.Softness));
+                Row(words: section, row: 29, value: new(value: revealed.Color, w: flow.Softness));
                 Row(
+                    words: section,
                     row: 30,
                     value: new(
                         revealed.Roughness,
@@ -424,52 +452,52 @@ public sealed class SdfAppearance {
                 );
             }
             if (m.Glass is { } glass) {
-                Row(row: 21, value: new(value: glass.Absorption(tint: m.Albedo), w: glass.Ior));
-                Row(row: 31, value: new(value: glass.Scatter, w: glass.Scattering));
+                Row(words: section, row: 21, value: new(value: glass.Absorption(tint: m.Albedo), w: glass.Ior));
+                Row(words: section, row: 31, value: new(value: glass.Scatter, w: glass.Scattering));
                 // Row 25.w is independent of the cel ink's RGB; keep the existing table stride.
-                if (m.Toon is null) { Row(row: 25, value: new Vector4(0f, 0f, 0f, glass.ShadowDensity)); }
+                if (m.Toon is null) { Row(words: section, row: 25, value: new Vector4(0f, 0f, 0f, glass.ShadowDensity)); }
             }
             if (m.Inset is { } inset) {
                 var paint = inset.Paint;
                 var rotation = Quaternion.Normalize(value: inset.Rotation);
 
-                Row(row: 4, value: new(value: inset.Origin, w: inset.Depth));
-                Row(row: 5, value: new(w: rotation.W, x: rotation.X, y: rotation.Y, z: rotation.Z));
-                Row(row: 6, value: new(inset.Ior, paint.Stops.Count, paint.Softness, paint.ModulationAmplitude));
-                Row(row: 7, value: new(paint.ModulationFrequency, BitConverter.UInt32BitsToSingle(value: paint.Seed), bleed.Y, bleed.Z));
+                Row(words: section, row: 4, value: new(value: inset.Origin, w: inset.Depth));
+                Row(words: section, row: 5, value: new(w: rotation.W, x: rotation.X, y: rotation.Y, z: rotation.Z));
+                Row(words: section, row: 6, value: new(inset.Ior, paint.Stops.Count, paint.Softness, paint.ModulationAmplitude));
+                Row(words: section, row: 7, value: new(paint.ModulationFrequency, BitConverter.UInt32BitsToSingle(value: paint.Seed), bleed.Y, bleed.Z));
                 for (var stop = 0; (stop < paint.Stops.Count); stop++) {
-                    Row(row: (8 + stop), value: new(value: paint.Stops[stop].Color, w: paint.Stops[stop].Radius));
+                    Row(words: section, row: (8 + stop), value: new(value: paint.Stops[stop].Color, w: paint.Stops[stop].Radius));
                 }
             }
             if (m.Weathering is { } w) {
-                Row(row: 12, value: new(w.Edge, w.Lines, w.Settle, w.Reach));
-                Row(row: 13, value: new(BitConverter.UInt32BitsToSingle(value: w.Seed), w.Scale, w.Floor, w.Lane));
+                Row(words: section, row: 12, value: new(w.Edge, w.Lines, w.Settle, w.Reach));
+                Row(words: section, row: 13, value: new(BitConverter.UInt32BitsToSingle(value: w.Seed), w.Scale, w.Floor, w.Lane));
                 if (w.Under is { } stages) {
                     for (var stage = 0; (stage < stages.Count); stage++) {
-                        Row(row: (14 + (2 * stage)), value: new(value: stages[stage].Surface.Color, w: stages[stage].Threshold));
-                        Row(row: (15 + (2 * stage)), value: new(stages[stage].Surface.Roughness, stages[stage].Surface.Metal, 0, 0));
+                        Row(words: section, row: (14 + (2 * stage)), value: new(value: stages[stage].Surface.Color, w: stages[stage].Threshold));
+                        Row(words: section, row: (15 + (2 * stage)), value: new(stages[stage].Surface.Roughness, stages[stage].Surface.Metal, 0, 0));
                     }
                 }
                 if (w.Deposit is { } deposit) {
-                    Row(row: 18, value: new(value: deposit.Color, w: 0));
-                    Row(row: 19, value: new(deposit.Roughness, deposit.Metal, 0, 0));
+                    Row(words: section, row: 18, value: new(value: deposit.Color, w: 0));
+                    Row(words: section, row: 19, value: new(deposit.Roughness, deposit.Metal, 0, 0));
                 }
                 // Pattern XYZ and noise coverage use existing reserved components; material stride stays fixed.
                 var pattern = (w.PatternScale ?? Vector3.One);
 
-                words[((materialBase + (15 * WordsPerVector)) + 3)] = BitConverter.SingleToUInt32Bits(value: pattern.X);
-                words[((materialBase + (17 * WordsPerVector)) + 3)] = BitConverter.SingleToUInt32Bits(value: pattern.Y);
-                words[((materialBase + (19 * WordsPerVector)) + 2)] = BitConverter.SingleToUInt32Bits(value: pattern.Z);
-                words[((materialBase + (19 * WordsPerVector)) + 3)] = BitConverter.SingleToUInt32Bits(value: w.Noise);
-                words[((materialBase + (17 * WordsPerVector)) + 2)] = BitConverter.SingleToUInt32Bits(value: w.Softness);
+                section[((materialBase + (15 * WordsPerVector)) + 3)] = BitConverter.SingleToUInt32Bits(value: pattern.X);
+                section[((materialBase + (17 * WordsPerVector)) + 3)] = BitConverter.SingleToUInt32Bits(value: pattern.Y);
+                section[((materialBase + (19 * WordsPerVector)) + 2)] = BitConverter.SingleToUInt32Bits(value: pattern.Z);
+                section[((materialBase + (19 * WordsPerVector)) + 3)] = BitConverter.SingleToUInt32Bits(value: w.Noise);
+                section[((materialBase + (17 * WordsPerVector)) + 2)] = BitConverter.SingleToUInt32Bits(value: w.Softness);
                 // A second octave exists when the gain word is positive; a single octave leaves both words zero.
                 if (w.Octaves >= 2) {
-                    words[((materialBase + (15 * WordsPerVector)) + 2)] = BitConverter.SingleToUInt32Bits(value: w.OctaveRatio);
-                    words[((materialBase + (18 * WordsPerVector)) + 3)] = BitConverter.SingleToUInt32Bits(value: w.OctaveGain);
+                    section[((materialBase + (15 * WordsPerVector)) + 2)] = BitConverter.SingleToUInt32Bits(value: w.OctaveRatio);
+                    section[((materialBase + (18 * WordsPerVector)) + 3)] = BitConverter.SingleToUInt32Bits(value: w.OctaveGain);
                 }
                 var turn = Quaternion.Normalize(value: (w.Turn ?? Quaternion.Identity));
 
-                Row(row: 26, value: new(w: turn.W, x: turn.X, y: turn.Y, z: turn.Z));
+                Row(words: section, row: 26, value: new(w: turn.W, x: turn.X, y: turn.Y, z: turn.Z));
             }
         }
     }
@@ -487,36 +515,37 @@ public sealed class SdfAppearance {
     // 6 (dynamic slot as uint bits, bound center); 7 (bound half-extents, infinite when unbounded, the surface text
     // slot plus one as uint bits, zero for a paint that covers its whole shape);
     // 8 primitive rotation. Side tables follow all fixed paint entries.
-    private static void PackPaint(SdfPaint paint, int paintVector, int tableVector, uint[] words) {
+    // `section` begins at the stream's vector `origin`; the vectors the rows record stay absolute.
+    private static void PackPaint(SdfPaint paint, int paintVector, int tableVector, Span<uint> section, int origin) {
         var shape = paint.Shape;
         var data0 = shape.Data0At(tableVector: tableVector);
         var rotation = Quaternion.Normalize(value: paint.Rotation);
         var minimumScale = SdfDerivedLanes.ScaleCorrection(scale: shape.Scale);
 
-        void Row(int row, Vector4 value) => SdfProgram.WriteVector4(
-            baseIndex: ((paintVector + row) * WordsPerVector),
+        void Row(Span<uint> words, int row, Vector4 value) => SdfProgram.WriteVector4(
+            baseIndex: (((paintVector - origin) + row) * WordsPerVector),
             w: value.W,
             words: words,
             x: value.X,
             y: value.Y,
             z: value.Z
         );
-        Row(row: 0, value: new(value: paint.Origin, w: BitConverter.UInt32BitsToSingle(value: ((uint)shape.Type))));
-        Row(row: 1, value: new(w: rotation.W, x: rotation.X, y: rotation.Y, z: rotation.Z));
-        Row(row: 2, value: new(value: shape.Scale, w: minimumScale));
-        Row(row: 3, value: data0);
-        Row(row: 4, value: shape.Data1);
-        Row(row: 5, value: new(value: paint.Color, w: paint.Stroke));
-        Row(row: 6, value: new(
+        Row(words: section, row: 0, value: new(value: paint.Origin, w: BitConverter.UInt32BitsToSingle(value: ((uint)shape.Type))));
+        Row(words: section, row: 1, value: new(w: rotation.W, x: rotation.X, y: rotation.Y, z: rotation.Z));
+        Row(words: section, row: 2, value: new(value: shape.Scale, w: minimumScale));
+        Row(words: section, row: 3, value: data0);
+        Row(words: section, row: 4, value: shape.Data1);
+        Row(words: section, row: 5, value: new(value: paint.Color, w: paint.Stroke));
+        Row(words: section, row: 6, value: new(
             x: BitConverter.UInt32BitsToSingle(value: ((paint.Slot == SdfPaint.WinningFrame) ? PaintWinningFrame : (uint)paint.Slot)),
             y: shape.Bound.Center.X,
             z: shape.Bound.Center.Y,
             w: shape.Bound.Center.Z
         ));
-        Row(row: 7, value: new(value: (shape.Bound.IsUnbounded ? new Vector3(value: float.PositiveInfinity) : shape.Bound.HalfExtents), w: BitConverter.UInt32BitsToSingle(value: ((uint)(paint.Text + 1)))));
-        Row(row: 8, value: new(shape.Rotation.X, shape.Rotation.Y, shape.Rotation.Z, shape.Rotation.W));
+        Row(words: section, row: 7, value: new(value: (shape.Bound.IsUnbounded ? new Vector3(value: float.PositiveInfinity) : shape.Bound.HalfExtents), w: BitConverter.UInt32BitsToSingle(value: ((uint)(paint.Text + 1)))));
+        Row(words: section, row: 8, value: new(shape.Rotation.X, shape.Rotation.Y, shape.Rotation.Z, shape.Rotation.W));
         for (var index = 0; (index < shape.Table.Count); index++) {
-            words[((tableVector * WordsPerVector) + index)] = BitConverter.SingleToUInt32Bits(value: shape.Table[index]);
+            section[(((tableVector - origin) * WordsPerVector) + index)] = BitConverter.SingleToUInt32Bits(value: shape.Table[index]);
         }
     }
 }

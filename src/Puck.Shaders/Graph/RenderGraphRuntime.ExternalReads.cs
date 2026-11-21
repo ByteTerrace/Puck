@@ -13,6 +13,8 @@ public sealed partial class RenderGraphRuntime {
     // Each instance's external reads, or null for one that has none, for the set they were made for: an external
     // instance's every read, and a graph instance's reads of the producers its graph binds to no version.
     private RenderGraphExternalReads?[] m_externalReads = [];
+    // Parallel to m_set.Reads[index]: each edge's position in m_externalReads[index], or -1 when skipped.
+    private int[]?[] m_externalReadSlots = [];
     private RenderGraphInstanceSet? m_externalReadsSet;
     private Binding[][]? m_externalReadsInputs;
 
@@ -29,7 +31,7 @@ public sealed partial class RenderGraphRuntime {
     }
     // Binds a graph instance's reads of the producers its graph binds to no version, which Bind has not, or returns null
     // when it has none or its graph runs no package that samples them. The taint they carry joins the taint Bind noted.
-    private RenderGraphExternalReads? BindUnboundReads(int index, RenderGraphSchedule schedule) => (SamplesReads(graph: m_graphs[index])
+    private RenderGraphExternalReads? BindUnboundReads(int index, RenderGraphSchedule schedule) => (SamplesReads(index: index)
         ? BindReads(
             index: index,
             schedule: schedule,
@@ -37,22 +39,11 @@ public sealed partial class RenderGraphRuntime {
         )
         : null);
     // Whether a graph runs a package pass whose package samples its instance's unbound reads.
-    private bool SamplesReads(RenderGraphRuntimeGraph? graph) {
-        if (graph is null) {
-            return false;
-        }
+    private bool SamplesReads(int index) {
+        var factories = m_instanceFactories[index];
 
-        var passes = graph.Pipeline.Plan.Passes;
-
-        for (var index = 0; (index < passes.Count); index++) {
-            if (
-                (passes[index].Package is { } step) &&
-                m_packages.TryGetFactory(
-                    factory: out var factory,
-                    package: step.Package
-                ) &&
-                factory.SamplesReads
-            ) {
+        for (var position = 0; (position < factories.Length); position++) {
+            if (factories[position].SamplesReads) {
                 return true;
             }
         }
@@ -82,6 +73,7 @@ public sealed partial class RenderGraphRuntime {
             )
         ) {
             m_externalReads = new RenderGraphExternalReads?[m_set.Instances.Count];
+            m_externalReadSlots = new int[]?[m_set.Instances.Count];
             m_externalReadsSet = m_set;
             m_externalReadsInputs = m_inputs;
         }
@@ -93,8 +85,9 @@ public sealed partial class RenderGraphRuntime {
         }
 
         // The edges bound here, in the set's read order: every edge, or a graph instance's unbound ones, which the list
-        // made for the set fixes once.
+        // made for the set fixes once alongside each edge's pre-resolved slot index.
         var reads = m_externalReads[index];
+        var slots = m_externalReadSlots[index];
 
         if (reads is null) {
             var producers = new List<string>(capacity: all.Count);
@@ -112,27 +105,29 @@ public sealed partial class RenderGraphRuntime {
             }
 
             reads = new RenderGraphExternalReads(producers: producers);
+            slots = new int[all.Count];
+            for (var edgeIndex = 0; (edgeIndex < all.Count); edgeIndex++) {
+                slots[edgeIndex] = reads.IndexOf(producer: m_set.Instances[all[edgeIndex].Producer].Name);
+            }
             m_externalReads[index] = reads;
+            m_externalReadSlots[index] = slots;
         }
         if (reads.Count == 0) {
             return null;
         }
 
-        var consumer = m_set.Instances[index].Name;
-
         for (var edgeIndex = 0; (edgeIndex < all.Count); edgeIndex++) {
-            var producer = all[edgeIndex].Producer;
-            var previousFrame = all[edgeIndex].PreviousFrame;
-            var position = reads.IndexOf(producer: m_set.Instances[producer].Name);
+            var position = slots![edgeIndex];
 
             if (position < 0) {
                 continue;
             }
 
-            var frame = FrameOf(
-                consumer: consumer,
-                producer: m_set.Instances[producer].Name,
-                schedule: schedule
+            var producer = all[edgeIndex].Producer;
+            var previousFrame = all[edgeIndex].PreviousFrame;
+            var frame = schedule.ReadFrame(
+                consumer: index,
+                producer: producer
             );
 
             if (m_producers[producer] is { } external) {
@@ -213,48 +208,24 @@ public sealed partial class RenderGraphRuntime {
 
         return reads;
     }
-    // Adds each source producer's declaration this frame, unless the host or an upload declares that source already.
-    private void AddProducerSourceStates() {
-        for (var index = 0; (index < m_producers.Length); index++) {
-            if (
-                !m_set.Instances[index].IsSource ||
-                (m_producers[index] is not IRenderGraphSourceProducer { Descriptor: { } descriptor })
-            ) {
+    // Adds each source producer's declaration this frame by ordinal.
+    private void AddOrdinalProducerSourceStates() {
+        for (var position = 0; (position < m_sourceProducerIndices.Length); position++) {
+            var index = m_sourceProducerIndices[position];
+
+            if (m_producers[index] is not IRenderGraphSourceProducer { Descriptor: { } descriptor }) {
                 continue;
             }
 
-            var name = m_set.Instances[index].Name;
-            var named = false;
-
-            for (var position = 0; (position < m_sourceStates.Count); position++) {
-                named |= string.Equals(
-                    a: m_sourceStates[position].Instance,
-                    b: name,
-                    comparisonType: StringComparison.Ordinal
-                );
-            }
-
-            if (!named) {
-                m_sourceStates.Add(item: new RenderGraphSourceState(
+            m_ordinalSources.Add(item: new RenderGraphOrdinalSource(
+                Index: index,
+                State: new RenderGraphSourceState(
                     Cadence: descriptor.Cadence,
                     Height: ((int)descriptor.Height),
-                    Instance: name,
+                    Instance: m_set.Instances[index].Name,
                     Width: ((int)descriptor.Width)
-                ));
-            }
+                )
+            ));
         }
-    }
-    // Whether any source instance renders through a producer that declares its own cadence and extent.
-    private bool HasSourceProducers() {
-        for (var index = 0; (index < m_producers.Length); index++) {
-            if (
-                m_set.Instances[index].IsSource &&
-                (m_producers[index] is IRenderGraphSourceProducer)
-            ) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

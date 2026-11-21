@@ -124,7 +124,7 @@ public sealed partial class SdfFieldDeviceLawTests {
                 var (distances, materials) = Reference(evaluator: reference);
 
                 legs.Add(item: new SdfInstanceLeg(
-                    Field: new SdfFieldLeg(Distances: distances, Materials: materials, Name: $"{name} instance {selected}", Words: device.Words.ToArray()),
+                    Field: new SdfFieldLeg(Distances: distances, Materials: materials, Name: $"{name} instance {selected}", Words: device.CopyWords()),
                     Mask: (1U << selected),
                     Selected: selected
                 ));

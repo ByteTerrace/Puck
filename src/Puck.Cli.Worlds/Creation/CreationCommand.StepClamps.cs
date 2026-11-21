@@ -68,7 +68,7 @@ public static partial class CreationCommand {
         var transforms = Enumerable.Repeat(new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity), dynamicSlots).ToArray();
         var groups = SdfMeshBakeGroup.Plan(program, transforms, SdfFrame.DefaultFarDistance, static (slot, dynamic) => new SdfMeshBakeGroup(slot, dynamic));
 
-        Console.Out.WriteLine($"    {path} bake work: {groups.Count} group(s), {program.Instances.Count} field instance(s), {program.InstructionCount} encoded instructions, {program.InstructionCount - program.SharedRootInstructionSavings} after root reuse in a full generic walk; encoded program {checked((((long)program.Words.Length) * sizeof(uint)))} B, {program.MaterialCount} materials, root/part poses {checked((((long)dynamicSlots) * 48))} B");
+        Console.Out.WriteLine($"    {path} bake work: {groups.Count} group(s), {program.Instances.Count} field instance(s), {program.InstructionCount} encoded instructions, {program.InstructionCount - program.SharedRootInstructionSavings} after root reuse in a full generic walk; encoded program {checked((((long)program.WordCount) * sizeof(uint)))} B, {program.MaterialCount} materials, root/part poses {checked((((long)dynamicSlots) * 48))} B");
         Console.Out.WriteLine("      mesh vertices and resident bytes: derived by the bake; read world.budget and world.counters gpu after world.wait bakes");
         Console.Out.WriteLine(value: string.Create(
             CultureInfo.InvariantCulture,

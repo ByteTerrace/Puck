@@ -86,7 +86,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
             key: mirror, mirror: mirror, name: name, session: session, shadowSettings: shadowSettings, skyLayers: skyLayers) { }
     // The one constructor both scene kinds and the presenter build through: what the scene is keyed by, the endpoint a
     // seat may be presented through (none for a shared scene), and the mirror it draws.
-    internal WorldRoutedScene(object key, WorldAuthorityEndpoint? endpoint, WorldSessionMirror mirror, string authority, string name, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings, WorldSkyAudition? skyLayers, bool buildsInBackground, WorldRenderSettings? session) {
+    internal WorldRoutedScene(object key, WorldAuthorityEndpoint? endpoint, WorldSessionMirror mirror, string authority, string name, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings, WorldSkyAudition? skyLayers, bool buildsInBackground, WorldRenderSettings? session, Puck.Hosting.Jobs.JobPool? jobs = null) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: key);
         ArgumentNullException.ThrowIfNull(argument: mirror);
@@ -106,7 +106,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
             shadowSettings: shadowSettings,
             domains: domains,
             effectiveCameraName: null,
-            mirror: mirror
+            mirror: mirror,
+            jobs: jobs
         ) { SkyLayers = skyLayers, Session = session };
         FrameSource = new SdfCompositionFrameSource(
             dresser: this,

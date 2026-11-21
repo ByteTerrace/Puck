@@ -96,7 +96,7 @@ public sealed class SdfViewsReadinessLawTests {
             actual: residency.Frame!.Program,
             expected: source.Frame.Program
         );
-        Assert.Equal(actual: residency.CopyLiveProgramWords(), expected: source.Frame.Program.Words.ToArray());
+        Assert.Equal(actual: residency.CopyLiveProgramWords(), expected: source.Frame.Program.CopyWords());
     }
 
     private static SdfProgram Sphere() {
