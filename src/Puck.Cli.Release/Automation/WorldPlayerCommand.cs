@@ -80,8 +80,8 @@ public static class WorldPlayerCommand {
             (Puck.Launcher.Setup) self-contained into launcher/; publish each --extension into extensions/<name>/; compile
             the package's parent directory into worlds/ (documents, compiled worlds and the shader package store); compose
             the package's worlds and export their specialized shading kernels into derived/; then boot the published engine
-            windowed with --cache-dir cache, once per backend with --mesh-cache ladder (the fill) and then once per backend
-            and --target with --mesh-cache stored on the target's device profile (the check). Every boot waits for its
+            windowed with --cache-dir cache, once per backend with --mesh-cache ladder, tick-locked (the fill), and then
+            once per backend and --target with --mesh-cache stored on the target's device profile (the check). Every boot waits for its
             bakes to settle where it spawns and at each spawn point the world's documents author, posing the first body
             there. The fill bakes every tier of every mesh those places draw into cache/ (meshes, compiled-worlds,
             compilations, derived) under the identities a consumer's boot of the same folder derives; a bake's
@@ -396,19 +396,21 @@ public static class WorldPlayerCommand {
     /// <param name="Places">The places the boot stood at, its spawn included.</param>
     /// <param name="Unsettled">Each place <c>world.wait bakes</c> released at unsettled, with the engine's reason.</param>
     /// <param name="Dispatches">The lattices the boot's bakes handed the GPU.</param>
-    /// <param name="GroupsBaked">The groups that began a bake.</param>
+    /// <param name="LiveDispatches">The lattices among them of geometry the world made as it ran.</param>
+    /// <param name="GroupsBaked">The groups that began a bake, live geometry apart.</param>
+    /// <param name="LiveBaked">The groups that began a bake because an operand or a sampled field they read moved.</param>
     /// <param name="RungsMissed">The tiers a stored-only boot asked that the store lacked.</param>
     /// <param name="LoadsDeclined">The stored entries a stored-only boot could not read for want of memory.</param>
     /// <param name="RungsFilled">The tiers a ladder boot baked beyond its demand.</param>
     /// <param name="Loaded">The groups the boot's bakes loaded from the store, summed over every start it reported.</param>
-    public sealed record BootReading(int Places, IReadOnlyList<string> Unsettled, long Dispatches, long GroupsBaked, long RungsMissed, long LoadsDeclined, long RungsFilled, int Loaded) {
-        /// <summary>Gets whether the boot took everything it drew from the store: no lattice dispatched, no group baked
-        /// and no tier missed.</summary>
-        public bool Hits => ((Dispatches == 0L) && (GroupsBaked == 0L) && (RungsMissed == 0L));
+    public sealed record BootReading(int Places, IReadOnlyList<string> Unsettled, long Dispatches, long LiveDispatches, long GroupsBaked, long LiveBaked, long RungsMissed, long LoadsDeclined, long RungsFilled, int Loaded) {
+        /// <summary>Gets whether the boot took from the store everything a cache can hold: no lattice dispatched and
+        /// no group baked but for geometry the world made as it ran, and no tier missed.</summary>
+        public bool Hits => ((Dispatches == LiveDispatches) && (GroupsBaked == 0L) && (RungsMissed == 0L));
 
         /// <summary>Describes the counts in one line, as the verb prints them.</summary>
         /// <returns>The line.</returns>
-        public string Describe() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"dispatches {Dispatches}, groups baked {GroupsBaked}, tiers missed {RungsMissed}, loads declined {LoadsDeclined}, tiers filled {RungsFilled}, groups loaded {Loaded}");
+        public string Describe() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"dispatches {Dispatches} ({LiveDispatches} live), groups baked {GroupsBaked} ({LiveBaked} more live), tiers missed {RungsMissed}, loads declined {LoadsDeclined}, tiers filled {RungsFilled}, groups loaded {Loaded}");
         /// <summary>Writes the reading as <c>player.json</c> records it.</summary>
         /// <returns>The object.</returns>
         public JsonObject ToJson() => new() {
@@ -416,7 +418,9 @@ public static class WorldPlayerCommand {
             ["settled"] = (Unsettled.Count == 0),
             ["unsettled"] = new JsonArray([.. Unsettled.Select(selector: static place => JsonValue.Create(value: place))]),
             ["dispatches"] = Dispatches,
+            ["liveDispatches"] = LiveDispatches,
             ["groupsBaked"] = GroupsBaked,
+            ["liveBaked"] = LiveBaked,
             ["tiersMissed"] = RungsMissed,
             ["loadsDeclined"] = LoadsDeclined,
             ["tiersFilled"] = RungsFilled,
@@ -434,11 +438,13 @@ public static class WorldPlayerCommand {
     private static BootReading Boot(WorldBackendPreference backend, BakeTarget target, string policy, IReadOnlyList<string> places, string output, string world, string logs, int bakeSeconds, string pass) {
         var name = $"{WorldBackendTokens.Token(backend: backend)}-{target.Profile}-{target.Width}x{target.Height}";
         var directory = Path.Combine(path1: logs, path2: $"{pass}-{name}");
+        var fill = string.Equals(a: policy, b: "ladder", comparisonType: StringComparison.Ordinal);
         // One wait and its answer at each place, and at the spawn; the World's own exit backstop, should the verb die.
         var deadline = TimeSpan.FromSeconds(seconds: (300L + ((places.Count + 1L) * (bakeSeconds + 90L))));
         var request = new WorldLaunchRequest(Artifact: Path.Combine(path1: output, path2: "Puck.World.dll"), Step: Verb) {
+            // A fill's lighting keeps its ordinary budget while its presentation is tick-locked (below).
             Arguments = ["--width", target.Width.ToString(provider: CultureInfo.InvariantCulture), "--height", target.Height.ToString(provider: CultureInfo.InvariantCulture),
-                "--cache-dir", Path.Combine(path1: output, path2: CacheName), "--mesh-cache", policy],
+                "--cache-dir", Path.Combine(path1: output, path2: CacheName), "--mesh-cache", policy, .. (fill ? (string[])["--budgeted-lighting"] : [])],
             Backend = backend,
             Executable = Path.Combine(path1: output, path2: (OperatingSystem.IsWindows() ? "Puck.World.exe" : "Puck.World")),
             ExitAfterSeconds = WorldLaunch.Backstop(deadline: deadline),
@@ -483,6 +489,8 @@ public static class WorldPlayerCommand {
                 return new BootReading(
                     Dispatches: Counted(kind: Puck.SdfVm.SdfMeshCache.Dispatches),
                     GroupsBaked: Counted(kind: Puck.SdfVm.SdfMeshCache.GroupsBaked),
+                    LiveBaked: Counted(kind: Puck.SdfVm.SdfMeshCache.LiveBaked),
+                    LiveDispatches: Counted(kind: Puck.SdfVm.SdfMeshCache.LiveDispatches),
                     Loaded: process.LinesFrom(from: 0).Where(predicate: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] start ")).Sum(selector: static row => CliLineFields.Count(line: row.Text, name: "loading")),
                     LoadsDeclined: Counted(kind: Puck.SdfVm.SdfMeshCache.LoadsDeclined),
                     Places: stood,
@@ -524,7 +532,15 @@ public static class WorldPlayerCommand {
                 }
             }
 
-            if (Settle(place: "its spawn")) {
+            // A fill bakes the world's own ladder where it spawns, which is nearly all of its work, tick-locked: a locked
+            // frame drives the bake's GPU work outside the frame's budget, at the worker pool's pace. It stands at the
+            // places unlocked, since a locked frame waits on its own work and a place costs only a few frames.
+            if (fill) { _ = process.RunScript(lines: ["world.lockstep on"], timeout: TimeSpan.FromSeconds(seconds: 60)); }
+
+            var spawned = Settle(place: "its spawn");
+
+            if (fill) { _ = process.RunScript(lines: ["world.lockstep off"], timeout: TimeSpan.FromSeconds(seconds: 60)); }
+            if (spawned) {
                 foreach (var place in places) {
                     _ = process.RunScript(lines: [$"body.pose spawn:{place} 0"], timeout: TimeSpan.FromSeconds(seconds: 60));
                     if (!Settle(place: place)) { break; }

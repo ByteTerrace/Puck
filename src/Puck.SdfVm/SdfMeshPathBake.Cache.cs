@@ -7,6 +7,8 @@ namespace Puck.SdfVm;
 // (StoredRung puts the nearest stored rung in its place), and StartReplacement, for a group drawing one tier and
 // asked another (it keeps what it draws). Begin and Load count every group that reaches a lattice past them
 // (SdfMeshCache.GroupsBaked), so a path that got around the doors shows in the count rather than passing unseen.
+// Live geometry (Group.Live: a group that reads an operand, or planned again as a sampled field it reads moved) is outside
+// the invariant, since the world makes it as it runs: it bakes under every policy and is counted apart.
 //
 // Invariant, under SdfMeshCachePolicy.Ladder: the bake's detail is not settled (DetailSettled) while any geometry a
 // listed group draws has a rung between its finest and coarsest tiers that the store lacks. FillLadders is the one
@@ -131,7 +133,7 @@ public sealed partial class SdfMeshPathBake {
     // the store holds no rung of, which bakes. The rung answered holds the demand the plan asked, so it is asked again
     // only when the demand names another tier, except a floor planned on arrival, which still owes its detail.
     private Group? StoredRung(Group planned, UInt128 identity) {
-        if ((Library.Policy != SdfMeshCachePolicy.Stored) || Stores(group: planned, identity: identity)) { return null; }
+        if ((Library.Policy != SdfMeshCachePolicy.Stored) || planned.Live || Stores(group: planned, identity: identity)) { return null; }
         for (var step = 1; (step <= SdfMeshTier.Last); step++) {
             var coarser = (planned.Tier + step);
             var finer = (planned.Tier - step);
@@ -172,7 +174,8 @@ public sealed partial class SdfMeshPathBake {
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
 
-            if (group.Retired || group.Failed || (Selection is not null)) { continue; }
+            // Live geometry takes another shape at each step of its input, so its other rungs are no later boot's to find.
+            if (group.Retired || group.Failed || group.Live || (Selection is not null)) { continue; }
             // A group still landing, or one a replacement stands in for, is walked once it draws its own tier.
             if (!group.Done || (group.Replaces is not null) || group.Ahead || group.FirstDetailOwed) {
                 unfinished = true;

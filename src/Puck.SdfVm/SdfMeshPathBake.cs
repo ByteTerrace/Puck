@@ -1076,6 +1076,9 @@ public sealed partial class SdfMeshPathBake {
             };
             m_accounts.Batches++;
             Library.Cache.Add(amount: batch.Lattices.Length, kind: SdfMeshCache.Dispatches);
+            foreach (var ticket in batch.Tickets) {
+                if (ticket is Group { Live: true }) { Library.Cache.Count(kind: SdfMeshCache.LiveDispatches); }
+            }
             foreach (var lattice in batch.Lattices) {
                 m_accounts.Dispatches++;
                 m_accounts.Samples += lattice.Samples;
@@ -1771,7 +1774,7 @@ public sealed partial class SdfMeshPathBake {
             // A dynamic group whose form the store holds a mesh of, baked at another pose, loads that mesh, as one the
             // library holds is taken (Place): its skin carries each member through its own slot.
             if (!HoldsForm(group: group)) {
-                Library.Cache.Count(kind: SdfMeshCache.GroupsBaked);
+                Library.Cache.Count(kind: (group.Live ? SdfMeshCache.LiveBaked : SdfMeshCache.GroupsBaked));
                 return false;
             }
             group.LoadsForm = true;
@@ -2633,7 +2636,7 @@ public sealed partial class SdfMeshPathBake {
             if (!loaded) {
                 group.LoadsForm = false;
                 group.Next = group.Deferred;
-                Library.Cache.Count(kind: SdfMeshCache.GroupsBaked);
+                Library.Cache.Count(kind: (group.Live ? SdfMeshCache.LiveBaked : SdfMeshCache.GroupsBaked));
                 return;
             }
             m_accounts.Loaded++;
@@ -3245,6 +3248,13 @@ public sealed partial class SdfMeshPathBake {
         // Whether the group loads the mesh the store holds of its form, baked at another pose, in place of its own
         // geometry's (SdfMeshLibrary.FormGeometry).
         public bool LoadsForm { get; set; }
+        // Whether the group's geometry is made as the world runs: it reads an operand's pose, which no two runs stand
+        // at alike, or it was planned again because a sampled field it reads published another snapshot (Revisit). No
+        // cache made beforehand holds such geometry, so it bakes under every cache policy, is counted apart, and has
+        // no ladder filled.
+        public bool Live { get => (m_live || Geometry.ReadsOperands); set => m_live = value; }
+
+        private bool m_live;
         // The loads of the group the account has had no room for in a row (SdfMeshPathBake.Reload).
         public int LoadRetries { get; set; }
         // Whether the group is a tier's replacement whose stored mesh the account had no room to read

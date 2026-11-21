@@ -78,6 +78,7 @@ public sealed partial class SdfMeshPathBake {
             var plan = plans[at];
 
             if (ReferenceEquals(objA: old, objB: plan)) { continue; }
+            plan.Live = true;
             if (!old.Geometry.OperandsMatch(transforms: transforms)) {
                 m_operandReplans++;
                 counts.Count(kind: SdfMeshInputs.Operand);
