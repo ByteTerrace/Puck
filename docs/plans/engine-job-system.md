@@ -97,7 +97,7 @@ thread's own allocation, `frameThreadAllocatedBytes`, beside every thread's):
 
 - **Captures and prepares during produce, counted by cause**: a scheduled
   render, an owed upload, a consumer minimum, or a freshness check
-  (`RenderGraphRuntime.WithUnchanged`), feeding the
+  (`RenderGraphRuntime.CollectUnchanged`), feeding the
   [streaming plan's capture order](streaming-and-memory.md#decision-4-a-residency-is-staged-by-its-demand-not-by-a-render).
 - **Garbage collections and bytes allocated per iteration, by source**, across
   both backends.

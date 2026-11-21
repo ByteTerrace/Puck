@@ -12,7 +12,8 @@ namespace Puck.World;
 // screens. A plan owns at most eight scenes; the cameras showing it add fitted outputs, never another scene or session.
 public sealed partial class WorldScreenBinder {
     private readonly Dictionary<(WorldSessionMirror Mirror, int Depth), InfinityRoot> m_infinityRoots = [];
-    private readonly Dictionary<string, InfinityOutput> m_infinityOutputs = new(comparer: StringComparer.Ordinal);
+    private Dictionary<string, InfinityOutput> m_infinityOutputs = new(comparer: StringComparer.Ordinal);
+    private Dictionary<string, InfinityOutput> m_infinityOutputsPrev = new(comparer: StringComparer.Ordinal);
     // Scratch for the roots and consumers one reconcile retires; the binder runs on the presentation thread alone.
     private readonly List<(WorldSessionMirror Mirror, int Depth)> m_staleInfinityRoots = [];
     private readonly List<string> m_deadInfinityConsumers = [];
@@ -199,6 +200,7 @@ public sealed partial class WorldScreenBinder {
             entry.Screens = screens;
             m_nestedOwners.Add(key: screens, value: new NestedOwner(instance, () => mirror.Definition,
                 () => ((entry.Views.Count == 0) ? null : entry.Views[0].Camera.Position), null, null) { Infinity = entry });
+            m_accessBindingsVersion++;
         }
         if (m_instanceHost.TryGet(instance: out var destination, name: instance) && (destination is not null)) {
             entry.Envelope = destination.Server.Envelope.Configure(
@@ -234,7 +236,9 @@ public sealed partial class WorldScreenBinder {
     private void ReleaseInfinity(InfinityEntry entry) {
         if (entry.Screens is { } screens) {
             screens.Close(sessions: NestedSessionsOf());
-            _ = m_nestedOwners.Remove(key: screens);
+            if (m_nestedOwners.Remove(key: screens)) {
+                m_accessBindingsVersion++;
+            }
         }
         entry.Envelope?.Dispose();
         entry.Emitter.Dispose();
@@ -250,7 +254,7 @@ public sealed partial class WorldScreenBinder {
             m_renderProbe?.UnregisterInfinityPlan(owner: root);
         }
         m_infinityRoots.Clear();
-        m_infinityOutputs.Clear();
+        ClearInfinityOutputs();
     }
     // Read several times a frame, so a world that plans no infinity layer walks its roots and allocates nothing.
     private IEnumerable<InfinityEntry> InfinityEntries() {

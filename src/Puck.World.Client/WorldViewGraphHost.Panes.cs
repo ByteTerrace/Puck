@@ -17,6 +17,18 @@ public interface IWorldViewScenes {
     /// <param name="view">The view's instance name.</param>
     /// <returns>The view's access. A view no session gates is <see cref="WorldViewAccess.Open"/>.</returns>
     WorldViewAccess AccessOf(string view) => WorldViewAccess.Open;
+    /// <summary>Reads every instance's access into <paramref name="access"/>, parallel to
+    /// <see cref="RenderGraphInstanceSet.Instances"/>. Implementations with ordinal caches override this to avoid
+    /// per-frame name lookups.</summary>
+    /// <param name="set">The running instance set.</param>
+    /// <param name="access">The destination span, with length matching <paramref name="set"/>'s instance count.</param>
+    void ReadAccess(RenderGraphInstanceSet set, Span<WorldViewAccess> access) {
+        var instances = set.Instances;
+
+        for (var index = 0; (index < instances.Count); index++) {
+            access[index] = AccessOf(view: instances[index].Name);
+        }
+    }
     /// <summary>Finds the camera a view last rendered from.</summary>
     /// <param name="view">The view's instance name.</param>
     /// <param name="camera">The camera when this returns <see langword="true"/>.</param>

@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Maths;
 using Puck.Shaders;
@@ -16,6 +17,30 @@ public sealed class SdfShadeDispatch {
     /// bin to hold every tile of the extent) and the work one of its tiles is priced at.</summary>
     public readonly record struct Bin(uint Width, uint Jobs, ulong TileWork);
 
+    // The key that decides whether an existing plan stands for the next call to For/ForEngine without replanning.
+    private readonly struct PlanKey(SdfProgram? scene, SdfShadeProgram? fallback, bool enabled, uint width, uint height, uint lights, bool glass, bool binned, SdfShadeTier tier) : IEquatable<PlanKey> {
+        public readonly SdfProgram? Scene = scene;
+        public readonly SdfShadeProgram? Fallback = fallback;
+        public readonly uint Width = width;
+        public readonly uint Height = height;
+        public readonly uint Lights = lights;
+        public readonly SdfShadeTier Tier = tier;
+        public readonly bool Enabled = enabled;
+        public readonly bool Glass = glass;
+        public readonly bool Binned = binned;
+
+        public bool Equals(PlanKey other) =>
+            ReferenceEquals(objA: Scene, objB: other.Scene) &&
+            ReferenceEquals(objA: Fallback, objB: other.Fallback) &&
+            (Width == other.Width) &&
+            (Height == other.Height) &&
+            (Lights == other.Lights) &&
+            (Tier == other.Tier) &&
+            (Enabled == other.Enabled) &&
+            (Glass == other.Glass) &&
+            (Binned == other.Binned);
+    }
+
     // The pixels of one tile, which a group shades.
     private const ulong TilePixels = (SdfVisibility.GroupEdgePixels * SdfVisibility.GroupEdgePixels);
     // The bits of a binned job's pushed index that name its bin; its first entry in the bin's tile list fills the rest
@@ -32,7 +57,8 @@ public sealed class SdfShadeDispatch {
     private readonly IReadOnlyList<string> m_identities;
     // The extent's tiles, a binned job's argument record's stride between bins.
     private readonly uint m_tiles;
-    private (SdfProgram? Scene, SdfShadeProgram? Default, bool Enabled, uint Width, uint Height, uint Lights, bool Glass, bool Binned, SdfShadeTier Tier)? m_key;
+    private PlanKey m_key;
+    private bool m_hasKey;
 
     private SdfShadeDispatch(Job[] jobs, Bin[] bins, string[] identities, uint tiles) {
         m_jobs = jobs;
@@ -59,37 +85,80 @@ public sealed class SdfShadeDispatch {
     /// with a tier no later than its own (<c>SdfShadeSlots.RecordSelection</c>).</summary>
     public SdfShadeTier Tier { get; private set; }
 
-    // A frame's plan for a pass of the given extent and view: binned when asked for and the tier runs programs, unsplit
-    // otherwise, priced for the tier the residency records the frame with. The same inputs give the same plan, so every
-    // pass of one frame agrees.
-    internal static SdfShadeDispatch For(SdfShadeDispatch? previous, SdfFrame frame, int view, uint width, uint height, uint screens, bool glass, SdfShadeTier tier, bool binned = false) {
-        var lights = checked(ViewLights(frame: frame, view: view) + (frame.DisableScreenLights ? 0u : screens));
-        var key = ((SdfProgram?)frame.Program, frame.ShadeDefault, frame.ShadePrograms, width, height, lights, glass, binned, tier);
-        if (previous is not null && previous.m_key == key) { return previous; }
-        var programs = ((frame.ShadePrograms && (tier != SdfShadeTier.Neutral)) ? frame.ShadingPrograms.ToArray() : []);
+    /// <summary>Returns a frame's plan for a pass of the given extent, reusing <paramref name="previous"/> without
+    /// allocating whenever every input in the key still holds. Prices each pixel's walk at the frame's light-walk
+    /// maximum (<see cref="SdfLights.Count"/> plus active screens), which every view's light mask
+    /// (<see cref="SdfLightSelection.Select"/>) and every tile's walk narrows and never widens, so camera motion across a
+    /// light's range never replans.</summary>
+    /// <param name="previous">The prior plan to reuse on a key match, or <see langword="null"/>.</param>
+    /// <param name="frame">The frame being shaded.</param>
+    /// <param name="width">The extent's width, in pixels.</param>
+    /// <param name="height">The extent's height, in pixels.</param>
+    /// <param name="screens">The bound screen count.</param>
+    /// <param name="glass">Whether the pass shades glass, pricing both interfaces.</param>
+    /// <param name="tier">The kernel tier the residency records the frame with.</param>
+    /// <param name="binned">Whether to produce a binned plan when the tier runs programs.</param>
+    /// <returns>The standing or newly built plan.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
+    public static SdfShadeDispatch For(SdfShadeDispatch? previous, SdfFrame frame, uint width, uint height, uint screens, bool glass, SdfShadeTier tier, bool binned = false) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
+
+        var lights = checked(((uint)frame.Lights.Count) + (frame.DisableScreenLights ? 0u : screens));
+        var key = new PlanKey(
+            binned: binned,
+            enabled: frame.ShadePrograms,
+            fallback: frame.ShadeDefault,
+            glass: glass,
+            height: height,
+            lights: lights,
+            scene: frame.Program,
+            tier: tier,
+            width: width
+        );
+
+        if ((previous is not null) && previous.m_hasKey && previous.m_key.Equals(other: key)) {
+            return previous;
+        }
+
+        var usePrograms = (frame.ShadePrograms && (tier != SdfShadeTier.Neutral));
+        var appearancePrograms = (usePrograms ? frame.Program.Appearance.ShadingPrograms : []);
+        var fallback = (usePrograms ? frame.ShadeDefault : null);
+        var hasPrograms = ((appearancePrograms.Count != 0) || (fallback is not null));
         var straight = (tier == SdfShadeTier.Straight);
-        var plan = ((binned && (programs.Length != 0))
-            ? PlanBins(height: height, lights: lights, programs: programs, width: width, straight: straight)
-            : Plan(width: width, height: height, programs: programs, lights: lights, glass: glass, straight: straight));
+        var (pixelWork, identities) = PriceList(appearancePrograms: appearancePrograms, fallback: fallback, lights: lights, straight: straight);
+        var plan = ((binned && hasPrograms)
+            ? BuildBins(height: height, identities: identities, lights: lights, shadedWork: pixelWork, straight: straight, width: width)
+            : BuildUnsplit(glass: glass, height: height, identities: identities, pixelWork: pixelWork, straight: straight, width: width));
+
         plan.m_key = key;
+        plan.m_hasKey = true;
+
         return plan;
     }
     // The plan of an extent's pass that runs no program (a binned view's filter): one dispatch of its groups.
     internal static SdfShadeDispatch ForEngine(SdfShadeDispatch? previous, uint width, uint height) {
-        var key = ((SdfProgram?)null, (SdfShadeProgram?)null, false, width, height, 0u, false, false, SdfShadeTier.Neutral);
-        if (previous is not null && previous.m_key == key) { return previous; }
-        var plan = Plan(width, height, [], 0u, glass: false);
-        plan.m_key = key;
-        return plan;
-    }
-    // The lights a pixel's walk in the view may visit: the view's light mask (SdfLightSelection, which SdfFrameBlock writes
-    // as the pass block's lightMask), which every tile's walk (sdfViewsTileLights) and glass's (sdfViewLightMasks) narrows
-    // and never widens.
-    private static uint ViewLights(SdfFrame frame, int view) {
-        if (frame.Views.Count == 0) { return (uint)frame.Lights.Count; }
-        var camera = frame.Views[Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1))].Camera;
+        var key = new PlanKey(
+            binned: false,
+            enabled: false,
+            fallback: null,
+            glass: false,
+            height: height,
+            lights: 0u,
+            scene: null,
+            tier: SdfShadeTier.Neutral,
+            width: width
+        );
 
-        return (uint)UInt128.PopCount(value: SdfLightSelection.Select(camera: in camera, far: frame.FarDistance, lights: frame.Lights));
+        if ((previous is not null) && previous.m_hasKey && previous.m_key.Equals(other: key)) {
+            return previous;
+        }
+
+        var plan = BuildUnsplit(glass: false, height: height, identities: [], pixelWork: DefaultWork(lights: 0u), straight: false, width: width);
+
+        plan.m_key = key;
+        plan.m_hasKey = true;
+
+        return plan;
     }
 
     /// <summary>Plans an unsplit extent, conservatively pricing every padded pixel at its largest admitted program.
@@ -110,17 +179,8 @@ public sealed class SdfShadeDispatch {
         ArgumentNullException.ThrowIfNull(programs);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(lights, SdfShadeProgram.MaxLights);
         var (pixelWork, identities) = Price(lights: lights, programs: programs, straight: straight);
-        var groupWork = checked(pixelWork * TilePixels * (glass ? 2UL : 1UL));
-        if (groupWork > SdfShadeProgram.MaxWork) { throw new InvalidOperationException("An admitted shade group exceeds MaxWork."); }
-        var total = Tiles(width: width, height: height);
-        var capacity = (uint)Math.Min(MaxGroups, ((identities.Length == 0) ? MaxGroups : (SdfShadeProgram.MaxWork / groupWork)));
-        var jobs = new List<Job>();
-        for (uint first = 0; first < total;) {
-            var count = Math.Min(capacity, total - first);
-            jobs.Add(new(first, count, checked(count * groupWork)));
-            first += count;
-        }
-        return new(jobs.ToArray(), [], identities, total) { Tier = TierOf(identities: identities, straight: straight) };
+
+        return BuildUnsplit(glass: glass, height: height, identities: identities, pixelWork: pixelWork, straight: straight, width: width);
     }
     /// <summary>Plans a binned views extent: bin zero, the tiles no pixel of which has a program, which run only the
     /// engine's fixed stage and are bounded by the group-count limit alone; bin one, every other tile, priced at the
@@ -140,6 +200,25 @@ public sealed class SdfShadeDispatch {
         ArgumentNullException.ThrowIfNull(programs);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(lights, SdfShadeProgram.MaxLights);
         var (shadedWork, identities) = Price(lights: lights, programs: programs, straight: straight);
+
+        return BuildBins(height: height, identities: identities, lights: lights, shadedWork: shadedWork, straight: straight, width: width);
+    }
+    private static SdfShadeDispatch BuildUnsplit(uint width, uint height, ulong pixelWork, string[] identities, bool glass, bool straight) {
+        var groupWork = checked(pixelWork * TilePixels * (glass ? 2UL : 1UL));
+        if (groupWork > SdfShadeProgram.MaxWork) { throw new InvalidOperationException("An admitted shade group exceeds MaxWork."); }
+        var total = Tiles(width: width, height: height);
+        var capacity = (uint)Math.Min(MaxGroups, ((identities.Length == 0) ? MaxGroups : (SdfShadeProgram.MaxWork / groupWork)));
+        var jobCount = ((total == 0u) ? 0u : total.CeilingDivide(divisor: capacity));
+        var jobs = ((jobCount == 0u) ? [] : new Job[jobCount]);
+
+        for (uint slot = 0u, first = 0u; (slot < jobCount); slot++, first += capacity) {
+            var count = Math.Min(capacity, total - first);
+            jobs[slot] = new(first, count, checked(count * groupWork));
+        }
+
+        return new(jobs, [], identities, total) { Tier = TierOf(identities: identities, straight: straight) };
+    }
+    private static SdfShadeDispatch BuildBins(uint width, uint height, ulong shadedWork, string[] identities, uint lights, bool straight) {
         var tiles = Tiles(width: width, height: height);
         Bin[] bins = [BinOf(authored: false, pixelWork: DefaultWork(lights: lights), tiles: tiles), BinOf(authored: true, pixelWork: shadedWork, tiles: tiles)];
 
@@ -178,12 +257,65 @@ public sealed class SdfShadeDispatch {
 
     // The light walk's and composition's default work beside the stage's fixed work: a pixel with no program.
     private static ulong DefaultWork(uint lights) => checked(SdfShadeProgram.EngineWork + (ulong)lights * SdfShadeProgram.DefaultLightWork + SdfShadeProgram.DefaultComposeWork);
-    // A pixel's largest work over the programs, never below the default's, and the programs' identities.
+    // A pixel's largest work over the programs, never below the default's, and the sorted distinct identities.
     private static (ulong PixelWork, string[] Identities) Price(uint lights, IEnumerable<SdfShadeProgram> programs, bool straight) {
-        var identities = new HashSet<string>(StringComparer.Ordinal);
+        if (programs is IReadOnlyList<SdfShadeProgram> list) {
+            return PriceList(appearancePrograms: list, fallback: null, lights: lights, straight: straight);
+        }
+
         var pixelWork = DefaultWork(lights: lights);
-        foreach (var program in programs) { identities.Add(program.Identity); pixelWork = Math.Max(pixelWork, program.PixelWork(lights: lights, straight: straight)); }
-        return (pixelWork, identities.Order(StringComparer.Ordinal).ToArray());
+        var collected = new List<string>();
+
+        foreach (var program in programs) {
+            collected.Add(item: program.Identity);
+            pixelWork = Math.Max(pixelWork, program.PixelWork(lights: lights, straight: straight));
+        }
+
+        return (pixelWork, DistinctSorted(identities: ((collected.Count == 0) ? [] : collected.ToArray())));
+    }
+    private static (ulong PixelWork, string[] Identities) PriceList(IReadOnlyList<SdfShadeProgram> appearancePrograms, SdfShadeProgram? fallback, uint lights, bool straight) {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(lights, SdfShadeProgram.MaxLights);
+
+        var count = (appearancePrograms.Count + ((fallback is not null) ? 1 : 0));
+        var pixelWork = DefaultWork(lights: lights);
+
+        if (count == 0) {
+            return (pixelWork, []);
+        }
+        if (count == 1) {
+            var single = ((appearancePrograms.Count == 1) ? appearancePrograms[0] : fallback!);
+
+            return (Math.Max(pixelWork, single.PixelWork(lights: lights, straight: straight)), [single.Identity]);
+        }
+
+        var identities = new string[count];
+
+        for (var index = 0; (index < appearancePrograms.Count); index++) {
+            var program = appearancePrograms[index];
+
+            identities[index] = program.Identity;
+            pixelWork = Math.Max(pixelWork, program.PixelWork(lights: lights, straight: straight));
+        }
+        if (fallback is not null) {
+            identities[appearancePrograms.Count] = fallback.Identity;
+            pixelWork = Math.Max(pixelWork, fallback.PixelWork(lights: lights, straight: straight));
+        }
+
+        return (pixelWork, DistinctSorted(identities: identities));
+    }
+    private static string[] DistinctSorted(string[] identities) {
+        if (identities.Length < 2) {
+            return identities;
+        }
+
+        Array.Sort(array: identities, comparer: StringComparer.Ordinal);
+        var unique = SpanDistinct.Sorted(sorted: identities.AsSpan());
+
+        if (unique != identities.Length) {
+            Array.Resize(array: ref identities, newSize: unique);
+        }
+
+        return identities;
     }
     // A bin whose tiles run no authored program is bounded by the group-count limit alone, as an unsplit extent with no
     // program is (Plan).

@@ -13,6 +13,12 @@ namespace Puck.World.Testing;
 /// <param name="create">Creates the node of a new graph instance, by its name.</param>
 internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> create) : IRenderGraphInstances, IDisposable {
     private readonly Dictionary<string, ShaderPipelineRenderNode> m_nodes = new(comparer: StringComparer.Ordinal);
+    private ShaderPipelineRenderNode?[] m_nodesByIndex = [];
+
+    /// <summary>Gets how many times <see cref="NodeOf"/> was called.</summary>
+    public int NodeOfLookups { get; private set; }
+    /// <summary>Resets <see cref="NodeOfLookups"/> to zero.</summary>
+    public void ResetLookupCounts() => NodeOfLookups = 0;
 
     /// <summary>Gets every graph the host installed, by instance, in order.</summary>
     public List<string> Installed { get; } = [];
@@ -32,6 +38,8 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
     public RenderGraphInstanceSet? Set { get; private set; }
     /// <inheritdoc/>
     public RenderGraphInstanceSet Instances => (Set ?? throw new InvalidOperationException(message: "The fake has accepted no reconfiguration."));
+    /// <inheritdoc/>
+    public ReadOnlySpan<ShaderPipelineRenderNode?> Nodes => m_nodesByIndex;
     /// <inheritdoc/>
     /// <remarks>A law sets it to the schedule it stands for the runtime's latest frame; a reconfiguration clears it, as
     /// the runtime's does.</remarks>
@@ -73,12 +81,17 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
         }
 
         m_nodes.Clear();
+        m_nodesByIndex = [];
     }
     /// <summary>Gets every instance the host withdrew, in order.</summary>
     public List<string> Withdrawn { get; } = [];
 
     /// <inheritdoc/>
-    public ShaderPipelineRenderNode? NodeOf(string instance) => m_nodes.GetValueOrDefault(key: instance);
+    public ShaderPipelineRenderNode? NodeOf(string instance) {
+        NodeOfLookups++;
+
+        return m_nodes.GetValueOrDefault(key: instance);
+    }
     /// <inheritdoc/>
     /// <remarks>Records the withdrawal; the fake publishes nothing to withdraw.</remarks>
     public void Withdraw(string instance) {
@@ -152,18 +165,21 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
             }
         }
 
-        foreach (var instance in set.Instances) {
-            if (
-                (instance.Kind == RenderGraphInstanceKind.Graph) &&
-                !m_nodes.ContainsKey(key: instance.Name)
-            ) {
-                m_nodes.Add(
-                    key: instance.Name,
-                    value: create(arg: instance.Name)
-                );
+        var byIndex = new ShaderPipelineRenderNode?[set.Instances.Count];
+
+        for (var index = 0; (index < set.Instances.Count); index++) {
+            var instance = set.Instances[index];
+
+            if (instance.Kind == RenderGraphInstanceKind.Graph) {
+                if (!m_nodes.TryGetValue(key: instance.Name, value: out var node)) {
+                    node = create(arg: instance.Name);
+                    m_nodes.Add(key: instance.Name, value: node);
+                }
+                byIndex[index] = node;
             }
         }
 
+        m_nodesByIndex = byIndex;
         Reconfigurations++;
         Latest = null;
         Root = root;
