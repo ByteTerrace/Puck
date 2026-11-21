@@ -128,18 +128,20 @@ treated as leads and reopened. These checks changed the plan:
    (`src/Puck.World.Server/WorldBodyHistory.cs:34-35`), which `world.counters` reads. They count
    each encoding once, before it is shared between streams, so their ratio is bytes per body
    record; what one recipient is sent needs a per-stream count beside them.
-8. **Defects the reports named, confirmed at this tree.** The entity writer gates the carried
-   transform on the value's presence and the reader gates it on the continuity kind; a separate
-   change fixes that pair, and it stands here as the example of the class the generator removes
-   (`src/Puck.World.Server/WorldFederationCodec.cs:960`, `:212`). Two checkpoint readers cast a
-   byte to an enum without checking it is declared (`src/Puck.World.Server/WorldEntrySections.cs:130`,
+8. **Defects the reports named, read at this tree.** The Claude report found the entity writer
+   and reader deciding differently whether a carried transform follows, and found no encode-side
+   check of a snapshot against its receiver's cap. Both are closed by hand: the two sides now
+   share one predicate over the continuity byte (`CarriesPose`,
+   `src/Puck.World.Server/WorldFederationCodec.cs:196`), and an over-cap record is refused before
+   it is sent (`WithinResponseCap`, `:962`). They stand here as the example of the class: each is
+   an agreement between a writer and a reader that a person has to keep, and the generator makes
+   it structural. Two checkpoint readers still cast a byte to an enum without checking it is
+   declared (`src/Puck.World.Server/WorldEntrySections.cs:130`,
    `src/Puck.World.Server/WorldAuthorityCheckpointCodec.Arena.cs:51`). The Gemini report also
    lists the arena key's UTF-16 encoding as a defect; the codec's own comment states it as the
    chosen layout, so it is a size question for the generator, not a bug.
-9. **Not rechecked.** The Claude report's claim that nothing on the encode side checks a full
-   table against the 4 MiB snapshot cap, and every report's line counts for the hand-written
-   codecs, are carried as the reports' word. [Step 3](#the-build-order) replaces the snapshot
-   writer and settles the first; code size's own counts settle the second.
+9. **Not rechecked.** Every report's line counts for the hand-written codecs are carried as the
+   reports' word; code size's own counts settle them.
 
 ## Puck's wire today
 
@@ -148,17 +150,17 @@ treated as leads and reopened. These checks changed the plan:
 | Transport | QUIC with TLS 1.3 through `System.Net.Quic`. Each connection admits one inbound bidirectional stream. No datagrams. | `src/Puck.Networking/Peers/QuicPeerTransport.cs:16-17`, `:38` |
 | Framing | `[u32 length][u8 kind][payload]`, little-endian. Values are fixed-width: 64-bit fixed-point, 32-bit floats and counts, one byte per boolean, a 16-bit length before each string. | `src/Puck.Networking/FrameCodec.cs:5-6`; `src/Puck.Networking/WireCodec.cs:204`, `:657`, `:742`, `:784` |
 | Readers | `WireReader` latches the first refusal and never throws; `TryFinish` refuses trailing bytes. Each optional or repeated field passes a delegate. | `src/Puck.Networking/WireCodec.cs:81`, `:149`, `:384`, `:542` |
-| A body sample | `EntitySnapshot` holds float position, orientation, heading and colour, built from the body each tick. The writer emits every field, then every state register as 64 bits. | `src/Puck.World.Protocol/Protocol/WorldSnapshot.cs:98`; `src/Puck.World.Server/WorldDocument.Apply.cs:995`; `src/Puck.World.Server/WorldFederationCodec.cs:948` |
+| A body sample | `EntitySnapshot` holds float position, orientation, heading and colour, built from the body each tick. The writer emits every field, then every state register as 64 bits. | `src/Puck.World.Protocol/Protocol/WorldSnapshot.cs:98`; `src/Puck.World.Server/WorldDocument.Apply.cs:995`; `src/Puck.World.Server/WorldFederationCodec.cs:977` |
 | Deltas | A body is skipped only when its whole record equals the baseline's; otherwise it is written whole. Removed slots are listed. | `src/Puck.World.Server/WorldBodyHistory.cs:19`, `:28` |
-| Baselines | The receiver writes each snapshot's stamp back on the stream. The sender keeps the last eight images and deltas against the newest acknowledged one still in that ring. | `src/Puck.World.Server/WorldBodyHistory.cs:45-46`, `:78-83`; `src/Puck.World.Server/WorldFederationProjectionSink.cs:28`, `:337`, `:382` |
-| Backpressure | Records queue in a channel of eight. A record that does not fit ends the observation, and the peer reopens with a fresh primer. | `src/Puck.World.Server/WorldFederationProjectionSink.cs:36`, `:189` |
+| Baselines | The receiver writes each snapshot's stamp back on the stream. The sender keeps the last eight images and deltas against the newest acknowledged one still in that ring. | `src/Puck.World.Server/WorldBodyHistory.cs:45-46`, `:78-83`; `src/Puck.World.Server/WorldFederationProjectionSink.cs:28`, `:347`, `:392` |
+| Backpressure | Records queue in a channel of eight. A record that does not fit ends the observation, and the peer reopens with a fresh primer. | `src/Puck.World.Server/WorldFederationProjectionSink.cs:39`, `:199` |
 | Cadence | One interval for a whole world: `UpdateSeconds`, 0.03 by default, 30 samples a second on the 240 Hz authority. | `src/Puck.World.Schema/WorldObserverDisclosure.cs:33` |
 | Interest | All bodies, only the recipient's own, or a radius. The radius uses a shared sweep grid, cached per origin and radius, then a float distance test. A recipient with no body receives nothing under a radius. | `src/Puck.World.Server/WorldInterestFrame.cs:83`; `src/Puck.World.Protocol/Protocol/WorldSnapshot.cs:215`, `:220` |
 | Shared encoding | Encoded body bytes are reused between streams that have the same image and the same baseline. | `src/Puck.World.Server/WorldInterestFrame.cs:147` |
-| The snapshot's tail | Each field cell repeats its region and field names as strings and embeds a JSON observation. The header repeats the authority's name. | `src/Puck.World.Server/WorldFederationCodec.cs:944`, `:975`, `:987` |
+| The snapshot's tail | Each field cell repeats its region and field names as strings and embeds a JSON observation. The header repeats the authority's name. | `src/Puck.World.Server/WorldFederationCodec.cs:973`, `:1008`, `:1020` |
 | Input upstream | An intent writes all 32 numeric lanes as 64 bits each, moved or not. | `src/Puck.World.Protocol/Protocol/WorldWireCodec.cs:561`; `src/Puck.World.Schema/PlayerIntent.cs:16` |
 | Input answers | `WorldInputAnswer` carries the owner, epoch, sequence and tick, and nothing of the body. | `src/Puck.World.Protocol/Protocol/WorldInputPublication.cs:42` |
-| Documents | A definition is sent whole as compact JSON; four submission unions are JSON through a reflection resolver. | `src/Puck.World.Server/WorldFederationProjectionSink.cs:175`, `:244`; `src/Puck.World.Protocol/Protocol/WorldSubmissionCodec.cs:98`, `:644`, `:707` |
+| Documents | A definition is sent whole as compact JSON; four submission unions are JSON through a reflection resolver. | `src/Puck.World.Server/WorldFederationProjectionSink.cs:178`, `:254`; `src/Puck.World.Protocol/Protocol/WorldSubmissionCodec.cs:98`, `:644`, `:707` |
 | Checkpoints | One full, uncompressed image per capture, encoded under the row's gate on the step thread. The envelope's version is bumped by hand. | `src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs:48`, `:54`; `src/Puck.World.Silo/WorldSiloHost.Checkpoints.cs:85`, `:219` |
 | Exact state, where it already travels | A transfer commit carries exact fixed-point position and velocities. The checkpoint carries every body section exactly. | `src/Puck.World.Server/WorldWireLeaves.cs:435`; `src/Puck.World.Server/WorldBodySections.cs:19`, `:95` |
 
@@ -186,7 +188,7 @@ somewhere to state a field's wire form.
 
 | Option | Evidence | Cost | Fails at |
 |---|---|---|---|
-| 1a. Hand-written pairs (today) | 135 writers and 147 readers, each field stated three times ([code size](code-size.md#1-wire-and-checkpoint-records)); the carried-transform gate and two unchecked enum reads above | None to build | Every new field is three edits, and a mismatch is silent until a record with that shape is sent |
+| 1a. Hand-written pairs (today) | 135 writers and 147 readers, each field stated three times ([code size](code-size.md#1-wire-and-checkpoint-records)); the two agreements kept by hand and the two unchecked enum reads above | None to build | Every new field is three edits, and a mismatch is silent until a record with that shape is sent |
 | 1b. A general schema format (FlatBuffers, Cap'n Proto, protobuf) | Offset tables suit trusted files read in part; Cap'n Proto's author says padding can double or triple a message; none uses a declared range as the width, and none knows a delta or a fixed-point lattice | A second schema language beside the C# record | It reintroduces the two definitions the family exists to remove, and still needs masks, deltas and disclosure built on top |
 | 1c. One visitor run in both directions (`IStateTransfer`, Fiedler's `serialize`) | Puck's emulators already do this for mutable state (`src/Puck.Machines/IStateTransfer.cs:14`); Fiedler's one function serves write, read and measure | Small | The world's records are immutable and constructed whole, so a visitor over mutable fields does not fit them |
 | 1d. An incremental generator over attributed records (Unity's `GhostField`, Iris's descriptors) | Puck already runs one such generator (`src/Puck.Analyzers/SdfFieldCatalogueGenerator.cs:16`); Unity generates serializers from field annotations; Iris builds descriptors that separate quantizing, comparing and serializing | One generator, then conversions | A field the record type itself lacks, and records whose layout an outside format fixes |
@@ -226,7 +228,9 @@ the record; [decision 7](#decision-7-the-seats-own-body)'s restore-and-step chec
 the one place it matters.
 
 **A format's identity, computed.** The checkpoint envelope's version is a number bumped by
-hand (`WorldAuthorityCheckpointCodec.SupportedVersion`). The generator can instead emit an
+hand (`WorldAuthorityCheckpointCodec.SupportedVersion`), and so is the federation wire's
+(`WorldFederationCodec.WireKey`, whose last digit is the contract's version). The generator can
+instead emit an
 identity for each record family, computed from the definitions, which two peers compare at the
 handshake and a checkpoint carries in its envelope. A mismatch is then refused by name instead of
 misparsed, and nobody bumps a number. This is an identity computed from inputs and recorded
