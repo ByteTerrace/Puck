@@ -376,13 +376,24 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
     [Fact]
     public void APausedViewWhoseRouteMovesShowsNoReaderItsPictureUnderTheNextRoute() {
+        // A view with two outputs, so a selection re-publishes a picture without rendering one.
+        var twoOutputs = Compile(definition: new RenderGraphDefinition(
+            Name: "camera",
+            Outputs: ["near", "far"],
+            Packages: [
+                new RenderGraphPackagePass(Name: "near-view", Outputs: ["near"], Package: Camera),
+                new RenderGraphPackagePass(Name: "far-view", Outputs: ["far"], Package: Camera),
+            ],
+            Resources: [Image(name: "near"), Image(name: "far")],
+            Schema: RenderGraphSchemas.Graph
+        ));
         using var scene = new StandingScene(
             [],
             Set(
                 Instance(name: "camera"),
                 Instance("main", reads: new RenderGraphRead(Producer: "camera"))
             ),
-            Graph(pipeline: CameraGraph()),
+            Graph(pipeline: twoOutputs),
             Graph(ScreensGraph(false, "near"), ("near", "camera"))
         );
         var spans = new DeliverySpanSource();
@@ -404,25 +415,22 @@ public sealed partial class RenderGraphRuntimeLawTests {
             }
         );
 
-        var image = scene.Recorders.Of(instance: "camera").OutputImage;
-
         // Positive control: under its first route the camera's picture reaches its reader.
-        Assert.True(condition: scene.Runtime.TryLatestImage(image: out var shown, instance: "camera"));
-        Assert.Equal(expected: image, actual: shown.ImageHandle);
+        Assert.True(condition: scene.Runtime.TryLatestImage(image: out _, instance: "camera"));
 
         // The view is paused, as a clock-held session view is, and its route moves the way the host moves it when the
-        // viewer's access narrows: the old span ends and the view renders under the next. Its picture was made under
-        // the old span, so no frame may give it out under the new one.
-        scene.Node(instance: "camera").Paused = true;
+        // viewer's access narrows: the old span ends and the view renders under the next. A selection then re-publishes
+        // a picture the view made under the old span, which no frame may give out under the new one.
+        var node = scene.Node(instance: "camera");
+
+        node.Paused = true;
         _ = spans.Advance();
         scene.Runtime.SetRoute(instance: camera, route: DeliveryLabel.Of(span: spans.Span));
+        node.SelectOutput(name: "far");
 
         for (var frame = 0; (frame < 4); frame++) {
             _ = scene.Produce(footprints: filmed, roots: MainRoot);
-            Assert.False(condition: (
-                scene.Runtime.TryLatestImage(image: out var latest, instance: "camera") &&
-                (latest.ImageHandle == image)
-            ));
+            Assert.False(condition: scene.Runtime.TryLatestImage(image: out _, instance: "camera"));
         }
     }
 
