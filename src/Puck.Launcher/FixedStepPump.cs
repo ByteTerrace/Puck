@@ -376,9 +376,9 @@ public sealed class FixedStepPump {
     private bool Step(ulong stepTicks) {
         var started = m_timeline?.Time.GetTimestamp() ?? 0L;
         var window = m_simulation.TickBoundary;
-        window?.Open(drain: false);
+        window?.Open(drain: !StepPending);
         try {
-            if (!TryStep(stepTicks)) { return false; }
+            if (!RunStep(stepTicks)) { return false; }
         } finally {
             window?.Close();
         }
@@ -386,7 +386,7 @@ public sealed class FixedStepPump {
         return true;
     }
 
-    private bool TryStep(ulong stepTicks) {
+    private bool RunStep(ulong stepTicks) {
         if (!StepPending) {
             var stepElapsedTicks = m_elapsedTicks + stepTicks;
             var windowEndTick = CaptureOriginTicks + stepElapsedTicks;

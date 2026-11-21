@@ -6,8 +6,8 @@ public interface IHostTickBoundary {
     void RegisterPump();
     /// <summary>Unregisters the pump after its last iteration.</summary>
     void UnregisterPump();
-    /// <summary>Opens the window on the pump. Drain deferred submissions only before boundary control work.</summary>
-    /// <param name="drain">Whether this is the control phase of a settled boundary.</param>
+    /// <summary>Opens the window on the pump.</summary>
+    /// <param name="drain">Whether deferred submissions can drain at a settled boundary.</param>
     void Open(bool drain);
     /// <summary>Closes the current window.</summary>
     void Close();
