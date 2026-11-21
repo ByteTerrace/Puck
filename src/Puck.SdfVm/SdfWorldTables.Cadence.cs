@@ -37,6 +37,8 @@ namespace Puck.SdfVm;
 //   - m_screenSurfaceRegion, m_screenMappingRegion : the screen-surface sampling table and the mapping and bound flag
 //                          each screen is drawn from.
 //   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
+//   - m_meshIrradianceRevision : each publication of the irradiance volume, which the device copies into one table
+//                          behind the same binding; a lighting value too, so only the shading passes gather it again.
 // Not covered by any packed span: a screen's image, which its source updates in place behind the same handle. A pass
 // that samples one folds the image's publication into its signature (SdfWorldPasses.ReadSignatureOf); the whole view,
 // which sees no publication, renders while any screen shows a source (ForcesRender).
@@ -411,6 +413,7 @@ public sealed partial class SdfWorldTables {
             handoffs,
             screenSurfaces,
             screenMappings,
+            unchecked((ulong)m_meshIrradianceRevision),
         ];
 
         hash.Add(values: MemoryMarshal.AsBytes(span: values));
@@ -434,6 +437,8 @@ public sealed partial class SdfWorldTables {
         lighting.Add(value: screenMappings);
         lighting.Add(value: lights);
         lighting.Add(value: handoffs);
+        // The views and glass shading gather the irradiance volume, which a publication rewrites behind one binding.
+        lighting.Add(value: unchecked((ulong)m_meshIrradianceRevision));
         Span<float> hitSky = [sky.Ambient, sky.Reflection];
 
         lighting.Add(values: MemoryMarshal.AsBytes(span: hitSky));

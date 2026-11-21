@@ -139,6 +139,14 @@ after each one (the worker computing on the host, not blocked on a probe job), s
 the frames count device round trips, not how fast the pool runs. A frame's default
 `Lights` and `Sky` are written into its content on first read, so a residency's copy
 carries a rig's edits to them.
+What the irradiance volume publishes reaches a view through signatures alone: each
+publication moves `SdfWorldTables`' irradiance revision, which the tables' signature
+and the lighting group fold, so the shading passes gather again exactly when it
+publishes, and a camera sample's reading arrives through the exposures' air light and
+camera light in the pass block. `SdfWorldResidency.IsUnchanged` reads no state of the
+volume's background work, so nothing the pool finishes mid-frame decides whether a view
+stands; `SdfMeshIrradiance.Settling` serves a converging frame, the residency's
+preparation and a rig that settles the volume whole.
 Waiting on every allocated residency
 deadlocks on hidden routed scenes whose GPU work correctly never starts.
 
@@ -412,14 +420,14 @@ Never use an earlier exit/peel image to reject a caster.
 A receiver-conditioned cascade retains a coverage identity with each submitted
 layer (`SdfWorldPasses.ReceiverSignatureOf`): the sample grid its receivers were
 classified on (cull level, detail, extent, scale, cut, bindings), excluding the
-light, the camera, the geometry and the jitter. The far rate can hold or split
-while both layers cover that grid; a changed grid refreshes both. The hold's own
+light, the camera, the geometry and the jitter. The far rate can hold, or refresh
+over the static layer, while both layers cover that grid; a changed grid refreshes both. The hold's own
 camera tolerances and the receiver cells' neighbouring-cell margin cover the
 drift the identity leaves out; a receiver a moving caster uncovers lags by the
 same refresh its shadow does. Hashing the geometry signature or the jitter here
 ends the hold on every frame anything moves, so a receiver-conditioned cascade
-then pays a whole refresh each frame (`sdf.rates` shows `rendered` on every
-frame and no `split` or `held`). Readers use each layer's committed light
+then pays a whole refresh each frame (`sdf.rates` shows `rendered` and `static` on every
+frame and no `held`). Readers use each layer's committed light
 camera. The graph keeps the sampling barrier, while the package projects its
 cadence dependency onto the consumed receiver inputs, so unrelated mesh writes do
 not invalidate it. `world.cull camera` removes the receiver input and disables cascade
@@ -1506,15 +1514,18 @@ by its fence share is GPU back-pressure, not CPU work.
   the mesh pass's vertices there (`world.counters gpu pass sdf.world$shadow-far
   counter vertices`, which counts only the layers a frame draws).
   `world.counters sdf.rates` counts `shadow-far.rendered` (both layers),
-  `.split` (one layer of a split refresh) and `.held`: a 60 Hz view that splits
-  shows `.split` on every frame; one that shows `.rendered` on every frame pays
-  a whole refresh each frame. The rate and the light turn a hold tolerates are
+  `.split` (one layer of a split refresh), `.held` and `.static` (the static
+  layer drawn again). A cascade at a reduced rate holds a static layer, so each
+  refresh draws both layers over it and costs only the moving casters: a still
+  60 Hz view at 30 Hz shows `.rendered` and `.held` on alternate frames and no
+  `.static`, while `.static` on every frame means the fit ends every frame and
+  each refresh redraws the whole cascade. The rate and the light turn a hold tolerates are
   the device table's `farShadows { hertz, turnDegrees }` (`SdfFrame.FarShadows`,
   `SdfFarShadows.TurnRadiansFor`; an unauthored world refreshes every frame and
-  tolerates a one-texel turn), so a rate at half the frame rate or more splits
-  on every frame and a lower one stands between refreshes; a timed refresh always draws the depth on one frame and the exit
-  layer on the next (`SdfFarLayers`), so no frame draws both layers for the
-  rate's sake and a slow frame is never held slow by its own cascade. The pass
+  tolerates a one-texel turn), measured from the camera the static layer was
+  drawn from; only a cascade whose graph holds no static layer yet splits a
+  timed refresh, drawing the depth on one frame and the exit layer on the next
+  (`SdfFarLayers`). The pass
   asks `SdfWorldPasses.RecordFar`, which answers both for a layer its graph has
   not drawn, and `SubmittedFar` commits each drawn layer's camera; the surface
   pass reads the exit layer through the pass block's fourth camera. Compare

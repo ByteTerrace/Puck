@@ -50,6 +50,8 @@ public sealed partial class SdfMeshIrradiance {
     private int[] m_gpuDestinations = [];
     // The candidate each row of a selection answers for (ListGpu).
     private int[] m_gpuSelectRows = [];
+    // The selection's header and change rows (SelectionRows), rewritten in place while their length holds.
+    private Vector4[] m_gpuSelectionRows = [];
     private Vector4[]? m_gpuLightingRows;
     private int[] m_gpuUpdateAt = [];
     private uint[] m_gpuUpdateData = [];
@@ -202,13 +204,8 @@ public sealed partial class SdfMeshIrradiance {
             OrderCandidates(candidates, all);
             return deferred;
         }
-        var changes = new List<Vector4> {
-            new(BitConverter.Int32BitsToSingle(snapshot.Geometry), 0, 0, 0),
-            new(snapshot.Changes.Length, 0, BitConverter.Int32BitsToSingle(snapshot.Changes.Length == 0 ? 0 : snapshot.Changes[0].Geometry), layout.Reach),
-            new(layout.SpacingOf(0), 0), new(layout.SpacingOf(1), 0), new(layout.SpacingOf(2), 0),
-        };
-        changes[1] = changes[1] with { Y = WriteChanges(changes: snapshot.Changes, rows: changes) };
-        var selected = GpuTrace!.Select(snapshot.Scene, origins.AsMemory(start: 0, length: selections), input.AsMemory(start: 0, length: selections * SdfMeshProbeRelight.SelectionInputWords), [.. changes], GpuHitCapacity, reuse: m_gpuAnswer);
+        var changes = (m_gpuSelectionRows = SelectionRows(changes: snapshot.Changes, geometry: snapshot.Geometry, layout: layout, rows: m_gpuSelectionRows));
+        var selected = GpuTrace!.Select(snapshot.Scene, origins.AsMemory(start: 0, length: selections), input.AsMemory(start: 0, length: selections * SdfMeshProbeRelight.SelectionInputWords), changes, GpuHitCapacity, reuse: m_gpuAnswer);
         m_gpuAnswer = selected;
         for (var i = 0; i < selections; i++) { candidates[selectRows[i]] = candidates[selectRows[i]] with { Trace = selected[i] != 0 }; }
         OrderCandidates(candidates, all);

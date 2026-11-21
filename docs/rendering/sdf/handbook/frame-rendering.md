@@ -1623,12 +1623,12 @@ cascade's extent or texels change, the camera cuts, turns past half a degree or
 moves half a metre, the view follows another residency, or a capture
 converges. Frames that come at or below the authored rate hold nothing.
 
-A refresh the rate alone calls for is split over two frames whatever the
-frames' pace: the first draws the depth and its glass extinction, the second
-draws the exit layer and holds the depth (`SdfFarLayers`), so at a rate of
-half the frame rate or more every frame draws one layer, and at a lower rate
-the frames between refreshes stand; the cascade never costs a slow frame a
-whole refresh and holds it slow. A refresh that ends a hold redraws both. Under occlusion culling a layer
+A cascade at a reduced rate holds a static layer (below), so a refresh the
+rate alone calls for draws both layers in one frame over it, costing only the
+moving casters. A cascade whose graph holds no static layer yet splits such a
+refresh over two frames: the first draws the depth and its glass extinction,
+the second draws the exit layer and holds the depth (`SdfFarLayers`). A
+refresh that ends a hold redraws both. Under occlusion culling a layer
 also records the sample grid its receivers were classified on
 (`SdfWorldPasses.ReceiverSignatureOf`: cull level, detail, extent, scale, cut
 and bindings, never the camera, the geometry or the jitter, which the hold's
@@ -1641,7 +1641,9 @@ a layer of its current graph has never been drawn; the cameras it draws from
 are committed when the frame's submission succeeds (`SubmittedFar`), so each
 layer is always read through the camera it was drawn from. `world.rates`
 counts `shadow-far.rendered` (both layers), `.split` (one), `.held` and
-`.static` (a refresh that drew the static layer again).
+`.static` (a refresh that drew the static layer again): a still view at a 30 Hz
+rate on a 60 Hz display shows `.rendered` and `.held` on alternate frames and
+no `.static`.
 
 A far cascade at a reduced rate (`farShadows.hertz` below every frame, with
 `world.rates shadow-far` on: `SdfFarShadows.HoldsStaticLayer`) also holds a

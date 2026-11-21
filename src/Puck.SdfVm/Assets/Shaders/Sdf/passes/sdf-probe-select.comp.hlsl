@@ -1,6 +1,6 @@
 #include "../isa/sdf-probe-relight.interface.hlsli"
 #include "../isa/sdf-render.hlsli"
-// KEEP IN SYNC with SdfMeshIrradiance.Affected, the CPU reference List and the rows SdfMeshIrradiance.WriteChanges
+// KEEP IN SYNC with SdfMeshIrradiance.Affected, the CPU reference List and the rows SdfMeshIrradiance.SelectionRows
 // packs. The host sends the cells owing work. This kernel decides which need fresh geometry.
 bool probeMeets(float3 origin, float3 direction, float3 low, float3 high, float reach) {
     float3 inverse = 1 / direction;

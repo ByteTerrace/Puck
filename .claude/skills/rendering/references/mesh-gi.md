@@ -463,7 +463,7 @@ read again is refilled and republished whole.
   level of each newer change) fit the live frame allowance
   (`SdfGpuWorkBudget.FrameAllowanceSeconds`) at the measured rate, each answered
   before the next is submitted. `sdf-probe-select` reads the rows
-  `SdfMeshIrradiance.WriteChanges` packs: a row a change, then two a node.
+  `SdfMeshIrradiance.SelectionRows` packs: the header rows, a row a change, then two a node.
   `most-job` prints a selection's `changes`, `change-nodes` and `tests`.
 - Four reflected angular taps reconstruct local surface patches from first-hit
   positions and signed octahedral normal bytes. Join taps only when their normals

@@ -664,8 +664,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     private float m_skyPeak;
 
-    /// <summary>Gets whether probes are being traced or relit or wait to reach the volume table: true throughout a
-    /// lighting that changes every frame.</summary>
+    /// <summary>Gets whether probes are being traced or relit or wait to reach the volume table, or a camera sample is in
+    /// flight: true throughout a lighting that changes every frame. A frame converging its lighting waits this out; a view
+    /// does not, since what the volume publishes reaches it through its signature (each publication, and its exposures'
+    /// air light and camera light).</summary>
     public bool Settling {
         get {
             lock (m_gate) {

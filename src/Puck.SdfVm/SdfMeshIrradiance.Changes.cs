@@ -67,7 +67,7 @@ public sealed partial class SdfMeshIrradiance {
     // Whether a probe traced against an earlier geometry may have other hits or another placement under the current
     // one: some draw a change since added or removed lies in the region its placement searches, or meets one of its
     // rays before the hit the ray recorded. A probe no change can reach keeps its hits, which a trace would reproduce.
-    // KEEP IN SYNC with sdf-probe-select, which answers the same on the GPU from the rows WriteChanges packs.
+    // KEEP IN SYNC with sdf-probe-select, which answers the same on the GPU from the rows SelectionRows packs.
     private static bool Affected(in ProbeData probe, (int X, int Y, int Z) cell, Vector3 spacing, Layout layout, in Snapshot snapshot) {
         var changes = snapshot.Changes;
 
@@ -208,30 +208,44 @@ public sealed partial class SdfMeshIrradiance {
         return true;
     }
 
-    // The changes as sdf-probe-select reads them, appended to the selection's header rows: a row a change (its geometry,
-    // its first node's row, its node count, and its flags: bit 0 a change of every probe, the deepest leaf from bit 8),
-    // then each change's nodes, two rows a node: its low corner and its escape (an index among the change's nodes), its
-    // high corner and whether it is a leaf. Returns the nodes written. KEEP IN SYNC with sdf-probe-select and
-    // SdfMeshProbeGpuWork.Select.
-    private static int WriteChanges(List<Vector4> rows, (int Geometry, ChangeTree? Tree)[] changes) {
-        var first = (rows.Count + changes.Length);
+    // A selection's rows as sdf-probe-select reads them, exactly sized: the header rows (the volume's geometry; the
+    // change count, node count, oldest change's geometry and reach; each level's spacing), then a row a change (its
+    // geometry, its first node's row, its node count, and its flags: bit 0 a change of every probe, the deepest leaf from
+    // bit 8), then each change's nodes, two rows a node: its low corner and its escape (an index among the change's
+    // nodes), its high corner and whether it is a leaf. The array `rows` holds is rewritten and returned when it already
+    // has the length, so selections under one set of changes share one array: the probe service answers or cancels every
+    // job of a selection before Select returns. KEEP IN SYNC with sdf-probe-select and SdfMeshProbeGpuWork.Select.
+    private static Vector4[] SelectionRows(int geometry, (int Geometry, ChangeTree? Tree)[] changes, Layout layout, Vector4[] rows) {
         var nodes = 0;
 
-        foreach (var (geometry, tree) in changes) {
+        foreach (var (_, tree) in changes) { nodes += (tree?.Nodes.Length ?? 0); }
+
+        var first = (SdfMeshProbeRelight.SelectionHeaderRows + changes.Length);
+
+        if (rows.Length != (first + (2 * nodes))) { rows = new Vector4[first + (2 * nodes)]; }
+        rows[0] = new Vector4(BitConverter.Int32BitsToSingle(value: geometry), 0f, 0f, 0f);
+        rows[1] = new Vector4(changes.Length, nodes, BitConverter.Int32BitsToSingle(value: ((changes.Length == 0) ? 0 : changes[0].Geometry)), layout.Reach);
+        for (var level = 0; (level < SdfMeshIrradianceProbe.Levels); level++) { rows[2 + level] = new Vector4(layout.SpacingOf(level: level), 0f); }
+
+        var head = SdfMeshProbeRelight.SelectionHeaderRows;
+        var at = first;
+        var written = 0;
+
+        foreach (var (changed, tree) in changes) {
             var count = (tree?.Nodes.Length ?? 0);
             var flags = ((tree is null) ? 1u : (((uint)tree.Depth) << 8));
 
-            rows.Add(item: new Vector4(BitConverter.UInt32BitsToSingle(value: (uint)geometry), BitConverter.UInt32BitsToSingle(value: (uint)(first + (2 * nodes))),
-                BitConverter.UInt32BitsToSingle(value: (uint)count), BitConverter.UInt32BitsToSingle(value: flags)));
-            nodes += count;
+            rows[head++] = new Vector4(BitConverter.UInt32BitsToSingle(value: (uint)changed), BitConverter.UInt32BitsToSingle(value: (uint)(first + (2 * written))),
+                BitConverter.UInt32BitsToSingle(value: (uint)count), BitConverter.UInt32BitsToSingle(value: flags));
+            written += count;
         }
         foreach (var (_, tree) in changes) {
             if (tree is null) { continue; }
             foreach (var node in tree.Nodes) {
-                rows.Add(item: new Vector4(node.Low, BitConverter.UInt32BitsToSingle(value: (uint)node.Escape)));
-                rows.Add(item: new Vector4(node.High, (node.Leaf ? 1f : 0f)));
+                rows[at++] = new Vector4(node.Low, BitConverter.UInt32BitsToSingle(value: (uint)node.Escape));
+                rows[at++] = new Vector4(node.High, (node.Leaf ? 1f : 0f));
             }
         }
-        return nodes;
+        return rows;
     }
 }
