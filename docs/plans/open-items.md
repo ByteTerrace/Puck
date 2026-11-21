@@ -751,9 +751,10 @@ pair started from `puck_world_start` and the remote seat's input.
   screen and a gallery painting) on the client matches the same set taken in
   process, which is the lead's windowed leg after the design's step 7.
 - [high] A remote seat does not play. The design fixes each defect at its
-  cause: a remote input batch is refused by the authority's input admission
-  for its capture time and then refused forever
-  ([what ran](remote-content.md#what-ran-and-what-it-settled)), the debug
+  cause: the intent stream holds a backlog, a remote input batch applied after
+  the tick it was captured for is refused by the authority's input admission,
+  and one refusal refuses every batch after it
+  ([what ran](remote-content.md#what-ran-and-what-it-settled)); the debug
   world admits no remote player, a replica travels as one capped message, a
   delivered document that names content by relative path fails validation, and
   the client still steps its whole boot world.
@@ -4226,12 +4227,13 @@ the stages; this packet holds what a stage does not.
   - A `--connect` traveller's seat input does not move its body on the remote
     authority. With the transfer committed and deliveries arriving, a held
     `player.signal gamepad.leftStick 0 1` leaves `body.where` unchanged for 90
-    ticks. The input reaches the authority and is refused by its input
-    admission (`WorldInputOwner.TryAdmit`): the batch that carries the stick's
-    movement is refused for its capture time, and every batch after it for
-    disagreeing with a movement the authority never took
-    ([what ran](remote-content.md#what-ran-and-what-it-settled)). This blocks
-    every remote route, on any world.
+    ticks on most runs. The input reaches the authority and is refused by its
+    input admission (`WorldInputOwner.TryAdmit`): the intent stream holds a
+    backlog, so the batch that carries the stick's movement is applied after
+    the tick it was captured for and refused for its capture time, and every
+    batch after it is refused for disagreeing with a movement the authority
+    never took ([what ran](remote-content.md#what-ran-and-what-it-settled)).
+    This blocks every remote route, on any world.
   - `--connect` resolves its remote destination from the document the client
     booted and refuses one that authors no `host.authorityNamespace`
     (`WorldInstanceHost`'s remote destination resolution). The subject a run

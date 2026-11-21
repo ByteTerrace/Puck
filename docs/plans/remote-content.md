@@ -53,8 +53,11 @@ Four words are used throughout.
   the hosted world is sent a few kilobytes where it is sent 21.9 MB today, and
   no single message grows with the world.
 - **The remote seat's input is lost at the authority's input admission,** which
-  was settled by running a pair. The fix re-times a remote batch at the door and
-  never drops one silently.
+  was settled by running a pair. The intent stream carries a backlog of most of
+  a second, the admission refuses a batch applied after the tick it was
+  captured for, and one refusal refuses everything after it. The fix removes
+  the backlog, re-times a remote batch at the door and never drops one
+  silently.
 - **Who may arrive, and as what, is authored.** The debug world authors its
   namespace, its visitor slots and separate admission rows for windows and for
   arriving bodies. The engine keeps no default that admits anyone.
@@ -88,30 +91,51 @@ document was the Moth, her controls and a floor. The client's seat submitted
 every tick, the intent stream carried each batch and the authority acknowledged
 each one. Three of the four places never fired. The fourth did: the authority's
 input admission (`WorldInputOwner.TryAdmit`, reached through
-`WorldTick.ApplyFederatedIntents`) refused the batches, in three stages.
+`WorldTick.ApplyFederatedIntents`) refused batches. Whether it refuses depends
+on timing, so the pair was run four times.
 
-1. For the first few ticks the batches named the input epoch of the client's own
-   world. The client then took the remote authority's published epoch and this
-   refusal stopped. It is the ordinary start of a stream.
-2. The one batch that carried the stick's movement was refused as late
-   (`input.late`; on another run `input.time`). The authority applies a remote
-   batch at whatever tick it arrives and rewrites the batch's tick to match, but
-   it leaves each event stamped with the earlier tick the client captured it
-   for. The world authors no lateness allowance
-   (`WorldInputHistory.MaximumLatenessSeconds` defaults to zero), so an event
-   captured one tick earlier is too late by rule. A remote event is always at
-   least one tick earlier.
-3. Every batch after that was refused as inconsistent
-   (`input.image: ordered transitions disagree with final image`). The refused
-   batch held the only record that the stick moved. Later batches carry the
-   stick's held position and no event, and the authority, which never took the
-   movement, cannot reconcile them. The stream stays refused until the stick
-   moves again.
+| Run | What was sent | What the authority did |
+|---|---|---|
+| 1 and 2, with scratch probes writing to both processes' error streams | One held stick | Refused the batch that carried the movement, as `input.time` and as `input.late`; the body did not move in 90 ticks |
+| 3, on the committed head | One held stick | Admitted it; the body moved 14.6 units in 90 ticks |
+| 4, on the committed head | Twenty stick movements, ten ticks apart | Refused 18 of the 20 as `input.time`; the body moved 1.4 units |
 
-The body's position on the authority was read before the held stick and 90
-ticks after it, and was the same. The existing narration of an input refusal is
-a bare line with no body or actor, repeated every tick, which is why the earlier
-reading found that neither process named a refusal.
+The refusals have three causes, and each is a defect on its own.
+
+1. **The intent stream carries latency that never drains.** In run 4 the
+   authority applied each refused batch between 21 and 46 ticks after the tick
+   the client captured it for, settling at a constant 21. That is 0.7 seconds
+   at this world's 30 ticks a second, on one machine. The mechanism was read in
+   the code and not separately instrumented: the client sends one batch and
+   waits for its acknowledgement before the next, the authority runs each batch
+   on its tick thread before it acknowledges, and the client queues a batch for
+   every remote tick without coalescing. The stream therefore carries at most
+   one batch for each authority tick, which is the rate batches are made, so a
+   stall leaves a backlog for good. Run 3 had no backlog, and its batch was
+   applied in the tick it was captured for.
+2. **The admission refuses a batch applied later than it was captured.** The
+   authority rewrites a remote batch's tick to the tick that applies it, and
+   leaves each event stamped with the earlier tick. The world authors no
+   lateness allowance (`WorldInputHistory.MaximumLatenessSeconds` defaults to
+   zero) and the authority keeps two earlier intervals, so an event one tick
+   old is refused as late and an older one as unknown.
+3. **One refused batch refuses every batch after it.** The refused batch held
+   the only record that the stick moved. Later batches carry the stick's held
+   position and no event, and the authority, which never took the movement,
+   refuses each one as inconsistent
+   (`input.image: ordered transitions disagree with final image`) until the
+   stick moves again and that movement happens to be admitted.
+
+Two smaller things showed beside them. For the first few ticks of a stream the
+batches name the input epoch of the client's own world, until the client takes
+the authority's published epoch; that is the ordinary start of a stream. And in
+run 4 the authority detached the client's observation once for falling behind
+(the benchmark packet's backpressure item), after which the client's input
+profile was admitted again twice.
+
+The existing narration of an input refusal is a bare line with no body or
+actor, repeated every tick, which is why the earlier reading found that neither
+process named a refusal.
 
 The same pair confirmed two more of the trace's open points. A client started
 with `--connect` keeps stepping its own copy of the world after its seat has
@@ -435,10 +459,19 @@ identity is computed from its inputs.
 
 Each defect is fixed at the cause that the pair or the code showed.
 
-**Input is re-timed at the door and never dropped silently.** Two rules, both
-in the one place a remote batch enters the tick (`WorldTick.ApplyFederatedIntents`).
+**Input arrives without a backlog, is re-timed at the door and is never dropped
+silently.** One change to the stream, and two rules in the one place a remote
+batch enters the tick (`WorldTick.ApplyFederatedIntents`).
 
-1. *The authority decides when a remote input happened.* An event in a remote
+1. *The stream carries what the seat last did, not every tick's copy of it.*
+   The client writes batches without waiting for each to be acknowledged; the
+   authority's answer to an input already returns in its deliveries
+   (`WorldInputAnswer`). A batch with no event replaces an unsent batch with no
+   event, so only batches that carry events queue, in order. The authority
+   takes an arrived batch under its authority gate, as the path inside one
+   process already does, and does not wait for its tick thread before it reads
+   the next. A batch is then late by its transit and at most one tick.
+2. *The authority decides when a remote input happened.* An event in a remote
    batch claims a capture time in the authority's ticks that the client could
    only estimate. The door moves each claim into the window the authority still
    honours: no earlier than the world's lateness allowance before the tick that
@@ -447,7 +480,7 @@ in the one place a remote batch enters the tick (`WorldTick.ApplyFederatedIntent
    exactly authors a larger allowance (`WorldInputHistory.MaximumLatenessSeconds`),
    which is the author's to choose. A local seat's events are stamped in the
    same process and keep today's refusal.
-2. *An event is applied or its stream is restarted, and the client is told.*
+3. *An event is applied or its stream is restarted, and the client is told.*
    When the admission refuses a remote batch for any reason but permission, the
    door resets that input owner through the reset a lost capture already uses.
    The reset starts a new epoch, the authority publishes it, and the client
@@ -457,7 +490,10 @@ in the one place a remote batch enters the tick (`WorldTick.ApplyFederatedIntent
 
 The narration added for the pair stays: one line when a body's remote input
 starts being dropped or the reason changes. The per-tick bare line from the
-admission is replaced by the same once-per-change form. The client's intent
+admission is replaced by the same once-per-change form. Saying a thing once
+until its reason changes is written three times in the tree (this door, the
+drive denial beside it, and the render graph's completion narration), so the
+step makes it one shared type and all three use it. The client's intent
 stream gains the same treatment for a worker that ends on an error it does not
 handle, which today ends the stream without a word (read in the code, not
 observed).
@@ -468,9 +504,12 @@ only caller of the admission for a remote batch, and its refusal branch has no
 path that continues without the reset. **Where it stops:** a remote event's
 time is the authority's, within the allowance the world authors.
 
-**Attack it closes.** A client cannot claim a capture time earlier than the
-allowance to win a timing judgement, because the claim is moved, and it cannot
-wedge its own stream into a state the authority refuses forever.
+**Attacks it closes.** A client cannot claim a capture time earlier than the
+allowance to win a timing judgement, because the claim is moved. It cannot
+wedge its own stream into a state the authority refuses forever. And a slow
+client cannot make the authority hold a growing queue of stale batches:
+batches without events replace each other, and the event queue keeps its
+existing bound, past which the stream restarts.
 
 **Admission is authored, and says what kind of arrival it admits.** One debug
 world row serves two kinds of arrival today: a session looking in through a
@@ -589,12 +628,15 @@ its picture needs.
    remote endpoint and a signing key file.
    *Check:* the pair below starts and stops through the tool, with no process
    started by hand.
-2. **The remote seat's input.** The two rules of decision 5 and the narration.
-   *Check:* on the small staged pair a held stick moves the body on the
-   authority (`body.where` before and after); `world.input.federated` narrates
-   only the epoch change at the start; with the authority paused for a second
-   under a held stick and resumed, the body moves again and the reset is
-   counted once.
+2. **The remote seat's input.** The stream change and the two rules of
+   decision 5, and the narration.
+   *Check:* on the small staged pair, twenty stick movements ten ticks apart
+   are all admitted, where run 4 above admitted two: `world.input.federated`
+   narrates only the epoch change at the start, and the body's travel on the
+   authority equals the same script's travel in one process. A counter reads
+   the ticks between a batch's capture and its admission, and reads at most one
+   beyond transit. With the authority paused for a second under a held stick
+   and resumed, the body moves again and the restart is counted once.
 3. **Content by pin.** The resolver, the loaders moved to it, a pin on voice
    sample sets, `EmbedAudio` and the text catalog's directory deleted.
    *Check:* with the debug world staged, the reservation is no longer refused
@@ -674,7 +716,8 @@ Searched and read before proposing a mechanism. Each is cited by symbol.
   `WorldTick.PublishFederatedIntent`, `WorldTick.ApplyFederatedIntents`,
   `WorldInputRuntime.TryAdmit` and `WorldInputOwner.TryAdmit`. The reset a lost
   capture uses, and the published epoch a client reconciles to, are the
-  restart; no new mechanism is added.
+  restart, and `WorldInputAnswer` is the acknowledgement; no new mechanism is
+  added.
 - **Content.** `IAssetSource` and `FileSystemAssetSource`, `FontAtlasSourceResolver`,
   `ContentAddressedStore`, `WorldProjectionPrototypeFetch`, `AssetRowFamilies`,
   `WorldAssetRowLoader.EmbedAudio`, `WorldVoiceSampleLoader`, the player folder
