@@ -376,6 +376,16 @@ public sealed partial class SdfMeshPathBake {
     private readonly Stopwatch m_clock = new();
 
     private SdfProgram? m_program;
+    // The field m_program derives, counted: it moves when the bake adopts a program that does not share the held one's
+    // field (SdfProgram.SharesField), and only then. A group's checkpoint keys name the field they were taken from by this
+    // count (CheckpointKeys.Field), never by the program, so keys held by many groups pin no program's tables.
+    private long m_field;
+
+    // Under the gate: holds a program, moving the field count when its field is not the held one's.
+    private void Adopt(SdfProgram program) {
+        if (!program.SharesField(other: m_program)) { Volatile.Write(location: ref m_field, value: (m_field + 1L)); }
+        m_program = program;
+    }
 
     // The baked sampled set the groups were planned at (SdfSampledSet.Baked): a frame carrying another resamples the groups
     // that read a moved field.
@@ -594,7 +604,7 @@ public sealed partial class SdfMeshPathBake {
             // frame. A program that shares the held one's field (SdfProgram.SharesField: only its appearance moved) is
             // adopted as it stands: every group, plan and bake in flight reads the field alone.
             if (!ReferenceEquals(objA: frame.Program, objB: m_program) && frame.Program.SharesField(other: m_program)) {
-                m_program = frame.Program;
+                Adopt(program: frame.Program);
             }
             if (!ReferenceEquals(objA: frame.Program, objB: m_program) || (Library.LostRevision != m_lostRevision)) {
                 m_lostRevision = Library.LostRevision;
@@ -1427,7 +1437,7 @@ public sealed partial class SdfMeshPathBake {
 
         m_allResident = false;
         m_demandTransforms = frame.DynamicTransforms;
-        m_program = program;
+        Adopt(program: program);
         m_sampled = sampled;
         m_groups.Clear();
         TouchAll();
@@ -1588,7 +1598,7 @@ public sealed partial class SdfMeshPathBake {
             // A group kept mid-bake carries on under the new program: its checkpoints are keyed again under it, so the
             // stages and lattices still to come are kept where a later bake of this program looks. Its sealed geometry,
             // and so its mesh, is the same under either program, as the library's key says.
-            if (!old.Done && (old.Checkpoints is { Samples.Store: var store } keys) && !ReferenceEquals(keys.Program, m_program)) { KeyCheckpoints(old, store); }
+            if (!old.Done && (old.Checkpoints is { Samples.Store: var store } keys) && (keys.Field != m_field)) { KeyCheckpoints(old, store); }
             Replace(group: old, index: index);
             if (!old.Done && (old.Leader is null) && (old.Replaces is null)) { _ = leaders.TryAdd(key: old.Sealed, value: old); }
             return false;

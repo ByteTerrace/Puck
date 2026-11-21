@@ -265,7 +265,6 @@ public sealed class MemoryAdmissionLawTests {
         using var play = account.CreateOwner(memoryClass: MemoryClass.Workspace, name: "play");
         using var bake = account.CreateOwner(allowance: MemoryAllowance.Authoring, memoryClass: MemoryClass.Workspace, name: "bake");
 
-        // The bar also counts this test process's private bytes beyond the owners, well under the margin left here.
         account.SetHostBar(bytes: (8L * Gibibyte));
         Assert.True(condition: play.TryReserve(peak: (4L * Gibibyte)));
         Assert.True(condition: bake.TryReserve(peak: (16L * Gibibyte)));

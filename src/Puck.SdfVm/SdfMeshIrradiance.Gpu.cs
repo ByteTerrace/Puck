@@ -55,10 +55,6 @@ public sealed partial class SdfMeshIrradiance {
     private Vector4[]? m_gpuLightingRows;
     private int[] m_gpuUpdateAt = [];
     private uint[] m_gpuUpdateData = [];
-    // The full snapshot of the volume a job carries when the feedback must be rewritten whole: the volume runs to
-    // megabytes, so a fresh array each time would land on the large object heap. Like the updates above, a batch may
-    // overwrite it because SdfMeshProbeGpuWork.Run answers or cancels every job before it returns or throws.
-    private uint[] m_gpuVolumeSnapshot = [];
     // Set by a device reattach; cleared once a completed job carried the volume's full snapshot into the new feedback.
     private bool m_republishOwed;
 
@@ -326,6 +322,10 @@ public sealed partial class SdfMeshIrradiance {
         SdfMeshProbeGpuWork.Deltas updates;
         int volumeWords;
         uint[]? snapshotOf = null;
+        // The volume's full snapshot when the feedback must be rewritten whole, rented for this job alone: Relight answers
+        // or cancels the job before it returns or throws, so nothing reads it after, and the shared cache, which pressure
+        // trims, keeps it for the next rewrite rather than every irradiance holding a second volume for good.
+        uint[]? volumeSnapshot = null;
         lock (m_gate) {
             if (!Stands(in snapshot)) { m_gpuVolume = null; return false; }
             for (var i = 0; i < count; i++) {
@@ -335,10 +335,10 @@ public sealed partial class SdfMeshIrradiance {
             volumeWords = m_volume.Length;
             if (!ReferenceEquals(m_gpuVolume, m_volume)) {
                 ArrayCapacity.EnsureScratch(ref m_gpuUpdateAt, 1);
-                ArrayCapacity.EnsureScratch(ref m_gpuVolumeSnapshot, m_volume.Length);
+                volumeSnapshot = RentedArrays.Rent<uint>(minimumLength: m_volume.Length);
                 m_gpuUpdateAt[0] = 0;
-                m_volume.CopyTo(array: m_gpuVolumeSnapshot, index: 0);
-                updates = new(Words: m_gpuUpdateAt, Data: m_gpuVolumeSnapshot.AsMemory(start: 0, length: m_volume.Length), Count: 1, Length: m_volume.Length);
+                m_volume.CopyTo(array: volumeSnapshot, index: 0);
+                updates = new(Words: m_gpuUpdateAt, Data: volumeSnapshot.AsMemory(start: 0, length: m_volume.Length), Count: 1, Length: m_volume.Length);
                 m_gpuVolume = m_volume;
                 snapshotOf = m_volume;
             } else {
@@ -367,6 +367,9 @@ public sealed partial class SdfMeshIrradiance {
             // A cancelled job may or may not have consumed the delta. Re-send a full snapshot on the next accepted job.
             lock (m_gate) { m_gpuVolume = null; }
             throw;
+        }
+        finally {
+            if (volumeSnapshot is not null) { RentedArrays.Return(array: volumeSnapshot); }
         }
         if (snapshotOf is not null) {
             lock (m_gate) {
