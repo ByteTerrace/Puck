@@ -931,7 +931,6 @@ public sealed partial class WorldTick {
             if (!Host.AuthorityRetiring) { m_intents.Enqueue(item: submission); }
         }
     }
-    private static readonly TimeSpan TickStall = TimeSpan.FromSeconds(30);
     private PendingTick m_pendingTick;
     private bool m_resumingTick;
     private volatile TickBlock? m_tickBlock;
@@ -960,10 +959,10 @@ public sealed partial class WorldTick {
     internal bool AwaitsBoundary => m_tickBlock is { } block && !ExecutionInterrupted && (block.Owner != Environment.CurrentManagedThreadId);
 
     /// <summary>Blocks the calling thread, which must not hold the authority gate, until the held tick settles or
-    /// freezes, for at most the tick stall.</summary>
+    /// freezes, for at most <see cref="WaitDeadline.StandaloneStall"/>.</summary>
     /// <returns><see langword="false"/> when the stall passed with the tick still held.</returns>
     internal bool AwaitBoundary() {
-        var deadline = WaitDeadline.In(TickStall);
+        var deadline = WaitDeadline.Standalone();
         lock (m_boundary) {
             while ((m_tickBlock is not null) && !ExecutionInterrupted) {
                 if (HostWaits.OnCondition(deadline: deadline, monitor: m_boundary, reason: in BoundaryWait) != WaitOutcome.Completed) { return false; }
@@ -1001,7 +1000,7 @@ public sealed partial class WorldTick {
     /// use <see cref="Advance"/> to derive these from the authority's own checkpointed clock.</param>
     internal void Step(in FixedStepContext context) {
         lock (Host.AuthorityGate) {
-            if (RunTick(in context, WaitDeadline.In(TickStall)) is { } pending) {
+            if (RunTick(in context, WaitDeadline.Standalone()) is { } pending) {
                 throw new TimeoutException(pending.ToString());
             }
         }
@@ -1031,9 +1030,9 @@ public sealed partial class WorldTick {
                 DrainOrdered();
                 StepCore(in context);
                 m_pendingTick.Pads = Host.Engagement.BuildPadSnapshot();
-                m_pendingTick.Stall = WaitDeadline.In(TickStall);
+                m_pendingTick.Stall = WaitDeadline.Standalone();
             }
-            var deadline = WaitDeadline.At(Math.Min(slice.Timestamp, m_pendingTick.Stall.Timestamp));
+            var deadline = slice.Earliest(m_pendingTick.Stall);
             var pending = ResumeTick(deadline);
             if (pending is { } reason) {
                 held = true;
@@ -1089,7 +1088,7 @@ public sealed partial class WorldTick {
     }
 
     internal void Advance(ulong stepTicks) {
-        if (TryAdvance(stepTicks, WaitDeadline.In(TickStall)) is { } pending) {
+        if (TryAdvance(stepTicks, WaitDeadline.Standalone()) is { } pending) {
             throw new TimeoutException(pending.ToString());
         }
     }

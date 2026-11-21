@@ -35,7 +35,7 @@ public static class WorldServerStepShell {
     /// fast-forwarding drive stepped; a caller derives its own elapsed engine time from the difference times
     /// <see cref="FixedStepContext.StepTicks"/>.</returns>
     public static ulong Step(WorldServer server, WorldReplayTape? tape, Action<ulong> publishTick, in FixedStepContext context, HostPacing pacing) {
-        var tick = TryStep(server, tape, publishTick, in context, pacing, WaitDeadline.In(TimeSpan.FromSeconds(30)), out var pending);
+        var tick = TryStep(server, tape, publishTick, in context, pacing, WaitDeadline.Standalone(), out var pending);
         if (pending is { } reason) { throw new TimeoutException(reason.ToString()); }
         return tick;
     }

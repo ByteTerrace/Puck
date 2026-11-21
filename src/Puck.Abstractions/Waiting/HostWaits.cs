@@ -9,10 +9,11 @@ namespace Puck.Abstractions.Waiting;
 /// answers a <see cref="WaitOutcome"/>; only a queue's consumer (<see cref="WaitConsumer"/>) waits without one, and only
 /// for its own next work. <c>WAIT001</c> refuses a blocking runtime member anywhere else in a project held to it.
 /// <para>
-/// The host loop registers its pump thread at each control phase (<see cref="BeginPumpIteration"/>): a deadline wait on
-/// that thread is clipped to what the iteration's allowance has left and the time it blocked is charged to it, so
-/// sequential waits between two control phases block for at most one allowance in all. A pump thread cannot claim a
-/// consumer, and a consumer's thread cannot become a pump.
+/// The host loop registers its pump thread at each control phase (<see cref="BeginPumpIteration"/>): a slice deadline
+/// wait on that thread is clipped to what the iteration's allowance has left and the time it blocked is charged to it,
+/// so sequential slice waits between two control phases block for at most one allowance in all. A stall deadline
+/// (<see cref="WaitDeadline.IsStall"/>) is charged and never clipped: its caller cannot resume the wait, so a clip
+/// could only fail it. A pump thread cannot claim a consumer, and a consumer's thread cannot become a pump.
 /// </para>
 /// <para>
 /// The pacer's wait is serviced (<see cref="Pace"/>): the pump thread sleeps on its deadline and on one wake event
@@ -413,7 +414,7 @@ public static class HostWaits {
         var start = Stopwatch.GetTimestamp();
         var end = deadline.Timestamp;
 
-        if (slot.IsPump) {
+        if (slot.IsPump && !deadline.IsStall) {
             end = Math.Min(val1: end, val2: start.AddSaturating(right: slot.AllowanceTicks));
         }
 

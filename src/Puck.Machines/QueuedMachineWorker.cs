@@ -1140,7 +1140,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     public bool Step(ulong deltaTicks, in MachinePads input) {
         var generation = 0UL;
         var result = StepSegment(deltaTicks: deltaTicks, input: in input, drain: true, generation: ref generation,
-            deadline: QueuedWorkerLifecycle<WorkItem>.StandaloneDeadline());
+            deadline: WaitDeadline.Standalone());
         return QueuedWorkerLifecycle<WorkItem>.RequireSettled(result) != QueuedMachineSubmission.Rejected;
     }
     /// <summary>Accepts one exact tick/input segment for ordered execution, applying producer backpressure at capacity.</summary>
@@ -1150,7 +1150,7 @@ public sealed class QueuedMachineWorker : IDisposable {
     public QueuedMachineSubmission Submit(ulong deltaTicks, in MachinePads input) {
         var generation = 0UL;
         var result = EnqueueStep(deltaTicks: deltaTicks, input: in input, forceStage: false, generation: ref generation,
-            deadline: QueuedWorkerLifecycle<WorkItem>.StandaloneDeadline());
+            deadline: WaitDeadline.Standalone());
         return QueuedWorkerLifecycle<WorkItem>.RequireSettled(result);
     }
 

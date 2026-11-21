@@ -40,7 +40,6 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
     private static readonly WaitReason CapacityWait = new("machines", "worker queue capacity");
     private static readonly WaitReason DrainWait = new("machines", "worker drain");
     private static readonly WaitReason IdleWait = new("machines", "queued worker work");
-    internal static WaitDeadline StandaloneDeadline() => WaitDeadline.In(TimeSpan.FromSeconds(30));
 
     internal static QueuedMachineSubmission RequireSettled(QueuedMachineSubmission outcome) => outcome switch {
         QueuedMachineSubmission.PendingCapacity => throw new TimeoutException(CapacityWait.ToString()),

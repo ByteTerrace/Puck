@@ -79,7 +79,7 @@ public sealed class JobPool : IDisposable {
     /// lowest-numbered partition that threw is rethrown here, on the calling thread.</remarks>
     public void Fork(int partitions, IJobPartitions body) {
         var fork = default(ForkOperation);
-        if (Fork(partitions, body, ref fork, WaitDeadline.In(TimeSpan.FromSeconds(30))) == WaitOutcome.DeadlinePassed) {
+        if (Fork(partitions, body, ref fork, WaitDeadline.Standalone()) == WaitOutcome.DeadlinePassed) {
             throw new TimeoutException(JoinWait.ToString());
         }
     }
