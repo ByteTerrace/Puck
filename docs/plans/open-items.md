@@ -168,9 +168,15 @@ What to do next:
    target, and it refuses a folder whose check did not settle; Vulkan has not
    run it yet. The bake identity has moved since the last set, so without new
    sets the `player` job holds its publish and names what to run.
-2. Start the validation run without deploying:
-   `gh workflow run azure.yml --ref lead/rendering -f deploy=false`.
-3. When the window and that run are green, push `lead/rendering` to `main` and
+2. Read the validation run the last lead started (`gh run list --workflow
+   azure.yml --branch lead/rendering -L 1`; it ran with `-f deploy=false`
+   on the code the head carries, since only documents landed after it). If
+   it is red, or the head has gained code, start another:
+   `gh workflow run azure.yml --ref lead/rendering -f deploy=false`. The
+   owner asked for this deploy directly, so a green validation run is enough
+   to push; the bulk window may run beside the release rather than before
+   it, and step 1's cache sets only hold the `player` job, never the deploy.
+3. When that run is green, push `lead/rendering` to `main` and
    watch the release to its end. It should deploy, pass the public probe
    (`puck azure test-production` reads the worker's `/healthz` first, so a
    withheld readiness names its reason) and publish the player channel. A red
