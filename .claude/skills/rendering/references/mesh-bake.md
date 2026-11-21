@@ -1486,6 +1486,35 @@ laws exercise that boundary.
   boundary: applied code updates report types, including declaring types of nested helpers, so a partial/nested dresser
   would still invalidate the bake. `SdfMeshBakeClosure.Reads` includes producing types and excludes the standalone dresser,
   draw history, world tables, pass recorder and the view frame block; unknown applied-code updates remain conservative.
+- **A library has a cache policy** (`SdfMeshCachePolicy`, `SdfMeshLibrary.Policy`,
+  the World's `--mesh-cache`), which every bake holding it follows about a rung
+  of a group's ladder the store lacks. `Demand` bakes the rung asked, an
+  author's boot. `Ladder` also bakes every other rung between each drawn
+  geometry's `FinestTier` and `CoarsestTier`, coarsest first, into the store
+  alone (`SdfMeshPathBake.FillLadders`): a rung bakes in its group's place as a
+  tier's replacement does, its product never takes the draws (`Group.Fill`,
+  `Draw`), and the group it stood in for takes the place back
+  (`FinishFill`). The detail is not settled while a ladder is unfinished, so
+  `world.wait bakes` waits for all of them, and a residency besides the world's
+  own holds the wait while its frames still come (`SdfMeshPathBake.Filling`).
+  `Stored` draws stored rungs alone, the policy of a build that ships its cache
+  (a complete player build's default): a group arriving takes the nearest
+  stored rung of its ladder, coarser first (`StoredRung`, in `Place`), a group
+  asked another tier keeps what it draws until its demand names another
+  (`StartReplacement`, `Group.RetierRefused`), and a load the account had no
+  room for is read again rather than baked (`Load`). Only a shape the store
+  holds no rung of bakes. `world.counters sdf.mesh-cache` (`SdfMeshCache`) is
+  the reading: `dispatches`, `groups-baked`, `rungs-missed`, `loads-retried`
+  and `rungs-filled`. A boot of a whole cache under `Stored` counts none of the
+  first three, which is what `puck world player`'s check boots require.
+- **A dynamic group's mesh is stored under its form too.** Its geometry holds
+  its other slots' poses, which no later run stands in again, so
+  `SdfMeshLibrary.Store` writes the mesh a second time under
+  `SdfMeshLibrary.FormGeometry` (the latest replacing the one before; a group
+  whose form is its geometry writes once), and a group whose own entry is
+  missing loads that one (`SdfMeshPathBake.HoldsForm`, `Group.LoadsForm`), as
+  `TryTakeForm` takes a form this run holds. A tier's replacement takes its
+  form from the library the same way.
 - **A miss names its cause.** Each identity's parts and code members are
   recorded beside the entries (`<identity>.identity`, the 64 most recent kept),
   and a start that bakes groups logs one line: `[sdf.mesh-bake] miss … identity

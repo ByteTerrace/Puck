@@ -2388,7 +2388,13 @@ they read moved a step, and the newer plans that replaced a successor still
 waiting on its group's bake; and `sdf.mesh-skin` over the same library
 (`SdfMeshSkin`): each skinned mesh a bake group starts drawing and its vertices
 by vertex-stage path, riding the draw's slot, riding one moving member rigidly,
-or blending two. It registers `sdf.mesh-gi` too, the world
+or blending two; and `sdf.mesh-cache` over the same library (`SdfMeshCache`):
+what its bakes asked of the mesh store beyond a hit, which is the lattices they
+dispatched, the groups that began a bake, and, under a `--mesh-cache` policy,
+the tiers a stored-only boot drew another stored tier in place of, the loads it
+read again for want of memory, and the tiers a ladder boot baked beyond its
+demand. A boot of a whole shipped cache reads zero for the first three. It
+registers `sdf.mesh-gi` too, the world
 residency's irradiance volume (`SdfMeshIrradiance`): its trace scene builds,
 the geometries they built and took from the scene they replaced, the triangles
 they built, static draws, top-level entries, exported prefix bytes, the peaks

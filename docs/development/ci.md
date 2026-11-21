@@ -740,6 +740,12 @@ puck world player worlds/debug --output <folder> --target rtx2060@1920x1080 --ta
 puck world caches produce <folder> --push
 ```
 
+`world player` fills the store with every detail tier of what the world's
+authored spawn points draw, then boots each target as a player's build does;
+it exits 1 and marks the folder incomplete when a boot does not settle or a
+check boot bakes or misses, and `produce` refuses an incomplete folder
+([the decision](../decisions/runtime-and-delivery.md#the-player-channel)).
+
 `--push` uses `gh` with the developer's own login to create the prerelease when
 it is missing and replace its `cache-set.zip`. The next release whose build has
 the same mesh bake identity, and whose world plans the groups the set was

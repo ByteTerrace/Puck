@@ -55,13 +55,13 @@ public sealed partial class WorldScreenBinder : IWorldBakeReadiness {
             names.Add(item: world.MeshPathBake.Describe());
         }
         foreach (var residency in m_routedResidencies.Values) {
-            if (residency.MeshPathBake.Pending) { names.Add(item: residency.MeshPathBake.Describe()); }
+            if (Bakes(bake: residency.MeshPathBake)) { names.Add(item: residency.MeshPathBake.Describe()); }
         }
         foreach (var view in m_viewResidencies.Values) {
-            if (view.Residency.MeshPathBake.Pending) { names.Add(item: view.Residency.MeshPathBake.Describe()); }
+            if (Bakes(bake: view.Residency.MeshPathBake)) { names.Add(item: view.Residency.MeshPathBake.Describe()); }
         }
         foreach (var entry in InfinityEntries()) {
-            if (entry.Residency is { MeshPathBake.Pending: true } residency) { names.Add(item: residency.MeshPathBake.Describe()); }
+            if ((entry.Residency is { } residency) && Bakes(bake: residency.MeshPathBake)) { names.Add(item: residency.MeshPathBake.Describe()); }
         }
 
         if ((names.Count == 0) && !world.MeshPathBake.DetailSettled) {
@@ -85,17 +85,19 @@ public sealed partial class WorldScreenBinder : IWorldBakeReadiness {
     // Whether a residency besides the world's own still owes its bake; allocates nothing, so a hold polls it every drain.
     private bool ViewsBake() {
         foreach (var residency in m_routedResidencies.Values) {
-            if (residency.MeshPathBake.Pending) { return true; }
+            if (Bakes(bake: residency.MeshPathBake)) { return true; }
         }
         foreach (var view in m_viewResidencies.Values) {
-            if (view.Residency.MeshPathBake.Pending) { return true; }
+            if (Bakes(bake: view.Residency.MeshPathBake)) { return true; }
         }
         foreach (var root in m_infinityRoots.Values) {
             foreach (var entry in root.Entries.Values) {
-                if (entry.Residency is { MeshPathBake.Pending: true }) { return true; }
+                if ((entry.Residency is { } residency) && Bakes(bake: residency.MeshPathBake)) { return true; }
             }
         }
 
         return false;
     }
+    // Whether a residency's bake owes a group, or is between the rungs of a ladder it is filling (SdfMeshPathBake.Filling).
+    private static bool Bakes(SdfMeshPathBake bake) => (bake.Pending || bake.Filling);
 }

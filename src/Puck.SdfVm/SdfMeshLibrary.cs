@@ -69,6 +69,40 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// (<see cref="SdfMeshBakeShare"/>) every bake holding the library counts into: the groups joined, those that took
     /// the leader's mesh, the samples that saved, and those whose leader left them to start again.</summary>
     public WorkCounterSet Shares { get; } = SdfMeshBakeShare.Counters();
+    /// <summary>Gets what every bake holding the library does about a rung its store lacks
+    /// (<see cref="SdfMeshCachePolicy"/>); <see cref="SdfMeshCachePolicy.Demand"/> unless the host says otherwise.</summary>
+    public SdfMeshCachePolicy Policy { get; init; }
+    /// <summary>Gets the counts of what the bakes holding the library asked of its cache beyond a hit
+    /// (<see cref="SdfMeshCache"/>): the lattices dispatched, the shapes baked, and the rungs missed, retried and
+    /// filled.</summary>
+    public WorkCounterSet Cache { get; } = SdfMeshCache.Counters();
+
+    /// <summary>Returns whether the library or its store holds a geometry's mesh, or its empty result, under a bake's
+    /// identity, as <see cref="SdfMeshStore.Holds"/> answers for the store: with no file read once the identity's
+    /// entries are listed. A <see cref="SdfMeshCachePolicy.Ladder"/> or <see cref="SdfMeshCachePolicy.Stored"/> bake
+    /// decides what to bake or draw from it.</summary>
+    /// <param name="identity">The bake's identity.</param>
+    /// <param name="geometry">The geometry.</param>
+    /// <returns><see langword="true"/> when a take or a load of the geometry would find it.</returns>
+    public bool Holds(UInt128 identity, SdfMeshGeometry geometry) => (HoldsAny(geometry: geometry, identity: identity) || (Disk?.Holds(geometry: geometry, identity: identity) ?? false));
+    /// <summary>Returns the geometry a dynamic form's latest mesh is also stored under (<see cref="Store"/>), so a later
+    /// run takes the mesh of the form at whatever pose its other slots stand in, as <see cref="TryTakeForm"/> takes one
+    /// this run holds.</summary>
+    /// <param name="form">The form (<see cref="SdfMeshGeometryBuilder.Form"/>).</param>
+    /// <returns>The geometry the store keys the form's mesh by.</returns>
+    public static SdfMeshGeometry FormGeometry(UInt128 form) => new(Dynamic: true, Hash: form);
+    /// <summary>Returns whether the library holds a mesh of a dynamic form, baked at any pose, or its store holds one
+    /// (<see cref="FormGeometry"/>).</summary>
+    /// <param name="identity">The bake's identity.</param>
+    /// <param name="form">The form.</param>
+    /// <returns><see langword="true"/> when a group of the form would take or load a mesh.</returns>
+    public bool HoldsForm(UInt128 identity, UInt128 form) {
+        lock (m_gate) {
+            if (m_forms.ContainsKey(key: (identity, form))) { return true; }
+        }
+
+        return (Disk?.Holds(geometry: FormGeometry(form: form), identity: identity) ?? false);
+    }
 
     // The bake running each geometry under a bake identity, which a group of any bake holding the library waits on rather
     // than bake it again (Share). Under m_gate, which is also the one gate a share is joined, left and resolved under.
@@ -195,7 +229,12 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
         // A published mesh restores its parts from its identity's set, which this process pins (a lease the store could not
         // open leaves a restore that misses to bake the group again).
-        if (written) { _ = Disk!.Hold(identity: identity); }
+        if (written) {
+            _ = Disk!.Hold(identity: identity);
+            // A dynamic group's geometry holds its other slots' poses, which no later run stands in again: its mesh is
+            // stored under its form too, the latest replacing the one before.
+            if ((form is { } shapes) && (FormGeometry(form: shapes) != geometry)) { _ = Disk.Write(geometry: FormGeometry(form: shapes), identity: identity, materials: materials, mesh: mesh); }
+        }
 
         var owned = (written
             ? mesh.NativeCopy(Allocator, Account, restore: (this, identity, geometry), stored: stored)
@@ -278,13 +317,16 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <param name="refusal">Why the store refused the entry it held, or <see langword="null"/>.</param>
     /// <param name="form">The form of the dynamic group loading it, as <see cref="Store"/> takes it, or
     /// <see langword="null"/>.</param>
+    /// <param name="declined">Whether the store holds a sound entry the read did not take because the account had no
+    /// room for its workspace (<see cref="SdfMeshStore.WorkspaceRefusal"/>): a later read may take it.</param>
     /// <returns><see langword="true"/> when the store held a sound entry.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="materials"/> is <see langword="null"/>.</exception>
-    public bool TryLoad(UInt128 identity, SdfMeshGeometry geometry, int[] materials, out SdfMesh? mesh, out string? refusal, UInt128? form = null) {
+    public bool TryLoad(UInt128 identity, SdfMeshGeometry geometry, int[] materials, out SdfMesh? mesh, out string? refusal, out bool declined, UInt128? form = null) {
         ArgumentNullException.ThrowIfNull(argument: materials);
 
         mesh = null;
         refusal = null;
+        declined = false;
         if (Disk is null) { return false; }
         // A geometry the library already holds under this identity is served from memory: the decode is shared until
         // the library evicts it, and the store is read again only for a geometry it does not hold.
@@ -303,6 +345,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
                 var result = pending.Value;
 
                 refusal = result.Refusal;
+                declined = result.Declined;
                 if (!result.Found) { return false; }
                 if (result.Mesh is null) {
                     StoreEmpty(geometry: geometry, identity: identity);
@@ -337,14 +380,14 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     private StoredMesh Decode(SdfMeshStore disk, UInt128 identity, SdfMeshGeometry geometry, int[] taking, UInt128? form) {
         // A native mesh lets its parts go and restores them from this set, so the set stays while this process runs.
         var storage = ((Allocator is { } native) ? SdfMesh.Native(allocator: native, account: Account, restore: (this, identity, geometry)) : new SdfMeshManagedStorage());
-        var loaded = disk.TryReadInto(declined: out _, geometry: geometry, identity: identity, materials: out var held, mesh: out var mesh, refusal: out var why, storage: storage, taking: taking);
+        var loaded = disk.TryReadInto(declined: out var declined, geometry: geometry, identity: identity, materials: out var held, mesh: out var mesh, refusal: out var why, storage: storage, taking: taking);
 
         if (loaded && (mesh is not null)) {
             if (Allocator is not null) { _ = disk.Hold(identity: identity); }
             _ = Hold(form: form, geometry: geometry, identity: identity, materials: held, mesh: mesh);
         }
 
-        return new StoredMesh(found: loaded, materials: held, mesh: mesh, refusal: why);
+        return new StoredMesh(declined: declined, found: loaded, materials: held, mesh: mesh, refusal: why);
     }
     /// <summary>Takes the mesh of a geometry for a group whose shapes carry <paramref name="materials"/>: the stored mesh
     /// when its group carried the same ids, and otherwise the stored mesh with each triangle's material renumbered from the
@@ -545,9 +588,10 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     }
     // One decode every group of a geometry shares. Its mesh carries the decode's own claim, which exactly one of them takes
     // over and releases (TakeOwnership).
-    private sealed class StoredMesh(bool found, SdfMesh? mesh, int[] materials, string? refusal) {
+    private sealed class StoredMesh(bool found, SdfMesh? mesh, int[] materials, string? refusal, bool declined) {
         private int m_owned;
 
+        public bool Declined { get; } = declined;
         public bool Found { get; } = found;
         public int[] Materials { get; } = materials;
         public SdfMesh? Mesh { get; } = mesh;

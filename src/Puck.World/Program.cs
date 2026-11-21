@@ -95,6 +95,9 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         DefaultValueFactory = static _ => null,
         Description = "Override the root of the device caches (held compiles, compiled worlds, baked meshes), each a subdirectory of it. Absent uses the per-user Puck directory (%LOCALAPPDATA%/Puck on Windows). A developer/deployment override, the --state-dir pattern: an empty root boots as a machine's first boot does, baking every mesh.",
     };
+    var meshCacheOption = new Option<Puck.SdfVm.SdfMeshCachePolicy?>(name: "--mesh-cache") {
+        Description = "What the boot does about a tier of a mesh its store lacks: demand bakes the tier the view asks; ladder also bakes every other tier of each mesh it draws, into the store alone, which is how a shipped cache is produced (world.wait bakes then waits for all of them); stored draws stored tiers alone, holding the nearest stored tier where one is missing and baking only a shape the store holds no tier of. Absent is stored in a complete player build, which never bakes, and demand anywhere else. world.counters reads what a boot asked of its cache beyond a hit as sdf.mesh-cache.",
+    };
     var captureDirOption = new Option<string?>(name: "--capture-dir") {
         DefaultValueFactory = static _ => null,
         Description = "Override the world document's captures.directory. A developer/deployment override, the --state-dir pattern: a cross-backend parity run needs the two legs' captures kept apart.",
@@ -246,6 +249,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         headlessOption,
         stateDirOption,
         cacheDirOption,
+        meshCacheOption,
         heightOption,
         listenOption,
         presentModeOption,
@@ -306,13 +310,18 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     // The device caches are per user rather than under the state root, since each holds a pure function of its inputs and
     // the build, never of a run's state. Their per-user defaults are named here and nowhere else, like the state root's.
     var cacheRoot = parseResult.GetValue(option: cacheDirOption);
+    var runsAsPlayer = Puck.Launcher.Release.PlayerBuildLayout.ProcessRunsAsPlayer();
 
     Puck.Assets.DerivedBytes.DefaultDirectory = ((cacheRoot is null) ? null : Path.Join(path1: cacheRoot, path2: "derived"));
     var caches = new WorldCacheRoots(
         compilations: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "compilations") : Path.Join(path1: cacheRoot, path2: "compilations")),
         compiledWorlds: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "compiled-worlds") : Path.Join(path1: cacheRoot, path2: "compiled-worlds")),
         meshes: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "meshes") : Path.Join(path1: cacheRoot, path2: "meshes"))
-    );
+    ) {
+        // A player's build ships its meshes and never bakes one the store holds another tier of; a producer or a check
+        // boot of a folder not yet marked complete names its policy.
+        MeshPolicy = (parseResult.GetValue(option: meshCacheOption) ?? (runsAsPlayer ? Puck.SdfVm.SdfMeshCachePolicy.Stored : Puck.SdfVm.SdfMeshCachePolicy.Demand)),
+    };
     // A world source compiles once across boots.
     Puck.World.Transpiler.WorldCompileSession.Shared.Persist(directory: caches.Compilations);
     // A reload's recomposition never waits for its image to reach the disk.
@@ -612,7 +621,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     // A player's build never bakes; if one ever does, its authoring work degrades under the play bar instead of drawing on
     // headroom the player never offered. Anywhere else (a checkout, a player folder's own baking boots) authoring draws on
     // the machine's headroom.
-    Puck.Hosting.Jobs.MemoryAccount.Shared.SetAuthoringOnPlayBar(onPlayBar: Puck.Launcher.Release.PlayerBuildLayout.ProcessRunsAsPlayer());
+    Puck.Hosting.Jobs.MemoryAccount.Shared.SetAuthoringOnPlayBar(onPlayBar: (runsAsPlayer || (caches.MeshPolicy == Puck.SdfVm.SdfMeshCachePolicy.Stored)));
     // Everything the boot resolved above becomes the one service collection its shape needs; the composition laws build
     // the same collection through the same method.
     services.AddWorldBoot(inputs: new WorldBootInputs(

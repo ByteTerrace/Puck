@@ -221,6 +221,12 @@ public sealed partial class SdfMeshPathBake {
                 m_replacing.RemoveAt(index: at);
                 continue;
             }
+            if (group.Fill) {
+                if (!group.Done) { continue; }
+                m_replacing.RemoveAt(index: at);
+                FinishFill(fill: group, index: index, replaced: replaced);
+                continue;
+            }
             if (!group.Done || group.Ahead) { continue; }
             m_replacing.RemoveAt(index: at);
             if (group.Mesh is null) {
@@ -295,7 +301,14 @@ public sealed partial class SdfMeshPathBake {
         // read from the draws once it lands, and it holds no budgeted replacement back.
         var firstsInFlight = 0;
 
+        // The rungs a ladder bake fills are outside the budget and the draws: they land in the store alone.
+        var fills = 0;
+
         foreach (var (group, _) in m_replacing) {
+            if (group.Fill) {
+                fills++;
+                continue;
+            }
             if (group.FirstDetail) {
                 firstsInFlight++;
                 continue;
@@ -465,9 +478,14 @@ public sealed partial class SdfMeshPathBake {
                 Over: over
             )));
         }
+        // A ladder bake's detail is settled once every drawn geometry's other rungs stand in the store too.
+        var filling = ((Library.Policy == SdfMeshCachePolicy.Ladder) && FillLadders(fills: fills));
+
+        Volatile.Write(location: ref m_filling, value: (filling ? 1 : 0));
+        Volatile.Write(location: ref m_decidedAt, value: System.Diagnostics.Stopwatch.GetTimestamp());
         Volatile.Write(
             location: ref m_detailQuiet,
-            value: ((replaced || (inFlight > 0) || (landing > 0) || (owedWaiting > 0) || (firstsInFlight > 0) || (firstsOwed > 0) || pressing) ? 0 : Math.Min(val1: (m_detailQuiet + elapsed), val2: SdfMeshTier.SettleFrames))
+            value: ((replaced || (inFlight > 0) || (landing > 0) || (owedWaiting > 0) || (firstsInFlight > 0) || (firstsOwed > 0) || pressing || filling) ? 0 : Math.Min(val1: (m_detailQuiet + elapsed), val2: SdfMeshTier.SettleFrames))
         );
     }
     // Starts the first details the latest decision found owed (m_firstCandidates), finest demand first, at most
@@ -529,14 +547,25 @@ public sealed partial class SdfMeshPathBake {
     // product stands in the mesh region. True when the replacement is still to bake or load. FinishReplacements
     // retires the replaced group once the product has the draws. Under the gate.
     private bool StartReplacement(Group group, Group old, int index) {
+        // A bake that draws stored rungs alone keeps drawing what it draws when the store lacks the rung asked: the
+        // group is asked again only once its demand names another tier (Group.RetierRefused).
+        if ((Library.Policy == SdfMeshCachePolicy.Stored) && !Holds(group: group, identity: Identity.Value)) {
+            Library.Cache.Count(kind: SdfMeshCache.RungsMissed);
+            old.RetierRefused = true;
+            group.Retired = true;
+            return false;
+        }
         group.TakeDemandBox();
         group.Replaces = old;
         Replace(group: group, index: index);
         m_replacing.Add(item: (group, index));
         group.Identity = Identity.Value;
         ShowReplaced(group: group, old: old);
-        if (Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var baked)) {
-            group.Mesh = baked;
+        // The mesh of the geometry, or for a dynamic group the latest of its form, baked at another pose, as an
+        // arriving group takes one (Place).
+        if (Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var baked) ||
+            (group.Dynamic && Library.TryTakeForm(form: group.Form, identity: group.Identity, materials: group.MaterialOrder, mesh: out baked))) {
+            Draw(group: group, mesh: baked);
             group.Done = true;
             group.Stored = true;
             return false;
