@@ -246,6 +246,25 @@ public sealed class WorldExpressionVocabularyLawTests {
                     Effects: [new ActionEffect.SetState(
                             State: "target",
                             Expression: new ExpressionProgram(Instructions: [
+                    Instruction.Operand(name: "target"),
+                    Instruction.Constant(value: 2m),
+                    Instruction.Constant(value: 3m),
+                    Instruction.Of(operation: ExpressionOp.Select),
+                ])
+                        )]
+                )]
+        );
+        // A literal condition reads as the Int a condition must be, whatever kind the arms compute in.
+        var literalCondition = Document(
+            state: [StateFixtures.FixedSlot(
+                    name: "target",
+                    rawBits: 0L
+                )],
+            rules: [new WorldRule(
+                    Name: Name(value: "literal-condition"),
+                    Effects: [new ActionEffect.SetState(
+                            State: "target",
+                            Expression: new ExpressionProgram(Instructions: [
                     Instruction.Constant(value: 1m),
                     Instruction.Constant(value: 2m),
                     Instruction.Constant(value: 3m),
@@ -324,6 +343,13 @@ public sealed class WorldExpressionVocabularyLawTests {
         Assert.Contains(
             actualString: conditionReason,
             expectedSubstring: "Select"
+        );
+        Assert.True(
+            condition: WorldDefinitionValidator.TryValidateLocally(
+                definition: literalCondition,
+                reason: out var literalReason
+            ),
+            userMessage: literalReason
         );
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: danglingComparison,
