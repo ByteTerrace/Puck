@@ -771,7 +771,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 screens: definition.Screens
             );
 
-            return new StaticFieldBuild(Excluded: excluded, Field: new SdfFieldEvaluator(program: builder.Build()), Refusal: null);
+            // Regional: a probe or a sweep walks the chains near its samples, not the whole static world.
+            return new StaticFieldBuild(Excluded: excluded, Field: new SdfFieldEvaluator(program: builder.Build(), reading: SdfFieldReading.Contact, regional: true), Refusal: null);
         } catch (ArgumentException exception) {
             return new StaticFieldBuild(Excluded: excluded, Field: null, Refusal: exception);
         }

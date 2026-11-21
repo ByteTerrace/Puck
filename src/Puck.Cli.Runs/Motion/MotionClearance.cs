@@ -87,7 +87,7 @@ public sealed class MotionClearance : IMotionClearance {
             seatRouter: new WorldSeatAuthorityRouter()
         );
 
-        clearance = new MotionClearance(client: client, definition: definition, field: new SdfFieldEvaluator(program: all.Build()), placements: usable);
+        clearance = new MotionClearance(client: client, definition: definition, field: new SdfFieldEvaluator(program: all.Build(), reading: SdfFieldReading.Contact, regional: true), placements: usable);
         error = string.Empty;
 
         return true;
