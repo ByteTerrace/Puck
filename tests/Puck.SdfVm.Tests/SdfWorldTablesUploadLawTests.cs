@@ -1379,6 +1379,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                     WorkLedger: ledger
                 ),
                 pipelines: m_pipelines,
+                shadowEntryRaster: m_shadowRaster,
                 shadowRaster: m_shadowRaster,
                 shadowExitRaster: m_shadowRaster,
                 shadowGlassRaster: m_shadowRaster,

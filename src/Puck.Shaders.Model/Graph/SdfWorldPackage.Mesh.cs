@@ -97,6 +97,18 @@ public static partial class SdfWorldPackage {
     /// <summary>The most texels along each side of one shadow cascade's depth, which full shadow quality renders; a lower
     /// quality renders a power-of-two fraction of it (<see cref="WithShadows"/>).</summary>
     public const int MeshShadowResolution = 2048;
+    /// <summary>The side in texels of an optical-shadow clear tile.</summary>
+    public const uint ShadowOpticalTileEdge = 16;
+    /// <summary>The words per optical texel, before the dirty-tile bitmap.</summary>
+    public const uint ShadowOpticalTexelWords = 3;
+
+    /// <summary>Returns the number of bitmap words following the optical texels for a square cascade.</summary>
+    /// <param name="side">The allocated cascade width in texels.</param>
+    /// <returns>The number of 32-bit words in the bitmap.</returns>
+    public static uint ShadowOpticalBitmapWords(uint side) {
+        var tiles = (side + ShadowOpticalTileEdge - 1) / ShadowOpticalTileEdge;
+        return (tiles * tiles + 31) / 32;
+    }
 
     /// <summary>Each cascade's signed optical depth to its first opaque receiver and nearest glass entry.</summary>
     public const string MeshShadowNearOptical = "meshShadowNearOptical";

@@ -81,14 +81,20 @@ public sealed class SdfKernelInterfaces {
     public const int MeshReceiverStep = 4;
     /// <summary>Receiver hierarchy reduction step.</summary>
     public const int MeshReceiverReduceStep = 5;
+    /// <summary>Clears the optical texels that an earlier raster dirtied.</summary>
+    public const int MeshShadowOpticalClearStep = 6;
     /// <summary>Cascade texels per receiver cell, as a power of two.</summary>
     public const int MeshReceiverShift = 4;
     /// <summary>Receiver sample grid and jitter row.</summary>
     public const int MeshReceiverRow = 14;
     /// <summary>First portal sight query row.</summary>
     public const int MeshSightRow = 15;
+    /// <summary>The compact back-face-culled lists follow both entry lists, both exit lists and glass.</summary>
+    public const int MeshShadowCulledEntryPhase = 5;
+    /// <summary>The number of command phases allocated for a shadow cascade.</summary>
+    public const int MeshShadowPhases = MeshShadowCulledEntryPhase + 2;
     /// <summary>First portal sight verdict after draw counts.</summary>
-    public const int MeshSightCountBase = 5;
+    public const int MeshSightCountBase = MeshShadowPhases;
     /// <summary>The first selection mark word in the raster selection's counts, past every portal sight verdict: on a
     /// marked frame each draw a phase emits a command for ORs its level plus one into two bits, sixteen draws a
     /// word, the lowest draw in the lowest bits.</summary>

@@ -34,6 +34,18 @@ float3 sdfMeshPreviousRow(uint record, uint row) {
 
     return asfloat(uint3(sdfPreviousMeshTransforms[word], sdfPreviousMeshTransforms[(word + 1u)], sdfPreviousMeshTransforms[(word + 2u)]));
 }
+// A rigid draw uses the same geometry and carry in both reconstructions. A pose overlay, skin or displacement
+// can move it independently of its matrix.
+bool sdfMeshDrawUnmoved(uint record) {
+    if ((sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_SKIN_FLAG) != 0u ||
+        sdfMeshDisplacementEntry(record) != SDF_FRAME_SAMPLED_NONE) return false;
+    uint slot = sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD);
+    if (sdfViewPoseSlot(slot) != slot) return false;
+    [unroll] for (uint row = 0u; row < 4u; row++) {
+        if (any(sdfMeshRow(record, row) != sdfMeshPreviousRow(record, row))) return false;
+    }
+    return true;
+}
 // Where a draw's index `k` stood in the preceding consumed frame: displaced by a height field's previous heights, skinned
 // under its members' previous transforms (sdfMeshSkinPose), then under the draw's previous matrix and its carry, as its
 // current position is (sdfMeshWorldVertex).
@@ -70,6 +82,9 @@ bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint
         return false;
     }
     uint mesh = hit.record;
+    if (sdfMeshDrawUnmoved(mesh)) {
+        return true;
+    }
     uint first = (3u * hit.triangleIndex);
     float3 a = sdfMeshWorldPosition(mesh, first);
     float3 b = sdfMeshWorldPosition(mesh, first + 1u);

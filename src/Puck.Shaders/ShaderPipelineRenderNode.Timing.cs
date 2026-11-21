@@ -4,13 +4,14 @@ using Puck.Abstractions.Gpu;
 namespace Puck.Shaders;
 
 public sealed partial class ShaderPipelineRenderNode {
-    /// <summary>The most recent completed samples retained in each pass's observational mean.</summary>
+    /// <summary>The number of node submissions covered by a pass's observational mean.</summary>
     public const int TimingWindow = 32;
 
     private TimingSlot[] m_timingSlots = [];
     private GpuPassTiming[] m_timings = [];
-    private double[] m_timingValues = [];
-    private int[] m_timingNext = [];
+    private (long Submission, double Milliseconds)[] m_timingValues = [];
+    private bool m_timingWindowDirty;
+    private int m_timingWindowFrames;
     private long m_timingRevision = -1;
     private bool m_timingEnabled;
     private long m_timingEpoch;
@@ -45,20 +46,29 @@ public sealed partial class ShaderPipelineRenderNode {
     public string? TimingRefusal => (m_timingEnabled ? m_timingRefusal : null);
     /// <summary>Gets the current graph's completed per-pass means. Empty while disabled, unsupported, or awaiting its
     /// first timed submission. A pass with no completed pair has zero samples, never a fabricated time.</summary>
-    public ReadOnlySpan<GpuPassTiming> Timings => ((m_timingCompleted && (m_timingRevision == m_revision)) ? m_timings : []);
+    public ReadOnlySpan<GpuPassTiming> Timings {
+        get {
+            if (!HasCompletedTiming) { return []; }
+            if (m_timingWindowDirty) { UpdateTimingWindow(); }
+            return m_timings;
+        }
+    }
+    private bool HasCompletedTiming => m_timingCompleted && (m_timingRevision == m_revision);
+    /// <summary>Gets the number of completed submissions covered since starting this graph's timing, capped at the window width.</summary>
+    public int TimingWindowFrames => (HasCompletedTiming ? m_timingWindowFrames : 0);
     /// <summary>Gets how many timed submissions this node has read back, which moves with each one and never repeats.</summary>
     public long TimingFrames => m_timingFrames;
     /// <summary>Gets the summed pass time, in milliseconds, of the latest timed submission read back for the current graph,
     /// or zero while <see cref="Timings"/> is empty.</summary>
-    public double LatestTimingMilliseconds => (Timings.IsEmpty ? 0d : m_timingLatest);
+    public double LatestTimingMilliseconds => (HasCompletedTiming ? m_timingLatest : 0d);
     /// <summary>Gets the identity of the submission <see cref="LatestTimingMilliseconds"/> timed, as the node's work ledger
     /// numbers it: the newest submission read back, whichever frame slot held it. Zero while <see cref="Timings"/> is
     /// empty.</summary>
-    public long LatestTimingSubmission => (Timings.IsEmpty ? 0L : m_timingLatestSubmission);
+    public long LatestTimingSubmission => (HasCompletedTiming ? m_timingLatestSubmission : 0L);
     /// <summary>Gets when the latest timed submission's first timed pass began and its last timed pass ended, in
     /// milliseconds on the recording queue's timestamp clock, which every node on that queue shares; (0, 0) while
     /// <see cref="Timings"/> is empty. Two nodes' spans compare only when they come from the same queue.</summary>
-    public (double Start, double End) LatestTimingSpan => (Timings.IsEmpty ? default : m_timingLatestSpan);
+    public (double Start, double End) LatestTimingSpan => (HasCompletedTiming ? m_timingLatestSpan : default);
     /// <summary>Gets the logical bytes of timestamp readback buffers still owned, including disabled slots awaiting fences.</summary>
     public ulong TimingReadbackBytes {
         get { var bytes = 0UL; foreach (var slot in m_timingSlots) { if (slot.Readback is not null) { bytes += ((ulong)slot.Bytes.Length); } } return bytes; }
@@ -66,7 +76,7 @@ public sealed partial class ShaderPipelineRenderNode {
     /// <summary>Gets the retained timestamp sample, rolling-window and slot-mask payload bytes, excluding managed object headers.</summary>
     public ulong TimingCpuBytes {
         get {
-            var bytes = ((ulong)(((m_timingValues.Length * sizeof(double)) + (m_timingNext.Length * sizeof(int))) + (m_timings.Length * System.Runtime.CompilerServices.Unsafe.SizeOf<GpuPassTiming>())));
+            var bytes = ((ulong)((m_timingValues.Length * (sizeof(long) + sizeof(double))) + (m_timings.Length * System.Runtime.CompilerServices.Unsafe.SizeOf<GpuPassTiming>())));
 
             foreach (var slot in m_timingSlots) { bytes += ((ulong)(slot.Bytes.Length + slot.Recorded.Length)); }
             return bytes;
@@ -111,8 +121,11 @@ public sealed partial class ShaderPipelineRenderNode {
     private void ProvisionTiming(IGpuTimestampFactory factory, int slot) {
         if (m_timingRevision != m_revision) {
             m_timings = new GpuPassTiming[m_passLabels.Length];
-            m_timingValues = new double[(m_passLabels.Length * TimingWindow)];
-            m_timingNext = new int[m_passLabels.Length];
+            m_timingValues = new (long Submission, double Milliseconds)[m_passLabels.Length * TimingWindow];
+            m_timingCompleted = false;
+            m_timingWindowDirty = false;
+            m_timingWindowFrames = 0;
+            m_timingLatestSubmission = m_submissions;
             for (var index = 0; (index < m_timings.Length); index++) {
                 m_timings[index] = new GpuPassTiming(Pass: m_passLabels[index], Milliseconds: 0, Samples: 0);
             }
@@ -220,26 +233,45 @@ public sealed partial class ShaderPipelineRenderNode {
                 last = Math.Max(val1: last, val2: end);
 
                 m_timingCompleted = true;
-                var entry = m_timings[pass];
-                var count = Math.Min(val1: TimingWindow, val2: (entry.Samples + 1));
-                var index = ((pass * TimingWindow) + m_timingNext[pass]);
-                var total = (((entry.Milliseconds * entry.Samples) - m_timingValues[index]) + value);
-
                 frame += value;
-                m_timingValues[index] = value;
-                m_timingNext[pass] = ((m_timingNext[pass] + 1) % TimingWindow);
-                m_timings[pass] = entry with { Milliseconds = (total / count), Samples = count };
+                var index = ((pass * TimingWindow) + (int)(slot.Submission % TimingWindow));
+                if (m_timingValues[index].Submission < slot.Submission) {
+                    m_timingValues[index] = (slot.Submission, value);
+                }
+                if (m_timings[pass].LastSubmission < slot.Submission) {
+                    m_timings[pass] = m_timings[pass] with { LastSubmission = slot.Submission };
+                }
             }
             // Several slots can complete in one poll, so the newest submission, not the last slot read, is the latest.
             if (slot.Submission > m_timingLatestSubmission) {
+                m_timingWindowFrames = (int)Math.Min(TimingWindow, m_timingWindowFrames + (slot.Submission - m_timingLatestSubmission));
                 m_timingLatest = frame;
                 m_timingLatestSubmission = slot.Submission;
-                if (last >= first) {
-                    m_timingLatestSpan = (((first * pool.NanosecondsPerTick) / 1_000_000), ((last * pool.NanosecondsPerTick) / 1_000_000));
-                }
+                m_timingLatestSpan = (last >= first)
+                    ? (((first * pool.NanosecondsPerTick) / 1_000_000), ((last * pool.NanosecondsPerTick) / 1_000_000))
+                    : default;
             }
+            m_timingWindowDirty = true;
             m_timingFrames++;
         }
+    }
+    private void UpdateTimingWindow() {
+        var first = Math.Max(1, m_timingLatestSubmission - TimingWindow + 1);
+        for (var pass = 0; pass < m_timings.Length; pass++) {
+            var count = 0;
+            var total = 0d;
+            foreach (var (submission, milliseconds) in m_timingValues.AsSpan(pass * TimingWindow, TimingWindow)) {
+                if (submission < first) { continue; }
+                total += milliseconds;
+                count++;
+            }
+            m_timings[pass] = m_timings[pass] with {
+                Milliseconds = (count == 0 ? 0 : total / count),
+                Samples = count,
+                PerFrameMs = total / TimingWindow,
+            };
+        }
+        m_timingWindowDirty = false;
     }
     private void ReleaseTiming() {
         foreach (var slot in m_timingSlots) { slot.Dispose(); }
@@ -249,7 +281,6 @@ public sealed partial class ShaderPipelineRenderNode {
         m_timingRefusal = null;
         m_timings = [];
         m_timingValues = [];
-        m_timingNext = [];
         m_timingRevision = -1;
     }
 

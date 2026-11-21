@@ -76,8 +76,9 @@ in the tree.
 - **The opaque fragment loses forced early depth** to the stamp fade's `clip`
   and the fragment counter's UAV atomics
   (`Assets/Shaders/Sdf/passes/sdf-mesh.frag.hlsl:13-18`,
-  `frame/sdf-stamp-fade.hlsli:13`). The shadow fragment counts under
-  `[earlydepthstencil]` (`passes/sdf-mesh-shadow.frag.hlsl:8-10`).
+  `frame/sdf-stamp-fade.hlsli:13`). The opaque shadow pipelines rasterize depth
+  without a fragment stage. The selection kernel counts their draws and vertices
+  (`sdfOcclusionCount`).
 - **Visibility storage is indexed by draw, with generation validation.**
   `sdf-mesh-occlusion.comp.hlsl` compares the retained generation before using
   visibility history. A draw-index change alone is not evidence of accepting

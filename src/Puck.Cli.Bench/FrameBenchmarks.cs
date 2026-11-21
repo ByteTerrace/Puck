@@ -210,14 +210,14 @@ public static partial class FrameBenchmarks {
         var header = GpuWindowPattern().Match(output);
         if (!header.Success || !int.TryParse(header.Groups["window"].Value, CultureInfo.InvariantCulture, out var window) || window < 1) { return null; }
         var rows = GpuPattern().Matches(output).ToDictionary(match => match.Groups["name"].Value,
-            match => (Value: double.Parse(match.Groups["ms"].Value, CultureInfo.InvariantCulture), Samples: int.Parse(match.Groups["samples"].Value, CultureInfo.InvariantCulture)), StringComparer.Ordinal);
-        if (passes.Any(pass => !rows.TryGetValue(pass, out var row) || row.Samples < window || !double.IsFinite(row.Value))) { return null; }
+            match => (Value: double.Parse(match.Groups["ms"].Value, CultureInfo.InvariantCulture), Frames: int.Parse(match.Groups["frames"].Value, CultureInfo.InvariantCulture)), StringComparer.Ordinal);
+        if (passes.Any(pass => !rows.TryGetValue(pass, out var row) || row.Frames < window || !double.IsFinite(row.Value))) { return null; }
         return passes.ToDictionary(pass => pass, pass => rows[pass].Value, StringComparer.Ordinal);
     }
 
     [GeneratedRegex(@"^\[world\.gpu-timing: on window=(?<window>[0-9]+)", RegexOptions.CultureInvariant)]
     private static partial Regex GpuWindowPattern();
 
-    [GeneratedRegex(@"(?m)^(?<name>[^\r\n]+): (?<ms>[0-9.]+) ms samples=(?<samples>[0-9]+)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?m)^(?<name>[^\r\n]+): [0-9.]+ ms perFrameMs=(?<ms>[0-9.]+) samples=[0-9]+ frames=(?<frames>[0-9]+) submission=[0-9]+ lastSubmission=[0-9]+ (?:present|stale)\b", RegexOptions.CultureInvariant)]
     private static partial Regex GpuPattern();
 }
