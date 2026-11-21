@@ -181,7 +181,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     private long m_contentRevision = Interlocked.Increment(location: ref ContentRevisions);
 
     /// <summary>Gets a revision of <see cref="Contents"/> that moves whenever a write changes its bytes or its size
-    /// (<see cref="Write"/> owing a difference, <see cref="WriteRuns"/> writing a run, a growth, shrink or shadow), and
+    /// (<see cref="Write"/> owing a difference, <see cref="WriteRuns(ReadOnlySpan{uint}, GpuUploadRuns)"/> writing a run, a growth, shrink or shadow), and
     /// is never shared with another state of this or any other region's contents, so a reader that folds it in place of
     /// the bytes sees every change. A write that leaves the bytes as they were does not move it.</summary>
     public long ContentRevision => m_contentRevision;
@@ -1790,7 +1790,22 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <exception cref="InvalidOperationException">The region's destination is external, whose contents the region does
     /// not know.</exception>
     /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
-    public bool WriteRuns(ReadOnlySpan<uint> words, GpuUploadRuns runs) {
+    public bool WriteRuns(ReadOnlySpan<uint> words, GpuUploadRuns runs) => WriteRuns(head: words, runs: runs, tail: []);
+    /// <summary>Copies the runs that <paramref name="runs"/> names of words held in two buffers, <paramref name="head"/>
+    /// then <paramref name="tail"/>, into <see cref="Contents"/> at the same words and owes each in every buffer, as
+    /// <see cref="WriteRuns(ReadOnlySpan{uint}, GpuUploadRuns)"/> does for words held in one: a run that spans the two
+    /// copies from both.</summary>
+    /// <param name="head">The region's new words from word 0.</param>
+    /// <param name="tail">The region's new words after <paramref name="head"/>.</param>
+    /// <param name="runs">The runs of words, from word 0, in which the two differ from <see cref="Contents"/>.</param>
+    /// <returns><see langword="true"/> when any word was owed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="runs"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The words run past <see cref="ShadowBytes"/>, or a run past their
+    /// end.</exception>
+    /// <exception cref="InvalidOperationException">The region's destination is external, whose contents the region does
+    /// not know.</exception>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public bool WriteRuns(ReadOnlySpan<uint> head, ReadOnlySpan<uint> tail, GpuUploadRuns runs) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -1798,7 +1813,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: runs);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(
             other: (m_shadowBytes / sizeof(uint)),
-            value: ((long)words.Length)
+            value: (((long)head.Length) + tail.Length)
         );
 
         if (m_external) {
@@ -1810,17 +1825,18 @@ public sealed unsafe class GpuRegion : IDisposable {
             var length = runs.Length(index: run);
 
             ArgumentOutOfRangeException.ThrowIfGreaterThan(
-                other: words.Length,
+                other: (head.Length + tail.Length),
                 value: (start + length),
                 paramName: nameof(runs)
             );
-            words.Slice(
-                length: length,
-                start: start
-            ).CopyTo(destination: new Span<uint>(
+            var destination = new Span<uint>(
                 length: length,
                 pointer: (((uint*)m_contents) + start)
-            ));
+            );
+            var fromHead = Math.Clamp(value: (head.Length - start), min: 0, max: length);
+
+            head.Slice(length: fromHead, start: Math.Min(val1: start, val2: head.Length)).CopyTo(destination: destination);
+            if (fromHead < length) { tail.Slice(length: (length - fromHead), start: ((start + fromHead) - head.Length)).CopyTo(destination: destination[fromHead..]); }
             Owe(
                 endWord: (start + length),
                 startWord: start

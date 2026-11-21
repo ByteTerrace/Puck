@@ -7,8 +7,9 @@ namespace Puck.SignedDistance;
 // A look value (a colour, a material's roughness, a shade program's parameter) changes a program's appearance and leaves
 // its field as it was, and the field derivation (validation, the Lipschitz and bounds analyses, the rigid plan, the part
 // programs, the packing) is nearly all of a build. Of hands a rebuild the program it replaces, and when the field
-// constructor would read the same inputs the new program shares that program's field derivation and packs only its own
-// appearance (WithAppearance), or is that program itself when the appearance is the same too.
+// constructor would read the same inputs the new program shares that program's field derivation, its field's words
+// included, and packs only its own appearance section (WithAppearance), or is that program itself when the appearance is
+// the same too.
 //
 // A derivation is named by the instruction array its constructor snapshotted and patched, which only a program sharing
 // it (a MemberwiseClone in WithAppearance) holds.
@@ -104,16 +105,14 @@ public sealed partial class SdfProgram {
         return hasher.GetCurrentHashAsUInt128();
     }
 
-    // Returns a program sharing this one's field derivation with another appearance of the same outline: the field's words
-    // copied and the appearance packed into the tail, as Of packs a fresh program's.
+    // Returns a program sharing this one's field derivation and field words with another appearance of the same outline,
+    // packed into a section of its own as Of packs a fresh program's.
     private SdfProgram WithAppearance(SdfAppearance appearance) {
         var program = (SdfProgram)MemberwiseClone();
-        var words = (uint[])m_words.Clone();
-        var materialVector = ((int)words[ProgramMaterialOffsetLane]);
+        var section = new uint[m_appearanceWords.Length];
 
-        words.AsSpan(start: (materialVector * WordsPerVector)).Clear();
-        appearance.Pack(materialVector: materialVector, words: words);
-        program.m_words = words;
+        appearance.Pack(materialVector: ((int)m_words[ProgramMaterialOffsetLane]), section: section);
+        program.m_appearanceWords = section;
         program.m_appearance = appearance;
         program.m_hasGlassShadows = null;
 

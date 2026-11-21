@@ -1926,11 +1926,6 @@ in [sweep](#sweep-and-visual-checks).
   and the managed heap holds only what the collector should walk. At scale a
   hub of a dozen worlds holds a dozen worlds' products, so anything a world
   holds must be evictable by the residency that asked for it.
-- [high] A program's field and its appearance are one object, so each
-  appearance change clones the whole program's words
-  (`SdfProgram.WithAppearance`), tens of megabytes for the debug world. Split
-  the field from the appearance, so a colour edit or a state-bound look
-  shares the field's words.
 - [medium] Under the RTX 2060's profile a player build's check declined well
   over a hundred stored mesh loads because the host account had no room to
   read them, and each kept the coarser tier it drew

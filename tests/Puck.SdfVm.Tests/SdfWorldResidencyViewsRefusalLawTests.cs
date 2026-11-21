@@ -140,7 +140,7 @@ public sealed class SdfWorldResidencyViewsRefusalLawTests {
         );
         Assert.Equal(
             actual: rig.Residency.CopyLiveProgramWords(),
-            expected: rig.Source.First.Program.Words.ToArray()
+            expected: rig.Source.First.Program.CopyWords()
         );
         Assert.Equal(
             actual: rig.Attempts(name: "sdf-world-views"),
