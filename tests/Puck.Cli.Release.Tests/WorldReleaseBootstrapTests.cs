@@ -286,7 +286,7 @@ public sealed class WorldReleaseBootstrapTests {
 
             await Bootstrap(history: [new WorldReleaseGroupHistoryEntry {
                 OperationId = operation,
-                RecoveryRoots = new Dictionary<string, string> { [amber.RootKey] = captured.Pin },
+                RecoveryRoots = new Dictionary<string, string> { [$"{amber.Owner:D}/{amber.World}"] = captured.Pin },
                 Result = "recovered: test",
                 TargetRelease = "earlier",
             }]);
