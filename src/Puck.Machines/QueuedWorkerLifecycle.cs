@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Puck.Abstractions.Machines;
 using Puck.Abstractions.Waiting;
 
@@ -57,6 +58,7 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
     private bool m_acceptingWork;
     private long m_backpressureEvents;
     private long m_completedSteps;
+    private long m_stepBusyTimestampTicks;
     private long m_submittedSteps;
     private ulong m_issuedBarrier;
     private ulong m_completedBarrier;
@@ -89,6 +91,17 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
         get {
             lock (m_workLock) {
                 return m_completedSteps;
+            }
+        }
+    }
+    /// <summary>Gets the host time the owning thread has spent running step items since the counters were last reset,
+    /// measured from <see cref="TakeWork"/> returning each step to its <see cref="CompleteStep"/>. It is host
+    /// diagnostics, never machine state: divided by the wall time it spans, it is the share of real time the machine
+    /// needs to keep pace.</summary>
+    public TimeSpan StepBusyTime {
+        get {
+            lock (m_workLock) {
+                return Stopwatch.GetElapsedTime(startingTimestamp: 0L, endingTimestamp: m_stepBusyTimestampTicks);
             }
         }
     }
@@ -129,9 +142,15 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
 
     /// <summary>Records one completed step item and wakes every producer waiting for pending-window capacity. Call
     /// from the thread that ran the item.</summary>
-    public void CompleteStep() {
+    /// <param name="startedTimestamp">The <see cref="Stopwatch"/> timestamp <see cref="TakeWork"/> gave for the item,
+    /// which charges the time since to <see cref="StepBusyTime"/>; zero for a step this lifecycle's thread did not run,
+    /// such as a lent core's step on its link's thread, which charges nothing.</param>
+    public void CompleteStep(long startedTimestamp) {
         lock (m_workLock) {
             ++m_completedSteps;
+            if (startedTimestamp != 0L) {
+                m_stepBusyTimestampTicks += (Stopwatch.GetTimestamp() - startedTimestamp);
+            }
             Monitor.PulseAll(obj: m_workLock);
         }
     }
@@ -245,6 +264,7 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
                 m_submittedSteps = 0L;
                 m_completedSteps = 0L;
                 m_backpressureEvents = 0L;
+                m_stepBusyTimestampTicks = 0L;
             } else {
                 m_submittedSteps = m_completedSteps;
             }
@@ -336,12 +356,16 @@ public sealed class QueuedWorkerLifecycle<TWorkItem> where TWorkItem : IQueuedWo
         );
     }
     /// <summary>Blocks the worker thread until an item is available and returns it.</summary>
+    /// <param name="takenTimestamp">The <see cref="Stopwatch"/> timestamp at which the item was taken, which a step
+    /// passes back to <see cref="CompleteStep"/>.</param>
     /// <returns>The next item in FIFO order.</returns>
-    public TWorkItem TakeWork() {
+    public TWorkItem TakeWork(out long takenTimestamp) {
         lock (m_workLock) {
             while (m_work.Count == 0) {
                 HostWaits.IdleOnCondition(monitor: m_workLock, consumer: HostWaits.ClaimConsumer(reason: IdleWait));
             }
+
+            takenTimestamp = Stopwatch.GetTimestamp();
 
             return m_work.Dequeue();
         }
