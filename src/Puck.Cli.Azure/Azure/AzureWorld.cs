@@ -352,7 +352,7 @@ public static partial class AzureCommand {
                 : "--entrypoint dotnet"),
                 ["__MCP_ARGUMENTS__"] = ((mcpOptions is null)
                 ? "--silo /configuration/silo.json"
-                : $"{WorldSiloImageLayout.CliAssembly} mcp --silo /configuration/silo.json --http /configuration/mcp.json"),
+                : string.Join(separator: ' ', value: WorldSiloImageLayout.McpArguments(silo: "/configuration/silo.json", http: "/configuration/mcp.json"))),
                 ["__SILO_DOCUMENT__"] = Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: silo.ToJsonString())),
                 ["__CLIENT_ID__"] = clientId,
                 ["__REGISTRY__"] = image.Split(separator: '/')[0],

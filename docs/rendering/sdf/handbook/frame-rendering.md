@@ -237,16 +237,45 @@ refreshes the shared environment at the irradiance threshold described in
 revision also changes those lighting passes. Lighting-visible panels affect
 analytic reflections directly, so their edits change lighting passes even below
 the map's threshold. A selected shadow direction adds the cascades and `surface`;
-geometry or camera changes render every active pass. A sky layer that
+a camera change renders every active pass of its view. A sky layer that
 samples a screen (a panorama, a textured disc) runs `sky` and `composite` every
 frame, since the screen's image changes in place where no signature sees it;
 the raster and surface passes still stand. The bake's passes record whenever
 they run. `world.lighting` reports each keyed value's change class, including
 fields keyed through a section.
 
+A moving draw renders only the passes that can show it. Each raster pass of a
+view has a motion scope (`SdfMotionScope`): the cull it draws under and a
+revision that moves when a draw that cull keeps changes. The mesh pass's scope
+also signs the passes that shade what it drew, the glass pass's the glass passes,
+and each shadow cascade has its own, under its caster cull. So a body walking
+behind the camera leaves the view's mesh pass standing, and re-renders a cascade
+only where its shadow can fall on something the view shows. The tables judge every
+staged change against every scope (`SdfWorldTables.ObserveMotion`):
+
+- a draw record, by the box it held before the change and the box it holds after,
+  the same boxes every pass selects the draw by;
+- a skinned draw, whose members move without its record changing, by a host bound
+  of its mesh under the frame's transforms (`SdfMeshBox.TryOfSkin`);
+- a light, a medium or a paint that rides a transform slot, by the box it reaches
+  under the slot's pose before and after, against the scopes that shade (a
+  cascade holds depths alone);
+- a previous table seeded whole, or a view's pose overlay row, against every
+  scope they can reach.
+
+`world.residency` prints each scope with why its revision last moved, naming the
+draw row and its box or the slot and its reader, and `world.counters sdf.cadence`
+counts the scopes held and those a staging moved. A scope's cull is the one its
+pass last recorded under; before a pass has recorded, its scope keeps every draw.
+
 Temporal sampling renders the geometry again while a sample is owed. Once
 lit history converges, visual edits leave its sample count and ring standing.
-`world.cadence off` forces active passes to render for measurement.
+A view's history follows its own scope's poses, so motion the view cannot show
+neither resamples it nor resets it. A shadow cascade is drawn from its light's
+camera and stands through the view's jitter samples.
+`world.cadence off` forces active passes to render for measurement, and
+`world.counters render.record` counts the passes each frame recorded, left
+standing and skipped.
 
 The cadence also rates changing work by its size on screen (`world.rates`,
 `SdfUpdateRates`), presentation only and only where the drop is barely

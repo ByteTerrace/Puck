@@ -100,15 +100,17 @@ public sealed partial class SdfWorldTables {
     }
 
     /// <summary>Gets the revision of the poses the current dynamic-transform and mesh-matrix tables hold as of the latest
-    /// upload. It moves on every upload that changes a pose or seeds a previous row, and never otherwise.</summary>
+    /// upload, for the whole residency. It moves on every upload that changes a pose or seeds a previous row, and never
+    /// otherwise. A view's history follows its own scope's poses instead (<see cref="SdfMotionScope.Poses"/>), which
+    /// move only for the draws the view can show.</summary>
     public long PoseRevision { get; private set; }
     /// <summary>Gets the revision of the poses the previous tables were advanced from as of the latest upload: the
-    /// <see cref="PoseRevision"/> before that upload. A view whose latest render held these poses as current reads its
-    /// motion from them; a seeded row reads as still.</summary>
+    /// <see cref="PoseRevision"/> before that upload.</summary>
     public long PreviousPoseRevision { get; private set; }
     /// <summary>Gets or sets whether the frame the tables hold is held for a capture (<see cref="SdfWorldResidency.HoldsFrame"/>),
     /// which the residency sets before each upload. While it is held and the <c>motion</c> debug view is shown, an upload
-    /// that moves no pose leaves the previous tables and both pose revisions as they stand, so every render of the held
+    /// that moves no pose leaves the previous tables, both pose revisions and every scope's poses
+    /// (<see cref="SdfMotionScope.Poses"/>) as they stand, so every render of the held
     /// frame reads the motion it was presented with rather than settling to still. A pose that moves still advances them.
     /// Any other view settles as usual: a temporal view's history accumulates over the held frame's renders, whose poses
     /// do not move between them.</summary>
@@ -143,6 +145,7 @@ public sealed partial class SdfWorldTables {
         if (moved) {
             PoseRevision++;
         }
+        UploadedMotion();
 
         var seedTransforms = m_seedDynamicHistory;
 

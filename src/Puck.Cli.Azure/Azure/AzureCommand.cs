@@ -110,7 +110,7 @@ public static partial class AzureCommand {
             commitOption, new Option<bool>(name: "--before-static-publication") { Description = "Verify services only; the website is not published yet." },
         };
         var testWorldContainer = new Command(
-            description: "Boot the world image twice against a fixture store and prove activation, checkpointing, health, and QUIC.",
+            description: "Boot the world image twice against a fixture store, the second time through its hosted MCP entry point, and prove activation, checkpointing, health, and QUIC.",
             name: "test-world-container"
         ) {
             new Option<string>(name: "--image") { Description = "The built world-silo image.", Required = true },
