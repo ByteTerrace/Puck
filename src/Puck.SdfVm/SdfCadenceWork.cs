@@ -22,6 +22,8 @@ public static class SdfCadenceWork {
     public static readonly WorkKind Blocks = new(name: "sdf.cadence.blocks", unit: "blocks", workClass: WorkClass.Pacing);
     /// <summary>Counts the shadow cascade sets fitted (<see cref="SdfMeshShadowCascades.Fit"/>).</summary>
     public static readonly WorkKind Fits = new(name: "sdf.cadence.fits", unit: "fits", workClass: WorkClass.Pacing);
+    /// <summary>Counts the per-view light selections run (<see cref="SignedDistance.SdfLightSelection.Select"/>).</summary>
+    public static readonly WorkKind LightSelections = new(name: "sdf.cadence.light-selections", unit: "selections", workClass: WorkClass.Pacing);
 
     /// <summary>Counts the motion scopes the tables held, summed over the stagings of their draw records
     /// (<see cref="SdfMotionScope"/>): the most <see cref="ScopesMet"/> can reach over the same stagings.</summary>
@@ -44,5 +46,5 @@ public static class SdfCadenceWork {
     public static readonly WorkKind ScopeTests = new(name: "sdf.cadence.scopes.tests", unit: "tests", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the process's cadence counts.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.cadence", kinds: [Signatures, Forced, Resampled, Blocks, Fits, Scopes, ScopesMet, ScopesLit, ScopeUnbounded, ScopeCulls, ScopeChanges, ScopeTests]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.cadence", kinds: [Signatures, Forced, Resampled, Blocks, Fits, LightSelections, Scopes, ScopesMet, ScopesLit, ScopeUnbounded, ScopeCulls, ScopeChanges, ScopeTests]);
 }

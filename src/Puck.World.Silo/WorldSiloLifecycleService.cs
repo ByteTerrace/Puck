@@ -83,6 +83,7 @@ public sealed class WorldSiloLifecycleService(WorldSiloHost silo, IHostApplicati
                     timeProvider: silo.Clock
                 );
                 var reason = await silo.CheckHealthAsync(cancellationToken: deadline.Token);
+                var loopback = ((context.Connection.RemoteIpAddress is { } healthAddress) && IPAddress.IsLoopback(address: healthAddress));
 
                 context.Response.StatusCode = ((reason.Length == 0)
                     ? 200
@@ -91,7 +92,9 @@ public sealed class WorldSiloLifecycleService(WorldSiloHost silo, IHostApplicati
                 await context.Response.WriteAsync(
                     ((reason.Length == 0)
                     ? "ready"
-                    : reason),
+                    : (loopback
+                        ? reason
+                        : "unavailable")),
                     context.RequestAborted
                 );
             } else if (

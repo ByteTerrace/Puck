@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
@@ -24,17 +25,43 @@ namespace Puck.Shaders;
 //
 // A reader of an output that resolves to nothing binds a stand-in. So that the display never shows nothing in its place,
 // the instance whose output resolves to nothing, or would after this frame, renders again whenever something shows it:
-// WithRerenders names it, and a frame that releases an instance another's output stood for is scheduled again
+// CollectRerenders names it, and a frame that releases an instance another's output stood for is scheduled again
 // (RescheduleAfterRelease), so the reader binds the released producer's stand-in in the same frame. Only an output
 // standing for a one-frame image costs a render every frame it is shown.
 public sealed partial class RenderGraphRuntime {
     // The frame outputs are read at, retained when a reconfiguration replaces the scheduling history.
     private long m_readFrame = -1;
 
-    // The instances whose latest output resolves to nothing, or stands for a one-frame image, reused from frame to frame.
-    private readonly List<string> m_standing = [];
+    // The ordinals of instances whose latest output must render again to stay shown, reused from frame to frame.
+    private readonly MarkedIndexSet m_standingIndices = new();
+    // Sparse candidates whose current output became non-Own (tracked on write, lazily pruned when back to Own).
+    private readonly List<int> m_standingCandidates = [];
+    private bool[] m_standingCandidateMark = [];
     // The instances the frame's release forgot, reused from frame to frame.
     private readonly List<int> m_released = [];
+
+    private void TrackStandingCandidate(int index) {
+        if (!m_standingCandidateMark[index]) {
+            m_standingCandidateMark[index] = true;
+            m_standingCandidates.Add(item: index);
+        }
+    }
+    private void RebuildStandingCandidates() {
+        m_standingCandidates.Clear();
+        m_standingCandidateMark = new bool[m_current.Length];
+
+        for (var index = 0; (index < m_current.Length); index++) {
+            if (!m_current[index].StandsFor.IsOwn) {
+                TrackStandingCandidate(index: index);
+            }
+        }
+    }
+    private void ClearStandingCandidates() {
+        for (var position = 0; (position < m_standingCandidates.Count); position++) {
+            m_standingCandidateMark[m_standingCandidates[position]] = false;
+        }
+        m_standingCandidates.Clear();
+    }
 
     // What an output's image is when it is not the instance's own: another graph instance's output (Producer at least
     // zero), at the frame read or, for a previous-frame read, the frame before it; an image bound for one frame only
@@ -130,10 +157,9 @@ public sealed partial class RenderGraphRuntime {
             }
 
             var bound = OutputAt(
-                frame: FrameOf(
-                    consumer: m_set.Instances[index].Name,
-                    producer: binding.ProducerName,
-                    schedule: schedule
+                frame: schedule.ReadFrame(
+                    consumer: index,
+                    producer: binding.Producer
                 ),
                 producer: binding.Producer,
                 readFrame: (schedule.Frame - (binding.PreviousFrame ? 1L : 0L))
@@ -153,36 +179,46 @@ public sealed partial class RenderGraphRuntime {
             Producer: -1
         );
     }
-    // Whether an instance's latest output must render again to stay shown: its outputs were withdrawn
-    // (RenderGraphRuntime.Withdrawal.cs), it resolves to nothing, or it stands for a one-frame image, which resolves to
-    // nothing once the frame it was bound in has passed.
-    private bool RendersToStayShown(int index) => (
-        (m_sources[index] is null) &&
-        (
-            IsWithdrawing(index: index) ||
-            (
-                !m_current[index].StandsFor.IsOwn &&
-                (m_current[index].StandsFor.IsOneFrame || (LatestOf(index: index).Frame < 0))
-            )
-        )
-    );
-    // Collects every instance whose latest output must render again to stay shown, returning whether there is any.
+    // Collects every instance whose latest output must render again to stay shown, visiting only sparse standing
+    // candidates (and withdrawing instances only while m_withdrawing is non-empty), returning whether there is any.
     private bool CollectStanding() {
-        m_standing.Clear();
+        m_standingIndices.Clear();
 
-        for (var index = 0; (index < m_nodes.Length); index++) {
-            if (RendersToStayShown(index: index)) {
-                m_standing.Add(item: m_set.Instances[index].Name);
+        for (var position = (m_standingCandidates.Count - 1); (position >= 0); position--) {
+            var index = m_standingCandidates[position];
+            var standing = m_current[index].StandsFor;
+
+            if (standing.IsOwn) {
+                m_standingCandidateMark[index] = false;
+                var last = (m_standingCandidates.Count - 1);
+
+                m_standingCandidates[position] = m_standingCandidates[last];
+                m_standingCandidates.RemoveAt(index: last);
+
+                continue;
+            }
+            if (
+                (m_sources[index] is null) &&
+                (standing.IsOneFrame || (LatestOf(index: index).Frame < 0))
+            ) {
+                _ = m_standingIndices.Add(index: index);
+            }
+        }
+        if (m_withdrawing.Count != 0) {
+            for (var index = 0; (index < m_nodes.Length); index++) {
+                if ((m_sources[index] is null) && IsWithdrawing(index: index)) {
+                    _ = m_standingIndices.Add(index: index);
+                }
             }
         }
 
-        return (m_standing.Count != 0);
+        return (m_standingIndices.Count != 0);
     }
     // Schedules a frame again after its release left an output standing for a released instance, naming that output's
     // instance to render again, so the display and every reader bind the released producer's stand-in this frame rather
     // than an empty image. The release does not depend on what renders, so the second schedule releases nothing more; the
     // released instances are forgotten again in its history.
-    private void RescheduleAfterRelease(RenderGraphSchedule schedule, RenderGraphHistory prior, in RenderGraphFrame frame) {
+    private void RescheduleAfterRelease(RenderGraphSchedule schedule, RenderGraphHistory prior, in RenderGraphFrame frame, in RenderGraphOrdinalOverlay overlay) {
         if (
             (m_released.Count == 0) ||
             !CollectStanding()
@@ -190,27 +226,23 @@ public sealed partial class RenderGraphRuntime {
             return;
         }
 
-        if (!ReferenceEquals(
-            objA: frame.Rerender,
-            objB: m_rerender
-        )) {
-            m_rerender.Clear();
+        var standingMembers = m_standingIndices.Members;
 
-            if (frame.Rerender is { } declared) {
-                m_rerender.AddRange(collection: declared);
-            }
-        }
-        foreach (var name in m_standing) {
-            if (!m_rerender.Contains(item: name)) {
-                m_rerender.Add(item: name);
-            }
+        for (var position = 0; (position < standingMembers.Length); position++) {
+            _ = m_rerenderIndices.Add(index: standingMembers[position]);
         }
 
-        RenderGraphScheduler.Schedule(
-            frame: (frame with {
-                Rerender = m_rerender,
-            }),
+        var updated = new RenderGraphOrdinalOverlay {
+            Rerender = m_rerenderIndices.Members,
+            Sources = overlay.Sources,
+            Stale = overlay.Stale,
+            Unchanged = overlay.Unchanged,
+        };
+
+        RenderGraphScheduler.ScheduleOrdinal(
+            frame: frame,
             history: prior,
+            overlay: in updated,
             schedule: schedule,
             set: m_set
         );

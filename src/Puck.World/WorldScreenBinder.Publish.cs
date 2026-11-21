@@ -114,6 +114,11 @@ public sealed partial class WorldScreenBinder {
         ReconcileViewResidencies();
         m_frameContext = context;
         m_hasFrameContext = true;
+        var runtimeInstances = Runtime?.Instances;
+        if (!ReferenceEquals(objA: runtimeInstances, objB: m_lastRuntimeInstances) || (m_cameraFeeds.Count > 0)) {
+            m_lastRuntimeInstances = runtimeInstances;
+            m_extentRevision++;
+        }
         Mappings.Publish(images: this);
         PublishNestedMappings();
     }

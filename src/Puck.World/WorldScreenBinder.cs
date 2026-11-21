@@ -247,6 +247,7 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
         ArgumentNullException.ThrowIfNull(argument: roster);
 
         m_machines = machines;
+        m_machines.MachinesChanged += OnMachinesChanged;
         m_cameraCapture = cameraCapture;
         m_cameraDeviceScanner = new CameraDeviceScanner(
             cameraCapture,
@@ -482,6 +483,7 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
         }
 
         m_disposed = true;
+        m_machines.MachinesChanged -= OnMachinesChanged;
 
         EnsureFeeds();
 

@@ -167,7 +167,15 @@ public sealed partial class WorldCreationInstances {
         ArgumentNullException.ThrowIfNull(argument: moved);
 
         m_packedSlotBase = slotBase;
-        m_volumes.Clear();
+        var volumesNeedRebuild = (m_volumesDirty || (slotBase != m_volumesSlotBase));
+        if (m_hasAnyVolumes && (m_volumeActive.Length < m_poolCount)) {
+            m_volumeActive = new bool[m_poolCount];
+            m_volumeScale = new float[m_poolCount];
+            m_volumeHidden = new bool[]?[m_poolCount];
+            volumesNeedRebuild = true;
+        }
+        m_packVolumesChanged = false;
+        m_packPoseMoved = false;
         m_slotClipRun.Clear();
         m_slotClipBodies.Clear();
         m_packCount++;
@@ -222,7 +230,38 @@ public sealed partial class WorldCreationInstances {
             EndStep(deltaSeconds: deltaSeconds, doors: doors, index: index, moved: moved, transforms: transforms);
         }
 
+        if (volumesNeedRebuild || m_packVolumesChanged) {
+            if (m_hasAnyVolumes || (m_volumes.Count > 0)) {
+                m_volumes.Clear();
+                if (m_hasAnyVolumes) {
+                    for (var index = 0; (index < m_poolCount); index++) {
+                        if (!m_volumeActive[index] || (m_pool[index] is not { } live) || (live.PackedRoot is null)) {
+                            continue;
+                        }
+
+                        var rootSlot = (slotBase + RootSlotOffset(index: index));
+
+                        AppendVolumes(
+                            document: live.Creation.EngineDocument,
+                            hidden: live.Hidden,
+                            live: live,
+                            placementScale: m_volumeScale[index],
+                            rootSlot: rootSlot
+                        );
+                    }
+                }
+                VolumesRevision++;
+            }
+            m_volumesSlotBase = slotBase;
+            m_volumesDirty = false;
+        }
+
+        var rigidPoseBefore = Rigid.PoseRevision;
+
         Rigid.Pack(transforms, client, (slotBase + ArticulatedSlotCount), deltaSeconds);
+        if (m_packPoseMoved || (Rigid.PoseRevision != rigidPoseBefore)) {
+            PoseRevision++;
+        }
         PackGuess(client: client, deltaSeconds: deltaSeconds, moved: moved, parkPosition: parkPosition, slotBase: slotBase, transforms: transforms);
         WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Packs);
         EndRateCodes();
@@ -298,10 +337,17 @@ public sealed partial class WorldCreationInstances {
         // A held pose whose root stood still, which owes nothing.
         public bool Still;
         public bool SlotsMoved;
+        // Whether the full pose switched the registration's active pose frame (CarryRevision).
+        public bool PoseFrameChanged;
         // The seconds the full pose advances its drivers by, and the seconds since its previous full pose.
         public float PoseSeconds;
         public float ElapsedSeconds;
     }
+
+    // What the serial passes learned this pack, folded into the volume list and PoseRevision after them. Only BeginStep
+    // and EndStep write them, never a pose partition.
+    private bool m_packVolumesChanged;
+    private bool m_packPoseMoved;
 
     private PackStep[] m_steps = [];
     // The pool entries the first pass found posing in full, in pool order: partition i poses m_poseOrder[i].
@@ -366,6 +412,10 @@ public sealed partial class WorldCreationInstances {
         }
 
         if (live is null) {
+            if (m_hasAnyVolumes && m_volumeActive[index]) {
+                m_volumeActive[index] = false;
+                m_packVolumesChanged = true;
+            }
             m_packedRegistrations[index] = null;
             SetMeshDraw(
                 draw: null,
@@ -376,6 +426,7 @@ public sealed partial class WorldCreationInstances {
                 moved: moved,
                 owner: index
             )) {
+                m_packPoseMoved = true;
                 WorldTransformOwners.Park(
                     count: slots,
                     moved: moved,
@@ -509,6 +560,7 @@ public sealed partial class WorldCreationInstances {
     private void Pose(IWorldStampSource client, float deltaSeconds, int index, Vector3 parkPosition, Span<DynamicTransform> transforms) {
         ref var step = ref m_steps[index];
         var live = m_pool[index]!;
+        var poseFrameBefore = live.PoseFrame;
 
         step.SlotsMoved = PackRegistration(
             client: client,
@@ -523,6 +575,7 @@ public sealed partial class WorldCreationInstances {
             shapeCount: step.ShapeCount,
             transforms: transforms
         );
+        step.PoseFrameChanged = (live.PoseFrame != poseFrameBefore);
         if (step.SlotsMoved) {
             live.PoseSerial++;
         }
@@ -552,7 +605,13 @@ public sealed partial class WorldCreationInstances {
             live.RateSeconds = 0f;
             live.RateOwed = false;
         }
+        if (step.PoseFrameChanged) {
+            CarryRevision++;
+        }
         if (posed || (step.Stage == PackStage.Held)) {
+            if (step.SlotsMoved) {
+                m_packPoseMoved = true;
+            }
             m_owners.Settle(
                 deltaSeconds: deltaSeconds,
                 moved: (!step.Still && moved.Commit(
@@ -570,13 +629,16 @@ public sealed partial class WorldCreationInstances {
 
         var placementScale = transforms[rootSlot].Scale;
 
-        AppendVolumes(
-            document: live.Creation.EngineDocument,
-            hidden: live.Hidden,
-            live: live,
-            placementScale: placementScale,
-            rootSlot: rootSlot
-        );
+        // The volume list is rebuilt (PackTransforms) only when a volume-bearing registration's membership, scale or
+        // hidden set changed, so each registration only compares itself here.
+        if (m_hasAnyVolumes && (live.Creation.EngineDocument.Volumes is { Count: > 0 })) {
+            if (!m_volumeActive[index] || (m_volumeScale[index] != placementScale) || !ReferenceEquals(objA: m_volumeHidden[index], objB: live.Hidden)) {
+                m_volumeActive[index] = true;
+                m_volumeScale[index] = placementScale;
+                m_volumeHidden[index] = live.Hidden;
+                m_packVolumesChanged = true;
+            }
+        }
 
         // A body straddling a portal whose counterpart stands in this world is drawn on both sides of it. The rest
         // bound screens out the bodies nowhere near a door; the posed parts decide.

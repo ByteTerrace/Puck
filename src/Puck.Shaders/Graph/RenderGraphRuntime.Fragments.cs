@@ -70,6 +70,13 @@ public sealed partial class RenderGraphRuntime {
         }
     }
 
+    // Pre-resolved package instance descriptor so RefreshPackageFragments visits only package instances with zero
+    // dictionary lookups on steady frames.
+    private readonly record struct PackageInstanceSlot(int Index, string Name, string Package, IRenderGraphPackageFactory Factory, RenderGraphPackageFragment? DefaultFragment);
+
+    private PackageInstanceSlot[] m_packageInstances = [];
+    private RenderGraphPackageFragment?[] m_installedFragments = [];
+
     // Records the fragment of every package instance of the set the runtime now runs, from the graphs it was given, and
     // forgets the instances it no longer runs.
     private void RecordPackageFragments(RenderGraphPackageFragment?[] fragments) {
@@ -92,29 +99,34 @@ public sealed partial class RenderGraphRuntime {
     private object? m_refusedFragmentProducers;
 
     private void RefreshPackageFragments() {
+        if (m_packageInstances.Length == 0) {
+            return;
+        }
+
         var changes = m_fragmentChanges;
 
         changes.Clear();
-        for (var index = 0; (index < m_set.Instances.Count); index++) {
-            var instance = m_set.Instances[index];
+        for (var position = 0; (position < m_packageInstances.Length); position++) {
+            var slot = m_packageInstances[position];
+            var fragment = (slot.Factory.FragmentOf(instance: slot.Name) ?? slot.DefaultFragment);
 
-            if (!RunsPackage(instance: instance, packages: m_packages) ||
-                (PackageGraphs.FragmentOf(instance: instance.Name, package: instance.ExternalPackage!, packages: m_packages) is not { } fragment)) {
+            if (fragment is null) {
                 continue;
             }
-            if (m_packageGraphs.Fragments.TryGetValue(key: instance.Name, value: out var previous) && ReferenceEquals(objA: previous, objB: fragment)) {
-                continue;
-            }
-
-            var graph = (m_packageGraphs.GraphFor(fragment: out _, instance: instance.Name, package: instance.ExternalPackage!, packages: m_packages) ??
-                throw new InvalidDataException(message: $"Instance '{instance.Name}' selected a refused package fragment: {m_packageGraphs.RefusalOf(instance: instance.Name, package: instance.ExternalPackage!, packages: m_packages)}"));
-
-            if (ReferenceEquals(objA: graph.Pipeline, objB: m_graphs[index]?.Pipeline)) {
-                m_packageGraphs.Fragments[instance.Name] = fragment;
+            if (ReferenceEquals(objA: m_installedFragments[slot.Index], objB: fragment)) {
                 continue;
             }
 
-            changes.Add(item: (index, fragment, graph));
+            var graph = (m_packageGraphs.GraphFor(fragment: out _, instance: slot.Name, package: slot.Package, packages: m_packages) ??
+                throw new InvalidDataException(message: $"Instance '{slot.Name}' selected a refused package fragment: {m_packageGraphs.RefusalOf(instance: slot.Name, package: slot.Package, packages: m_packages)}"));
+
+            if (ReferenceEquals(objA: graph.Pipeline, objB: m_graphs[slot.Index]?.Pipeline)) {
+                m_installedFragments[slot.Index] = fragment;
+                m_packageGraphs.Fragments[slot.Name] = fragment;
+                continue;
+            }
+
+            changes.Add(item: (slot.Index, fragment, graph));
         }
         if ((changes.Count == 0) || RefusedAlready(changes: changes)) {
             return;
@@ -141,12 +153,14 @@ public sealed partial class RenderGraphRuntime {
         m_refusedFragmentChanges.Clear();
         m_refusedFragmentSet = null;
         foreach (var (index, _, _) in changes) { m_nodes[index]!.RequireSwappable(pipeline: candidate[index]!.Pipeline); }
-        foreach (var (index, fragment, _) in changes) {
-            m_nodes[index]!.Swap(pipeline: candidate[index]!.Pipeline);
-            m_packageGraphs.Fragments[m_set.Instances[index].Name] = fragment;
-        }
         m_graphs = candidate;
         m_inputs = inputs;
+        foreach (var (index, fragment, _) in changes) {
+            m_nodes[index]!.Swap(pipeline: candidate[index]!.Pipeline);
+            m_installedFragments[index] = fragment;
+            m_packageGraphs.Fragments[m_set.Instances[index].Name] = fragment;
+            UpdateGraphTable(index: index);
+        }
     }
     // Whether these changes are the ones a binding last refused, against the set, graphs and producers it read.
     private bool RefusedAlready(List<(int Index, RenderGraphPackageFragment Fragment, RenderGraphRuntimeGraph Graph)> changes) {

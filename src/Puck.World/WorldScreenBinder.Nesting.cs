@@ -138,6 +138,7 @@ public sealed partial class WorldScreenBinder {
             Local: DestinationOf(feed: feed),
             Scene: null
         );
+        m_accessBindingsVersion++;
 
         return screens;
     }
@@ -161,6 +162,7 @@ public sealed partial class WorldScreenBinder {
         AddPresentedFeeds();
 
         m_feedsMoved = false;
+        m_accessBindingsVersion++;
     }
     private void AddFeed(SessionFeed feed) {
         m_feeds.Add(item: feed);
@@ -403,6 +405,29 @@ public sealed partial class WorldScreenBinder {
     // The extent of the image a level's screen shows: its machine output's framebuffer, from the level's world's own
     // host, or its source instance's running image.
     private sealed class NestedImages(WorldScreenBinder binder, WorldNestedScreens<SessionFeed> screens) : IWorldScreenImages {
+        private long m_lastBinderRevision = -1;
+        private ulong m_lastMachineRevision = ulong.MaxValue;
+        private long m_revision;
+
+        /// <inheritdoc/>
+        public long? ExtentRevision {
+            get {
+                var binderRevision = binder.m_extentRevision;
+                var machineRevision = (binder.MachinesOf(world: screens.World)?.InstanceRevision ?? 0UL);
+
+                if (
+                    (binderRevision != m_lastBinderRevision) ||
+                    (machineRevision != m_lastMachineRevision)
+                ) {
+                    m_lastBinderRevision = binderRevision;
+                    m_lastMachineRevision = machineRevision;
+                    m_revision++;
+                }
+
+                return m_revision;
+            }
+        }
+
         /// <inheritdoc/>
         public bool TryExtent(int screen, out int width, out int height) {
             (width, height) = ((screens.RowOf(screen: screen) is { Source: WorldScreenSource.Machine machine })

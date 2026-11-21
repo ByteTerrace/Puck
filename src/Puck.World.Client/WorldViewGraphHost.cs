@@ -265,9 +265,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private readonly List<RenderGraphFootprint> m_footprints = [];
     private readonly List<string> m_named = [];
     private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
-    // The access epoch each instance was last bound under (BindAccess), for the set they were recorded against.
-    private readonly Dictionary<string, long> m_accessEpochs = new(comparer: StringComparer.Ordinal);
+    // Ordinal side tables for BindAccess, rebuilt only when the instance set or m_entries changes so steady frames
+    // index by ordinal and never hash instance names.
     private RenderGraphInstanceSet? m_accessSet;
+    private long[] m_accessEpochs = [];
+    private bool[] m_accessSeen = [];
+    private WorldViewAccess[] m_accessScratch = [];
+    private Entry?[] m_entriesByIndex = [];
+    private int m_entriesVersion;
+    private int m_accessEntriesVersion = -1;
+    private int m_portalsVersion;
 
     // Whether this frame's lone whole-display view is shown only so its place pass applies its matte: the
     // display shows the world itself, as it does when the root stands for the view, so no pane is published for it.
@@ -557,6 +564,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_lastRendered = null;
         m_lastViews = null;
         m_runtime = runtime;
+        m_accessSet = null;
+        m_accessEpochs = [];
+        m_accessSeen = [];
+        m_accessScratch = [];
+        m_entriesByIndex = [];
+        m_accessEntriesVersion = -1;
         m_comparisonLiveRoot = scene;
         m_lastComparisonRevision = 0;
         m_synthesized = synthesized;
@@ -608,10 +621,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         // Every instance that renders on a node presents the frame: the synthesized root, every SDF view, and each
         // views.graphs row, which PrepareGraph then hands its own pointer and time.
-        var instances = runtime.Instances.Instances;
+        var nodes = runtime.Nodes;
 
-        for (var index = 0; (index < instances.Count); index++) {
-            if (runtime.NodeOf(instance: instances[index].Name) is { } node) {
+        for (var index = 0; (index < nodes.Length); index++) {
+            if (nodes[index] is { } node) {
                 node.Frame = frame;
             }
         }
@@ -636,6 +649,52 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_framing.Clear();
         m_cameras.Clear();
     }
+    // Rebuilds BindAccess's ordinal side tables when the instance set or m_entries changed, carrying epochs across
+    // reconfigurations for surviving instances by name.
+    private void EnsureAccessTables(RenderGraphInstanceSet set) {
+        var count = set.Instances.Count;
+
+        if (!ReferenceEquals(objA: set, objB: m_accessSet)) {
+            var nextEpochs = new long[count];
+            var nextSeen = new bool[count];
+
+            if (m_accessSet is { } previous) {
+                var instances = set.Instances;
+
+                for (var index = 0; (index < count); index++) {
+                    var old = previous.IndexOf(name: instances[index].Name);
+
+                    if ((old >= 0) && m_accessSeen[old]) {
+                        nextEpochs[index] = m_accessEpochs[old];
+                        nextSeen[index] = true;
+                    }
+                }
+            }
+
+            m_accessSet = set;
+            m_accessEpochs = nextEpochs;
+            m_accessSeen = nextSeen;
+            if (m_accessScratch.Length < count) {
+                m_accessScratch = new WorldViewAccess[count];
+            }
+            m_accessEntriesVersion = -1;
+        }
+        if (m_accessEntriesVersion != m_entriesVersion) {
+            if (m_entriesByIndex.Length != count) {
+                m_entriesByIndex = new Entry?[count];
+            }
+
+            var instances = set.Instances;
+
+            for (var index = 0; (index < count); index++) {
+                _ = m_entries.TryGetValue(
+                    key: instances[index].Name,
+                    value: out m_entriesByIndex[index]
+                );
+            }
+            m_accessEntriesVersion = m_entriesVersion;
+        }
+    }
     // The one place a view's access reaches the runtime, once a frame before it schedules, after the screens settled
     // their sessions' access (WorldScreenBinder.Publish). A view whose epoch moved since the host last saw it has every
     // output it published withdrawn (IRenderGraphInstances.Withdraw), so no reader binds a picture made under the old
@@ -643,27 +702,33 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // seen for the first time has published nothing yet, so its epoch is only recorded.
     private void BindAccess(IRenderGraphInstances runtime) {
         var set = runtime.Instances;
+        var count = set.Instances.Count;
 
-        if (!ReferenceEquals(objA: set, objB: m_accessSet)) {
-            m_accessSet = set;
-            foreach (var name in m_accessEpochs.Keys.ToArray()) {
-                if (set.IndexOf(name: name) < 0) { _ = m_accessEpochs.Remove(key: name); }
-            }
+        EnsureAccessTables(set: set);
+
+        var access = m_accessScratch.AsSpan(start: 0, length: count);
+
+        if (ViewScenes is { } scenes) {
+            scenes.ReadAccess(access: access, set: set);
+        } else {
+            access.Fill(value: WorldViewAccess.Open);
         }
 
-        var instances = set.Instances;
+        var nodes = runtime.Nodes;
+        var epochs = m_accessEpochs;
+        var seen = m_accessSeen;
+        var entries = m_entriesByIndex;
 
-        for (var index = 0; (index < instances.Count); index++) {
-            var name = instances[index].Name;
-            var access = (ViewScenes?.AccessOf(view: name) ?? WorldViewAccess.Open);
+        for (var index = 0; (index < count); index++) {
+            var current = access[index];
 
-            if (m_accessEpochs.TryGetValue(key: name, value: out var seen) && (seen != access.Epoch)) {
-                runtime.Withdraw(instance: name);
+            if (seen[index] && (epochs[index] != current.Epoch)) {
+                runtime.Withdraw(instance: set.Instances[index].Name);
             }
-            m_accessEpochs[name] = access.Epoch;
-            if (runtime.NodeOf(instance: name) is { } node) {
-                _ = m_entries.TryGetValue(key: name, value: out var entry);
-                ApplyPause(available: access.Available, entry: entry, node: node);
+            epochs[index] = current.Epoch;
+            seen[index] = true;
+            if (nodes[index] is { } node) {
+                ApplyPause(available: current.Available, entry: entries[index], node: node);
             }
         }
     }
@@ -1319,6 +1384,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_screenFootprints.AddRange(collection: DisplayFootprints(scene: scene));
         m_named.Clear();
         m_portals.Clear();
+        m_portalsVersion++;
 
         foreach (var view in rendered.Views) {
             m_named.Add(item: view.Name);
@@ -1396,6 +1462,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 if (entry is not null) { CancelPending(entry: entry); }
                 entry = new Entry { Name = row.Name, Node = node, Owner = this };
                 m_entries[row.Name] = entry;
+                m_entriesVersion++;
             }
 
             entry.Adopt(row: row);
@@ -1419,6 +1486,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             if (desiredNames.Contains(item: name)) { continue; }
             CancelPending(entry: m_entries[name]);
             m_entries.Remove(key: name);
+            m_entriesVersion++;
         }
     }
     // Installs a compiled graph on its row's instance, binding each input the row declares to the instance it names.

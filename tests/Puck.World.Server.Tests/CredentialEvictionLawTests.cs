@@ -239,4 +239,200 @@ public sealed class CredentialEvictionLawTests {
         Assert.False(condition: server.Population.IsParked(index: resumed.BodyIndex));
         Assert.True(condition: server.Grants.Allows(principal: resumed.Identity, capability: WorldCapability.Observe, subject: body).IsAllowed);
     }
+    [Fact]
+    public async Task DynamicArrivalGrantThenRemovalEvictsAuthenticatedFederationStream() {
+        var identity = GenerateIdentity(subject: "dynamic-arrival-authority");
+        using var key = identity.Key;
+        var signingEntry = BuildEntry(grants: [], identity: identity);
+        var arrivalEntry = new WorldAdmissionEntry(
+            Domain: identity.Subject,
+            Mode: WorldAdmissionTrustMode.FederatedAuthority,
+            Grants: [],
+            Disclosure: WorldDisclosureTier.Replica
+        );
+        var document = BuildAdmissionDocument(entry: signingEntry);
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var clock = new VirtualClock(start: ClaimInstant);
+        var verifier = new WorldAttestedAuthenticator(trustEntries: () => fixture.Server.Definition.Admission, now: clock.GetUtcNow);
+        using var oracle = new LocalKeySigningOracle(key: identity.Key, subject: identity.Subject, validity: TimeSpan.FromMinutes(value: 1), now: clock.GetUtcNow);
+        using var host = new WorldPeerHost(server: fixture.Server, authenticator: verifier, timeProvider: clock, transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
+
+        PeerTestClient.StartOrSkip(host: host);
+        var authenticated = await AuthenticateFederationAsync(host: host, oracle: oracle);
+        using var client = authenticated.Client;
+
+        Assert.Equal(actual: authenticated.Kind, expected: ((byte)WorldFederationResponse.Authenticated));
+        await OpenIntentStreamAsync(client: client);
+        var closed = WaitForCloseAsync(stream: client.GetStream(), ct: TestToken);
+
+        // Grant arrival authority dynamically after the session already connected, let reverification observe it,
+        // then remove the arrival row: the session must now be evicted rather than consulting a connect-time latch.
+        InstallDefinition(fixture: fixture, candidate: (fixture.Server.Definition with { Admission = [signingEntry, arrivalEntry] }));
+        clock.Advance(by: WorldPeerHost.CredentialSweepInterval);
+        Assert.False(condition: closed.IsCompleted);
+
+        InstallDefinition(fixture: fixture, candidate: (fixture.Server.Definition with { Admission = [signingEntry] }));
+        clock.Advance(by: WorldPeerHost.CredentialSweepInterval);
+        Assert.True(condition: await closed.WaitAsync(cancellationToken: TestToken));
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public async Task ForwardedTravelerProjectionEndsImmediatelyWhenIntermediaryNarrowsOrRemovesArrivalPolicy(bool removeArrival) {
+        var identity = GenerateIdentity(subject: "forwarded-projection-source");
+        using var key = identity.Key;
+        var signingEntry = BuildEntry(grants: [], identity: identity);
+        var arrivalEntry = new WorldAdmissionEntry(
+            Domain: identity.Subject,
+            Mode: WorldAdmissionTrustMode.FederatedAuthority,
+            Grants: [
+                new WorldAdmissionGrant(Capability: WorldCapability.Drive, Budget: 100),
+                new WorldAdmissionGrant(Capability: WorldCapability.Observe, Budget: 100),
+            ],
+            Disclosure: WorldDisclosureTier.Replica
+        );
+        var baseDocument = Fixtures.PeerPopulationDocument(networkPlayers: 1);
+        var document = (baseDocument with { Admission = [signingEntry, arrivalEntry] });
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var forwarder = new StallingForwarder();
+
+        fixture.Server.TransferForwarder = forwarder;
+        var mobility = new WorldMobilityIdentity(
+            DepartedFrom: new WorldEntityAddress(Authority: identity.Subject, Generation: 1, Index: 4),
+            Epoch: 0UL,
+            Incarnation: new WorldEntityAddress(Authority: identity.Subject, Generation: 1, Index: 4)
+        );
+        var reservation = fixture.Server.ReserveTransfer(request: new WorldTransferReservationRequest(
+            Border: "seam",
+            BorderCapacity: null,
+            DeadlineSourceTick: 60,
+            Members: [new WorldTransferReservationMember(
+                BodyColor: default,
+                CatalogRig: 4,
+                Identity: null,
+                Mobility: mobility,
+                PreferredSlot: 4,
+                Principal: Principal.Console,
+                Source: IntentSource.Live
+            )],
+            PartyAllOrNothing: true,
+            PeerAdmission: true,
+            SourceAuthority: identity.Subject,
+            SourceRateHz: 240,
+            SourceTick: 0,
+            TransferId: 11
+        ));
+
+        Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
+        Assert.Equal(
+            expected: WorldTransferStatus.Committed,
+            actual: fixture.Server.CommitTransfer(
+                members: [new WorldTransferCommitMember(
+                    BodyMotionProgramName: "grounded",
+                    Arrival: WorldTransferArrival.Spawn,
+                    PlanarVelocity: default,
+                    Position: default,
+                    Profile: null,
+                    VerticalVelocity: default,
+                    YawRadians: default
+                )],
+                reason: out var commitReason,
+                sourceAuthority: identity.Subject,
+                transferId: 11
+            )
+        );
+        Assert.True(condition: string.IsNullOrEmpty(value: commitReason), userMessage: commitReason);
+        var observedMobility = mobility.Advance();
+
+        Assert.True(condition: fixture.Server.TryTransferredPrincipal(mobility: in observedMobility, principal: out var traveler, sourceAuthority: identity.Subject));
+        // Detach the local body so B acts solely as an onward forwarding intermediary (B -> C).
+        Assert.True(condition: fixture.Server.Population.TryDetachSeatForTransfer(slot: traveler.Index, profile: out _));
+
+        var clock = new VirtualClock(start: ClaimInstant);
+        var verifier = new WorldAttestedAuthenticator(trustEntries: () => fixture.Server.Definition.Admission, now: clock.GetUtcNow);
+        using var oracle = new LocalKeySigningOracle(key: identity.Key, subject: identity.Subject, validity: TimeSpan.FromMinutes(value: 1), now: clock.GetUtcNow);
+        using var host = new WorldPeerHost(server: fixture.Server, authenticator: verifier, timeProvider: clock, transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
+
+        PeerTestClient.StartOrSkip(host: host);
+        var authenticated = await AuthenticateFederationAsync(host: host, oracle: oracle);
+        using var client = authenticated.Client;
+
+        Assert.Equal(actual: authenticated.Kind, expected: ((byte)WorldFederationResponse.Authenticated));
+        var stream = client.GetStream();
+
+        await using (StartMailboxPump(host: host)) {
+            await WorldFederationCodec.WriteRequestAsync(
+                body: WorldFederationCodec.EncodeTravelerObservation(request: new WorldTravelerObservation(
+                    Ceiling: WorldDisclosureTier.Replica,
+                    Mobility: observedMobility,
+                    SourceAuthority: identity.Subject
+                )),
+                ct: TestToken,
+                kind: WorldFederationRequest.ObserveTraveler,
+                stream: stream
+            );
+            await forwarder.Started.Task.WaitAsync(cancellationToken: TestToken);
+        }
+
+        var updatedAdmission = (removeArrival
+            ? new[] { signingEntry }
+            : new[] { signingEntry, (arrivalEntry with { Disclosure = WorldDisclosureTier.Presentation }) });
+
+        InstallDefinition(fixture: fixture, candidate: (fixture.Server.Definition with { Admission = updatedAdmission }));
+        var invalidated = await WorldFederationCodec.ReadResponseAsync(stream: stream, ct: TestToken);
+
+        Assert.True(condition: invalidated.Ok);
+        Assert.Equal(expected: ((byte)WorldFederationResponse.ProjectionInvalidated), actual: invalidated.Kind);
+        await forwarder.Canceled.Task.WaitAsync(cancellationToken: TestToken);
+
+        if (removeArrival) {
+            using var routeProbe = (await AuthenticateFederationAsync(host: host, oracle: oracle)).Client;
+
+            await using (StartMailboxPump(host: host)) {
+                await WorldFederationCodec.WriteRequestAsync(
+                    body: WorldFederationCodec.EncodeRouteCredential(sourceAuthority: identity.Subject, mobility: in observedMobility),
+                    ct: TestToken,
+                    kind: WorldFederationRequest.Route,
+                    stream: routeProbe.GetStream()
+                );
+                var routeReply = await WorldFederationCodec.ReadResponseAsync(stream: routeProbe.GetStream(), ct: TestToken);
+
+                Assert.True(condition: routeReply.Ok);
+                Assert.Equal(expected: ((byte)WorldFederationResponse.Refusal), actual: routeReply.Kind);
+                Assert.StartsWith(expectedStartString: nameof(WorldFederationRefusal.CredentialUnknown),
+                    actualString: System.Text.Encoding.UTF8.GetString(bytes: routeReply.Body.Span));
+            }
+        }
+    }
+
+    private sealed class StallingForwarder : IWorldTransferForwarder {
+        public TaskCompletionSource Canceled { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Started { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeForwardingAsync(WorldServer source, WorldMobilityIdentity mobility) =>
+            ValueTask.FromResult<(WorldAuthorityRouteDescription?, string)>(result: (null, "unused"));
+        public ValueTask<byte[]?> FetchForwardedPrototypeAsync(WorldServer source, WorldTravelerObservation request, Puck.Assets.ContentPin pin) =>
+            ValueTask.FromResult<byte[]?>(result: null);
+        public bool HasOnwardRoute(WorldServer source, in WorldMobilityIdentity mobility) => true;
+        public async Task<string?> StreamForwardedProjectionAsync(WorldServer source, WorldTravelerObservation request, Stream output, CancellationToken ct) {
+            var stalled = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+            using var cancel = ct.Register(callback: () => {
+                Canceled.TrySetResult();
+                stalled.TrySetCanceled(cancellationToken: ct);
+            });
+
+            Started.TrySetResult();
+            await stalled.Task.ConfigureAwait(continueOnCapturedContext: false);
+            return null;
+        }
+        public string? TimelineResetRefusal(WorldServer source) => null;
+        public bool TryForwardIntent(WorldServer source, in WorldMobilityIdentity mobility, in IntentSubmission submission, out string reason) {
+            reason = string.Empty;
+            return true;
+        }
+        public bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason) {
+            reason = string.Empty;
+            return false;
+        }
+    }
 }

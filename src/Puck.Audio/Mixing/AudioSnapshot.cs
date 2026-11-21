@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Maths;
 
 namespace Puck.Audio.Mixing;
@@ -158,18 +159,43 @@ public sealed class AudioSnapshot {
 
     private readonly AudioEmitter[] m_emitters;
     private readonly SynthTrigger[] m_triggers;
+    // Open-addressing id -> (emitterIndex + 1) table per slab (0 = empty) plus the bucket each emitter occupies so
+    // Reset clears only occupied entries in O(emitters) with zero allocation.
+    private readonly int[] m_buckets;
+    private readonly int[] m_emitterBuckets;
+    private readonly int m_bucketMask;
 
     private int m_emitterCount;
     private int m_triggerCount;
 
     /// <summary>Whether the snapshot carries the emitter a bound trigger needs.</summary>
-    public bool ContainsEmitter(int id) => ContainsEmitter(Emitters, id);
+    public bool ContainsEmitter(int id) => TryFindEmitterIndex(id: id, index: out _);
+    /// <summary>Finds the index of the emitter with <paramref name="id"/> in <see cref="Emitters"/> in O(1) time.</summary>
+    /// <param name="id">The emitter id to look up.</param>
+    /// <param name="index">The index into <see cref="Emitters"/> when found; -1 otherwise.</param>
+    /// <returns><see langword="true"/> when the snapshot carries an emitter with <paramref name="id"/>.</returns>
+    public bool TryFindEmitterIndex(int id, out int index) {
+        var bucket = ((int)(InvertibleBitMix.Mix(value: unchecked((uint)id)) & ((uint)m_bucketMask)));
 
-    internal static bool ContainsEmitter(ReadOnlySpan<AudioEmitter> emitters, int id) {
-        foreach (ref readonly var emitter in emitters) {
-            if (emitter.Id == id) { return true; }
+        while (true) {
+            var entry = m_buckets[bucket];
+
+            if (entry == 0) {
+                index = -1;
+
+                return false;
+            }
+
+            var candidate = (entry - 1);
+
+            if (m_emitters[candidate].Id == id) {
+                index = candidate;
+
+                return true;
+            }
+
+            bucket = ((bucket + 1) & m_bucketMask);
         }
-        return false;
     }
 
     /// <summary>Initializes an empty snapshot slab.</summary>
@@ -180,6 +206,11 @@ public sealed class AudioSnapshot {
         ArgumentOutOfRangeException.ThrowIfNegative(value: maxTriggers);
         m_emitters = new AudioEmitter[maxEmitters];
         m_triggers = new SynthTrigger[maxTriggers];
+        var bucketCount = ((int)BitOperations.RoundUpToPowerOf2(value: ((uint)Math.Max(val1: 2, val2: (maxEmitters * 2)))));
+
+        m_buckets = new int[bucketCount];
+        m_emitterBuckets = new int[maxEmitters];
+        m_bucketMask = (bucketCount - 1);
     }
 
     /// <summary>Gets the emitter table.</summary>
@@ -199,6 +230,13 @@ public sealed class AudioSnapshot {
     /// <param name="listener">The listener pose for this frame.</param>
     public void Reset(in AudioListener listener) {
         Listener = listener;
+        for (var index = 0; (index < m_emitterCount); index++) {
+            var bucket = m_emitterBuckets[index];
+
+            if (bucket >= 0) {
+                m_buckets[bucket] = 0;
+            }
+        }
         m_emitterCount = 0;
         m_triggerCount = 0;
     }
@@ -210,7 +248,29 @@ public sealed class AudioSnapshot {
             return false;
         }
 
-        m_emitters[m_emitterCount++] = emitter;
+        var index = m_emitterCount++;
+
+        m_emitters[index] = emitter;
+
+        var bucket = ((int)(InvertibleBitMix.Mix(value: unchecked((uint)emitter.Id)) & ((uint)m_bucketMask)));
+
+        while (true) {
+            var entry = m_buckets[bucket];
+
+            if (entry == 0) {
+                m_buckets[bucket] = (index + 1);
+                m_emitterBuckets[index] = bucket;
+
+                break;
+            }
+            if (m_emitters[(entry - 1)].Id == emitter.Id) {
+                m_emitterBuckets[index] = -1;
+
+                break;
+            }
+
+            bucket = ((bucket + 1) & m_bucketMask);
+        }
 
         return true;
     }
