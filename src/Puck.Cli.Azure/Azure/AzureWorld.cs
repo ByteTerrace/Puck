@@ -478,21 +478,11 @@ public static partial class AzureCommand {
             )
         ) {
             Console.WriteLine(value: $"Recreating {scaleSet} to change its priority from {Text(value: existing[0])} to {priority}.");
-            await AzAsync(
-                "vmss",
-                "delete",
-                "-g",
-                group,
-                "--name",
-                scaleSet,
-                "-o",
-                "none"
-            );
-            if ((await StableWorkersAsync(
+            await DeleteWorldComputeAsync(
                 clock: clock,
                 group: group,
                 scaleSet: scaleSet
-            )).Length != 0) { throw new InvalidOperationException(message: "Deleting the scale set left workers behind; no release was applied."); }
+            );
         }
         await AzAsync(
             "deployment",
@@ -524,6 +514,62 @@ public static partial class AzureCommand {
             "none"
         );
     }
+    /// <summary>Deletes the world's workers and then its scale set, when it exists, and proves no worker remains. The
+    /// world's state lives in blob storage, so the scale set is disposable: the compute template recreates it.</summary>
+    /// <remarks>Callers reach this only when no release runs on the scale set: after its source drained, or in a group
+    /// that has never committed a release. Azure refuses to delete a Flexible scale set that still holds a VM, and the
+    /// scale set's autoscale floor can add one back between the two deletes, so a refused scale-set delete is retried
+    /// after its workers are deleted again.</remarks>
+    private static async Task DeleteWorldComputeAsync(string group, string scaleSet, TimeProvider clock) {
+        for (var attempt = 1; ; attempt++) {
+            foreach (var worker in await StableWorkersAsync(
+                clock: clock,
+                group: group,
+                scaleSet: scaleSet
+            )) {
+                await AzAsync(
+                    "vm",
+                    "delete",
+                    "-g",
+                    group,
+                    "--name",
+                    Text(value: worker!["name"]),
+                    "--yes",
+                    "-o",
+                    "none"
+                );
+            }
+            if ((await AzJsonAsync(
+                "vmss",
+                "list",
+                "-g",
+                group,
+                "--query",
+                $"[?name=='{scaleSet}'].name",
+                "-o",
+                "json"
+            )).AsArray().Count == 0) { break; }
+            try {
+                await AzAsync(
+                    "vmss",
+                    "delete",
+                    "-g",
+                    group,
+                    "--name",
+                    scaleSet,
+                    "-o",
+                    "none"
+                );
+                break;
+            } catch (InvalidOperationException) when (attempt < WorldComputeDeleteAttempts) { }
+        }
+        if ((await StableWorkersAsync(
+            clock: clock,
+            group: group,
+            scaleSet: scaleSet
+        )).Length != 0) { throw new InvalidOperationException(message: $"Deleting {scaleSet} left workers behind; no release was applied."); }
+    }
+    private const int WorldComputeDeleteAttempts = 3;
     private static async Task WorldGuestAsync(string group, string script, string worker) {
         var marker = ("puck-operation-" + Guid.NewGuid().ToString(format: "N"));
         var output = await WorldGuestOutputAsync(

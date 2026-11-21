@@ -42,12 +42,34 @@ public sealed record WorldReleaseGroupRecord {
     [JsonPropertyName("recoveryRoots")] public IReadOnlyDictionary<string, string> RecoveryRoots { get; init; } = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
     [JsonPropertyName("history")] public IReadOnlyList<WorldReleaseGroupHistoryEntry> History { get; init; } = [];
 
+    /// <summary>Gets whether a worker found in the group's compute before a bootstrap captures anything is one an earlier
+    /// bootstrap of the group left behind, which the bootstrap may replace. The group has never committed a release, so
+    /// no release owns a worker, and its history records a bootstrap that captured roots (only such a bootstrap goes on
+    /// to create compute) and then recovered. Without that history a worker came from outside the group's operations and
+    /// is refused.</summary>
+    [JsonIgnore]
+    public bool HasRecoveredBootstrap => ((ActiveRelease is null) && History.Any(predicate: static entry => entry.IsRecoveredBootstrap));
+
     /// <summary>Whether an identifier already owns pending or retained work. New operations must never reuse
     /// an identifier because immutable recovery roots are addressed by that identifier.</summary>
     public bool ContainsOperation(Guid operationId) => ((PendingOperationId == operationId) || History.Any(predicate: entry => (entry.OperationId == operationId)));
 }
 /// <summary>Immutable history retained after an operation is finalized or recovered.</summary>
 public sealed record WorldReleaseGroupHistoryEntry {
+    /// <summary>The prefix of <see cref="Result"/> for an unfinished bootstrap a newer release superseded before it
+    /// captured any recovery root (<see cref="WorldReleaseGroupStore.AbandonBootstrapAsync"/>).</summary>
+    public const string AbandonedResult = "abandoned: ";
+    /// <summary>The prefix of <see cref="Result"/> for a pre-commit operation whose protected roots were restored
+    /// (<see cref="WorldReleaseGroupStore.CompleteRecoveryAsync"/>); the failure that began recovery follows it.</summary>
+    public const string RecoveredResult = "recovered: ";
+
+    /// <summary>Gets whether this entry is a first deployment that captured recovery roots and then recovered.</summary>
+    [JsonIgnore]
+    public bool IsRecoveredBootstrap => ((SourceRelease is null) && (RecoveryRoots.Count > 0) && Result.StartsWith(
+        comparisonType: StringComparison.Ordinal,
+        value: RecoveredResult
+    ));
+
     [JsonPropertyName("operationId")] public required Guid OperationId { get; init; }
     [JsonPropertyName("recoveryRoots")] public IReadOnlyDictionary<string, string> RecoveryRoots { get; init; } = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
     [JsonPropertyName("restorePoint"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -304,16 +326,12 @@ public sealed partial class WorldReleaseGroupStore {
         }
 
         // Preserve the completed operation and its recovery references before reusing the single pending slot.
-        var history = ((old.PendingOperationId is { } completed)
-            ? old.History.Append(element: new WorldReleaseGroupHistoryEntry {
-                OperationId = completed,
-                RecoveryRoots = old.RecoveryRoots,
-                RestorePoint = old.RestorePoint,
-                Result = "rollback-started",
-                Revision = checked((old.Revision + 1)),
-                SourceRelease = old.PendingSourceRelease!,
-                TargetRelease = old.PendingTargetRelease!,
-            }).ToArray()
+        var history = ((old.PendingOperationId is not null)
+            ? old.History.Append(element: HistoryEntry(
+                old: old,
+                result: "rollback-started",
+                roots: old.RecoveryRoots
+            )).ToArray()
             : old.History
         );
         var next = old with {
@@ -471,29 +489,16 @@ public sealed partial class WorldReleaseGroupStore {
                 "recovery must be privately completed before its durable operation can close"
             ));
         }
-        var history = old.History.Append(element: new WorldReleaseGroupHistoryEntry {
-            OperationId = old.PendingOperationId.Value,
-            RecoveryRoots = old.RecoveryRoots,
-            RestorePoint = old.RestorePoint,
-            Result = $"recovered: {(old.PendingFailure ?? "unspecified failure")}",
-            Revision = checked((old.Revision + 1)),
-            SourceRelease = old.PendingSourceRelease!,
-            TargetRelease = old.PendingTargetRelease!,
-        }).ToArray();
         var rollbackAttempt = ((old.PreviousRelease is not null) && string.Equals(
             a: old.PendingTargetRelease,
             b: old.PreviousRelease,
             comparisonType: StringComparison.Ordinal
         ));
-        var next = old with {
-            RestorePoint = null,
-            PendingOperationId = null,
-            PendingSourceRelease = null,
-            PendingTargetRelease = null,
-            PendingPhase = null,
-            PendingCommitted = false,
-            PendingFailure = null,
-            RecoveryRoots = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal),
+        var next = Retire(
+            old: old,
+            result: (WorldReleaseGroupHistoryEntry.RecoveredResult + (old.PendingFailure ?? "unspecified failure")),
+            roots: old.RecoveryRoots
+        ) with {
             Admission = ((sourceAuthorityLease is null)
             ? WorldReleaseAdmissionState.Closed
             : WorldReleaseAdmissionState.Open),
@@ -501,14 +506,54 @@ public sealed partial class WorldReleaseGroupStore {
             RollbackEligible = ((old.RestorePoint is not null)
             ? old.RollbackEligible
             : rollbackAttempt),
-            History = history,
-            Revision = checked((old.Revision + 1)),
         };
 
         return WriteAsync(
             cancellationToken: cancellationToken,
             current: current,
             next: next
+        );
+    }
+    /// <summary>Ends an unfinished first deployment that has captured no recovery root, so a newer release can begin.
+    /// Such a bootstrap has created no compute and restored nothing, so ending it needs no runtime effect; admission
+    /// stays closed.</summary>
+    /// <param name="current">The group state holding the bootstrap.</param>
+    /// <param name="reason">The reason recorded in the history entry, after <see cref="WorldReleaseGroupHistoryEntry.AbandonedResult"/>.</param>
+    /// <param name="capturedRoots">The recovery roots the bootstrap saved under its operation identifier without
+    /// recording them, by root key; the history entry keeps them, so a later bootstrap recognizes the definitions this
+    /// one published.</param>
+    /// <param name="cancellationToken">The token that cancels the guarded write.</param>
+    /// <returns>The written state, or a conflict when the pending operation is not such a bootstrap.</returns>
+    public Task<WorldReleaseGroupOutcome> AbandonBootstrapAsync(WorldReleaseGroupSnapshot current, string reason,
+        IReadOnlyDictionary<string, string> capturedRoots, CancellationToken cancellationToken = default) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        ArgumentNullException.ThrowIfNull(capturedRoots);
+        var old = current.Record;
+
+        if (
+            (old.PendingOperationId is null) ||
+            (old.ActiveRelease is not null) ||
+            (old.PendingSourceRelease is not null) ||
+            old.PendingCommitted ||
+            (old.RecoveryRoots.Count != 0) ||
+            (old.PendingPhase is not (WorldReleaseOperationPhase.Prepare or WorldReleaseOperationPhase.Drain))
+        ) {
+            return Task.FromResult(result: new WorldReleaseGroupOutcome(
+                WorldReleaseOperationOutcomeKind.Conflict,
+                "only a bootstrap that has captured no recovery root can be abandoned"
+            ));
+        }
+        return WriteAsync(
+            cancellationToken: cancellationToken,
+            current: current,
+            next: Retire(
+                old: old,
+                result: (WorldReleaseGroupHistoryEntry.AbandonedResult + reason),
+                roots: new SortedDictionary<string, string>(
+                    dictionary: capturedRoots.ToDictionary(comparer: StringComparer.Ordinal),
+                    comparer: StringComparer.Ordinal
+                )
+            )
         );
     }
     /// <summary>Publishes target pointers at the commit boundary; admission remains closed until publication is explicit.</summary>
@@ -684,15 +729,45 @@ public sealed partial class WorldReleaseGroupStore {
                 "only an admitted committed operation can be finalized"
             ));
         }
-        var history = old.History.Append(element: new WorldReleaseGroupHistoryEntry { OperationId = old.PendingOperationId.Value, RecoveryRoots = old.RecoveryRoots, RestorePoint = old.RestorePoint, Result = "committed", Revision = (old.Revision + 1), SourceRelease = old.PendingSourceRelease!, TargetRelease = old.PendingTargetRelease! }).ToArray();
-        var next = old with { RestorePoint = null, PendingOperationId = null, PendingSourceRelease = null, PendingTargetRelease = null, PendingPhase = null, PendingCommitted = false, PendingFailure = null, RecoveryRoots = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal), RollbackEligible = false, History = history, Revision = checked((old.Revision + 1)) };
-
         return WriteAsync(
             cancellationToken: cancellationToken,
             current: current,
-            next: next
+            next: (Retire(
+                old: old,
+                result: "committed",
+                roots: old.RecoveryRoots
+            ) with { RollbackEligible = false })
         );
     }
+
+    // The history entry that retains the pending operation of old under result, with the recovery roots it keeps.
+    private static WorldReleaseGroupHistoryEntry HistoryEntry(WorldReleaseGroupRecord old, string result, IReadOnlyDictionary<string, string> roots) => new() {
+        OperationId = old.PendingOperationId!.Value,
+        RecoveryRoots = roots,
+        RestorePoint = old.RestorePoint,
+        Result = result,
+        Revision = checked((old.Revision + 1)),
+        SourceRelease = old.PendingSourceRelease,
+        TargetRelease = old.PendingTargetRelease!,
+    };
+    // The next revision of old with its pending operation moved into history and every pending field cleared; the caller
+    // sets admission, the authority lease and rollback eligibility for its own transition.
+    private static WorldReleaseGroupRecord Retire(WorldReleaseGroupRecord old, string result, IReadOnlyDictionary<string, string> roots) => old with {
+        RestorePoint = null,
+        PendingOperationId = null,
+        PendingSourceRelease = null,
+        PendingTargetRelease = null,
+        PendingPhase = null,
+        PendingCommitted = false,
+        PendingFailure = null,
+        RecoveryRoots = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal),
+        History = old.History.Append(element: HistoryEntry(
+            old: old,
+            result: result,
+            roots: roots
+        )).ToArray(),
+        Revision = checked((old.Revision + 1)),
+    };
 
     private async Task<WorldReleaseGroupOutcome> WriteAsync(WorldReleaseGroupSnapshot current, WorldReleaseGroupRecord next, CancellationToken cancellationToken) {
         Validate(

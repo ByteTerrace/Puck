@@ -232,6 +232,217 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
         }
     }
 
+    // A first deployment begun and advanced to Drain, with protected roots when rooted, and to Activate after them.
+    private static async Task<WorldReleaseGroupSnapshot> PendingBootstrap(WorldReleaseGroupStore groups, WorldReleaseGroupSnapshot group,
+        Guid owner, WorldReleaseManifest target, bool rooted) {
+        group = Required(result: await groups.BeginAsync(
+            group,
+            Guid.NewGuid(),
+            target.Identity,
+            Token
+        ));
+        group = Required(result: await groups.AdvanceAsync(
+            group,
+            group.Record with {
+                PendingPhase = WorldReleaseOperationPhase.Drain,
+                RecoveryRoots = (rooted
+                    ? new Dictionary<string, string> { [$"{owner:D}/row"] = "protected-root" }
+                    : new Dictionary<string, string>()),
+                Revision = (group.Record.Revision + 1),
+            },
+            Token
+        ));
+        return (rooted
+            ? Required(result: await groups.AdvanceAsync(
+                group,
+                group.Record with { PendingPhase = WorldReleaseOperationPhase.Activate, Revision = (group.Record.Revision + 1) },
+                Token
+            ))
+            : group);
+    }
+
+    // A worker a bootstrap finds is replaced only when the group's history shows an earlier bootstrap that reached its
+    // candidate and recovered, in a group that never committed. A fresh group, one whose only earlier bootstrap was
+    // abandoned before it captured anything, and a group serving a release all refuse it.
+    [Fact]
+    public async Task ABootstrapReplacesOnlyTheWorkerAnEarlierRecoveredBootstrapOfItsGroupLeft() {
+        var owner = Guid.NewGuid();
+        var groups = new WorldReleaseGroupStore(
+            new FakeObjectBlobStore(),
+            Target,
+            owner
+        );
+        var coordinator = new WorldReleaseCoordinator(groups: groups);
+        var first = Manifest(image: 'b');
+        var second = Manifest(image: 'c');
+        var group = Required(result: await groups.CreateAsync(
+            "primary",
+            null,
+            Token
+        ));
+
+        Assert.False(condition: group.Record.HasRecoveredBootstrap);
+        var abandoned = await coordinator.SupersedeBootstrapAsync(
+            await PendingBootstrap(
+                group: group,
+                groups: groups,
+                owner: owner,
+                rooted: false,
+                target: first
+            ),
+            second.Identity,
+            first,
+            new Dictionary<string, string>(),
+            new RecordingRuntime(owner: owner),
+            Token
+        );
+
+        group = abandoned.Snapshot!.Value;
+        Assert.False(condition: group.Record.HasRecoveredBootstrap);
+        var recovered = await coordinator.ResumeAsync(
+            await PendingBootstrap(
+                group: group,
+                groups: groups,
+                owner: owner,
+                rooted: true,
+                target: first
+            ),
+            first,
+            new RecordingRuntime(owner: owner) { StartFailure = "the silo exited on start" },
+            Token
+        );
+
+        Assert.True(condition: recovered.SourceRecovered);
+        group = recovered.Snapshot!.Value;
+        Assert.True(condition: group.Record.HasRecoveredBootstrap);
+        Assert.False(condition: (group.Record with { ActiveRelease = first.Identity }).HasRecoveredBootstrap);
+        var serving = Required(result: await groups.CreateAsync(
+            "serving",
+            first.Identity,
+            Token
+        ));
+
+        Assert.False(condition: serving.Record.HasRecoveredBootstrap);
+    }
+
+    // A newer release ends a first deployment that never committed: one with no protected root is abandoned without a
+    // runtime effect, keeping the roots it saved unrecorded; one with roots is recovered as a failed start would be. An
+    // upgrade and a bootstrap of the successor itself are never superseded.
+    [Fact]
+    public async Task ANewerReleaseSupersedesOnlyAnUnfinishedBootstrapOfAnotherRelease() {
+        var owner = Guid.NewGuid();
+        var groups = new WorldReleaseGroupStore(
+            new FakeObjectBlobStore(),
+            Target,
+            owner
+        );
+        var coordinator = new WorldReleaseCoordinator(groups: groups);
+        var first = Manifest(image: 'b');
+        var second = Manifest(image: 'c');
+        var group = Required(result: await groups.CreateAsync(
+            "primary",
+            null,
+            Token
+        ));
+        var unrooted = await PendingBootstrap(
+            group: group,
+            groups: groups,
+            owner: owner,
+            rooted: false,
+            target: first
+        );
+        var quiet = new RecordingRuntime(owner: owner);
+
+        Assert.False(condition: (await coordinator.SupersedeBootstrapAsync(
+            unrooted,
+            first.Identity,
+            first,
+            new Dictionary<string, string>(),
+            quiet,
+            Token
+        )).Snapshot.HasValue);
+        var saved = new Dictionary<string, string> { [$"{owner:D}/row"] = "saved-unrecorded" };
+        var abandoned = await coordinator.SupersedeBootstrapAsync(
+            unrooted,
+            second.Identity,
+            first,
+            saved,
+            quiet,
+            Token
+        );
+
+        Assert.Equal(
+            0,
+            quiet.Calls
+        );
+        var entry = abandoned.Snapshot!.Value.Record.History[^1];
+
+        Assert.Null(@object: abandoned.Snapshot!.Value.Record.PendingOperationId);
+        Assert.Equal(
+            unrooted.Record.PendingOperationId,
+            entry.OperationId
+        );
+        Assert.StartsWith(
+            actualString: entry.Result,
+            expectedStartString: WorldReleaseGroupHistoryEntry.AbandonedResult
+        );
+        Assert.Equal(
+            saved,
+            entry.RecoveryRoots
+        );
+        var rooted = await PendingBootstrap(
+            group: abandoned.Snapshot!.Value,
+            groups: groups,
+            owner: owner,
+            rooted: true,
+            target: first
+        );
+        var recovering = new RecordingRuntime(owner: owner);
+        var recovered = await coordinator.SupersedeBootstrapAsync(
+            rooted,
+            second.Identity,
+            first,
+            new Dictionary<string, string>(),
+            recovering,
+            Token
+        );
+
+        Assert.True(condition: recovered.SourceRecovered);
+        Assert.Equal(
+            1,
+            recovering.RecoveryCalls
+        );
+        Assert.Null(@object: recovered.Snapshot!.Value.Record.PendingOperationId);
+        Assert.True(condition: recovered.Snapshot!.Value.Record.History[^1].IsRecoveredBootstrap);
+        var upgrade = Required(result: await groups.BeginAsync(
+            Required(result: await groups.CreateAsync(
+                "serving",
+                first.Identity,
+                Token
+            )),
+            Guid.NewGuid(),
+            second.Identity,
+            Token
+        ));
+        var refused = await coordinator.SupersedeBootstrapAsync(
+            upgrade,
+            Manifest(image: 'e').Identity,
+            second,
+            new Dictionary<string, string>(),
+            quiet,
+            Token
+        );
+
+        Assert.False(condition: refused.Snapshot.HasValue);
+        Assert.Equal(
+            upgrade.VersionToken,
+            (await groups.LoadAsync(
+                "serving",
+                Token
+            ))!.Value.VersionToken
+        );
+    }
+
     private sealed class RecordingRuntime(Guid owner) : IWorldReleaseRuntime {
         public int Calls { get; private set; }
         public int RecoveryCalls { get; private set; }

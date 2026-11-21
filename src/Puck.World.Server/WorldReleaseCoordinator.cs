@@ -486,6 +486,76 @@ public sealed class WorldReleaseCoordinator {
             current: current,
             phase: WorldReleaseOperationPhase.Verify
         );
+    /// <summary>Ends an unfinished first deployment so a newer release can bootstrap the group: one that has captured no
+    /// recovery root is abandoned without a runtime effect, and one that has is recovered through
+    /// <see cref="IWorldReleaseRuntime"/> (its compute stopped and its roots restored), as a failed start would be. A
+    /// committed operation, or one with a source, is never superseded.</summary>
+    /// <param name="current">The group state holding the unfinished bootstrap.</param>
+    /// <param name="successor">The identity of the release that supersedes it.</param>
+    /// <param name="pendingTarget">The manifest of the bootstrap's own target release.</param>
+    /// <param name="capturedRoots">The recovery roots the bootstrap saved under its operation identifier without
+    /// recording them, kept in the history of an abandoned bootstrap.</param>
+    /// <param name="runtime">The runtime driver for the bootstrap's own target, used only when it is recovered.</param>
+    /// <param name="cancellationToken">The token that cancels storage and runtime work.</param>
+    /// <returns>The run result; its snapshot holds no pending operation when the bootstrap has ended, and its detail
+    /// names why it has not otherwise.</returns>
+    public async Task<WorldReleaseRunResult> SupersedeBootstrapAsync(
+        WorldReleaseGroupSnapshot current,
+        string successor,
+        WorldReleaseManifest pendingTarget,
+        IReadOnlyDictionary<string, string> capturedRoots,
+        IWorldReleaseRuntime runtime,
+        CancellationToken cancellationToken = default) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(successor);
+        ArgumentNullException.ThrowIfNull(pendingTarget);
+        ArgumentNullException.ThrowIfNull(runtime);
+        var record = current.Record;
+
+        if (
+            (record.PendingOperationId is null) ||
+            (record.ActiveRelease is not null) ||
+            (record.PendingSourceRelease is not null) ||
+            record.PendingCommitted ||
+            !string.Equals(
+                a: record.PendingTargetRelease,
+                b: pendingTarget.Identity,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+            string.Equals(
+                a: record.PendingTargetRelease,
+                b: successor,
+                comparisonType: StringComparison.Ordinal
+            )
+        ) {
+            return RefusedRun(reason: "only an unfinished bootstrap of another release can be superseded");
+        }
+        var reason = $"superseded by release {successor}";
+
+        if (record.RecoveryRoots.Count == 0) {
+            var abandoned = await m_groups.AbandonBootstrapAsync(
+                cancellationToken: cancellationToken,
+                capturedRoots: capturedRoots,
+                current: current,
+                reason: reason
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return (abandoned.Ok
+                ? new(
+                    false,
+                    false,
+                    $"the unfinished bootstrap captured no recovery root and was abandoned: {reason}",
+                    abandoned.Snapshot
+                )
+                : RefusedRun(reason: abandoned.Detail)
+            );
+        }
+        return await RecoverPreCommitAsync(
+            cancellationToken: cancellationToken,
+            failure: reason,
+            runtime: runtime,
+            state: current
+        ).ConfigureAwait(continueOnCapturedContext: false);
+    }
     /// <summary>Resumes the exact durable operation without accepting a different source or target.</summary>
     public async Task<WorldReleaseRunResult> ResumeAsync(
         WorldReleaseGroupSnapshot current,

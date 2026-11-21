@@ -1025,7 +1025,11 @@ verifies its identity and ownership before committing and opening admission.
 Pre-commit recovery restores only that operation's protected source roots and
 then restarts the retained source. The removed blob-version rewind path is not
 an alternative rollback mechanism. An unmanaged worker or existing gameplay
-cannot be silently adopted as an empty bootstrap.
+cannot be silently adopted as an empty bootstrap. A worker an earlier recovered
+bootstrap of the same group left is replaced with fresh compute, a bootstrap's
+recovery deletes its compute, and the next deploy supersedes an unfinished
+bootstrap of another release, so a failed first release never needs a manual
+resume or Azure change before the next push deploys.
 
 Release Azure prepares the package before deploying it. Deploy automatically
 exports a coherent capture from the active source, preserving admission while

@@ -49,7 +49,7 @@ release_guard
 systemctl enable --now docker
 # A daemon an earlier pass started before the library was replaced still holds the old one. Restart it only while no
 # world runs: restarting Docker stops its containers, and a running writer is the coordinator's to drain.
-if [ "$crypto_stale" = 1 ] && ["$(docker inspect -f '{{.State.Running}}' puck-world 2>/dev/null || true)" != true ]; then
+if [ "$crypto_stale" = 1 ] && [ "$(docker inspect -f '{{.State.Running}}' puck-world 2>/dev/null || true)" != true ]; then
     systemctl try-restart containerd.service docker.service
 fi
 install -d -m 700 /etc/puck /var/lib/puck
