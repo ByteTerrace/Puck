@@ -21,12 +21,12 @@ public sealed partial class HgdCpu<TBus> {
             m_storeHalted = false;
             m_specialBus = m_precharge;
             if (m_polledIrq || m_polledNmi) {
-                m_opcode = 0;
+                SetOpcode(opcode: 0);
                 m_sequence = (m_polledNmi ? Sequence.Nmi : Sequence.Irq);
                 m_polledIrq = false;
                 m_polledNmi = false;
             } else {
-                m_opcode = value;
+                SetOpcode(opcode: value);
                 ++m_pc;
             }
             m_step = 1;

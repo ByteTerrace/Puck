@@ -22,6 +22,9 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
     private byte m_s;
     private ushort m_pc;
     private byte m_opcode;
+    // The decoded entry of m_opcode; derived, never serialized. SetOpcode and LoadState are its only writers, and a
+    // zero opcode decodes to the default entry, so a new CPU needs no initialization.
+    private Instruction m_instruction;
     private byte m_step;
 
     private Sequence m_sequence = Sequence.Reset;
@@ -146,7 +149,7 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
         m_y = y;
         P = p;
         m_s = s;
-        m_opcode = 0;
+        SetOpcode(opcode: 0);
         m_step = 0;
         m_sequence = Sequence.Instruction;
         m_operand = 0;
@@ -231,6 +234,7 @@ public sealed partial class HgdCpu<TBus> : ISnapshotable where TBus : struct, IH
     /// <exception cref="InvalidOperationException">The reader does not contain a complete CPU state.</exception>
     public void LoadState(StateReader reader) {
         TransferState(transfer: new StateLoadTransfer(reader: reader));
+        m_instruction = Instructions[m_opcode];
     }
 
     private void TransferState<TTransfer>(TTransfer transfer) where TTransfer : struct, IStateTransfer {

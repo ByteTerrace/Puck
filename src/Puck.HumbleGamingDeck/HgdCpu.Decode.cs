@@ -95,7 +95,12 @@ public sealed partial class HgdCpu<TBus> {
         Indirect,
         ZeroPageY,
     }
-    private readonly record struct Instruction(Operation Operation, AddressMode Mode);
+    // One table entry: what an opcode does, its bus sequence, and the two classes the sequencer branches on every cycle,
+    // evaluated once when the table is built.
+    private readonly record struct Instruction(Operation Operation, AddressMode Mode) {
+        public bool IsStore { get; } = (Operation is Operation.Sta or Operation.Stx or Operation.Sty or Operation.Sax or Operation.Ahx or Operation.Shx or Operation.Shy or Operation.Tas);
+        public bool IsModify { get; } = (Operation is Operation.Asl or Operation.Lsr or Operation.Rol or Operation.Ror or Operation.Inc or Operation.Dec or Operation.Slo or Operation.Sre or Operation.Rla or Operation.Rra or Operation.Dcp or Operation.Isc);
+    }
 
     // Every opcode indexes exactly one operation and bus sequence; the table order is the byte encoding.
     private static readonly Instruction[] Instructions = [
@@ -357,8 +362,14 @@ public sealed partial class HgdCpu<TBus> {
         new(Mode: AddressMode.AbsoluteX, Operation: Operation.Isc),
     ];
 
-    private Operation CurrentOperation => Instructions[m_opcode].Operation;
-    private AddressMode CurrentMode => Instructions[m_opcode].Mode;
-    private bool IsStore => (CurrentOperation is Operation.Sta or Operation.Stx or Operation.Sty or Operation.Sax or Operation.Ahx or Operation.Shx or Operation.Shy or Operation.Tas);
-    private bool IsModify => (CurrentOperation is Operation.Asl or Operation.Lsr or Operation.Rol or Operation.Ror or Operation.Inc or Operation.Dec or Operation.Slo or Operation.Sre or Operation.Rla or Operation.Rra or Operation.Dcp or Operation.Isc);
+    private Operation CurrentOperation => m_instruction.Operation;
+    private AddressMode CurrentMode => m_instruction.Mode;
+    private bool IsStore => m_instruction.IsStore;
+    private bool IsModify => m_instruction.IsModify;
+
+    // Every write of m_opcode goes through here, so the decoded entry the sequencer reads always matches it.
+    private void SetOpcode(byte opcode) {
+        m_opcode = opcode;
+        m_instruction = Instructions[opcode];
+    }
 }

@@ -93,7 +93,9 @@ those lists into a `SnapshotImage` with clock, CPU, DMA, bus, PPU, nametable,
 APU, controller, and mapper sections.
 `HgdMachineIdentity` pins the layout version, console, named power-up profile,
 decoded header configuration, and complete-image, PRG, and CHR fingerprints.
-Restore rejects a different identity. Forks use the shared `MachineInstance`
+The PPU's snapshot holds the one picture it is drawing; the completed frame
+`HgdPpu.Frame` presents is a hand-off copy made at vertical blank and rebuilt
+from the drawn picture on a restore. Restore rejects a different identity. Forks use the shared `MachineInstance`
 and `MachineFork` lifecycle: immutable image bytes are shared, while every
 RAM array and CPU latch belongs to one machine.
 
@@ -116,9 +118,13 @@ The legacy zero PRG-RAM-size convention produces a diagnostic explaining its
 8 KiB default; NES 2.0 can declare no RAM explicitly.
 
 A board sees the PPU's whole window below $3F00 with the console's nametable
-RAM, and routes nametable accesses to a page of it or to its own memory. It
-also observes every PPU address and M2 edge, drives an IRQ line, and exposes
-the battery-backed RAM a save file keeps. Every board keeps its RAM in one
+RAM, and routes nametable accesses to a page of it or to its own memory. A board
+that times on bus edges (`IHgdMapper.TimesOnEdges`: MMC1 and MMC3) also observes
+every PPU address and M2 edge and drives an IRQ line, and the machine calls
+those members for no other board. A board exposes the battery-backed RAM a save
+file keeps and maps its ROM banks into windows (four 8 KiB PRG, eight 1 KiB
+pattern) whenever a register changes, so a read is an index and not bank
+arithmetic. Every board keeps its RAM in one
 `HgdBoardMemory`: PRG-RAM at $6000 (volatile bytes, then PRG NVRAM), CHR-RAM
 (volatile, then CHR NVRAM), a four-screen image's own nametable RAM, and the
 battery save (PRG NVRAM, then CHR NVRAM). A trainer initializes $7000–$71FF
