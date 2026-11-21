@@ -158,7 +158,7 @@ keeps showing it.
 Confirmed in the code. The epoch moves when the observation object changes, but
 the residency's guard is not told about the observation at all:
 
-`src/Puck.World/WorldScreenBinder.Availability.cs:205`
+`src/Puck.World/WorldScreenBinder.Availability.cs:257`
 
 ```csharp
             return ((access != WorldSessionAccess.None) && (access < Source));
@@ -174,7 +174,7 @@ revision counters, not traced.
 
 Confirmed. A withdrawal unpublishes and stops there:
 
-`src/Puck.Shaders/ShaderPipelineRenderNode.cs:1947-1954`
+`src/Puck.Shaders/ShaderPipelineRenderNode.cs:2231-2238`
 
 ```csharp
     public void WithdrawPublication() {
@@ -218,7 +218,7 @@ Confirmed, three ways.
 Partly true. The default hook does nothing, and the environment producer does
 not override it:
 
-`src/Puck.Shaders/Graph/RenderGraphPackageRecorders.cs:330`
+`src/Puck.Shaders/Graph/RenderGraphPackageRecorders.cs:344`
 
 ```csharp
     void OnOutputsForgotten(string instance) { }
@@ -249,12 +249,12 @@ contract says "An anchored light and the screens are no part of the sample"
 Partly true as stated. The root's image is read from its latest output, which a
 withdrawal clears,
 
-`src/Puck.Shaders/Graph/RenderGraphRuntime.cs:1624-1627`
+`src/Puck.Shaders/Graph/RenderGraphRuntime.cs:1694-1697`
 
 ```csharp
     private Surface RootImage() {
-        if (m_producers[m_root] is not { } producer) {
-            return LatestOf(index: m_root).Image;
+        if (m_producers[m_root] is null) {
+            return LatestOf(index: m_root, latch: in m_latch).Image;
         }
 ```
 
@@ -300,10 +300,12 @@ this sequence refuted; the design review corrected it.
 
 ### Combining epochs by their maximum
 
-True of the code (`WorldViewAccess.Join`,
-`src/Puck.World.Client/WorldViewerAccess.cs:71-74`): the maximum of a chain
-does not change when one member is swapped for an older one under a newer
-parent. No sequence that does this was found or ruled out.
+True of the code (the epoch the screen binder takes for a chain,
+`WorldScreenBinder.WalkRoute`): the maximum of a chain does not change when
+one member is swapped for an older one under a newer parent. No sequence that
+does this was found or ruled out. Since step 2 the chain's route also names
+every member's span, so a swapped member's ended span refuses the view's
+earlier pictures whatever the maximum says.
 
 ### The delivery and settle race
 
@@ -944,39 +946,49 @@ for the display. The second and third kinds are GPU legs the lead schedules.
    replaced when its node next records; a cut accepted between the latch and
    the return changes nothing in that frame and everything in the next. Every
    law the withdrawn lane added still passes.
-   *Built:* `DeliveryLabel` replaces the boolean taint flag (`DeliveryLabel.External`
-   carries capture taint, `DeliveryLabel.Unclassified` is the default and is
-   refused at every bind, and `DeliveryPublicSource` lists the sources allowed
-   to mint a zero-span public label). `DeliveryContent<T>` pairs content with
-   its label as one value whose content is read only through
-   `TryRead(in DeliveryLatch, out T)` at external outputs
-   (`RenderGraphExternalOutput`), node image and buffer bindings and holds
-   (`ShaderPipelineExternalImage`, `ShaderPipelineExternalBuffer`,
-   `ShaderPipelineRenderNode.HoldBinding`), and package reads
-   (`RenderGraphExternalReads`, `RenderGraphExternalInput`,
-   `RenderGraphPackageResource`). `RenderGraphRuntime` keeps its output tables
-   private inside `OutputRecords`, writes every output—including uploaded-source
-   capture conversions in `ConvertForCapture`—through `RememberOutput`, and
-   filters every read through `DeliveryLatch`. `RenderGraphRuntimeNode` captures
-   one `DeliveryLatch` per frame on `FrameContext.Latch` and
-   `RenderGraphPackageRecording.Latch`, and `ShaderPipelineRenderNode` validates
-   bound and held external bindings on record (`ValidateBindingsForRecord`),
-   replacing an ended image binding with a shared `RenderGraphStandIns` 1×1
-   stand-in and releasing its hold before any pass runs. `WorldViewerAccess`
-   and `WorldStreamIngress` each advance a `DeliverySpanSource`, and
-   `WorldScreenBinder` unions their spans onto `WorldViewAccess.Route`, passed
-   to `IRenderGraphInstances.SetRoute` in `WorldViewGraphHost.BindAccess` beside
+   *Built.* The label is `DeliveryLabel`: unclassified by default, public for
+   the sources `DeliveryPublicSource` lists, or a set of `DeliverySpan`s, and
+   it carries the capture taint as `DeliveryLabel.External`. A span is ended
+   only by the `DeliverySpanSource` that minted it, and its currency is asked
+   only through a `DeliveryLatch`. The values that move content between owners
+   expose it only through a read that takes the latch and refuses an
+   unclassified or ended label: `DeliveryContent`, `RenderGraphExternalOutput`,
+   `RenderGraphExternalInput`, `ShaderPipelineExternalImage` (bindings and
+   holds) and `ShaderPipelineExternalBuffer`. Binding an unclassified value
+   throws, and an unclassified producer output reads as nothing, so its
+   readers bind the stand-in. The runtime's output records are private to its `OutputRecords`,
+   every read of them takes the latch, and `RememberOutput` is their one
+   writer, the capture conversion of an uploaded source included
+   (`ConvertForCapture`). A record's label is the instance's route, every
+   label it bound and its node's published label. `RenderGraphRuntimeNode`
+   captures one latch per frame before the host prepares it (`FrameContext.Latch`,
+   `RenderGraphPackageRecording.Latch`), and the runtime, its nodes, held
+   reconfiguration plans and package reads decide against it. A node checks
+   every external binding against the latch each time it records
+   (`ShaderPipelineRenderNode.ValidateBindingsForRecord`): an ended image
+   binding is replaced by the stand-in and its hold released, and an ended
+   buffer binding withholds the render. An output whose label ended renders
+   again to stay shown. A session view's route is the span of every
+   `WorldViewerAccess` and every mirror ingress (`WorldStreamIngress`) on its
+   chain: the access advances its span where its epoch moves and closes it when
+   the session or layer is released, and the ingress advances on every cut and
+   generation and closes with the stream. `WorldViewGraphHost.BindAccess` hands
+   each view its route (`IRenderGraphInstances.SetRoute`) beside
    `IRenderGraphInstances.Withdraw`, its edge walk and
-   `IRenderGraphPackageFactory.OnOutputsForgotten`. The device-free checks live
-   in `RenderGraphRuntimeLawTests` (`RenderGraphRuntimeLawTests.Withdrawal.cs`).
+   `IRenderGraphPackageFactory.OnOutputsForgotten`, which all stay. The four
+   checks are `RenderGraphRuntimeLawTests` in
+   `tests/Puck.Shaders.Tests/RenderGraphRuntimeLawTests.Withdrawal.cs`. What
+   holds only by review: a source minting a public label for content that is
+   not public (review-only item 1), and code that reads content through the
+   latch and wraps the raw handle again under another label (item 5).
 3. **The withdrawal reset, generation-owned cells and labelled publications.**
    The reset of part 5; the owners of part 6 moved as its table lists; exports,
    probes and comparison holds labelled and checked at each read. Only now are
    `IRenderGraphInstances.Withdraw`, the edge walk,
    `ShaderPipelineRenderNode.WithdrawPublication` and
    `IRenderGraphPackageFactory.OnOutputsForgotten` deleted, with the epoch
-   table in `WorldViewGraphHost.BindAccess`, `WorldViewAccess.Join` and
-   `WorldViewAccess.Retired`.
+   table in `WorldViewGraphHost.BindAccess`, the epoch maximum in
+   `WorldScreenBinder.WalkRoute` and `WorldViewAccess.Retired`.
    *Check, device-free:* a feedback image written before a cut reads
    uninitialized after it; a pass held by its cadence over an intermediate
    written before the cut records again; a deferred hand-over settled after the
@@ -1056,7 +1068,7 @@ Each item is deleted in the step named for it above, never before.
 - On the authority's side: the whole-replica test and the second policy copy
   it stood for (deleted in step 6).
 - On the viewer's side: `WorldViewerAccess` and `WorldSessionAccess`,
-  `WorldViewAccess` with its join and its retired value, the generated-name
+  `WorldViewAccess` with its epoch and its retired value, the generated-name
   grammar in `WorldScreenBinder.AccessOf`, the binder's `ContentAccess` and
   delivery mark, `WorldScreenBinder.WithdrawOwnSource`,
   `WorldScreenBinder.WithdrawInfinityResidency`, and the epoch table and
