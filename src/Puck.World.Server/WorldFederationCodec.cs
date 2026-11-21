@@ -179,7 +179,7 @@ public static partial class WorldFederationCodec {
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames. The key's final digit is the contract's version: raise it whenever the
     /// federation wire contract changes.</summary>
-    public const ulong WireKey = 0x364445464B435550UL; // "PUCKFED6"
+    public const ulong WireKey = 0x374445464B435550UL; // "PUCKFED7"
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;
@@ -188,6 +188,17 @@ public static partial class WorldFederationCodec {
     /// 8-byte little-endian count.</summary>
     public const int ProjectionDeltaHeaderBytes = (DocumentHeaderBytes + 16);
 
+    // An entity's continuity head byte holds its kind in the low bits and, in this flag, whether the 32-byte carried
+    // motion follows the smoothing window. The writer sets the flag from the data it holds and the reader decides from
+    // the same byte through CarriesPose, so the two cannot disagree about which records hold a carry.
+    private const byte CarryFlag = 0x80;
+
+    private static bool CarriesPose(byte head) => ((head & CarryFlag) != 0);
+    private static EntityContinuityKind ContinuityKindOf(byte head) => ((EntityContinuityKind)(head & ~CarryFlag));
+    private static byte ContinuityHead(EntityContinuity continuity) => ((byte)(((byte)continuity.Kind) | ((continuity.Carried is null) ? 0 : CarryFlag)));
+    // A cell delta names a state cell image exactly when both its row and cell address a real cell; every other delta
+    // (a lattice cell, a row observation, a physical-region count) rides on its address alone.
+    private static bool CarriesCellImage(int row, int cell) => ((row >= 0) && (cell >= 0));
     private static bool Finish(ref WireReader reader, out WireFailure failure) => reader.TryFinish(failure: out failure);
     private static EntitySnapshot ReadEntity(ref WireReader reader, int ordinal) {
         var index = reader.ReadInt32();
@@ -199,17 +210,23 @@ public static partial class WorldFederationCodec {
         var kit = reader.ReadByte();
         var look = reader.ReadByte();
         var catalogRig = reader.ReadByte();
-        var continuityKind = ((EntityContinuityKind)reader.ReadByte());
+        var continuityHead = reader.ReadByte();
+        var continuityKind = ContinuityKindOf(head: continuityHead);
 
         if (!Enum.IsDefined(value: continuityKind)) {
             reader.Fail(
                 detail: $"snapshot entity {ordinal} continuity kind {((byte)continuityKind)} is not declared",
                 refusal: WireRefusal.EnumValueUnknown
             );
+        } else if ((continuityKind == EntityContinuityKind.Carry) && !CarriesPose(head: continuityHead)) {
+            reader.Fail(
+                detail: $"snapshot entity {ordinal} reports a carry continuity without its carried motion",
+                refusal: WireRefusal.PayloadMalformed
+            );
         }
 
         var seconds = reader.ReadSingle();
-        WorldPoseCarry? carried = ((continuityKind == EntityContinuityKind.Carry)
+        WorldPoseCarry? carried = (CarriesPose(head: continuityHead)
             ? new WorldPoseCarry(
                 Rotation: reader.ReadFiniteQuaternion(field: $"snapshot entity {ordinal} carry rotation"),
                 Translation: reader.ReadFiniteVector(field: $"snapshot entity {ordinal} carry translation"),
@@ -934,7 +951,19 @@ public static partial class WorldFederationCodec {
         WriteSnapshotHeader(writer, snapshot, snapshot.Entries.Length);
         foreach (ref readonly var entry in snapshot.Entries.Span) { WriteEntity(writer, entry); }
         WriteSnapshotTail(writer, snapshot);
+        ThrowIfOverCap(kind: WorldFederationResponse.Snapshot, length: (StreamStampBytes + writer.WrittenMemory.Length));
         return writer.ToArray();
+    }
+    /// <summary>Reports whether a response record of <paramref name="length"/> bytes is within the cap its receiver
+    /// holds it to (<see cref="MaxResponseBytes"/>), so an encoder refuses what a decoder would.</summary>
+    /// <param name="kind">The response kind.</param>
+    /// <param name="length">The record's body bytes, its stream stamp included.</param>
+    /// <returns><see langword="true"/> when the receiver admits the record.</returns>
+    public static bool WithinResponseCap(WorldFederationResponse kind, long length) => (length <= MaxResponseBytes(kind: kind));
+    private static void ThrowIfOverCap(WorldFederationResponse kind, long length) {
+        if (!WithinResponseCap(kind: kind, length: length)) {
+            throw new ArgumentException(message: $"{kind} record is {length} bytes; the receiver's cap is {MaxResponseBytes(kind: kind)}");
+        }
     }
 
     internal static void WriteSnapshotHeader(WireWriter writer, in WorldSnapshot snapshot, int count) {
@@ -955,9 +984,13 @@ public static partial class WorldFederationCodec {
         writer.WriteByte(value: entry.Kit);
         writer.WriteByte(value: entry.Look);
         writer.WriteByte(value: entry.CatalogRig);
-        writer.WriteByte(value: ((byte)entry.Continuity.Kind));
+        var continuityHead = ContinuityHead(continuity: entry.Continuity);
+
+        writer.WriteByte(value: continuityHead);
         writer.WriteSingle(value: entry.Continuity.Seconds);
-        if (entry.Continuity.Carried is { } carried) {
+        if (CarriesPose(head: continuityHead)) {
+            var carried = entry.Continuity.Carried!.Value;
+
             writer.WriteQuaternion(value: carried.Rotation);
             writer.WriteVector(value: carried.Translation);
             writer.WriteSingle(value: carried.Scale);
@@ -985,7 +1018,7 @@ public static partial class WorldFederationCodec {
             writer.WriteString(value: delta.FieldName);
             writer.WriteBlock(value: ((delta.Observation is { } observation)
                 ? JsonSerializer.SerializeToUtf8Bytes(new[] { observation }, WorldJsonContext.Default.WorldObservedRowArray) : []));
-            if ((delta.Row >= 0) && (delta.Cell >= 0)) {
+            if (CarriesCellImage(row: delta.Row, cell: delta.Cell)) {
                 writer.WriteString(value: delta.Image.Key.Value);
                 var value = delta.Image.Value;
 
@@ -1090,7 +1123,9 @@ public static partial class WorldFederationCodec {
         WorldFederationResponse.Challenge => MaxChallengeBytes,
         WorldFederationResponse.Refusal => WireLimits.MaxStringBytes,
         WorldFederationResponse.Commit => (2 * WireLimits.MaxStringBytes),
-        WorldFederationResponse.Snapshot or WorldFederationResponse.SnapshotDelta => (((4 * 1024) * 1024) + StreamStampBytes),
+        // A primer's cells may take WorldFieldCapacity.MaxSnapshotBytes and the rest of the frame is the population,
+        // state and envelope, so a snapshot may fill the frame ceiling the transport already admits.
+        WorldFederationResponse.Snapshot or WorldFederationResponse.SnapshotDelta => MaxFrameBytes,
         WorldFederationResponse.Cut => (StreamStampBytes + 1),
         WorldFederationResponse.Completion => (1024 * 1024),
         WorldFederationResponse.Definition => (WireLimits.MaxDocumentBytes + StreamStampBytes),
@@ -1790,7 +1825,7 @@ public static partial class WorldFederationCodec {
                 reader.Fail(detail: "snapshot cell address is outside its capacity", refusal: WireRefusal.PayloadMalformed);
                 break;
             }
-            if ((row >= 0) && (cell >= 0)) {
+            if (CarriesCellImage(row: row, cell: cell)) {
                 var name = reader.ReadRequiredString(field: "snapshot cell key");
 
                 if (!CellName.TryParse(candidate: name, name: out var key, reason: out _)) {
