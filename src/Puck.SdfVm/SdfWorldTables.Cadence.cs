@@ -10,7 +10,7 @@ namespace Puck.SdfVm;
 // signature equals the one it last rendered at and nothing unhashed forces a render (ForcesRender).
 //
 // The whole-view signature folds every packed table and the frame block. PassSignature partitions the same inputs:
-// geometry owns the field, poses, mesh, screen mappings and camera; shadow owns directions and the fitted cascades; lighting owns
+// geometry owns the field, poses, mesh and camera; shadow owns directions and the fitted cascades; lighting owns the screens' tables,
 // colors, surface fog and analytic environment; visual owns sky and media. A generated offset table separates pass-block
 // members without spelling HLSL offsets. Temporal sampling is the instance's, and graph versions check last writes.
 // Whole-view coverage:
@@ -406,7 +406,7 @@ public sealed partial class SdfWorldTables {
         m_tablesSignature = hash.Value;
 
         var geometry = Fnv1aHash.Create();
-        Span<ulong> geometryValues = [m_programGeometryRevision, m_dynamicTransformRevision, unchecked((ulong)m_meshRevision), m_meshDrawCount, m_frameSampledRevision, BoundScreenCount(), screenSurfaces, screenMappings];
+        Span<ulong> geometryValues = [m_programGeometryRevision, m_dynamicTransformRevision, unchecked((ulong)m_meshRevision), m_meshDrawCount, m_frameSampledRevision];
 
         geometry.Add(values: MemoryMarshal.AsBytes(span: geometryValues));
         m_geometrySignature = geometry.Value;
@@ -416,6 +416,11 @@ public sealed partial class SdfWorldTables {
 
         lighting.Add(value: m_programRevision);
         lighting.Add(value: m_decalRevision);
+        // Only shading reads the screens' tables (their surfaces, mappings, ripples and bound flags), so a ripple's
+        // clock or a moving screen's frame renders the shading passes again while the geometry stands.
+        lighting.Add(value: BoundScreenCount());
+        lighting.Add(value: screenSurfaces);
+        lighting.Add(value: screenMappings);
         lighting.Add(value: lights);
         lighting.Add(value: handoffs);
         Span<float> hitSky = [sky.Ambient, sky.Reflection];
