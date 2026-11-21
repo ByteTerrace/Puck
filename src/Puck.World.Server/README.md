@@ -1826,7 +1826,11 @@ via `WorldHelloDoor.TryAccept`, `Puck.World.Protocol`); door 2, once door 1
 passes, is the IDENTITY challenge-response
 (`Puck.World.Protocol.WorldAdmissionDoor`)—the host mints a fresh
 nonce, the peer answers with a signed `Puck.Attestation` claim (and, for a
-vouching root, its two-hop chain), and the door verifies it against the world
+vouching root, its two-hop chain) whose payload is the nonce bound to the
+connection by `WorldAdmissionDoor.BindChallenge` (its client key is the
+connector's own transport key hash, its server key the acceptor's, so a claim
+elicited on one link cannot be replayed on another; the derivation is
+`ChannelBinding.Bind`, shared with the federation proof), and the door verifies it against the world
 document's own authored `admission` section, mapping the verified identity to
 that entry's own authored grant templates. Each door refuses by its OWN named
 spelling (`version-mismatch: …` vs `identity-refused: …`)—the two are never
@@ -2018,10 +2022,11 @@ another destination namespace. An expected namespace retained in recovery is
 checked again after proof verification.
 
 `WorldFederationCodec.BindProofChallenge` derives the authenticator's challenge
-with HKDF-SHA256, preserving the nonce's length. The input is the verifier's
-nonce; the context contains the protocol label, direction, client fingerprint,
-server fingerprint, destination namespace (empty for the client proof), and the
-prover's nonce, encoded with the bounded wire writer. Production nonces are
+through `ChannelBinding.Bind` (HKDF-SHA256, preserving the nonce's length). The
+input is the verifier's nonce; the transcript holds the protocol label, client
+fingerprint and server fingerprint, then a context of the direction, destination
+namespace (empty for the client proof) and the prover's nonce, encoded with the
+bounded wire writer. Production nonces are
 32 random bytes; each decoded nonce has a 256-byte ceiling, and both peers enforce
 the authenticator's exact `ChallengeBytes` width before proving it.
 
