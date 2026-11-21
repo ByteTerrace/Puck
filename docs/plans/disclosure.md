@@ -1552,20 +1552,25 @@ Implementation choices for step 1:
   a cursor holds only hashes, sequence and any pending observation headers.
 - Replica definitions carry readable cells. Their immediate snapshot primers
   carry every restricted row's observation header in `FieldCellDelta.Observation`,
-  including a zero hidden count under `Omit`, `Count` or `Placeholder`. A session
-  pairs a later whole-document delivery (a shape change, a jump, a cut or a
-  resumed span) with the same non-consuming primer. A state delivery whose
-  frame moved (a deal, a zone move) replaces the observer's arena but keeps its
-  bodies and field cells, so it owes only the headers the definition cannot
-  carry: the cursor keeps them owed (`WorldDeliveryCursor.OwesRows`) until a
-  snapshot's rows advance through it, which is the tick's own snapshot when it
-  follows the delivery (`WorldServer.SnapshotFollows`) and otherwise a primer of
-  the body table alone (`WorldDocument.BuildPrimerSnapshot` without cells), sent
-  at once so no quiet tick shows a row without its header. A replacement that
-  changes the observer's fields (`WorldDocumentStateView.KeepsFieldCells`) takes
-  the whole primer. A Resume already inside a snapshot uses that snapshot rather
-  than rebuilding its borrowed carrier. Later count, order and deletion changes
-  compare the complete image.
+  including a zero hidden count under `Omit`, `Count` or `Placeholder`. Every
+  replica stream, a session's and a federation peer's alike, completes a later
+  document by one decision (`WorldDeliveryCursor.Completion`). A whole-document
+  delivery (a shape change, a jump, a cut or a resumed span) takes the same
+  non-consuming primer. A state delivery whose frame moved (a deal, a zone
+  move) replaces the reader's arena but keeps its bodies and field cells, so it
+  owes only the headers the definition cannot carry: the cursor keeps them owed
+  (`WorldDeliveryCursor.OwesRows`) until a snapshot's rows advance through it,
+  which is the tick's own snapshot when it follows the delivery
+  (`WorldServer.SnapshotFollows`; a peer samples that tick whatever its cadence)
+  and otherwise a primer of the body table alone
+  (`WorldDocument.BuildPrimerSnapshot` without cells), sent at once so no quiet
+  tick shows a row without its header. A replacement that changes the reader's
+  fields (`WorldFieldsSection.KeepsCells`) takes the whole primer. A grant or
+  revocation leaves the document as it was, so it is delivered as a state
+  delivery, never a whole document: each stream re-discloses only when its
+  recipient's operator authority or Observe hold moved. A Resume already inside
+  a snapshot uses that snapshot rather than rebuilding its borrowed carrier.
+  Later count, order and deletion changes compare the complete image.
 - A key-skip proof covers only its current change window. A cached image still
   current at a window boundary may use the next window's keys; an image whose
   version already differs must recompose. Before any change carrier is bound,
@@ -1608,7 +1613,8 @@ Implementation choices for step 1:
 and missed-window readable writes, clock corrections without source
 observations, whole-row storage metadata, policy-shaped replica primers, and a
 deal's frame move completed by the tick's snapshot alone into the mirror a fresh
-primer gives.
+primer gives, for a session and for a federation peer whose cadence skips that
+tick, beside a grant that re-delivers no document.
 Its restore cases check a document replacement outside the tick, where no
 ordinary snapshot follows to repair missing observation headers.
 

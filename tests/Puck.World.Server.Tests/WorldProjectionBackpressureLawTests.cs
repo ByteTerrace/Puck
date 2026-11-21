@@ -327,13 +327,15 @@ public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output
             return Task.CompletedTask;
         }
     }
+}
 
-    private sealed class ProjectionWire : MemoryStream {
-        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) {
-            await Task.Delay(cancellationToken: cancellationToken, delay: Timeout.InfiniteTimeSpan);
+/// <summary>A projection stream that keeps every record written to it and never acknowledges one, so a sink's
+/// records stay whole snapshots rather than deltas against an acknowledged baseline.</summary>
+internal sealed class ProjectionWire : MemoryStream {
+    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) {
+        await Task.Delay(cancellationToken: cancellationToken, delay: Timeout.InfiniteTimeSpan);
 
-            return 0;
-        }
+        return 0;
     }
 }
 
