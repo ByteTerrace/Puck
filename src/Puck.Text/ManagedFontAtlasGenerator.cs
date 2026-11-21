@@ -107,7 +107,8 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
     private static (int Width, int Height, GlyphPlacement[] Placements) ChooseShelves(
         IReadOnlyList<GlyphRaster> glyphs,
         int padding,
-        FontAtlasGenerationOptions options
+        FontAtlasGenerationOptions options,
+        long maxAtlasPixels
     ) {
         var glyphCount = glyphs.Count;
 
@@ -145,6 +146,7 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
                 columns: candidateColumns,
                 height: out var candidateHeight,
                 heights: heights,
+                maxAtlasPixels: maxAtlasPixels,
                 options: options,
                 width: out var candidateWidth,
                 widths: widths
@@ -164,6 +166,7 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
                 columns: candidateColumns,
                 height: out candidateHeight,
                 heights: heights,
+                maxAtlasPixels: maxAtlasPixels,
                 options: options,
                 width: out candidateWidth,
                 widths: widths
@@ -188,6 +191,7 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
                 columns: fallbackColumns,
                 height: out selectedHeight,
                 heights: heights,
+                maxAtlasPixels: maxAtlasPixels,
                 options: options,
                 width: out selectedWidth,
                 widths: widths
@@ -198,7 +202,7 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
 
         if (selectedColumns == 0) {
             throw new ArgumentException(
-                message: $"The selected glyphs cannot fit within the {options.MaxAtlasDimension}px dimension and {options.MaxAtlasPixels.ToString(provider: CultureInfo.InvariantCulture)}-pixel atlas limits, or exceeded the bounded shelf search.",
+                message: $"The selected glyphs cannot fit within the {options.MaxAtlasDimension}px dimension and {maxAtlasPixels.ToString(provider: CultureInfo.InvariantCulture)}-pixel atlas limits, or exceeded the bounded shelf search.",
                 paramName: nameof(options)
             );
         }
@@ -291,6 +295,7 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
         IReadOnlyList<int> widths,
         IReadOnlyList<int> heights,
         FontAtlasGenerationOptions options,
+        long maxAtlasPixels,
         out int width,
         out int height
     ) {
@@ -320,7 +325,7 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
         return (
             (width <= options.MaxAtlasDimension) &&
             (height <= options.MaxAtlasDimension) &&
-            ((((long)width) * height) <= options.MaxAtlasPixels)
+            ((((long)width) * height) <= maxAtlasPixels)
         );
     }
     private static (OpenTypeFontFace Font, IReadOnlyList<GlyphRaster> Glyphs) ParseFont(
@@ -452,7 +457,8 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
         var shelves = ChooseShelves(
             glyphs: drawableGlyphs,
             padding: request.Options.Padding,
-            options: request.Options
+            options: request.Options,
+            maxAtlasPixels: Math.Min(val1: request.Options.MaxAtlasPixels, val2: request.Limits.MaxAtlasPixels)
         );
         var prepared = new MtsdfGlyphField.PreparedCell[drawableGlyphs.Length];
 

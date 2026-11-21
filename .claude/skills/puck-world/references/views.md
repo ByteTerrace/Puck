@@ -701,7 +701,8 @@ Free Cam do not alter the logical movement basis.
   machines <n>` (what its delivered document carries), then `text-fault <why>`
   when it does not hold one of those fonts by pin. `world.counters
   assets.content` reads where content read by pin was found (`files`, `store`,
-  `missing`, `bytes`).
+  `fetched`), the fetched objects refused (`refused`), the reads nothing answered
+  (`missing`) and the bytes answered (`bytes`).
 - `views.nestingDepth` (document) — how many observations deep a world shown
   through screens or named infinity layers renders: 3 unauthored, 0 through 8,
   refused by name past either end. The boot world's governs the presentation

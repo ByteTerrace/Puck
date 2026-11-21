@@ -943,6 +943,7 @@ public static class WorldProjection {
         }
 
         definition = resolved;
+        WorldContentIndex.Fetch(definition: resolved, fetch: fetch, held: content);
 
         return true;
     }
@@ -1109,9 +1110,49 @@ public static class WorldProjectionContent {
     /// again through the authorized door.</summary>
     public static readonly CacheBound Retention = new(MaxBytes: (256L << 20), MaxEntries: 4096);
 
+    /// <summary>The most bytes one prototype body read by pin may hold; a larger one reads as missing.</summary>
+    public const int MaxPrototypeBytes = (32 << 20);
+
+    /// <summary>The bound every authority's content together is held to: how many authorities' stores are kept, least
+    /// recently used out and removed whole, and the bytes they hold between them.</summary>
+    public static readonly CacheBound AuthorityRetention = new(MaxBytes: (1L << 30), MaxEntries: 16);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ContentAddressedStore> AuthorityStores = new(comparer: StringComparer.Ordinal);
+    private static readonly System.Collections.Concurrent.ConcurrentBag<FileStream?> AuthorityHolds = [];
+
     /// <summary>Gets the process's one resolver of content by pin: the files its loaded worlds registered, then
     /// <see cref="Shared"/>. A document another process delivered has no directory, so its content is read here.</summary>
     public static ContentResolver Resolver { get; } = new(store: static () => Shared);
+
+    /// <summary>Gets the store one authority's fetched content is kept in: a directory of its own beside
+    /// <see cref="Shared"/>'s objects, named by a digest of the authority's identity and held to
+    /// <see cref="Retention"/>. What an authority makes this process fetch evicts only that authority's own content,
+    /// so no authority can push another's, or this process's own, out of the cache. The stores together are held to
+    /// <see cref="AuthorityRetention"/>.</summary>
+    /// <param name="authority">The authority's identity: the name this process authenticated it under.</param>
+    /// <returns>The authority's store, the same instance for one identity.</returns>
+    /// <exception cref="ArgumentException"><paramref name="authority"/> is <see langword="null"/>, empty or white
+    /// space.</exception>
+    public static ContentAddressedStore AuthorityStore(string authority) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: authority);
+
+        return AuthorityStores.GetOrAdd(
+            key: authority,
+            valueFactory: static name => {
+                var directory = Path.Combine(path1: Shared.Root, path2: "authorities");
+                var root = Path.Combine(path1: directory, path2: ContentDigest.HexOfText(text: name)[..32]);
+                var created = new ContentAddressedStore(retention: Retention, root: root);
+
+                // The store is pinned for the life of this process, so no process's enforcement removes it; the least
+                // recently used of the others go whole once the stores together pass their bound. The hold is never
+                // released: the operating system drops it with the process.
+                AuthorityHolds.Add(item: CacheRetention.HoldSet(setDirectory: root));
+                _ = CacheRetention.EnforceSets(bound: AuthorityRetention, directory: directory, isEntry: static name => !name.EndsWith(value: ".lease", comparisonType: StringComparison.Ordinal));
+
+                return created;
+            }
+        );
+    }
 
     /// <summary>Gets the recipient cache shared across worlds and observation lifetimes.</summary>
     public static ContentAddressedStore Shared {
@@ -1162,24 +1203,37 @@ public static class WorldProjectionContent {
         if (references is null) { return false; }
         foreach (var reference in references) {
             if ((reference is null) || !ContentPin.TryParse(text: reference.Content, pin: out var pin)) { return false; }
-            if (!store.TryGet(content: out var bytes, pin: pin)) {
-                bytes = fetch?.Invoke(pin);
-                if ((bytes is null) || (ContentPin.Compute(content: bytes) != pin)) { return false; }
-                _ = store.Put(content: bytes);
-            } else if (ContentPin.Compute(content: bytes) != pin) {
-                return false;
-            }
-            try {
-                var body = JsonSerializer.Deserialize(utf8Json: bytes, jsonTypeInfo: WorldJsonContext.Untrusted.WorldPrototypeContent);
 
-                if (body?.Document is null) { return false; }
-                result.Add(item: new WorldPrototype(Id: reference.Id, Document: body.Document, Mesh: body.Mesh));
-            } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
+            // A fetched body is parsed before it is stored, so bytes that are no prototype never enter the store; a
+            // body the store already held is parsed after the read.
+            WorldPrototypeContent? body = null;
+
+            if (!Resolver.TryRead(
+                admit: arrived => TryParse(bytes: arrived.Span, body: out body),
+                content: out var bytes,
+                fetch: fetch,
+                held: store,
+                maximumBytes: MaxPrototypeBytes,
+                pin: pin
+            ) || ((body is null) && !TryParse(bytes: bytes.Span, body: out body))) {
                 return false;
             }
+            result.Add(item: new WorldPrototype(Id: reference.Id, Document: body!.Document, Mesh: body.Mesh));
         }
         prototypes = result;
         reason = string.Empty;
         return true;
+    }
+
+    private static bool TryParse(ReadOnlySpan<byte> bytes, out WorldPrototypeContent? body) {
+        try {
+            body = JsonSerializer.Deserialize(utf8Json: bytes, jsonTypeInfo: WorldJsonContext.Untrusted.WorldPrototypeContent);
+        } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
+            body = null;
+        }
+
+        if (body?.Document is null) { body = null; }
+
+        return (body is not null);
     }
 }

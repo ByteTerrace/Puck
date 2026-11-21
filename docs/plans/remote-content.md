@@ -194,10 +194,25 @@ sent the pin of the prepared image it runs (`WorldMachineCartridge.RomHash`,
 which the authority's machine host already computes), because a player's build
 cannot compile a cartridge. Bytes fetched from an
 authority are checked as their family's type before they are stored, and are
-stored against a byte budget for that authority, so a hostile authority cannot
-push other worlds' content out of the shared store. A delivered font catalog is
-bounded in font bytes, glyph count and atlas pixels before any glyph is
-rasterized. A delivered row is read by its pin alone, and its path is a label. The
+stored in that authority's own store
+(`WorldProjectionContent.AuthorityStore`), a directory named by a digest of the
+name the client authenticated it under and held to its own bound, least
+recently used out. A hostile authority can therefore evict only what it sent
+itself, never another world's content or this process's own. The stores
+together are held to a second bound, and the least recently used authority's
+store goes whole (`CacheRetention.EnforceSets`, which the mesh store already
+uses for sets). The cost is that two authorities that send the same font each
+have it fetched once; a font the client's own package ships is still found in
+its file and fetched from nobody. The fetch happens where a delivery is decoded
+(`WorldContentIndex.Fetch`), on the stream's thread, so the frame thread never
+waits on the network; a later read by pin finds the bytes in the store. A
+delivered font catalog is held to ceilings (`TextFontCatalogLimits.Delivered`):
+the fonts it names, the glyphs its rows ask for and each row's em size are
+checked from the rows alone before any font is read, and its font bytes and
+atlas pixels are charged as each font resolves, with the generator's own
+geometry and work budgets (`FontAtlasGenerationLimits`) on each font. Those
+ceilings are engine capacity bounds today; a device profile is where a target
+that needs smaller ones would author them. A delivered row is read by its pin alone, and its path is a label. The
 loaders that take a directory today (the font resolver's `IAssetSource`, the
 audio row loaders, `WorldVoiceSampleLoader`, the machine content folders) take
 the resolver instead when the document was delivered.
@@ -761,7 +776,7 @@ code. "Taken" means the design above changed as the finding asks.
 | L1 | The federated door allocates an array for every admitted batch | Taken in step 2 |
 | L2 | A machine's picture is the same for every viewer | Taken: the options table says so, and it is why pictures are practical for the machines that need them |
 | U1 | Whether every engine saves its state and is exact across processors | The step that builds machines lists them; an engine that cannot save shows its fallback with a reason, where capture throws today |
-| U2 | A hostile font's outline complexity | The bounds of H13 cover bytes, glyphs and pixels. Outline complexity inside the rasterizer was not read; the step that builds the resolver reads it and bounds it there |
+| U2 | A hostile font's outline complexity | The bounds of H13 cover bytes, glyphs and pixels. Read since: the generator already charges every outline to a whole-job budget (`FontAtlasGenerationLimits`: retained geometry elements, composite copies included, and work units for parsing and raster edge visits) beside its fixed limits for each glyph, and a delivered font is generated under a smaller work ceiling |
 
 ## The build order
 
@@ -810,11 +825,23 @@ its picture needs.
    hold a font. On a headless pair at the presentation tier, a client booted
    from the authority's document read the delivered font from its own file and
    reported no fault, and a client booted from a document with no font catalog
-   reported the font as not held. *Not built:* the fetch on a miss, the other
-   loaders (audio rows, voice sets, machine content), pins on a voice set's
-   samples, the store's budget for each authority, the glyph and pixel bounds
-   on a delivered font catalog, and the deletion of `EmbedAudio`. The delivered
-   text itself has not been seen drawn: that needs a rendering host.
+   reported the font as not held. The fetch on a miss is built for fonts and
+   prototype bodies: `ContentResolver.TryRead` fetches through the caller's
+   door, refuses bytes that are too large, do not hash to the pin or are not
+   their kind, and stores the rest in the authority's own bounded store; the
+   authority's door serves a font only while the recipient's projection names
+   its pin. A delivered font catalog is held to its ceilings. A registered
+   file that cannot be read stays registered; only a file whose bytes are not
+   the pin's is forgotten. On the pair, the client with no font fetched the
+   font and two prototype bodies on its first run and reported no fault, read
+   them from the authority's store on its second run with no fetch, and
+   reported a catalog asking for the whole Basic Multilingual Plane as past
+   the glyph ceiling. *Not built:* the other loaders (audio rows, voice sets,
+   machine content), pins on a voice set's samples, and the deletion of
+   `EmbedAudio`. The fetch door and its request kind still carry the name
+   prototype (`WorldProjectionPrototypeFetch`), which the loaders' move
+   renames. The delivered text itself has not been seen drawn: that needs a
+   rendering host.
    *How the rest is shaped.* Every loader of a pinned row reads by pin through
    the resolver and takes no directory, for a loaded document and a delivered
    one alike, so the loader has no path to open. A loaded document's rows are
@@ -824,9 +851,10 @@ its picture needs.
    (`WorldAssetRowLoader` holds the four canonicalizers today). A delivered
    audio row then travels as its pin and a path label, and
    `WorldDefinitionValidator.TryValidateDeliveredAudio` checks the content it
-   resolves instead of requiring it inline. The fetch is the resolver's third
-   source: `WorldProjectionContent.TryResolve`, which reads the store, fetches
-   and stores a prototype itself today, becomes a caller of it.
+   resolves instead of requiring it inline. Each family adds a branch to
+   `WorldContentIndex` in three places: the files a loaded document registers,
+   the pins a delivery is fetched for, and the pins the authority's door
+   serves.
    *Check:* with the debug world staged, the reservation is no longer refused
    for a relative path; on the client `world.nesting` reports that the world's
    text resolves; a counter reads content found in the package, found in the

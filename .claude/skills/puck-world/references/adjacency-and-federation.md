@@ -845,7 +845,7 @@ with the reason.
 |---|---|
 | `host.authorityNamespace` | `--connect` refuses: the name the client expects at the endpoint is the one its own document authors |
 | `bodies.networkPlayers` of at least one, inside `capacity` | No slot for the arriving body |
-| An `admission` row of mode `FederatedAuthority` (`domain: "*"` or the namespace) whose grants give the arrival an exclusive `Drive`; its `disclosure` is the tier the client is delivered | No authority's traveller is admitted: an absent row denies |
+| An `admission` row of mode `FederatedAuthority` (`domain: "*"` or the namespace) whose grants give the arrival an exclusive `Drive` and an `Observe` with no subject (its own body, which the fetch door `WorldProjectionPrototypeFetch` requires of a traveller); its `disclosure` is the tier the client is delivered | No authority's traveller is admitted: an absent row denies |
 | An `admission` row of mode `SignsDirectly` that pins the key file's public key: `domain` the lowercase hex SHA-256 of the key's `SubjectPublicKeyInfo` (the `peer=` the listener prints), `subject` the namespace, `algorithm: "ecdsa-p256-sha256"`, `publicKey` the base64 `SubjectPublicKeyInfo`, `grants []` | `AuthenticationFailed: the presented proof did not verify` |
 
 The key file is a PKCS8 P-256 private key in DER, made for the run and never
