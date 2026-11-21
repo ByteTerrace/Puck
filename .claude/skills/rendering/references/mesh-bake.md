@@ -1495,8 +1495,10 @@ laws exercise that boundary.
   tier's replacement does, its product never takes the draws (`Group.Fill`,
   `Draw`), and the group it stood in for takes the place back
   (`FinishFill`). The detail is not settled while a ladder is unfinished, so
-  `world.wait bakes` waits for all of them, and a residency besides the world's
-  own holds the wait while its frames still come (`SdfMeshPathBake.Filling`).
+  `world.wait bakes` waits for all of them. A residency besides the world's own
+  holds the wait while it owes a group or is between rungs (`Filling`) and a
+  view draws it (`SdfMeshPathBake.Driven`: its GPU work asked it for a lattice
+  within a second); one no view draws lands nothing, so it holds no wait.
   `Stored` draws stored rungs alone, the policy of a build that ships its cache
   (a complete player build's default): a group arriving takes the nearest
   stored rung of its ladder, coarser first (`StoredRung`, in `Place`), a group
@@ -1505,10 +1507,16 @@ laws exercise that boundary.
   had no room to read is never baked instead: a tier's replacement gives its
   place back (`Decline`), and a group with nothing to draw reads again after a
   doubling wait (`Reload`). Only a shape the store
-  holds no rung of bakes. `world.counters sdf.mesh-cache` (`SdfMeshCache`) is
-  the reading: `dispatches`, `groups-baked`, `rungs-missed`, `loads-declined`
-  and `rungs-filled`. A boot of a whole cache under `Stored` counts none of the
-  first three, which is what `puck world player`'s check boots require.
+  holds no rung of bakes, and live geometry (`Group.Live`): a group that reads
+  an operand's pose, or one planned again because a sampled field it reads
+  published another snapshot. The world makes that geometry as it runs, so no
+  cache holds it; it bakes under every policy, has no ladder filled and is
+  counted apart. `world.counters sdf.mesh-cache` (`SdfMeshCache`) is the
+  reading: `dispatches` and the `live-dispatches` among them, `groups-baked`
+  and `live-baked`, `rungs-missed`, `loads-declined` and `rungs-filled`. A boot
+  of a whole cache under `Stored` dispatches only live lattices, bakes no other
+  group and misses no rung, which is what `puck world player`'s check boots
+  require.
 - **A dynamic group's mesh is stored under its form too.** Its geometry holds
   its other slots' poses, which no later run stands in again, so
   `SdfMeshLibrary.Store` writes the mesh a second time under

@@ -45,6 +45,31 @@ public sealed partial class SdfMeshPathBake {
     /// from any thread.</summary>
     public bool Filling => ((Volatile.Read(location: ref m_filling) != 0) && (System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: Volatile.Read(location: ref m_decidedAt)) < FillingPatience));
 
+    // The takes asked of the bake as Driven last read them, and when they last moved. Read and written by Driven alone.
+    private long m_drivenAsks;
+    private long m_drivenAt;
+
+    /// <summary>The longest the bake may go unasked for a lattice and still count as driven
+    /// (<see cref="Driven"/>).</summary>
+    public static TimeSpan DrivenPatience { get; } = TimeSpan.FromSeconds(seconds: 1);
+
+    /// <summary>Gets whether the bake's residency is being drawn: its background GPU work asked the bake for a lattice
+    /// within <see cref="DrivenPatience"/>, as it does every frame a view renders the residency. A bake that is not
+    /// driven lands nothing, whatever it owes, so a wait on the bakes of a residency besides the world's own holds on
+    /// one only while this is true. Read by one thread at a time (the host's pump).</summary>
+    public bool Driven {
+        get {
+            var asks = Asks;
+            var now = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            if (asks != m_drivenAsks) {
+                m_drivenAsks = asks;
+                m_drivenAt = now;
+            }
+            return ((m_drivenAt != 0L) && (System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: m_drivenAt, endingTimestamp: now) < DrivenPatience));
+        }
+    }
+
     // The groups whose load the account had no room for, each with the time its next read is due (Reload). Under the gate.
     private readonly List<(Group Group, long Due)> m_reloads = [];
 
@@ -146,6 +171,7 @@ public sealed partial class SdfMeshPathBake {
                     continue;
                 }
                 Library.Cache.Count(kind: SdfMeshCache.RungsMissed);
+                SdfMeshBakeReport.RungMissed(asked: planned.Tier, drawn: rung.Tier, dynamic: planned.Dynamic, residency: Residency, selector: planned.Selector, shape: planned.Shape);
                 rung.FirstDetailOwed = planned.FirstDetailOwed;
                 rung.DemandPixel = planned.DemandPixel;
                 if (!planned.FirstDetailOwed) {

@@ -308,17 +308,18 @@ A dynamic group's mesh is stored under its form as well as its posed geometry,
 so a body at another pose loads it. A player's build then runs the stored
 policy: where a tier is missing it draws the nearest stored one and never bakes
 it, and an entry its memory has no room to read is held (the tier it draws
-stays) or read again, never baked. Only a shape the
-store holds no tier of bakes, because nothing else can draw it: a world whose
-rules make new static geometry in play (dealt cards, set type) bakes that
-geometry on any machine. The guarantee stops at what the authored spawn points
+stays) or read again, never baked. Only two things bake. A shape the store holds no tier of does, because nothing
+else can draw it: a world whose rules make new static geometry in play (dealt
+cards, set type) bakes that geometry on any machine. So does live geometry, a
+mesh that reads an operand's pose or a sampled field that moved, which is a
+feature of the engine and is counted apart from the cache's misses. The guarantee stops at what the authored spawn points
 draw; a residency no such place shows is filled only as far as its frames came.
 
 **Complete means checked as a player runs it.** `puck world player` boots each
 backend and target under the stored policy on the target's device profile,
 stands at every authored spawn point, and marks the folder complete only when
-every boot settled at every place and dispatched no lattice, baked no group and
-missed no tier (`world.counters sdf.mesh-cache`). An incomplete folder says why
+every boot settled at every place, missed no tier and baked nothing but live
+geometry (`world.counters sdf.mesh-cache`). An incomplete folder says why
 in `player.json` and produces no cache set, so the release job holds the
 channel as it does for a missing set.
 

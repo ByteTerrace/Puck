@@ -7,7 +7,8 @@ namespace Puck.World;
 // holds the program the latest one's content called for (SdfCompositionFrameSource.Building false), the world's
 // residency (ViewHost) bakes that very program with its meshes at the detail its demand asks
 // (SdfMeshPathBake.DetailSettled), and neither it nor any residency the binder renders besides it, a session view's, a
-// routed scene's or an infinity layer's, owes a group of its program (SdfMeshPathBake.Pending). Without the frames and the
+// routed scene's or an infinity layer's, owes a group of its program while a view draws it (SdfMeshPathBake.Pending,
+// Driven). Without the frames and the
 // program, a change delivered before the wait (a world.reload, a camera moved to a stop) reads settled while its program
 // is still queued or building, or while the bake has yet to measure its groups against the moved demand, since the
 // residency's bake of what came before it is done. The detail is the world's own residency's: the others draw at their
@@ -98,6 +99,8 @@ public sealed partial class WorldScreenBinder : IWorldBakeReadiness {
 
         return false;
     }
-    // Whether a residency's bake owes a group, or is between the rungs of a ladder it is filling (SdfMeshPathBake.Filling).
-    private static bool Bakes(SdfMeshPathBake bake) => (bake.Pending || bake.Filling);
+    // Whether a residency besides the world's own holds a wait on the bakes: its bake owes a group, or is between the
+    // rungs of a ladder it is filling (SdfMeshPathBake.Filling), while a view draws it (SdfMeshPathBake.Driven). One no
+    // view draws lands nothing, so a product of its left waiting when its last view turned away holds no wait.
+    private static bool Bakes(SdfMeshPathBake bake) => ((bake.Pending || bake.Filling) && bake.Driven);
 }

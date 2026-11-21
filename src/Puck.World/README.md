@@ -2393,10 +2393,13 @@ waiting on its group's bake; and `sdf.mesh-skin` over the same library
 by vertex-stage path, riding the draw's slot, riding one moving member rigidly,
 or blending two; and `sdf.mesh-cache` over the same library (`SdfMeshCache`):
 what its bakes asked of the mesh store beyond a hit, which is the lattices they
-dispatched, the groups that began a bake, and, under a `--mesh-cache` policy,
+dispatched and the groups that began a bake, each with live geometry (a mesh
+that reads an operand's pose or a sampled field that moved) counted apart, and,
+under a `--mesh-cache` policy,
 the tiers a stored-only boot drew another stored tier in place of, the stored
 entries it could not read for want of memory, and the tiers a ladder boot baked beyond its
-demand. A boot of a whole shipped cache reads zero for the first three. It
+demand. A boot of a whole shipped cache dispatches only live lattices, bakes no
+other group and misses no tier. It
 registers `sdf.mesh-gi` too, the world
 residency's irradiance volume (`SdfMeshIrradiance`): its trace scene builds,
 the geometries they built and took from the scene they replaced, the triangles

@@ -80,8 +80,8 @@ public static class WorldPlayerCommand {
             (Puck.Launcher.Setup) self-contained into launcher/; publish each --extension into extensions/<name>/; compile
             the package's parent directory into worlds/ (documents, compiled worlds and the shader package store); compose
             the package's worlds and export their specialized shading kernels into derived/; then boot the published engine
-            windowed with --cache-dir cache, once per backend with --mesh-cache ladder, tick-locked (the fill), and then
-            once per backend and --target with --mesh-cache stored on the target's device profile (the check). Every boot waits for its
+            windowed with --cache-dir cache, once per backend with --mesh-cache ladder (the fill) and then once per backend
+            and --target with --mesh-cache stored on the target's device profile (the check). Every boot waits for its
             bakes to settle where it spawns and at each spawn point the world's documents author, posing the first body
             there. The fill bakes every tier of every mesh those places draw into cache/ (meshes, compiled-worlds,
             compilations, derived) under the identities a consumer's boot of the same folder derives; a bake's
@@ -438,13 +438,11 @@ public static class WorldPlayerCommand {
     private static BootReading Boot(WorldBackendPreference backend, BakeTarget target, string policy, IReadOnlyList<string> places, string output, string world, string logs, int bakeSeconds, string pass) {
         var name = $"{WorldBackendTokens.Token(backend: backend)}-{target.Profile}-{target.Width}x{target.Height}";
         var directory = Path.Combine(path1: logs, path2: $"{pass}-{name}");
-        var fill = string.Equals(a: policy, b: "ladder", comparisonType: StringComparison.Ordinal);
         // One wait and its answer at each place, and at the spawn; the World's own exit backstop, should the verb die.
         var deadline = TimeSpan.FromSeconds(seconds: (300L + ((places.Count + 1L) * (bakeSeconds + 90L))));
         var request = new WorldLaunchRequest(Artifact: Path.Combine(path1: output, path2: "Puck.World.dll"), Step: Verb) {
-            // A fill's lighting keeps its ordinary budget while its presentation is tick-locked (below).
             Arguments = ["--width", target.Width.ToString(provider: CultureInfo.InvariantCulture), "--height", target.Height.ToString(provider: CultureInfo.InvariantCulture),
-                "--cache-dir", Path.Combine(path1: output, path2: CacheName), "--mesh-cache", policy, .. (fill ? (string[])["--budgeted-lighting"] : [])],
+                "--cache-dir", Path.Combine(path1: output, path2: CacheName), "--mesh-cache", policy],
             Backend = backend,
             Executable = Path.Combine(path1: output, path2: (OperatingSystem.IsWindows() ? "Puck.World.exe" : "Puck.World")),
             ExitAfterSeconds = WorldLaunch.Backstop(deadline: deadline),
@@ -532,15 +530,7 @@ public static class WorldPlayerCommand {
                 }
             }
 
-            // A fill bakes the world's own ladder where it spawns, which is nearly all of its work, tick-locked: a locked
-            // frame drives the bake's GPU work outside the frame's budget, at the worker pool's pace. It stands at the
-            // places unlocked, since a locked frame waits on its own work and a place costs only a few frames.
-            if (fill) { _ = process.RunScript(lines: ["world.lockstep on"], timeout: TimeSpan.FromSeconds(seconds: 60)); }
-
-            var spawned = Settle(place: "its spawn");
-
-            if (fill) { _ = process.RunScript(lines: ["world.lockstep off"], timeout: TimeSpan.FromSeconds(seconds: 60)); }
-            if (spawned) {
+            if (Settle(place: "its spawn")) {
                 foreach (var place in places) {
                     _ = process.RunScript(lines: [$"body.pose spawn:{place} 0"], timeout: TimeSpan.FromSeconds(seconds: 60));
                     if (!Settle(place: place)) { break; }

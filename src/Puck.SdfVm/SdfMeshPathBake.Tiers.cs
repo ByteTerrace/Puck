@@ -554,9 +554,11 @@ public sealed partial class SdfMeshPathBake {
     // retires the replaced group once the product has the draws. Under the gate.
     private bool StartReplacement(Group group, Group old, int index) {
         // A bake that draws stored rungs alone keeps drawing what it draws when the store lacks the rung asked: the
-        // group is asked again only once its demand names another tier (Group.RetierRefused).
-        if ((Library.Policy == SdfMeshCachePolicy.Stored) && !Stores(group: group, identity: Identity.Value)) {
+        // group is asked again only once its demand names another tier (Group.RetierRefused). Live geometry has no
+        // stored rung to lack: its tiers bake as its steps do.
+        if ((Library.Policy == SdfMeshCachePolicy.Stored) && !group.Live && !Stores(group: group, identity: Identity.Value)) {
             Library.Cache.Count(kind: SdfMeshCache.RungsMissed);
+            SdfMeshBakeReport.RungMissed(asked: group.Tier, drawn: old.Tier, dynamic: group.Dynamic, residency: Residency, selector: group.Selector, shape: group.Shape);
             old.RetierRefused = true;
             group.Retired = true;
             return false;

@@ -394,11 +394,13 @@ drawn too.
   reads the engine's `sdf.mesh-cache` counters when its last wait ends.
 
 `player.json` keeps each boot's reading under `checked` (`places`, `settled`,
-`unsettled`, `dispatches`, `groupsBaked`, `tiersMissed`, `loadsDeclined`,
-`tiersFilled`, `loaded`). It says `complete` only when every boot settled at
-every place and every check dispatched no lattice, baked no group and missed no
-tier; otherwise `incomplete` lists why, the verb exits 1, and `world caches
-produce` refuses the folder. Settling and baking are read apart: a boot can
+`unsettled`, `dispatches`, `liveDispatches`, `groupsBaked`, `liveBaked`,
+`tiersMissed`, `loadsDeclined`, `tiersFilled`, `loaded`). It says `complete`
+only when every boot settled at every place and every check missed no tier and
+baked nothing but live geometry, which the world makes as it runs (a mesh that
+reads an operand's pose or a sampled field that moved) and no cache can hold;
+otherwise `incomplete` lists why, the verb exits 1, and `world caches produce`
+refuses the folder. Settling and baking are read apart: a boot can
 settle having baked, and can bake nothing while its detail still moves between
 stored tiers under a memory budget. With `--no-bake` (a machine without a GPU)
 one headless boot fills the device-free caches instead, and the mesh store
