@@ -31,7 +31,8 @@ public sealed partial class SdfWorldPasses {
     }
 
     private static ExternalReads ReadsOf(string part) => part switch {
-        SdfWorldPackage.Parts.Surface or SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowFar or
+        SdfWorldPackage.Parts.Mesh or SdfWorldPackage.Parts.Pyramid or SdfWorldPackage.Parts.GlassClear or
+            SdfWorldPackage.Parts.Glass or SdfWorldPackage.Parts.Surface or SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowFar or
             SdfWorldPackage.Parts.ShadowSecond or SdfWorldPackage.Parts.ShadowDistant or SdfWorldPackage.Parts.ViewsProbes or
             SdfWorldPackage.Parts.ViewsFilter or SdfWorldPackage.Parts.ViewsBins or SdfWorldPackage.Parts.GlassShade or
             SdfWorldPackage.Resolve or SdfWorldPackage.Display => ExternalReads.None,

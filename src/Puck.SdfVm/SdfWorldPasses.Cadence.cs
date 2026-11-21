@@ -26,6 +26,7 @@ public sealed partial class SdfWorldPasses {
         }
         if (!frame.EnableCadenceGate || entry.Picker.Pending || (entry.Convergence is { IsActive: true }) ||
             (ReadSignatureOf(entry: entry, frame: frame, part: part, reads: reads, view: view) is not { } images)) {
+            SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Forced);
             return ((part == SdfWorldPackage.Parts.ShadowFar) ? FarSignatureOf(entry: entry, signature: null) : null);
         }
         UpdateSurfaceInputs(entry: entry, tables: tables, view: view);
@@ -35,6 +36,7 @@ public sealed partial class SdfWorldPasses {
                 height: entry.Temporal.Epoch.Height, debug: tables.PassValues.DebugMode, temporal: temporal,
                 unread: entry.UnreadFrames), previousPoses: tables.PoseRevision)) {
                 entry.SampleRevision++;
+                SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Resampled);
             }
         }
         var hash = Fnv1aHash.Create();
