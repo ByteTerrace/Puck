@@ -106,6 +106,8 @@ until the next writer, shape or case arrives.
   and a row that moved on such a tick stayed stale until it moved again. The
   tick broadcast and the per-sink primer now each own a carrier
   (`WorldDocument.SnapshotCarrier`), so a primer cannot reach the tick's storage.
+  The tick's snapshot completes a frame move without a primer, but a cut that
+  state delivery decides primes there, so the split stays load-bearing.
 - The cascades' exit layer assumes a caster encloses a solid
   (`SdfMeshDraw.EnclosesSolid`); a body clipped at a portal's glass is a thin
   caster that shadows its own wrapped side

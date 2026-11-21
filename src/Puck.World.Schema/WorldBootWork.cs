@@ -183,8 +183,6 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     public static WorkKind SessionCellsDelivered { get; } = Registry.Declare("world.boot.session-cells-delivered", "count", WorkClass.Pacing);
     /// <summary>Gets the kind counting the body entries every snapshot handed a session observer carried.</summary>
     public static WorkKind SessionEntriesDelivered { get; } = Registry.Declare("world.boot.session-entries-delivered", "count", WorkClass.Pacing);
-    public static WorkKind[] TmpWhy { get; } = [.. Enumerable.Range(0, 8).Select(i => Registry.Declare($"world.boot.tmpwhy-{i}", "count", WorkClass.Pacing))]; // TEMP
-    public static WorkKind ReprimeWireBytes { get; } = Registry.Declare("world.boot.reprime-wire-bytes", "bytes", WorkClass.Pacing); // TEMP
     /// <summary>Gets the kind counting the installs that judged the compiled products against the parts of the
     /// document they were built from: a full install of a mutation or a reload, an undo, and a presentation install
     /// fitting the render envelope.</summary>
