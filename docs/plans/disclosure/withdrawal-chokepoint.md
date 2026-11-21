@@ -288,7 +288,7 @@ That replaces membership. It does not replace the pose of a body both sessions
 hold at the same index: an admitted body that was already active takes its
 earlier endpoint from what the table held,
 
-`src/Puck.World.Protocol/Protocol/WorldPoseTable.cs:258-259`
+`src/Puck.World.Protocol/Protocol/WorldPoseTable.cs:273-274`
 
 ```csharp
             m_previousPosition[index] = priorPosition;
