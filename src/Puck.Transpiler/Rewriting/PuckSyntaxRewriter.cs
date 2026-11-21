@@ -168,7 +168,7 @@ public abstract partial class PuckSyntaxRewriter {
         ReleaseStatementNode release => release,
         RemoveCellStatementNode remove => (remove with { Target = this.Rewritten(node: remove.Target) }),
         RepeatStatementNode repeat => (repeat with { Body = this.DescendStatements(statements: repeat.Body), Count = this.Rewritten(node: repeat.Count) }),
-        ScheduleStatementNode schedule => (schedule with { Target = this.Rewritten(node: schedule.Target) }),
+        ScheduleStatementNode schedule => (schedule with { Target = this.Rewritten(node: schedule.Target), Delay = this.Rewritten(node: schedule.Delay) }),
         SetCellStatementNode set => (set with { Rhs = this.Rewritten(node: set.Rhs), Target = this.Rewritten(node: set.Target) }),
         ShuffleStatementNode leaf => leaf,
         TransactionStatementNode transaction => (transaction with {

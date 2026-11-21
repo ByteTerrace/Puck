@@ -182,12 +182,11 @@ public sealed class WorldGeneratorEngineLawTests {
         targetKind: ((generator.Source == GeneratorSource.Markov)
         ? CellKind.Text
         : CellKind.Int),
-        seedState: GeneratorEngine.ComputeSeedState(
+        seed: GeneratorEngine.ComputeDrawSeed(
             documentSeed: worldSeed,
             instanceIdentity: instance,
             site: site
         ),
-        stream: GeneratorEngine.ComputeStreamId(site: site),
         cursor: cursor,
         masks: masks,
         result: out result,

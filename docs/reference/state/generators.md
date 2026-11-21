@@ -307,7 +307,7 @@ that rewinds is rewound with it: the next draw produces the same value again.
 The same holds for a draw inside a transaction's failed savepoint.
 
 A host decides how an emission lands on other kinds of site. Puck.World also
-supports keyed sites, which draw one sample per cell, and board rows painted by
+supports keyed sites, which draw one sample per cell in ordinal key-name order, and board rows painted by
 a draw; see [State in Puck.World](worlds.md).
 
 ## Fire a draw from C#

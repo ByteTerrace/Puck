@@ -1,3 +1,4 @@
+using static Puck.Transpiler.Lowering.JsonNodeExtensions;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -31,7 +32,7 @@ public static class LockPins {
             if (frameworkNode is not JsonObject packages) { continue; }
 
             foreach (var (id, node) in packages) {
-                if ((node is not JsonObject entry) || (Text(node: entry["type"]) is null or "Project") || (Text(node: entry["resolved"]) is not { } resolved)) { continue; }
+                if ((node is not JsonObject entry) || (StringValue(node: entry["type"]) is null or "Project") || (StringValue(node: entry["resolved"]) is not { } resolved)) { continue; }
                 yield return (id, entry, resolved);
             }
         }
@@ -45,7 +46,7 @@ public static class LockPins {
         var pinned = new Dictionary<string, JsonObject>(comparer: StringComparer.Ordinal);
 
         foreach (var (id, entry, resolved) in texts.SelectMany(selector: Resolved)) {
-            if (!pinned.TryGetValue(key: id, value: out var known) || (Compare(left: resolved, right: Text(node: known["resolved"])!) < 0)) { pinned[id] = entry; }
+            if (!pinned.TryGetValue(key: id, value: out var known) || (Compare(left: resolved, right: StringValue(node: known["resolved"])!) < 0)) { pinned[id] = entry; }
         }
 
         return pinned;
@@ -79,7 +80,7 @@ public static class LockPins {
             foreach (var (id, newEntry) in newPackages) {
                 if (newEntry is not JsonObject entry) { continue; }
 
-                var type = Text(node: entry["type"]);
+                var type = StringValue(node: entry["type"]);
 
                 // A project entry carries no version. A pin follows a package the project still asks for in the same role
                 // and range (a changed request is the reference change itself), or a package the file did not list.
@@ -88,13 +89,13 @@ public static class LockPins {
                 JsonObject? source = null;
 
                 if (oldPackages?[id] is JsonObject old) {
-                    if ((type == Text(node: old["type"])) && (Text(node: entry["requested"]) == Text(node: old["requested"]))) { source = old; }
-                } else if ((solution is not null) && solution.TryGetValue(key: id, value: out var pinned) && ((type != "Direct") || Admits(range: Text(node: entry["requested"]), version: Text(node: pinned["resolved"])))) {
+                    if ((type == StringValue(node: old["type"])) && (StringValue(node: entry["requested"]) == StringValue(node: old["requested"]))) { source = old; }
+                } else if ((solution is not null) && solution.TryGetValue(key: id, value: out var pinned) && ((type != "Direct") || Admits(range: StringValue(node: entry["requested"]), version: StringValue(node: pinned["resolved"])))) {
                     source = pinned;
                 }
-                if ((source is null) || (Text(node: entry["resolved"]) == Text(node: source["resolved"]))) { continue; }
+                if ((source is null) || (StringValue(node: entry["resolved"]) == StringValue(node: source["resolved"]))) { continue; }
 
-                packages.Add(item: $"{id} {Text(node: source["resolved"])} (restored from {Text(node: entry["resolved"])})");
+                packages.Add(item: $"{id} {StringValue(node: source["resolved"])} (restored from {StringValue(node: entry["resolved"])})");
                 entry["resolved"] = source["resolved"]?.DeepClone();
                 entry["contentHash"] = source["contentHash"]?.DeepClone();
                 _ = entry.Remove(propertyName: "dependencies");
@@ -138,6 +139,4 @@ public static class LockPins {
 
         return (DependencyVersion.TryParse(text: left, version: out var first) ? first : zero).CompareTo(other: (DependencyVersion.TryParse(text: right, version: out var second) ? second : zero));
     }
-    private static string? Text(JsonNode? node) =>
-        ((node is JsonValue value) && value.TryGetValue<string>(value: out var text) ? text : null);
 }

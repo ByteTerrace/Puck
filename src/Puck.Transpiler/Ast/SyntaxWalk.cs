@@ -53,7 +53,7 @@ public static class SyntaxWalk {
             CompoundAssignStatementNode compound => [compound.Target, compound.Rhs],
             PushStatementNode push => [push.Rhs],
             RemoveCellStatementNode remove => [remove.Target],
-            ScheduleStatementNode schedule => [schedule.Target],
+            ScheduleStatementNode schedule => [schedule.Target, schedule.Delay],
             TransformStatementNode transform => [transform.Transform],
             TransactionStatementNode transaction => [.. transaction.MainEffects, .. (transaction.OnFailureEffects ?? [])],
             IfStatementNode branch => [branch.Condition, .. branch.Then, .. (branch.Else ?? [])],

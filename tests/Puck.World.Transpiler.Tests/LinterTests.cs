@@ -63,7 +63,7 @@ host {
         );
     }
     // A source, the lint finding it draws, and the name that finding must mention.
-    [InlineData("puck: 1\nentities [\n    {\n        name: \"Box\"\n        color: \"#FF0000\"\n    }\n]\n", "PUCK_LINT_003", "#FF0000")]
+    [InlineData("puck: 1\nentities [\n    {\n        name: \"Box\"\n        color: \"#FF0000\"\n    }\n]\n", "PUCK_LINT_004", "#FF0000")]
     [InlineData("puck: 1\nlet UNUSED_VAL = 42\nhost {\n    authority: \"test\"\n}\n", "PUCK_LINT_001", "UNUSED_VAL")]
     [InlineData("puck: 1\ntemplate UnusedTemplate() {\n    components []\n}\nhost {\n    authority: \"test\"\n}\n", "PUCK_LINT_001", "UnusedTemplate")]
     [Theory]

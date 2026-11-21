@@ -119,8 +119,8 @@ public static partial class WorldDefinitionFileSource {
         return output.WrittenSpan.ToArray();
     }
     // A node's compact JSON as UTF-8, the bytes JsonNode.ToJsonString's text encodes to; a null node is the literal null.
-    internal static byte[] Compact(JsonNode? node) {
-        if (node is JsonObject tree) { return Compact(members: out _, tree: tree); }
+    /// <summary>Writes the compact UTF-8 JSON of a node, including a literal null.</summary>
+    public static byte[] Compact(JsonNode? node) {
         if (node is null) { return "null"u8.ToArray(); }
 
         var output = new ArrayBufferWriter<byte>(initialCapacity: 256);

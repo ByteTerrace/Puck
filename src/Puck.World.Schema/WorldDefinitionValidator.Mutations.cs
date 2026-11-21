@@ -198,40 +198,6 @@ public static partial class WorldDefinitionValidator {
         reason = string.Empty;
 
         switch (transform) {
-            case StateTransform.Observe observe:
-                names.Add(item: observe.Row.Spelling);
-
-                break;
-            case StateTransform.Transfer transfer:
-                names.Add(item: transfer.From.Spelling);
-                names.Add(item: transfer.To.Spelling);
-
-                // A random selection advances the draw site's own cursor when the transfer commits (see
-                // StateTransform.Transfer's remarks), so the site is touched exactly like Shuffle's.
-                if (transfer.Draw is { } transferDraw) {
-                    names.Add(item: transferDraw.Spelling);
-                }
-
-                break;
-            case StateTransform.SetRay setRay:
-                names.Add(item: setRay.Row.Spelling);
-
-                break;
-            case StateTransform.Shuffle shuffle:
-                names.Add(item: shuffle.Row.Spelling);
-                names.Add(item: shuffle.Draw.Spelling);
-
-                break;
-            case StateTransform.Sort sort:
-                names.Add(item: sort.Row.Spelling);
-
-                foreach (var key in (sort.By ?? [])) {
-                    if (key is not null) {
-                        names.Add(item: key.Row.Spelling);
-                    }
-                }
-
-                break;
             case StateTransform.WriteSet writeSet:
                 names.Add(item: writeSet.Row.Spelling);
                 AddPositionSource(
@@ -255,73 +221,16 @@ public static partial class WorldDefinitionValidator {
                 );
 
                 break;
-            case StateTransform.Arrange arrange:
-                names.Add(item: arrange.Row.Spelling);
-                names.Add(item: arrange.From.Spelling);
-
-                break;
-            case StateTransform.ClearEnclosed clear:
-                names.Add(item: clear.Row.Spelling);
-
-                break;
-            case StateTransform.Mix mix:
-                AddSpellingRowName(mix.Into, names);
-                foreach (var term in (mix.Terms ?? [])) {
-                    AddSpellingRowName(term?.From, names);
-                }
-
-                break;
-            case StateTransform.Mean mean:
-                AddSpellingRowName(mean.From, names);
-                AddSpellingRowName(mean.Into, names);
-                if (mean.Where is { } meanWhere) {
-                    names.Add(item: meanWhere.Spelling);
-                }
-
-                break;
-            case StateTransform.Nearest nearest:
-                AddSpellingRowName(nearest.From, names);
-                AddSpellingRowName(nearest.Query, names);
-                names.Add(item: nearest.Into.Spelling);
-                if (nearest.Where is { } nearestWhere) {
-                    names.Add(item: nearestWhere.Spelling);
-                }
-
-                break;
-            case StateTransform.Remember remember:
-                names.Add(item: remember.Into.Spelling);
-                AddSpellingRowName(remember.From, names);
-
+            case StateTransform.Observe or StateTransform.Transfer or StateTransform.SetRay or StateTransform.Shuffle or
+                 StateTransform.Sort or StateTransform.Arrange or StateTransform.ClearEnclosed or StateTransform.Mix or
+                 StateTransform.Mean or StateTransform.Nearest or StateTransform.Remember:
+                foreach (var subject in transform.Subjects()) { names.Add(item: subject.Name); }
                 break;
             default:
                 reason = $"transform kind '{transform.GetType().Name}' is not recognized";
-
                 return false;
         }
 
         return true;
     }
-
-    private static void AddSpellingRowName(string? spelling, ISet<string> names) {
-        if (string.IsNullOrWhiteSpace(value: spelling)) {
-            return;
-        }
-        spelling = spelling.Trim();
-        if (spelling.StartsWith(comparisonType: StringComparison.Ordinal, value: "vector(")) {
-            return;
-        }
-        var bracketIndex = spelling.IndexOf(value: '[');
-
-        if ((bracketIndex > 0) && spelling.EndsWith(value: ']')) {
-            var rowName = spelling[..bracketIndex].Trim();
-
-            if (rowName.Length > 0) {
-                names.Add(item: rowName);
-            }
-            return;
-        }
-        names.Add(item: spelling);
-    }
-
 }
-
