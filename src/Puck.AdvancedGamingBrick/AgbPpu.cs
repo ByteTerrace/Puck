@@ -78,6 +78,27 @@ public sealed partial class AgbPpu : IAgbPpu {
 
     /// <inheritdoc/>
     public ReadOnlySpan<uint> Framebuffer => m_framebuffer;
+    /// <inheritdoc/>
+    /// <remarks>A line is drawn as its H-blank begins, so the frame is whole once the last visible line's H-blank
+    /// event has run.</remarks>
+    public long CyclesToFrameEnd {
+        get {
+            if (!m_event.Scheduled) {
+                return AdvancedGamingBrickMachine.CyclesPerFrame;
+            }
+
+            // The pending raster event either draws m_line or starts the line after it; whole lines follow until the
+            // last visible one's H-blank.
+            var toEvent = Math.Max(
+                val1: 1L,
+                val2: (m_event.When - m_scheduler.Now)
+            );
+            var drawn = (m_inHBlank ? ((m_line + 1) % TotalLines) : m_line);
+            var lines = ((((ScreenHeight - 1) - drawn) + TotalLines) % TotalLines);
+
+            return ((toEvent + (m_inHBlank ? HDrawLength : 0)) + (((long)lines) * DotsPerLine));
+        }
+    }
 
     private int BackgroundMode => m_registers[0] & 0x7;
     private bool ForcedBlank => ((m_registers[0] & 0x80) != 0);

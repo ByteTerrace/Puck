@@ -11,6 +11,7 @@ namespace Puck.HumbleGamingDeck;
 public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
     private readonly MachineInstance<HgdMachine, HgdMachineConfiguration> m_instance;
     private readonly HgdMachine m_machine;
+    private readonly int m_ppuDivider;
 
     private readonly StateWriter m_writer = new(capacity: 4096);
     private readonly uint[] m_colours = new uint[(HgdPpu.Width * HgdPpu.Height)];
@@ -57,6 +58,7 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
         );
         m_instance = HgdMachineFactory.Create(configuration: configuration);
         m_machine = m_instance.Machine;
+        m_ppuDivider = configuration.Model.PpuDivider();
         LoadBatterySave();
     }
 
@@ -71,6 +73,15 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
     public MachineCycleRate CycleRate => m_machine.Clock.Rate;
     /// <inheritdoc/>
     public long CycleCount => ((long)m_machine.MasterTicks);
+    /// <inheritdoc/>
+    /// <remarks>The machine runs to a cumulative master-tick target and stops on it (<see cref="RunCycles"/>).</remarks>
+    public bool CarriesBudgetOvershoot => true;
+    /// <inheritdoc/>
+    public long CyclesPerFrame => (((long)HgdPpu.DotsPerFrame) * m_ppuDivider);
+    /// <inheritdoc/>
+    /// <remarks>An estimate within a dot: the PPU copies its completed picture as the vertical blank begins, so a copy a
+    /// little after that still reads the same frame.</remarks>
+    public long CyclesToFrameEnd => (((long)m_machine.Ppu.DotsToFrame) * m_ppuDivider);
     /// <inheritdoc/>
     public long NativeFrameIndex => m_machine.FrameIndex;
     /// <inheritdoc/>

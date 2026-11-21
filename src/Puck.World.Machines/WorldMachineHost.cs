@@ -136,14 +136,17 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     // The sparse pad lookup: WorldEngagement.BuildPadSnapshot() carries one entry per screen with at least one
     // player engaged, so a linear scan over the (typically tiny) active set costs nothing — the same shape the
     // pre-inversion WorldClient.EngagedPad used over the wire lane.
-    private static MachinePadState EngagedPad(ReadOnlySpan<ScreenPadSnapshot> pads, int screenIndex) {
+    private static ScreenPadSnapshot EngagedPad(ReadOnlySpan<ScreenPadSnapshot> pads, int screenIndex) {
         foreach (ref readonly var pad in pads) {
             if (pad.ScreenIndex == screenIndex) {
-                return pad.Pad;
+                return pad;
             }
         }
 
-        return MachinePadState.Neutral;
+        return new ScreenPadSnapshot(
+            Pad: MachinePadState.Neutral,
+            ScreenIndex: screenIndex
+        );
     }
     private void LeaveLink(int index) {
         if (
@@ -176,14 +179,40 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         var inputs = new MachinePadState[entry.Members.Length];
 
+        // Each member holds the image its screen's tick starts with, and changes inside the tick by cable position.
+        m_linkChanges.Clear();
+
         for (var index = 0; (index < entry.Members.Length); index++) {
-            inputs[index] = EngagedPad(
+            var engaged = EngagedPad(
                 pads: pads,
                 screenIndex: entry.Members[index]
             );
+
+            inputs[index] = (engaged.Timeline?.Start ?? engaged.Pad);
+
+            if (engaged.Timeline is { } timeline) {
+                foreach (ref readonly var change in timeline.Changes) {
+                    m_linkChanges.Add(item: new MachineSeatChange(
+                        OffsetTicks: change.OffsetTicks,
+                        Pad: change.Pad,
+                        Seat: index
+                    ));
+                }
+            }
         }
 
-        var submitted = link.StepSegment(stepTicks, inputs, ref m_stepBarrier, deadline);
+        // Two changes at one offset belong to different seats (a timeline never holds two at one instant), so their
+        // order within the offset does not matter.
+        m_linkChanges.Sort(comparison: static (left, right) => left.OffsetTicks.CompareTo(value: right.OffsetTicks));
+
+        var submitted = link.StepSegment(
+            changes: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_linkChanges),
+            deadline: deadline,
+            deltaTicks: stepTicks,
+            endTicks: m_presentClock,
+            generation: ref m_stepBarrier,
+            inputs: inputs
+        );
         if (PendingMachineStep(submitted) is { } pending) { return pending; }
         if (submitted == QueuedMachineSubmission.Rejected) { return null; }
 
@@ -477,6 +506,14 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
     private Dictionary<string, LinkEntry>.ValueCollection.Enumerator m_stepLinks;
     private Dictionary<string, MachineInstance>.ValueCollection.Enumerator m_stepInstances;
+    // A link's members' changes inside the tick being stepped, and one port's merged image over it: reused scratch.
+    private readonly List<MachineSeatChange> m_linkChanges = [];
+    private readonly MachinePadTimeline m_portTimeline = new();
+    // The presentation clock: the sum of the steps advanced, in engine ticks, which stamps every machine's segments;
+    // the latest step's width; and the host time that step began at. Presentation only.
+    private ulong m_presentClock;
+    private ulong m_presentStep;
+    private long m_presentTimestamp;
     private ulong m_stepBarrier;
     private ulong m_stepWidth;
     private bool m_stepsLinks;
@@ -498,6 +535,9 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         if (m_disposed || (stepTicks == 0)) { return null; }
         if (m_stepWidth == 0) {
             m_stepWidth = stepTicks;
+            m_presentClock = unchecked(m_presentClock + stepTicks);
+            m_presentStep = stepTicks;
+            m_presentTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
             m_stepLinks = m_links.Values.GetEnumerator();
             m_stepsLinks = m_stepLinks.MoveNext();
             m_drainsMachines = SynchronousSteps?.Invoke() ?? false;
@@ -524,6 +564,25 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         _ = LinkedInstances();
         m_stepInstances = m_instances.Values.GetEnumerator();
         _ = m_stepInstances.MoveNext();
+    }
+    /// <inheritdoc/>
+    public ulong PresentedTicks {
+        get {
+            if (
+                m_drainsMachines ||
+                (m_presentStep == 0UL)
+            ) {
+                return m_presentClock;
+            }
+
+            var fraction = Math.Clamp(
+                max: 1d,
+                min: 0d,
+                value: (System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: m_presentTimestamp).TotalSeconds / Puck.Maths.FixedTickConversion.ToSeconds(ticks: m_presentStep))
+            );
+
+            return ((m_presentClock - m_presentStep) + ((ulong)(fraction * m_presentStep)));
+        }
     }
     /// <inheritdoc/>
     public IAudioMachine? AudioMachine(int index) =>

@@ -15,8 +15,12 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     private readonly SeatPort[] m_seats;
     private readonly QueuedMachineWorker m_worker;
 
+    // The changes the ports scheduled inside the next segment, in rising offset order.
+    private readonly List<MachineSeatChange> m_changes = [];
+
     private MachinePads m_inputs = MachinePads.Neutral;
     private string? m_savePath;
+    private ulong? m_segmentClock;
 
     /// <summary>Initializes a queued screen-machine host.</summary>
     /// <param name="width">The native framebuffer width.</param>
@@ -85,6 +89,12 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     /// <inheritdoc/>
     public long NativeFrameIndex => m_worker.NativeFrameIndex;
     /// <inheritdoc/>
+    public long StagedFrames => m_worker.StagedFrames;
+    /// <inheritdoc/>
+    public long ShownFrames => m_worker.ShownFrames;
+    /// <inheritdoc/>
+    public uint FrameRateHz => m_worker.FrameRateHz;
+    /// <inheritdoc/>
     public TimeSpan StepBusyTime => m_worker.StepBusyTime;
     /// <inheritdoc/>
     public Vector3 EmittedLight => m_worker.EmittedLight;
@@ -137,10 +147,16 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     protected abstract IQueuedMachineCore CreateCore(byte[] data, string? savePath);
 
     /// <inheritdoc/>
-    public bool Advance(ulong deltaTicks) => Step(
-        deltaTicks: deltaTicks,
-        inputs: in m_inputs
-    );
+    public bool Advance(ulong deltaTicks) {
+        var generation = 0UL;
+
+        return (QueuedMachineWorker.RequireSettled(outcome: StepSegment(
+            deadline: WaitDeadline.Synchronous(),
+            deltaTicks: deltaTicks,
+            drain: true,
+            generation: ref generation
+        )) != QueuedMachineSubmission.Rejected);
+    }
     /// <inheritdoc/>
     public byte[] CaptureCheckpoint() => m_worker.CaptureCheckpoint().Encode(
         inputs: in m_inputs,
@@ -236,10 +252,18 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
         );
     }
     /// <inheritdoc/>
-    public QueuedMachineSubmission Submit(ulong deltaTicks) => Submit(
-        deltaTicks: deltaTicks,
-        inputs: in m_inputs
-    );
+    public QueuedMachineSubmission Submit(ulong deltaTicks) {
+        var generation = 0UL;
+
+        return QueuedMachineWorker.RequireSettled(outcome: StepSegment(
+            deadline: WaitDeadline.Synchronous(),
+            deltaTicks: deltaTicks,
+            drain: false,
+            generation: ref generation
+        ));
+    }
+    /// <inheritdoc/>
+    public void SetSegmentClock(ulong endTicks) => m_segmentClock = endTicks;
     /// <summary>Queues an exact tick and seat-image segment for standalone hardware callers.</summary>
     /// <param name="deltaTicks">The exact tick budget.</param>
     /// <param name="inputs">The seat image captured by this submission; seats past this host's ports are held
@@ -255,9 +279,35 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     }
 
     /// <inheritdoc/>
+    /// <remarks>An accepted segment takes the ports' scheduled changes and the stated clock with it, and the ports then
+    /// hold the image the segment ends with.</remarks>
     public QueuedMachineSubmission StepSegment(ulong deltaTicks, bool drain, ref ulong generation, WaitDeadline deadline) {
+        // A call that resumes an accepted segment's drain submits nothing, and the ports already hold its last image.
+        var fresh = (generation == 0UL);
         var declared = Declared(inputs: in m_inputs);
-        return m_worker.StepSegment(deltaTicks, in declared, drain, ref generation, deadline);
+        var submission = m_worker.StepSegment(
+            changes: ((fresh && (m_changes.Count != 0)) ? m_changes.ToArray() : null),
+            deadline: deadline,
+            deltaTicks: deltaTicks,
+            drain: drain,
+            endTicks: (fresh ? m_segmentClock : null),
+            generation: ref generation,
+            input: in declared
+        );
+
+        if (
+            fresh &&
+            (submission is QueuedMachineSubmission.Accepted or QueuedMachineSubmission.AcceptedAfterBackpressure or QueuedMachineSubmission.PendingDrain)
+        ) {
+            foreach (var change in m_changes) {
+                m_inputs[change.Seat] = change.Pad;
+            }
+
+            m_changes.Clear();
+            m_segmentClock = null;
+        }
+
+        return submission;
     }
 
     // Neutralizes the seats this host declares no port for, so the replay ring and a checkpoint record the same image.
@@ -274,13 +324,56 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     /// <inheritdoc/>
     public long WriteFrame(Span<byte> region) =>
         m_worker.WriteFrame(region: region);
+    /// <inheritdoc/>
+    public long WriteFrame(Span<byte> region, ulong dueTicks) =>
+        m_worker.WriteFrame(
+            dueTicks: dueTicks,
+            region: region
+        );
+    /// <inheritdoc/>
+    public long FrameDue(ulong dueTicks) =>
+        m_worker.FrameDue(dueTicks: dueTicks);
+
+    // Withdraws the changes a seat scheduled inside the next segment.
+    private void WithdrawChanges(int seat) =>
+        _ = m_changes.RemoveAll(match: change => (change.Seat == seat));
+    // Schedules a seat's change, keeping the list in rising offset order with equal offsets in the order scheduled.
+    private void ScheduleChange(int seat, in MachinePadState state, ulong offsetTicks) {
+        var position = m_changes.Count;
+
+        while ((position > 0) && (m_changes[(position - 1)].OffsetTicks > offsetTicks)) {
+            --position;
+        }
+
+        m_changes.Insert(
+            index: position,
+            item: new MachineSeatChange(
+                OffsetTicks: offsetTicks,
+                Pad: state,
+                Seat: seat
+            )
+        );
+    }
 
     // One controller port: a view of its seat in the host's held image, so every port's state rides the same
     // submission, checkpoint, and replay record.
     private sealed class SeatPort(QueuedMachineHost host, int seat) : IMachineInputPort {
         public MachinePadState State => host.m_inputs[seat];
 
-        public void SetState(in MachinePadState state) =>
+        public void SetState(in MachinePadState state) {
+            host.WithdrawChanges(seat: seat);
             host.m_inputs[seat] = state;
+        }
+        public void SetState(in MachinePadState state, ulong offsetTicks) {
+            if (offsetTicks == 0UL) {
+                host.m_inputs[seat] = state;
+            } else {
+                host.ScheduleChange(
+                    offsetTicks: offsetTicks,
+                    seat: seat,
+                    state: in state
+                );
+            }
+        }
     }
 }

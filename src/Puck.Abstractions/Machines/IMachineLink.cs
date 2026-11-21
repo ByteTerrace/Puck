@@ -31,4 +31,31 @@ public interface IMachineLink : IDisposable {
         Step(deltaTicks, inputs);
         return QueuedMachineSubmission.Accepted;
     }
+    /// <summary>Steps or submits one segment whose members' controller images change inside it, stamped with the host
+    /// clock position it ends at (<see cref="IQueuedMachineRuntime.SetSegmentClock"/>). A link that keeps no time inside
+    /// a segment holds each member's last image for the whole of it, which is the default.</summary>
+    /// <param name="deltaTicks">The shared fixed-step tick budget.</param>
+    /// <param name="inputs">Each member's controller image at the segment's start, in cable order.</param>
+    /// <param name="changes">The members' changes inside the segment, in rising offset order; a seat is a cable
+    /// position.</param>
+    /// <param name="endTicks">The host clock position at the segment's end, in engine ticks, or
+    /// <see langword="null"/> for the link's own running clock.</param>
+    /// <param name="generation">The drain generation a resumed step hands back.</param>
+    /// <param name="deadline">The last instant to wait.</param>
+    /// <returns>The observable submission outcome.</returns>
+    QueuedMachineSubmission StepSegment(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs, ReadOnlySpan<MachineSeatChange> changes, ulong? endTicks, ref ulong generation, WaitDeadline deadline) {
+        if (changes.IsEmpty) {
+            return StepSegment(deltaTicks, inputs, ref generation, deadline);
+        }
+
+        var held = new MachinePadState[inputs.Length];
+
+        inputs.CopyTo(destination: held);
+
+        foreach (ref readonly var change in changes) {
+            held[change.Seat] = change.Pad;
+        }
+
+        return StepSegment(deltaTicks, held, ref generation, deadline);
+    }
 }

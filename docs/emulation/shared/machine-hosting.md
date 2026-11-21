@@ -29,7 +29,9 @@ The [machine contracts](../../../src/Puck.Abstractions/README.md) own their full
 input port per seat through that contract. A host declares its ports' names in
 seat order when it is constructed, up to `MachinePads.MaxSeats`; the bricks
 declare the single port `controls`, and `Seats` lists the same ports in seat
-order. `AccessHardware` marshals a
+order. A port takes the image a segment starts with and, optionally, changes at
+offsets inside it (`IMachineInputPort.SetState`), so a press reaches the
+machine on the native frame it happened in. `AccessHardware` marshals a
 coherent inspection or a validated patch/bus operation to the owning worker or
 coupled link. Successful state-changing accesses invalidate rewind history in the
 same ordered work item; unavailable or unsupported hardware returns an explicit
@@ -166,7 +168,64 @@ A world emulates every running machine on every tick, whether or not any
 screen showing it is visible to anyone. Machine state is simulation state that
 rules, bindings and replays read, so it never depends on what a viewer can see;
 the cost of an unseen cabinet is reduced by making idle emulation cheap, never
-by skipping or deferring it.
+by skipping or deferring it. Which frame a display shows, and whether any
+display reads the machine at all, likewise never reaches it.
+
+### Segments run in parts
+
+`MachineSegment.Run` is the one way a host executes an accepted segment, shared
+by `QueuedMachineWorker` and `LinkedMachineGroup`. It turns the segment's ticks
+into cycles through the host's phase and runs them in parts that end in two
+places: where a seat's controller image changes, and where the machine
+completes a frame (`ITimeTravelMachineCore.CyclesToFrameEnd`). The first is
+what lets a press land inside a segment; the second is what lets the host copy
+every native frame whole, since the handheld cores draw their framebuffer in
+place.
+
+Dividing a segment never changes where the machine ends up. The parts take
+their budgets from the same phase, so they sum to the segment's budget, and a
+core that measures each budget from where its clock stands
+(`CarriesBudgetOvershoot` false, the Advanced core) is given each part less
+what the part before it overran, so its last part ends at the instruction
+boundary the undivided budget ends at. With no change inside a segment the
+input is applied once, as before. `QueuedMachineWorker.DividesSegments` off is
+the reference: whole segments, each holding every seat's last image from its
+start. The shared `queued-host-segment-parts` stage runs the same segments both
+ways on every core and requires byte-identical checkpoints.
+
+A rewind lands only where a segment ended (`MachineTimeTravel.Record`'s `lands`),
+replaying the parts before it, so a rewound machine given the same future
+segments re-traces the recorded ones.
+
+### Video at the machine's rate
+
+The worker keeps a short queue of complete frames (`FrameQueueLength`). Each
+part that completes a frame stages it, stamped with the host clock position the
+part ended at: the clock is whatever the host states for the segment
+(`IQueuedMachineRuntime.SetSegmentClock`), or the machine's own running sum of
+accepted ticks. A display asks for the frame due at the position it presents
+(`IMachineVideoOutput.FrameDue`, `WriteFrame(region, dueTicks)`): the newest
+frame stamped at or before it. A 60 Hz machine in a 30 Hz world therefore shows
+both frames of each segment, one display frame apart, and a display faster or
+slower than the machine repeats or skips frames as any display must.
+
+In a World, `WorldMachineHost` stamps every machine's segments with one clock,
+the sum of the steps it advanced, and answers `PresentedTicks`: a position that
+runs from the latest step's start to its end over the host time one step takes.
+`MachineVideoSourceUpload` reads it, declares the output's own rate, and tells
+the render graph whether the frame due is one its region does not hold
+(`IRenderGraphSourceUpload.HasNewImage`), so the source is converted on exactly
+the presented frames that bring a new machine frame, at any display rate, and
+an unchanged frame is never written again. Under lockstep the position is the
+step's end, so every presented frame shows the completed tick.
+
+`machine.state` counts it: `stagedFrames` rises once per native frame the
+machine completes, and `shownFrames` once each time a display takes a frame
+other than the one before it. `shownFrames` beside `nativeFrames` is about one
+to one on a display at or above the machine's rate.
+
+While a runahead lookahead supplies the picture, the worker stages it once per
+segment, since the lookahead advances once per segment.
 
 `QueuedMachineHost` is the base class exposed to machine-specific adapters. A
 concrete host has one main job: turn loaded content into an
@@ -218,7 +277,9 @@ The worker applies these policies:
   `AcceptedAfterBackpressure`; work is never dropped or coalesced.
 - `IMachineRuntime.Advance` submits one segment and drains through a barrier
   before returning. Set optional input ports before advancing or submitting;
-  submission captures every port's state, as one seat image, before returning.
+  submission captures every port's state, as one seat image with the changes
+  scheduled inside the segment, before returning, and the ports then hold the
+  image the segment ends with.
   A durable checkpoint carries each declared seat and refuses a host that
   declares a different number of them.
 - A core reports its clock as a `MachineCycleRate`: a whole number of cycles
@@ -232,21 +293,19 @@ The worker applies these policies:
   accumulating drift. A rewind restores that phase with the core, and a durable
   checkpoint persists it with its scale and refuses a runtime whose clock has a
   different one.
-- Pixels are repacked only when a new native frame completes for queued calls.
-  The synchronous path forces a stage to preserve its contract. A segment
-  stages only the last native frame it completed, and a machine's video source
-  takes at most one image per completed tick, so a machine whose native rate is
-  above the world's tick rate shows a subset of its frames: in a 30 Hz world a
-  60 Hz machine completes about two native frames per segment and shows one.
+- Pixels are repacked once per native frame the machine completes, at the
+  frame's end. The synchronous path also stages the machine as it stands when
+  the step returns, to preserve its contract.
 - The lifecycle charges the host time from `TakeWork` returning a step to its
   `CompleteStep` to `StepBusyTime` (on `IQueuedMachineRuntime`); a lent core's
   step is charged to the link thread's lifecycle instead. `machine.state`
-  echoes it as `busyMs`, beside `nativeFrames` and `backpressure`: `busyMs`
+  echoes it as `busyMs`, beside `nativeFrames`, `stagedFrames`, `shownFrames`
+  and `backpressure`: `busyMs`
   over the wall time between two reads is the share of real time the machine
   needs to keep pace. It is host diagnostics, never machine state.
-- GPU publication serializes uploads but does not hold the frame lock during
-  the upload. The leased array stays outside the worker's write rotation until
-  the upload returns.
+- A consumer copies a frame under the frame lock, which the worker holds only
+  to publish a frame it has finished writing: the slot it writes into is the
+  one no reader can reach.
 - Audio crosses through a host-owned ring, so a consumer never touches the
   core's execution thread. When full, the ring drops the oldest audio and keeps
   the newest emulated second. It is the same `StereoSampleRing` both cores
@@ -356,10 +415,12 @@ one by quiescing each member's `QueuedMachineWorker` at a frame boundary
 an `IMachineGroupCore`—the medium plus its deterministic interleave—advances
 every member through one shared cycle budget.
 
-- *One publication path.* After each group step the members publish through
-  their own workers (`PublishLentStep`): the same framebuffer, audio ring,
-  feedback, and completed-step count a host already reads. Nothing above the
-  worker changes when a cable goes in.
+- *One publication path.* The group runs each segment through the same
+  `MachineSegment.Run` a single worker does, and the members publish through
+  their own workers: each part's completed frame (`PublishLentPart`), then the
+  audio ring, feedback, and completed-step count (`PublishLentStep`) a host
+  already reads. Nothing above the worker changes when a cable goes in, and a
+  linked member keeps its native video rate.
 - *Per-seat input.* `MachinePads` carries one `MachinePadState` per seat, in
   cable order, and is the held-input image the group's rewind ring replays. It
   is the same seat image a single multi-port machine uses, where a seat is a
@@ -398,7 +459,7 @@ this project reaches beyond the process.
 | Serialization | `StateWriter`, `StateReader`, `IStateTransfer`, `StateSaveTransfer`, `StateLoadTransfer`, `SnapshotSection`, `SnapshotCapture`, `ISnapshotable`, `SnapshotImage` | Little-endian whole-state capture/restore |
 | Divergence | `SnapshotDivergence` | Section-localized first-difference report |
 | Fork lifecycle | `ISnapshotableMachine`, `MachineInstance<TMachine, TConfiguration>`, `MachineFork<TMachine, TConfiguration>`, `MachineInstancePool<TMachine, TConfiguration>` | Pooled, ABA-safe forked-instance rentals |
-| Queued machines | `QueuedMachineHost`, `QueuedMachineWorker`, `IQueuedMachineCore`, `QueuedWorkerLifecycle<TWorkItem>`, `IQueuedWorkItem<TSelf>` | Ordered off-thread emulation and complete-frame publication |
+| Queued machines | `QueuedMachineHost`, `QueuedMachineWorker`, `IQueuedMachineCore`, `QueuedWorkerLifecycle<TWorkItem>`, `IQueuedWorkItem<TSelf>`, `MachineSegment`, `IMachineSegmentObserver` | Ordered off-thread emulation, segments run in parts, and a queue of complete native frames |
 | Time travel | `MachineTimeTravel<TInput>`, `ITimeTravelMachineCore<TInput>`, `ITimeTravelLookahead<TInput>` | Bounded rewind, persistent runahead, and fast-forward |
 | Cable links | `LinkedMachineGroup`, `IMachineGroupCore`, `IMachineCoreLender`, `MachinePads`, `LinkPacer`, `ILinkPacerParticipants` | Group-owned cores, per-seat input, the shared interleave, and coupled time travel |
 | Rate conversion | `RationalRateAccumulator` | Drift-free integer rate conversion: both audio stages' sample cadence and the host's tick-to-cycle budgets |

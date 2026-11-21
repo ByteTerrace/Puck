@@ -123,6 +123,14 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     void Advance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads);
     /// <summary>Advances the same tick until it settles, returning the dependency still outstanding after a slice.</summary>
     WaitReason? TryAdvance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads, WaitDeadline deadline);
+    /// <summary>Gets the position, on the clock this host stamps its machines' segments with, that a frame rendered now
+    /// presents: the frames a machine completed up to it are due (<see cref="IMachineVideoOutput.FrameDue"/>). The clock
+    /// is the sum of the steps advanced, in engine ticks, and the position runs from the latest step's start to its end
+    /// over the host time one step takes, so a machine's frames are shown at the rate it completes them however few
+    /// steps a second the world runs. While the world completes each tick's machine work before a screen reads it
+    /// (lockstep), the position is the step's end. Presentation only: it reads the host's clock and never reaches a
+    /// machine.</summary>
+    ulong PresentedTicks { get; }
     /// <summary>Returns the live named machine a screen shows as its audio drain seam,
     /// or <see langword="null"/> when no machine (or no capability) is available.</summary>
     /// <param name="index">The engine screen-surface index.</param>

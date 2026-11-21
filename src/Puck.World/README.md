@@ -1685,7 +1685,7 @@ the drawn image, none exists:
 | Arm | Reproduced by | Held by |
 |---|---|---|
 | `none` | no instance: `WorldSourceInstances` names none, and the engine shades the screen as unbound glass | `WorldSourceInstanceLawTests`; `world.screens` echoes `unbound`; the `uploaded-sources` canary captures the dark glass |
-| `machine` | `source.machine`, an uploaded instance whose `MachineVideoSourceUpload` writes the output's latest frame once per completed tick, read from the host of the world instance its `world` setting names | `RenderGraphRuntimeLawTests.AMachineSource*`, `WorldCaptureSchedulerLawTests` (the exact verdict), `WorldNestedScreensLawTests` (a presented world's machine is its own instance), the `uploaded-sources`, `instrument-clock-source` and `portal-sources` canaries |
+| `machine` | `source.machine`, an uploaded instance whose `MachineVideoSourceUpload` writes the output's frame due at the position its machine host presents, on each presented frame that brings a new one, read from the host of the world instance its `world` setting names | `RenderGraphRuntimeLawTests.AMachineSource*`, `WorldCaptureSchedulerLawTests` (the exact verdict), `WorldNestedScreensLawTests` (a presented world's machine is its own instance), the `uploaded-sources`, `instrument-clock-source` and `portal-sources` canaries |
 | `producer`, `testPattern` | `WorldTestPatternProducer`, uploaded | `ImageProducerLawTests.ATestPatternFeedStatesTheExactPatternItShowsAndTheVerdictHoldsIt`, `WorldSourceInstanceLawTests`, the `uploaded-sources` canary |
 | `producer`, `qr` | `WorldQrProducer`, uploaded | `ImageProducerLawTests.AQrFeedStatesTheCodeItRasterized`, the `uploaded-sources` canary |
 | `producer`, `color` | `WorldColorProducer`, uploaded | `WorldNestedScreensLawTests` (a face past the nesting depth shows its fallback colour's instance), the `portal-nested` and `portal-return` canaries' discriminating legs |
@@ -1917,8 +1917,10 @@ select, options, link, unlink) remain their own ordered payload kind beside the
 generic provider operation. Generic provider operations are refused during recording until the tape
 can capture their execution. A screen showing a machine output reads it as a
 render-graph source instance (package `source.machine`), an uploaded source:
-once per completed tick its upload (`MachineVideoSourceUpload`, made by the
-binder's `MachineSource`) copies the output's latest complete frame into the
+on each presented frame that brings a new machine frame its upload
+(`MachineVideoSourceUpload`, made by the binder's `MachineSource`) copies the
+output's frame due at the position the world's machine host presents
+(`IWorldMachineHost.PresentedTicks`) into the
 instance's region (`IMachineVideoOutput.WriteFrame`, in the `Format` the output
 declares: RGBA8, or an indexed image and its palette), the instance converts it
 once however many screens show it, and the world's `sdf.world` passes bind the

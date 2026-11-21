@@ -1594,8 +1594,10 @@ by its fence share is GPU back-pressure, not CPU work.
   inspect the live schedule and completed build as well.
 - Screen-light reproduction must compare source bytes, not just graph publication
   numbers. `MachineVideoSourceUpload` numbers uploads, while a queued machine's
-  video read takes its latest completed native frame. Equal publications can
-  therefore feed different images to `ScreenEmission`. Lockstep uses the existing
+  video read takes the native frame due at the position its machine host
+  presents (`IWorldMachineHost.PresentedTicks`), which outside lockstep follows
+  host time. Equal publications can therefore feed different images to
+  `ScreenEmission`. Lockstep uses the existing
   synchronous machine advance before rendering. A fence wait, readback or GPU
   validation can mask this worker race by changing pacing; diagnose the CPU
   video bytes and native frame version before changing GPU barriers.

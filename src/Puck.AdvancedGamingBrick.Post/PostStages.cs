@@ -32,6 +32,7 @@ internal static class PostStages {
             shared["fork-determinism"],
             new SaveRoundTripStage(),
             shared["queued-host-backpressure"],
+            shared["queued-host-segment-parts"],
             shared["queued-host-frame-publication"],
             shared["queued-host-audio"],
             shared["queued-host-time-travel"],

@@ -50,8 +50,12 @@ public sealed partial class WorldMachineHost {
         var runtime = instance.Lease.Runtime;
         var queued = (runtime as IQueuedMachineRuntime);
 
+        var progress = (runtime as IMachineFrameProgress);
+
         return new(
-            NativeFrames: ((runtime as IMachineFrameProgress)?.NativeFrameIndex ?? -1L),
+            NativeFrames: (progress?.NativeFrameIndex ?? -1L),
+            StagedFrames: (progress?.StagedFrames ?? 0L),
+            ShownFrames: (progress?.ShownFrames ?? 0L),
             BackpressureEvents: (queued?.BackpressureEvents ?? 0L),
             StepBusyTime: (queued?.StepBusyTime ?? TimeSpan.Zero)
         );
@@ -470,24 +474,19 @@ public sealed partial class WorldMachineHost {
 
             if (ports.InputPorts is FrozenDictionary<string, IMachineInputPort> frozen) {
                 for (var index = 0; (index < frozen.Count); index++) {
-                    var input = MachineInput(instance: instance.Declaration.Name, pads: pads, port: frozen.Keys[index], sole: sole);
-
-                    frozen.Values[index].SetState(state: in input);
+                    SetPort(instance: instance.Declaration.Name, pads: pads, name: frozen.Keys[index], port: frozen.Values[index], sole: sole);
                 }
             } else {
                 foreach (var (name, port) in ports.InputPorts) {
-                    var input = MachineInput(
-                        instance: instance.Declaration.Name,
-                        pads: pads,
-                        port: name,
-                        sole: sole
-                    );
-
-                    port.SetState(state: in input);
+                    SetPort(instance: instance.Declaration.Name, pads: pads, name: name, port: port, sole: sole);
                 }
             }
         }
         if (runtime is IQueuedMachineRuntime queued) {
+            if (m_stepBarrier == 0) {
+                queued.SetSegmentClock(endTicks: m_presentClock);
+            }
+
             var submitted = queued.StepSegment(stepTicks, m_drainsMachines, ref m_stepBarrier, deadline);
             if (PendingMachineStep(submitted) is { } pending) { return pending; }
 
@@ -506,11 +505,34 @@ public sealed partial class WorldMachineHost {
         }
         return null;
     }
-    // The input one port of a named machine receives: the engaged pads of every screen showing the machine whose route
-    // names that port, or that names none when the port is the machine's sole one, merged; neutral when none is engaged.
-    private MachinePadState MachineInput(string instance, ReadOnlySpan<ScreenPadSnapshot> pads, string port, bool sole) {
-        var input = MachinePadState.Neutral;
+    // Hands one port of a named machine its image over the tick: the image the tick starts with, then each change
+    // inside it at its offset.
+    private void SetPort(string instance, ReadOnlySpan<ScreenPadSnapshot> pads, string name, IMachineInputPort port, bool sole) {
+        MachineInput(
+            instance: instance,
+            pads: pads,
+            port: name,
+            sole: sole
+        );
+
+        var start = m_portTimeline.Start;
+
+        port.SetState(state: in start);
+
+        foreach (ref readonly var change in m_portTimeline.Changes) {
+            port.SetState(
+                offsetTicks: change.OffsetTicks,
+                state: change.Pad
+            );
+        }
+    }
+    // Fills m_portTimeline with the input one port of a named machine receives over the tick: the engaged pads of every
+    // screen showing the machine whose route names that port, or that names none when the port is the machine's sole
+    // one, merged instant by instant; neutral when none is engaged.
+    private void MachineInput(string instance, ReadOnlySpan<ScreenPadSnapshot> pads, string port, bool sole) {
         var routed = false;
+
+        m_portTimeline.Reset(start: MachinePadState.Neutral);
 
         foreach (var slot in m_slots.Values) {
             if (
@@ -532,21 +554,34 @@ public sealed partial class WorldMachineHost {
                     if (snapshot.ScreenIndex != slot.Index) {
                         continue;
                     }
-                    var snapshotPad = snapshot.Pad;
 
-                    input = (routed
-                        ? MachinePadState.Merge(
-                            first: in input,
-                            second: in snapshotPad
-                        )
-                        : snapshotPad
+                    var start = (snapshot.Timeline?.Start ?? snapshot.Pad);
+                    var changes = ((snapshot.Timeline is { } timeline)
+                        ? timeline.Changes
+                        : default
                     );
+
+                    if (routed) {
+                        m_portTimeline.Merge(
+                            changes: changes,
+                            start: in start
+                        );
+                    } else {
+                        m_portTimeline.Reset(start: in start);
+
+                        foreach (ref readonly var change in changes) {
+                            m_portTimeline.Add(
+                                offsetTicks: change.OffsetTicks,
+                                pad: change.Pad
+                            );
+                        }
+                    }
+
                     routed = true;
                     break;
                 }
             }
         }
-        return input;
     }
     // Every engageable screen showing the machine must resolve to one of its input ports: the port its route names, or
     // the machine's sole port when the route names none. A passive display routes no input and needs no port. The ports

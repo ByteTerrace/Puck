@@ -36,6 +36,8 @@ public static class QueuedHostContractProbe {
     private const int RewindBackFrames = 30;
     private const int RewindDriveFrames = 90;
     private const int RunaheadFrames = 6;
+    // The 30 Hz segments VerifySegmentParts runs, about two native frames each.
+    private const int SegmentPartsSteps = 96;
     // The steps VerifyWholeFrameWrites runs on its own thread while it writes frames on the probe's.
     private const int WholeFrameSteps = 30;
     // What a frame write must leave in the region's header.
@@ -989,6 +991,91 @@ public static class QueuedHostContractProbe {
         try { _ = source.CaptureCheckpoint(); return QueuedHostProbeResult.Fail(detail: "checkpoint silently discarded enabled rewind history"); } catch (InvalidOperationException) { }
         return QueuedHostProbeResult.Pass(detail: "queued capture drained all accepted work; independent import and continuation preserved full core state, held input, fractional pacing, playback settings, and step count; corruption and identity mismatch left the target unchanged");
     }
+    /// <summary>Verifies that dividing a segment never changes where the machine ends up, and that the division is what
+    /// puts every native frame in the video output. Two hosts run the same 30 Hz segments, about two native frames
+    /// each, under the same changing input: one in parts (<see cref="MachineSegment"/>), one whole
+    /// (<see cref="QueuedMachineWorker.DividesSegments"/> off, the reference). Their checkpoints, which hold the whole
+    /// core state, the carried cycle phase and the step count, must be byte-identical; the divided host must have staged
+    /// one frame per native frame the machine completed, where the whole one stages at most one a segment. Two further
+    /// hosts then take the same segments with a controller change scheduled inside each and must agree with each other,
+    /// with their ports holding each segment's last image.</summary>
+    /// <typeparam name="THost">The queued host under test.</typeparam>
+    /// <param name="withContent">Builds a fresh assigned host with the core's synthetic content.</param>
+    /// <returns>The contract result.</returns>
+    public static QueuedHostProbeResult VerifySegmentParts<THost>(Func<THost> withContent) where THost : QueuedMachineHost {
+        var budget = FixedTickConversion.PerRate(ratePerSecond: 30U);
+
+        using var divided = withContent();
+        using var whole = withContent();
+
+        whole.Worker.DividesSegments = false;
+
+        var nativeBefore = divided.Worker.NativeFrameIndex;
+        var stagedBefore = divided.StagedFrames;
+        var wholeStagedBefore = whole.StagedFrames;
+
+        for (var step = 0; (step < SegmentPartsSteps); step++) {
+            var input = ScheduledInput(frame: (step / 3));
+
+            divided.Seats[0].SetState(state: in input);
+            whole.Seats[0].SetState(state: in input);
+
+            if (
+                (divided.Submit(deltaTicks: budget) == QueuedMachineSubmission.Rejected) ||
+                (whole.Submit(deltaTicks: budget) == QueuedMachineSubmission.Rejected)
+            ) {
+                return QueuedHostProbeResult.Fail(detail: $"segment {step} was rejected");
+            }
+        }
+
+        // A checkpoint joins the queue behind every accepted segment, so both hosts are read at the same instant.
+        if (!divided.CaptureCheckpoint().AsSpan().SequenceEqual(other: whole.CaptureCheckpoint())) {
+            return QueuedHostProbeResult.Fail(detail: $"{SegmentPartsSteps} segments run in parts left another state than the same segments run whole");
+        }
+
+        var native = (divided.Worker.NativeFrameIndex - nativeBefore);
+        var staged = (divided.StagedFrames - stagedBefore);
+        var wholeStaged = (whole.StagedFrames - wholeStagedBefore);
+
+        if (Math.Abs(value: (staged - native)) > 1L) {
+            return QueuedHostProbeResult.Fail(detail: $"the machine completed {native} native frames over {SegmentPartsSteps} segments and its output took {staged}: every native frame is staged once");
+        }
+        if (wholeStaged > SegmentPartsSteps) {
+            return QueuedHostProbeResult.Fail(detail: $"the reference staged {wholeStaged} frames over {SegmentPartsSteps} whole segments: a whole segment stages at most one");
+        }
+
+        using var first = withContent();
+        using var second = withContent();
+
+        for (var step = 0; (step < SegmentPartsSteps); step++) {
+            var start = ScheduledInput(frame: step);
+            var middle = ScheduledInput(frame: (step + 3));
+            var last = ScheduledInput(frame: (step + 5));
+            var offset = ((budget * ((ulong)((step % 7) + 1))) / 9UL);
+
+            foreach (var host in (ReadOnlySpan<THost>)[first, second]) {
+                host.Seats[0].SetState(state: in start);
+                host.Seats[0].SetState(
+                    offsetTicks: offset,
+                    state: in middle
+                );
+                host.Seats[0].SetState(
+                    offsetTicks: (offset + 1UL),
+                    state: in last
+                );
+                _ = host.Submit(deltaTicks: budget);
+
+                if (!host.Seats[0].State.Equals(other: last)) {
+                    return QueuedHostProbeResult.Fail(detail: $"after segment {step} a port did not hold the last image scheduled inside it");
+                }
+            }
+        }
+
+        return (first.CaptureCheckpoint().AsSpan().SequenceEqual(other: second.CaptureCheckpoint())
+            ? QueuedHostProbeResult.Pass(detail: $"{SegmentPartsSteps} segments run in parts and whole left byte-identical checkpoints; the parts staged {staged} frames for {native} native frames (the whole segments {wholeStaged}); two hosts given the same controller changes inside each segment agreed")
+            : QueuedHostProbeResult.Fail(detail: "two hosts given the same controller changes inside each segment diverged")
+        );
+    }
     /// <summary>Verifies the debug memory window (<see cref="IMachineMemoryPeek"/>) is marshaled through the worker
     /// rather than racing the running core: the marshaled poke path is deterministic (the serial reference — two
     /// identical ordered step/poke schedules reach a byte-identical image), cross-thread peek hammering leaves state
@@ -1199,7 +1286,11 @@ public static class QueuedHostContractProbe {
         private long m_cycle;
         private long m_frame;
 
+        public bool CarriesBudgetOvershoot => true;
         public long CycleCount => m_cycle;
+        public MachineCycleRate CycleRate => new(cycles: 1UL);
+        public long CyclesPerFrame => 1L;
+        public long CyclesToFrameEnd => 1L;
         public ReadOnlySpan<uint> Framebuffer => default;
         public long NativeFrameIndex => m_frame;
         public int StateBytes { get; set; } = stateBytes;

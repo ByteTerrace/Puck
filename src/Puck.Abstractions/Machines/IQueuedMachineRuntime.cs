@@ -66,4 +66,10 @@ public interface IQueuedMachineRuntime {
 
     /// <summary>Submits or resumes one segment. A synchronous step retains its drain generation across slices.</summary>
     QueuedMachineSubmission StepSegment(ulong deltaTicks, bool drain, ref ulong generation, WaitDeadline deadline);
+    /// <summary>States the host clock position the next submitted segment ends at, which stamps the frames that segment
+    /// completes so a display finds the one due when it presents (<see cref="IMachineVideoOutput.FrameDue"/>). The
+    /// submission captures it, as it does the input ports. A host that states none gets the machine's own running clock,
+    /// the sum of the segments it accepted. Presentation only: the stamp never reaches machine state.</summary>
+    /// <param name="endTicks">The clock position at the segment's end, in engine ticks; it never moves back.</param>
+    void SetSegmentClock(ulong endTicks);
 }

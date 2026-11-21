@@ -81,6 +81,17 @@ public sealed partial class HgdPpu : ISnapshotable {
     public int Line => m_line;
     /// <summary>Gets the number of frames whose vertical blank has begun since power-on.</summary>
     public long FrameIndex => m_frameIndex;
+    /// <summary>Gets the dots from now through the one that copies the completed picture and counts the frame, at least
+    /// one, as if no dot were skipped: an odd frame's skipped dot makes the true count one less.</summary>
+    public int DotsToFrame {
+        get {
+            var toCopy = (((VblankLine - m_line) * DotsPerLine) + (1 - m_dot));
+
+            return (((toCopy >= 0) ? toCopy : (toCopy + DotsPerFrame)) + 1);
+        }
+    }
+    /// <summary>The dots in one frame with no dot skipped.</summary>
+    public const int DotsPerFrame = ((PreRenderLine + 1) * DotsPerLine);
     /// <summary>Gets the PPU's NMI output: the vertical-blank flag while $2000 bit 7 enables it.</summary>
     public bool NmiOutput => (m_vblank && ((m_control & 0x80) != 0));
     /// <summary>Gets the 256 bytes of primary object memory, 64 four-byte sprite entries, for inspection.</summary>

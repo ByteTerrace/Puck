@@ -325,6 +325,9 @@ public sealed class QueuedWorkerLifecycleTests {
         public string CheckpointIdentity => "test/counting-core";
         public long CycleCount => 0L;
         public MachineCycleRate CycleRate => new(cycles: 1UL);
+        public bool CarriesBudgetOvershoot => true;
+        public long CyclesPerFrame => 1L;
+        public long CyclesToFrameEnd => long.MaxValue;
         public int DisposeCount { get; private set; }
 
         /// <summary>Gets a signal set once the first segment is running and, when <see cref="FirstStepRelease"/> is
@@ -371,6 +374,9 @@ public sealed class QueuedWorkerLifecycleTests {
         public long CompletedTransfers => 0L;
         public long CycleCount => 0L;
         public MachineCycleRate CycleRate => new(cycles: 1UL);
+        public bool CarriesBudgetOvershoot => true;
+        public long CyclesPerFrame => 1L;
+        public long CyclesToFrameEnd => long.MaxValue;
         public ReadOnlySpan<uint> Framebuffer => m_first.Framebuffer;
         public int MemberCount => 2;
         public long NativeFrameIndex => 0L;

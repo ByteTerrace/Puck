@@ -57,6 +57,14 @@ change.
   frame its worker finished: compare `WriteFrame`'s version and bytes when
   diagnosing screen or screen-light repeatability. Adding a GPU fence wait can
   hide a late worker frame without fixing its completion boundary.
+- **A segment runs in parts, and the parts must not move the machine.**
+  `MachineSegment.Run` ends a part where a seat's image changes and where the
+  core says its frame completes (`CyclesToFrameEnd`), and the worker stages a
+  frame per part that completed one. A core states whether `RunCycles` carries
+  an instruction's overshoot into the next budget (`CarriesBudgetOvershoot`):
+  get it wrong and every divided segment drifts from the whole one. The shared
+  `queued-host-segment-parts` stage is the judge, and a new core, or a change
+  to a core's run loop or frame timing, runs it.
 
 Each is detailed in [references/hardware-and-oracles.md](references/hardware-and-oracles.md).
 
@@ -171,9 +179,12 @@ summary and per-check ticks, host.log and machineDebuggerViolations; use world.a
 for last/peak/total fuel. Run=2 plays runtime segments; run=3 fuzzes a seeded window.
 No game addresses or title knowledge belongs in this guest.
 
-The debug world runs 30 world ticks per second, holding inputs across about two native
-frames; a screen shows only each segment's last one. `machine.state` reports each
-machine's `nativeFrames`, `backpressure` and worker `busyMs` (host time, never state):
+The debug world runs 30 world ticks per second, about two native frames per segment. A
+screen shows both (the worker queues every native frame and the screen takes the one
+due when it presents), and a press reaches the machine at the offset inside the tick it
+was captured at. `machine.state` reports each machine's `nativeFrames`, `stagedFrames`
+and `shownFrames` (shown beside native is about one to one on a display at or above the
+machine's rate), `backpressure` and worker `busyMs` (host time, never state):
 `busyMs` over the wall time between two reads is the share of real time it needs. It is
 a timing reading, so it is taken only on a quiet machine; `nativeFrames` per segment
 is a count any machine can read. Hash/probe reads drain workers; checkpoints preserve their rational cycle phase,
