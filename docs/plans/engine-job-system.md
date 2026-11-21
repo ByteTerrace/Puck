@@ -1547,10 +1547,10 @@ step that meets it.
    - *The tick stays on the frame thread*, shortened by C0, J1, T3, T2 and the
      serial tick fixes.
    Each arrangement is judged beside today's measured input-to-display latency.
-   Because the register rules that a frame of latency is never the fix for a
-   missed bar ([the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation)),
-   any arrangement that adds latency for the world the player acts in goes to
-   the owner with that measurement. Whether an unseen world may step less often
+   The register allows the simulation to run pipelined beside the frame, a
+   tick behind at most, provided look, camera and cursor read input at present
+   time and the input-to-display time stays within the budget the design
+   states ([the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation)). Whether an unseen world may step less often
    is its authority's choice and is part of the same design: authority is
    placed per world, so where a world steps is a property of that world
    ([the world model](../architecture/worlds.md#the-idea-in-plain-terms)).

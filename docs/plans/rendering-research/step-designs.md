@@ -495,8 +495,8 @@ limits follow from how the check was done:
 1. **Where the tick should run.** The presentation area's first candidate moved
    the tick to its own thread; the scheduling area rejected running it beside
    frame building. The question stays open in
-   [the job system plan](../engine-job-system.md#open-questions): the register's
-   ruling against a frame of latency constrains any answer, and neither area
+   [the job system plan](../engine-job-system.md#open-questions): the register
+   allows a pipelined tick with present-time look input, and neither area
    measured what a world costs the frame thread or what a hand-off costs.
 2. **What limits the cold bake** is unmeasured under the recipe; the three
    disagreeing records are in

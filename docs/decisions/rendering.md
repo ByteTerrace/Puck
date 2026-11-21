@@ -895,8 +895,16 @@ strengths](engine-design.md#each-machine-runs-to-its-own-strengths)), never by
 dropping below the highest quality. An average hides the
 hitch a player feels, so a periodic stall (a camera enumeration, a live
 mutation's apply, a pipeline compile) misses the bar even when the mean is
-fast. A lower tier, a coarser shadow snap, reduced contact detail or a frame
-of latency is never the fix for a missed bar. Counted work explains a change;
+fast. A lower tier, a coarser shadow snap or reduced contact detail is never
+the fix for a missed bar, and neither is latency that hides a slow frame
+(generated frames, a deeper GPU queue). Pipelining the simulation beside the
+frame is a different thing and is allowed (the lead's decision, delegated by
+the owner): engines commonly run their game thread a frame ahead of rendering,
+and a fixed tick rendered by interpolation already sits up to a tick behind.
+The frame presents the latest completed tick, look, camera and cursor read
+input at present time so the view answers the hand at once, and the time from
+input to display is measured on the benchmark route and kept within a budget
+the design states. Counted work explains a change;
 the bar itself is read by timing the worst frame on a quiet machine.
 
 **Worlds are mostly static, and sculpting happens in the editor.** Most of a

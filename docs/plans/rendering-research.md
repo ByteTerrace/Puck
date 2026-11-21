@@ -1060,16 +1060,16 @@ them before it draws cannot hold its bar however short each step is. The
 first wave measures what one more world in frame costs the frame thread,
 and that number is the question's first input.
 
-The register still rules that a frame of latency is never the fix for a
-missed bar ([the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation)),
+The register allows the simulation to run pipelined beside the frame, with
+look, camera and cursor reading input at present time
+([the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation)),
 and Puck's purpose weighs feel as heavily as looks. So the design has to
 say what the player's own input costs under each arrangement it weighs:
 worlds the player is not acting in stepping on other threads, which adds
 nothing to the time from input to display; every world on its own thread
 with the frame reading the latest complete state; or the tick staying where
 it is. Each is stated with its measured time from input to display beside
-today's. An arrangement that adds latency for the world the player acts in
-is the owner's call, because it changes a recorded ruling.
+today's, against the budget the design states.
 
 **What it costs or risks.** The two planned splits may not be where the
 debug world's tick spends its time. One trace shows about a third of it

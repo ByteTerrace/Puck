@@ -539,12 +539,6 @@ Sittings, each the owner's eye on a running World:
 
 Open calls, each with its sides:
 
-- **Latency for a tick on its own thread.** [The CPU frame](#the-cpu-frame)'s
-  first design may show the world the player acts in a tick later than today.
-  The register rules that a frame of latency is never the fix for a missed
-  bar, so if the design adds any, it comes to the owner with the measured
-  input-to-display time on both sides. Nothing is asked until that
-  measurement exists.
 - **The mirror construct.** G16 as recorded: each limb a template over `side`,
   with nothing new in the language. Or the
   [modeling authoring plan](modeling-authoring.md)'s `mirror` block, lowered
@@ -621,7 +615,7 @@ wait behind them.
    so no thread timing can change simulation state (AGENTS.md rule 4), and
    what enforces that; where input is sampled, with the input-to-display time
    measured before and after
-   ([the latency call](#owner-decisions)). Check: `host.frames` shows the
+   ([the pipelining decision](../decisions/rendering.md#the-pipeline-foundation)). Check: `host.frames` shows the
    step outside the frame's interval on the route, and
    `puck test --reproduce` passes at every worker count. At scale: every
    world a client runs steps on its own thread, which is the shape the silo's
