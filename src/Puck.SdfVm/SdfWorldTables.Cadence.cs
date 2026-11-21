@@ -34,11 +34,9 @@ namespace Puck.SdfVm;
 //   - m_screenSurfaceRegion, m_screenMappingRegion : the screen-surface sampling table and the mapping and bound flag
 //                          each screen is drawn from.
 //   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
-// Not covered by any packed span — handled conservatively by forcing a render:
-//   - a sky layer sampling a screen (a panorama, a textured disc): the screen's image updates in place like a slab's, so
-//                          the sky and the composite run every frame (ForcesPass) and the whole view never stands.
-//   - m_programDeclaresScreenSlab : a bound screen's image content updates in place each frame with the same view handle,
-//                          unseen by any packed span, so any declared ScreenSlab force-renders.
+// Not covered by any packed span: a screen's image, which its source updates in place behind the same handle. A pass
+// that samples one folds the image's publication into its signature (SdfWorldPasses.ReadSignatureOf); the whole view,
+// which sees no publication, renders while any screen shows a source (ForcesRender).
 // The pass block's temporal values (jitter, previous view) and the previous transform tables belong to each instance's
 // history, not the tables: SdfWorldPasses.IsUnchanged holds them through SdfTemporalHistory.Stands.
 public sealed partial class SdfWorldTables {
@@ -311,46 +309,19 @@ public sealed partial class SdfWorldTables {
     private static void AddMembers(ref Fnv1aHash hash, Span<byte> block, (int Offset, int Length)[] members) {
         foreach (var member in members) { hash.Add(values: block.Slice(length: member.Length, start: member.Offset)); }
     }
-    /// <summary>Returns whether the frame the tables hold forces every view to render whatever its signature: a
-    /// declared screen slab, whose bound image changes in place, or a sky layer sampling a screen (<see cref="ForcesPass"/>).</summary>
+    /// <summary>Returns whether the frame the tables hold forces every view to render whatever its signature: the cadence
+    /// gate is off, or a view samples another instance's image (a screen showing a source, a sky layer's infinity image),
+    /// which changes in place behind the same handle. A view's passes identify those images by their publications instead
+    /// (<see cref="SdfWorldPasses"/>), which the whole view's signature cannot see.</summary>
     /// <param name="frame">The frame the tables packed.</param>
     /// <returns><see langword="true"/> when no view's latest render may stand for the frame.</returns>
     public bool ForcesRender(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
-        return (ForcesEveryPass(frame: frame) || SkySamplesScreen(sky: frame.Sky));
-    }
-    /// <summary>Returns whether the frame the tables hold forces one pass group to run whatever its signature: every
-    /// group under <see cref="ForcesRender"/>'s whole-view causes, and the sky and the composite while a sky layer (a
-    /// panorama, a textured disc) samples a screen, whose bound image changes in place unseen by any packed span.</summary>
-    /// <param name="frame">The frame the tables packed.</param>
-    /// <param name="part">The fragment pass name.</param>
-    /// <returns><see langword="true"/> when the pass's latest output may not stand for the frame.</returns>
-    public bool ForcesPass(SdfFrame frame, string part) {
-        ArgumentNullException.ThrowIfNull(argument: frame);
-
-        return (
-            ForcesEveryPass(frame: frame) ||
-            ((part is SdfWorldPackage.Parts.Sky or SdfWorldPackage.Parts.Composite) && SkySamplesScreen(sky: frame.Sky))
-        );
-    }
-
-    private bool ForcesEveryPass(SdfFrame frame) => (
-        !frame.EnableCadenceGate ||
-        m_programDeclaresScreenSlab
-    );
-    // Whether any layer of the sky names a screen to sample: a panorama, or a disc with a texture.
-    private static bool SkySamplesScreen(SdfSky sky) {
-        for (var layer = 0; (layer < sky.LayerCount); layer++) {
-            var screen = sky.LayerAt(index: layer).Kind switch {
-                SdfSkyLayerKind.Panorama => sky.Parameters<SdfSkyPanorama>(index: layer).Screen,
-                SdfSkyLayerKind.Disc => sky.Parameters<SdfSkyDisc>(index: layer).Screen,
-                _ => -1,
-            };
-
-            if (screen >= 0) { return true; }
+        if (!frame.EnableCadenceGate || (BoundScreenCount() != 0u)) { return true; }
+        for (var view = 0; (view < frame.Views.Count); view++) {
+            if (frame.Views[view].SkyViews is { Count: > 0 }) { return true; }
         }
-
         return false;
     }
 
@@ -489,20 +460,5 @@ public sealed partial class SdfWorldTables {
         visual.Add(value: skyLayers);
         visual.Add(value: volumes);
         m_visualSignature = visual.Value;
-    }
-
-    // Whether the program's instruction stream declares any shape of the given type — a one-time UploadProgram walk
-    // backing per-program facts (the cadence's ScreenSlab force-render).
-    private static bool ProgramDeclaresShape(SdfProgram program, SdfShapeType shapeType) {
-        foreach (var instruction in program.Instructions) {
-            if (
-                (instruction.Op == SdfOp.ShapeBlend) &&
-                (((SdfShapeType)instruction.Shape) == shapeType)
-            ) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

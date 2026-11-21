@@ -46,10 +46,10 @@ public sealed partial class SdfWorldTables {
             m_watch.Clear();
             if (residency.ScreenSources is { } sources) {
                 foreach (var screen in sources.Screens) {
-                    if (!sources.Emits(screen: screen) || (sources.ReadOf(screen: screen, view: view) is not { } producer) || (reads is null)) { continue; }
-                    var index = reads.IndexOf(producer: producer);
+                    if (!sources.Emits(screen: screen)) { continue; }
+                    var index = residency.ScreenRead(reads: reads, screen: screen, view: view);
 
-                    if (index < 0) { continue; }
+                    if ((index < 0) || (reads is null)) { continue; }
                     var input = reads[index];
 
                     // An image with no known publication, such as a portal's level that has not rendered because its glass

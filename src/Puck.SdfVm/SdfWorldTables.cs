@@ -134,10 +134,6 @@ public sealed partial class SdfWorldTables : IDisposable {
     private IGpuSurfaceUpload? m_glyphAtlasUpload;
     private nint m_glyphAtlasView;
     private int m_liveInstanceMaskWordCount;
-    // Whether the LIVE uploaded program declares any ScreenSlab shape (bound or not), computed once at UploadProgram. A
-    // bound slab's image changes in place under the same view handle, which no packed span the signature hashes sees, so
-    // a view showing one renders every frame (TablesSignature).
-    private bool m_programDeclaresScreenSlab;
     // Monotonic revisions folded into the signature so a change to a resource NOT re-hashed each frame still invalidates
     // it: program revision covers every changed packed program; geometry revision excludes only palette values.
     // Decal revision covers SetScreenDecal/ClearScreenDecal calls that actually change the stored bytes.
