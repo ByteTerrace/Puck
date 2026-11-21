@@ -588,7 +588,7 @@ public static partial class CreationStampEmitter {
 
         return SdfReliefRegion.Lower(
             chamfer: (shape.Chamfer ?? 0f),
-            exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+            exponent: ShapeDocument.EffectiveExponent(exponent: shape.Exponent),
             position: position.ToVector3(),
             rotation: rotation.ToQuaternion(),
             rounding: (shape.Rounding ?? 0f),

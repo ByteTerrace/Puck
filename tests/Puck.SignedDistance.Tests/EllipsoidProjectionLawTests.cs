@@ -50,10 +50,13 @@ public sealed class EllipsoidProjectionLawTests {
 
             foreach (var (px, py, pz) in Points3(rx: rx, ry: ry, rz: rz)) {
                 var point = new FixedVector3(X: Fixed(value: px), Y: Fixed(value: py), Z: Fixed(value: pz));
-                var answer = FixedEllipsoidProjection.Project(point: point, radii: radii);
+                var answer = FixedEllipsoidProjection.Project(foot: out var foot, point: point, radii: radii);
                 var expected = Reference3(px: (double)point.X, py: (double)point.Y, pz: (double)point.Z, rx: rx, ry: ry, rz: rz);
+                var where = $"ellipsoid ({ex}, {ey}, {ez}) at ({(double)point.X}, {(double)point.Y}, {(double)point.Z})";
+                var scale = Math.Max(val1: rx, val2: Math.Max(val1: ry, val2: rz));
 
-                Judge(answer: answer, expected: expected, scale: Math.Max(val1: rx, val2: Math.Max(val1: ry, val2: rz)), failures: failures, where: $"ellipsoid ({ex}, {ey}, {ez}) at ({(double)point.X}, {(double)point.Y}, {(double)point.Z})");
+                Judge(answer: answer, expected: expected, scale: scale, failures: failures, where: where);
+                JudgeFoot(answer: answer, foot: foot, point: point, radii: (rx, ry, rz), scale: scale, failures: failures, where: where);
             }
         }
 
@@ -79,6 +82,19 @@ public sealed class EllipsoidProjectionLawTests {
         if (!((((double)answer.Distance) >= lower) && (((double)answer.Distance) <= upper))) {
             failures.Add(item: $"{where}: scalar {(double)answer.Distance} outside [{lower}, {upper}]");
         }
+    }
+    // The foot lies on the surface, in the point's octant, at the scalar's distance from the point, each to within the
+    // raws its coordinates round to.
+    private static void JudgeFoot(FixedEllipsoidProjection answer, FixedVector3 foot, FixedVector3 point, (double X, double Y, double Z) radii, double scale, List<string> failures, string where) {
+        var (fx, fy, fz) = ((double)foot.X, (double)foot.Y, (double)foot.Z);
+        var surface = Math.Sqrt(d: (((fx * fx) / (radii.X * radii.X)) + ((fy * fy) / (radii.Y * radii.Y)) + ((fz * fz) / (radii.Z * radii.Z))));
+        var least = Math.Min(val1: radii.X, val2: Math.Min(val1: radii.Y, val2: radii.Z));
+        var reach = Math.Sqrt(d: (Math.Pow((fx - (double)point.X), 2.0) + Math.Pow((fy - (double)point.Y), 2.0) + Math.Pow((fz - (double)point.Z), 2.0)));
+        var slack = (FinishedRaws * Raw * Math.Max(val1: 1.0, val2: (scale / 32768.0)));
+
+        if (!(Math.Abs(value: (surface - 1.0)) <= (slack / least))) { failures.Add(item: $"{where}: foot ({fx}, {fy}, {fz}) off the surface by {surface - 1.0}"); }
+        if (((fx * (double)point.X) < 0.0) || ((fy * (double)point.Y) < 0.0) || ((fz * (double)point.Z) < 0.0)) { failures.Add(item: $"{where}: foot ({fx}, {fy}, {fz}) outside the point's octant"); }
+        if (!(Math.Abs(value: (reach - Math.Abs(value: (double)answer.Distance))) <= slack)) { failures.Add(item: $"{where}: foot {reach} from the point, scalar {(double)answer.Distance}"); }
     }
     private static FixedQ4816 Fixed(double value) => FixedQ4816.FromRawBits(value: (long)Math.Round(a: (value * 65536.0)));
 

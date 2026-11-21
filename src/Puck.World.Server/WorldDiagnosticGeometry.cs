@@ -118,9 +118,9 @@ public static class WorldDiagnosticGeometry {
     private static readonly float[] Scales = [1f, 1.5f, 2f];
 
     // Kinds whose SignedDistance is the exact Euclidean distance outside; a lower bound would close a void that is open.
-    private static bool Exact(FixedStaticCollider collider) => (collider.Kind is FixedStaticColliderKind.AxisAlignedBox or
+    private static bool Exact(FixedStaticCollider collider) => ((collider.Kind is FixedStaticColliderKind.AxisAlignedBox or
         FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox or FixedStaticColliderKind.Sphere or
-        FixedStaticColliderKind.Cylinder or FixedStaticColliderKind.HalfSpace);
+        FixedStaticColliderKind.Cylinder or FixedStaticColliderKind.HalfSpace) || collider.MeasuresDistance());
 
     /// <summary>Returns a radius about the collider's centre that contains the whole solid, so a point farther from
     /// the centre than this is outside it and on none of its faces.</summary>
@@ -168,6 +168,9 @@ public static class WorldDiagnosticGeometry {
             ? collider.Rotation.RotateInverse(vector: relative) : relative).ToVector3();
         var e = collider.Extent.ToVector3();
 
+        if (collider.MeasuresDistance()) {
+            return (double)(FixedEllipsoidProjection.Project(point: FixedVector3.FromVector3(value: p), radii: collider.Extent).Distance - collider.Radius);
+        }
         if (collider.Kind == FixedStaticColliderKind.Superellipsoid) {
             var normalized = (Vector3.Abs(value: p) / e);
             var exponent = ((double)collider.Exponent);

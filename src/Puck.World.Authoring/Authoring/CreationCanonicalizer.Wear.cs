@@ -70,7 +70,7 @@ public static partial class CreationCanonicalizer {
                 (paint.Type != SdfSolidPrimitive.Sweep) &&
                 !SdfSolidGeometry.TryValidateScaledPrimitive(
                     chamfer: (paint.Chamfer ?? 0f),
-                    exponent: (paint.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+                    exponent: ShapeDocument.EffectiveExponent(exponent: paint.Exponent),
                     lift: (paint.Lift ?? SdfLift.Extrude),
                     profile: paint.Profile,
                     refusal: out var refusal,

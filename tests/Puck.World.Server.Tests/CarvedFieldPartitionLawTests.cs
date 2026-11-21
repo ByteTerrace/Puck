@@ -26,6 +26,12 @@ public sealed class CarvedFieldPartitionLawTests {
     private static ShapeDocument FarCarve(int id) =>
         Shape(blend: SdfBlendOp.Subtraction, id: id, position: new Vector3(x: 8f, y: 0f, z: 8f), scale: new Vector3(x: 0.5f, y: 0.5f, z: 0.5f), type: SdfSolidPrimitive.Box);
     private static FixedStaticCollider Collider(float margin, params ShapeDocument[] shapes) {
+        var collider = Assert.Single(collection: Colliders(margin: margin, shapes: shapes)).Collider;
+
+        Assert.NotNull(@object: collider.Field?.Partition);
+        return collider;
+    }
+    private static IReadOnlyList<WorldDiagnosticCollider> Colliders(float margin, params ShapeDocument[] shapes) {
         var canonical = CreationCanonicalizer.Canonicalize(document: new CreationDocument(
             Schema: CreationDocument.CurrentSchema, Name: "carved", Palette: null, Shapes: shapes, Frames: null, Noise: null), source: "carved");
         var definition = Fixtures.BuildGradientUpDocument(gradientUp: false) with {
@@ -33,10 +39,8 @@ public sealed class CarvedFieldPartitionLawTests {
             PlacementRowsRaw = [new WorldPlacement(Id: "carved", PrototypeId: "carved", Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f,
                 Solid: new WorldSolid(Margin: margin))],
         };
-        var collider = Assert.Single(collection: WorldColliderSet.Build(definition: definition).DiagnosticColliders).Collider;
 
-        Assert.NotNull(@object: collider.Field?.Partition);
-        return collider;
+        return WorldColliderSet.Build(definition: definition).DiagnosticColliders;
     }
     private static FixedBodyColliderVolume Ball(double radius) => new(Center: FixedVector3.Zero, Endpoint: FixedVector3.Zero,
         HalfExtents: FixedVector3.Zero, Kind: FixedBodyColliderKind.Sphere, Radius: FixedQ4816.FromDouble(value: radius), Rotation: FixedQuaternion.Identity);
@@ -128,5 +132,43 @@ public sealed class CarvedFieldPartitionLawTests {
         Assert.True(condition: (push.Normal.Y > FixedQ4816.FromDouble(value: 0.99d)), userMessage: $"normal {push.Normal}");
         _ = Agree(centre: V(x: 4.2d, y: 0.2d, z: 0d), collider: collider, radius: 0.05d);
         _ = Agree(centre: V(x: 2.9d, y: 0.2d, z: 2.9d), collider: collider, radius: 0.05d);
+    }
+
+    // F4: a spheroid union piece, an Ellipsoid of radii [1.5, 0.6, 1.5] standing at y = 1.2 under a 0.05 m margin, is its
+    // exact analytic collider: the partition narrows a ball beside it to that piece alone, and the piece's push, measured
+    // through the ellipse projection, is the composed field's at every pose round it, off its principal axes included.
+    [Fact]
+    public void ASpheroidPieceNarrowsToItsMeasuredEllipsoid() {
+        var collider = Collider(margin: 0.05f, Ground, FarCarve(id: 1), Shape(id: 2, position: new Vector3(x: 0f, y: 1.2f, z: 0f),
+            scale: new Vector3(x: 1.5f, y: 0.6f, z: 1.5f), type: SdfSolidPrimitive.Ellipsoid));
+        (double X, double Y, double Z)[] poses = [(0d, 2.0d, 0d), (1.75d, 1.2d, 0d), (1.1d, 1.75d, 0.6d), (-0.9d, 1.6d, -0.9d), (0.3d, 1.98d, 0.2d)];
+
+        foreach (var (x, y, z) in poses) {
+            var centre = V(x: x, y: y, z: z);
+            var volume = Ball(radius: 0.2d);
+            var region = FixedColliderBounds.WorldBounds(orientation: FixedQuaternion.Identity, position: centre, volume: in volume);
+
+            var narrowed = collider.Field!.Partition!.Narrow(collider: out var piece, region: region.Grow(margin: (Skin + FixedQ4816.FromDouble(value: (1d / 64d)))));
+
+            Assert.Equal(expected: FixedFieldRegion.Base, actual: narrowed);
+            Assert.Equal(expected: FixedStaticColliderKind.Superellipsoid, actual: piece.Kind);
+            Assert.True(condition: Agree(centre: centre, collider: collider, radius: 0.2d).Pushes, userMessage: $"no push at ({x}, {y}, {z})");
+        }
+    }
+
+    // An Ellipsoid in an all-union creation collides as its ellipsoid, never its box: a ball over its box's corner, outside
+    // the ellipsoid, is clear, and a ball beside its equator is pushed straight off it.
+    [Fact]
+    public void AnUncarvedEllipsoidCollidesAsItsEllipsoid() {
+        var collider = Assert.Single(collection: Colliders(margin: 0f, Shape(id: 0, position: new Vector3(x: 0f, y: 1f, z: 0f),
+            scale: new Vector3(x: 2f, y: 0.5f, z: 2f), type: SdfSolidPrimitive.Ellipsoid))).Collider;
+        var volume = Ball(radius: 0.1d);
+
+        Assert.Equal(expected: FixedStaticColliderKind.Superellipsoid, actual: collider.Kind);
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 2), actual: collider.Exponent);
+        Assert.False(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 1.6d, y: 1d, z: 1.6d), push: out _, skin: Skin, uncertain: out _, volume: in volume));
+        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 2.1d, y: 1d, z: 0d), push: out var push, skin: Skin, uncertain: out _, volume: in volume));
+        Assert.True(condition: (push.Normal.X > FixedQ4816.FromDouble(value: 0.9999d)), userMessage: $"normal {push.Normal}");
+        Assert.True(condition: (FixedQ4816.Abs(value: (push.Penetration - FixedQ4816.FromDouble(value: 0.05d))) <= FixedQ4816.FromRawBits(value: 4L)), userMessage: $"penetration {(double)push.Penetration}");
     }
 }
