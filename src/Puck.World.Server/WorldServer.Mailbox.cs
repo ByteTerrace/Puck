@@ -34,6 +34,7 @@ public sealed partial class WorldServer {
         );
     }
     internal void DrainMailbox() {
+        using var prepare = PrepareArrivals();
         // A crossing record the log has answered settles here, at the tick boundary, before any reply that may wait on it;
         // a retiring activation drains here too, so the settle takes the gate itself.
         using (EnterAtTickBoundary()) {

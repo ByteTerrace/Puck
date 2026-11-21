@@ -65,9 +65,6 @@ public sealed partial class WorldPopulation {
     /// <returns>The 0-based entity index.</returns>
     public static int EntityFromDisplay(int number) => (number - 1);
 
-    /// <summary>Gets the currently configured adjacency resolver — see <see cref="ConfigureAdjacencies"/>, the
-    /// one writer.</summary>
-    public IWorldAdjacencySource? Adjacencies => m_adjacencies;
     /// <summary>The authored entity-table capacity allocated at world load.</summary>
     public int Capacity => m_entries.Length;
     /// <summary>The world's compiled channel table (name→ordinal, per-ordinal shape/threshold) — the co-driving
@@ -203,7 +200,7 @@ public sealed partial class WorldPopulation {
 
     private int m_activeCarryCount;
     private CarryNeighbourhood? m_carryNeighbourhood;
-    private IWorldAdjacencySource? m_adjacencies;
+    private string? m_adjacencyAuthority;
     private WorldDefinition? m_adjacencyDefinition;
     // The world contact field derived from the definition's solid geometry and collision tuning. Built by
     // CompileFixedTables and handed to every live body, so a live solid-geometry or collision-tuning edit takes

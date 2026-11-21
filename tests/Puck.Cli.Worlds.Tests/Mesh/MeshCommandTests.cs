@@ -291,16 +291,10 @@ public sealed class MeshCommandTests {
         inert.SubmitIntent(submission: default);
         inert.SubmitSession(completion: _ => answered = true, request: default!);
         inert.SubmitCue(eventToken: "cue", site: null);
-        inert.BeginTick(tick: 1UL);
 
         Assert.False(condition: answered);
         Assert.Equal(expected: 0L, actual: inert.SubmitEnvelope(payload: default!, principal: default));
-        Assert.Equal(expected: WorldBodyContactMode.Solid, actual: inert.LocalBodyContact(index: 0));
-        Assert.Equal(expected: default, actual: inert.LocalEntityAddress(index: 0));
-        Assert.False(condition: inert.TryResolve(adjacencyName: "east", neighbour: out var neighbour));
-        Assert.Null(@object: neighbour);
         Assert.Empty(collection: inert.Visuals());
-        Assert.False(condition: inert.TryLocalDepartedFrom(departedFrom: out _, index: 0));
     }
 
     private static (int ExitCode, bool Named) Refused((int ExitCode, string Output) output, string text) =>

@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using System.Numerics;
 using Puck.Maths;
 using Puck.Physics;
 using Puck.World.Client;
@@ -5,29 +7,15 @@ using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>
-/// The composition root's <see cref="IWorldAdjacencySource"/>: resolves an authored adjacency over
-/// the same wire-shaped seam a picture-frame session screen already observes a destination through
-/// (<see cref="WorldInstanceHost.TryResolveObservedDestination"/> then <see cref="WorldServer.AttachSink(Protocol.IClientSink)"/>) — data a
-/// real network peer could equally have delivered, never a same-process shortcut into the neighbour's live server
-/// objects. One instance-bound source is consumed by both that authority's contact resolution
-/// (<see cref="WorldServer.Adjacencies"/>) and its boot-or-away render composition
-/// (<c>WorldAdjacencySceneEmitter</c>), so a body's ground and what it sees cannot disagree.
-/// </summary>
-/// <remarks>One <see cref="Handle"/> per adjacency row, held for the life of this
-/// instance — an observation lease, exactly like a session screen's own, never released until this type is disposed.
-/// Each handle lazily (re)resolves the counterpart frame and (re)compiles a <see cref="WorldSolidField"/> over the
-/// mirrored definition only when the mirror's own delivery revision moves, mirroring
-/// <see cref="WorldServer"/>'s own revision-gated <c>SwapSolids</c>.</remarks>
+/// <summary>Resolves adjacency observations on the host and publishes their frozen projections.</summary>
 public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
     private readonly WorldInstanceHost m_instances;
     private readonly string m_sourceInstanceName;
 
-    private bool m_tickProjectionsCurrent;
-
     private readonly Dictionary<string, Handle> m_handles = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<(string Name, string Destination, string Counterpart), LinkAuthority> m_linkAuthorities = [];
-    private WorldAdjacencyProjection[] m_tickProjections = [];
+    internal bool HasTickImage { get; private set; }
+    private IReadOnlyList<WorldAdjacencyProjection> m_published = ImmutableArray<WorldAdjacencyProjection>.Empty;
 
     /// <summary>Initializes the source.</summary>
     /// <param name="instances">The process's running world instances — the one observation door an adjacency's
@@ -42,83 +30,56 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         m_sourceInstanceName = sourceInstanceName;
     }
 
-    private WorldAdjacencyProjection[] BuildProjections() {
-        if (
-            !m_instances.TryGet(
-            instance: out var source,
-            name: m_sourceInstanceName
-        ) ||
-            (source is null)
-        ) {
-            return [];
-        }
-
-        var definition = source.Server.Configuration;
-
-        if (definition.Adjacencies is not { Count: > 0 }) {
-            return [];
-        }
-        var rows = (definition.Adjacencies ?? []).Where(predicate: static row => (row is not null)).ToArray();
-        var visuals = new List<WorldAdjacencyProjection>(capacity: (rows.Length + ((rows.Length * (rows.Length - 1)) / 2)));
-        var direct = new Dictionary<string, IWorldAdjacencyNeighbour>(comparer: StringComparer.Ordinal);
+    private ImmutableArray<WorldAdjacencyProjection> BuildProjections(WorldInstance source, WorldDefinition definition,
+        ImmutableHashSet<Protocol.WorldEntityAddress> departed, bool pin) {
+        var rows = definition.Adjacencies!;
+        var visuals = ImmutableArray.CreateBuilder<WorldAdjacencyProjection>();
+        var direct = new Dictionary<string, WorldAdjacencyProjection>(StringComparer.Ordinal);
 
         foreach (var row in rows) {
-            if (
-                TryResolve(
-                adjacencyName: row!.Name.Value,
-                neighbour: out var neighbour
-            ) &&
-                (neighbour is not null) &&
-                WorldAdjacencyPolicy.TryDeriveOverlap(
-                local: definition,
-                neighbour: neighbour.Definition,
-                depth: out var depth,
-                reason: out _
-            )
-            ) {
-                var frame = row.Boundary.CompileFrame();
-
-                depth = ProjectionOverlapDepth(adjacency: row, derived: depth);
-
-                direct[row.Name.Value] = neighbour;
-                visuals.Add(item: new WorldAdjacencyProjection(
-                    Name: row.Name.Value,
-                    Neighbour: neighbour,
-                    Path: [new WorldAdjacencyFramePair(
-                            Neighbour: neighbour.CounterpartFrame,
-                            Source: frame,
-                            OverlapDepth: depth,
-                            OwnershipThreshold: WorldAdjacencyPolicy.OwnershipFace(adjacency: row, definition: definition).Threshold
-                        )],
-                    OverlapDepth: depth,
-                    Direct: true
-                ));
+            if (row is not { Boundary: { } boundary }) { continue; }
+            var frame = boundary.CompileFrame();
+            if (Resolve(source, row.Name.Value, row.Destination, row.Counterpart, frame,
+                definition, departed, pin) is not { } neighbour ||
+                !WorldAdjacencyPolicy.TryDeriveOverlap(local: definition, neighbour: neighbour.Definition, depth: out var depth, reason: out _)) {
+                continue;
             }
+
+            depth = ProjectionOverlapDepth(adjacency: row, derived: depth);
+            var projection = new WorldAdjacencyProjection(
+                Name: row.Name.Value,
+                Neighbour: neighbour,
+                Path: ImmutableArray.Create(new WorldAdjacencyFramePair(
+                    Neighbour: neighbour.CounterpartFrame,
+                    Source: frame,
+                    OverlapDepth: depth,
+                    OwnershipThreshold: WorldAdjacencyPolicy.OwnershipFace(adjacency: row, definition: definition).Threshold
+                )),
+                OverlapDepth: depth,
+                Direct: true
+            );
+            direct.Add(row.Name.Value, projection);
+            visuals.Add(projection);
         }
 
         // A four-way corner has no diagonal ownership edge, but it DOES have a diagonal visibility/interest peer.
         // Derive it only when two different direct neighbours independently lead to the same next document. This
         // makes the topology itself the proof and prevents an arbitrary two-hop chain from widening interest.
-        for (var leftIndex = 0; (leftIndex < rows.Length); leftIndex++) {
+        for (var leftIndex = 0; (leftIndex < rows.Count); leftIndex++) {
             var leftRow = rows[leftIndex]!;
 
-            if (!direct.TryGetValue(
-                key: leftRow.Name.Value,
-                value: out var leftNeighbour
-            )) { continue; }
+            if (leftRow is null || !direct.TryGetValue(leftRow.Name.Value, out var left)) { continue; }
+            var leftNeighbour = left.Neighbour;
 
-            for (var rightIndex = (leftIndex + 1); (rightIndex < rows.Length); rightIndex++) {
+            for (var rightIndex = (leftIndex + 1); (rightIndex < rows.Count); rightIndex++) {
                 var rightRow = rows[rightIndex]!;
 
                 if (
-                    !direct.TryGetValue(
-                    key: rightRow.Name.Value,
-                    value: out var rightNeighbour
-                ) ||
+                    rightRow is null || !direct.TryGetValue(rightRow.Name.Value, out var right) ||
                     !WorldAdjacencyPolicy.TrySharedCorner(
                     left: WorldAdjacencyDocumentView.FromDefinition(definition: leftNeighbour.Definition),
                     leftBack: leftRow.Counterpart,
-                    right: WorldAdjacencyDocumentView.FromDefinition(definition: rightNeighbour.Definition),
+                    right: WorldAdjacencyDocumentView.FromDefinition(definition: right.Neighbour.Definition),
                     rightBack: rightRow.Counterpart,
                     document: out var cornerDocument,
                     leftEdge: out var leftEdge,
@@ -135,18 +96,11 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
 
                 if (
                     (cornerDestination is null) ||
-                    !TryResolveCorner(
-                    source: source,
-                    key: $"corner:{leftRow.Name.Value}+{rightRow.Name.Value}",
-                    destinationName: cornerDestination,
-                    counterpart: leftEdge.Counterpart,
-                    intermediate: leftNeighbour,
-                    intermediateEdge: leftEdge,
-                    handle: out var corner
-                ) ||
+                    Resolve(source, $"corner:{leftRow.Name.Value}+{rightRow.Name.Value}", cornerDestination,
+                    leftEdge.Counterpart, leftEdge.Boundary.CompileFrame(), leftNeighbour.Definition, departed, pin) is not { } corner ||
                     !WorldAdjacencyPolicy.TryDeriveOverlap(
                     local: leftNeighbour.Definition,
-                    neighbour: corner!.Definition,
+                    neighbour: corner.Definition,
                     depth: out var cornerDepth,
                     reason: out _
                 )
@@ -165,7 +119,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 visuals.Add(item: new WorldAdjacencyProjection(
                     Name: $"corner:{leftRow.Name.Value}+{rightRow.Name.Value}",
                     Neighbour: corner,
-                    Path: [
+                    Path: ImmutableArray.Create(
                         new WorldAdjacencyFramePair(
                             Neighbour: corner.CounterpartFrame,
                             Source: intermediateFrame,
@@ -175,279 +129,103 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                         new WorldAdjacencyFramePair(
                             Neighbour: leftNeighbour.CounterpartFrame,
                             Source: localFrame,
-                            OverlapDepth: visuals.First(predicate: projection => (projection.Direct && string.Equals(
-                                a: projection.Name,
-                                b: leftRow.Name.Value,
-                                comparisonType: StringComparison.Ordinal
-                            ))).OverlapDepth,
+                            OverlapDepth: left.OverlapDepth,
                             OwnershipThreshold: WorldAdjacencyPolicy.OwnershipFace(adjacency: leftRow, definition: definition).Threshold
-                        ),
-                    ],
+                        )
+                    ),
                     OverlapDepth: cornerDepth,
                     Direct: false
                 ));
             }
         }
 
-        return visuals.ToArray();
+        return visuals.ToImmutable();
     }
     private static FixedQ4816 ProjectionOverlapDepth(FixedQ4816 derived, WorldAdjacency adjacency) => FixedQ4816.Max(
         x: derived,
         y: FixedQ4816.FromDouble(value: adjacency.Hysteresis)
     );
-    private bool TryResolveCorner(WorldInstance source, string key, string destinationName, string counterpart, IWorldAdjacencyNeighbour intermediate, WorldAdjacencyEdgeView intermediateEdge, out IWorldAdjacencyNeighbour? handle) {
-        handle = null;
-        if (
-            !m_instances.TryResolveObservedProjection(
-            attach: out var attach,
-            definition: out var observedDefinition,
-            destinationName: destinationName,
-            generationId: out var observedGenerationId,
-            instanceName: out var observedInstanceName,
-            reason: out _,
-            source: source
-        ) ||
-            (observedDefinition is null) ||
-            (attach is null)
-        ) {
-            return false;
+    private PinnedNeighbour? Resolve(WorldInstance source, string key, string destination, string counterpart,
+        WorldFaceFrame sourceFrame, WorldDefinition definition, ImmutableHashSet<Protocol.WorldEntityAddress> departed, bool pin) {
+        var handle = ResolveHandle(source, key, destination, counterpart, sourceFrame);
+        return (handle is null) ? null : handle.Read(definition, departed, pin);
+    }
+
+    private Handle? ResolveHandle(WorldInstance source, string key, string destination, string counterpart, WorldFaceFrame sourceFrame) {
+        if (!m_instances.TryResolveObservedProjection(source, destination, out var instanceName, out var generation,
+            out var definition, out var attach, out _) || definition is null || attach is null) {
+            return null;
         }
 
-        var identity = new HandleIdentity(
-            Destination: destinationName,
-            InstanceName: observedInstanceName,
-            GenerationId: observedGenerationId,
-            Counterpart: counterpart,
-            SourceFrame: intermediateEdge.Boundary.CompileFrame()
-        );
-
-        if (
-            m_handles.TryGetValue(
-            key: key,
-            value: out var existing
-        ) &&
-            (existing.Identity != identity)
-        ) {
-            existing.Dispose();
-            _ = m_handles.Remove(key: key);
-            existing = null;
+        var identity = new HandleIdentity(destination, instanceName, generation, counterpart, sourceFrame);
+        if (m_handles.TryGetValue(key, out var handle)) {
+            if (handle.Identity == identity) { return handle; }
+            handle.Dispose();
+            m_handles.Remove(key);
         }
-        if (existing is null) {
-            var mirror = new WorldSessionMirror(placeholder: observedDefinition);
 
-            existing = new Handle(
-                authority: LinkAuthorityFor(key, destinationName, counterpart),
-                identity: identity,
-                mirror: mirror,
-                lease: attach(mirror),
-                sourceDefinition: () => intermediate.Definition,
-                sourceDescription: $"{m_sourceInstanceName}/{key}",
-                narrationHub: m_instances.Narration
-            );
-            m_handles[key] = existing;
+        var mirror = new WorldSessionMirror(placeholder: definition);
+        handle = new Handle(identity, LinkAuthorityFor(key, destination, counterpart), mirror, attach(mirror), m_instances.Narration, $"{m_sourceInstanceName}/{key}");
+        m_handles.Add(key, handle);
+        return handle;
+    }
+
+    /// <summary>Checks whether every reachable direct neighbour has delivered its first snapshot to a held row.</summary>
+    public bool MirrorsPrimed() {
+        if (!m_instances.TryGet(instance: out var source, name: m_sourceInstanceName) || source is null) { return true; }
+        foreach (var row in source.Server.Configuration.Adjacencies ?? []) {
+            if (ResolveHandle(source, row.Name.Value, row.Destination, row.Counterpart, row.Boundary.CompileFrame()) is { } handle &&
+                handle.Read(source.Server.Configuration, ImmutableHashSet<Protocol.WorldEntityAddress>.Empty, pin: true) is { SnapshotRevision: < 1 }) {
+                return false;
+            }
         }
-        return existing.TryResolve(neighbour: out handle);
+        return true;
+    }
+
+    /// <summary>Closes the adjacency input at a host boundary and publishes the same record for presentation.</summary>
+    public ImmutableArray<WorldAdjacencyProjection> Prepare() {
+        HasTickImage = true;
+        return Publish();
+    }
+
+    internal void PreparePresentation() => Publish();
+
+    private ImmutableArray<WorldAdjacencyProjection> Publish() {
+        var projections = ImmutableArray<WorldAdjacencyProjection>.Empty;
+        if (m_instances.TryGet(instance: out var source, name: m_sourceInstanceName) && source?.Server.Configuration is { Adjacencies.Count: > 0 } definition) {
+            var population = source.Server.Population;
+            ImmutableHashSet<Protocol.WorldEntityAddress>.Builder? departed = null;
+            for (var index = 0; index < population.Capacity; index++) {
+                if (population.TryDepartedFrom(index, out var address)) {
+                    (departed ??= ImmutableHashSet.CreateBuilder<Protocol.WorldEntityAddress>()).Add(address);
+                }
+            }
+
+            // Discover against the previous image first to keep the resolver's generation order across live edits.
+            // Sample the newly eligible images in the second pass, including corners first reachable in that pass.
+            _ = BuildProjections(source, definition, ImmutableHashSet<Protocol.WorldEntityAddress>.Empty, pin: false);
+            projections = BuildProjections(source, definition,
+                departed?.ToImmutable() ?? ImmutableHashSet<Protocol.WorldEntityAddress>.Empty, pin: true);
+        }
+
+        Volatile.Write(ref m_published, projections);
+        return projections;
     }
 
     /// <inheritdoc/>
-    public void BeginTick(ulong tick) {
-        if (
-            !m_instances.TryGet(
-            instance: out var source,
-            name: m_sourceInstanceName
-        ) ||
-            (source is null)
-        ) {
-            m_tickProjections = [];
-            m_tickProjectionsCurrent = true;
-            return;
-        }
+    public IReadOnlyList<WorldAdjacencyProjection> Visuals() => Volatile.Read(ref m_published);
 
-        // A derived corner handle only exists once the two-hop walk has found it, so discovery runs first and its
-        // result is discarded: it resolved against handles not yet pinned for this tick. Pinning every handle the
-        // walk left in the table and building again is what makes the frozen array's geometry and the pinned entity
-        // image describe the same delivered revision. Contact may ask once per body; returning that frozen array
-        // avoids rebuilding the two-hop graph for every body while keeping the render on the same image.
-        _ = BuildProjections();
-
-        foreach (var handle in m_handles.Values) {
-            handle.Pin(sourceTick: tick);
-        }
-
-        // A neighbour's delivered image can predate a handoff this authority has already committed, so a traveler
-        // that has just arrived is still in it, at the slot it departed from. That entity is the arrival seen
-        // before its handoff, not a second body: contact would shove the arrival out of itself and the render would
-        // draw it twice. A generation-addressed slot names one occupant for all time, so the match is exact and
-        // needs no window.
-        var population = source.Server.Population;
-
-        for (var index = 0; (index < population.Capacity); index++) {
-            if (!population.TryDepartedFrom(
-                departedFrom: out var departedFrom,
-                index: index
-            )) {
-                continue;
-            }
-
-            foreach (var handle in m_handles.Values) {
-                handle.MaskDeparted(address: in departedFrom);
-            }
-        }
-
-        m_tickProjections = BuildProjections();
-        m_tickProjectionsCurrent = true;
-    }
     /// <inheritdoc/>
     public void Dispose() {
         foreach (var handle in m_handles.Values) {
             handle.Dispose();
         }
-
         m_handles.Clear();
         m_linkAuthorities.Clear();
     }
-    /// <inheritdoc/>
-    public WorldBodyContactMode LocalBodyContact(int index) {
-        if (
-            !m_instances.TryGet(
-            instance: out var source,
-            name: m_sourceInstanceName
-        ) ||
-            (source is null)
-        ) {
-            return WorldBodyContactMode.Overlap;
-        }
 
-        return source.Server.Population.BodyContact(index: index);
-    }
-    /// <inheritdoc/>
-    public Protocol.WorldEntityAddress LocalEntityAddress(int index) {
-        if (
-            !m_instances.TryGet(
-            instance: out var source,
-            name: m_sourceInstanceName
-        ) ||
-            (source is null)
-        ) {
-            return new Protocol.WorldEntityAddress(
-                Authority: m_sourceInstanceName,
-                Generation: 0,
-                Index: index
-            );
-        }
-
-        return new Protocol.WorldEntityAddress(
-            Authority: source.Server.AuthorityIdentity,
-            Index: index,
-            Generation: source.Server.Population.Generation(index: index)
-        );
-    }
-    /// <inheritdoc/>
-    public bool TryLocalDepartedFrom(int index, out Protocol.WorldEntityAddress departedFrom) {
-        departedFrom = default;
-
-        return (
-            m_instances.TryGet(
-                instance: out var source,
-                name: m_sourceInstanceName
-            ) &&
-            (source is not null) &&
-            source.Server.Population.TryDepartedFrom(
-                departedFrom: out departedFrom,
-                index: index
-            )
-        );
-    }
-    /// <inheritdoc/>
-    public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
-        neighbour = null;
-
-        if (
-            !m_instances.TryGet(
-            instance: out var source,
-            name: m_sourceInstanceName
-        ) ||
-            (source is null)
-        ) {
-            return false;
-        }
-
-        var definition = source.Server.Configuration;
-
-        if (WorldDefinitionRows.FindAdjacency(
-            adjacencies: definition.Adjacencies,
-            name: adjacencyName
-        ) is not { Boundary: { } boundary } adjacency) {
-            return false;
-        }
-
-        if (
-            !m_instances.TryResolveObservedProjection(
-            source: source,
-            destinationName: adjacency.Destination,
-            instanceName: out var observedInstanceName,
-            generationId: out var observedGenerationId,
-            definition: out var observedDefinition,
-            attach: out var attach,
-            reason: out _
-        ) ||
-            (observedDefinition is null) ||
-            (attach is null)
-        ) {
-            return false;
-        }
-
-        var identity = new HandleIdentity(
-            Destination: adjacency.Destination,
-            InstanceName: observedInstanceName,
-            GenerationId: observedGenerationId,
-            Counterpart: adjacency.Counterpart,
-            SourceFrame: boundary.CompileFrame()
-        );
-
-        if (
-            m_handles.TryGetValue(
-            key: adjacencyName,
-            value: out var handle
-        ) &&
-            (handle.Identity != identity)
-        ) {
-            handle.Dispose();
-            _ = m_handles.Remove(key: adjacencyName);
-            handle = null;
-        }
-
-        if (handle is null) {
-
-            var mirror = new WorldSessionMirror(placeholder: observedDefinition);
-            var lease = attach(mirror);
-
-            handle = new Handle(
-                authority: LinkAuthorityFor(adjacencyName, adjacency.Destination, adjacency.Counterpart),
-                identity: identity,
-                mirror: mirror,
-                lease: lease,
-                sourceDefinition: () => source.Server.Configuration,
-                sourceDescription: $"{m_sourceInstanceName}/{adjacencyName}",
-                narrationHub: m_instances.Narration
-            );
-            m_handles[adjacencyName] = handle;
-        }
-
-        return handle.TryResolve(neighbour: out neighbour);
-    }
-    /// <inheritdoc/>
-    public IReadOnlyList<WorldAdjacencyProjection> Visuals() {
-        if (m_tickProjectionsCurrent) {
-            return m_tickProjections;
-        }
-
-        return BuildProjections();
-    }
-
-    // One adjacency's held observation: the mirror (kept live for the row's lifetime), the attach lease, and the
-    // counterpart frame/solid field cache — refreshed only when the mirror's own delivery revision moves.
     private readonly record struct HandleIdentity(string Destination, string InstanceName, ulong GenerationId, string Counterpart, WorldFaceFrame SourceFrame);
+
     private LinkAuthority LinkAuthorityFor(string name, string destination, string counterpart) {
         var key = (name, destination, counterpart);
         if (!m_linkAuthorities.TryGetValue(key, out var authority)) {
@@ -456,6 +234,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         }
         return authority;
     }
+
     // Observation generations and transient resolution failures do not replace the authored link's identity.
     private sealed class LinkAuthority {
         public string Value { get; private set; } = string.Empty;
@@ -464,263 +243,117 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             return Value.Length > 0;
         }
     }
-    private sealed class Handle(HandleIdentity identity, LinkAuthority authority, WorldSessionMirror mirror, IDisposable lease, Func<WorldDefinition> sourceDefinition, string sourceDescription, WorldOutputHub narrationHub) : IWorldAdjacencyNeighbourContact, IDisposable {
-        private readonly bool[] m_active = new bool[WorldBodiesLimits.CapacityCeiling];
-        private readonly Protocol.WorldEntityAddress[] m_addresses = new Protocol.WorldEntityAddress[WorldBodiesLimits.CapacityCeiling];
-        private readonly int[] m_poseEpochs = new int[WorldBodiesLimits.CapacityCeiling];
-        private readonly string?[] m_placementIds = new string?[WorldBodiesLimits.CapacityCeiling];
-        private readonly System.Numerics.Vector3[] m_previousPositions = new System.Numerics.Vector3[WorldBodiesLimits.CapacityCeiling];
-        private readonly System.Numerics.Quaternion[] m_previousOrientations = new System.Numerics.Quaternion[WorldBodiesLimits.CapacityCeiling];
-        private readonly System.Numerics.Vector3[] m_currentPositions = new System.Numerics.Vector3[WorldBodiesLimits.CapacityCeiling];
-        private readonly System.Numerics.Quaternion[] m_currentOrientations = new System.Numerics.Quaternion[WorldBodiesLimits.CapacityCeiling];
-        private readonly System.Numerics.Vector3[] m_colors = new System.Numerics.Vector3[WorldBodiesLimits.CapacityCeiling];
-        private readonly WorldLook[] m_looks = new WorldLook[WorldBodiesLimits.CapacityCeiling];
-        private readonly byte[] m_catalogRigs = new byte[WorldBodiesLimits.CapacityCeiling];
-        private readonly FixedWorldCollider?[] m_colliders = new FixedWorldCollider?[WorldBodiesLimits.CapacityCeiling];
-        private readonly WorldBodyContactMode[] m_bodyContacts = new WorldBodyContactMode[WorldBodiesLimits.CapacityCeiling];
-        private int m_builtRevision = -1;
-        private string m_fieldReason = string.Empty;
-        private string m_pinnedFieldReason = string.Empty;
-
+    private sealed class Handle(HandleIdentity identity, LinkAuthority authority, WorldSessionMirror mirror, IDisposable lease, WorldOutputHub narrationHub, string sourceDescription) : IDisposable {
         public HandleIdentity Identity { get; } = identity;
-
-        private WorldDefinition? m_builtSourceDefinition;
-        private WorldSolidField? m_field;
+        private WorldSessionMirror.BodyImage? m_image;
+        private PinnedNeighbour? m_pinned;
+        private WorldDefinition? m_builtSource;
+        private WorldDefinition? m_builtDefinition;
         private WorldFaceFrame m_frame;
         private bool m_frameResolved;
-        private bool m_hasPin;
-        private long m_pinnedArrivalTimestamp;
-        private WorldDefinition? m_pinnedDefinition;
-        private WorldSolidField? m_pinnedField;
-        private WorldFaceFrame m_pinnedFrame;
-        private int m_pinnedSnapshotRevision;
-        private ulong m_pinnedSnapshotTick;
-        private float m_pinnedStepSeconds;
+        private WorldSolidField? m_field;
+        private string m_fieldReason = string.Empty;
 
-        public string Authority => authority.Value;
-        public WorldFaceFrame CounterpartFrame => (m_hasPin
-            ? m_pinnedFrame
-            : m_frame
-        );
-        public WorldDefinition Definition => (m_pinnedDefinition ?? mirror.Definition);
-        public int DefinitionRevision => mirror.DefinitionRevision;
-        public int EntityCapacity => WorldBodiesLimits.CapacityCeiling;
-        public float InterpolationAlpha => (m_hasPin
-            ? WorldSessionMirror.ResolveInterpolationAlpha(
-                arrivalTimestamp: m_pinnedArrivalTimestamp,
-                stepSeconds: m_pinnedStepSeconds
-            )
-            : mirror.InterpolationAlpha
-        );
-        public int SnapshotRevision => (m_hasPin
-            ? m_pinnedSnapshotRevision
-            : mirror.SnapshotRevision
-        );
-        public ulong SnapshotTick => (m_hasPin
-            ? m_pinnedSnapshotTick
-            : mirror.Tick
-        );
+        public PinnedNeighbour? Read(WorldDefinition source, ImmutableHashSet<Protocol.WorldEntityAddress> departed, bool pin) {
+            if (!pin && m_pinned is { } previous) { return previous; }
 
-        // The compiled field is a function of BOTH documents: the mirrored one supplies the geometry, and the source
-        // one fixes the overlap depth the selection is taken at. A document is swapped whole, so reference identity
-        // is its revision.
-        private void Refresh() {
-            var source = sourceDefinition();
+            var image = mirror.CaptureBodyImage(m_image);
+            if (!ReferenceEquals(source, m_builtSource) || !ReferenceEquals(image.Definition, m_builtDefinition)) {
+                Refresh(source, image.Definition);
+                m_builtSource = source;
+                m_builtDefinition = image.Definition;
+            }
 
-            if (
-                (m_builtRevision != mirror.DefinitionRevision) ||
-                !ReferenceEquals(
-                objA: m_builtSourceDefinition,
-                objB: source
-            )
-            ) {
-                if (WorldDefinitionRows.FindAdjacency(
-                    adjacencies: mirror.Definition.Adjacencies,
-                    name: Identity.Counterpart
-                ) is { Boundary: { } boundary }) {
-                    m_frame = boundary.CompileFrame();
-                    m_frameResolved = true;
+            m_image = image;
+            m_pinned = (m_frameResolved && authority.Settle(image.Authority))
+                ? new PinnedNeighbour(authority.Value, image, m_frame, m_field, m_fieldReason, departed)
+                : null;
+            return m_pinned;
+        }
 
-                    var hasDepth = WorldAdjacencyPolicy.TryDeriveOverlap(
-                        local: source,
-                        neighbour: mirror.Definition,
-                        depth: out var depth,
-                        reason: out m_fieldReason
-                    );
-                    var selection = (hasDepth
-                        ? WorldAdjacencyGeometry.Select(
-                            definition: mirror.Definition,
-                            frame: m_frame,
-                            overlapDepth: depth
-                        )
-                        : new WorldAdjacencyGeometry.Selection(
-                            Placements: [],
-                            Truncated: false
-                        )
-                    );
-                    var collisionDefinition = mirror.Definition with { PlacementRowsRaw = selection.Placements };
+        private void Refresh(WorldDefinition source, WorldDefinition definition) {
+            if (WorldDefinitionRows.FindAdjacency(
+                adjacencies: definition.Adjacencies,
+                name: Identity.Counterpart
+            ) is { Boundary: { } boundary }) {
+                m_frame = boundary.CompileFrame();
+                m_frameResolved = true;
 
-                    m_field = (WorldSolidField.TryBuild(
-                        built: out var built,
-                        definition: collisionDefinition,
-                        reason: out m_fieldReason
+                var hasDepth = WorldAdjacencyPolicy.TryDeriveOverlap(
+                    local: source,
+                    neighbour: definition,
+                    depth: out var depth,
+                    reason: out m_fieldReason
+                );
+                var selection = (hasDepth
+                    ? WorldAdjacencyGeometry.Select(
+                        definition: definition,
+                        frame: m_frame,
+                        overlapDepth: depth
                     )
-                        ? built
-                        : null
-                    );
+                    : new WorldAdjacencyGeometry.Selection(
+                        Placements: [],
+                        Truncated: false
+                    )
+                );
+                var collisionDefinition = definition with { PlacementRowsRaw = selection.Placements };
 
-                    if (selection.Truncated) {
-                        if (narrationHub.HasNarrationSink) {
-                            narrationHub.Narrate(
-                                channel: "world.adjacency",
-                                text: $"[world.adjacency: '{sourceDescription}' neighbour geometry truncated identically for collision and rendering at {WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid placements]"
-                            );
-                        }
-                    }
-                } else {
-                    m_frameResolved = false;
-                    m_field = null;
-                    m_fieldReason = "the authored counterpart frame no longer resolves";
-                }
-                m_builtRevision = mirror.DefinitionRevision;
-                m_builtSourceDefinition = source;
-            }
-
-        }
-
-        public System.Numerics.Vector3 BodyColor(int index) => (m_hasPin
-            ? m_colors[index]
-            : mirror.BodyColor(index: index)
-        );
-        public WorldBodyContactMode BodyContact(int index) => (m_hasPin
-            ? m_bodyContacts[index]
-            : mirror.BodyContact(index: index)
-        );
-        public byte CatalogRig(int index) => (m_hasPin
-            ? m_catalogRigs[index]
-            : mirror.CatalogRig(index: index)
-        );
-        public FixedWorldCollider? Collider(int index) => (m_hasPin
-            ? m_colliders[index]
-            : mirror.Collider(index: index)
-        );
-        public System.Numerics.Quaternion CurrentOrientation(int index) => (m_hasPin
-            ? m_currentOrientations[index]
-            : mirror.CurrentOrientation(index: index)
-        );
-        public System.Numerics.Vector3 CurrentPosition(int index) => (m_hasPin
-            ? m_currentPositions[index]
-            : mirror.CurrentPosition(index: index)
-        );
-        public void Dispose() => lease.Dispose();
-        public Protocol.WorldEntityAddress EntityAddress(int index) => (m_hasPin
-            ? m_addresses[index]
-            : mirror.Address(index: index)
-        );
-        public bool IsEntityActive(int index) => (m_hasPin
-            ? m_active[index]
-            : mirror.IsActive(index: index)
-        );
-        public string? PlacementId(int index) => (m_hasPin ? m_placementIds[index] : mirror.PlacementId(index: index));
-        public int PoseEpoch(int index) => (m_hasPin ? m_poseEpochs[index] : mirror.PoseEpoch(index: index));
-        public WorldLook Look(int index) => (m_hasPin
-            ? m_looks[index]
-            : mirror.Look(index: index)
-        );
-        public void MaskDeparted(in Protocol.WorldEntityAddress address) {
-            if (
-                !m_hasPin ||
-                (((uint)address.Index) >= ((uint)m_active.Length)) ||
-                !m_active[address.Index]
-            ) {
-                return;
-            }
-
-            var pinned = m_addresses[address.Index];
-
-            if (
-                (pinned.Generation == address.Generation) &&
-                string.Equals(
-                    a: pinned.Authority,
-                    b: address.Authority,
-                    comparisonType: StringComparison.Ordinal
+                m_field = (WorldSolidField.TryBuild(
+                    built: out var built,
+                    definition: collisionDefinition,
+                    reason: out m_fieldReason
                 )
-            ) {
-                m_active[address.Index] = false;
-            }
-        }
-        public void Pin(ulong sourceTick) {
-            Refresh();
-            if (!m_frameResolved) {
-                m_hasPin = false;
-                return;
-            }
+                    ? built
+                    : null
+                );
 
-            mirror.CopySnapshotTo(
-                active: m_active,
-                addresses: m_addresses,
-                poseEpochs: m_poseEpochs,
-                arrivalTimestamp: out m_pinnedArrivalTimestamp,
-                bodyContacts: m_bodyContacts,
-                catalogRigs: m_catalogRigs,
-                colliders: m_colliders,
-                colors: m_colors,
-                currentOrientations: m_currentOrientations,
-                currentPositions: m_currentPositions,
-                looks: m_looks,
-                placementIds: m_placementIds,
-                previousOrientations: m_previousOrientations,
-                previousPositions: m_previousPositions,
-                revision: out m_pinnedSnapshotRevision,
-                stepSeconds: out m_pinnedStepSeconds,
-                tick: out m_pinnedSnapshotTick
-            );
-            _ = authority.Settle(delivered: mirror.Authority);
-            m_pinnedDefinition = mirror.Definition;
-            m_pinnedFrame = m_frame;
-            m_pinnedField = m_field;
-            m_pinnedFieldReason = m_fieldReason;
-            m_hasPin = true;
-            _ = sourceTick;
+                if (selection.Truncated && narrationHub.HasNarrationSink) {
+                    narrationHub.Narrate(
+                        channel: "world.adjacency",
+                        text: $"[world.adjacency: '{sourceDescription}' neighbour geometry truncated identically for collision and rendering at {WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid placements]"
+                    );
+                }
+            } else {
+                m_frameResolved = false;
+                m_field = null;
+                m_fieldReason = "the authored counterpart frame no longer resolves";
+            }
         }
-        public System.Numerics.Quaternion PreviousOrientation(int index) => (m_hasPin
-            ? m_previousOrientations[index]
-            : mirror.PreviousOrientation(index: index)
-        );
-        public System.Numerics.Vector3 PreviousPosition(int index) => (m_hasPin
-            ? m_previousPositions[index]
-            : mirror.PreviousPosition(index: index)
-        );
-        /// <inheritdoc/>
-        /// <remarks>The verdict is about the field this call hands out, never about a different one: a caller that
-        /// trusts a true answer must receive a field, and a caller told false must be told which image refused.</remarks>
+
+        public void Dispose() => lease.Dispose();
+    }
+
+    private sealed class PinnedNeighbour(string authority, WorldSessionMirror.BodyImage image, WorldFaceFrame frame,
+        WorldSolidField? solids, string fieldReason, ImmutableHashSet<Protocol.WorldEntityAddress> departed) : IWorldAdjacencyNeighbourContact {
+        public string Authority => authority;
+        public WorldDefinition Definition => image.Definition;
+        public int DefinitionRevision => image.DefinitionRevision;
+        public WorldFaceFrame CounterpartFrame => frame;
+        public ulong SnapshotTick => image.Tick;
+        public int SnapshotRevision => image.Revision;
+        public float InterpolationAlpha => WorldSessionMirror.ResolveInterpolationAlpha(stepSeconds: image.StepSeconds, arrivalTimestamp: image.ArrivalTimestamp);
+        public int EntityCapacity => image.Entries.Length;
+
+        public bool IsEntityActive(int index) {
+            ref readonly var entry = ref image.Entries.ItemRef(index);
+            return entry.Active && (departed.IsEmpty || !departed.Contains(entry.Address));
+        }
+        public Protocol.WorldEntityAddress EntityAddress(int index) => image.Entries.ItemRef(index).Address;
+        public int PoseEpoch(int index) => image.Entries.ItemRef(index).PoseEpoch;
+        public string? PlacementId(int index) => image.Entries.ItemRef(index).PlacementId;
+        public Vector3 PreviousPosition(int index) => image.Entries.ItemRef(index).PreviousPosition;
+        public Quaternion PreviousOrientation(int index) => image.Entries.ItemRef(index).PreviousOrientation;
+        public Vector3 CurrentPosition(int index) => image.Entries.ItemRef(index).CurrentPosition;
+        public Quaternion CurrentOrientation(int index) => image.Entries.ItemRef(index).CurrentOrientation;
+        public Vector3 BodyColor(int index) => image.Entries.ItemRef(index).Color;
+        public WorldLook Look(int index) => image.Entries.ItemRef(index).Look;
+        public byte CatalogRig(int index) => image.Entries.ItemRef(index).CatalogRig;
+        public FixedWorldCollider? Collider(int index) => image.Entries.ItemRef(index).Collider;
+        public WorldBodyContactMode BodyContact(int index) => image.Entries.ItemRef(index).Contact;
         public bool TryGetSolidField(out IContactField? field, out string reason) {
-            field = (m_hasPin
-                ? m_pinnedField
-                : m_field
-            );
-            reason = (m_hasPin
-                ? m_pinnedFieldReason
-                : m_fieldReason
-            );
-
-            return (field is not null);
+            field = solids;
+            reason = fieldReason;
+            return field is not null;
         }
-        public bool TryResolve(out IWorldAdjacencyNeighbour? neighbour) {
-            neighbour = null;
-
-            if (!m_hasPin) {
-                Refresh();
-            }
-
-            if (!(m_hasPin || m_frameResolved) || !authority.Settle(delivered: mirror.Authority)) {
-                return false;
-            }
-
-            neighbour = this;
-
-            return true;
-        }
-
     }
 }

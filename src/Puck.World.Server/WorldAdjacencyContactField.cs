@@ -36,19 +36,18 @@ namespace Puck.World.Server;
 /// </remarks>
 public sealed class WorldAdjacencyContactField : IEntityContactField {
     private readonly IContactField m_inner;
-    private readonly IWorldAdjacencySource m_source;
+    private readonly string m_authority;
     private readonly WorldPopulation m_population;
 
     /// <summary>Initializes the wrapper.</summary>
     /// <param name="inner">This world's own compiled contact field.</param>
-    /// <param name="source">The injected neighbour resolver.</param>
+    /// <param name="authority">The local authority identity used to settle dynamic contact.</param>
     /// <param name="population">Owns the local envelopes and the correction budget shared across this tick's sweeps.</param>
-    public WorldAdjacencyContactField(IContactField inner, IWorldAdjacencySource source, WorldPopulation population) {
+    public WorldAdjacencyContactField(IContactField inner, string authority, WorldPopulation population) {
         ArgumentNullException.ThrowIfNull(argument: inner);
-        ArgumentNullException.ThrowIfNull(argument: source);
 
         m_inner = inner;
-        m_source = source;
+        m_authority = authority;
         m_population = population;
     }
 
@@ -89,17 +88,16 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
             if (resolution.Refusal != ContactRefusal.None) { return resolution; }
         }
 
-        var localAddress = m_source.LocalEntityAddress(index: entityIndex);
-        var localIsSolid = (m_source.LocalBodyContact(index: entityIndex) == WorldBodyContactMode.Solid);
+        var localIsSolid = (m_population.BodyContact(index: entityIndex) == WorldBodyContactMode.Solid);
         // The frozen record can predate a handoff committed after it was frozen, within the same tick, so the
         // arrival asks for itself: the entity still shown at the slot it departed from is this body.
         var departedFrom = default(Protocol.WorldEntityAddress);
-        var hasDeparted = (localIsSolid && m_source.TryLocalDepartedFrom(
+        var hasDeparted = (localIsSolid && m_population.TryDepartedFrom(
             departedFrom: out departedFrom,
             index: entityIndex
         ));
 
-        foreach (var projection in m_source.Visuals()) {
+        foreach (var projection in m_population.AdjacencyProjections) {
             if (!TryMapIntoNeighbour(
                 mapped: out var neighbourStart,
                 position: neighbourQuery,
@@ -127,7 +125,7 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
             // One responder per authority pair settles every body contact between them, whichever bodies meet.
             var responds = (localIsSolid && WorldCrossAuthoritySettlement.LocalResponds(
                 interaction: "physical-contact",
-                localAuthority: localAddress.Authority,
+                localAuthority: m_authority,
                 remoteAuthority: neighbour.Authority
             ));
 
@@ -360,7 +358,7 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
         in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) {
         var met = m_inner.TrySupportDistance(descent: out descent, orientation: in orientation, position: in position, reach: reach, up: in up, volumes: volumes);
 
-        foreach (var projection in m_source.Visuals()) {
+        foreach (var projection in m_population.AdjacencyProjections) {
             if (
                 !TryMapIntoNeighbour(mapped: out var neighbourPosition, position: position, projection: projection) ||
                 (projection.Neighbour is not IWorldAdjacencyNeighbourContact contactNeighbour) ||

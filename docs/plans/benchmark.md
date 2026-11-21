@@ -1128,7 +1128,7 @@ the address that opens.
 - **The HUD** has no plot and no engine-reading binding; both are named gaps.
 - **`WorldSessionMirror`** is the one client-side mirror of an authority,
   local or remote. It already published a whole image for readers that need
-  one delivery (`CopySnapshotTo`), so the driver's body read
+  one delivery (`WorldSessionMirror.CaptureBodyImage`), so the driver's body read
   (`TryReadBody`) is one more reader of that image and no second mirror, and
   its delivery counts are taken where the deliveries land.
 - **`WorldEventFeed`'s occupancy latches** are the authority's answer to which
