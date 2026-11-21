@@ -14,7 +14,7 @@ internal static class FixedConvexGeometry {
             return (collider with { Center = FixedVector3.Zero, Rotation = FixedQuaternion.Identity }).SupportPoint(direction: direction);
         }
         if (collider.Kind == FixedStaticColliderKind.Superellipsoid) {
-            if (collider.Exponent == Two) {
+            if (collider.MeasuresDistance()) {
                 var weightedDirection = FixedVector3.Multiply(left: direction, right: collider.Extent).Normalize();
 
                 return (FixedVector3.Multiply(left: weightedDirection, right: collider.Extent) + (direction.Normalize() * collider.Radius));
@@ -68,20 +68,16 @@ internal static class FixedConvexGeometry {
     private static FixedQ4816 Power(FixedQ4816 value, FixedQ4816 exponent) =>
         ((value == FixedQ4816.Zero) ? FixedQ4816.Zero : FixedQ4816.Pow(x: value, y: exponent));
 
-    // Whether Field answers a collider's true signed distance everywhere: an exponent-2 superellipsoid, an ellipsoid swept
-    // by its Radius, measured through the ellipse projection.
-    internal static bool MeasuresDistance(in FixedStaticCollider collider) =>
-        ((collider.Kind == FixedStaticColliderKind.Superellipsoid) && (collider.Exponent == Two));
-
-    // The drawn field and its active outward gradient, in the collider's frame. An ellipsoid (MeasuresDistance) answers its
-    // true signed distance less its Radius, measured to the projection's foot, whose outward normal is the implicit
-    // gradient there. A higher exponent answers its gauge, and a chamfered box a signed bound outside a bevel vertex; their
-    // distance queries still use GJK, and this recognizes a boundary probe before a vanishing EPA tetrahedron is built.
+    // The drawn field and its active outward gradient, in the collider's frame. An ellipsoid
+    // (FixedStaticCollider.MeasuresDistance) answers its true signed distance less its Radius, measured to the projection's
+    // foot, whose outward normal is the implicit gradient there. A higher exponent answers its gauge, and a chamfered box a
+    // signed bound outside a bevel vertex; their distance queries still use GJK, and this recognizes a boundary probe
+    // before a vanishing EPA tetrahedron is built.
     internal static (FixedQ4816 Distance, FixedVector3 Normal) Field(in FixedStaticCollider collider, FixedVector3 point) {
         var p = FixedVector3.Abs(value: point);
         var e = collider.Extent;
 
-        if (MeasuresDistance(collider: in collider)) {
+        if (collider.MeasuresDistance()) {
             var projection = FixedEllipsoidProjection.Project(foot: out var foot, point: point, radii: e);
             // foot_i / r_i², scaled by the least radius so each component is a ratio under one and keeps Q16's resolution;
             // a radius under one raw is taken as one raw, as the projection takes it.

@@ -251,6 +251,12 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         }
         return (Center + ((Kind == FixedStaticColliderKind.AxisAlignedBox) ? point : Rotation.Rotate(vector: point)));
     }
+    /// <summary>Returns whether the collider's distance and normal are exact everywhere: an exponent-2
+    /// <see cref="FixedStaticColliderKind.Superellipsoid"/>, an ellipsoid swept by <see cref="Radius"/>, measured through
+    /// <see cref="FixedEllipsoidProjection"/>.</summary>
+    /// <returns><see langword="true"/> for an exponent-2 superellipsoid.</returns>
+    public bool MeasuresDistance() => ((Kind == FixedStaticColliderKind.Superellipsoid) && (Exponent == EllipsoidExponent));
+    private static readonly FixedQ4816 EllipsoidExponent = FixedQ4816.FromInteger(value: 2);
     /// <summary>Returns a finite solid's world-axis half-extent about <see cref="Center"/>, padded past fixed-point
     /// rounding. A body whose bounds, grown by the contact skin, miss this box needs no push from the solid, so a
     /// sweep may skip its exact query.</summary>
@@ -400,7 +406,7 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         ? FixedConvexContact.TryPush(collider: in this, orientation: in orientation, position: position,
             push: out push, skin: skin, volume: in volume)
         : Kind switch {
-            FixedStaticColliderKind.Superellipsoid when ((volume.Kind == FixedBodyColliderKind.Sphere) && FixedConvexGeometry.MeasuresDistance(collider: in this)) =>
+            FixedStaticColliderKind.Superellipsoid when ((volume.Kind == FixedBodyColliderKind.Sphere) && MeasuresDistance()) =>
                 FixedConvexContact.TryMeasuredPush(collider: in this, orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume),
             FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid => FixedConvexContact.TryPush(
                 collider: in this, orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume),

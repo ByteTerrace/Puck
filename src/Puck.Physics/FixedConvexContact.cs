@@ -344,7 +344,7 @@ public static class FixedConvexContact {
         return (push.Penetration > FixedQ4816.Zero);
     }
 
-    // A ball against a collider whose field is its true signed distance (FixedConvexGeometry.MeasuresDistance): the push
+    // A ball against a collider whose field is its true signed distance (FixedStaticCollider.MeasuresDistance): the push
     // is the ball's reach less the distance at its centre, along the field's normal there, with no support descent.
     internal static bool TryMeasuredPush(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation,
         in FixedBodyColliderVolume volume, FixedQ4816 skin, out FixedContactPush push) {
@@ -373,7 +373,7 @@ public static class FixedConvexContact {
         var local = collider.Rotation.RotateInverse(vector: (probe - collider.Center));
         var field = FixedConvexGeometry.Field(collider: in collider, point: local);
 
-        if (FixedConvexGeometry.MeasuresDistance(collider: in collider) || (FixedQ4816.Abs(value: field.Distance) <= Tolerance)) {
+        if (collider.MeasuresDistance() || (FixedQ4816.Abs(value: field.Distance) <= Tolerance)) {
             return ((collider.Center + collider.Rotation.Rotate(vector: (local - (field.Normal * field.Distance)))), collider.Rotation.Rotate(vector: field.Normal));
         }
         var pointVolume = new FixedBodyColliderVolume(FixedBodyColliderKind.Sphere, FixedVector3.Zero, FixedVector3.Zero,

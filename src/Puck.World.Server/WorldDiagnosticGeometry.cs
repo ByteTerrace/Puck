@@ -120,10 +120,7 @@ public static class WorldDiagnosticGeometry {
     // Kinds whose SignedDistance is the exact Euclidean distance outside; a lower bound would close a void that is open.
     private static bool Exact(FixedStaticCollider collider) => ((collider.Kind is FixedStaticColliderKind.AxisAlignedBox or
         FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox or FixedStaticColliderKind.Sphere or
-        FixedStaticColliderKind.Cylinder or FixedStaticColliderKind.HalfSpace) || IsEllipsoid(collider: collider));
-    // An exponent-2 superellipsoid, whose SignedDistance is its ellipsoid's true distance less its offset.
-    private static bool IsEllipsoid(FixedStaticCollider collider) =>
-        ((collider.Kind == FixedStaticColliderKind.Superellipsoid) && (collider.Exponent == FixedQ4816.FromInteger(value: 2)));
+        FixedStaticColliderKind.Cylinder or FixedStaticColliderKind.HalfSpace) || collider.MeasuresDistance());
 
     /// <summary>Returns a radius about the collider's centre that contains the whole solid, so a point farther from
     /// the centre than this is outside it and on none of its faces.</summary>
@@ -171,7 +168,7 @@ public static class WorldDiagnosticGeometry {
             ? collider.Rotation.RotateInverse(vector: relative) : relative).ToVector3();
         var e = collider.Extent.ToVector3();
 
-        if (IsEllipsoid(collider: collider)) {
+        if (collider.MeasuresDistance()) {
             return (double)(FixedEllipsoidProjection.Project(point: FixedVector3.FromVector3(value: p), radii: collider.Extent).Distance - collider.Radius);
         }
         if (collider.Kind == FixedStaticColliderKind.Superellipsoid) {
