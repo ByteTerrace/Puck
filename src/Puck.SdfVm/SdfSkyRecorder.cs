@@ -253,7 +253,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
             var name = m_fragmentPass.Inputs[port].Name;
 
             if ((name is not (SdfSkyEnvironmentGraph.Input or SdfSkyEnvironmentGraph.MapInput or SdfSkyEnvironmentGraph.ScreensInput)) && (ReadMemberOf(version: name) == SdfWorldPackage.LitImage)) {
-                return recording.Inputs[port].Image.ImageViewHandle;
+                return recording.Inputs[port].ReadImage(latch: recording.Latch).ImageViewHandle;
             }
         }
 
@@ -295,11 +295,11 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
             if (bound.Buffer is { } buffer) {
                 tables.WriteInterfaceBuffer(buffer: buffer, layout: layout, member: member, set: set);
             } else {
-                bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: member), descriptorSetHandle: set, imageViewHandle: bound.Image.ImageViewHandle);
+                bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: member), descriptorSetHandle: set, imageViewHandle: bound.ReadImage(latch: recording.Latch).ImageViewHandle);
             }
         }
         for (var port = 0; (port < m_fragmentPass.Outputs.Count); port++) {
-            bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: WrittenMemberOf(version: m_fragmentPass.Outputs[port].Name)), descriptorSetHandle: set, imageViewHandle: recording.Outputs[port].Image.ImageViewHandle);
+            bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: WrittenMemberOf(version: m_fragmentPass.Outputs[port].Name)), descriptorSetHandle: set, imageViewHandle: recording.Outputs[port].ReadImage(latch: recording.Latch).ImageViewHandle);
         }
         Array.Clear(array: m_screens[slot]);
         m_portTables[slot] = tables;
@@ -345,16 +345,12 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
                 throw new InvalidOperationException(message: $"Sky layer {binding.Layer} has two fitted infinity images.");
             }
             occupied |= bit;
-            nint image = 0;
-
-            if ((binding.Producer is { } producer) && (recording.Reads is { } reads) && (reads.IndexOf(producer: producer) is var read and >= 0)) {
-                if (!reads.IsTaken(index: read)) {
-                    var lease = reads.Take(index: read);
-
-                    recording.Leases.Hold(lease: in lease);
-                }
-                image = reads[read].Lease.ImageViewHandle;
-            }
+            var image = (((binding.Producer is { } producer) &&
+                (recording.Reads is { } reads) &&
+                (reads.IndexOf(producer: producer) is var read and >= 0) &&
+                reads.TrySample(imageViewHandle: out var sampled, index: read, latch: recording.Latch, leases: recording.Leases))
+                ? sampled
+                : 0);
             var parameters = binding.Parameters;
             var declared = sky.Parameters<SdfSkyView>(index: authored);
 

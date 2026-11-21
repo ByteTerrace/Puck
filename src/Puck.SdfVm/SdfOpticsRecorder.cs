@@ -51,7 +51,7 @@ internal sealed class SdfOpticsRecorder : IRenderGraphPackageRecorder {
         var snapshot = frame.Views[Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1))];
         var bloom = (snapshot.Bloom ?? new CameraBloom());
         var set = m_sets.PassSet(slot: recording.Slot);
-        var output = recording.Outputs[0].Image;
+        var output = recording.Outputs[0].ReadImage(latch: recording.Latch);
         var display = (m_kernel == SdfKernel.Display);
         // A display pass reads the scene light first and the scatter second; without a pyramid it reads the scene light
         // alone, which it binds at both and adds no scatter from.
@@ -87,12 +87,12 @@ internal sealed class SdfOpticsRecorder : IRenderGraphPackageRecorder {
         }
         m_work.Write(passSet: set, recording: recording);
         var bindings = m_context.Services.Bindings;
-        var scene = recording.Inputs[0].Image.ImageViewHandle;
+        var scene = recording.Inputs[0].ReadImage(latch: recording.Latch).ImageViewHandle;
 
         bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: "bloomSource"), descriptorSetHandle: set,
-            imageViewHandle: ((display && scattered) ? recording.Inputs[1].Image.ImageViewHandle : scene));
+            imageViewHandle: ((display && scattered) ? recording.Inputs[1].ReadImage(latch: recording.Latch).ImageViewHandle : scene));
         bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: "bloomFine"), descriptorSetHandle: set,
-            imageViewHandle: ((m_kernel == SdfKernel.BloomUp) ? recording.Inputs[1].Image.ImageViewHandle : scene));
+            imageViewHandle: ((m_kernel == SdfKernel.BloomUp) ? recording.Inputs[1].ReadImage(latch: recording.Latch).ImageViewHandle : scene));
         bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: "bloomOutput"), descriptorSetHandle: set,
             imageViewHandle: output.ImageViewHandle);
         var pipeline = tables.Pipeline(kernel: m_kernel);

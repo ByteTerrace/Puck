@@ -3185,11 +3185,20 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   order with the content, and content travels with the right to show it as one
   value. A design review found sixteen flaws in the first draft, and the memo
   answers each. It orders eight steps, each with a check, and no step deletes a
-  guard before its replacement owns the same paths. Its step 1 is built (the
-  tightened whole-replica test, the stream's generation, ordered ingress), all
-  but the lease an admission grants after a lost connection. Next: step 2.
+  guard before its replacement owns the same paths. Its steps 1, 2 and 6 are
+  built: step 1 added the tightened whole-replica test, the stream's generation
+  and ordered ingress (all but the lease an admission grants after a lost
+  connection); step 2 replaced the taint flag with `DeliveryLabel`, paired
+  content with its label in `DeliveryContent<T>` across external outputs, node
+  bindings, holds and package reads behind one per-frame `DeliveryLatch`,
+  routed capture conversion and output reads through `RenderGraphRuntime`'s
+  single writer and filtered `OutputRecords` store, validated held bindings
+  when a node records, and wired `WorldViewerAccess` and `WorldStreamIngress`
+  spans through `IRenderGraphInstances.SetRoute` beside the existing withdrawal
+  guards; and step 6 added `WorldSceneProof` (with its offscreen checks still
+  to run). Next: step 3.
   This is decision 14's step 5 (results keyed by what each viewer was
-  delivered) with the withdrawn picture of decision 2. The lease it leaves
+  delivered) with the withdrawn picture of decision 2. The lease step 1 leaves
   unbuilt is built by the lane that next works remote observation, which
   [a hosted world on a client](#a-hosted-world-on-a-client) is.
 - [medium] The authority's population revision crosses to recipients whose
@@ -3203,7 +3212,9 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   delivery between may show the scene its old proof named
   (`WorldSceneProof`): stamp the proof with the stream's span so a proof from
   before the cut cannot stand after it. From the lane that fixed the pane
-  case; the withdrawal chokepoint's step 2 is where it is closed.
+  case; step 2 built the render-graph carrying value and latch without changing
+  `WorldSceneProof`, so this stays open with step 6's `WorldSceneProof`
+  checks (`WorldSessionObservation`, `WorldSessionSink`).
 
 - [high] Authored search must plan over what its actor is disclosed. Today an
   actor-less job reads true state under the audience check (an AI can read a

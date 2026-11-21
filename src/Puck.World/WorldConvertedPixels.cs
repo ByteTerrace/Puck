@@ -230,13 +230,19 @@ internal sealed class WorldConvertedPixels {
     // changes shape. The lease is retired whether or not the conversion submits: by the frame that records it, at
     // once otherwise.
     public bool TryConvert(RenderGraphRuntime? runtime, in FrameContext context, ShaderPipelineExternalImage image, GpuImageLease lease, ImageColorEncoding color) {
+        var latch = (context.Latch.IsLatched ? context.Latch : DeliveryLatch.Capture());
+        var latched = (context.Latch.IsLatched ? context : (context with { Latch = latch }));
+
         if (
             m_retired ||
             (runtime is null) ||
-            (PixelFormatOf(format: image.Format) is not { } format)
+            !image.TryRead(latch: in latch, image: out var resolved) ||
+            (PixelFormatOf(format: resolved.Format) is not { } format)
         ) {
             if (!m_retired && (runtime is not null)) {
-                m_unconvertible ??= $"{m_name} hands over an imported {image.Format} image no conversion reads";
+                m_unconvertible ??= (image.TryRead(latch: in latch, image: out var refused)
+                    ? $"{m_name} hands over an imported {refused.Format} image no conversion reads"
+                    : $"{m_name} hands over an imported image refused at the frame's latch");
             }
 
             lease.Retire();
@@ -251,14 +257,14 @@ internal sealed class WorldConvertedPixels {
         var current = Ensure(
             color: color,
             format: format,
-            height: image.Height,
+            height: resolved.Height,
             imported: true,
             runtime: runtime,
-            width: image.Width
+            width: resolved.Width
         );
 
         return (current.Converter.TryConvert(
-            context: in context,
+            context: in latched,
             image: image,
             lease: lease
         ) && Show(current: current));

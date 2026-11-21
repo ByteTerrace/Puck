@@ -1,3 +1,5 @@
+using Puck.Abstractions.Presentation;
+
 namespace Puck.Shaders;
 
 // A withdrawn picture: a host says the viewer an instance renders for may no longer see what it showed
@@ -21,6 +23,22 @@ public sealed partial class RenderGraphRuntime {
     private readonly HashSet<string> m_withdrawing = new(comparer: StringComparer.Ordinal);
     // The instances the frame's withdrawal reaches, sized to the set.
     private bool[] m_withdrawn = [];
+
+    /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">The runtime is disposed.</exception>
+    public void SetRoute(string instance, DeliveryLabel route) {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        var index = IndexOf(instance: instance);
+
+        if (!route.IsClassified) {
+            throw new ArgumentException(
+                message: $"Route for instance '{instance}' has an unclassified delivery label.",
+                paramName: nameof(route)
+            );
+        }
+
+        m_routes[index] = route;
+    }
 
     /// <inheritdoc/>
     /// <exception cref="ObjectDisposedException">The runtime is disposed.</exception>
@@ -77,9 +95,8 @@ public sealed partial class RenderGraphRuntime {
             var name = m_set.Instances[index].Name;
 
             m_nodes[index]?.WithdrawPublication();
-            m_current[index] = Output.None;
-            m_previous[index] = Output.None;
-            m_producerTainted[index] = false;
+            m_outputs.Forget(index: index);
+            m_producerLabels[index] = default;
             for (var factory = 0; (factory < factories.Count); factory++) {
                 factories[factory].OnOutputsForgotten(instance: name);
             }

@@ -236,6 +236,7 @@ public sealed partial class WorldScreenBinder {
             screens.Close(sessions: NestedSessionsOf());
             _ = m_nestedOwners.Remove(key: screens);
         }
+        entry.Access.Close();
         entry.Envelope?.Dispose();
         entry.Emitter.Dispose();
         if (entry.Residency is { } residency) {

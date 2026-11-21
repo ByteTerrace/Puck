@@ -8,8 +8,8 @@ property as one invariant, and designs the structural door that holds it, in
 place of the per-path guards the review kept finding ways around. A design
 review of the first draft found sixteen flaws in that door; this revision
 closes each at its cause and [answers them one by one](#the-design-reviews-findings-answered).
-Steps 1 and 6 of [the build order](#the-build-order) are built; the rest is a
-design.
+Steps 1, 2 and 6 of [the build order](#the-build-order) are built; the rest is
+a design.
 
 ## Summary
 
@@ -939,6 +939,31 @@ for the display. The second and third kinds are GPU legs the lead schedules.
    replaced when its node next records; a cut accepted between the latch and
    the return changes nothing in that frame and everything in the next. Every
    law the withdrawn lane added still passes.
+   *Built:* `DeliveryLabel` replaces the boolean taint flag (`DeliveryLabel.External`
+   carries capture taint, `DeliveryLabel.Unclassified` is the default and is
+   refused at every bind, and `DeliveryPublicSource` lists the sources allowed
+   to mint a zero-span public label). `DeliveryContent<T>` pairs content with
+   its label as one value whose content is read only through
+   `TryRead(in DeliveryLatch, out T)` at external outputs
+   (`RenderGraphExternalOutput`), node image and buffer bindings and holds
+   (`ShaderPipelineExternalImage`, `ShaderPipelineExternalBuffer`,
+   `ShaderPipelineRenderNode.HoldBinding`), and package reads
+   (`RenderGraphExternalReads`, `RenderGraphExternalInput`,
+   `RenderGraphPackageResource`). `RenderGraphRuntime` keeps its output tables
+   private inside `OutputRecords`, writes every output—including uploaded-source
+   capture conversions in `ConvertForCapture`—through `RememberOutput`, and
+   filters every read through `DeliveryLatch`. `RenderGraphRuntimeNode` captures
+   one `DeliveryLatch` per frame on `FrameContext.Latch` and
+   `RenderGraphPackageRecording.Latch`, and `ShaderPipelineRenderNode` validates
+   bound and held external bindings on record (`ValidateBindingsForRecord`),
+   replacing an ended image binding with a shared `RenderGraphStandIns` 1×1
+   stand-in and releasing its hold before any pass runs. `WorldViewerAccess`
+   and `WorldStreamIngress` each advance a `DeliverySpanSource`, and
+   `WorldScreenBinder` unions their spans onto `WorldViewAccess.Route`, passed
+   to `IRenderGraphInstances.SetRoute` in `WorldViewGraphHost.BindAccess` beside
+   `IRenderGraphInstances.Withdraw`, its edge walk and
+   `IRenderGraphPackageFactory.OnOutputsForgotten`. The device-free checks live
+   in `RenderGraphRuntimeLawTests` (`RenderGraphRuntimeLawTests.Withdrawal.cs`).
 3. **The withdrawal reset, generation-owned cells and labelled publications.**
    The reset of part 5; the owners of part 6 moved as its table lists; exports,
    probes and comparison holds labelled and checked at each read. Only now are
@@ -1057,8 +1082,10 @@ Searched before proposing a generation or a key.
   kept as what it is.
 - `StateArena.DisclosureRevision` is one number for every recipient and moves
   for hidden changes, so a recipient must not be shown it.
-- The render graph's taint (`RenderGraphExternalOutput.Tainted`,
-  `IRenderGraphPackageFactory.TaintOf`, `SdfWorldTables.ProjectTaintedSourcesAgain`)
+- The render graph's taint (`DeliveryLabel.External` on
+  `RenderGraphExternalOutput.Label`, replaced from the earlier boolean in step
+  2, together with `IRenderGraphPackageFactory.TaintOf` and
+  `SdfWorldTables.ProjectTaintedSourcesAgain`)
   is the plumbing the label rides, and the capture repair is the precedent for
   re-reducing lighting from its sources.
 - `RenderGraphSlotResults` is the precedent for a result that waits on a slot,

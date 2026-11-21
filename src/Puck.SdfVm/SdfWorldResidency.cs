@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -830,22 +831,17 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <param name="screen">The program-declared screen index.</param>
     /// <param name="reads">The images the pass's instance reads that its graph binds to no version, or
     /// <see langword="null"/>.</param>
+    /// <param name="latch">The frame's delivery latch.</param>
     /// <param name="leases">The frame's lease list, which retires the lease after the frame's submission.</param>
     /// <returns>The image view, or zero when the screen shows nothing this frame.</returns>
-    public nint ScreenImage(int view, int screen, RenderGraphExternalReads? reads, LeaseRetireList leases) {
+    public nint ScreenImage(int view, int screen, RenderGraphExternalReads? reads, in DeliveryLatch latch, LeaseRetireList leases) {
         ArgumentNullException.ThrowIfNull(argument: leases);
 
-        nint handle = 0;
-
-        if ((ScreenRead(reads: reads, screen: screen, view: view) is var index and >= 0) && (reads is not null)) {
-            if (!reads.IsTaken(index: index)) {
-                var lease = reads.Take(index: index);
-
-                leases.Hold(lease: in lease);
-            }
-
-            handle = reads[index].Lease.ImageViewHandle;
-        }
+        var handle = (((ScreenRead(reads: reads, screen: screen, view: view) is var index and >= 0) &&
+            (reads is not null) &&
+            reads.TrySample(imageViewHandle: out var sampled, index: index, latch: in latch, leases: leases))
+            ? sampled
+            : 0);
 
         m_boundScreenSources[screen] = handle;
 
@@ -871,7 +867,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         for (var screen = 0; (screen < SdfWorldTables.MaxScreenSurfaces); screen++) {
             var image = (((screen < shown.Length) && shown[screen])
-                ? ScreenImage(leases: recording.Leases, reads: recording.Reads, screen: screen, view: view)
+                ? ScreenImage(latch: recording.Latch, leases: recording.Leases, reads: recording.Reads, screen: screen, view: view)
                 : 0);
 
             if (image != 0) {

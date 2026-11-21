@@ -13,8 +13,8 @@ public sealed partial class RenderGraphRuntime {
     // The instances still to visit in the walk up from the captured instance, reused from frame to frame.
     private readonly Stack<int> m_unvisited = new();
 
-    // Each external producer's taint at its latest acquisition, which is what its next consumer would bind.
-    private bool[] m_producerTainted;
+    // Each external producer's delivery label at its latest acquisition, which is what its next consumer would bind.
+    private DeliveryLabel[] m_producerLabels;
     // Whether the latest frame began with a capture pending anywhere in the runtime.
     private bool m_capturing;
 
@@ -89,8 +89,8 @@ public sealed partial class RenderGraphRuntime {
     // Whether an instance's latest output is tainted: an external producer's as its latest acquisition said, a graph
     // instance's as its latest render bound.
     private bool IsTainted(int index) => ((m_producers[index] is not null)
-        ? m_producerTainted[index]
-        : m_current[index].Tainted
+        ? m_producerLabels[index].External
+        : m_outputs.ExternalAt(index: index, latch: in m_latch)
     );
     // The instance the pending capture reads: the one armed on the runtime, or the instance whose node or producer holds
     // one; -1 when no capture is pending.

@@ -1,23 +1,19 @@
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.Shaders;
 
-// What an image input binds while its producer has no completed output of the frame it reads: before the producer
-// first renders, while its graph builds, and after a device loss. One transparent-black image per format, one texel,
-// cleared once in a submission of its own that precedes every instance submission sampling it on the one queue, so a
-// consumer renders on schedule and never waits for a producer. The stand-ins are the runtime's own and never reach a
-// capture, which reads the root instance's output; they are released with the device like every instance's objects.
-public sealed partial class RenderGraphRuntime {
+internal sealed class RenderGraphStandIns {
     private readonly Dictionary<GpuPixelFormat, StandIn> m_standIns = [];
 
-    private ShaderPipelineExternalImage StandInFor(GpuPixelFormat format) {
+    public ShaderPipelineExternalImage ImageFor(GpuDeviceServices gpu, GpuPixelFormat format) {
         if (!m_standIns.TryGetValue(
             key: format,
             value: out var standIn
         )) {
             standIn = StandIn.Create(
                 format: format,
-                gpu: m_device.Services
+                gpu: gpu
             );
             m_standIns.Add(
                 key: format,
@@ -32,12 +28,12 @@ public sealed partial class RenderGraphRuntime {
             Height: image.Height,
             ImageHandle: image.ImageHandle,
             ImageViewHandle: image.ImageViewHandle,
+            Label: DeliveryLabel.ForSource(source: DeliveryPublicSource.StandIn),
             Layout: GpuImageLayout.ShaderReadOnly,
             Width: image.Width
         );
     }
-    // Waits out each clear before releasing its image, unless the device that ran it is gone.
-    private void ReleaseStandIns(bool wait) {
+    public void Release(bool wait) {
         foreach (var standIn in m_standIns.Values) {
             standIn.Dispose(wait: wait);
         }
@@ -145,4 +141,18 @@ public sealed partial class RenderGraphRuntime {
             sourceStageMask: barrier.SourceStage
         );
     }
+}
+
+// What an image input binds while its producer has no completed output of the frame it reads: before the producer
+// first renders, while its graph builds, and after a device loss. One transparent-black image per format, one texel,
+// cleared once in a submission of its own that precedes every instance submission sampling it on the one queue, so a
+// consumer renders on schedule and never waits for a producer. The stand-ins are the runtime's own and never reach a
+// capture, which reads the root instance's output; they are released with the device like every instance's objects.
+public sealed partial class RenderGraphRuntime {
+    private readonly RenderGraphStandIns m_standIns = new();
+
+    private ShaderPipelineExternalImage StandInFor(GpuPixelFormat format) =>
+        m_standIns.ImageFor(format: format, gpu: m_device.Services);
+    // Waits out each clear before releasing its image, unless the device that ran it is gone.
+    private void ReleaseStandIns(bool wait) => m_standIns.Release(wait: wait);
 }

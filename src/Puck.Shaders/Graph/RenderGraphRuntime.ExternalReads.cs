@@ -135,17 +135,20 @@ public sealed partial class RenderGraphRuntime {
                 schedule: schedule
             );
 
-            if (m_producers[producer] is { } external) {
-                if (external.TryAcquireOutput(output: out var output)) {
-                    m_producerTainted[producer] = output.Tainted;
-                }
-                if (output.Lease.ImageViewHandle != 0) {
+            if (m_producers[producer] is not null) {
+                var acquiredExternal = TryAcquireProducer(
+                    acquired: out var external,
+                    label: out var externalLabel,
+                    latch: in m_latch,
+                    producer: producer
+                );
 
+                if (acquiredExternal && (external.Lease.ImageViewHandle != 0)) {
                     if (Withholds(
                         previousFrame: previousFrame,
-                        tainted: output.Tainted
+                        tainted: externalLabel.External
                     )) {
-                        output.Lease.Retire();
+                        external.Lease.Retire();
 
                         continue;
                     }
@@ -153,16 +156,17 @@ public sealed partial class RenderGraphRuntime {
                     NoteTaint(
                         index: index,
                         producer: m_set.Instances[producer].Name,
-                        tainted: output.Tainted
+                        tainted: externalLabel.External
                     );
                     reads.Bind(
-                        image: output.Image,
+                        image: external.Image,
                         index: position,
-                        layout: output.Layout,
-                        lease: output.Lease,
-                        tainted: output.Tainted
+                        label: externalLabel,
+                        layout: external.Layout,
+                        lease: external.Lease
                     );
                 } else {
+                    external.Lease.Retire();
                     NoteStandIn(frame: frame, index: index, producer: producer);
                 }
 
@@ -175,37 +179,39 @@ public sealed partial class RenderGraphRuntime {
                 frame: ((frame < 0)
                     ? long.MaxValue
                     : frame),
+                latch: in m_latch,
                 producer: producer,
                 readFrame: ((frame < 0)
                     ? long.MaxValue
                     : (schedule.Frame - (previousFrame ? 1L : 0L)))
             );
-            var acquired = new RenderGraphExternalOutput(
-                Image: completed.Image, Layout: completed.Layout, Lease: LeaseOf(image: completed.Image) with { Publication = completed.Publication }, Tainted: completed.Tainted);
+            var lease = (completed.Image.IsSameDeviceImage
+                ? (LeaseOf(image: completed.Image) with { Publication = completed.Publication })
+                : default);
 
             if (
-                acquired.Image.IsSameDeviceImage &&
+                completed.Image.IsSameDeviceImage &&
                 !Withholds(
                     previousFrame: previousFrame,
                     rendersThisFrame: RendersIn(producer: producer, schedule: schedule),
-                    tainted: acquired.Tainted
+                    tainted: completed.Tainted
                 )
             ) {
                 NoteTaint(
                     index: index,
                     producer: m_set.Instances[producer].Name,
-                    tainted: acquired.Tainted
+                    tainted: completed.Tainted
                 );
                 reads.Bind(
-                    image: acquired.Image,
+                    image: completed.Image,
                     index: position,
-                    layout: acquired.Layout,
-                    lease: acquired.Lease,
-                    tainted: acquired.Tainted
+                    label: completed.Label,
+                    layout: completed.Layout,
+                    lease: lease
                 );
             } else {
-                acquired.Lease.Retire();
-                if (!acquired.Image.IsSameDeviceImage) {
+                lease.Retire();
+                if (!completed.Image.IsSameDeviceImage) {
                     NoteStandIn(frame: frame, index: index, producer: producer);
                 }
             }

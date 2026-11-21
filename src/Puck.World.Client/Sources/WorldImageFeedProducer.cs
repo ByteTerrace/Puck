@@ -136,10 +136,10 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
         }
 
         output = new RenderGraphExternalOutput(
-            Image: lease.Image,
-            Layout: GpuImageLayout.ShaderReadOnly,
-            Lease: lease,
-            Tainted: tainted
+            image: lease.Image,
+            label: Opening.Context.PublicLabel(external: tainted),
+            layout: GpuImageLayout.ShaderReadOnly,
+            lease: lease
         );
 
         return true;

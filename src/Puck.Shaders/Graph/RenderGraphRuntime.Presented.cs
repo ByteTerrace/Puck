@@ -91,7 +91,7 @@ public sealed partial class RenderGraphRuntime {
         }
         // Skipped where a settled capture would wait, and where the shown image, which may stand for another instance's,
         // read external content the gate did not fill.
-        if ((ReasonOf(index: index) is not null) || (LatestOf(index: index) is not { Tainted: false } output)) {
+        if ((ReasonOf(index: index) is not null) || (LatestOf(index: index, latch: in m_latch) is not { Tainted: false } output)) {
             return;
         }
         if (m_presentedWarmup > 0) {

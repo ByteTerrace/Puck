@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -25,6 +26,13 @@ public interface IRenderGraphInstances {
     /// <param name="instance">The instance's name.</param>
     /// <returns>The node.</returns>
     ShaderPipelineRenderNode? NodeOf(string instance);
+    /// <summary>Sets the provenance route an instance renders under, carried into every output the instance completes.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <param name="route">The classified delivery label of the route.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="instance"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The set has no instance of that name, or <paramref name="route"/> is
+    /// unclassified.</exception>
+    void SetRoute(string instance, DeliveryLabel route);
     /// <summary>Withdraws every picture an instance published, from the next frame the runtime produces: the image its
     /// node publishes, the outputs the runtime records for it, and every output another instance rendered over them, so
     /// no reader, capture or display binds any of them again. Each instance withdrawn renders again before anything

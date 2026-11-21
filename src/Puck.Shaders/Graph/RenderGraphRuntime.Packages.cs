@@ -135,6 +135,7 @@ public sealed partial class RenderGraphRuntime {
                 IsRead(index: index) &&
                 (index != captured) &&
                 !IsConverging(index: index) &&
+                !m_outputs.HasEnded(index: index, latch: in m_latch) &&
                 (m_stale[index] is null) &&
                 (m_sources[index] is null) &&
                 InputsUnchanged(index: index) &&
@@ -276,7 +277,8 @@ public sealed partial class RenderGraphRuntime {
             return false;
         }
 
-        var latest = LatestOf(index: index);
+        var latch = ActiveLatch();
+        var latest = LatestOf(index: index, latch: in latch);
 
         if (
             (latest.Frame < 0) ||

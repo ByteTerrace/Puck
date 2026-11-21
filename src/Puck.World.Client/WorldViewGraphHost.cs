@@ -657,6 +657,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             var name = instances[index].Name;
             var access = (ViewScenes?.AccessOf(view: name) ?? WorldViewAccess.Open);
 
+            runtime.SetRoute(instance: name, route: access.Route);
             if (m_accessEpochs.TryGetValue(key: name, value: out var seen) && (seen != access.Epoch)) {
                 runtime.Withdraw(instance: name);
             }

@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Shaders;
 using Puck.World.Client;
@@ -76,9 +77,22 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
     }
     /// <summary>Gets every instance the host withdrew, in order.</summary>
     public List<string> Withdrawn { get; } = [];
+    /// <summary>Gets the latest route set for each instance.</summary>
+    public Dictionary<string, DeliveryLabel> Routes { get; } = new(comparer: StringComparer.Ordinal);
 
     /// <inheritdoc/>
     public ShaderPipelineRenderNode? NodeOf(string instance) => m_nodes.GetValueOrDefault(key: instance);
+    /// <inheritdoc/>
+    public void SetRoute(string instance, DeliveryLabel route) {
+        ArgumentNullException.ThrowIfNull(argument: instance);
+        if (Instances.IndexOf(name: instance) < 0) {
+            throw new ArgumentException(message: $"The render graph has no instance '{instance}'.", paramName: nameof(instance));
+        }
+        if (!route.IsClassified) {
+            throw new ArgumentException(message: $"Route for instance '{instance}' has an unclassified delivery label.", paramName: nameof(route));
+        }
+        Routes[instance] = route;
+    }
     /// <inheritdoc/>
     /// <remarks>Records the withdrawal; the fake publishes nothing to withdraw.</remarks>
     public void Withdraw(string instance) {

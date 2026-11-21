@@ -107,10 +107,10 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
     // output, which stands for the opaque image while no glass is in view, so its handle is part of the key too.
     private void BindPorts(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var slot = recording.Slot;
-        var lit = recording.Inputs[0].Image.ImageViewHandle;
+        var lit = recording.Inputs[0].ReadImage(latch: recording.Latch).ImageViewHandle;
         var history = (m_temporal
-            ? (lit, recording.Inputs[(Inputs.Length + 2)].Image.ImageViewHandle, recording.Inputs[(Inputs.Length + 3)].Buffer!.BufferHandle,
-                recording.Outputs[2].Image.ImageViewHandle, recording.Outputs[3].Buffer!.BufferHandle, recording.Inputs[(Inputs.Length + 4)].Buffer!.BufferHandle)
+            ? (lit, recording.Inputs[(Inputs.Length + 2)].ReadImage(latch: recording.Latch).ImageViewHandle, recording.Inputs[(Inputs.Length + 3)].Buffer!.BufferHandle,
+                recording.Outputs[2].ReadImage(latch: recording.Latch).ImageViewHandle, recording.Outputs[3].Buffer!.BufferHandle, recording.Inputs[(Inputs.Length + 4)].Buffer!.BufferHandle)
             : (lit, (nint)0, (nint)0, (nint)0, (nint)0, (nint)0));
 
         if (ReferenceEquals(objA: m_portTables[slot], objB: tables) && (m_portHistory[slot] == history)) {
@@ -119,8 +119,8 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
 
         var bindings = m_context.Services.Bindings;
 
-        bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.CurrentColor), descriptorSetHandle: set, imageViewHandle: recording.Inputs[0].Image.ImageViewHandle);
-        bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.Output), descriptorSetHandle: set, imageViewHandle: recording.Outputs[0].Image.ImageViewHandle);
+        bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.CurrentColor), descriptorSetHandle: set, imageViewHandle: lit);
+        bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.Output), descriptorSetHandle: set, imageViewHandle: recording.Outputs[0].ReadImage(latch: recording.Latch).ImageViewHandle);
         tables.WriteInterfaceBuffer(buffer: recording.Outputs[1].Buffer!, layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.TransportWritten, set: set);
         for (var port = 0; (port < Inputs.Length); port++) {
             tables.WriteInterfaceBuffer(buffer: recording.Inputs[(port + 1)].Buffer!, layout: SdfWorldInterfaces.ResolveParameters.Layout, member: Inputs[port], set: set);
@@ -131,7 +131,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
 
             if (member == SdfWorldPackage.HistoryColor) {
                 bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: member), descriptorSetHandle: set,
-                    imageViewHandle: (m_temporal ? bound.Image.ImageViewHandle : tables.SampledFiller.ImageViewHandle));
+                    imageViewHandle: (m_temporal ? bound.ReadImage(latch: recording.Latch).ImageViewHandle : tables.SampledFiller.ImageViewHandle));
             } else {
                 tables.WriteInterfaceBuffer(buffer: ((m_temporal ? bound.Buffer : null) ?? tables.DummyBuffer), layout: SdfWorldInterfaces.ResolveParameters.Layout, member: member, set: set);
             }
@@ -142,7 +142,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
 
             if (member == SdfWorldPackage.HistoryColorWritten) {
                 bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: member), descriptorSetHandle: set,
-                    imageViewHandle: (m_temporal ? bound.Image.ImageViewHandle : tables.StorageFiller.ImageViewHandle));
+                    imageViewHandle: (m_temporal ? bound.ReadImage(latch: recording.Latch).ImageViewHandle : tables.StorageFiller.ImageViewHandle));
             } else {
                 tables.WriteInterfaceBuffer(buffer: ((m_temporal ? bound.Buffer : null) ?? tables.DummyBuffer), layout: SdfWorldInterfaces.ResolveParameters.Layout, member: member, set: set);
             }

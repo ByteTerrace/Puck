@@ -129,8 +129,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
             public void Dispose() { }
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
                 foreach (var output in recording.Outputs) {
-                    if (output.Image.ImageHandle != 0) {
-                        _ = owner.Wrote.Add(item: output.Image.ImageHandle);
+                    if (output.Image.TryRead(latch: recording.Latch, image: out var resolvedOutput) && (resolvedOutput.ImageHandle != 0)) {
+                        _ = owner.Wrote.Add(item: resolvedOutput.ImageHandle);
                     }
                 }
 
@@ -138,9 +138,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
                     first &&
                     (recording.Reads is { } reads) &&
                     (reads.IndexOf(producer: ExportedView) is var index and >= 0) &&
-                    reads[index].Image.IsSameDeviceImage
+                    reads[index].TryRead(latch: recording.Latch, read: out var resolvedRead) &&
+                    resolvedRead.Image.IsSameDeviceImage
                 ) {
-                    owner.Read.Add(item: (reads[index].Image.ImageHandle, reads[index].Image.ImageViewHandle));
+                    owner.Read.Add(item: (resolvedRead.Image.ImageHandle, resolvedRead.Image.ImageViewHandle));
                 }
 
                 return RenderGraphPackageOutcome.Drew;
@@ -162,9 +163,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 if (
                     (recording.Reads is { } reads) &&
                     (reads.IndexOf(producer: ExportedView) is var index and >= 0) &&
-                    reads[index].Image.IsSameDeviceImage
+                    reads[index].TryRead(latch: recording.Latch, read: out var resolvedRead) &&
+                    resolvedRead.Image.IsSameDeviceImage
                 ) {
-                    owner.Seen.Add(item: reads[index].Image.ImageViewHandle);
+                    owner.Seen.Add(item: resolvedRead.Image.ImageViewHandle);
                 }
 
                 return RenderGraphPackageOutcome.Drew;

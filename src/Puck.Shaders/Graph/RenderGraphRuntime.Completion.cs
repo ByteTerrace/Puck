@@ -89,25 +89,40 @@ public sealed partial class RenderGraphRuntime {
         m_historySchedule = null;
         m_historyPrior = null;
     }
-    private void RememberOutput(int index, ShaderPipelineRenderNode node, RenderGraphSchedule schedule, in Surface surface) {
-        NotePackageTaint(index: index);
+    private void RememberOutput(int index, ShaderPipelineRenderNode node, long frame, RenderGraphSchedule? schedule, in Surface surface, bool rendered) {
+        if (rendered) {
+            NotePackageTaint(index: index);
+        }
         SettleWithdrawal(index: index);
-        var publication = (((node.PublishedBinding is { } binding) && node.TryGetBoundImage(image: out var input, name: binding))
-            ? input.Publication
+        var publication = (((node.PublishedBinding is { } binding) &&
+            node.TryGetBoundImage(image: out var input, name: binding) &&
+            input.TryRead(latch: in m_latch, image: out var resolvedInput))
+            ? resolvedInput.Publication
             : new ReferenceRevision(Owner: node, Revision: node.SubmissionCount));
+        var label = (rendered
+            ? m_routes[index].Union(other: m_boundLabels[index]).Union(other: node.PublishedLabel)
+            : m_routes[index].Union(other: node.PublishedLabel));
 
-        var buffer = node.LatestOutputBuffer();
-        var buffers = node.LatestOutputBuffers(reuse: m_previous[index].Buffers);
+        if (rendered && (m_taintedReads[index] is not null)) {
+            label = label.WithExternal(external: true);
+        }
+        if (!label.IsClassified || (surface.IsEmpty && (node.LatestOutputBuffer().Buffer is null))) {
+            m_outputs.Forget(index: index);
 
-        m_previous[index] = m_current[index];
-        m_current[index] = new Output(
-            Buffer: buffer.Buffer, Frame: schedule.Frame, Image: surface, Layout: node.PublishedLayout,
-            Buffers: buffers,
-            BufferPublication: buffer.Publication,
-            StateTick: node.PublishedStateTick,
-            Publication: publication,
-            StandsFor: StandingOf(index: index, node: node, schedule: schedule, surface: in surface),
-            Tainted: (m_taintedReads[index] is not null));
+            return;
+        }
+
+        m_outputs.Write(
+            frame: frame,
+            index: index,
+            label: label,
+            node: node,
+            publication: publication,
+            standsFor: ((schedule is null)
+                ? Standing.Own
+                : StandingOf(index: index, node: node, schedule: schedule, surface: in surface)),
+            surface: in surface
+        );
     }
     private void MarkCurrent(int index) {
         m_stale[index] = null;
@@ -307,6 +322,7 @@ public sealed partial class RenderGraphRuntime {
                 (read.Frame >= 0) &&
                 (RecordedAt(
                     frame: read.Frame,
+                    latch: in m_latch,
                     producer: producer
                 ).Frame < read.Frame)
             ) {
@@ -340,7 +356,7 @@ public sealed partial class RenderGraphRuntime {
                 : FrameRender.Waiting(reason: reason));
         } else if (
             (m_producers[m_root] is null) &&
-            (m_current[m_root].Frame < 0)
+            (LatestOf(index: m_root, latch: in m_latch).Frame < 0)
         ) {
             Render = FrameRender.Waiting(reason: $"the root '{m_set.Instances[m_root].Name}' has produced no output");
         } else {

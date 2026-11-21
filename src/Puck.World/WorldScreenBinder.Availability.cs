@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Abstractions.Presentation;
 using Puck.World.Client;
 using Puck.World.Server;
 
@@ -67,18 +68,27 @@ public sealed partial class WorldScreenBinder {
         path = ((split < 0) ? [] : path[(split + 1)..]);
         return split < 0 || !path.IsEmpty;
     }
-    private static WorldViewAccess Access(InfinityEntry infinity) => new(
-        Available: (infinity.Access.Level != WorldSessionAccess.None),
-        Epoch: infinity.Access.Epoch
-    );
+    private static WorldViewAccess ViewAccess(WorldViewerAccess access, WorldSessionMirror? mirror) {
+        var available = (access.Level != WorldSessionAccess.None);
+        var route = (!available
+            ? DeliveryLabel.Of(span: DeliverySpan.Ended)
+            : ((mirror is null)
+                ? DeliveryLabel.Of(span: access.Span)
+                : DeliveryLabel.Of(span: access.Span).Union(other: DeliveryLabel.Of(span: mirror.DeliverySpan))));
+
+        return new WorldViewAccess(
+            Available: available,
+            Epoch: access.Epoch,
+            Route: route
+        );
+    }
+    private static WorldViewAccess Access(InfinityEntry infinity) =>
+        ViewAccess(access: infinity.Access, mirror: infinity.Hosted?.Mirror);
     private static WorldViewAccess Access(SessionFeed feed) {
         var access = WorldViewAccess.Open;
 
         for (var current = feed; current is not null; current = current.ParentFeed) {
-            access = access.Join(other: new WorldViewAccess(
-                Available: (current.Route.Access.Level != WorldSessionAccess.None),
-                Epoch: current.Route.Access.Epoch
-            ));
+            access = access.Join(other: ViewAccess(access: current.Route.Access, mirror: current.Mirror));
             if (current.ParentInfinity is { } infinity) { access = access.Join(other: Access(infinity: infinity)); }
         }
         return access;
