@@ -203,6 +203,7 @@ public static class WorldBootComposition {
         services.AddSingleton<PlayerRoster>(implementationFactory: static sp => new PlayerRoster(
             definition: sp.GetRequiredService<WorldDefinition>(),
             link: sp.GetRequiredService<LoopbackTransport>(),
+            profiles: sp.GetRequiredService<WorldServer>().CaptureRosterProfiles(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>()
         ));
         // The per-seat PERCEPTION ANCHOR — the one body index all seat-relative presentation (camera eye, audio
@@ -327,6 +328,7 @@ public static class WorldBootComposition {
         services.AddSingleton<IWorldServerHost>(implementationFactory: static sp => sp.GetRequiredService<WorldServer>());
         // The boot server's own counters (state.arena, state.rules, state.search) for world.counters.
         services.AddWorldServerCounters();
+        services.AddSingleton<WorldLinkBoundary>();
         services.AddSingleton<LoopbackTransport>();
         // The console's handlers submit through the boot row's console link, which registers each line in the console's
         // table so its verdict answers and counts; the client, the roster, the camera and the boot row's own tape and
@@ -928,7 +930,8 @@ public static class WorldBootComposition {
                 pacing: sp.GetRequiredService<HostPacing>(),
                 presents: (sp.GetService<WorldHostSettings>() is not { Headless: true }),
                 jobs: sp.GetRequiredService<Puck.Hosting.Jobs.JobPool>(),
-                scenario: scenario
+                scenario: scenario,
+                linkBoundary: sp.GetRequiredService<WorldLinkBoundary>()
             );
             var bootOrigin = sp.GetRequiredService<WorldDefinitionSource>();
             var bootServer = sp.GetRequiredService<WorldServer>();
@@ -1325,7 +1328,7 @@ public static class WorldBootComposition {
                 // Constructing the runtime mounts the guests for the presented shape.
                 _ = sp.GetRequiredService<WorldAddonRuntime>();
             }
-            return new WorldSimulation(sp.GetRequiredService<WorldHostStep>(), postStep);
+            return new WorldSimulation(sp.GetRequiredService<WorldHostStep>(), postStep, sp.GetRequiredService<WorldLinkBoundary>());
         });
 
         // The platform's high-resolution wait for every shape's pacing loop and device-loss backoff, registered by the

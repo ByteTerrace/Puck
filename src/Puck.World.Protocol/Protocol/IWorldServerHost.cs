@@ -5,13 +5,15 @@ namespace Puck.World.Protocol;
 /// exposes for a loopback client to submit through and attach a sink to. A separate shape from <see cref="IServerLink"/>
 /// on purpose: <see cref="IServerLink"/> is the client-facing submit vocabulary (the taps and the Submit* naming a
 /// recording observes), while this is the server-facing surface the transport adapts it onto — deliberately narrow
-/// (three members, not one per submission kind), because every non-intent submission funnels through the one ordered
+/// because every non-intent submission funnels through the one ordered
 /// domain <see cref="Submit"/> drains; there is no per-kind Enqueue*/Apply* here for a transport to split traffic across.
 /// Puck.World.Protocol cannot name <c>Puck.World.Server.WorldServer</c> directly — this interface is what lets
 /// <see cref="LoopbackTransport"/> hold a server reference without the assembly ever naming the concrete type, so
 /// <c>Puck.World.Server</c> stays a downstream consumer of <c>Puck.World.Protocol</c> rather than a dependency of it.
 /// </summary>
 public interface IWorldServerHost {
+    /// <summary>Refuses an inline loopback reply while the authority holds an incomplete tick.</summary>
+    void RequireInlineSubmission();
     /// <summary>Binds the client sink the server delivers each tick's snapshot to — a subscribe, not an overwrite: the
     /// server's output hub supports more than one attached sink (play-and-host), so a second call adds a second
     /// subscriber rather than displacing the first. The newly attached sink also immediately receives the live

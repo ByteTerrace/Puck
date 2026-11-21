@@ -1,10 +1,15 @@
+using Puck.Abstractions.Pacing;
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.World.Protocol;
 
 namespace Puck.World;
 
 /// <summary>The one fixed-step shell for every boot shape. The composition supplies its post-step.</summary>
-internal sealed class WorldSimulation(WorldHostStep step, Action afterInstances) : IFixedStepSimulation {
+internal sealed class WorldSimulation(WorldHostStep step, Action afterInstances, WorldLinkBoundary boundary) : IFixedStepSimulation {
+    /// <inheritdoc/>
+    public IHostTickBoundary TickBoundary => boundary;
+
     /// <inheritdoc/>
     public bool AwaitsFrame => step.AwaitsFrame;
 

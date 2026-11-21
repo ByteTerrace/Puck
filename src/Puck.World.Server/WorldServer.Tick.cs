@@ -153,6 +153,15 @@ public sealed partial class WorldServer {
     /// <inheritdoc cref="WorldTick.Step"/>
     [Replaces(root: typeof(StateArena))]
     public void Step(in FixedStepContext context) => m_tick.Step(context: in context);
+
+    void IWorldServerHost.RequireInlineSubmission() => ThrowIfTickPending();
+
+    /// <summary>Captures the owned profiles for the local roster while the authority is settled.</summary>
+    public WorldRosterProfiles CaptureRosterProfiles() {
+        using var gate = EnterAuthorityGate();
+        return m_profiles.CaptureRosterProfiles();
+    }
+
     /// <inheritdoc cref="WorldTick.Submit"/>
     public void Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) =>
         m_tick.Submit(

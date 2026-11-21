@@ -143,6 +143,8 @@ public sealed class HostLoop(
         var holding = false;
         Exception? fault = null;
 
+        var boundary = m_simulation?.TickBoundary;
+        boundary?.RegisterPump();
         try {
             while (!stoppingToken.IsCancellationRequested && (isOpen?.Invoke() ?? true)) {
                 timeline.BeginIteration();
@@ -231,6 +233,7 @@ public sealed class HostLoop(
             fault = exception;
             throw;
         } finally {
+            boundary?.UnregisterPump();
             HostWaits.EndPump();
             try {
                 LauncherHostRun.RunTeardown(fault, logger, ("flush output", output.Drain));

@@ -121,8 +121,20 @@ public sealed class FixedStepPump {
     /// <summary>Runs the iteration's control phase even when no step is due. The first step reuses it; later steps in a
     /// catch-up burst still run it before each input snapshot.</summary>
     public void BeginIteration() {
-        m_beforeStep?.Invoke(AtTickBoundary);
+        RunControlPhase();
         m_iterationDrained = true;
+    }
+
+    private void RunControlPhase() {
+        var atBoundary = AtTickBoundary;
+        var window = atBoundary ? m_simulation.TickBoundary : null;
+
+        window?.Open(drain: !StepPending);
+        try {
+            m_beforeStep?.Invoke(atBoundary);
+        } finally {
+            window?.Close();
+        }
     }
     /// <summary>Creates the pump every launcher host loop drives: it drains the console before every step, holds the
     /// first step until piped standard input no longer can hold it, stops stepping once <c>quit</c> has run, and bounds
@@ -344,7 +356,7 @@ public sealed class FixedStepPump {
     // simulation's rate (read before the drain as ratePerSecond), when the host may not step, or when a holding pump's
     // simulation withholds it, spending withheldTicks of host time.
     private StepGate Gate(uint ratePerSecond, ulong withheldTicks) {
-        if (m_iterationDrained) { m_iterationDrained = false; } else { m_beforeStep?.Invoke(AtTickBoundary); }
+        if (m_iterationDrained) { m_iterationDrained = false; } else { RunControlPhase(); }
 
         if (StepPending) { return StepGate.Steps; }
 
@@ -363,6 +375,18 @@ public sealed class FixedStepPump {
     // Apply input once, then retain the same coordinates and commands until the simulation completes.
     private bool Step(ulong stepTicks) {
         var started = m_timeline?.Time.GetTimestamp() ?? 0L;
+        var window = m_simulation.TickBoundary;
+        window?.Open(drain: false);
+        try {
+            if (!TryStep(stepTicks)) { return false; }
+        } finally {
+            window?.Close();
+        }
+        if (m_timeline is { } timeline) { timeline.NoteTick(ticks: timeline.Time.GetTimestamp() - started); }
+        return true;
+    }
+
+    private bool TryStep(ulong stepTicks) {
         if (!StepPending) {
             var stepElapsedTicks = m_elapsedTicks + stepTicks;
             var windowEndTick = CaptureOriginTicks + stepElapsedTicks;
@@ -376,7 +400,6 @@ public sealed class FixedStepPump {
         m_completedStepCount++;
         m_pendingContext = default;
         m_pendingCommands = default;
-        if (m_timeline is { } timeline) { timeline.NoteTick(ticks: timeline.Time.GetTimestamp() - started); }
         return true;
     }
 }
