@@ -6,38 +6,29 @@ namespace Puck.World.Server;
 
 /// <summary>
 /// The runtime counterpart to <see cref="IWorldNeighbourResolver"/>: <see cref="IWorldNeighbourResolver"/> proves an
-/// adjacency envelope once at document-load time; this seam resolves the neighbour's actual delivered ground and
-/// entity content every tick a body or render composition needs it. <c>Puck.World.Server</c> (a
+/// adjacency envelope once at document-load time. This seam reads the neighbour's published ground and entity
+/// content. <c>Puck.World.Server</c> (a
 /// body's contact resolution) and <c>Puck.World</c>'s render composition both consume the ONE resolution an
 /// implementation produces, so a border's geometry and the ground a body stands on can never disagree.
 /// </summary>
 /// <remarks>Injected, never resolved by reaching into a sibling instance directly (<c>WorldServer.Adjacencies</c>
-/// is the seam a body's contact field reads it through) — the composition root's implementation is expected to reach
+/// exposes the latest published projections) — the composition root's implementation is expected to reach
 /// the neighbour over the SAME wire-shaped path an ordinary session screen already observes a destination through
 /// (<c>WorldServer.AttachSink</c>), so the answer is data that could equally have arrived over a real network
 /// connection, never a same-process shortcut into the neighbour's live server objects.</remarks>
 public interface IWorldAdjacencySource {
-    /// <summary>Returns the durable address of one locally authoritative entity. Cross-authority interaction uses
-    /// this identity—not process placement or transport arrival order—to settle a single responder.</summary>
-    WorldEntityAddress LocalEntityAddress(int index);
-    /// <summary>The authored dynamic-body contact mode of one locally authoritative entity.</summary>
-    WorldBodyContactMode LocalBodyContact(int index);
-    /// <summary>Reads the generation-addressed slot one locally authoritative entity held under the authority it
-    /// arrived from. A neighbour's delivered record can predate a handoff this authority has already committed, and
-    /// the entity it still shows at that address is the arrival seen before its handoff, never a second body.</summary>
-    /// <param name="index">The local entity index.</param>
-    /// <param name="departedFrom">The address on success.</param>
-    /// <returns><see langword="true"/> when the entity arrived by a committed handoff.</returns>
-    bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom);
-    /// <summary>Freezes the delivered neighbour records that simulation may read during one authority tick. A
-    /// transport may continue delivering newer records concurrently, but they become eligible only at the next
-    /// call. Rendering observes the same most-recent frozen record.</summary>
-    void BeginTick(ulong tick);
-    /// <summary>Attempts to resolve one live authored adjacency.</summary>
-    /// <param name="adjacencyName">The source document's stable adjacency name.</param>
-    /// <param name="neighbour">The resolved neighbour handle, when reachable.</param>
-    /// <returns><see langword="true"/> when the neighbour is currently reachable and its counterpart face resolves.</returns>
-    bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour);
+    /// <summary>Reads the published neighbour for one authored adjacency.</summary>
+    IWorldAdjacencyNeighbour? Find(string adjacencyName) {
+        var projections = Visuals();
+        for (var index = 0; index < projections.Count; index++) {
+            var projection = projections[index];
+            if (projection.Direct && string.Equals(projection.Name, adjacencyName, StringComparison.Ordinal)) {
+                return projection.Neighbour;
+            }
+        }
+        return null;
+    }
+
     /// <summary>Returns the deterministic contact/render/interest projection set: every direct edge plus
     /// compiler-derived corner peers reachable through two different direct neighbours. Corner peers observe and
     /// provide geometry contact but never own a crossing; their path maps terrain and entity poses through the same
@@ -56,9 +47,7 @@ public readonly record struct WorldAdjacencyFramePair(WorldFaceFrame Neighbour, 
 /// <summary>One direct or compiler-derived corner projection.</summary>
 public sealed record WorldAdjacencyProjection(string Name, IWorldAdjacencyNeighbour Neighbour, IReadOnlyList<WorldAdjacencyFramePair> Path, FixedQ4816 OverlapDepth, bool Direct);
 /// <summary>
-/// One resolved adjacent authority: its live definition, per-tick entity image, and counterpart frame. All halves
-/// share one delivered mirror, so observation, interaction callers, and rendering cannot disagree about which
-/// revision they read. A Server-side contact resolver additionally narrows to
+/// One resolved adjacent authority: its delivered definition, per-tick entity image, and counterpart frame. A Server-side contact resolver additionally narrows to
 /// <c>IWorldAdjacencyNeighbourContact</c> for the compiled solid field this project cannot name.
 /// </summary>
 public interface IWorldAdjacencyNeighbour {

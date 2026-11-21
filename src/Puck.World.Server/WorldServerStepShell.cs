@@ -55,7 +55,8 @@ public static class WorldServerStepShell {
             lock (server.AuthorityGate) {
                 try {
                     if (!resuming) { server.PendingReplayInputs = tape?.InjectDriveTick(); }
-                    pending = server.Tick.TryAdvance(current.StepTicks, deadline);
+                    var prepared = server.Tick.PrepareAdvance(current.StepTicks);
+                    pending = server.Tick.TryAdvance(in prepared, deadline);
                     if (pending is not null) { return current.Tick; }
                 } catch (InvalidDataException error) when (tape?.Mode == WorldReplayMode.Replaying &&
                     ReplayRefusalExtensions.ReasonOf(error) == ReplayRefusal.MissingPrivateDraw) {

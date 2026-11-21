@@ -535,9 +535,10 @@ boot population directly is a routing defect.
 
 ## Contact across the overlap
 
-`WorldAdjacencyFields` owns the delivered neighbour images used by both contact
-and presentation. It freezes the complete direct-plus-derived projection graph
-once per authority tick; contact must not rebuild that graph per body.
+`WorldAdjacencyFields.Prepare` resolves instances and observation leases at a
+host boundary. It publishes frozen direct and corner projections for both
+contact and presentation. The tick reads that record without consulting the
+host or a live neighbour mirror.
 `WorldAdjacencyContactField` walks the same projection set as rendering,
 including a diagonal peer whose two overlap bands meet at a four-way corner. It
 maps the body through every path stage, resolves neighbour terrain and eligible
@@ -576,10 +577,10 @@ local body per tick:
   reports therefore comes from the body's own motion; a neighbour can push a
   still body up to its face but not across it.
 
-`WorldPopulation.BeginAdjacencyContacts` opens one pinned image and budget for
-the tick before its mutation drain. A mapped continuum arrival between ticks
-opens the upcoming tick's same image and allowance; ordinary advance does not
-replenish it. `WorldBody.FollowCarrier` names its population-bound slot even
+`WorldPopulation.BeginAdjacencyContacts` installs the prepared image and opens
+the contact budget before the tick's mutation drain. A mapped continuum arrival
+during a host transfer or mailbox drain can open the upcoming tick's image and
+budget early. The tick uses that same image and remaining budget. `WorldBody.FollowCarrier` names its population-bound slot even
 before its first rigid advance. Its local block retains the ordinary carry
 response; every propagated neighbour block goes through the same admission
 door again for the carrier's own position, velocity and remaining allowance.

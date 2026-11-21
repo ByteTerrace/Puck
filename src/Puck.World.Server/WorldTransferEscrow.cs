@@ -1561,6 +1561,7 @@ public sealed partial class WorldTransferEscrow {
                 yawRadians: member.YawRadians
             );
         } else if (member.Arrival == WorldTransferArrival.Mapped) {
+            if (member.Continuum is not null) { m_server.PrepareAdjacencyForArrival(); }
             m_server.Population.ApplyMappedArrival(
                 actionContinuity: member.ActionContinuity,
                 continuum: member.Continuum,

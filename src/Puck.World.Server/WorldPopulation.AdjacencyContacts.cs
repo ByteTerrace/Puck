@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Puck.Maths;
 
 namespace Puck.World.Server;
@@ -13,21 +14,24 @@ public sealed partial class WorldPopulation {
     private FixedQ4816[] m_adjacencyCorrectionSpent = [];
     private ulong m_adjacencyTick = 1;
     private ulong? m_adjacencyImageTick;
+    internal ImmutableArray<WorldAdjacencyProjection> AdjacencyProjections { get; private set; } = [];
+
+    internal bool HasAdjacencyImage(ulong tick) => (m_adjacencyImageTick == tick);
     // The ownership faces of the definition the contact field composes over, rederived when that definition changes.
     private WorldOwnershipFace[] m_ownershipFaces = [];
     private WorldDefinition? m_ownershipFacesDefinition;
 
     private void BeginAdjacencyContacts() {
-        if ((m_adjacencies is null) || (m_adjacencyImageTick == m_adjacencyTick)) { return; }
+        if ((m_adjacencyAuthority is null) || (m_adjacencyImageTick == m_adjacencyTick)) { return; }
         if (m_adjacencyCorrectionSpent.Length != Capacity) {
             m_adjacencyCorrectionSpent = new FixedQ4816[Capacity];
         } else {
             Array.Clear(m_adjacencyCorrectionSpent);
         }
-        m_adjacencies.BeginTick(tick: m_adjacencyTick);
         m_adjacencyImageTick = m_adjacencyTick;
     }
-    internal void BeginAdjacencyContacts(ulong tick) {
+    internal void BeginAdjacencyContacts(ulong tick, ImmutableArray<WorldAdjacencyProjection> adjacency) {
+        AdjacencyProjections = adjacency;
         m_adjacencyTick = tick;
         BeginAdjacencyContacts();
     }
