@@ -2975,6 +2975,19 @@ is pushed to `main` ([the player channel](../development/ci.md#the-player-channe
   and a verbose GC trace. The machine's only readings came from a source
   build before the device table applied and before the far and distant
   shadow work landed, so they describe nothing current.
+- [low] Whether Caddy's MCP TLS front logs the load balancer's TCP probe of
+  8443 as handshake noise is unverified.
+- [low] Workers sharing one MCP hostname keep their own copy of Caddy's TLS
+  state, which `build/Keep-WorldTls.py` reconciles through the owner's store
+  every ten minutes, so workers whose Caddy reaches the same ARI renewal time
+  before either has stored its renewal each renew (ARI renewals are exempt from
+  Let's Encrypt's rate limits; startup issuance is already one per hostname).
+  The release lane runs one authoritative worker today. If many workers come
+  to share a hostname, weigh a Caddy storage module that makes the store
+  Caddy's live storage, so certmagic's own storage locks serialize renewals:
+  `lnr0626/certmagic-azureblob` (MIT, managed identity, blob-lease locks) is
+  the candidate found, young and from one author, and it needs a custom
+  `xcaddy` build in place of the pinned official image.
 - [low] `worldSiloConfigType`'s `compute.spot.restoreTimeout`
   (`avm/ptn/platform/world-silo/main.bicep`) is read by nothing, since Flexible
   scale sets refuse Spot Try & Restore and `worldSiloCompute.bicep` holds the
@@ -3788,6 +3801,12 @@ their lane order; this packet keeps the single duplicates and leads.
   record goes (an `IClientSink` or a wire frame). One stream type writing
   to a record target would hold each rule once; the withdrawal chokepoint's
   step 4 (the mirror per span) is the natural place to make it.
+- Four copies of the world worker's managed-identity token fetch and storage
+  read in Python: `build/Boot-WorldSilo.py` (`fetch`), `build/Guard-WorldRelease.py`
+  (`guard`), `build/Keep-WorldTls.py` (`token`, `call`) and the registry login
+  `build/Start-WorldSilo.sh` writes inline. Each is a standalone input the
+  release pins, so sharing one needs the launcher to install a guest module the
+  others import (the launcher already runs first and verifies its inputs).
 - The bake's landing stages still allocate each mesh's workspace afresh, which
   is most of what a cold debug-world bake still allocates and collects
   ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials),

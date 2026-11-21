@@ -81,10 +81,20 @@ public sealed partial class RenderGraphRuntime {
             }
         }
     }
-    private void RefreshPackageFragments() {
-        RenderGraphRuntimeGraph?[]? candidate = null;
-        List<(int Index, RenderGraphPackageFragment Fragment)>? changes = null;
+    // The fragment changes this frame's refresh found, reused frame to frame.
+    private readonly List<(int Index, RenderGraphPackageFragment Fragment, RenderGraphRuntimeGraph Graph)> m_fragmentChanges = [];
+    // The changes a binding last refused as InputProducer and the set, graphs and producers it bound them against.
+    // TryBindAll answers from those alone, so the same changes against the same three refuse again: they are tried once
+    // one of them moves (a reconfiguration replaces the set, the graphs and the producers; a swap replaces the graphs).
+    private readonly List<(int Index, RenderGraphPackageFragment Fragment, RenderGraphRuntimeGraph Graph)> m_refusedFragmentChanges = [];
+    private object? m_refusedFragmentSet;
+    private object? m_refusedFragmentGraphs;
+    private object? m_refusedFragmentProducers;
 
+    private void RefreshPackageFragments() {
+        var changes = m_fragmentChanges;
+
+        changes.Clear();
         for (var index = 0; (index < m_set.Instances.Count); index++) {
             var instance = m_set.Instances[index];
 
@@ -104,28 +114,54 @@ public sealed partial class RenderGraphRuntime {
                 continue;
             }
 
-            candidate ??= ((RenderGraphRuntimeGraph?[])m_graphs.Clone());
-            candidate[index] = graph;
-            (changes ??= []).Add(item: (index, fragment));
+            changes.Add(item: (index, fragment, graph));
         }
-        if (candidate is not null) {
-            if (!TryBindAll(graphs: candidate, inputs: out var inputs, packages: m_packages, producers: m_producers, refusal: out var refusal, set: m_set)) {
-                // A package resolves its instances' views as the frame begins, and a view that moved to another
-                // residency (a portal window following its destination's scene) binds that residency's producers
-                // before the host reconciles a set whose reads name them. The installed graphs stand for this frame,
-                // and the changed fragments are tried again on the next, against the reconciled set.
-                if (refusal.Code == RenderGraphRuntimeRefusalCode.InputProducer) {
-                    return;
-                }
-                throw new InvalidDataException(message: refusal.Message);
-            }
-            foreach (var (index, _) in changes!) { m_nodes[index]!.RequireSwappable(pipeline: candidate[index]!.Pipeline); }
-            foreach (var (index, fragment) in changes!) {
-                m_nodes[index]!.Swap(pipeline: candidate[index]!.Pipeline);
-                m_packageGraphs.Fragments[m_set.Instances[index].Name] = fragment;
-            }
-            m_graphs = candidate;
-            m_inputs = inputs;
+        if ((changes.Count == 0) || RefusedAlready(changes: changes)) {
+            return;
         }
+
+        var candidate = ((RenderGraphRuntimeGraph?[])m_graphs.Clone());
+
+        foreach (var (index, _, graph) in changes) { candidate[index] = graph; }
+        if (!TryBindAll(graphs: candidate, inputs: out var inputs, packages: m_packages, producers: m_producers, refusal: out var refusal, set: m_set)) {
+            // A package resolves its instances' views as the frame begins, and a view that moved to another
+            // residency (a portal window following its destination's scene) binds that residency's producers
+            // before the host reconciles a set whose reads name them. The installed graphs stand for this frame,
+            // and the changed fragments are tried again against the reconciled set.
+            if (refusal.Code == RenderGraphRuntimeRefusalCode.InputProducer) {
+                m_refusedFragmentChanges.Clear();
+                m_refusedFragmentChanges.AddRange(collection: changes);
+                m_refusedFragmentSet = m_set;
+                m_refusedFragmentGraphs = m_graphs;
+                m_refusedFragmentProducers = m_producers;
+                return;
+            }
+            throw new InvalidDataException(message: refusal.Message);
+        }
+        m_refusedFragmentChanges.Clear();
+        m_refusedFragmentSet = null;
+        foreach (var (index, _, _) in changes) { m_nodes[index]!.RequireSwappable(pipeline: candidate[index]!.Pipeline); }
+        foreach (var (index, fragment, _) in changes) {
+            m_nodes[index]!.Swap(pipeline: candidate[index]!.Pipeline);
+            m_packageGraphs.Fragments[m_set.Instances[index].Name] = fragment;
+        }
+        m_graphs = candidate;
+        m_inputs = inputs;
+    }
+    // Whether these changes are the ones a binding last refused, against the set, graphs and producers it read.
+    private bool RefusedAlready(List<(int Index, RenderGraphPackageFragment Fragment, RenderGraphRuntimeGraph Graph)> changes) {
+        if (!ReferenceEquals(objA: m_refusedFragmentSet, objB: m_set) || !ReferenceEquals(objA: m_refusedFragmentGraphs, objB: m_graphs) ||
+            !ReferenceEquals(objA: m_refusedFragmentProducers, objB: m_producers) || (m_refusedFragmentChanges.Count != changes.Count)) {
+            return false;
+        }
+        for (var position = 0; (position < changes.Count); position++) {
+            var (index, fragment, graph) = changes[position];
+            var refused = m_refusedFragmentChanges[position];
+
+            if ((refused.Index != index) || !ReferenceEquals(objA: refused.Fragment, objB: fragment) || !ReferenceEquals(objA: refused.Graph, objB: graph)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

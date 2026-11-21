@@ -22,15 +22,7 @@ uint sdfRateCell(ViewportData view, uint viewIndex, uint2 origin, uint2 tile, ui
     SdfMeshHit mesh;
     if (!sdfVisibilityHit(ref) || ref.material >= SDF_SCREEN_MATERIAL ||
         !sdfMeshResolveHit(sdfVisibilitySource(ref.identity), sdfVisibilityRecordBuffer[first + SdfVisibilityTriangleWord], mesh)) return 0u;
-    // For a rigid, undisplaced receiver with an unchanged transform, reprojection only needs the camera.
-    // Deforming and moving draws retain per-pixel shading.
-    if ((sdfMeshRecordWord(mesh.record + SDF_MESH_FLAGS_WORD) & SDF_MESH_SKIN_FLAG) != 0u ||
-        sdfMeshDisplacementEntry(mesh.record) != SDF_FRAME_SAMPLED_NONE) return 0u;
-    uint slot = sdfMeshRecordWord(mesh.record + SDF_MESH_FRAME_SLOT_WORD);
-    if (sdfViewPoseSlot(slot) != slot) return 0u;
-    [unroll] for (uint row = 0u; row < 4u; row++) {
-        if (any(sdfMeshRow(mesh.record, row) != sdfMeshPreviousRow(mesh.record, row))) return 0u;
-    }
+    if (!sdfMeshDrawUnmoved(mesh.record)) return 0u;
 
     SdfPixel anchor = sdfPixelAt(view, tile, viewIndex);
     float3 anchorNormal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[first + SdfVisibilityNormalWord]);

@@ -151,7 +151,7 @@ Probe kinds:
   also `Inconclusive`.
 - `hex-pattern`—gambatte's `_out<hex>` convention: the expected hex digits
   are drawn as 8x8 monochrome tiles at the top of the screen, compared against
-  a ported copy of `test/testrunner.cpp`'s own glyph table (`HexPatternProbe`).
+  a ported copy of gambatte's testrunner glyph table (`HexPatternProbe`).
   A pattern character with no glyph is `Inconclusive` rather than an early
   pass. The cell right after the last digit is deliberately not required to
   be clear—several real cases tile further hex-shaped content immediately

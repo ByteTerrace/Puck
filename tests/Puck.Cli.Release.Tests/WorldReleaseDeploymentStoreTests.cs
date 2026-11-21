@@ -227,6 +227,10 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
             launcherScript: File.ReadAllText(path: Path.Combine(
                 path1: root,
                 path2: "build/Boot-WorldSilo.py"
+            )),
+            tlsKeeperScript: File.ReadAllText(path: Path.Combine(
+                path1: root,
+                path2: "build/Keep-WorldTls.py"
             ))
         );
 

@@ -529,7 +529,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         width: width
     );
 
-    public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) {
+    public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule? fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) {
         description.ValidateAgainst(renderPass: renderPass);
 
         var created = CreateCompiled(kind: "graphics pipeline");

@@ -418,6 +418,7 @@ public sealed class OverlayFrameComposer {
             buffer: buffer,
             length: (m_builder.ClipCount * OverlayFrameBuilder.ClipWords)
         );
+        Upload(baseWords: m_builder.TileBaseWords, buffer: buffer, length: m_builder.TileIndexWords);
     }
     /// <summary>Writes the pass block's three per-frame values (<see cref="RenderGraphPackageCatalog.OverlayMembers"/>):
     /// <c>counts</c>, <c>misc</c> and <c>sdf</c>, the counts, region bases and glyph and outline figures the shader reads.
@@ -427,8 +428,8 @@ public sealed class OverlayFrameComposer {
     public void WritePassValues(Span<byte> values) {
         var floats = MemoryMarshal.Cast<byte, float>(span: values);
 
-        floats[0] = m_builder.PanelCount;
-        floats[1] = m_builder.ElementCount;
+        floats[0] = m_builder.TileBaseWords;
+        floats[1] = m_builder.TileElementWords;
         floats[2] = m_builder.Glyphs.AtlasCellWidth;
         floats[3] = m_builder.Glyphs.AtlasCellHeight;
         floats[4] = m_builder.TextBaseWords;

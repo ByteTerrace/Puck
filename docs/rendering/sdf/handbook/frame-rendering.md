@@ -106,8 +106,8 @@ through the interpreter (`mapCore`), the frame's one walk of the SDF program. A
 frame with no pending bake skips both, so a settled scene evaluates no field on
 the GPU at all.
 
-**shadow-near**, **shadow-far** and **shadow-second** (`sdf-mesh-shadow.vert.hlsl`,
-`sdf-mesh-shadow.frag.hlsl`) draw the opaque mesh draws from the light cameras
+**shadow-near**, **shadow-far** and **shadow-second** (`sdf-mesh-shadow.vert.hlsl`)
+draw opaque meshes from the light cameras
 `SdfMeshShadowCascades` fits ([the shadow cascades](#the-shadow-cascades)) into
 their depth alone, each draw whose box lies in the cascade's light box and,
 swept along the light, may shadow a receiver the view shows
@@ -117,6 +117,11 @@ emits (the secondary shadow role, `SdfLights.RoleSlot`), and a view whose world
 holds one stable slot has no `shadow-second` at all. A view whose world draws a
 distant map adds `shadow-distant` ([the distant shadow map](#the-distant-shadow-map)),
 which stands on every frame its inputs do.
+
+The opaque shadow pipelines write depth without a fragment stage.
+The entry pass culls back faces on closed, rigid casters whose bounds are
+wholly beyond the light's near plane. The glass raster marks the optical tiles
+it touches so the next redraw can clear those tiles.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
 each, into the mesh visibility target at the view's extent: per pixel the ray parameter,

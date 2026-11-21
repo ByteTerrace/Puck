@@ -135,7 +135,7 @@ public sealed partial class WorldInspectorText {
     /// <param name="timing">The pass's completed mean.</param>
     public void Timing(string node, in Puck.Abstractions.Gpu.GpuPassTiming timing) {
         if (m_scratch.AsSpan().TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out var written,
-            handler: $"{node}/{timing.Pass}: {timing.Milliseconds:0.000} ms samples={timing.Samples}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0)); }
+            handler: $"{node}/{timing.Pass}: {timing.PerFrameMs:0.000} ms/frame samples={timing.Samples}{(timing.Stale ? " stale" : "")}")) { _ = Line(text: m_scratch.AsSpan(length: written, start: 0)); }
     }
     /// <summary>Appends why a render-graph instance refused the pass timing it was asked for.</summary>
     /// <param name="node">The render-graph instance.</param>

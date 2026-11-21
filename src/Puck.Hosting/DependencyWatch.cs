@@ -4,19 +4,36 @@ namespace Puck.Hosting;
 /// <typeparam name="TKey">The identity of one watched dependency.</typeparam>
 /// <typeparam name="TStamp">The dependency's comparable observed value.</typeparam>
 /// <remarks>The caller supplies monotonic presentation timestamps; no clock enters simulation state.
-/// Refreshing dependencies preserves retained stamps and pending changes, including edits during a build.</remarks>
+/// Refreshing dependencies preserves retained stamps and pending changes, including edits during a build.
+/// <para>A poll reads the stamps on the shared thread pool (<see cref="BackgroundBuild{T}"/>), never on the owner's
+/// thread, which is the host pump that also steps the simulation and produces frames: a read stats files, and a tree
+/// of a few hundred inputs read every poll interval cost that pump whole milliseconds. Every other member, and the
+/// adoption of a finished read, runs on the owner's thread, so the stamp table has one writer. A read sees the keys
+/// watched when it started; a read finishing after <see cref="Clear"/> is discarded, and its answer for a key since
+/// dropped is ignored. The read function must therefore be safe to call from a pool thread.</para></remarks>
 public sealed class DependencyWatch<TKey, TStamp> where TKey : notnull {
     private readonly Dictionary<TKey, TStamp> m_stamps;
     private readonly Func<TKey, TStamp> m_read;
+    private readonly BackgroundBuild<Reading> m_reading = new();
 
     private long m_lastPolledAt;
     private long m_changedAt;
     private long m_retryAt;
+    private long m_generation;
+    private Reading? m_next;
     private bool m_changed;
     private bool m_retry;
 
+    // One poll's stamps, read off the owner's thread for the keys watched when it started.
+    private sealed class Reading(TKey[] keys, long generation) {
+        public TKey[] Keys { get; } = keys;
+        public TStamp[] Stamps { get; } = new TStamp[keys.Length];
+        public long Generation { get; } = generation;
+    }
+
     /// <summary>Creates a watch using the caller's dependency reader and identity comparer.</summary>
-    /// <param name="read">Reads a stamp; inaccessible dependencies should have a stable refusal stamp.</param>
+    /// <param name="read">Reads a stamp; inaccessible dependencies should have a stable refusal stamp. It runs on a
+    /// pool thread during a poll, and on the owner's thread for a newly watched dependency.</param>
     /// <param name="comparer">The dependency identity comparer, or the type's default.</param>
     public DependencyWatch(Func<TKey, TStamp> read, IEqualityComparer<TKey>? comparer = null) {
         ArgumentNullException.ThrowIfNull(read);
@@ -41,24 +58,29 @@ public sealed class DependencyWatch<TKey, TStamp> where TKey : notnull {
         foreach (var key in m_stamps.Keys.ToArray()) {
             if (!retained.Contains(item: key)) { m_stamps.Remove(key: key); }
         }
+        // A read in flight was taken against the set before this one and may predate a first read just recorded.
+        m_generation++;
+        m_next = null;
     }
-    /// <summary>Polls at most once per interval and consumes one request after the quiet period.</summary>
+    /// <summary>Adopts a finished stamp read, starts the next once the interval has passed since the last one started,
+    /// and consumes one request after the quiet period.</summary>
     /// <param name="now">The caller's monotonic presentation timestamp.</param>
     /// <param name="debounceTicks">The quiet period in that timestamp's units.</param>
     /// <param name="pollTicks">The minimum interval between stamp reads in the same units.</param>
-    /// <returns>Whether one build or reload request is due.</returns>
+    /// <returns>Whether one build or reload request is due. A stamp read that threw rethrows its exception here.</returns>
     public bool Poll(long now, long debounceTicks, long pollTicks) {
-        if ((now - m_lastPolledAt) >= pollTicks) {
+        Adopt(now: now);
+        if (!m_reading.IsPending && ((now - m_lastPolledAt) >= pollTicks) && (m_stamps.Count > 0)) {
             m_lastPolledAt = now;
-            foreach (var (key, before) in m_stamps) {
-                var after = m_read(key);
+            // The set's keys and stamp buffer are made once per generation: a finished read is adopted before the next
+            // starts, so the next reuses them.
+            var reading = (m_next ??= new Reading(keys: [.. m_stamps.Keys], generation: m_generation));
+            var read = m_read;
 
-                if (EqualityComparer<TStamp>.Default.Equals(x: before, y: after)) { continue; }
-                m_stamps[key] = after;
-                ChangeCount++;
-                m_changedAt = now;
-                m_changed = true;
-            }
+            m_reading.Start(build: _ => {
+                for (var index = 0; (index < reading.Keys.Length); index++) { reading.Stamps[index] = read(reading.Keys[index]); }
+                return reading;
+            });
         }
         if (!(m_changed || m_retry)) { return false; }
         var queuedAt = ((m_changed && m_retry) ? Math.Max(val1: m_changedAt, val2: m_retryAt) : (m_changed ? m_changedAt : m_retryAt));
@@ -68,15 +90,37 @@ public sealed class DependencyWatch<TKey, TStamp> where TKey : notnull {
         m_retry = false;
         return true;
     }
+    /// <summary>Blocks until the stamp read in flight finishes, so the next <see cref="Poll"/> adopts it; returns at once
+    /// when none is. For an owner that must see the current stamps before it goes on.</summary>
+    public void WaitForRead() => _ = m_reading.WaitFinished(cancellationToken: CancellationToken.None);
+    // Compares a finished read with the stamps it was read against: a moved stamp is a change observed now.
+    private void Adopt(long now) {
+        if (!m_reading.TryTake(error: out var error, result: out var reading)) { return; }
+        if (error is not null) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(source: error); }
+        if (reading!.Generation != m_generation) { return; }
+        for (var index = 0; (index < reading.Keys.Length); index++) {
+            var key = reading.Keys[index];
+            var after = reading.Stamps[index];
+
+            if (!m_stamps.TryGetValue(key: key, value: out var before) || EqualityComparer<TStamp>.Default.Equals(x: before, y: after)) { continue; }
+            m_stamps[key] = after;
+            ChangeCount++;
+            m_changedAt = now;
+            m_changed = true;
+        }
+    }
     /// <summary>Schedules a request after a quiet period, without inventing a dependency change.</summary>
     /// <param name="now">The caller's monotonic presentation timestamp.</param>
     public void Retry(long now) {
         m_retryAt = now;
         m_retry = true;
     }
-    /// <summary>Stops watching and discards all pending change and retry requests.</summary>
+    /// <summary>Stops watching and discards all pending change and retry requests, and the stamps of a read in
+    /// flight.</summary>
     public void Clear() {
         m_stamps.Clear();
+        m_generation++;
+        m_next = null;
         m_lastPolledAt = 0;
         m_changed = false;
         m_retry = false;

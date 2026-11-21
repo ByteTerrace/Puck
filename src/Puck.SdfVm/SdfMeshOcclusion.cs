@@ -26,8 +26,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // Controls only; bounds and level metadata live in the shared mesh region. Paired with sdf-mesh-selection.hlsli:
     // one header row, three detail rows, ten cull rows, one receiver sample row.
     private const int HeaderWords = (SdfKernelInterfaces.MeshSightRow * 4);
-    // Every pass reserves early/late entry; cascades add solid exit, thin exit and optional extinction.
+    // Every pass reserves early/late entry; cascades also reserve exit, extinction and compact culled entry.
     private readonly uint m_argumentPhases;
+    private readonly bool m_optical;
     // The counts' draw phases and portal sight verdicts; the selection marks follow from MeshMarkBase, which the
     // unsigned constant keeps past the verdicts at compile time.
     private const int SightWords = (SdfKernelInterfaces.MeshSightCountBase + SdfPortalSight.Capacity);
@@ -87,8 +88,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     }
 
     // Creates a view's occlusion state; every buffer is created on the first frame that needs it.
-    public SdfMeshOcclusion(IGpuBufferFactory buffers, int slots, string owner, string part, uint argumentPhases, SdfPortalSight? sight = null) {
-        m_argumentPhases = argumentPhases;
+    public SdfMeshOcclusion(IGpuBufferFactory buffers, int slots, string owner, string part, bool cascade, bool optical = false, SdfPortalSight? sight = null) {
+        m_argumentPhases = cascade ? SdfKernelInterfaces.MeshShadowPhases : 2u;
+        m_optical = optical;
         m_retired = Enumerable.Range(count: slots, start: 0).Select(selector: static _ => new List<IGpuBuffer>()).ToArray();
         m_owner = owner;
         m_part = part;
@@ -180,7 +182,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         words[0] = count;
         words[1] = m_levels;
         words[2] = (occlude ? 1u : 0u) | (splitExit ? 2u : 0u) | (m_argumentPhases << 2);
-        words[3] = (glass ? 1u : 0u) | (skipsDepth ? 2u : 0u) | (skipsExit ? 4u : 0u) | (m_marking ? 8u : 0u) | ((motion == SdfMeshMotion.Static) ? 16u : 0u) | ((motion == SdfMeshMotion.Dynamic) ? 32u : 0u) |
+        words[3] = (glass ? 1u : 0u) | (skipsDepth ? 2u : 0u) | (skipsExit ? 4u : 0u) | (m_marking ? 8u : 0u) | ((motion == SdfMeshMotion.Static) ? 16u : 0u) | ((motion == SdfMeshMotion.Dynamic) ? 32u : 0u) | (m_optical ? 64u : 0u) |
             (((uint)(slices - 1)) << 8) | (((uint)slice) << 16);
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
@@ -268,6 +270,11 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         Dispatch(commandBuffer: commandBuffer, invocations: m_count, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionEarlyStep);
         if (!m_lateFollows) { RecordReadback(commandBuffer: commandBuffer, recorder: recorder, sight: false); }
         ToIndirect(commandBuffer: commandBuffer, recorder: recorder);
+    }
+    internal void RecordOpticalClear(IGpuRecorder recorder, nint commandBuffer, IGpuComputePipeline pipeline, nint set, uint side) {
+        Bind(commandBuffer: commandBuffer, pipeline: pipeline, recorder: recorder, set: set);
+        Dispatch(commandBuffer: commandBuffer, invocations: SdfWorldPackage.ShadowOpticalBitmapWords(side) * SdfKernelInterfaces.MeshSelectionGroupSize,
+            level: side, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshShadowOpticalClearStep);
     }
     // Copies the counts after the frame's last selection step into the slot's readback, when the step computed portal
     // sight verdicts or the frame marks its selection; the node delivers the copy once it proves the slot complete.

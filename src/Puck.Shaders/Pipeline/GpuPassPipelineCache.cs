@@ -124,10 +124,9 @@ public sealed class GpuPassPipelineCache {
                     stage: GpuShaderStage.Vertex
                 );
                 cancellationToken.ThrowIfCancellationRequested();
-                built.Secondary = shaderModules.Create(
-                    bytecode: key.Secondary,
-                    stage: GpuShaderStage.Fragment
-                );
+                if (!key.Secondary.IsEmpty) {
+                    built.Secondary = shaderModules.Create(bytecode: key.Secondary, stage: GpuShaderStage.Fragment);
+                }
                 cancellationToken.ThrowIfCancellationRequested();
                 built.RenderPass = services.RenderPassFactory.Create(
                     description: key.RenderPass!,
@@ -153,7 +152,7 @@ public sealed class GpuPassPipelineCache {
 }
 /// <summary>
 /// One pass pipeline and what it was created from, released together: a compute pipeline and its shader module, or a
-/// graphics pipeline, its two shader modules and the render pass it draws in. Its owner is the
+/// graphics pipeline, its shader modules and the render pass it draws in. Its owner is the
 /// <see cref="GpuPassPipelineCache"/> or the harness that built it, never a holder recording with it; a holder creates
 /// its own framebuffers against <see cref="RenderPass"/>.
 /// </summary>
