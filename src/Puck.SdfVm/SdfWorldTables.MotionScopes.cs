@@ -12,11 +12,13 @@ namespace Puck.SdfVm;
 // revision, so the tables judge every change against every scope they hold, here and nowhere else.
 //
 // What a view's passes read of a draw, and where a change to each is judged:
-//   - its record (matrix, mesh, material, clip, carry) : every staged record passes NoteStagedRow, which judges the box
-//                          the record held before the write and the box it holds after (SdfMeshRegion.ReadSelection),
+//   - its record (pose, mesh, material, clip, carry) : every staged record passes NoteStagedRow, which judges the box
+//                          the record held before the write and the box it holds after (RowSelection, JudgeSelection),
 //                          the boxes every pass selects the draw by.
-//   - its frame slot's row (the material frame and the lanes) : NoteMovedSlots judges each changed slot's draws
-//                          (m_rowsByFrameSlot) by the box they hold, unless the staging already judged the record.
+//   - its frame slot's row (the pose of a draw riding the slot, its material frame and its lanes) : NoteMovedSlots
+//                          judges each changed slot's draws (m_rowsByFrameSlot) from the box each was last judged by
+//                          (m_slotBoxes) to the box it holds under the slot's new row, unless the staging already judged
+//                          the record. The kernels derive the same box from the same row (sdfSelectionBox).
 //   - its members' slots (a skinned mesh) : no record changes as a member moves, so NoteSkinnedRows judges each
 //                          skinned row a changed slot may pose by a host bound (SdfMeshBox.TryOfSkin, under the shared
 //                          rows and each view's pose overlay), kept beside the row from one staging to the next and
@@ -54,8 +56,11 @@ public sealed partial class SdfWorldTables {
     private int m_pendingMotionCount;
     // The staging that last staged each row's record.
     private long[] m_rowStagings = [];
-    // The boxed draws by the slot whose row they shade in.
+    // The boxed draws by the slot whose row they ride and shade in.
     private readonly GpuRowIndex<int> m_rowsByFrameSlot = new();
+    // The world box each row whose record holds its box in its slot's frame (SdfMeshRecord.SlotBoxFlag) was last judged
+    // by: the box under its slot's row at that staging (JudgeSelection), what the next judgement starts from.
+    private SdfMeshBox?[] m_slotBoxes = [];
     // What shading reads of a slot besides a draw's, each with the box it reaches in its slot's frame: the live
     // program's paints, in slot order, and the frame's lights and media. A slot's mark says which of the two read it
     // (PaintMark, FrameMark), and a staging keeps the pose each marked slot held before it wrote the slot.
@@ -160,7 +165,7 @@ public sealed partial class SdfWorldTables {
         if (m_skinRows.TryGetValue(key: row, value: out var skin)) {
             box = skin.Box;
         } else {
-            _ = SdfMeshRegion.ReadSelection(record: m_meshDrawWords.AsSpan(length: SdfMeshRecord.DrawWords, start: (row * SdfMeshRecord.DrawWords)), box: out box, glass: out _);
+            _ = RowSelection(row: row, box: out box, glass: out _);
         }
 
         return string.Create(provider: CultureInfo.InvariantCulture, handler:
@@ -338,12 +343,41 @@ public sealed partial class SdfWorldTables {
         box = null;
         glass = false;
 
-        return ((row < m_stagedCount) && SdfMeshRegion.ReadSelection(record: record, box: out box, glass: out glass));
+        return ((row < m_stagedCount) && RowSelection(row: row, record: record, box: out box, glass: out glass));
+    }
+    // The box the tables judge a staged row by as it last stood: its record's world box, or, for a draw riding its slot
+    // (SdfMeshRecord.SlotBoxFlag), the box it was last judged by under its slot's row, which every staging that moves the
+    // slot brings up to date (NoteMovedSlots). Every host reader of a staged row's box reads it here.
+    private bool RowSelection(int row, out SdfMeshBox? box, out bool glass) =>
+        RowSelection(row: row, record: m_meshDrawWords.AsSpan(length: SdfMeshRecord.DrawWords, start: (row * SdfMeshRecord.DrawWords)), box: out box, glass: out glass);
+    private bool RowSelection(int row, ReadOnlySpan<uint> record, out SdfMeshBox? box, out bool glass) {
+        if (!HoldsSlotBox(record: record)) { return SdfMeshRegion.ReadSelection(record: record, transforms: m_motionTransforms, box: out box, glass: out glass); }
+        glass = ((record[(SdfMeshRecord.SelectionWord + 3)] & 2u) != 0u);
+        box = ((row < m_slotBoxes.Length) ? m_slotBoxes[row] : null);
+
+        return true;
+    }
+    // Reads a row's record as it stands after its staging, under the frame's transforms, and holds the box of a draw
+    // riding its slot for the next judgement.
+    private bool JudgeSelection(int row, ReadOnlySpan<uint> record, out SdfMeshBox? box, out bool glass) {
+        var live = SdfMeshRegion.ReadSelection(record: record, transforms: m_motionTransforms, box: out box, glass: out glass);
+
+        if (HoldsSlotBox(record: record)) {
+            if (m_slotBoxes.Length <= row) { Array.Resize(array: ref m_slotBoxes, newSize: Math.Max(val1: (row + 1), val2: m_stagedDraws.Length)); }
+            m_slotBoxes[row] = box;
+        }
+
+        return live;
+    }
+    private static bool HoldsSlotBox(ReadOnlySpan<uint> record) {
+        var flags = record[(SdfMeshRecord.SelectionWord + 3)];
+
+        return (((flags & SdfMeshRecord.SlotBoxFlag) != 0u) && ((flags & (SdfMeshRecord.AbsentFlag | 1u)) == 0u));
     }
     // One row's record was staged: judges the draw it held against the draw it holds, and keeps the row's place in the
     // slot index and the skinned rows. A skinned side is left to NoteSkinnedRows, which holds its bound.
     private void NoteStagedRow(int row, bool wasLive, in SdfMeshBox? before, bool wasGlass, in SdfMeshDraw draw, ReadOnlySpan<uint> record) {
-        var isLive = SdfMeshRegion.ReadSelection(record: record, box: out var after, glass: out var isGlass);
+        var isLive = JudgeSelection(row: row, record: record, box: out var after, glass: out var isGlass);
         var wasSkinned = ((m_skinRows.Count > 0) && m_skinRows.ContainsKey(key: row));
         var isSkinned = (draw.Mesh is { Members.IsEmpty: false });
 
@@ -373,7 +407,7 @@ public sealed partial class SdfWorldTables {
         m_rowStagings[row] = m_motionStaging;
         if (draw.Mesh is { Members.IsEmpty: false }) { return; }
 
-        var isLive = SdfMeshRegion.ReadSelection(record: record, box: out var after, glass: out var isGlass);
+        var isLive = JudgeSelection(row: row, record: record, box: out var after, glass: out var isGlass);
 
         NoteMotion(cause: SdfMotionCause.Draw, row: row, wasLive: wasLive, before: in before, wasGlass: wasGlass, isLive: isLive, after: in after, isGlass: isGlass);
     }
@@ -522,22 +556,27 @@ public sealed partial class SdfWorldTables {
             }
         }
     }
-    // Judges each changed or reseated transform slot: a view's overlay row moves that view's scopes, and any slot the
-    // draws that shade in its frame, unless this staging staged them.
+    // Judges each changed or reseated transform slot: a view's overlay row moves that view's scopes, and each draw riding
+    // the slot (m_rowsByFrameSlot) moves with it, from the box it was last judged by to the box it holds under the slot's
+    // new row, unless this staging staged it at that row already. The held box follows the slot on every staging, open
+    // scope or none, or a later staging would judge the draw from a place it left stagings ago.
     private void NoteMovedSlots(GpuUploadRuns slots) {
         for (var run = 0; (run < slots.Count); run++) {
             var end = Math.Min(val1: m_packedTransformCount, val2: (slots.Start(index: run) + slots.Length(index: run)));
 
             for (var slot = slots.Start(index: run); (slot < end); slot++) {
-                if (m_motionOpen == 0) { return; }
-                foreach (var (first, count, view, _) in m_overlayRows) {
-                    if ((slot >= first) && ((slot - first) < count)) { MeetEveryScope(cause: SdfMotionCause.Overlay, detail: slot, view: view); }
+                if (m_motionOpen > 0) {
+                    foreach (var (first, count, view, _) in m_overlayRows) {
+                        if ((slot >= first) && ((slot - first) < count)) { MeetEveryScope(cause: SdfMotionCause.Overlay, detail: slot, view: view); }
+                    }
                 }
                 for (var row = m_rowsByFrameSlot.First(key: slot); (row >= 0); row = m_rowsByFrameSlot.Next(row: row)) {
-                    if (m_rowStagings[row] == m_motionStaging) { continue; }
-                    var live = ReadStagedSelection(row: row, record: m_meshDrawWords.AsSpan(length: SdfMeshRecord.DrawWords, start: (row * SdfMeshRecord.DrawWords)), box: out var box, glass: out var glass);
+                    if ((row >= m_stagedCount) || (m_rowStagings[row] == m_motionStaging)) { continue; }
+                    var record = m_meshDrawWords.AsSpan(length: SdfMeshRecord.DrawWords, start: (row * SdfMeshRecord.DrawWords));
+                    var live = RowSelection(row: row, record: record, box: out var before, glass: out var glass);
 
-                    NoteMotion(cause: SdfMotionCause.Slot, row: row, wasLive: live, before: in box, wasGlass: glass, isLive: false, after: null, isGlass: false);
+                    _ = JudgeSelection(row: row, record: record, box: out var after, glass: out _);
+                    NoteMotion(cause: SdfMotionCause.Slot, row: row, wasLive: live, before: in before, wasGlass: glass, isLive: live, after: in after, isGlass: glass);
                 }
             }
         }

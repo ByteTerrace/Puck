@@ -81,7 +81,7 @@ public sealed partial class SdfWorldTables {
     // The words the program region holds: the program, then the default shade program's code and parameters after its
     // last vector (PackShadeDefault). The constructor, UploadProgram and PackShadeDefault all size the region by it.
     private static int ProgramRegionWords(SdfProgram program, SdfShadeProgram? shade) =>
-        checked(program.Words.Length + ((shade is null) ? 0 : (shade.Words.Length + shade.ParameterWords.Length)));
+        checked(program.WordCount + ((shade is null) ? 0 : (shade.Words.Length + shade.ParameterWords.Length)));
 
     // The one growth path of the program region and the instance capacity the bake's masks are sized by. The region grows
     // without waiting for the device: what it replaces retires after the following upload, which signals only once every

@@ -8,10 +8,12 @@ namespace Puck.SdfVm;
 // is seeded from this frame's after the ordinary copies, so it reads as still: every row on the first upload and after
 // a program geometry change or a frame owing every row, a range whose owner changed (SdfMovedTransforms.Reseat), and a mesh
 // draw whose observed surface incarnation at its index changed (SdfMeshHistory.Observe). The previous mesh table holds
-// only each draw's matrix. The shared region-copy kernel gathers changed rows from the mesh region in one dispatch,
-// so GpuRegion's CPU-shadow contract holds and only copy requests, never a second matrix, cross the host bus.
+// only each draw's pose words (SdfMeshRecord.PoseWords): a draw riding its frame slot keeps its scale there and takes its
+// previous pose from its slot's previous row, so a cut of its pose history (SdfMeshObservation.PoseCut) reseats that
+// row (ReseatRiddenSlot). The shared region-copy kernel gathers changed rows from the mesh region in one dispatch, so
+// GpuRegion's CPU-shadow contract holds and only copy requests, never a second matrix, cross the host bus.
 public sealed partial class SdfWorldTables {
-    private const int MeshMatrixBytes = (SdfMeshRecord.MatrixWords * sizeof(float));
+    private const int MeshPoseBytes = (SdfMeshRecord.PoseWords * sizeof(float));
     private const GpuStage TableReaders = GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader;
 
     private readonly GpuFittedBuffer m_previousDynamicTransforms;
@@ -208,7 +210,7 @@ public sealed partial class SdfWorldTables {
         BeginHistoryCopy(commandBuffer: commandBuffer, compute: true, destination: m_previousMeshTransforms.Buffer!, source: source);
         var work = m_meshHistoryCopies.Record(commandBuffer: commandBuffer, slot: m_currentSlot, recording: recording,
             source: source, destination: m_previousMeshTransforms.Buffer!, rows: copies, rowLimit: limit,
-            rowWords: SdfMeshRecord.MatrixWords, sourceStrideWords: SdfMeshRecord.DrawWords, destinationStrideWords: SdfMeshRecord.MatrixWords);
+            rowWords: SdfMeshRecord.PoseWords, sourceStrideWords: SdfMeshRecord.DrawWords, destinationStrideWords: SdfMeshRecord.PoseWords);
 
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.HistoryRowsCopied, amount: work.Rows);
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.HistoryBytesCopied, amount: (((long)work.Words) * sizeof(uint)));
@@ -273,6 +275,7 @@ public sealed partial class SdfWorldTables {
 
             if (reseat) { _ = m_namedRowCuts.Add(item: index); }
             observation = m_meshHistory.Observe(draw: in draw, index: index, reseat: reseat, occupancy: m_currentDrawRows.Occupancy(row: index), table: m_currentDrawRows.Rows);
+            if (observation.PoseCut) { ReseatRiddenSlot(draw: in draw); }
             _ = m_absentRows.Remove(item: index);
             if (incremental && !wasAbsent) {
                 // Both ordinary edits and landing use the arena's current placement, never an absent record's zeros.
@@ -282,11 +285,9 @@ public sealed partial class SdfWorldTables {
 
                 packedWords = work.PackedWords;
                 changedWords = work.ChangedWords;
-                if (work.NormalComputed) { tally.Normals++; }
                 if (work.SelectionComputed) { tally.Selections++; }
             } else {
                 SdfMeshRegion.WriteDraw(draw: in draw, placement: m_meshArena.Placements[draw.Mesh!], generation: observation.Generation, record: record);
-                tally.Normals++;
                 tally.Selections++;
             }
         }
@@ -306,30 +307,38 @@ public sealed partial class SdfWorldTables {
             return changedWords;
         }
         var offset = (index * SdfMeshRegion.DrawBytes);
-        var matrix = System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: record[..SdfMeshRecord.MatrixWords]);
+        var matrix = System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: record[..SdfMeshRecord.PoseWords]);
 
-        if (incremental ? ((changedWords & ((1UL << SdfMeshRecord.MatrixWords) - 1)) != 0) :
-            ((offset > (old.Length - MeshMatrixBytes)) || !matrix.SequenceEqual(other: old.Slice(length: MeshMatrixBytes, start: offset)))) {
+        if (incremental ? ((changedWords & ((1UL << SdfMeshRecord.PoseWords) - 1)) != 0) :
+            ((offset > (old.Length - MeshPoseBytes)) || !matrix.SequenceEqual(other: old.Slice(length: MeshPoseBytes, start: offset)))) {
             m_changedMeshMatrices.Add(length: 1, start: index);
             tally.Matrices++;
         }
         return changedWords;
     }
 
+    // Seeds the previous row of the slot a draw rides, after this upload, so its previous pose is its current one: the
+    // pose history of a draw riding its slot is that row's, and a cut of it (SdfMeshObservation.PoseCut: a teleport, a
+    // slot handed to another body, a new occupant) would otherwise read the row's earlier owner or place as motion. Every
+    // draw riding the slot reads still for that frame.
+    private void ReseatRiddenSlot(in SdfMeshDraw draw) {
+        if ((draw.FrameSlot is { } slot) && (slot >= 0) && (slot < m_packedTransformCount)) { m_reseatedTransforms.Add(length: 1, start: slot); }
+    }
+
     // Packs a posed row: only its matrix moved, so its record's placement words, glass membership and live state stand,
     // and its history cell's observation would neither seed nor move its generation (SdfMeshHistory.Observe keys on
     // none of the matrix), so the row is neither observed nor looked up again. Only the pose words are written
-    // (SdfMeshRegion.WriteDrawPose), leaving the record as the full incremental packing would.
+    // (SdfMeshRegion.WriteDrawPose), leaving the record as the full incremental packing would. A draw riding its slot
+    // never comes here: its pose moving changes no record (SdfMeshDrawDifference.Slot).
     private ulong StagePose(int index, in SdfMeshDraw draw, Span<uint> record, ref StagingTally tally) {
         var work = SdfMeshRegion.WriteDrawPose(draw: in draw, previous: in m_stagedDraws[index], record: record);
 
-        if (work.NormalComputed) { tally.Normals++; }
         if (work.SelectionComputed) { tally.Selections++; }
         m_meshRevision++;
         tally.Records++;
         tally.Posed++;
         tally.RecordBytes += (work.PackedWords * sizeof(uint));
-        if ((work.ChangedWords & ((1UL << SdfMeshRecord.MatrixWords) - 1)) != 0) {
+        if ((work.ChangedWords & ((1UL << SdfMeshRecord.PoseWords) - 1)) != 0) {
             m_changedMeshMatrices.Add(length: 1, start: index);
             tally.Matrices++;
         }
@@ -342,7 +351,6 @@ public sealed partial class SdfWorldTables {
     // took the draw journal (Cause null), split between a hand-over (a record naming another mesh than it last staged)
     // and a pose.
     private struct StagingTally(SdfMeshStagingCause? cause) {
-        public long Normals;
         public long Selections;
         public long Records;
         public long HandOvers;
@@ -362,19 +370,18 @@ public sealed partial class SdfWorldTables {
                 causes[((int)SdfMeshStagingCause.Landing)] = Landings;
                 causes[((int)SdfMeshStagingCause.Pose)] = ((Records - HandOvers) - Landings);
             }
-            work.Add(kind: SdfMeshHistory.NormalMatricesComputed, amount: Normals);
             work.Add(kind: SdfMeshHistory.SelectionBoxesComputed, amount: Selections);
             work.Add(kind: SdfMeshHistory.RecordsPacked, amount: Records);
             work.Add(kind: SdfMeshHistory.RecordsPosed, amount: Posed);
             SdfMeshHistory.PublishCauses(records: causes);
             work.Add(kind: SdfMeshHistory.RecordBytesPacked, amount: RecordBytes);
             work.Add(kind: SdfMeshHistory.MatricesChanged, amount: Matrices);
-            work.Add(kind: SdfMeshHistory.MatrixBytesChanged, amount: (Matrices * MeshMatrixBytes));
+            work.Add(kind: SdfMeshHistory.MatrixBytesChanged, amount: (Matrices * MeshPoseBytes));
         }
     }
 
     private void EnsurePreviousMeshCapacity(int count) {
-        var bytes = (((ulong)Math.Max(val1: 1, val2: count)) * MeshMatrixBytes);
+        var bytes = (((ulong)Math.Max(val1: 1, val2: count)) * MeshPoseBytes);
 
         if (!m_previousMeshTransforms.Fit(bytes)) { return; }
         m_bindingRevision++;

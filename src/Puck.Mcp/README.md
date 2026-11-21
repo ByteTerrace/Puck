@@ -224,7 +224,7 @@ than writing a boot line:
   allows. Every start, windowed or headless, then waits for the host admission
   (`puck lease` and the gate wait on the same one): free memory, a commit charge under
   its share of the commit limit, commit headroom that covers the World's expected peak
-  (windowed 18 GB, headless 6 GB) plus what admitted starts still have to grow, free disk and, for a windowed start, an idle GPU. The
+  (the start's own measured peak by profile: kind, backend, warm or cold mesh store; before a measurement windowed 18 GB, cold windowed 22 GB, headless 6 GB) plus what admitted starts still have to grow, free disk and, for a windowed start beside a working one, a GPU whose video memory is not full. The
   wait is the start's `host-admission` stage, and a start the admission refuses
   launches nothing and releases its leases. `timeoutSeconds` (1–7200, default 900)
   bounds the whole admitted start: build, lease and admission waits and the World's

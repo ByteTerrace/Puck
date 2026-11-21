@@ -2315,7 +2315,7 @@ public sealed partial class SdfMeshPathBake {
         if (empty) {
             if (contour is not null) { StoreEmpty(group); }
         } else if (contour is not null) {
-            creases = CreaseVertices(contour: contour, workspace: group.Memory);
+            creases = CreaseVertices(allocator: group.Allocator, contour: contour, workspace: group.Memory);
             if (creases.Length > 0) {
                 group.Projection = new ContourProjection(allocator: group.Allocator, contour: contour, observer: group.Memory);
                 group.CreaseSpacing = lattice.ContourCell;
@@ -2351,8 +2351,8 @@ public sealed partial class SdfMeshPathBake {
         }
     }
     // The vertices a contour's field check measures (AnswerCreases): every vertex no crossing pins to the surface.
-    private static int[] CreaseVertices(SdfContour contour, IAllocationObserver? workspace) {
-        using var found = new RentedList<int>(owner: workspace);
+    private static int[] CreaseVertices(SdfContour contour, IAllocationObserver? workspace, IAllocator? allocator) {
+        using var found = new OwnedBuffer<int>(allocator: allocator, observer: workspace);
 
         for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
             if (((vertex < contour.Features.Length) && contour.Features[vertex]) || ((vertex < contour.Solved.Length) && contour.Solved[vertex])) { found.Add(item: vertex); }
@@ -2463,7 +2463,7 @@ public sealed partial class SdfMeshPathBake {
     private void Split(Group group) {
         var started = Stopwatch.GetTimestamp();
 
-        var contour = group.Contour!.Finished(cell: group.DiagnosticCell, workspace: group.Memory);
+        var contour = group.Contour!.Finished(allocator: group.Allocator, cell: group.DiagnosticCell, workspace: group.Memory);
         var cut = new SdfMeshMaterialCut(contour: contour);
         var points = cut.Points(into: group.Points);
 
@@ -2531,7 +2531,7 @@ public sealed partial class SdfMeshPathBake {
         var started = Stopwatch.GetTimestamp();
 
         try {
-            mesh = group.Cut!.Build(group.Memory);
+            mesh = group.Cut!.Build(group.Memory, group.Allocator);
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
             SdfMeshBakeReport.Refused(refusal: exception.Message, selector: group.Selector);
         }
@@ -2569,7 +2569,7 @@ public sealed partial class SdfMeshPathBake {
             var contoured = mesh.TriangleCount;
             var started = Stopwatch.GetTimestamp();
 
-            mesh = SimplificationStage.Run(mesh, group.Dynamic, group.Glass, group.Instances, group.Geometry.ContainsGlyph, group.Memory);
+            mesh = SimplificationStage.Run(mesh, group.Dynamic, group.Glass, group.Instances, group.Geometry.ContainsGlyph, group.Memory, group.Allocator);
             merged = (contoured - mesh.TriangleCount);
             Account(detail: new(Count: contoured, Kept: mesh.TriangleCount), group: group, since: started, stage: BakeStage.Land);
             KeepCheckpoint(group, mesh, simplified: true);

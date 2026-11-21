@@ -76,7 +76,7 @@ public interface ISdfSceneEmitter {
     /// <param name="context">This call's context — supplies <see cref="SdfEmitContext.SlotBase"/>,
     /// <see cref="SdfEmitContext.ParkPosition"/>, and <see cref="SdfEmitContext.Time"/>.</param>
     /// <param name="moved">The frame's moved set, which every repacked or vacated owner reports to.</param>
-    void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) { }
+    void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) { }
 
     /// <summary>Gets the number of independent revision counters this emitter watches (0 = never changes, the default
     /// — a purely static emitter). Read once by the composition host to lay out its revision vector, so — exactly like

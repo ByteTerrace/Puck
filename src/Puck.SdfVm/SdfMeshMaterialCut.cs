@@ -184,13 +184,14 @@ internal sealed class SdfMeshMaterialCut {
     /// <exception cref="InvalidOperationException">The mesh grows past <see cref="MaxTrianglesPerQuad"/> triangles or
     /// <see cref="MaxVerticesPerQuad"/> added vertices for each contour quad. The contour bounds the lists, so a cut that
     /// does not end fails its group by name instead of taking the process.</exception>
-    public SdfMesh? Build(IAllocationObserver? owner = null) {
+    /// <param name="allocator">The native allocator the mesh's working lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> to rent them.</param>
+    public SdfMesh? Build(IAllocationObserver? owner = null, IAllocator? allocator = null) {
         var contour = m_contour;
 
         if (contour.QuadCount == 0) { return null; }
 
         // The lists are working storage the output arrays are copied from, rented so the next group's cut reuses them.
-        using var scope = new RentedScope(owner: owner);
+        using var scope = new RentedScope(allocator: allocator, owner: owner);
         var positions = scope.RentList<Vector3>(capacity: (contour.VertexCount + m_edges.Count));
         var sites = scope.RentList<int>(capacity: (contour.VertexCount + m_edges.Count));
         var addedSites = new SdfMeshWeld(m_edges.Count);
@@ -202,21 +203,21 @@ internal sealed class SdfMeshMaterialCut {
 
         // Every growth of the lists passes here: the bound is the one door, so no stage can outgrow it.
         void Within() {
-            if ((positions.Count > vertexLimit) || ((indices.Count / 3L) > triangleLimit)) {
-                throw new InvalidOperationException(message: $"the material cut of {contour.QuadCount} quads passed its bound of {triangleLimit} triangles and {vertexLimit} vertices (holding {(indices.Count / 3)} and {positions.Count})");
+            if ((positions.Length > vertexLimit) || ((indices.Length / 3L) > triangleLimit)) {
+                throw new InvalidOperationException(message: $"the material cut of {contour.QuadCount} quads passed its bound of {triangleLimit} triangles and {vertexLimit} vertices (holding {(indices.Length / 3)} and {positions.Length})");
             }
         }
         uint Add(Vector3 point, Vector3 normal) {
             var length = normal.Length();
 
-            var vertex = positions.Count;
+            var vertex = positions.Length;
             sites.Add(vertex < m_site.Length ? m_site[vertex] :
                 m_siteAt.TryFind(point, out var original) ? original : addedSites.Site(point, vertex));
             positions.Add(item: point);
             normals.Add(item: ((length > 0f) ? (normal / length) : normal));
             Within();
 
-            return ((uint)(positions.Count - 1));
+            return ((uint)(positions.Length - 1));
         }
         // A triangle, dropping one with no area, as a contour's triangle (its last two vertices one) has.
         void Triangle(uint a, uint b, uint c, int material) {
@@ -364,9 +365,9 @@ internal sealed class SdfMeshMaterialCut {
         // lands on an end of its edge is a vertex of its own at that site. A quarter's own triangles hold no such edge:
         // each of their edges ends at a middle or the centre.
         if (quartered.Count > 0) {
-            var pending = new Stack<int>(capacity: (indices.Count / 3));
+            var pending = new Stack<int>(capacity: (indices.Length / 3));
 
-            for (var at = ((indices.Count / 3) - 1); (at >= 0); at--) { pending.Push(item: at); }
+            for (var at = ((indices.Length / 3) - 1); (at >= 0); at--) { pending.Push(item: at); }
             while (pending.TryPop(result: out var at)) {
                 for (var side = 0; (side < 3); side++) {
                     var (u, v) = (indices[((3 * at) + side)], indices[((3 * at) + ((side + 1) % 3))]);
@@ -385,7 +386,7 @@ internal sealed class SdfMeshMaterialCut {
                     triangleMaterials.Add(item: triangleMaterials[at]);
                     Within();
                     pending.Push(item: at);
-                    pending.Push(item: ((indices.Count / 3) - 1));
+                    pending.Push(item: ((indices.Length / 3) - 1));
 
                     break;
                 }

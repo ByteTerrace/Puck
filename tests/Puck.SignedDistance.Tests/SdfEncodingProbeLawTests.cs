@@ -72,7 +72,7 @@ public sealed class SdfEncodingProbeLawTests {
     public void TheProbePacksEverySideTableAndFlag() {
         var parts = SdfEncodingProbe.Build(call: Named(name: "part-programs"));
 
-        Assert.Equal(expected: 0x80000001u, actual: parts.Words[(PartTableOf(program: parts) * 4)]);
+        Assert.Equal(expected: 0x80000001u, actual: parts.CopyWords()[(PartTableOf(program: parts) * 4)]);
         Assert.Contains(collection: SdfEncodingProbe.Build(call: Named(name: "sweep")).Instructions, filter: static instruction => (instruction.Shape == ((uint)SdfShapeType.Sweep)));
         Assert.Contains(collection: SdfEncodingProbe.Build(call: Named(name: "path")).Instructions, filter: static instruction => (instruction.Shape == ((uint)SdfShapeType.Path)));
         Assert.Equal(expected: (1 + 64), actual: SdfEncodingProbe.Build(call: Named(name: "material")).MaterialCount);
@@ -112,7 +112,7 @@ public sealed class SdfEncodingProbeLawTests {
         ])) {
             var program = SdfEncodingProbe.Build(call: Named(name: name));
 
-            Assert.NotEqual(expected: program.Words.ToArray(), actual: wordsOf(arg: program));
+            Assert.NotEqual(expected: program.CopyWords(), actual: wordsOf(arg: program));
             Assert.NotEqual(expected: description, actual: SdfEncodingProbe.Describe(calls: Calls, wordsOf: wordsOf));
         }
     }
@@ -129,7 +129,7 @@ public sealed class SdfEncodingProbeLawTests {
         };
         var program = SdfEncodingProbe.Build(call: untraceable);
 
-        Assert.Equal(expected: 1u, actual: program.Words[(PartTableOf(program: program) * 4)]);
+        Assert.Equal(expected: 1u, actual: program.CopyWords()[(PartTableOf(program: program) * 4)]);
         Assert.NotEqual(expected: SdfEncodingProbe.Describe(), actual: DescribeWith(call: untraceable));
     }
     // The packer writes the program header and every instruction header lane where the model's lane constants, which
@@ -137,7 +137,7 @@ public sealed class SdfEncodingProbeLawTests {
     [Fact]
     public void ThePackerWritesEachHeaderLaneWhereTheModelPlacesIt() {
         foreach (var (_, program) in Built) {
-            var words = program.Words;
+            var words = program.CopyWords();
 
             Assert.Equal(expected: ((uint)program.InstructionCount), actual: words[SdfProgram.ProgramInstructionCountLane]);
             Assert.Equal(expected: ((uint)program.MaterialCount), actual: words[SdfProgram.ProgramMaterialCountLane]);
@@ -157,7 +157,7 @@ public sealed class SdfEncodingProbeLawTests {
     }
     // The vector offset of a program's instance directory, after the segment directory.
     private static int InstanceDirectoryOf(SdfProgram program) {
-        var words = program.Words;
+        var words = program.CopyWords();
         var boundsOffset = (((int)words[SdfProgram.ProgramDataOffsetLane]) + (SdfProgram.InstructionDataVectors * ((int)words[SdfProgram.ProgramInstructionCountLane])));
         var segmentOffset = (boundsOffset + (SdfProgram.BoundRecordVectors * program.InstructionCount));
 
@@ -165,5 +165,5 @@ public sealed class SdfEncodingProbeLawTests {
     }
     // The vector offset of a program's part table: the instance directory header's part-programs lane.
     private static int PartTableOf(SdfProgram program) =>
-        ((int)program.Words[((InstanceDirectoryOf(program: program) * 4) + SdfProgram.InstancePartProgramsLane)]);
+        ((int)program.CopyWords()[((InstanceDirectoryOf(program: program) * 4) + SdfProgram.InstancePartProgramsLane)]);
 }

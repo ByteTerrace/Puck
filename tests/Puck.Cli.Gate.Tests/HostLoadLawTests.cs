@@ -27,7 +27,7 @@ public sealed class HostLoadLawTests {
     public void ThresholdsScaleWithTheInstalledMemoryAndTheLogicalProcessors(double installedRamGb, int logicalProcessors, double cpu, double pressureRam) {
         var thresholds = HostLoadThresholds.For(installedRamGb: installedRamGb, logicalProcessors: logicalProcessors);
 
-        Assert.Equal(actual: thresholds, expected: new HostLoadThresholds(CommitReservePercent: HostLoadThresholds.DefaultCommitReservePercent, CapacityCpuPercent: cpu, InstalledRamGb: Math.Ceiling(installedRamGb), PressureDiskGb: HostLoadThresholds.DiskPressureGb, PressureRamGb: pressureRam));
+        Assert.Equal(actual: thresholds, expected: new HostLoadThresholds(CommitReservePercent: HostLoadThresholds.DefaultCommitReservePercent, CapacityCpuPercent: cpu, DeviceFullPercent: HostLoadThresholds.DefaultDeviceFullPercent, InstalledRamGb: Math.Ceiling(installedRamGb), PressureDiskGb: HostLoadThresholds.DiskPressureGb, PressureRamGb: pressureRam));
     }
     [Fact]
     public void ThresholdsRefuseAMachineWithNoMemoryOrNoProcessors() {

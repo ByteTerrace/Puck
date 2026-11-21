@@ -76,7 +76,5 @@ public static class CliWorldDocuments {
     /// <summary>Resolves the directory of the baked-mesh store.</summary>
     /// <param name="cacheRoot">The <c>--cache-root</c> value, or <see langword="null"/> for the per-user store.</param>
     /// <returns>The store's full path.</returns>
-    public static string MeshStore(string? cacheRoot) => Path.GetFullPath(path: ((cacheRoot is null)
-        ? Puck.Abstractions.PuckUserDirectory.Resolve(name: "meshes")
-        : Path.Join(path1: cacheRoot, path2: "meshes")));
+    public static string MeshStore(string? cacheRoot) => WorldDevices.MeshStore(cacheRoot: cacheRoot);
 }

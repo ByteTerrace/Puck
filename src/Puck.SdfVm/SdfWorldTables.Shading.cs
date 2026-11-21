@@ -13,7 +13,7 @@ public sealed partial class SdfWorldTables {
     // Neither their code nor their parameters enter the field's words or its bake identity.
     private void PackShadeDefault(SdfFrame frame) {
         if (ReferenceEquals(m_shadeDefault, frame.ShadeDefault) && ReferenceEquals(m_shadeDefaultProgram, frame.Program)) { return; }
-        var first = checked((uint)(frame.Program.Words.Length / 4));
+        var first = checked((uint)(frame.Program.WordCount / 4));
         if (frame.ShadeDefault is { } shade) {
             EnsureProgramCapacity(program: frame.Program, shade: shade);
             _ = m_programRegion.Write(bytes: MemoryMarshal.AsBytes(shade.Words), offset: checked((int)first * 16));

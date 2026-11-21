@@ -117,8 +117,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var avatarBodyMaterials = bodyMaterials.Span;
         var avatarAccentMaterials = accentMaterials.Span;
 
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (m_catalog.Slots[index] < 0) { continue; }
+        foreach (var index in m_catalog.Bodies) {
             var (rig, look, color) = CatalogAppearance(index);
             WorldMirroredAvatarBand.EmitPalette(
                 builder: builder, look: look, bodyColor: new DisplayColor(rgb: color), catalogRig: rig,
@@ -369,13 +368,13 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// animated/body-rooted stamps follow in the replay pool's range. An avatar repacks only while its presented pose,
     /// or pose epoch moves, or its root follower is still settling; a body that stops drawing
     /// parks its range once. Local seats fire one footstep cue per gait half-cycle.</remarks>
-    public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
+    public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) {
         m_animator.SetCatalogSlots(m_catalog.Slots, context.SlotBase);
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (m_catalog.Slots[index] < 0) { continue; }
+        // The catalog's bodies alone, in body order; a body's rows are owed only when its pose wakes it (Wake).
+        foreach (var index in m_catalog.Bodies) {
             if (!TryPresentedPose(
                 address: out var address,
                 index: index,

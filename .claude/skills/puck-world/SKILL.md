@@ -739,7 +739,8 @@ check the flag: the owner may be holding the pad.
   another session holds the GPU grant for a parity, counters or windowed leg, it
   may run beside that leg with its own `--state-dir`, as may builds and other
   CPU work. Windowed and offscreen runs are GPU work and wait for the grant and
-  an idle GPU (`puck host load` prints `GPU busy` or `GPU idle`). A process
+  for room on the GPU: they share it with another working World while its video
+  memory is not full (`puck host load` prints `GPU busy` or `GPU idle`). A process
   search of your own matches its own command line, so exclude it before
   concluding another job is running
   ([verification](../verification/SKILL.md#what-uses-the-gpu)).

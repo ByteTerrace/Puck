@@ -300,12 +300,12 @@ What this session met on the lead machine; each is true until the named fix.
   ([contributing](../development/contributing.md#setting-up-a-machine)).
 - **The Azure verbs are an extension.** Install it after a change to it:
   `dotnet publish src/Puck.Cli.Azure -c Release -o extensions/Puck.Cli.Azure`.
-- **One windowed World at a time.** Windowed admission now expects about 22 GB
-  of headroom, learned from the largest windowed starts, which blocks a
-  second World beside it, and the GPU lease is exclusive. Lanes waited up to two hours for
-  a window this session and handed back unverified. Grant no lane a window
-  unless seeing is its work, and run the rest in the bulk window
-  ([the admission defect](#cli-and-lease-machinery)).
+- **Windowed Worlds share the machine by their own measured need.** The admission
+  profile (kind, backend, warm or cold mesh store) and the shared GPU lease are
+  in, and two warm windowed Worlds beside each other are awaiting the lead's
+  windowed check ([the admission check](#cli-and-lease-machinery)). Until it
+  passes, grant no lane a window unless seeing is its work, and run the rest in
+  the bulk window.
 - **Local Bicep is older than CI's.** A Bicep build that passes locally can
   differ from CI's; CI's result decides.
 
@@ -338,8 +338,9 @@ one says so:
 
 1. [high] [The CPU frame](#the-cpu-frame): the authority's step leaves the
    frame thread. A design memo first, since it touches determinism.
-2. [high] [The CPU frame](#the-cpu-frame): the frame fork. Capture, pack and
-   view recording run across one pool. M2's four views need it.
+2. [high] [The CPU frame](#the-cpu-frame): the frame fork. The pose pack
+   forks; the pack's awake set, one-pass rating and recording in waves are
+   left. M2's four views need them.
 3. [high] [The CPU frame](#the-cpu-frame): a draw record reads its slot's
    transform, so a moving body writes one row.
 4. [high] [The CPU frame](#the-cpu-frame): presentation queries stop
@@ -646,13 +647,29 @@ wait behind them.
    rows as jobs (the memo's T4) need too, so a hub of a dozen live worlds
    costs the frame nothing per world.
 2. **The frame fork.** Capture, pack and view recording run across one pool,
-   partitioned by registration: the pool
-   ([J1](engine-job-system.md#6-build-order)), then the pose pack's fork and
-   recording in dependency waves
-   ([the memo](engine-job-system.md#3-parallel-view-recording)). The memo
-   holds wave recording until its serial sum pays; four seats' views (M2)
-   multiply that sum, so read it with four views before deciding. Check: the
-   memo's, per step.
+   partitioned by registration. Built: the pool's `Frame` and `Tick` classes,
+   whose forks run side by side, and the pose pack's fork, which poses each
+   woken registration in its own partition. Left:
+   - The pack still visits every registration every frame before it knows
+     anything moved (`WorldCreationInstances.BeginStep`: `RootPose`, `Wake`,
+     `NoteMotion`; `sdf.creations.registrations.visited`), and every live
+     registration rebuilds its volumes, straddle test, mesh draw and rate
+     every frame (`EndStep`). The replacement is an awake set: body pose
+     changes from the client's published poses, changed state cells from the
+     mirror's refresh, active drivers and followers, and a timer wheel on a
+     held pose's `RateSeconds`, with the per-frame outputs retained per
+     registration so a sleeping one costs nothing. It waits for the tick
+     thread's published per-frame state, which is where body pose changes
+     come from.
+   - Rating tests every view frustum and shadow cascade per registration
+     (`WorldCreationInstances.Shown`, `BodyPixelsPerMetre`); at a town's
+     hundreds of bodies that wants one cull pass over a grid or the GPU
+     cull's previous-frame visibility.
+   - Recording in dependency waves
+     ([the memo's R1](engine-job-system.md#6-build-order)) waits on its
+     admission reading, taken with four seats' views (M2) beside one.
+
+   Check: the memo's, per step.
 3. **A draw record reads its slot's transform.** A draw's record is
    `SdfMeshRecord.DrawWords` words that hold its matrix, its normal matrix and
    its world box (`SdfMesh`'s `WritePose`), and the CPU rewrites those words
@@ -1037,13 +1054,20 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
     collapse, planar merge, chunk binning, the material cut's lists and the
     entry encoder now rent through a `RentedScope` or write in chunks; a cold
     debug-world bake's `allocated:` fell from 78.5 GB to about 50 GB (`done`
-    line, windowed Direct3D 12). What is left is mostly large rentals the pool
-    cannot answer (`rented-large-fresh`, about 29 GB), above all
-    `ExtractRefined`'s per-vertex lists (about 200 bytes a fine vertex, with the
-    plane data twice, then the merged copy of each): a chunk-wise or in-place
-    merge, or a narrower per-vertex record, is the next cut. A pool that keeps
-    1 GB, evicts its oldest array and matches up to twice the length did not
-    change `allocated`.
+    line, windowed Direct3D 12). The contour's lists and tables
+    (`SdfDualContouring.Extract`, `ExtractRefined`, `Merge`'s merged copies and
+    plane runs, the crease split), the weld's and crease split's lists, and every
+    stage's `RentedScope.RentList` and `Buffer` now take the group's native
+    allocator (`OwnedBuffer`), so in a World they never reach the managed heap;
+    that was the bulk of the `rented-large-fresh` share (about 29 GB). Still
+    managed: the tables a stage leases as arrays (`RentedScope.Rent`, the
+    collapse's and planar merge's per-place tables), `ExtractRefined`'s
+    `fineCells` dictionary (one entry per crossed fine cell; a native
+    long-to-int map in `Puck.Abstractions` is its home), the stages' exact
+    outputs listed above, and the mesh store's `RentedMemoryStream` payloads
+    (the stream takes an allocator; `SdfMeshStoreCodec` does not pass one yet).
+    Read the `done` line's `allocated:` and `rented-large-fresh` on the next
+    cold bake to confirm what moved.
   - GPU side: `SdfMeshProbeGpuWork` recreates a slot's origins buffer
     whenever the batch size changes.
 
@@ -1126,9 +1150,11 @@ runtime is [later work](memory-pooling.md). Open beside them:
 - [medium] Managed working memory per admitted bake group is not all in a
   group's peak, so the account cannot pace the collections it causes. The
   field check's projection, the crossing roots, the contour's rented scratch
-  and the refinement's per-cell masks are charged to the group's owner; the
-  stages after the contour (the planar merge, the collapse, chunks, the
-  material cut's builds) still allocate managed arrays no owner claims.
+  and the refinement's per-cell masks are charged to the group's owner, and the
+  contour's and the later stages' lists are native under it; the per-place
+  tables the planar merge, the collapse and chunks lease as arrays are charged
+  but managed, and the stages' exact outputs are managed arrays no owner
+  claims.
 - [low] The library releases evicted claims, which frees native payloads,
   under its own gate (`SdfMeshLibrary`'s `Retain`), the gate the frame thread
   takes in `Restart` through `TryTake`.
@@ -1926,11 +1952,6 @@ in [sweep](#sweep-and-visual-checks).
   and the managed heap holds only what the collector should walk. At scale a
   hub of a dozen worlds holds a dozen worlds' products, so anything a world
   holds must be evictable by the residency that asked for it.
-- [high] A program's field and its appearance are one object, so each
-  appearance change clones the whole program's words
-  (`SdfProgram.WithAppearance`), tens of megabytes for the debug world. Split
-  the field from the appearance, so a colour edit or a state-bound look
-  shares the field's words.
 - [medium] Under the RTX 2060's profile a player build's check declined well
   over a hundred stored mesh loads because the host account had no room to
   read them, and each kept the coarser tier it drew
@@ -3869,20 +3890,17 @@ cost lanes hours · Next: windowed admission and the GPU lease, then one built
 CLI; then the `puck integrate` verb and the launch and process lifecycles,
 each as one change that gives its lifecycle an explicit state.
 
-- [high] One windowed World blocks every other. Admission learns one peak for
-  each kind of start (`HostStartTracker`, `HostStartKind`), so the largest
-  windowed Worlds, the cold bakes, set what every windowed start must find
-  free, and that figure passed what the lead machine has beside a second
-  World. The GPU lease admits one holder whatever it needs. Lanes waited up
-  to two hours and handed back unverified. The replacement: admission judges
-  a start by its own measured need (its device profile, warm or cold store,
-  as well as its kind), and the GPU lease admits
-  holders by measured device and host headroom, as the heavy lease's shared
-  slots do (`CliLease.SharedSlots`), keeping an exclusive hold for a timing
-  leg. A holder that sits idle gives its place back, which a start already
-  does (`StartIdleness`) and a GPU holder does not. Check: two warm windowed
-  Worlds run side by side on the lead machine, and a third waits its turn
-  rather than being refused.
+- [high] Check the shared GPU lease: admission judges a windowed start by its
+  own profile (`HostStartProfile`: kind, backend, warm or cold mesh store) and
+  the gpu lease shares slots between holders by measured host and device
+  headroom, with an exclusive hold for a timing leg and the place of an idle
+  holder given back. What remains is the windowed check on the lead machine:
+  two warm windowed Worlds run side by side and a third waits its turn rather
+  than being refused. The device gate reads video memory in use against the
+  adapter's size (`HostGpuMeter`) and does not predict what a further World
+  will take, so a verification that finds two Worlds crowding the device sets
+  `HostLoadThresholds.DeviceFullPercent` or measures a per-profile device
+  peak.
 - [high] The CLI is built and installed in several places that drift: the
   global tool, each lane's private copy, the MCP hook's build and the Azure
   extension. A lease protocol bump strands every stale copy.

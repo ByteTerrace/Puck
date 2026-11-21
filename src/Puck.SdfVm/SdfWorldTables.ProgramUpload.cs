@@ -23,7 +23,7 @@ public sealed partial class SdfWorldTables {
 
         if (m_liveProgram is { } previous) {
             geometryChanged = !SameProgramGeometry(current: program, previous: previous);
-            programChanged = (geometryChanged || !previous.Words.SequenceEqual(other: program.Words));
+            programChanged = (geometryChanged || !previous.ShadingWords.SequenceEqual(other: program.ShadingWords));
         }
 
         EnsureDynamicTransformCapacity(program.RequiredDynamicTransformCapacity);
@@ -38,8 +38,9 @@ public sealed partial class SdfWorldTables {
             ReferenceEquals(objA: known.From, objB: m_liveProgram)
         ) {
             _ = m_programRegion.WriteRuns(
+                head: program.FieldWords,
                 runs: known.Runs,
-                words: program.Words
+                tail: program.ShadingWords
             );
         } else {
             WriteProgramWords(program: program);
@@ -90,17 +91,11 @@ public sealed partial class SdfWorldTables {
         return hash.Value;
     }
     // Paint and material values do not change geometry. Wrap and density have separate pass signatures.
-    // The exact prefix and suffix retain every instruction material
-    // ID, compiled-part binding, shape/instance flag, bound and auxiliary table; a reordered palette is not inferred.
-    private static bool SameProgramGeometry(SdfProgram previous, SdfProgram current) {
-        var before = previous.Words;
-        var after = current.Words;
-
-        if ((before.Length != after.Length) || (previous.MaterialCount != current.MaterialCount) ||
-            !previous.ShadingWords.Equals(other: current.ShadingWords) ||
-            !previous.Appearance.ScreenSurfaceWords.SequenceEqual(other: current.Appearance.ScreenSurfaceWords)) { return false; }
-        var (first, end) = (current.ShadingWords.Start.Value, current.ShadingWords.End.Value);
-
-        return (before[..first].SequenceEqual(other: after[..first]) && before[end..].SequenceEqual(other: after[end..]));
-    }
+    // The field's exact words retain every instruction material ID, compiled-part binding, shape/instance flag, bound and
+    // auxiliary table; a reordered palette is not inferred. Programs that share a field share those words, so only a
+    // field rebuild compares them.
+    private static bool SameProgramGeometry(SdfProgram previous, SdfProgram current) =>
+        (previous.ShadingWords.Length == current.ShadingWords.Length) &&
+        previous.Appearance.ScreenSurfaceWords.SequenceEqual(other: current.Appearance.ScreenSurfaceWords) &&
+        (current.SharesField(other: previous) || current.FieldWords.SequenceEqual(other: previous.FieldWords));
 }

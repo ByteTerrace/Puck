@@ -58,7 +58,7 @@ public sealed partial class SdfFieldDeviceLawTests {
                 Distances: distances,
                 Materials: materials,
                 Name: call.Name,
-                Words: program.Words.ToArray()
+                Words: program.CopyWords()
             );
         }
 
@@ -71,7 +71,7 @@ public sealed partial class SdfFieldDeviceLawTests {
             Distances: reference.Distances,
             Materials: reference.Materials,
             Name: "rotate, a box",
-            Words: rotated.Words.ToArray()
+            Words: rotated.CopyWords()
         );
     }
     // A box behind a rotation, packed as a rigid leaf.
@@ -85,7 +85,7 @@ public sealed partial class SdfFieldDeviceLawTests {
                 Distances: distances,
                 Materials: materials,
                 Name: oracle.Name,
-                Words: Program(oracle: oracle).Words.ToArray()
+                Words: Program(oracle: oracle).CopyWords()
             );
         }
     }
@@ -96,7 +96,7 @@ public sealed partial class SdfFieldDeviceLawTests {
         SdfProgram Called(string name) =>
             SdfEncodingProbe.Build(call: calls.Single(predicate: call => (call.Name == name)));
         SdfFieldLeg Swapped(string name, SdfProgram program, uint[] words, (float[] Distances, int[] Materials) reference) {
-            Assert.NotEqual(expected: program.Words.ToArray(), actual: words);
+            Assert.NotEqual(expected: program.CopyWords(), actual: words);
 
             return new SdfFieldLeg(
                 Distances: reference.Distances,
@@ -226,7 +226,7 @@ public sealed partial class SdfFieldDeviceLawTests {
     }
     // The words of a program with two lanes of its first instruction of an op's header exchanged.
     private static uint[] HeaderLanesExchanged(SdfProgram program, SdfOp op, int first, int second) {
-        var words = program.Words.ToArray();
+        var words = program.CopyWords();
         var header = ((SdfProgram.ProgramHeaderVectors + InstructionOf(op: op, program: program)) * 4);
 
         (words[(header + first)], words[(header + second)]) = (words[(header + second)], words[(header + first)]);
@@ -235,7 +235,7 @@ public sealed partial class SdfFieldDeviceLawTests {
     }
     // The words of a program with two lanes of its first instruction of an op's first data vector exchanged.
     private static uint[] DataLanesExchanged(SdfProgram program, SdfOp op, int first, int second) {
-        var words = program.Words.ToArray();
+        var words = program.CopyWords();
         var data = ((((int)words[SdfProgram.ProgramDataOffsetLane]) + (SdfProgram.InstructionDataVectors * InstructionOf(op: op, program: program))) * 4);
 
         (words[(data + first)], words[(data + second)]) = (words[(data + second)], words[(data + first)]);
