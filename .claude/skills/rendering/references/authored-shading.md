@@ -160,9 +160,11 @@ checks the allocated phases' `PixelWork` at `MaxLights` for a complete 8x8 group
 including both glass interfaces, against `MaxWork`. This admission bound is provisional;
 it is not a measured timeout margin. `SdfShadeDispatch.Plan` partitions the full
 padded extent into whole groups under that bound and the backend group-count
-limit, pricing a pixel's walk at the lights its view's mask holds
-(`SdfLightSelection`, which every tile's walk narrows) and the bound screens, and
-pricing the tier the residency records the frame with (`SdfWorldResidency.ShadeTier`,
+limit; `SdfShadeDispatch.For` prices a pixel's walk at the frame's light-walk
+maximum (`frame.Lights.Count` plus active bound screens, which every view's
+memoized light mask from `SdfWorldTables.LightMaskOf` and every tile's walk
+narrows and never widens, so camera motion across a light's range never replans),
+and prices the tier the residency records the frame with (`SdfWorldResidency.ShadeTier`,
 an `SdfShadeTier`): no program for the plain kernels, a specialized selection's
 straight-line arms (`SdfShadeStraight.Costs`: each canonical value once, without the
 interpreter's `SdfShadeOps.DispatchWork`), the interpreter otherwise. A plan bounds

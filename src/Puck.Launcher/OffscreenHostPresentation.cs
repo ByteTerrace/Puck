@@ -202,7 +202,7 @@ public sealed class OffscreenHostPresentation {
                 LauncherHostRun.RunTeardown(
                     fault,
                     m_logger,
-                    ("flush output", m_bufferedOutput.Flush),
+                    ("flush output", m_bufferedOutput.Drain),
                     // Before the render root goes: a capture still owed a frame is decided while the chain that would
                     // have served it is alive, never refused by the disposal of a node still holding it.
                     ("settle owed frames", () => m_simulation?.SettleOwedFrames()),

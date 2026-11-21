@@ -15,6 +15,12 @@ public sealed partial class WorldMachineHost {
 
     /// <inheritdoc/>
     public IEnumerable<string> InstanceNames => m_instances.Keys;
+    /// <inheritdoc/>
+    public ulong InstanceRevision => m_instanceRevision;
+    /// <inheritdoc/>
+    public event Action? MachinesChanged;
+
+    internal void NotifyMachinesChanged() => MachinesChanged?.Invoke();
 
     /// <inheritdoc/>
     public WorldMachineInstanceState? InstanceState(string name) {
@@ -374,6 +380,8 @@ public sealed partial class WorldMachineHost {
             }
         }
 
+        var replaced = (prepared.ReplacementLease is not null);
+
         if (prepared.ReplacementLease is { } replacement) {
             m_instances[prepared.Current.Name] = new MachineInstance(
                 prepared.HostCandidate,
@@ -391,6 +399,7 @@ public sealed partial class WorldMachineHost {
         }
         m_instanceRevision++;
         prepared.Committed = true;
+        if (replaced) { NotifyMachinesChanged(); }
         return result;
     }
     /// <inheritdoc/>
@@ -1107,12 +1116,18 @@ public sealed partial class WorldMachineHost {
         foreach (var lease in plan.Created) {
             if (lease is MachineLease.Refused refused) { m_narrationHub?.Narrate(channel: "machine", text: $"[machine: {refused.Reason}]"); }
         }
+        NotifyMachinesChanged();
     }
     private void DisposeInstances() {
+        var hadInstances = (m_instances.Count > 0);
         foreach (var instance in m_instances.Values) {
             instance.Lease.Runtime.Dispose();
         }
         m_instances.Clear();
+        if (hadInstances) {
+            m_instanceRevision++;
+            NotifyMachinesChanged();
+        }
     }
 
     // The runtime face of a refused lease, shared by every one: it reports Refused, never advances, and has no output,

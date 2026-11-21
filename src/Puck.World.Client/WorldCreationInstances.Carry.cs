@@ -7,6 +7,17 @@ using Puck.World.Authoring;
 namespace Puck.World.Client;
 
 public sealed partial class WorldCreationInstances {
+    /// <summary>Returns whether any live body carries <paramref name="screen"/> this frame, without computing its
+    /// carried screen pose or touching the carrier's cached screen table.</summary>
+    /// <param name="screen">The screen row.</param>
+    /// <param name="client">The client whose active body flags are checked.</param>
+    /// <returns><see langword="true"/> when a live body currently holds the carry pose for <paramref name="screen"/>.</returns>
+    public bool IsCarriedScreen(WorldScreen screen, IWorldStampSource client) {
+        ArgumentNullException.ThrowIfNull(argument: screen);
+        ArgumentNullException.ThrowIfNull(argument: client);
+
+        return ((screen.Carry is { } carry) && TryFindCarrier(carry: carry, client: client, live: out _, shapeSlot: out _));
+    }
     /// <summary>Resolves where a carried screen's picture is this frame (<see cref="WorldScreen.Carry"/>): on the front
     /// face of the carrying look's box, for the first live body wearing that look whose pose frame holding now is the
     /// carry's pose, read off the latch the last <see cref="PackTransforms"/> left, so the picture rides the box the frame
@@ -24,49 +35,58 @@ public sealed partial class WorldCreationInstances {
 
         carried = null;
 
-        if (screen.Carry is not { } carry) {
+        if ((screen.Carry is not { } carry) || !TryFindCarrier(carry: carry, client: client, live: out var live, shapeSlot: out var slot)) {
             return false;
         }
 
-        foreach (var live in m_pool.AsSpan(0, m_poolCount)) {
+        var shapes = live.Creation.EngineDocument.Shapes!;
+        var pose = LatchedShapePose(
+            client: client,
+            live: live,
+            shapeSlot: slot,
+            shapes: shapes
+        );
+        var scale = FollowedRootPose(
+            client: client,
+            live: live
+        ).Scale;
+        // The box's own axes, which the creation frame's half turn about up leaves as authored: its front face (the
+        // side a body holding it looks at) is -Z, so the picture's right as that body looks is -X and its up +Y.
+        var half = (((Vector3)shapes[slot].Scale) * scale);
+        var normal = Vector3.Transform(value: -Vector3.UnitZ, rotation: pose.Orientation);
+
+        carried = CarriedFrame(
+            half: half,
+            live: live,
+            origin: (pose.Position + (normal * half.Z)),
+            right: Vector3.Transform(value: -Vector3.UnitX, rotation: pose.Orientation),
+            screen: screen,
+            up: Vector3.Transform(value: Vector3.UnitY, rotation: pose.Orientation)
+        );
+
+        return true;
+    }
+    private bool TryFindCarrier(WorldScreenCarry carry, IWorldStampSource client, out Registration live, out int shapeSlot) {
+        foreach (var candidate in m_pool.AsSpan(0, m_poolCount)) {
             if (
-                (live?.BodyIndex is not { } body) ||
+                (candidate?.BodyIndex is not { } body) ||
                 !client.IsActive(index: body) ||
-                !string.Equals(a: live.Look?.Name.Value, b: carry.Look, comparisonType: StringComparison.Ordinal) ||
-                (live.PoseFrame == 0) ||
-                (live.PoseFrame != FrameNumber(document: live.Creation.Document, name: carry.Pose)) ||
-                (CarriedShapeSlot(document: live.Creation.EngineDocument, carry: carry) is not { } slot)
+                !string.Equals(a: candidate.Look?.Name.Value, b: carry.Look, comparisonType: StringComparison.Ordinal) ||
+                (candidate.PoseFrame == 0) ||
+                (candidate.PoseFrame != FrameNumber(document: candidate.Creation.Document, name: carry.Pose)) ||
+                (CarriedShapeSlot(document: candidate.Creation.EngineDocument, carry: carry) is not { } slot)
             ) {
                 continue;
             }
 
-            var shapes = live.Creation.EngineDocument.Shapes!;
-            var pose = LatchedShapePose(
-                client: client,
-                live: live,
-                shapeSlot: slot,
-                shapes: shapes
-            );
-            var scale = FollowedRootPose(
-                client: client,
-                live: live
-            ).Scale;
-            // The box's own axes, which the creation frame's half turn about up leaves as authored: its front face (the
-            // side a body holding it looks at) is -Z, so the picture's right as that body looks is -X and its up +Y.
-            var half = (((Vector3)shapes[slot].Scale) * scale);
-            var normal = Vector3.Transform(value: -Vector3.UnitZ, rotation: pose.Orientation);
-
-            carried = CarriedFrame(
-                half: half,
-                live: live,
-                origin: (pose.Position + (normal * half.Z)),
-                right: Vector3.Transform(value: -Vector3.UnitX, rotation: pose.Orientation),
-                screen: screen,
-                up: Vector3.Transform(value: Vector3.UnitY, rotation: pose.Orientation)
-            );
+            live = candidate;
+            shapeSlot = slot;
 
             return true;
         }
+
+        live = null!;
+        shapeSlot = -1;
 
         return false;
     }

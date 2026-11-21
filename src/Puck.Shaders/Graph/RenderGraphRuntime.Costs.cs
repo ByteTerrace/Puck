@@ -8,9 +8,16 @@ public sealed partial class RenderGraphRuntime : IRenderGraphPassCosts {
     RenderGraphPassCost? IRenderGraphPassCosts.CostOf(string instance, int width, int height) {
         var index = m_set.IndexOf(name: instance);
 
-        if ((index < 0) || (width <= 0) || (height <= 0) ||
-            !RunsPackage(instance: m_set.Instances[index], packages: m_packages) ||
-            !m_packages.TryGetFactory(package: m_set.Instances[index].ExternalPackage!, factory: out var factory) ||
+        return ((index >= 0)
+            ? CostAt(height: height, index: index, instance: instance, width: width)
+            : null);
+    }
+    RenderGraphPassCost? IRenderGraphPassCosts.CostAt(int index, string instance, int width, int height) =>
+        CostAt(height: height, index: index, instance: instance, width: width);
+
+    private RenderGraphPassCost? CostAt(int index, string instance, int width, int height) {
+        if ((width <= 0) || (height <= 0) ||
+            (m_packageFactory[index] is not { } factory) ||
             (factory.RenderExtentOf(instance: instance) is not { } extents) ||
             (m_graphs[index] is not { } graph)) {
             return null;

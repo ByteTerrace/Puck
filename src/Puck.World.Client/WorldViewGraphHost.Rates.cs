@@ -83,9 +83,17 @@ public sealed partial class WorldViewGraphHost {
         Dropped = 2,
     }
 
+    // Cached portal ordinals for MeasureRatedRenders, rebuilt only when m_portals or runtime.Instances changes.
+    private RenderGraphInstanceSet? m_portalIndexSet;
+    private int m_portalIndexVersion = -1;
+    private (string Name, int Index)[] m_portalIndices = [];
+
     private sealed class RatedProducer {
         // The lever its footprints rate it under.
         public SdfUpdateRates Lever;
+        // Cached ordinal in IndexSet so MeasureRatedRenders avoids per-frame set.IndexOf lookups.
+        public RenderGraphInstanceSet? IndexSet;
+        public int Index = -1;
         // The most frequent tier its footprints asked for this frame, or 0 when none asked, and the largest size on
         // screen they asked it by.
         public int Asked;
@@ -257,11 +265,26 @@ public sealed partial class WorldViewGraphHost {
         ) {
             m_ratedMeasured = latest.Frame;
 
+            var set = runtime.Instances;
             var intervals = RenderSettings?.RateIntervals;
             var (views, screens) = (0, 0);
 
-            foreach (var portal in m_portals) {
-                var rendered = runtime.Instances.IndexOf(name: portal);
+            if (!ReferenceEquals(objA: m_portalIndexSet, objB: set) || (m_portalIndexVersion != m_portalsVersion)) {
+                m_portalIndexSet = set;
+                m_portalIndexVersion = m_portalsVersion;
+                if (m_portals.Count == 0) {
+                    m_portalIndices = [];
+                } else {
+                    m_portalIndices = new (string Name, int Index)[m_portals.Count];
+                    var slot = 0;
+
+                    foreach (var portal in m_portals) {
+                        m_portalIndices[slot++] = (portal, set.IndexOf(name: portal));
+                    }
+                }
+            }
+            for (var position = 0; (position < m_portalIndices.Length); position++) {
+                var (portal, rendered) = m_portalIndices[position];
 
                 if ((rendered >= 0) && (rendered < latest.Instances.Count) && (latest.Instances[rendered].Status == RenderGraphInstanceStatus.Rendered)) {
                     _ = m_portalsRendered.Add(item: portal);
@@ -269,7 +292,11 @@ public sealed partial class WorldViewGraphHost {
             }
 
             foreach (var (name, rated) in m_ratedProducers) {
-                var index = runtime.Instances.IndexOf(name: name);
+                if (!ReferenceEquals(objA: rated.IndexSet, objB: set)) {
+                    rated.IndexSet = set;
+                    rated.Index = set.IndexOf(name: name);
+                }
+                var index = rated.Index;
                 var row = (((index >= 0) && (index < latest.Instances.Count)) ? latest.Instances[index] : default);
 
                 rated.RenderedLatest = ((rated.Asked != 0) && string.Equals(a: row.Instance, b: name, comparisonType: StringComparison.Ordinal) && (row.Status == RenderGraphInstanceStatus.Rendered));

@@ -7,6 +7,9 @@ namespace Puck.World.Client;
 /// <summary>What a screen shows at run time, as <see cref="WorldScreenMappingSet"/> reads it: the extent of an image only
 /// the running producer knows.</summary>
 public interface IWorldScreenImages {
+    /// <summary>Gets a revision that moves whenever any screen image's extent may have changed, or
+    /// <see langword="null"/> when the caller tracks no revision and dynamic rows are polled on every publish.</summary>
+    long? ExtentRevision => null;
     /// <summary>Finds the extent of the image a producer, machine or probe source shows on a screen.</summary>
     /// <param name="screen">The screen's index.</param>
     /// <param name="width">The image's width, in pixels, when this returns <see langword="true"/>.</param>
@@ -34,6 +37,13 @@ public sealed class WorldScreenMappingSet {
 
     private readonly List<SourceMapping> m_published = [];
     private Row[] m_rows = [];
+    // Rows whose extent comes from IWorldScreenImages (producer, machine, probe): fixed-extent rows (view, session)
+    // and handle-less rows never change after the first publish following a Reconcile.
+    private Row[] m_dynamicRows = [];
+    private bool m_publishedOnce;
+    private bool m_hasUnresolvedDynamic;
+    private IWorldScreenImages? m_publishedImages;
+    private long m_publishedRevision;
 
     // The source instances the rows show, before the routed worlds' are joined to them (Sources), and those routed
     // worlds' instances as ReconcileRouted last set them.
@@ -165,12 +175,71 @@ public sealed class WorldScreenMappingSet {
     public void Publish(IWorldScreenImages images) {
         ArgumentNullException.ThrowIfNull(argument: images);
 
+        var revision = images.ExtentRevision;
+
+        if (m_publishedOnce) {
+            if (m_dynamicRows.Length == 0) {
+                return;
+            }
+            if (
+                !m_hasUnresolvedDynamic &&
+                revision.HasValue &&
+                ReferenceEquals(objA: m_publishedImages, objB: images) &&
+                (revision.Value == m_publishedRevision)
+            ) {
+                return;
+            }
+
+            var changed = false;
+            var unresolved = false;
+
+            for (var index = 0; (index < m_dynamicRows.Length); index++) {
+                var row = m_dynamicRows[index];
+
+                if (row.Publish(images: images)) {
+                    changed = true;
+                }
+                if (row.Mapping is null) {
+                    unresolved = true;
+                }
+            }
+
+            m_hasUnresolvedDynamic = unresolved;
+            m_publishedImages = images;
+            m_publishedRevision = revision.GetValueOrDefault();
+
+            if (!changed) {
+                return;
+            }
+
+            RebuildPublished();
+
+            return;
+        }
+
+        var initialUnresolved = false;
+
         m_published.Clear();
+        for (var index = 0; (index < m_rows.Length); index++) {
+            var row = m_rows[index];
 
-        foreach (var row in m_rows) {
-            row.Publish(images: images);
-
+            _ = row.Publish(images: images);
             if (row.Mapping is { } mapping) {
+                m_published.Add(item: mapping);
+            } else if (row.IsDynamic) {
+                initialUnresolved = true;
+            }
+        }
+
+        m_publishedOnce = true;
+        m_hasUnresolvedDynamic = initialUnresolved;
+        m_publishedImages = images;
+        m_publishedRevision = revision.GetValueOrDefault();
+    }
+    private void RebuildPublished() {
+        m_published.Clear();
+        for (var index = 0; (index < m_rows.Length); index++) {
+            if (m_rows[index].Mapping is { } mapping) {
                 m_published.Add(item: mapping);
             }
         }
@@ -233,7 +302,29 @@ public sealed class WorldScreenMappingSet {
             );
         }
 
+        var dynamicCount = 0;
+
+        for (var position = 0; (position < rows.Length); position++) {
+            if (rows[position].IsDynamic) {
+                dynamicCount++;
+            }
+        }
+
+        var dynamicRows = ((dynamicCount == 0) ? [] : new Row[dynamicCount]);
+        var dynamicWrite = 0;
+
+        for (var position = 0; (position < rows.Length); position++) {
+            if (rows[position].IsDynamic) {
+                dynamicRows[dynamicWrite++] = rows[position];
+            }
+        }
+
         m_rows = rows;
+        m_dynamicRows = dynamicRows;
+        m_publishedOnce = false;
+        m_hasUnresolvedDynamic = false;
+        m_publishedImages = null;
+        m_publishedRevision = 0L;
         m_published.Clear();
         Screens = screens;
         m_rowSources = sources;
@@ -330,17 +421,20 @@ public sealed class WorldScreenMappingSet {
         private readonly SourceHandle? m_handle = handle;
         private readonly string? m_refusal = refusal;
 
+        public bool IsDynamic => ((m_handle is not null) && (m_extent is null));
         public SourceMapping? Mapping { get; private set; }
 
         public string? Refusal { get; private set; } = (refusal ?? Unpublished);
         public WorldScreen Screen { get; } = screen;
 
-        public void Publish(IWorldScreenImages images) {
+        public bool Publish(IWorldScreenImages images) {
             if (m_handle is not { } handle) {
+                var hadMapping = (Mapping is not null);
+
                 Mapping = null;
                 Refusal = m_refusal;
 
-                return;
+                return hadMapping;
             }
             var width = 0;
             var height = 0;
@@ -352,17 +446,19 @@ public sealed class WorldScreenMappingSet {
                 screen: Screen.Index,
                 width: out width
             )) {
+                var hadMapping = (Mapping is not null);
+
                 Mapping = null;
                 Refusal = NoExtent;
 
-                return;
+                return hadMapping;
             }
             if (
                 (Mapping is { } published) &&
                 (published.SourceWidth == width) &&
                 (published.SourceHeight == height)
             ) {
-                return;
+                return false;
             }
 
             var mapping = WorldScreenMappings.Of(
@@ -375,9 +471,15 @@ public sealed class WorldScreenMappingSet {
             if (mapping.TryValidate(refusal: out var invalid)) {
                 Mapping = mapping;
                 Refusal = null;
+
+                return true;
             } else {
+                var hadMapping = (Mapping is not null);
+
                 Mapping = null;
                 Refusal = invalid;
+
+                return hadMapping;
             }
         }
     }
