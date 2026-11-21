@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
@@ -221,7 +220,8 @@ public sealed partial class RenderGraphRuntime {
                 inFlightFrames: m_inFlightFrames,
                 name: name,
                 packages: m_packages,
-                pipelines: m_pipelines
+                pipelines: m_pipelines,
+                standIns: m_standIns
             )
         );
     }
@@ -260,7 +260,8 @@ public sealed partial class RenderGraphRuntime {
                 inFlightFrames: m_inFlightFrames,
                 name: name,
                 packages: m_packages,
-                pipelines: m_pipelines
+                pipelines: m_pipelines,
+                standIns: m_standIns
             )
         );
     }
@@ -268,7 +269,7 @@ public sealed partial class RenderGraphRuntime {
     // Opens an uploaded source instance's upload and makes its graph and its node, which renders nothing when the upload
     // refused or no conversion reads what it declares. The node takes the graph once every graph of the set binds
     // (Install).
-    private static (SourceGraph Source, ShaderPipelineRenderNode Node) CreateSource(RenderGraphInstance instance, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint inFlightFrames, GpuImageLeases images) {
+    private static (SourceGraph Source, ShaderPipelineRenderNode Node) CreateSource(RenderGraphInstance instance, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint inFlightFrames, GpuImageLeases images, RenderGraphStandIns standIns) {
         var upload = packages.CreateSource(context: new RenderGraphExternalProducerContext(
             Device: deviceContext,
             HostsOnDirectX: hostsOnDirectX,
@@ -296,7 +297,8 @@ public sealed partial class RenderGraphRuntime {
                 inFlightFrames: inFlightFrames,
                 name: instance.Name,
                 packages: packages,
-                pipelines: pipelines
+                pipelines: pipelines,
+                standIns: standIns
             );
 
             return (new SourceGraph(
@@ -350,16 +352,14 @@ public sealed partial class RenderGraphRuntime {
             return;
         }
 
-        m_previous[index] = m_current[index];
-        m_current[index] = new Output(
-            Buffer: null,
-            Frame: frame,
-            Image: surface,
-            Layout: node.PublishedLayout,
-            StateTick: node.PublishedStateTick,
-            Publication: new ReferenceRevision(Owner: node, Revision: node.SubmissionCount),
-            StandsFor: Standing.Own,
-            Tainted: false
+        m_taintedReads[index] = null;
+        RememberOutput(
+            frame: frame,
+            index: index,
+            node: node,
+            rendered: true,
+            schedule: null,
+            surface: in surface
         );
     }
     private static void DisposeSources(SourceGraph?[] sources) {

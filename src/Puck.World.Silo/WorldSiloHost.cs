@@ -695,19 +695,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             return true;
         }
 
-        foreach (var adjacency in (row.Server.Definition.Adjacencies ?? [])) {
-            if (
-                bookkeeping!.Adjacencies.TryResolve(
-                adjacencyName: adjacency.Name.Value,
-                neighbour: out var neighbour
-            ) &&
-                (neighbour is { SnapshotRevision: < 1 })
-            ) {
-                return false;
-            }
-        }
-
-        return true;
+        return bookkeeping!.Adjacencies.MirrorsPrimed();
     }
     private WorldSiloWorldRow? FindWorldRow(string name) => m_definition.Worlds.FirstOrDefault(predicate: row => string.Equals(
         a: row.World.Value,

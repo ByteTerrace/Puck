@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SignedDistance;
 
@@ -24,8 +25,8 @@ public sealed partial class SdfWorldTables {
     internal bool ScreenEmissionHasImages => m_screenBound.Any(predicate: static bound => bound);
     internal ReadOnlySpan<bool> ScreenEmissionScreens => m_screenEmission.Screens;
 
-    internal ulong? ScreenEmissionSignature(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) =>
-        m_screenEmission.Observe(reads: reads, residency: residency, view: view);
+    internal ulong? ScreenEmissionSignature(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads, in DeliveryLatch latch) =>
+        m_screenEmission.Observe(latch: in latch, reads: reads, residency: residency, view: view);
     internal long SubmitScreenEmission() => m_screenEmission.Publish();
     internal void CompleteScreenEmission(long sequence) => m_screenEmission.Publication.Complete(sequence: sequence);
     internal void WithdrawScreenEmission(long sequence) => m_screenEmission.Withdraw(sequence: sequence);
@@ -75,7 +76,7 @@ public sealed partial class SdfWorldTables {
 
         public EnvironmentPublication Publication { get; }
 
-        public ulong? Observe(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
+        public ulong? Observe(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads, in DeliveryLatch latch) {
             m_watch.Clear();
             if (residency.ScreenSources is { } sources) {
                 foreach (var screen in sources.Screens) {
@@ -87,9 +88,9 @@ public sealed partial class SdfWorldTables {
 
                     // An image with no known publication, such as a portal's level that has not rendered because its glass
                     // is out of view, is missing: it writes a zero record rather than holding every other screen's.
-                    if ((input.Lease.ImageViewHandle == 0) || !input.Publication.IsPublished()) { continue; }
+                    if (!input.TryRead(latch: in latch, read: out var resolved) || (resolved.ImageViewHandle == 0) || !resolved.Publication.IsPublished()) { continue; }
                     m_watch.Read(screen: screen);
-                    m_watch.Observe(publication: input.Publication, screen: screen, tainted: input.Tainted);
+                    m_watch.Observe(publication: resolved.Publication, screen: screen, tainted: input.Label.External);
                 }
             }
             Owes = ((Publication.Submitted is null) || (m_watch.ChangedScreens() != 0u) || Forced);

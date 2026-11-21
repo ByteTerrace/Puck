@@ -364,6 +364,7 @@ public sealed partial class OverlayPackageLawTests {
                     Height: Extent,
                     ImageHandle: WorldImage,
                     ImageViewHandle: (WorldImage + 1),
+                    Label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(source: Puck.Abstractions.Presentation.DeliveryPublicSource.Host),
                     Layout: GpuImageLayout.ShaderReadOnly,
                     Width: Extent
                 ),

@@ -45,7 +45,9 @@ internal sealed class ObservedPackageFactory(IRenderGraphPackageFactory inner, F
 
             owner.PackageBarriers += (owner.m_barriers() - before);
             owner.Records++;
-            owner.Layouts = (recording.Inputs[0].Image.Layout, recording.Outputs[0].Image.Layout);
+            _ = recording.Inputs[0].Image.TryRead(latch: recording.Latch, image: out var input);
+            _ = recording.Outputs[0].Image.TryRead(latch: recording.Latch, image: out var output);
+            owner.Layouts = (input.Layout, output.Layout);
             owner.Outcome = outcome;
 
             return outcome;

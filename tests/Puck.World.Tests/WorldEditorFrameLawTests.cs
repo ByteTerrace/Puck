@@ -30,21 +30,7 @@ public sealed class WorldEditorFrameLawTests {
         }
     }
     private sealed class Adjacency(IReadOnlyList<WorldAdjacencyProjection> projections) : IWorldAdjacencySource {
-        public void BeginTick(ulong tick) {
-        }
-        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
-        public WorldEntityAddress LocalEntityAddress(int index) => default;
-        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
-            neighbour = null;
-
-            return false;
-        }
         public IReadOnlyList<WorldAdjacencyProjection> Visuals() => projections;
-        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
-            departedFrom = default;
-
-            return false;
-        }
     }
     private sealed class Neighbour(WorldDefinition definition) : IWorldAdjacencyNeighbour {
         public string Authority => North;

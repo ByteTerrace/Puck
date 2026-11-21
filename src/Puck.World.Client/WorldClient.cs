@@ -181,11 +181,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private int m_activePeerCount;
     private long m_activeRevision;
     private long m_renderPoseRevision;
-    private readonly bool[] m_lastActiveFlags = new bool[EntityCapacity];
     private WorldChannelTable m_channels;
-    // The server's live world definition — the boot definition at construction, replaced by DeliverDefinition after an
-    // applied mutation batch or a swap. The frame source re-reads scene/screens from this behind the revision check.
-    private WorldDefinition m_definition;
     private int m_definitionRevision;
     private int m_responseRevision;
     private int m_solidResponseRevision;
@@ -215,9 +211,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
     /// <summary>The authority stamped on the latest delivered entity image.</summary>
     public string Authority => m_authority;
-    /// <summary>The server's live world definition — the boot definition, then whatever the server last delivered after
-    /// an applied mutation batch or swap. The frame source reads scene/screens from here on its next rebuild.</summary>
-    public WorldDefinition Definition => m_definition;
+    /// <summary>The client's own world definition: the boot definition, then whatever the authority last delivered after
+    /// an applied mutation batch or swap, each adopted through the state view so every state-bound value in it reads the
+    /// cells this client was delivered, never the authority's arena. The frame source reads scene/screens from here on
+    /// its next rebuild.</summary>
+    public WorldDefinition Definition => m_stateView.Definition;
     /// <summary>The monotonic definition-delivery counter — bumped each time the server delivers a new definition. The
     /// frame source watches it to know a scene/screen change landed (distinct from a population/roster change).</summary>
     public int DefinitionRevision => m_definitionRevision;
@@ -256,7 +254,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// mirror delivery. The callback borrows the mirror synchronously on the boot client's presentation thread.</summary>
     public event Action<WorldDefinition, int, WorldStateMirror>? DeliveredState;
 
-    private void PublishDeliveredState() => DeliveredState?.Invoke(m_definition, m_definitionRevision, m_stateMirror);
+    private void PublishDeliveredState() => DeliveredState?.Invoke(Definition, m_definitionRevision, m_stateMirror);
 
     /// <summary>Returns the state mirror presentation reads an authority's rows through: this client's own
     /// <see cref="StateMirror"/> for the authority this client observes, and the authority's own followed mirror
@@ -320,14 +318,13 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
         m_roster = roster;
         m_seatRouter = seatRouter;
-        m_definition = definition;
-        m_channels = WorldChannelTable.For(definition: definition);
+        m_stateView = new WorldDocumentStateView(clock: () => (m_tick, m_engineTick), delivered: definition);
+        m_channels = WorldChannelTable.For(definition: Definition);
         m_targets = WorldTargetRegisterTable.Compile(
-            registers: definition.TargetRegisters
+            registers: Definition.TargetRegisters
         );
         m_composition = composition;
         m_levers = null;
-        m_stateView = new WorldDocumentStateView(definition: () => m_definition);
         m_stateMirror = new WorldStateMirror(view: m_stateView);
         m_stateMirror.Delivered += PublishDeliveredState;
 
@@ -1004,13 +1001,14 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        // Store the live definition and bump the delivery revision (one component of WriteRevision), so the frame source rebuilds
+        // Adopt the definition and bump the delivery revision (one component of WriteRevision), so the frame source rebuilds
         // its program and re-reads scene/screens on its next capture. Poses still flow only through snapshots.
-        m_definition = definition;
+        var adopted = m_stateView.Adopt(delivered: definition);
+
         BeginVersion(version: version);
-        m_channels = WorldChannelTable.For(definition: definition);
+        m_channels = WorldChannelTable.For(definition: adopted);
         m_targets = WorldTargetRegisterTable.Compile(
-            registers: definition.TargetRegisters
+            registers: adopted.TargetRegisters
         );
         m_definitionRevision++;
         m_pendingStateInstall = true;
@@ -1021,10 +1019,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     }
     /// <inheritdoc/>
     public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
-        if (!rows.TryApply(m_definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the client's creation roster."); }
-        if (WorldStateReader.TryBoundArena(m_definition, out var arena)) { WorldStateReader.Bind(changed, arena); }
-        m_stateView.KeepValueShape(m_definition, changed);
-        m_definition = changed;
+        if (!rows.TryApply(Definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the client's creation roster."); }
+        _ = m_stateView.Adopt(delivered: changed, valuesFollow: true);
         BeginVersion(version);
         m_definitionRevision++;
     }
@@ -1107,7 +1103,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                         // snapshot, which may lag same-tick multi-pose batches past the server's own snap-escape check.
                         var positionError = (admission.PriorPosition - entry.Position);
 
-                        if (positionError.Length() > m_definition.Motion.MaxSmoothError) {
+                        if (positionError.Length() > Definition.Motion.MaxSmoothError) {
                             m_easers[index].Reset();
                             m_poses.Discontinue(index: index);
                         } else {
@@ -1150,16 +1146,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         var stepSeconds = ((float)FixedTickConversion.ToSeconds(ticks: snapshot.StepTicks));
 
         m_poses.Complete();
-        var activeChanged = false;
-        for (var index = 0; (index < EntityCapacity); index++) {
-            var active = m_poses.IsActive(index: index);
-
-            if (active != m_lastActiveFlags[index]) {
-                m_lastActiveFlags[index] = active;
-                activeChanged = true;
-            }
-        }
-        if (activeChanged) {
+        m_posesDelivered = true;
+        if (m_poses.ActiveChanged) {
             m_activeRevision++;
         }
         m_renderPoseRevision++;
@@ -1190,7 +1178,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         }
         var cues = WorldPresentationCueFeed.Capture(snapshot);
         if (cues.Cues.Length != 0) { CueFrames.Publish(cues); }
-        PresentCues?.Invoke(m_definition, cues);
+        PresentCues?.Invoke(Definition, cues);
     }
     /// <inheritdoc/>
     /// <remarks>A value-only mutation cannot have changed channels, target registers, or scene shape: the fresh
@@ -1202,7 +1190,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        switch (WorldPlacementResponse.ComparePlacements(after: definition, before: m_definition, solid: out var solid)) {
+        var previous = Definition;
+        var adopted = m_stateView.Adopt(delivered: definition, valuesFollow: (stamp.ArenaValues && (version.Activation == m_documentVersion.Activation)));
+
+        switch (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, solid: out var solid)) {
             case WorldPlacementChange.Appearance:
                 m_responseRevision++;
                 if (solid) { m_solidResponseRevision++; }
@@ -1214,8 +1205,6 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 break;
         }
 
-        if (stamp.ArenaValues && version.Activation == m_documentVersion.Activation) { m_stateView.KeepValueShape(m_definition, definition); }
-        m_definition = definition;
         BeginVersion(version: version);
         m_stateMirror.Refresh(notifyDelivery: false, stamp: in stamp);
     }
@@ -1403,7 +1392,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             return false;
         }
 
-        var register = m_definition.TargetRegisters[registerIndex];
+        var register = Definition.TargetRegisters[registerIndex];
         var halfAngle = register.MaximumHalfAngleDegrees;
         var range = FixedQ4816.FromDouble(value: register.MaximumRange);
         var minimumDot = FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: halfAngle));
@@ -1480,40 +1469,93 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// zero sub-steps previous == current, so both hold stably (no snap-back). Presentation only: <c>body.where</c>
     /// reports the server sim pose, never this.</summary>
     /// <param name="alpha">How far this frame sits between the last and next fixed sim step, in <c>[0, 1)</c>.</param>
+    /// <remarks>The first frame after a delivery resolves every live body and notes which of them moved between the
+    /// delivery's two tick poses. A later frame of the same delivery resolves only those: a body whose two poses are
+    /// equal resolves to the same pose at every alpha (<see cref="WorldPoseInterpolation"/>), and a correction eases
+    /// once a delivery, never between two, so its pose stands until the next delivery. A frame therefore costs the
+    /// bodies that moved, and a delivery the bodies that are live, never <see cref="EntityCapacity"/>.</remarks>
     public void UpdateRenderPoses(float alpha) {
         m_solidScaleAlpha = alpha;
-        var moved = false;
+        WorldPoseWork.Process.Count(kind: WorldPoseWork.Frames);
 
-        for (var index = 0; (index < EntityCapacity); index++) {
+        var changed = false;
+
+        if (!m_posesDelivered) {
+            foreach (var index in m_moving.AsSpan(start: 0, length: m_movingCount)) {
+                _ = ResolveRenderPose(index: index, alpha: alpha, changed: ref changed);
+            }
+            if (changed) {
+                m_renderPoseRevision++;
+            }
+            WorldPoseWork.Process.Add(kind: WorldPoseWork.Resolved, amount: m_movingCount);
+
+            return;
+        }
+
+        var live = m_poses.Live;
+
+        if (m_moving.Length < live.Length) {
+            m_moving = new int[((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)live.Length)))];
+        }
+
+        var moving = 0;
+        var resolved = 0;
+
+        foreach (var index in live) {
             if (!m_poses.IsActive(index: index)) {
                 continue;
             }
 
-            var position = WorldPoseInterpolation.Position(
-                previous: m_poses.PreviousPosition(index: index),
-                current: m_poses.CurrentPosition(index: index),
-                alpha: alpha
-            );
-            // Quaternion.Lerp is the nlerp: shortest-path dot-sign flip and renormalize.
-            var orientation = WorldPoseInterpolation.Orientation(
-                previous: m_poses.PreviousOrientation(index: index),
-                current: m_poses.CurrentOrientation(index: index),
-                alpha: alpha
-            );
-
-            m_easers[index].Apply(
-                orientation: ref orientation,
-                position: ref position
-            );
-            if ((m_renderPosition[index] != position) || (m_renderOrientation[index] != orientation)) {
-                m_renderPosition[index] = position;
-                m_renderOrientation[index] = orientation;
-                moved = true;
+            resolved++;
+            if (ResolveRenderPose(index: index, alpha: alpha, changed: ref changed)) {
+                m_moving[moving++] = index;
             }
         }
-        if (moved) {
+        if (changed) {
             m_renderPoseRevision++;
         }
+
+        m_movingCount = moving;
+        m_posesDelivered = false;
+        WorldPoseWork.Process.Add(kind: WorldPoseWork.Resolved, amount: resolved);
+    }
+
+    // The live bodies whose two tick poses differ in the latest delivery (the only ones a frame between two deliveries
+    // interpolates), and whether a delivery has arrived since a frame last resolved every live body.
+    private int[] m_moving = [];
+    private int m_movingCount;
+    private bool m_posesDelivered = true;
+
+    // Resolves one body's render pose at alpha, sets changed when the pose it stores differs from the one held, and
+    // returns whether the body's two tick poses differ.
+    private bool ResolveRenderPose(int index, float alpha, ref bool changed) {
+        var previousPosition = m_poses.PreviousPosition(index: index);
+        var currentPosition = m_poses.CurrentPosition(index: index);
+        var previousOrientation = m_poses.PreviousOrientation(index: index);
+        var currentOrientation = m_poses.CurrentOrientation(index: index);
+        var position = WorldPoseInterpolation.Position(
+            previous: previousPosition,
+            current: currentPosition,
+            alpha: alpha
+        );
+        // Quaternion.Lerp is the nlerp: shortest-path dot-sign flip and renormalize.
+        var orientation = WorldPoseInterpolation.Orientation(
+            previous: previousOrientation,
+            current: currentOrientation,
+            alpha: alpha
+        );
+
+        m_easers[index].Apply(
+            orientation: ref orientation,
+            position: ref position
+        );
+        if ((m_renderPosition[index] != position) || (m_renderOrientation[index] != orientation)) {
+            m_renderPosition[index] = position;
+            m_renderOrientation[index] = orientation;
+            changed = true;
+        }
+
+        return ((previousPosition != currentPosition) || (previousOrientation != currentOrientation));
     }
     /// <summary>Writes this client's program-rebuild watch counters side by side, never added together: the seat-metadata
     /// revision (colors, pending state), the server's declared-set revision from the latest snapshot, the

@@ -82,19 +82,31 @@ public static partial class WorldSessionLevers {
         ? (host with { TargetHertz = pacing.TargetHertz })
         : host
     );
+    // The tier and the device's budget row fold into the authored section only where they differ from it.
+    private static WorldRenderIndirect? FoldIndirect(WorldRenderIndirect? indirect, WorldRenderSettings settings) {
+        var folded = indirect;
+
+        if ((indirect?.Tier ?? Puck.SignedDistance.SdfIndirectTier.Medium) != settings.IndirectTier) {
+            folded = ((folded ?? new WorldRenderIndirect()) with { Tier = settings.IndirectTier });
+        }
+        if ((settings.IndirectBudget is { } budget) && (folded?.Budget != budget)) {
+            folded = ((folded ?? new WorldRenderIndirect()) with { Budget = budget });
+        }
+
+        return folded;
+    }
     // The shadow switch keeps the authored tier while it agrees with it; scalar ceilings survive without quantization.
     private static WorldRenderDefaults? FoldRender(WorldRenderDefaults? render, WorldRenderSettings settings) {
         if ((render is null) && (settings.RenderScale == WorldRenderDefaults.Absent.RenderScale) &&
             (settings.IndirectTier == Puck.SignedDistance.SdfIndirectTier.Medium) && (settings.SkyFieldScale == 1f) && settings.ShadeOverride is null &&
-            !settings.RayQueries && settings.DistantShadows is null && settings.FarShadows is null && settings.ViewsRate is null) {
+            !settings.RayQueries && settings.DistantShadows is null && settings.FarShadows is null && settings.ViewsRate is null && settings.IndirectBudget is null) {
             return null;
         }
 
         render ??= WorldRenderDefaults.Absent;
 
         var captured = (render with {
-            Indirect = (((render.Indirect?.Tier ?? Puck.SignedDistance.SdfIndirectTier.Medium) == settings.IndirectTier)
-                ? render.Indirect : (render.Indirect ?? new WorldRenderIndirect()) with { Tier = settings.IndirectTier }),
+            Indirect = FoldIndirect(indirect: render.Indirect, settings: settings),
             Shadows = settings.Shadows,
             ShadowLights = settings.ShadowSlots.Slots,
             ShadowFadeSlots = settings.ShadowSlots.FadeSlots,

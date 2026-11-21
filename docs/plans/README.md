@@ -51,6 +51,7 @@ Decisions: [worlds and federation](../decisions/worlds-and-federation.md), [play
 - [The hub, player saves and the player menu](hub-and-saves.md): the account as the player save, the hub as the reserved destination, the pause menu, durable images and machine save RAM.
 - [Companion custody protocol](companion-redesign.md): the specification the companion build follows, with the model that checks it.
 - [MMO foundations](mmo-foundations.md): the closed round that settled the federation register, and the records the register cites.
+- [A hosted world on a client](remote-content.md): how a world simulated elsewhere shows its text, its machines and its windows on the client that presents it (content by pin, machines run from replicated inputs, windows relayed by the authority that owns the screen), and the fixes that let a remote seat play, with the build order.
 - [Replication and the wire](replication.md): what an authority sends and to whom: generated codecs, exact fixed-point deltas against what each recipient holds, interest under an authored priority and a byte budget, the seat's own-body continuation, compression and checkpoint chunks, with the build order, the measurements owed and what each step replaces in today's wire.
 - [Readable interaction](readable-interaction.md): a motion program's predicted sweep as the telegraph, certified first contact and sub-tick presses, with the fencing salle as its proving ground.
 - [Play expressions](play-expressions.md): the family of ways to play that are defined by what the avatar's hands and body do. The bard is planned; play by solving and play by calculating are open explorations, and the page holds the synthesis of their ideation round and the four questions the owner chooses.
@@ -78,6 +79,7 @@ Decisions: [rendering](../decisions/rendering.md), [residency](../decisions/resi
 - [Blends between parts that move](moving-blends.md): a blended seam that holds under continuous motion, as a skinned seam.
 - [Arrival work proportional to change](arrival-proportional.md): draw rows that keep their place, the trace scene's top level, and what a hand-over rewrites.
 - [Field programs](field-programs.md): the SDF programs the bake, CPU queries, contact and the editor still interpret, one definition per field op generating every reader, and the bake kernel's cost.
+- [Presentation field queries](field-queries.md): the camera's clearance and the effectors' probes weighed between a GPU batch answered late and the CPU; region tapes, which are built, the float reader that remains, and the design review's findings answered one by one.
 - [Ink](ink.md): outlines as edge signals the engine computes per view and an ink phase authors write in the shade program.
 - [Illumination](illumination.md): direct light at author scale, ambient occlusion and area lights, and what the GPU probe trace still owes.
 - [Transmission and self-shadow](transmission.md): the shadow term a wrapped material reads past the terminator, by a body identity per cascade texel.
@@ -92,6 +94,7 @@ Decisions: [runtime and delivery](../decisions/runtime-and-delivery.md), [machin
 - [Iteration](iteration.md): the loops an author and a developer go round, how each is timed edit to frame, and the work that makes each fast; [the authoring loop memo](iteration/authoring-loop.md) holds its build order.
 - [Code size](code-size.md): where the source's lines are, the families of hand-written code that one definition could generate, the lanes that remove them, and how each wave keeps size falling.
 - [The engine job system](engine-job-system.md): one scheduler and its classes, the deterministic parallel tick, parallel view recording, memory ownership and background work proportional to change.
+- [The tick on its own thread](tick-thread.md): the in-process authority executes each tick on a step thread and the frame presents the last tick the loop collected, with the determinism invariant, the frame thread's readers of simulation state, the input-to-display budget and the steps.
 - [Runtime and delivery](runtime-and-delivery.md): how a world is composed, compiled, packaged, released and rolled back, and what a client may observe of it.
 - [Updater policy](updater-policy.md): one durable install record for the updater, the stub, registration and the pruner.
 - [Owned memory for Puck's own host](memory-pooling.md): the later custom no-GC runtime port.

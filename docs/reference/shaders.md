@@ -2226,9 +2226,12 @@ named rows lie past them gets detail row zero and counts none of its named work
 that frame, `gpu.refused.work-details` counts the frame, and the next frame asks
 again (`ShaderPipelineRenderNode.TryGrowWorkDetails`). A detailed pass has a `plain` remainder row, and its
 detail rows sum to the pass totals after readback. A
-compute kernel counts through `puckCountWork`, one wave sum added by the wave's
-first active lane, and a fragment stage through `puckCountFragmentWork`, the
-same over the wave's lanes that are not helper lanes. Every generated include
+compute kernel counts through `puckCountWork`, reduced across its thread group in groupshared memory
+and added once by the group (so every thread of the group reaches the call), and a fragment stage
+through `puckCountFragmentWork`, a wave sum over the wave's lanes that are not helper lanes added by
+the first of them. Both return before any wave or atomic work when the pass's row is
+`GpuKernelCounters.DisabledRow`, which the node records for every counting pass while no reading
+demands the counts (`ShaderPipelineRenderNode.DemandKernelCounting`). Every generated include
 declares those functions and `puckCountDetail`, which adds an active invocation's
 work to its named row. An interface declaring no work counters
 declares them empty. A kernel therefore counts unguarded: a package's kernel

@@ -863,6 +863,10 @@ public sealed class MemoryAccount {
             AuthoringPromised = (host ? AuthoringPromised : 0L),
             LastRefusedOwner = state.LastRefusedOwner,
             AuthoringRoom = (host ? (m_authoringOnPlayBar ? 0L : Math.Max(val1: 0L, val2: AuthoringRoomLocked())) : null),
+            OverLimitTakers = [.. state.OverLimitBy
+                .Select(selector: static taker => new MemoryOverLimitTaker(Bytes: taker.Value.Bytes, Grants: taker.Value.Grants, Taker: taker.Key))
+                .OrderByDescending(keySelector: static taker => taker.Bytes)
+                .ThenBy(keySelector: static taker => taker.Taker, comparer: StringComparer.Ordinal)],
             MachineLimit = (host ? MachineLimit() : null),
             PlayBeyondHeld = (host ? m_playBeyondHeld : 0L),
             PrivateBeyondHeld = (host ? m_privateBeyondHeld : 0L),
@@ -936,8 +940,7 @@ public sealed class MemoryAccount {
                     return new(Bytes: bytes, Net: net, Payer: null, Verdict: GpuMemoryVerdict.Refused);
                 }
                 verdict = GpuMemoryVerdict.OverLimit;
-                state.OverLimitGrants++;
-                state.OverLimitBytes += net;
+                state.GrantOverLimit(bytes: net, taker: (payer ?? segment.Name));
                 m_pressure = 1;
             }
             state.Granted += bytes;
@@ -1002,6 +1005,17 @@ public sealed class MemoryAccount {
         public long Refusals;
         public string? LastRefusedOwner;
         public long Retiring;
+        // The over-limit grants and bytes by the family or owner that took them.
+        public Dictionary<string, (long Grants, long Bytes)> OverLimitBy { get; } = new(comparer: StringComparer.Ordinal);
+
+        // Counts an over-limit grant of bytes to the family or owner that took it.
+        public void GrantOverLimit(string taker, long bytes) {
+            OverLimitGrants++;
+            OverLimitBytes += bytes;
+            var (grants, total) = OverLimitBy.GetValueOrDefault(key: taker);
+
+            OverLimitBy[taker] = ((grants + 1L), (total + bytes));
+        }
     }
     // One ledger segment's admission state: its row's owner, the grants in flight in it, and the limit a device refusal
     // left with the budget it was refused under.
@@ -1152,10 +1166,7 @@ public sealed class MemoryAccount {
                 if (!m_account.Fits(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host)) {
                     if (!progress || !m_account.FitsHostBar(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host)) { return RefusePeak(peak); }
 
-                    var state = m_account.m_pools[((int)PhysicalMemory.Host)];
-
-                    state.OverLimitGrants++;
-                    state.OverLimitBytes += extra;
+                    m_account.m_pools[((int)PhysicalMemory.Host)].GrantOverLimit(bytes: extra, taker: Name);
                     m_account.m_pressure = 1;
                 }
                 m_refusedPeak = -1L;

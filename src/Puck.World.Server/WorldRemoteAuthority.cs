@@ -140,8 +140,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     private static readonly TimeSpan ObserveRetryDelay = TimeSpan.FromMilliseconds(value: 250);
     /// <summary>How long an intent stream that failed waits before it reconnects.</summary>
     private static readonly TimeSpan IntentRetryDelay = TimeSpan.FromMilliseconds(value: 100);
-    /// <summary>How long an acknowledged intent suppresses a re-send of the identical submission.</summary>
-    private static readonly TimeSpan IntentAcknowledgementWindow = TimeSpan.FromSeconds(value: 1);
+    /// <summary>How long a written intent suppresses a second write of the identical submission.</summary>
+    private static readonly TimeSpan IntentRepeatWindow = TimeSpan.FromSeconds(value: 1);
 
     /// <summary>Gets the ceiling on how long a caller waits for its answer, queue time included — the outer of the two
     /// deadlines, run on the host clock (<see cref="WorldPeerNetwork.Clock"/>). The lane's own
@@ -556,12 +556,12 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             );
         }
     }
-    private void InvalidateAcknowledgement(in WorldRemoteRouteCredential credential) {
+    private void ResendLastIntent(in WorldRemoteRouteCredential credential) {
         if ((m_submissionAuthority ?? this).m_intentPumps.TryGetValue(
             key: credential.SourceAuthority,
             value: out var pump
         )) {
-            pump.InvalidateAcknowledgement(mobility: credential.Mobility);
+            pump.ResendLastIntent(mobility: credential.Mobility);
         }
     }
     // The gate before every socket: a run started without a federation signing identity can never authenticate a
@@ -962,7 +962,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             if (
                 changed &&
                 (m_submissionCredential is { } credential)
-            ) { InvalidateAcknowledgement(credential: in credential); }
+            ) { ResendLastIntent(credential: in credential); }
             Volatile.Write(
                 location: ref m_definition,
                 value: route.Definition
@@ -1382,11 +1382,12 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             Endpoint: Endpoint
         );
     }
-    // One authenticated, persistent control lane per source namespace. SubmitIntent only updates this pump's
-    // bounded latest-value table and returns to the local simulation immediately; the background lane pays connect
-    // and authentication once, then preserves request/ack ordering without making rendering or the boot clock wait
-    // on a network round trip. A key has one pending value, so a slow WAN coalesces intermediate stick samples rather
-    // than building latency or an unbounded queue.
+    // One authenticated, persistent control lane per source namespace. SubmitIntent only queues a batch and returns to
+    // the local simulation immediately; the background lane pays connect and authentication once, then writes each
+    // traveller's batches in order without waiting for an answer to any, so rendering and the boot clock never wait on
+    // a network round trip and no batch waits behind another's. Batches are never merged: one can carry a pointer's
+    // movement or a source's return to neutral that no event marks. A traveller's queue is bounded, and one that
+    // fills is replaced by a single lost-capture batch, which restarts the traveller's input at the authority.
     private sealed class FederatedIntentPump : IDisposable {
         private readonly CancellationTokenSource m_lifetime;
         private readonly WorldRemoteAuthority m_owner;
@@ -1399,7 +1400,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
 
         private bool HasPending => m_pending.Values.Any(predicate: static queue => !queue.IsEmpty);
 
-        private readonly ConcurrentDictionary<IntentKey, AcknowledgedIntent> m_acknowledged = new();
+        private readonly ConcurrentDictionary<IntentKey, SentIntent> m_sent = new();
         private readonly SemaphoreSlim m_signal = new(
             initialCount: 0,
             maxCount: 1
@@ -1412,7 +1413,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             m_worker = Task.Run(function: () => RunAsync(ct: m_lifetime.Token));
         }
 
-        private async Task HandoffAsync(Stream stream, CancellationToken ct) {
+        private async Task HandoffAsync(Stream stream, Task<WireFrameRead> answer, CancellationToken ct) {
             // This is an intentional route handoff, not a dropped client. Tell the older authority not to
             // synthesize a neutral release: the new lane will seed the same current held state.
             await WorldFederationCodec.WriteRequestAsync(
@@ -1421,10 +1422,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 kind: WorldFederationRequest.IntentStreamHandoff,
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);
-            var handoff = await WorldFederationCodec.ReadResponseAsync(
-                ct: ct,
-                stream: stream
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            var handoff = await answer.ConfigureAwait(continueOnCapturedContext: false);
 
             if (
                 !handoff.Ok ||
@@ -1480,8 +1478,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
 
                     // Only a lane this pump could not re-establish is an outage. An established lane ending is not
                     // evidence about the peer: a peer cancelling its own pending read closes the handle abortively
-                    // (WSAECONNABORTED), so its ordinary shutdown arrives here identically to a fault, and
-                    // reconnecting loses nothing because an unacknowledged row is still pending.
+                    // (WSAECONNABORTED), so its ordinary shutdown arrives here identically to a fault. The authority
+                    // restarts the traveller's input on the new lane and publishes the epoch it continues from.
                     if (
                         !established &&
                         (Interlocked.Exchange(
@@ -1509,6 +1507,28 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                     if (HasPending) {
                         try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
                     }
+                } catch (Exception exception) {
+                    // Not a transport failure: the lane could not encode or carry a batch. A worker that ended here
+                    // would leave the seat's input going nowhere for the rest of the run with nothing said, so the
+                    // lane names the failure every time and starts again. The batch that raised it was already taken
+                    // from its queue, so the next connection does not meet it.
+                    if (m_owner.m_narrationHub is { HasNarrationSink: true }) {
+                        m_owner.m_narrationHub?.Narrate(
+                            channel: "world.authority unavailable",
+                            text: $"[world.authority unavailable: intent stream to '{m_owner.Endpoint}' failed and is restarting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"
+                        );
+                    }
+
+                    try {
+                        await Task.Delay(
+                            cancellationToken: ct,
+                            delay: IntentRetryDelay,
+                            timeProvider: m_owner.m_clock
+                        ).ConfigureAwait(continueOnCapturedContext: false);
+                    } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
+                        return;
+                    }
+                    try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
                 }
             }
         }
@@ -1556,88 +1576,64 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
 
             established();
 
+            // The lane writes each batch as it is made and waits for no answer to one: the authority answers an input in
+            // its deliveries, and a lane that waited carried one batch a round trip, which left a backlog whenever a
+            // round trip outlasted the interval between batches. The one pending read is the lane's only answer: the
+            // authority's refusal, or its acknowledgement of a handoff.
+            var answer = WorldFederationCodec.ReadResponseAsync(
+                ct: ct,
+                stream: stream
+            );
+
             while (!ct.IsCancellationRequested) {
                 if (!HasPending) {
-                    await m_signal.WaitAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
+                    using var waiting = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
+                    var signalled = m_signal.WaitAsync(cancellationToken: waiting.Token);
+
+                    _ = await Task.WhenAny(signalled, answer).ConfigureAwait(continueOnCapturedContext: false);
+                    if (!signalled.IsCompleted) {
+                        // Withdrawn, so this wait cannot take a wake meant for the next connection.
+                        waiting.Cancel();
+                    }
+                    try {
+                        await signalled.ConfigureAwait(continueOnCapturedContext: false);
+                    } catch (OperationCanceledException) when (!ct.IsCancellationRequested) {
+                    }
+                }
+                if (answer.IsCompleted) {
+                    throw new IOException(message: DescribeHandshake(
+                        read: await answer.ConfigureAwait(continueOnCapturedContext: false),
+                        stage: "intent stream update"
+                    ));
+                }
+                if (!string.Equals(
+                    a: connectedEndpoint,
+                    b: m_owner.Endpoint,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    await HandoffAsync(
+                        answer: answer,
+                        ct: ct,
+                        stream: stream
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    return;
                 }
 
                 foreach (var pair in m_pending.ToArray()) {
-                    if (!pair.Value.TryPeek(result: out var sent)) { continue; }
-                    if (!string.Equals(
-                        a: connectedEndpoint,
-                        b: m_owner.Endpoint,
-                        comparisonType: StringComparison.Ordinal
-                    )) {
-                        await HandoffAsync(
-                            ct: ct,
-                            stream: stream
-                        ).ConfigureAwait(continueOnCapturedContext: false);
-                        return;
-                    }
                     var mobility = pair.Key.Mobility;
-                    var body = WorldFederationCodec.EncodeIntent(
-                        mobility: in mobility,
-                        sourceAuthority: m_sourceAuthority,
-                        submission: in sent
-                    );
 
-                    await WorldFederationCodec.WriteRequestAsync(
-                        body: body,
-                        ct: ct,
-                        kind: WorldFederationRequest.Intent,
-                        stream: stream
-                    ).ConfigureAwait(continueOnCapturedContext: false);
-                    var response = await WorldFederationCodec.ReadResponseAsync(
-                        ct: ct,
-                        stream: stream
-                    ).ConfigureAwait(continueOnCapturedContext: false);
-
-                    if (
-                        !response.Ok ||
-                        (response.Kind != ((byte)WorldFederationResponse.Ack))
-                    ) {
-                        throw new IOException(message: DescribeHandshake(
-                            read: response,
-                            stage: "intent stream update"
-                        ));
-                    }
-
-                    if (!string.Equals(
-                        a: connectedEndpoint,
-                        b: m_owner.Endpoint,
-                        comparisonType: StringComparison.Ordinal
-                    )) {
-                        await HandoffAsync(
+                    while (pair.Value.TryDequeue(result: out var sent)) {
+                        await WorldFederationCodec.WriteRequestAsync(
+                            body: WorldFederationCodec.EncodeIntent(
+                                mobility: in mobility,
+                                sourceAuthority: m_sourceAuthority,
+                                submission: in sent
+                            ),
                             ct: ct,
+                            kind: WorldFederationRequest.Intent,
                             stream: stream
                         ).ConfigureAwait(continueOnCapturedContext: false);
-                        return;
-                    }
-
-                    lock (pair.Value) {
-                        if (pair.Value.TryPeek(result: out var current) && (current == sent)) {
-                            m_acknowledged[pair.Key] = new AcknowledgedIntent(Submission: sent, Timestamp: m_owner.m_clock.GetTimestamp());
-                            _ = pair.Value.TryDequeue(result: out _);
-                        }
-                    }
-
-                    // Covers the route revision moving between the pre-ack check and publication of the acknowledged
-                    // row. Restore the exact sent state to pending before closing the older lane.
-                    if (!string.Equals(
-                        a: connectedEndpoint,
-                        b: m_owner.Endpoint,
-                        comparisonType: StringComparison.Ordinal
-                    )) {
-                        lock (pair.Value) { if (pair.Value.IsEmpty) { pair.Value.Enqueue(item: sent); } }
-                        _ = m_acknowledged.TryRemove(
-                            key: pair.Key,
-                            value: out _
-                        );
-                        await HandoffAsync(
-                            ct: ct,
-                            stream: stream
-                        ).ConfigureAwait(continueOnCapturedContext: false);
-                        return;
+                        m_sent[pair.Key] = new SentIntent(Submission: sent, Timestamp: m_owner.m_clock.GetTimestamp());
                     }
                 }
             }
@@ -1649,16 +1645,16 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             m_lifetime.Dispose();
             m_signal.Dispose();
         }
-        public void InvalidateAcknowledgement(WorldMobilityIdentity mobility) {
+        public void ResendLastIntent(WorldMobilityIdentity mobility) {
             var key = new IntentKey(Mobility: mobility);
 
-            if (m_acknowledged.TryRemove(
+            if (m_sent.TryRemove(
                 key: key,
-                value: out var acknowledged
+                value: out var last
             )) {
                 var queue = m_pending.GetOrAdd(key: key, valueFactory: static _ => new());
 
-                lock (queue) { if (queue.IsEmpty) { queue.Enqueue(item: acknowledged.Submission); } }
+                lock (queue) { if (queue.IsEmpty) { queue.Enqueue(item: last.Submission); } }
             }
             try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
         }
@@ -1666,12 +1662,12 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             var key = new IntentKey(Mobility: mobility);
 
             if (
-                m_acknowledged.TryGetValue(
+                m_sent.TryGetValue(
                 key: key,
-                value: out var acknowledged
+                value: out var last
             ) &&
-                (acknowledged.Submission == submission) &&
-                (m_owner.m_clock.GetElapsedTime(startingTimestamp: acknowledged.Timestamp) < IntentAcknowledgementWindow)
+                (last.Submission == submission) &&
+                (m_owner.m_clock.GetElapsedTime(startingTimestamp: last.Timestamp) < IntentRepeatWindow)
             ) {
                 return;
             }
@@ -1699,13 +1695,13 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 key: key,
                 value: out _
             );
-            _ = m_acknowledged.TryRemove(
+            _ = m_sent.TryRemove(
                 key: key,
                 value: out _
             );
         }
 
         private readonly record struct IntentKey(WorldMobilityIdentity Mobility);
-        private readonly record struct AcknowledgedIntent(IntentSubmission Submission, long Timestamp);
+        private readonly record struct SentIntent(IntentSubmission Submission, long Timestamp);
     }
 }

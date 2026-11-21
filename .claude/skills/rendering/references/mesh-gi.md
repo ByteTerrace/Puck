@@ -652,8 +652,8 @@ read again is refilled and republished whole.
   probes that lack a trace against the current geometry (finest level and
   nearest first), then those whose lighting is stale or whose bounce has not
   converged (oldest lighting first), and works through the list a batch at a
-  time while the budget (`render.indirect.budget`, `SdfIndirectBudget`), a rate a second of wall time whatever the frame rate,
-  grants relights and traces. `ChangeOf` compares each probe's last sampled
+  time while the budget (`render.indirect.budget` or the running quality table's `indirectBudget`, `SdfIndirectBudget`), a count a presented frame
+  (never a rate of wall time, so a slow frame owes no more), grants relights and traces. `ChangeOf` compares each probe's last sampled
   directional lights and open sky-ray groups with the new capture. Small changes
   within the authored angular and radiance grid can wait for their cell phase
   within the level's age bound. An angular change spanning more than one cell

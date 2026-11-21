@@ -851,10 +851,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
             Extent = (width, height);
             Produced++;
-            m_tainted = (reads?.Tainted ?? false);
+            m_tainted = (reads?.External ?? false);
 
             if (reads?.IndexOf(producer: "world") is >= 0 and var self) {
-                WorldReadBound.Add(item: (reads[self].Lease.ImageViewHandle != 0));
+                WorldReadBound.Add(item: (reads[self].TryRead(latch: context.Latch, read: out var resolved) && (resolved.ImageViewHandle != 0)));
             }
 
             m_capture.Serve(
@@ -883,20 +883,23 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
             Acquired++;
             output = new RenderGraphExternalOutput(
-                Image: Surface.SameDeviceImage(
+                image: Surface.SameDeviceImage(
                     format: GpuPixelFormat.R8G8B8A8Unorm,
                     height: image.Height,
                     imageHandle: image.ImageHandle,
                     imageViewHandle: image.ImageViewHandle,
                     width: image.Width
                 ),
-                Layout: GpuImageLayout.General,
-                Lease: new GpuImageLease(
+                label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(
+                    external: (CarriesTaint && m_tainted),
+                    source: Puck.Abstractions.Presentation.DeliveryPublicSource.Host
+                ),
+                layout: GpuImageLayout.General,
+                lease: new GpuImageLease(
                     ImageViewHandle: image.ImageViewHandle,
                     Release: m_release,
                     ReleaseToken: Acquired
-                ),
-                Tainted: (CarriesTaint && m_tainted)
+                )
             );
 
             return true;

@@ -84,11 +84,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             var name = row.Name.Value;
             var grace = definition.AdjacencyLivenessGraceTicks(adjacency: row);
             var stale = server.Events.LinkStalenessTicks(adjacencyName: name);
-            var neighbour = ((IWorldAdjacencyNeighbour?)null);
-            var resolved = ((adjacencies is not null) && adjacencies.TryResolve(
-                adjacencyName: name,
-                neighbour: out neighbour
-            ) && (neighbour is not null));
+            var neighbour = adjacencies?.Find(name);
             var destination = WorldDefinitionRows.FindDestination(
                 destinations: definition.Destinations,
                 name: row.Destination
@@ -102,8 +98,8 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             );
             // The delivered identity when the seam resolves and has been stamped; the reference's own neighbour key
             // otherwise — a resolved-but-unstamped mirror is not yet naming anyone.
-            var authority = ((resolved && !string.IsNullOrEmpty(value: neighbour!.Authority))
-                ? neighbour.Authority
+            var authority = ((neighbour?.Authority is { Length: > 0 } delivered)
+                ? delivered
                 : (reference?.NeighbourKey ?? "unresolved")
             );
             var graceEcho = (grace.IsNever

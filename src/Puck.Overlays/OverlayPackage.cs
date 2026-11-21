@@ -322,16 +322,17 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
             var recorder = recording.Recorder;
             var pipeline = m_built.Pipeline;
             var framebuffer = (m_framebuffers.GetValueOrDefault(key: target.ImageHandle) ?? throw new InvalidDataException(message: $"Output '{output.Version}' is an image the overlay was not installed with."));
+            var worldImage = input.ReadImage(latch: recording.Latch);
 
             WriteImages(
                 set: m_sets.PassSet(slot: recording.Slot),
-                worldView: input.Image.ImageViewHandle
+                worldView: worldImage.ImageViewHandle
             );
             m_workCounters.Write(
                 passSet: m_sets.PassSet(slot: recording.Slot),
                 recording: recording
             );
-            m_composer.Builder.BuildTileIndex(input.Image.Width, input.Image.Height);
+            m_composer.Builder.BuildTileIndex(worldImage.Width, worldImage.Height);
             m_composer.WritePassValues(values: recording.PassBlock.Slice(
                 length: OverlayFrameComposer.PassValueBytes,
                 start: m_values

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Numerics;
 using Puck.Abstractions;
@@ -39,7 +40,7 @@ namespace Puck.World.Client;
 /// on its socket task while the presentation thread reads this mirror. Definition and scalar clock/revision fields
 /// therefore publish through <see cref="Volatile"/>/<see cref="Interlocked"/>. Each entity record is copied before
 /// its active flag's release write; readers acquire that flag before consuming the copied pose fields. A reader that
-/// needs the whole table from one delivery (<see cref="CopySnapshotTo"/>), or the inputs and arrival history
+/// needs the whole table from one delivery (<see cref="CaptureBodyImage"/>), or the inputs and arrival history
 /// (<see cref="TryInput"/>, <see cref="SnapshotArrivalIntervals"/>), reads the latest complete image each writer
 /// publishes when it finishes, through a <see cref="PublishBuffer{T}"/>, so it never waits on a delivery in
 /// progress.</para>
@@ -348,11 +349,16 @@ public sealed class WorldSessionMirror : IClientSink {
     private int m_arrivalCount;
 
     private readonly bool m_unread;
-    private readonly WorldStreamIngress m_ingress = new();
+    // Withdraws the mirror itself on every span move, between ending the old span and opening the next.
+    private readonly WorldStreamIngress m_ingress;
 
     /// <summary>Gets the stream this mirror is bound to and the span it holds: what its ingress accepts records
     /// from.</summary>
     public WorldStreamSpan Span => m_ingress.Span;
+    /// <summary>Gets the delivery span of what the mirror holds now (<see cref="WorldStreamIngress.DeliverySpan"/>):
+    /// ended from an accepted cut, generation step, first bind or close until the mirror has dropped what it held, and
+    /// after a close.</summary>
+    public Puck.Abstractions.Presentation.DeliverySpan DeliverySpan => m_ingress.DeliverySpan;
     /// <summary>Gets the number of records the mirror's ingress dropped: a record of another stream, of an earlier
     /// generation, or not ahead of the last record it took.</summary>
     public long IngressRefusals => m_ingress.Refusals;
@@ -369,12 +375,13 @@ public sealed class WorldSessionMirror : IClientSink {
         ArgumentNullException.ThrowIfNull(argument: placeholder);
 
         m_unread = unread;
+        m_stateView = new WorldDocumentStateView(clock: () => (Tick, EngineTick), delivered: placeholder, gate: m_followGate);
+        m_ingress = new WorldStreamIngress(withdraw: Withdraw);
         m_document = new WorldDeliveredDocument(
-            Definition: placeholder,
+            Definition: m_stateView.Definition,
             Lifetime: 0,
             Version: default
         );
-        m_stateView = new WorldDocumentStateView(definition: () => Definition);
         m_synchronizedStateView = new SynchronizedStateView(owner: this);
         m_kitColliders = CompileColliders(definition: placeholder);
         m_kitBodyContacts = CompileBodyContacts(definition: placeholder);
@@ -486,77 +493,52 @@ public sealed class WorldSessionMirror : IClientSink {
             : null
         );
     }
-    /// <summary>Copies the latest complete delivered entity table for simulation pinning: the image the last finished
-    /// delivery or route seed published, never a mixture of two remote ticks. It never waits on a delivery: one in
-    /// progress leaves the previous complete image to copy, however long it takes. Placement identities are copied with
-    /// the poses, so a pinned renderer cannot read a newer body's authored policy; looks, colliders and body-contact modes
-    /// resolve against the current definition. Concurrent copies wait on nothing, neither each other nor a writer. Every
-    /// array holds at least <see cref="WorldBodiesLimits.CapacityCeiling"/> elements.</summary>
-    /// <param name="active">The destination for each slot's active flag.</param>
-    /// <param name="addresses">The destination for each slot's entity address.</param>
-    /// <param name="poseEpochs">The destination for each slot's pose epoch.</param>
-    /// <param name="placementIds">The destination for each slot's placement, <see langword="null"/> for none.</param>
-    /// <param name="previousPositions">The destination for each slot's previous render position.</param>
-    /// <param name="previousOrientations">The destination for each slot's previous render attitude.</param>
-    /// <param name="currentPositions">The destination for each slot's current render position.</param>
-    /// <param name="currentOrientations">The destination for each slot's current render attitude.</param>
-    /// <param name="colors">The destination for each slot's body color.</param>
-    /// <param name="looks">The destination for each slot's resolved look row.</param>
-    /// <param name="catalogRigs">The destination for each slot's catalog rig.</param>
-    /// <param name="colliders">The destination for each slot's compiled kit collider, <see langword="null"/> for none.</param>
-    /// <param name="bodyContacts">The destination for each slot's body-contact mode.</param>
-    /// <param name="tick">The image's destination tick.</param>
-    /// <param name="revision">The image's snapshot revision.</param>
-    /// <param name="stepSeconds">The image's destination step, in seconds.</param>
-    /// <param name="arrivalTimestamp">The image's arrival, in <see cref="Stopwatch.GetTimestamp"/> units.</param>
-    public void CopySnapshotTo(
-        bool[] active,
-        WorldEntityAddress[] addresses,
-        int[] poseEpochs,
-        string?[] placementIds,
-        Vector3[] previousPositions,
-        Quaternion[] previousOrientations,
-        Vector3[] currentPositions,
-        Quaternion[] currentOrientations,
-        Vector3[] colors,
-        WorldLook[] looks,
-        byte[] catalogRigs,
-        FixedWorldCollider?[] colliders,
-        WorldBodyContactMode[] bodyContacts,
-        out ulong tick,
-        out int revision,
-        out float stepSeconds,
-        out long arrivalTimestamp
-    ) {
-        (tick, revision, stepSeconds, arrivalTimestamp) = m_images.Read(
-            state: (this, active, addresses, poseEpochs, placementIds, previousPositions, previousOrientations, currentPositions, currentOrientations, colors, looks, catalogRigs, colliders, bodyContacts),
-            read: static (in SnapshotImage image, long version, (WorldSessionMirror Mirror, bool[] Active, WorldEntityAddress[] Addresses, int[] PoseEpochs, string?[] PlacementIds, Vector3[] PreviousPositions, Quaternion[] PreviousOrientations, Vector3[] CurrentPositions, Quaternion[] CurrentOrientations, Vector3[] Colors, WorldLook[] Looks, byte[] CatalogRigs, FixedWorldCollider?[] Colliders, WorldBodyContactMode[] BodyContacts) state) => {
-                var (mirror, active, addresses, poseEpochs, placementIds, previousPositions, previousOrientations, currentPositions, currentOrientations, colors, looks, catalogRigs, colliders, bodyContacts) = state;
-                var looksTable = mirror.Definition.Looks;
-                var kitColliders = Volatile.Read(location: ref mirror.m_kitColliders);
-                var kitContacts = Volatile.Read(location: ref mirror.m_kitBodyContacts);
+    /// <summary>Copies the latest complete body image out of the mirror's reusable publication storage.</summary>
+    public BodyImage CaptureBodyImage(BodyImage? previous = null) => m_images.Read(
+        state: (Mirror: this, Previous: previous),
+        read: static (in SnapshotImage image, long version, (WorldSessionMirror Mirror, BodyImage? Previous) state) => {
+            var mirror = state.Mirror;
+            var definition = mirror.Definition;
+            var revision = mirror.DefinitionRevision;
+            if (state.Previous is { } retained && retained.Version == version &&
+                retained.DefinitionRevision == revision && ReferenceEquals(retained.Definition, definition)) {
+                return retained;
+            }
 
-                for (var index = 0; (index < EntityCapacity); index++) {
-                    var entry = ((index < image.Extent) ? image.Entries[index] : SnapshotImage.Untouched);
+            var bodies = ImmutableArray.CreateBuilder<Body>(image.Extent);
+            var kitColliders = Volatile.Read(ref mirror.m_kitColliders);
+            var kitContacts = Volatile.Read(ref mirror.m_kitBodyContacts);
+            for (var index = 0; index < image.Extent; index++) {
+                var entry = image.Entries[index];
+                bodies.Add(new Body(
+                    Active: entry.Active,
+                    Address: new WorldEntityAddress(Authority: image.Authority, Generation: entry.Generation, Index: index),
+                    PoseEpoch: entry.PoseEpoch,
+                    PlacementId: entry.PlacementId,
+                    PreviousPosition: entry.PreviousPosition,
+                    PreviousOrientation: entry.PreviousOrientation,
+                    CurrentPosition: entry.CurrentPosition,
+                    CurrentOrientation: entry.CurrentOrientation,
+                    Color: entry.Color,
+                    Look: WorldDefinitionRows.ResolveLook(index: entry.Look, rows: definition.Looks),
+                    CatalogRig: entry.CatalogRig,
+                    Collider: (entry.Kit < kitColliders.Length) ? kitColliders[entry.Kit] : null,
+                    Contact: (entry.Kit < kitContacts.Length) ? kitContacts[entry.Kit] : WorldBodyContactMode.Overlap
+                ));
+            }
 
-                    active[index] = entry.Active;
-                    addresses[index] = new WorldEntityAddress(Authority: image.Authority, Generation: entry.Generation, Index: index);
-                    poseEpochs[index] = entry.PoseEpoch;
-                    placementIds[index] = entry.PlacementId;
-                    previousPositions[index] = entry.PreviousPosition;
-                    previousOrientations[index] = entry.PreviousOrientation;
-                    currentPositions[index] = entry.CurrentPosition;
-                    currentOrientations[index] = entry.CurrentOrientation;
-                    colors[index] = entry.Color;
-                    looks[index] = WorldDefinitionRows.ResolveLook(index: entry.Look, rows: looksTable);
-                    catalogRigs[index] = entry.CatalogRig;
-                    colliders[index] = ((entry.Kit < kitColliders.Length) ? kitColliders[entry.Kit] : null);
-                    bodyContacts[index] = ((entry.Kit < kitContacts.Length) ? kitContacts[entry.Kit] : WorldBodyContactMode.Overlap);
-                }
+            return new BodyImage(definition, revision, image.Authority, image.Tick, image.Revision, image.StepSeconds,
+                image.ArrivalTimestamp, bodies.MoveToImmutable(), version);
+        });
 
-                return (image.Tick, image.Revision, image.StepSeconds, image.ArrivalTimestamp);
-            });
-    }
+    /// <summary>A retained delivery for an adjacency. Entries are indexed by the destination's entity slot.</summary>
+    public sealed record BodyImage(WorldDefinition Definition, int DefinitionRevision, string Authority, ulong Tick,
+        int Revision, float StepSeconds, long ArrivalTimestamp, ImmutableArray<Body> Entries, long Version);
+
+    /// <summary>One slot from a retained body image, with its look and collider resolved against the delivered document.</summary>
+    public readonly record struct Body(bool Active, WorldEntityAddress Address, int PoseEpoch, string? PlacementId,
+        Vector3 PreviousPosition, Quaternion PreviousOrientation, Vector3 CurrentPosition, Quaternion CurrentOrientation,
+        Vector3 Color, WorldLook Look, byte CatalogRig, FixedWorldCollider? Collider, WorldBodyContactMode Contact);
 
     // Publishes the entity table, inputs and arrival history as one complete image (see m_images). Called by a writer
     // holding m_snapshotWriteGate once its writes are done.
@@ -604,7 +586,7 @@ public sealed class WorldSessionMirror : IClientSink {
         if (index >= m_extent) { m_extent = (index + 1); }
     }
 
-    // One slot of a published image: what CopySnapshotTo hands out, before resolving the kit and look against the
+    // One slot of a published image: what CaptureBodyImage hands out, before resolving the kit and look against the
     // current definition.
     private readonly record struct ImageEntry(
         bool Active,
@@ -623,24 +605,6 @@ public sealed class WorldSessionMirror : IClientSink {
         BodyFacts Facts
     );
     private sealed class SnapshotImage(long arrivalTimestamp) {
-        // A slot no writer has touched: as WorldPoseTable and this mirror's arrays are constructed.
-        public static readonly ImageEntry Untouched = new(
-            Active: false,
-            CatalogRig: 0,
-            Color: Vector3.Zero,
-            CurrentOrientation: Quaternion.Identity,
-            CurrentPosition: Vector3.Zero,
-            Facts: BodyFacts.None,
-            Generation: 0,
-            Heading: 0f,
-            Kit: 0,
-            Look: 0,
-            PlacementId: null,
-            PoseEpoch: 0,
-            PreviousOrientation: Quaternion.Identity,
-            PreviousPosition: Vector3.Zero
-        );
-
         public ImageEntry[] Entries = [];
 
         public int Extent;
@@ -666,24 +630,28 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 CurrentPosition(int index) => m_poses.CurrentPosition(index: index);
 
-    // Publishes a delivered definition and its version as one pair; the same pair delivered again is kept, so a
-    // repeated delivery allocates nothing.
-    private void Publish(WorldDefinition definition, WorldDocumentVersion version) {
+    // Adopts a delivered definition through the state view, the mirror's one door for documents, and publishes it with
+    // its version as one pair; the same pair delivered again is kept, so a repeated delivery allocates nothing. Returns
+    // the published definition.
+    private WorldDefinition Publish(WorldDefinition definition, WorldDocumentVersion version) {
         lock (m_followGate) {
+            var adopted = m_stateView.Adopt(delivered: definition);
             var current = Volatile.Read(location: ref m_document);
 
-            if (ReferenceEquals(objA: current.Definition, objB: definition) && (current.Version == version)) {
-                return;
+            if (ReferenceEquals(objA: current.Definition, objB: adopted) && (current.Version == version)) {
+                return adopted;
             }
 
             Volatile.Write(
                 location: ref m_document,
                 value: new WorldDeliveredDocument(
-                    Definition: definition,
+                    Definition: adopted,
                     Lifetime: (current.Lifetime + ((current.Version.Activation != version.Activation) ? 1 : 0)),
                     Version: version
                 )
             );
+
+            return adopted;
         }
     }
 
@@ -712,7 +680,7 @@ public sealed class WorldSessionMirror : IClientSink {
         lock (m_snapshotWriteGate) {
             lock (m_followGate) {
                 if (!rows.TryApply(Document.Definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the mirror's creation roster."); }
-                Publish(changed, version);
+                _ = Publish(changed, version);
                 _ = Interlocked.Increment(ref m_definitionRevision);
             }
         }
@@ -726,19 +694,20 @@ public sealed class WorldSessionMirror : IClientSink {
             m_stateTime = null;
         }
 
-        Volatile.Write(
-            location: ref m_kitColliders,
-            value: CompileColliders(definition: definition)
-        );
-        Volatile.Write(
-            location: ref m_kitBodyContacts,
-            value: CompileBodyContacts(definition: definition)
-        );
         lock (m_snapshotWriteGate) {
             lock (m_followGate) {
-                Publish(
+                var adopted = Publish(
                     definition: definition,
                     version: version
+                );
+
+                Volatile.Write(
+                    location: ref m_kitColliders,
+                    value: CompileColliders(definition: adopted)
+                );
+                Volatile.Write(
+                    location: ref m_kitBodyContacts,
+                    value: CompileBodyContacts(definition: adopted)
                 );
                 _ = Interlocked.Increment(location: ref m_definitionRevision);
                 m_observedSnapshotInstall = true;
@@ -759,19 +728,16 @@ public sealed class WorldSessionMirror : IClientSink {
     /// showable, and the whole document and primer the stream owes the new generation fill it again from empty (its
     /// first snapshot seeds both pose endpoints of every body). A terminal record also closes the span, after which only
     /// a stream that never closed on this mirror binds it. A record of any other stream changes nothing.</remarks>
-    public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
-        if (m_ingress.Cut(stream: in stream, terminal: terminal)) { Withdraw(); }
-    }
+    public void DeliverCut(in WorldStreamStamp stream, bool terminal) => _ = m_ingress.Cut(stream: in stream, terminal: terminal);
     /// <inheritdoc/>
     /// <remarks>The mirror drops what it held exactly as for a terminal record, and takes records again only from a
     /// stream that never closed on it.</remarks>
-    public void CloseSpan(ulong stream) {
-        if (m_ingress.Close(stream: stream)) { Withdraw(); }
-    }
+    public void CloseSpan(ulong stream) => _ = m_ingress.Close(stream: stream);
     // Drops everything an ended span delivered: the undisclosed document in place of the delivered one, an empty table
     // in place of its bodies, and no route seed or queued cue, applied through the ordinary delivery paths so every
     // reader follows it. The undisclosed document, never the construction placeholder, which can be a delivered
-    // document (a route's, or the authority's last).
+    // document (a route's, or the authority's last). The ingress runs it on every span move, after the old span ended
+    // and before the next opens (WorldStreamIngress).
     private void Withdraw() {
         lock (m_snapshotWriteGate) { m_seededRouteEntity = null; }
         CueFrames.Clear();
@@ -977,16 +943,17 @@ public sealed class WorldSessionMirror : IClientSink {
         // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
         // Publish the definition and its stamped clock together with respect to followers, including event readers.
         lock (m_followGate) {
-            // A delivery that moved placement rows is a scene change to this mirror's readers, which watch the definition
-            // revision alone.
-            if (WorldPlacementResponse.ComparePlacements(after: definition, before: Volatile.Read(location: ref m_document).Definition, solid: out _) != WorldPlacementChange.None) {
-                _ = Interlocked.Increment(location: ref m_definitionRevision);
-            }
-
-            Publish(
+            var previous = Volatile.Read(location: ref m_document).Definition;
+            var adopted = Publish(
                 definition: definition,
                 version: version
             );
+
+            // A delivery that moved placement rows is a scene change to this mirror's readers, which watch the definition
+            // revision alone.
+            if (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, solid: out _) != WorldPlacementChange.None) {
+                _ = Interlocked.Increment(location: ref m_definitionRevision);
+            }
 
             lock (m_stampGate) {
                 // Anchor and observation deltas arrive at unsampled ticks too. Their values stand at the delivery's

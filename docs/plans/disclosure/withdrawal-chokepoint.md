@@ -8,8 +8,8 @@ property as one invariant, and designs the structural door that holds it, in
 place of the per-path guards the review kept finding ways around. A design
 review of the first draft found sixteen flaws in that door; this revision
 closes each at its cause and [answers them one by one](#the-design-reviews-findings-answered).
-Steps 1 and 6 of [the build order](#the-build-order) are built; the rest is a
-design.
+Steps 1, 2 and 6 of [the build order](#the-build-order) are built; the rest is
+a design.
 
 ## Summary
 
@@ -158,7 +158,7 @@ keeps showing it.
 Confirmed in the code. The epoch moves when the observation object changes, but
 the residency's guard is not told about the observation at all:
 
-`src/Puck.World/WorldScreenBinder.Availability.cs:205`
+`src/Puck.World/WorldScreenBinder.Availability.cs:268`
 
 ```csharp
             return ((access != WorldSessionAccess.None) && (access < Source));
@@ -174,7 +174,7 @@ revision counters, not traced.
 
 Confirmed. A withdrawal unpublishes and stops there:
 
-`src/Puck.Shaders/ShaderPipelineRenderNode.cs:1947-1954`
+`src/Puck.Shaders/ShaderPipelineRenderNode.cs:2231-2238`
 
 ```csharp
     public void WithdrawPublication() {
@@ -218,7 +218,7 @@ Confirmed, three ways.
 Partly true. The default hook does nothing, and the environment producer does
 not override it:
 
-`src/Puck.Shaders/Graph/RenderGraphPackageRecorders.cs:330`
+`src/Puck.Shaders/Graph/RenderGraphPackageRecorders.cs:344`
 
 ```csharp
     void OnOutputsForgotten(string instance) { }
@@ -249,12 +249,12 @@ contract says "An anchored light and the screens are no part of the sample"
 Partly true as stated. The root's image is read from its latest output, which a
 withdrawal clears,
 
-`src/Puck.Shaders/Graph/RenderGraphRuntime.cs:1624-1627`
+`src/Puck.Shaders/Graph/RenderGraphRuntime.cs:1686-1689`
 
 ```csharp
     private Surface RootImage() {
-        if (m_producers[m_root] is not { } producer) {
-            return LatestOf(index: m_root).Image;
+        if (m_producers[m_root] is null) {
+            return LatestOf(index: m_root, latch: in m_latch).Image;
         }
 ```
 
@@ -288,7 +288,7 @@ That replaces membership. It does not replace the pose of a body both sessions
 hold at the same index: an admitted body that was already active takes its
 earlier endpoint from what the table held,
 
-`src/Puck.World.Protocol/Protocol/WorldPoseTable.cs:258-259`
+`src/Puck.World.Protocol/Protocol/WorldPoseTable.cs:273-274`
 
 ```csharp
             m_previousPosition[index] = priorPosition;
@@ -300,10 +300,12 @@ this sequence refuted; the design review corrected it.
 
 ### Combining epochs by their maximum
 
-True of the code (`WorldViewAccess.Join`,
-`src/Puck.World.Client/WorldViewerAccess.cs:71-74`): the maximum of a chain
-does not change when one member is swapped for an older one under a newer
-parent. No sequence that does this was found or ruled out.
+True of the code (the epoch the screen binder takes for a chain,
+`WorldScreenBinder.WalkRoute`): the maximum of a chain does not change when
+one member is swapped for an older one under a newer parent. No sequence that
+does this was found or ruled out. Since step 2 the chain's route also names
+every member's span, so a swapped member's ended span refuses the view's
+earlier pictures whatever the maximum says.
 
 ### The delivery and settle race
 
@@ -944,14 +946,76 @@ for the display. The second and third kinds are GPU legs the lead schedules.
    replaced when its node next records; a cut accepted between the latch and
    the return changes nothing in that frame and everything in the next. Every
    law the withdrawn lane added still passes.
+   *Built.* The label is `DeliveryLabel`: unclassified by default, public for
+   the sources `DeliveryPublicSource` lists, or a set of `DeliverySpan`s, and
+   it carries the capture taint as `DeliveryLabel.External`. A span is ended
+   only by the `DeliverySpanSource` that minted it, and its currency is asked
+   only through a `DeliveryLatch`. The values that move content between owners
+   expose it only through a read that takes the latch and refuses an
+   unclassified or ended label: `DeliveryContent`, `RenderGraphExternalOutput`,
+   `RenderGraphExternalInput`, `ShaderPipelineExternalImage` (bindings and
+   holds) and `ShaderPipelineExternalBuffer`. Binding an unclassified value
+   throws, and an unclassified producer output reads as nothing, so its
+   readers bind the stand-in. The runtime's output records are private to its
+   `OutputRecords`, every read of them takes the latch, and `RememberOutput`
+   is their one writer, the capture conversion of an uploaded source included
+   (`ConvertForCapture`). A node is given the instance's route before it
+   records, and the label it publishes with a frame is that route and every
+   label it bound (`ShaderPipelineRenderNode.FrameBindingLabel`). A record of
+   a rendered frame carries that label; a frame presented again without
+   rendering (a paused node, an output selection) keeps the label it was made
+   under, never the route the instance has now, and a node whose published
+   label ended unpublishes before it presents anything. `RenderGraphRuntimeNode`
+   captures one latch per frame before the host prepares it (`FrameContext.Latch`,
+   `RenderGraphPackageRecording.Latch`), and the runtime, its nodes, held
+   reconfiguration plans and package reads decide against it. A node checks
+   every external binding against the latch each time it records
+   (`ShaderPipelineRenderNode.ValidateBindingsForRecord`): an ended image
+   binding is replaced by the stand-in and its hold released, and an ended
+   buffer binding withholds the render until the buffer is bound again. An
+   output whose label ended renders again to stay shown, unless its route has
+   ended too. A session view's route is the span of every `WorldViewerAccess`
+   and every mirror ingress (`WorldStreamIngress`) on its chain: the access
+   advances its span where its epoch moves and closes it when the session or
+   layer is released. The ingress moves its span on every cut, generation step,
+   first bind and close in one step under its gate: it ends the old span, runs
+   the mirror's withdrawal, and only then opens the next, so no frame pairs
+   pre-cut content with the post-cut span. A view any of whose spans has ended
+   is unavailable, so its node pauses. `WorldViewGraphHost.BindAccess` hands
+   each view its route (`IRenderGraphInstances.SetRoute`) beside
+   `IRenderGraphInstances.Withdraw`, its edge walk and
+   `IRenderGraphPackageFactory.OnOutputsForgotten`, which all stay. The checks
+   are `RenderGraphRuntimeLawTests` in
+   `tests/Puck.Shaders.Tests/RenderGraphRuntimeLawTests.Withdrawal.cs` (the
+   four above, and a paused view whose route moves) and
+   `StreamGenerationLawTests` (the mirror's span stays ended while its cut
+   withdraws). What holds only by review: a source minting a public label for
+   content that is not public (review-only item 1), and code that reads
+   content through the latch and wraps the raw handle again under another
+   label (item 5).
+   *Not closed by step 2.* Step 2 labels pictures; it does not make retained
+   state or copies follow the label. These stay with their steps:
+   - A re-render after a cut reuses the node's temporal history, the view's
+     residency and the binder's settle state, so a picture rendered under the
+     new span can still blend content from before it. Steps 3 (the withdrawal
+     reset and generation-owned cells) and 4 (the holder per route), with the
+     withdrawal guard covering it until then.
+   - A probe that samples a camera's export mints a public label, though the
+     camera may film a screen that shows a session. Labelling the exact
+     exported slot is step 3's; until then the debug world's probe exhibit
+     keeps showing, which an unclassified probe label would black out.
+   - A view that shares another session's scene carries only its own spans,
+     not those of the mirror it draws from. Sharing is checked by proof at each
+     frame (step 6), and a span on the shared scene is step 4's holder per
+     route; the mesh reuse a shared scene draws on is step 7's fence.
 3. **The withdrawal reset, generation-owned cells and labelled publications.**
    The reset of part 5; the owners of part 6 moved as its table lists; exports,
    probes and comparison holds labelled and checked at each read. Only now are
    `IRenderGraphInstances.Withdraw`, the edge walk,
    `ShaderPipelineRenderNode.WithdrawPublication` and
    `IRenderGraphPackageFactory.OnOutputsForgotten` deleted, with the epoch
-   table in `WorldViewGraphHost.BindAccess`, `WorldViewAccess.Join` and
-   `WorldViewAccess.Retired`.
+   table in `WorldViewGraphHost.BindAccess`, the epoch maximum in
+   `WorldScreenBinder.WalkRoute` and `WorldViewAccess.Retired`.
    *Check, device-free:* a feedback image written before a cut reads
    uninitialized after it; a pass held by its cadence over an intermediate
    written before the cut records again; a deferred hand-over settled after the
@@ -1031,7 +1095,7 @@ Each item is deleted in the step named for it above, never before.
 - On the authority's side: the whole-replica test and the second policy copy
   it stood for (deleted in step 6).
 - On the viewer's side: `WorldViewerAccess` and `WorldSessionAccess`,
-  `WorldViewAccess` with its join and its retired value, the generated-name
+  `WorldViewAccess` with its epoch and its retired value, the generated-name
   grammar in `WorldScreenBinder.AccessOf`, the binder's `ContentAccess` and
   delivery mark, `WorldScreenBinder.WithdrawOwnSource`,
   `WorldScreenBinder.WithdrawInfinityResidency`, and the epoch table and
@@ -1062,8 +1126,10 @@ Searched before proposing a generation or a key.
   kept as what it is.
 - `StateArena.DisclosureRevision` is one number for every recipient and moves
   for hidden changes, so a recipient must not be shown it.
-- The render graph's taint (`RenderGraphExternalOutput.Tainted`,
-  `IRenderGraphPackageFactory.TaintOf`, `SdfWorldTables.ProjectTaintedSourcesAgain`)
+- The render graph's taint (`DeliveryLabel.External` on
+  `RenderGraphExternalOutput.Label`, replaced from the earlier boolean in step
+  2, together with `IRenderGraphPackageFactory.TaintOf` and
+  `SdfWorldTables.ProjectTaintedSourcesAgain`)
   is the plumbing the label rides, and the capture repair is the precedent for
   re-reducing lighting from its sources.
 - `RenderGraphSlotResults` is the precedent for a result that waits on a slot,
@@ -1088,9 +1154,10 @@ as `WorldDeliveryCursor.Generation` and `WorldStreamIngress`.
   blanks a neighbour's view on a network hiccup. The authored surface is not:
   a `lease` member on an admission row, carried to the observer when the
   stream is admitted, holding the closed span showable that long, and closed
-  at once when the next session's first record arrives. Its first consumer is
-  a remote neighbour, which nothing in the debug world runs yet; the lane
-  that next works on remote observation builds it.
+  at once when the next session's first record arrives.
+  [The hosted world on a client](../remote-content.md#decision-6-the-lease-after-a-lost-connection)
+  designs it and builds it as its last step; it changes when a span closes and
+  adds nothing to the span, the label or the frame latch.
 - Whether the scene a mirror hands out can become one type that the proof's
   comparison walks, which would retire review-only item 3. Decided for now:
   no. The comparison is small (the frame identity the disclosure table already

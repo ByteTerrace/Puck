@@ -96,39 +96,47 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     /// <remarks>The frame's completion is the runtime's (<see cref="RenderGraphRuntime.Render"/>): rendered only when
     /// the root's image shows this frame.</remarks>
     public RootFrame ProduceFrame(in FrameContext context) {
-        using (HostFrameWork.Measure(HostFrameWorkPart.Pump)) { Prepare?.Invoke(context: in context); }
-        SealRoots();
-        m_presentedTicks += context.FrameDeltaTicks;
+        var latch = (context.Latch.IsLatched ? context.Latch : DeliveryLatch.Capture());
+        var latched = (context.Latch.IsLatched ? context : (context with { Latch = latch }));
 
-        var rendered = (context with { PresentedTicks = m_presentedTicks });
-        var surface = Runtime.ProduceFrame(
-            context: in rendered,
-            frame: new RenderGraphFrame(
-                DisplayHeight: m_displayHeight,
-                DisplayHertz: context.DisplayHertz,
-                DisplayWidth: m_displayWidth,
-                Footprints: Footprints,
-                Index: m_frame++,
-                Named: Named,
-                Roots: m_roots,
-                Tick: context.Tick
-            ) {
-                FrameTicks = context.FrameDeltaTicks,
-                GridHertz = context.GridHertz,
-                PresentedTicks = m_presentedTicks,
-                Seal = m_seal,
-                Steps = context.Steps,
-                StepsNext = context.StepsNext,
-            }
-        );
+        Runtime.BeginLatchedFrame(latch: latch);
+        try {
+            using (HostFrameWork.Measure(HostFrameWorkPart.Pump)) { Prepare?.Invoke(context: in latched); }
+            SealRoots();
+            m_presentedTicks += latched.FrameDeltaTicks;
 
-        if (Runtime.Render.IsRendered) { FrameProduced?.Invoke(); }
+            var rendered = (latched with { PresentedTicks = m_presentedTicks });
+            var surface = Runtime.ProduceFrame(
+                context: in rendered,
+                frame: new RenderGraphFrame(
+                    DisplayHeight: m_displayHeight,
+                    DisplayHertz: rendered.DisplayHertz,
+                    DisplayWidth: m_displayWidth,
+                    Footprints: Footprints,
+                    Index: m_frame++,
+                    Named: Named,
+                    Roots: m_roots,
+                    Tick: rendered.Tick
+                ) {
+                    FrameTicks = rendered.FrameDeltaTicks,
+                    GridHertz = rendered.GridHertz,
+                    PresentedTicks = m_presentedTicks,
+                    Seal = m_seal,
+                    Steps = rendered.Steps,
+                    StepsNext = rendered.StepsNext,
+                }
+            );
 
-        return new RootFrame(
-            Context: rendered,
-            Render: Runtime.Render,
-            Surface: surface
-        );
+            if (Runtime.Render.IsRendered) { FrameProduced?.Invoke(); }
+
+            return new RootFrame(
+                Context: rendered,
+                Render: Runtime.Render,
+                Surface: surface
+            );
+        } finally {
+            Runtime.EndLatchedFrame();
+        }
     }
     // Rewrites the frame's roots from the host's as they stand: the runtime's root over the whole display, then every
     // other root the host names. The host rewrites its roots in the captures the frame starts (a filming camera's), so

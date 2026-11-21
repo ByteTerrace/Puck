@@ -281,12 +281,13 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             var sets = m_sets!;
 
             var framebuffer = (m_framebuffers.GetValueOrDefault(key: target.ImageHandle) ?? throw new InvalidDataException(message: $"Output '{output.Version}' is an image the pass was not installed with."));
+            var inputImage = input.ReadImage(latch: recording.Latch);
 
             m_services.Bindings.WriteSampledImage(
                 arrayElement: 0,
                 binding: m_input,
                 descriptorSetHandle: sets.PassSet(slot: recording.Slot),
-                imageViewHandle: input.Image.ImageViewHandle
+                imageViewHandle: inputImage.ImageViewHandle
             );
             m_workCounters!.Write(
                 passSet: sets.PassSet(slot: recording.Slot),

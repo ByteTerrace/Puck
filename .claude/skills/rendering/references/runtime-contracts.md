@@ -189,13 +189,33 @@ yields an empty, default or stale result that the frame presents as success.
   no longer allowed is a trust boundary, and only an adversarial review sees a
   path around this door (an external producer's own output, an export already
   copied out).
+- Beside the withdrawal, every image and buffer that moves between owners
+  carries a `DeliveryLabel` (unclassified, public, or a set of
+  `DeliverySpan`s, with the capture taint as `DeliveryLabel.External`), and its
+  handle is read only through `TryRead` at the frame's `DeliveryLatch`, which
+  `RenderGraphRuntimeNode` captures once a frame before the host prepares it
+  (`FrameContext.Latch`). Binding an unclassified value throws. Output records
+  are private to `RenderGraphRuntime`'s `OutputRecords` and written only by
+  `RememberOutput`; a record carries its node's published label, which is the
+  instance's route (`IRenderGraphInstances.SetRoute`, which the World sets
+  from each view's access and mirror spans) and every label the node bound
+  when it committed that frame, and no reader is given one whose span ended.
+  A frame presented again without rendering keeps the label it was made
+  under. A node replaces an ended
+  binding with the stand-in when it next records
+  (`ShaderPipelineRenderNode.ValidateBindingsForRecord`). A new producer or
+  recorder that wraps a handle it read in a fresh label, or mints a public
+  label for content that is not public, is outside what the types can see
+  (the memo's review-only items,
+  [the withdrawal chokepoint](../../../../docs/plans/disclosure/withdrawal-chokepoint.md#what-stays-review-only)).
 
 **Laws.** `RenderGraphRuntimeLawTests.Lifetime`
 (`ACaptureNoRootOutputServesIsRefusedByNameAndThenDropped`),
 `RenderGraphRuntimeLawTests.Alias`
 (`APassWhoseOutputAnotherPassReadsIsRefusedByNameWhenItDrawsNothing`,
 `AnOutputCannotStandForAPreviousFrameInputAndIsRefusedByName`),
-`RenderGraphRuntimeLawTests.UnboundReads`. The `pipeline-package` and
+`RenderGraphRuntimeLawTests.UnboundReads`, `RenderGraphRuntimeLawTests.Withdrawal`
+(the carrying value, the held binding and the latch). The `pipeline-package` and
 `no-device-compile` canaries that held it on the real World are quarantined
 under `experimental/tests/Puck.World.Canaries` with every other canary.
 

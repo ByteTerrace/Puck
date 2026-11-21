@@ -34,8 +34,8 @@ public sealed class ShaderWorkCountersLawTests {
         Assert.Contains(actualString: generated, expectedSubstring: "void puckCountShapes(uint shapes, uint gradients) {");
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkShapesWord = 10u;");
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkGradientsWord = 12u;");
-        Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork(row + PuckWorkShapesWord, waveShapes);");
-        Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork(row + PuckWorkGradientsWord, waveGradients);");
+        Assert.Contains(actualString: generated, expectedSubstring: "puckAddGroupWork((row + PuckWorkShapesWord), shapes, (row + PuckWorkGradientsWord), gradients);");
+        Assert.Contains(actualString: generated, expectedSubstring: "if (passGroup.workCounterRow == PuckWorkDisabledRow) {");
         Assert.Contains(actualString: generated, expectedSubstring: "void puckCountFragmentWork(uint steps, uint texels) {");
         Assert.Contains(actualString: generated, expectedSubstring: "bool counting = !IsHelperLane();");
         Assert.Contains(actualString: generated, expectedSubstring: $"RWStructuredBuffer<uint> {ShaderWorkCounters.Buffer}");
@@ -78,8 +78,8 @@ public sealed class ShaderWorkCountersLawTests {
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkSkyHashesWord = 6u;");
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkSkyTextureLoadsWord = 8u;");
         Assert.Contains(actualString: generated, expectedSubstring: "uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);");
-        Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork((row + PuckWorkSkyHashesWord), hashes);");
-        Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);");
+        Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork((row + PuckWorkSkyHashesWord), waveHashes);");
+        Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork((row + PuckWorkSkyTextureLoadsWord), waveLoads);");
         Assert.Contains(actualString: generated, expectedSubstring: "if (before > (0xFFFFFFFFu - amount))");
         Assert.Contains(actualString: generated, expectedSubstring: "InterlockedAdd(workCounters[word + 1u], 1u);");
     }

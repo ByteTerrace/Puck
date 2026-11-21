@@ -206,19 +206,6 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// world that enables no addon, or an offline re-drive read before its own mount). The record side of the replay
     /// tape reads this at record-start so a saved tape pins the guests it will re-run.</summary>
     public IReadOnlyList<WorldAddonReceipt> AddonReceipts => (m_addons?.Receipts ?? Array.Empty<WorldAddonReceipt>());
-    /// <summary>Gets or sets the runtime adjacency source every live body's contact resolution consults inside the
-    /// compiler-derived overlap — the per-tick counterpart to <see cref="Neighbours"/> (which proves reciprocal
-    /// topology once at document-load time). The same
-    /// "the server calls out, the composition root supplies the capability" shape as <see cref="Neighbours"/>/
-    /// <see cref="EchoTap"/>: <c>Puck.World.Server</c> carries no cross-instance dependency, so it cannot resolve a
-    /// sibling instance itself. Forwards straight to <see cref="Population"/>'s own contact-field composition — see
-    /// <see cref="Server.WorldPopulation.ConfigureAdjacencies"/> — so a caller that sets this after the server
-    /// already stepped still takes effect on the very next tick, no restart. <see langword="null"/> (the default) is
-    /// correct whenever no source is wired; the body then solves against this authority's own geometry alone.</summary>
-    public IWorldAdjacencySource? Adjacencies {
-        get => m_population.Adjacencies;
-        set => m_population.ConfigureAdjacencies(source: value);
-    }
     /// <summary>Gets a value indicating whether any mounted addon has ever had an admitted execution attempted (a real
     /// <c>TickAddons</c> pump, not merely mounting).
     /// <c>false</c> for a world that mounts no addon, or one whose mounted addons never reached their first tick.

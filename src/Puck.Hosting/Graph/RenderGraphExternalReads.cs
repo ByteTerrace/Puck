@@ -4,31 +4,58 @@ using Puck.Abstractions.Presentation;
 
 namespace Puck.Hosting;
 
-/// <summary>One image an external producer reads when it produces: the latest completed output of an instance its own
-/// instance reads, bound by the render-graph runtime.</summary>
-/// <param name="Producer">The name of the instance read.</param>
-/// <param name="Image">The image, or an empty surface when the instance read has completed no output or hands out its
-/// image view through the lease alone.</param>
-/// <param name="Layout">The layout the image is in between its producer's submissions; a sampling submission hands it
-/// back in this layout.</param>
-/// <param name="Lease">The acquisition that keeps the image alive; handle-only for an instance that needs none.</param>
-/// <param name="Tainted">Whether the image holds external content the capture gate did not fill
-/// (<see cref="RenderGraphExternalOutput.Tainted"/>).</param>
-public readonly record struct RenderGraphExternalInput(string Producer, Surface Image, GpuImageLayout Layout, GpuImageLease Lease, bool Tainted) {
-    /// <summary>Gets the bound image's actual publication, under the same lease that protects its pixels.</summary>
-    public ReferenceRevision Publication => Lease.Publication;
+/// <summary>The image, resting layout, view handle and publication unlocked from a
+/// <see cref="RenderGraphExternalInput"/> at a <see cref="DeliveryLatch"/>.</summary>
+/// <param name="Image">The image, or an empty surface when the instance read hands out its image view through the lease
+/// alone.</param>
+/// <param name="Layout">The layout the image rests in between its producer's submissions; a sampling submission hands
+/// it back in this layout.</param>
+/// <param name="ImageViewHandle">The image view to sample, or zero when none is bound.</param>
+/// <param name="Publication">The bound image's actual publication, under the same lease that protects its pixels.</param>
+public readonly record struct RenderGraphResolvedRead(Surface Image, GpuImageLayout Layout, nint ImageViewHandle, ReferenceRevision Publication);
+
+/// <summary>One image an external producer or package pass reads when it records: the latest completed output of an
+/// instance its own instance reads, paired with its <see cref="DeliveryLabel"/> so its handle and surface can be
+/// obtained only through <see cref="TryRead"/>.</summary>
+public readonly struct RenderGraphExternalInput {
+    private readonly DeliveryContent<RenderGraphResolvedRead> m_content;
+
+    internal RenderGraphExternalInput(string producer, DeliveryContent<RenderGraphResolvedRead> content, GpuImageLease lease) {
+        Producer = producer;
+        m_content = content;
+        Lease = lease;
+    }
+
+    internal GpuImageLease Lease { get; }
+
+    /// <summary>Gets the name of the instance read.</summary>
+    public string Producer { get; }
+    /// <summary>Gets the read's provenance and external-content classification.</summary>
+    public DeliveryLabel Label => m_content.Label;
+    /// <summary>Gets whether a classified image is bound for this read.</summary>
+    public bool IsClassified => m_content.IsClassified;
+
+    /// <summary>Reads the bound image, view handle and publication when <see cref="Label"/> allows
+    /// <paramref name="latch"/>.</summary>
+    /// <param name="latch">The frame's latch.</param>
+    /// <param name="read">The resolved read when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when a classified image is bound and every span in <see cref="Label"/> is
+    /// current at <paramref name="latch"/>.</returns>
+    public bool TryRead(in DeliveryLatch latch, out RenderGraphResolvedRead read) =>
+        m_content.TryRead(latch: in latch, value: out read);
 }
-/// <summary>The images one external producer reads in one produced frame, in the order its instance declares the reads.
-/// The render-graph runtime binds each read's latest completed output and hands the list to
-/// <see cref="IRenderGraphExternalProducer.Produce"/>; the producer takes the leases of the images its submission
-/// samples (<see cref="Take"/>) and retires each after that submission's fence, and the runtime retires every lease it
-/// leaves once <c>Produce</c> returns. The runtime reuses one list per instance, so a steady frame allocates nothing.
-/// Every member runs on the thread that produces frames.</summary>
+
+/// <summary>The images one external producer or package pass reads in one produced frame, in the order its instance
+/// declares the reads. The render-graph runtime binds each read's latest completed output and hands the list to
+/// <see cref="IRenderGraphExternalProducer.Produce"/> or <c>RenderGraphPackageRecording</c>; the reader takes or samples
+/// the leases of the images its submission samples (<see cref="TryTake"/>, <see cref="TrySample"/>) at the frame's
+/// <see cref="DeliveryLatch"/>, and the runtime retires every untaken lease once the frame returns. The runtime reuses
+/// one list per instance, so a steady frame allocates nothing.</summary>
 public sealed class RenderGraphExternalReads {
-    // Each read's position by the name of the instance it reads.
     private readonly Dictionary<string, int> m_indexByProducer;
     private readonly RenderGraphExternalInput[] m_inputs;
     private readonly bool[] m_taken;
+    private readonly DeliveryLabelUnion m_union = new();
 
     /// <summary>Initializes a new instance of the <see cref="RenderGraphExternalReads"/> class.</summary>
     /// <param name="producers">The instances read, in the order the consumer declares them.</param>
@@ -49,49 +76,69 @@ public sealed class RenderGraphExternalReads {
                 value: index
             );
             m_inputs[index] = new RenderGraphExternalInput(
-                Image: default,
-                Layout: default,
-                Lease: default,
-                Producer: producers[index],
-                Tainted: false
+                content: default,
+                lease: default,
+                producer: producers[index]
             );
         }
     }
 
     /// <summary>Gets the number of reads.</summary>
     public int Count => m_inputs.Length;
-    /// <summary>Gets whether any read bound this frame is tainted (<see cref="RenderGraphExternalInput.Tainted"/>), so the
-    /// producer's output rendered from them is too.</summary>
-    public bool Tainted {
+    /// <summary>Gets the union of every bound read's <see cref="DeliveryLabel"/> this frame, or a public host label
+    /// when no read is bound.</summary>
+    public DeliveryLabel Label {
         get {
-            foreach (var input in m_inputs) {
-                if (input.Tainted) {
-                    return true;
+            m_union.Clear();
+            m_union.Add(label: DeliveryLabel.ForSource(source: DeliveryPublicSource.Host));
+            for (var index = 0; (index < m_inputs.Length); index++) {
+                if (m_inputs[index].IsClassified) {
+                    m_union.Add(label: m_inputs[index].Label);
                 }
             }
 
-            return false;
+            return m_union.Build();
         }
     }
+    /// <summary>Gets whether any read bound this frame holds external pixels the capture gate did not fill.</summary>
+    public bool External => Label.External;
 
     /// <summary>Gets one read.</summary>
     /// <param name="index">The read's position, from zero.</param>
-    /// <returns>The read's image this frame.</returns>
+    /// <returns>The read's carrying input this frame.</returns>
     public RenderGraphExternalInput this[int index] => m_inputs[index];
 
     /// <summary>Binds one read's image for the frame, replacing whatever it held.</summary>
     /// <param name="index">The read's position.</param>
-    /// <param name="image">The image, or an empty surface when the instance read has none.</param>
+    /// <param name="image">The image, or an empty surface when the instance read hands out a view handle alone.</param>
     /// <param name="layout">The layout the image rests in.</param>
     /// <param name="lease">The acquisition that keeps it alive.</param>
-    /// <param name="tainted">Whether the image holds external content the capture gate did not fill.</param>
-    public void Bind(int index, Surface image, GpuImageLayout layout, GpuImageLease lease, bool tainted) {
-        m_inputs[index] = (m_inputs[index] with {
-            Image = image,
-            Layout = layout,
-            Lease = lease,
-            Tainted = tainted,
-        });
+    /// <param name="label">The image's provenance and external-content classification; an unclassified label is
+    /// refused.</param>
+    /// <exception cref="ArgumentException"><paramref name="label"/> is unclassified.</exception>
+    public void Bind(int index, Surface image, GpuImageLayout layout, GpuImageLease lease, DeliveryLabel label) {
+        if (!label.IsClassified) {
+            lease.Retire();
+
+            throw new ArgumentException(
+                message: $"External read '{m_inputs[index].Producer}' has an unclassified delivery label.",
+                paramName: nameof(label)
+            );
+        }
+
+        m_inputs[index] = new RenderGraphExternalInput(
+            content: new DeliveryContent<RenderGraphResolvedRead>(
+                label: label,
+                value: new RenderGraphResolvedRead(
+                    Image: image,
+                    ImageViewHandle: lease.ImageViewHandle,
+                    Layout: layout,
+                    Publication: lease.Publication
+                )
+            ),
+            lease: lease,
+            producer: m_inputs[index].Producer
+        );
         m_taken[index] = false;
     }
     /// <summary>Returns the position of the read of an instance.</summary>
@@ -107,10 +154,11 @@ public sealed class RenderGraphExternalReads {
     /// <summary>Returns whether one read's lease was taken this frame, so a producer that samples one image in several
     /// places takes it once.</summary>
     /// <param name="index">The read's position.</param>
-    /// <returns><see langword="true"/> once <see cref="Take"/> has taken it this frame.</returns>
+    /// <returns><see langword="true"/> once <see cref="TryTake"/> or <see cref="TrySample"/> has taken it this
+    /// frame.</returns>
     public bool IsTaken(int index) => m_taken[index];
     /// <summary>Retires every lease no producer took and clears every read's image, which the runtime does once
-    /// <see cref="IRenderGraphExternalProducer.Produce"/> returns.</summary>
+    /// the frame's recording returns.</summary>
     public void RetireUntaken() {
         for (var index = 0; (index < m_inputs.Length); index++) {
             var lease = m_inputs[index].Lease;
@@ -119,27 +167,72 @@ public sealed class RenderGraphExternalReads {
                 lease.Retire();
             }
 
-            m_inputs[index] = (m_inputs[index] with {
-                Image = default,
-                Layout = default,
-                Lease = default,
-                Tainted = false,
-            });
+            m_inputs[index] = new RenderGraphExternalInput(
+                content: default,
+                lease: default,
+                producer: m_inputs[index].Producer
+            );
             m_taken[index] = false;
         }
     }
-    /// <summary>Takes one read's lease: the producer's submission samples its image, and the producer retires the lease
-    /// once that submission has finished, on device loss or at disposal. A lease is taken at most once a frame.</summary>
+    /// <summary>Reads one bound input at <paramref name="latch"/> and takes its lease at most once for the frame.</summary>
     /// <param name="index">The read's position.</param>
-    /// <returns>The lease.</returns>
+    /// <param name="latch">The frame's latch.</param>
+    /// <param name="read">The resolved image, view handle and publication when this returns <see langword="true"/>.</param>
+    /// <param name="lease">The lease to retire once the sampling submission finishes.</param>
+    /// <returns><see langword="true"/> when a classified image with a non-zero view handle is bound and allowed at
+    /// <paramref name="latch"/>.</returns>
     /// <exception cref="InvalidOperationException">The lease was taken already this frame.</exception>
-    public GpuImageLease Take(int index) {
+    public bool TryTake(int index, in DeliveryLatch latch, out RenderGraphResolvedRead read, out GpuImageLease lease) {
         if (m_taken[index]) {
             throw new InvalidOperationException(message: $"The read of '{m_inputs[index].Producer}' was taken already this frame.");
         }
+        if (
+            !m_inputs[index].TryRead(latch: in latch, read: out read) ||
+            (read.ImageViewHandle == 0)
+        ) {
+            read = default;
+            lease = default;
+
+            return false;
+        }
 
         m_taken[index] = true;
+        lease = m_inputs[index].Lease;
 
-        return m_inputs[index].Lease;
+        return true;
+    }
+    /// <summary>Samples one read at <paramref name="latch"/>, holding its lease in <paramref name="leases"/> once for
+    /// the frame even when several passes of the recording sample the same read.</summary>
+    /// <param name="index">The read's position.</param>
+    /// <param name="latch">The frame's latch.</param>
+    /// <param name="leases">The frame's lease list, which retires the lease after the submission.</param>
+    /// <param name="imageViewHandle">The sampled image-view handle when this returns <see langword="true"/>; otherwise
+    /// zero.</param>
+    /// <returns><see langword="true"/> when a classified image with a non-zero view handle is bound and allowed at
+    /// <paramref name="latch"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="leases"/> is <see langword="null"/>.</exception>
+    public bool TrySample(int index, in DeliveryLatch latch, LeaseRetireList leases, out nint imageViewHandle) {
+        ArgumentNullException.ThrowIfNull(argument: leases);
+
+        if (
+            !m_inputs[index].TryRead(latch: in latch, read: out var read) ||
+            (read.ImageViewHandle == 0)
+        ) {
+            imageViewHandle = 0;
+
+            return false;
+        }
+        if (!m_taken[index]) {
+            m_taken[index] = true;
+
+            var lease = m_inputs[index].Lease;
+
+            leases.Hold(lease: in lease);
+        }
+
+        imageViewHandle = read.ImageViewHandle;
+
+        return true;
     }
 }

@@ -14,9 +14,9 @@ namespace Puck.World.Client;
 /// refuses one another rig made, so a driver advance or an effector solve cannot read what the rig did not list, and the
 /// wake test (<see cref="Revision"/>) and the presentation manifest see every read the pose depends on.
 /// </summary>
-/// <remarks>Presentation-only, on the thread that presents frames: the view reads the client's state mirror through the
-/// registration's lease and the client's interpolated body poses, and nothing it answers re-enters the
-/// simulation.</remarks>
+/// <remarks>Presentation-only, on whichever thread poses the registration (a partition of the pose fork, or the frame
+/// thread for a rig that reads another body): the view reads the client's state mirror through the registration's lease
+/// and the client's interpolated body poses, and nothing it answers re-enters the simulation.</remarks>
 public sealed class WorldRigReads {
     private readonly CreationRig m_rig;
     private readonly WorldStateLease m_lease;

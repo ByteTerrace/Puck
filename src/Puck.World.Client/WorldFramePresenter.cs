@@ -771,7 +771,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 screens: definition.Screens
             );
 
-            return new StaticFieldBuild(Excluded: excluded, Field: new SdfFieldEvaluator(program: builder.Build()), Refusal: null);
+            // Regional: a probe or a sweep walks the chains near its samples, not the whole static world.
+            return new StaticFieldBuild(Excluded: excluded, Field: new SdfFieldEvaluator(program: builder.Build(), reading: SdfFieldReading.Contact, regional: true), Refusal: null);
         } catch (ArgumentException exception) {
             return new StaticFieldBuild(Excluded: excluded, Field: null, Refusal: exception);
         }
@@ -2482,7 +2483,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 IndirectSources = lighting.Indirect.Gains.Sources,
                 IndirectGains = lighting.Indirect.Gains,
                 IndirectBounces = lighting.Indirect.Bounces,
-                IndirectBudget = lighting.Indirect.Budget,
+                IndirectBudget = WorldRenderSettings.ResolveIndirectBudget(authored: lighting.Indirect.Budget, row: m_settings.IndirectBudget),
                 IndirectLightingGrid = lighting.Indirect.LightingGrid,
                 IndirectApply = lighting.Indirect.Apply,
                 // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render

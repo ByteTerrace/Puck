@@ -1,3 +1,4 @@
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Shaders;
 
@@ -61,11 +62,13 @@ public sealed partial class SdfWorldPasses {
                 ? "the screen emission the screen lights read, reduced from a screen's external image"
                 : null)));
     // Names the first read a render bound with external content the capture gate did not fill, or null when none.
-    internal static string? ReadTaintOf(RenderGraphExternalReads? reads) {
+    internal static string? ReadTaintOf(RenderGraphExternalReads? reads, in DeliveryLatch latch) {
         for (var index = 0; (index < (reads?.Count ?? 0)); index++) {
-            if (reads![index].Tainted) {
+            var input = reads![index];
+
+            if (input.TryRead(latch: in latch, read: out var resolved) && (resolved.ImageViewHandle != 0) && input.Label.External) {
                 // Spelled once for each producer, since a view reading a live external image is tainted every frame.
-                return ReadTaints.GetValue(key: reads[index].Producer, derive: static producer => $"the unfilled external image of '{producer}'");
+                return ReadTaints.GetValue(key: input.Producer, derive: static producer => $"the unfilled external image of '{producer}'");
             }
         }
 

@@ -33,6 +33,13 @@ public interface IWorldDocumentRewriter {
     /// once it is <see langword="true"/>, and the rewrite answers its root unchanged.</summary>
     bool Stopped => false;
 
+    /// <summary>Returns what an earlier rewrite by the same owner turned a value that is not a surface into, so the
+    /// walk answers it without entering it; <see langword="null"/> goes on to <see cref="Enters"/>.</summary>
+    /// <remarks>Sound only because a document value never changes once built: a value rewritten once rewrites the same
+    /// way again.</remarks>
+    /// <param name="value">The value: never <see langword="null"/>, a string, a value type or a surface.</param>
+    /// <returns>The earlier rewrite, the value itself to keep it whole, or <see langword="null"/>.</returns>
+    object? Reuse(object value) => null;
     /// <summary>Returns whether the walk enters the members of a value that is not a surface.</summary>
     /// <param name="value">The value: never <see langword="null"/>, a string or a surface.</param>
     /// <param name="site">Where the value sits.</param>
@@ -643,6 +650,12 @@ public sealed partial class WorldDocumentWalker {
                     site: site,
                     value: value
                 );
+            }
+            if (
+                !type.IsValueType &&
+                (rewriter.Reuse(value: value) is { } reused)
+            ) {
+                return reused;
             }
             if (!rewriter.Enters(site: site, value: value)) {
                 return value;

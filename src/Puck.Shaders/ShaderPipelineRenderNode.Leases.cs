@@ -44,10 +44,32 @@ public sealed partial class ShaderPipelineRenderNode {
     /// <param name="name">The name of a declared external image.</param>
     /// <param name="image">The bound image, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the name is bound to an image.</returns>
-    public bool TryGetBoundImage(string name, out ShaderPipelineExternalImage image) => m_externalImages.TryGetValue(
-        key: name,
-        value: out image
-    );
+    public bool TryGetBoundImage(string name, out ShaderPipelineExternalImage image) {
+        if (m_externalImages.TryGetValue(key: name, value: out var bound)) {
+            image = bound.Image;
+
+            return true;
+        }
+
+        image = default;
+
+        return false;
+    }
+    /// <summary>Returns the buffer a named external buffer is bound to now.</summary>
+    /// <param name="name">The name of a declared external buffer.</param>
+    /// <param name="buffer">The bound buffer, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the name is bound to an external buffer.</returns>
+    public bool TryGetBoundBuffer(string name, out ShaderPipelineExternalBuffer buffer) {
+        if (m_externalBuffers.TryGetValue(key: name, value: out var bound)) {
+            buffer = bound.Binding;
+
+            return true;
+        }
+
+        buffer = default;
+
+        return false;
+    }
 
     /// <summary>Retires, without waiting, the leases of every frame slot whose submission has completed, so a node that
     /// stops submitting (paused, standing or released) lets go of the images its finished submissions read rather than
@@ -125,9 +147,10 @@ public sealed partial class ShaderPipelineRenderNode {
     /// image handle is zero.</exception>
     public void BindImage(string name, ShaderPipelineExternalImage image, GpuImageLease lease) {
         BindImage(
-            image: image with { Publication = lease.Publication },
+            image: image,
             name: name
         );
+        m_externalImages[name] = new BoundExternalImage(Image: image.WithLeasePublication(publication: lease.Publication));
 
         if (!lease.RequiresRetirement) {
             return;
@@ -182,8 +205,22 @@ public sealed partial class ShaderPipelineRenderNode {
     /// image handle is zero.</exception>
     public void HoldBinding(string name, ShaderPipelineExternalImage image, GpuImageLease lease) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentOutOfRangeException.ThrowIfZero(image.ImageHandle);
-        ArgumentOutOfRangeException.ThrowIfZero(image.ImageViewHandle);
+        if (!image.IsClassified) {
+            lease.Retire();
+
+            throw new ArgumentException(
+                message: $"External image '{name}' has an unclassified delivery label.",
+                paramName: nameof(image)
+            );
+        }
+        if (!image.HasHandles) {
+            lease.Retire();
+
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(image),
+                message: "External image handles must be non-zero."
+            );
+        }
 
         if (m_disposed) {
             lease.Retire();
@@ -200,7 +237,7 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         ClearLease(name: name);
-        m_externalImages[name] = image with { Publication = lease.Publication };
+        m_externalImages[name] = new BoundExternalImage(Image: image.WithLeasePublication(publication: lease.Publication));
         HoldBinding(
             lease: lease,
             name: name

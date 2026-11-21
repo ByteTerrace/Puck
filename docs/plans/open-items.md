@@ -114,9 +114,9 @@ lane; it does not gate starting them.
    reads its slot's transform instead of storing a matrix, so a moving body
    rewrites one transform row and pack stops restaging records.
 4. **`field-queries`** · high · a principal. Item 4: presentation queries
-   (effector probes, camera clearance) leave the interpreted CPU field, on
-   the GPU a frame late or as compiled vectorized code, whichever the lane
-   shows is better.
+   (effector probes, camera clearance) stop walking the whole static world.
+   Region tapes are built; the float reader is the open part
+   ([the design](field-queries.md#build-order)).
 5. **`frame-garbage`** · high · a specialist. Item 5 and the memory tenants:
    no collection pauses during play, the 26 MB appearance clone, the 80 MB
    clearance evaluator.
@@ -632,15 +632,19 @@ wait behind them.
 1. **The authority's step leaves the frame thread.** The in-process authority
    steps on a thread of its own and the frame presents the latest completed
    tick, as a client of a remote authority already does. A frame then costs
-   the longer of the tick and the produce, not their sum. This is
-   [the job system's open question 7](engine-job-system.md#open-questions),
-   and the design lane answers it before any code. What the design must
-   state: the frame reads only a completed tick's published state
-   ([the presentation view](runtime-and-delivery.md#the-presentation-view)),
-   so no thread timing can change simulation state (AGENTS.md rule 4), and
-   what enforces that; where input is sampled, with the input-to-display time
-   measured before and after
-   ([the pipelining decision](../decisions/rendering.md#the-pipeline-foundation)). Check: `host.frames` shows the
+   the longer of the tick and the produce, not their sum.
+   [The design](tick-thread.md) states the invariant (a tick executes from
+   input the loop closed before handing it over, and the loop reads the
+   authority only between a collect and the next hand-off, so no thread
+   timing can change simulation state, AGENTS.md rule 4), what enforces it,
+   every frame-thread reader and where it moves, and the input-to-display
+   budget ([the pipelining decision](../decisions/rendering.md#the-pipeline-foundation)).
+   The memo is reviewed and its findings answered. The frame cannot run
+   beside the tick until it reads no live authority state, so
+   [its steps](tick-thread.md#the-steps) come in three stages, and the second
+   stage's steps (the outbox, a delivered document bound to its sink's values,
+   adjacency in prepare, the link, presentation out of the composition root)
+   can run in separate lanes. Next: stage one. Check: `host.frames` shows the
    step outside the frame's interval on the route, and
    `puck test --reproduce` passes at every worker count. At scale: every
    world a client runs steps on its own thread, which is the shape the silo's
@@ -684,19 +688,21 @@ wait behind them.
 4. **Presentation queries stop interpreting the field on the CPU.** The
    creation effectors' surface probes (`WorldCreationInstances.ApplyEffectors`)
    and the chase camera's clearance march (`WorldCameraClearance.March`) walk
-   `SdfFieldEvaluator` on the frame thread, and the clearance keeps a whole
-   CPU evaluator alive for it. A design lane weighs two replacements. Batch
-   the probes onto the GPU and answer them a frame late: the kernels already
-   evaluate the same program, and the cost is a frame of lag in feet and
-   camera. Or compile the CPU evaluator to vectorized native code from the
-   one definition per field op the
-   [field programs](field-programs.md#build-order) plan generates readers
-   from, which also serves contact and the bake's CPU twin. These are
-   presentation queries; the simulation's fixed-point contact is not moved.
-   Check: `world.counters world.field-queries` and the frame thread's share
-   in the trace, with the feet captures of the verification debts unchanged.
-   At scale: a town's feet are hundreds of probes a frame, which only a batch
-   or compiled code can answer.
+   `SdfFieldEvaluator`, and the clearance keeps a whole CPU evaluator alive
+   for it. [The design](field-queries.md) weighs a GPU batch answered a frame
+   late against the CPU and chooses the CPU. Its first part is built: the
+   presentation field is a regional evaluator, which walks the chains that can
+   change the field in the cube its sample lies in and answers what the plain
+   evaluator answers, to the bit. Its second part is open: a float reader in
+   vector width, lowered from shared definitions, for the gradient's taps and
+   lattice fills, which never decides a hit. These are presentation queries;
+   the simulation's fixed-point contact is not moved. Check: the design's
+   [build order](field-queries.md#build-order), step by step, with
+   `world.counters world.field-queries`, `sdf.point` and `sdf.regions` and the
+   frame thread's share in the trace, and the feet captures of the
+   verification debts unchanged. At scale: a town's feet are hundreds of
+   probes a frame over a field as large as the zone, so a query's cost has to
+   follow the neighbourhood, not the world.
 5. **Background garbage leaves the shared heap.** A bake's and a worker's
    scratch is rented or owned (`RentedArrays`, `RentedScope`, `IAllocator`),
    so background work cannot pause the frame thread with a collection, and
@@ -752,46 +758,49 @@ whose check boots did not settle with no tier missed.
 
 ### A hosted world on a client
 
-Owner: federation and presentation; a principal's design, reviewed by another
-family, before code · high, M1 · Next: read it on a real pair. Boot a
-listening World and a `--connect` client on one staged document
-([the benchmark](#the-benchmark) holds the staging), and on the client read
-`world.nesting` and capture the press, an emulator cabinet, a chess screen and
-a gallery painting.
+Owner: federation and presentation · high, M1 · Next: step 3 of
+[the design](remote-content.md)'s
+[build order](remote-content.md#the-build-order), content by pin, then the
+manifest; the debug world's transfer does not commit until both land. Steps 1
+and 2 (the pair from `puck_world_start`, and the remote seat's input) are
+built, and the design carries its review's answers.
+
+- [medium] A remote seat's push is shorter than the same push in one process.
+  On a headless pair on one machine, on a staged world that steps once for
+  each delivery, ten pushes of ten ticks moved the remote body 15.83 units
+  where the same script on the authority's own seat moved its body 17.67:
+  about nine ticks' worth for each ten. On a staged world that steps eight
+  times for each delivery, four pushes of eighty ticks moved it 6.83 against
+  6.50. The cause is not shown. The likely one is that a seat's input waits
+  for the next delivery before it is sent (`WorldClient.SubmitAuthorityIntents`
+  submits once for each observed tick), so each stick movement lands up to one
+  delivery interval late. Read it after the design's step 4, with a counter of
+  the ticks between a stick movement and the tick that applies it.
 
 - [high] A world delivered from another authority shows no text, no machines
   and no session screens on the client that presents it
-  ([worlds](../architecture/worlds.md#observation-and-display)). Read in the
-  code: a machine screen asks the machine host of a world this process runs
-  and gets none for a remote one (`WorldScreenBinder.MachinesOf`), and a
-  delivered world's fonts resolve beside a document directory it does not
-  carry (`WorldTextCatalog`, `WorldDefinition.DocumentDirectory`). The session
-  screens' half is the architecture page's statement and was not traced. On
-  the RTX 2060 against the hosted authority this would blank every gallery
-  painting, the press, the emulator cabinets and the chess screens, so the
-  debug world would stop proving the idea in the topology M1 is about. The
-  design weighs two answers and may take one per kind:
-  - *The client runs them from its own package.* A player build ships the
-    world's package, so fonts and other content resolve by content pin from
-    it. A deterministic machine runs on the client from the cartridge it
-    ships, driven by the inputs the authority replicates, and a session
-    screen's world runs as a local replica the way a routed session already
-    renders through its own residency. It costs the authority nothing per
-    viewer and needs every machine input on the wire and a way to join a
-    machine in progress (its saved image).
-  - *The authority streams them.* The authority sends machine frames and
-    screen images. It needs no determinism on the client, and it costs
-    encoded video per viewer per screen, which does not survive a town's
-    worth of viewers.
-  Check: the capture set above on the client matches the same set taken in
-  process. At scale: a hub of a dozen worlds shows a dozen worlds' screens, so
-  the answer must cost by what a viewer looks at.
-- [high] A remote seat does not play. The defects are read and listed in
-  [the benchmark](#the-benchmark)'s remote-authority item: a `--connect`
-  traveller's input does not move its body, the debug world admits no remote
-  player, a replica travels as one capped message, a replica that names
-  content by relative path fails validation, and the client still steps its
-  whole boot world. M1 needs each closed, not worked around per world.
+  ([worlds](../architecture/worlds.md#observation-and-display)). On the RTX
+  2060 against the hosted authority this would blank every gallery painting,
+  the press, the emulator cabinets and the chess screens. The design settles
+  one answer for all three: the authority sends content pins, a machine's
+  image and inputs, and a window's relayed delivery, and the client computes
+  the picture. Check: the capture set (the press, an emulator cabinet, a chess
+  screen and a gallery painting) on the client matches the same set taken in
+  process, which is the lead's windowed leg after the design's step 7.
+- [high] A remote seat does not play. The design fixes each defect at its
+  cause: the intent stream holds a backlog, a remote input batch applied after
+  the tick it was captured for is refused by the authority's input admission,
+  and one refusal refuses every batch after it
+  ([what ran](remote-content.md#what-ran-and-what-it-settled)); the debug
+  world admits no remote player, a replica travels as one capped message, a
+  delivered document that names content by relative path fails validation, and
+  the client still steps its whole boot world.
+- [medium] The debug world's transfer to a remote authority is refused at the
+  reservation, before any input: the answer embeds the whole document, which
+  the client refuses for its relative paths and for a rule that reads a
+  withheld cell. The design's steps 3 and 4 close it.
+- [low] `body.where` for a seat whose body is on a remote authority fails with
+  a null reference on the client. The design's step 5 checks it.
 
 ### A multi-seat client
 
@@ -1116,7 +1125,7 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
 - A remote `WorldSessionMirror`'s per-property pose reads
   (`WorldSessionSceneEmitter`) against its socket thread's in-place delivery
   can compose a frame from two ticks. Use the coherent-copy path the adjacency
-  pin already uses (`CopySnapshotTo`). Owner: federation.
+  pin already uses (`WorldSessionMirror.CaptureBodyImage`). Owner: federation.
 - `LatestSlotPublication.TryAcquireLatest` (the shared GPU texture ring a
   camera or probe kernel publishes into) retries in a loop, where
   `PublishBuffer<T>` enters a slot with one atomic increment and has nothing to
@@ -1278,9 +1287,11 @@ The frame thread's CPU work, largest first:
 - [high] CPU field queries: the creation effectors' surface probes
   (`WorldCreationInstances.ApplyEffectors`) and the chase camera's clearance
   march (`WorldCameraClearance.March`), together about a third of the meadow's
-  frame. Answers live on their owners through one door (`WorldFieldAnswer`).
-  Remaining, on a rendered World: count `world.counters world.field-queries`
-  and `sdf.point.evaluations` under `world.lockstep` at the meadow and the
+  frame before the presentation field became regional
+  ([the design](field-queries.md)). Answers live on their owners through one
+  door (`WorldFieldAnswer`).
+  Remaining, on a rendered World: count `world.counters world.field-queries`,
+  `sdf.point` and `sdf.regions` under `world.lockstep` at the meadow and the
   forest road, and confirm the clearance family reuses at rest; read the chase
   target at full precision to find whether its 0.1 mm a frame drift is the
   boom follower's tail (`WorldSeatViewState.Follow`) or a body that does not
@@ -1294,7 +1305,10 @@ The frame thread's CPU work, largest first:
   so the gradient falls only on targets a foot draws. A
   four-tap tetrahedral difference, the GPU interpreter's form, cuts every
   gradient consumer by a third; it moves contact normals, so it is a measured
-  change of the deterministic query.
+  change of the deterministic query, and it reads zero at a corner of three
+  planes, where the six taps read the corner's diagonal. For presentation the
+  six taps become one vector walk instead
+  ([the float reader](field-queries.md#the-float-reader)).
 - [medium] Posing follows the rates, and occlusion is not consulted: a
   creation holds only while no camera's frustum and no cascade keeps its
   sphere (`WorldCreationInstances.Shown`), so at flight B the motion gallery's
@@ -1959,8 +1973,11 @@ in [sweep](#sweep-and-visual-checks).
   arithmetic still costs a player detail on screen; it is the same shortfall
   that refused store reads on the 2060's own run.
 - [medium] The camera's clearance keeps a whole CPU field evaluator alive
-  (`WorldCameraClearance`, `SdfFieldEvaluator`). It goes with
-  [the CPU frame](#the-cpu-frame)'s item 4.
+  (`WorldCameraClearance`, `SdfFieldEvaluator`), tens of megabytes for the
+  debug world. [The field queries design](field-queries.md) keeps it:
+  it is the reference that makes every decision. What it holds is mostly its
+  compiled instructions and certificates, so the cut is in their layout.
+  Next: `puck host heap` on a windowed World, to name the arrays and sizes.
 - [medium] The allocator's slack is never returned in play, and the bar is
   read on private bytes, which count driver commit the process does not
   touch. Read the bar on resident pages, as the bake's host bar already does,
@@ -3206,11 +3223,13 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   order with the content, and content travels with the right to show it as one
   value. A design review found sixteen flaws in the first draft, and the memo
   answers each. It orders eight steps, each with a check, and no step deletes a
-  guard before its replacement owns the same paths. Its step 1 is built (the
-  tightened whole-replica test, the stream's generation, ordered ingress), all
-  but the lease an admission grants after a lost connection. Next: step 2.
+  guard before its replacement owns the same paths. Steps 1, 2 and 6 are
+  built: the stream's generation and ordered ingress (all but the lease an
+  admission grants after a lost connection), content and its label as one
+  value read only through the frame's latch, and sharing by the authority's
+  proof (`WorldSceneProof`, its offscreen checks not yet run). Next: step 3.
   This is decision 14's step 5 (results keyed by what each viewer was
-  delivered) with the withdrawn picture of decision 2. The lease it leaves
+  delivered) with the withdrawn picture of decision 2. The lease step 1 leaves
   unbuilt is built by the lane that next works remote observation, which
   [a hosted world on a client](#a-hosted-world-on-a-client) is.
 - [medium] The authority's population revision crosses to recipients whose
@@ -3224,7 +3243,10 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   delivery between may show the scene its old proof named
   (`WorldSceneProof`): stamp the proof with the stream's span so a proof from
   before the cut cannot stand after it. From the lane that fixed the pane
-  case; the withdrawal chokepoint's step 2 is where it is closed.
+  case. Step 2 labels a view's pictures with its access and mirror spans but
+  leaves the proof as it was, so the check that a proof was issued in the
+  stream's current span belongs with step 6's checks (`WorldSessionObservation`,
+  `WorldSessionSink`).
 
 - [high] Authored search must plan over what its actor is disclosed. Today an
   actor-less job reads true state under the audience check (an AI can read a
@@ -3827,9 +3849,6 @@ State across an install:
 - A cell written back under a per-cell `advance` trait after removal
   (`TryApplyCellUpsert`) gets no birth clock and accumulates from the origin,
   where an import settles such a cell to its install time.
-- A bound document value read by the in-process client reads the server's
-  arena from the presentation thread (`WorldLiveValues`), unsynchronized with
-  the tick.
 - [low] Rule-group progress (`RuleGroupState`) and decision state survive a
   load, while latches and scoped replays clear on one
   (`WorldServer.ContinueArena`). Clearing them needs a reorder: a checkpoint
@@ -4256,10 +4275,13 @@ the stages; this packet holds what a stage does not.
   - A `--connect` traveller's seat input does not move its body on the remote
     authority. With the transfer committed and deliveries arriving, a held
     `player.signal gamepad.leftStick 0 1` leaves `body.where` unchanged for 90
-    ticks and neither process names a refusal. The client submits through
-    `WorldFederatedServerLink.SubmitIntent`, and the authority admits through
-    `WorldTick.PublishFederatedIntent`; where the input is lost between them is
-    not known. This blocks every remote route, on any world.
+    ticks on most runs. The input reaches the authority and is refused by its
+    input admission (`WorldInputOwner.TryAdmit`): the intent stream holds a
+    backlog, so the batch that carries the stick's movement is applied after
+    the tick it was captured for and refused for its capture time, and every
+    batch after it is refused for disagreeing with a movement the authority
+    never took ([what ran](remote-content.md#what-ran-and-what-it-settled)).
+    This blocks every remote route, on any world.
   - `--connect` resolves its remote destination from the document the client
     booted and refuses one that authors no `host.authorityNamespace`
     (`WorldInstanceHost`'s remote destination resolution). The subject a run
@@ -4294,6 +4316,12 @@ the stages; this packet holds what a stage does not.
     (`WorldFederationProjectionSink.PendingDeliveryLimit`), which on a loaded
     machine happened twice in fifteen seconds; each detach is a quarter second
     and a whole document again. A route's report shows it as a delivery gap.
+    It also happens on a small world: a headless pair on one machine, on a
+    staged document of one avatar and a floor, detached once in two of seven
+    runs, each within the first seconds of the stream. After each detach the
+    traveller's input profile was admitted again (its revision went from 1 to
+    3), and the input batches sent meanwhile named a past epoch and were
+    dropped: 35 in one such run against 2 in a run with no detach.
   The pair's staging, until `puck benchmark` does it: a delta over the world
   (`basis` the world's entry by absolute path) authoring
   `host.authorityNamespace`, `bodies.networkPlayers` and two admission rows, a

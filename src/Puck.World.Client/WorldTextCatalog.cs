@@ -4,12 +4,17 @@ using Puck.Text;
 
 namespace Puck.World.Client;
 
-/// <summary>Resolves a delivered world's hash-pinned font assets, beside the world's own document, and exposes their one
-/// packed GPU atlas: the boot world's, or a world shown through a screen, which draws its own text with its own
-/// fonts.</summary>
+/// <summary>Resolves a world's hash-pinned font assets and exposes their one packed GPU atlas: the boot world's, or a
+/// world shown through a screen, which draws its own text with its own fonts. A world loaded from a file reads its
+/// fonts beside its document. A world another authority delivered has no directory, so each font is read by its pin
+/// from what this process already holds (<see cref="WorldProjectionContent.Resolver"/>).</summary>
 public sealed class WorldTextCatalog {
-    private readonly FontAtlasSourceResolver m_resolver = new(assetSource: new FileSystemAssetSource());
-    // The directory a delivered definition's font assets resolve beside, or null for a definition that names none.
+    // One resolver for the process: every catalog shares its atlas cache, which is keyed by font content, so a world
+    // shown through five screens rasterizes each font once. The cache is not thread-safe, hence the gate.
+    private static readonly FontAtlasSourceResolver Fonts = new(assetSource: new FileSystemAssetSource(), pinned: WorldProjectionContent.Resolver);
+    private static readonly Lock FontsGate = new();
+
+    // The directory a definition's font assets resolve beside, or null for a delivered definition, which has none.
     private readonly Func<WorldDefinition, string?> m_directory;
 
     private TextFontCatalogDefinition? m_definition;
@@ -24,9 +29,10 @@ public sealed class WorldTextCatalog {
 
         m_directory = _ => WorldDocumentPaths.DirectoryOf(documentPath: source.SourcePath);
     }
-    /// <summary>Initializes a new instance of the <see cref="WorldTextCatalog"/> class for a world delivered from
-    /// another authority, whose font assets resolve beside its own document
-    /// (<see cref="WorldDefinition.DocumentDirectory"/>).</summary>
+    /// <summary>Initializes a new instance of the <see cref="WorldTextCatalog"/> class for a world this process did not
+    /// boot: one it loaded from a file resolves its fonts beside that file
+    /// (<see cref="WorldDefinition.DocumentDirectory"/>), and one delivered from another authority resolves them by
+    /// pin.</summary>
     public WorldTextCatalog() => m_directory = static definition => definition.DocumentDirectory;
 
     private static void PreflightContent(WorldDefinition definition, PackedFontAtlasCatalog catalog) {
@@ -111,13 +117,14 @@ public sealed class WorldTextCatalog {
             message: "The world declares no text catalog.",
             paramName: nameof(definition)
         ));
-        var catalog = m_resolver.ResolveCatalog(
-            basePath: (directory ?? throw new ArgumentException(
-                message: "The world's document names no directory its font assets resolve beside.",
-                paramName: nameof(definition)
-            )),
-            definition: text
-        );
+        PackedFontAtlasCatalog catalog;
+
+        lock (FontsGate) {
+            catalog = Fonts.ResolveCatalog(
+                basePath: directory,
+                definition: text
+            );
+        }
 
         PreflightContent(
             catalog: catalog,
@@ -127,13 +134,13 @@ public sealed class WorldTextCatalog {
         return catalog;
     }
 
-    /// <summary>Reconciles a newly delivered definition against the directory its font assets resolve beside.</summary>
+    /// <summary>Reconciles a newly delivered definition against where its font assets resolve: beside its directory,
+    /// or by pin when it has none.</summary>
     /// <param name="definition">The delivered definition.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The definition declares a text catalog and names no directory its font
-    /// assets resolve beside, or a font asset row is invalid.</exception>
-    /// <exception cref="InvalidDataException">A font asset fails its pin, or an authored text holds a scalar its font's
-    /// generated subset lacks.</exception>
+    /// <exception cref="ArgumentException">A font asset row is invalid.</exception>
+    /// <exception cref="InvalidDataException">A font asset fails its pin, a font of a document with no directory is not
+    /// held by this process, or an authored text holds a scalar its font's generated subset lacks.</exception>
     public void Reconcile(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(definition);
 
