@@ -14,7 +14,7 @@ public sealed class StreamGenerationLawTests {
 
     // A deck of two cards and their faces, an ordered public zone both start in, and an ordered zone only seat 1 reads.
     // The faces carry no policy of their own: which zone holds a card decides who reads its face.
-    private static WorldDefinition Table() => Fixtures.BuildDocument() with {
+    internal static WorldDefinition Table() => Fixtures.BuildDocument() with {
         Admission = [new WorldAdmissionEntry(Domain: "*", Disclosure: WorldDisclosureTier.Replica, Mode: WorldAdmissionTrustMode.FederatedAuthority,
             Grants: [new WorldAdmissionGrant(Capability: WorldCapability.Observe, Subject: GrantSubject.All, Budget: 100)])],
         StateRaw = new WorldStateSection(World: [

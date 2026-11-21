@@ -405,7 +405,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         tick: (server.NextInputTick - 1UL)
                     );
 
-                    return WorldSaveSnapshot.TryWrite(snapshot, target, definitionSource, server, machineCatalog,
+                    return WorldSaveSnapshot.TryWrite(snapshot, target, definitionSource, server.Compact, machineCatalog,
                         WorldBootComposition.MachineCatalogFingerprint(machineCatalog), out var result)
                         ? new CommandResult(Output: $"[world.save: {result}]")
                         : CommandResult.Error(output: $"[world.save: {result}]");

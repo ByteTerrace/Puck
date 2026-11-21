@@ -1030,6 +1030,7 @@ public sealed partial class WorldTick {
         m_resumingTick = true;
         var held = false;
         var scopes = Host.ScopedReplaySpan;
+        Host.Output.BeginExecute();
         try {
             if (PendingReason is null) {
                 StepCore(in context, adjacency);
@@ -1051,6 +1052,7 @@ public sealed partial class WorldTick {
             foreach (var scope in Host.ScopedReplaySpan) { scope.AfterTick(); }
             return null;
         } finally {
+            Host.Output.EndExecute();
             m_resumingTick = false;
             if (!held) {
                 var settled = m_tickBlock is not null;
@@ -1116,10 +1118,12 @@ public sealed partial class WorldTick {
     }
 
     internal void Advance(ulong stepTicks, FixedStepContext? explicitContext = null) {
+        Host.Output.Collect();
         lock (Host.AuthorityGate) {
             var prepared = explicitContext is { } context ? PrepareAdvance(in context) : PrepareAdvance(stepTicks);
             HostWaits.ThrowIfPending(TryAdvance(in prepared, WaitDeadline.Synchronous()));
         }
+        Host.Output.Collect();
     }
     /// <summary>Submits one envelope into the ordered domain — the single front door every non-intent submission kind
     /// drains through (see <see cref="IWorldServerHost.Submit"/>'s own remarks). Enqueues, then immediately drains

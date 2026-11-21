@@ -77,7 +77,8 @@ public sealed partial class WorldDocument {
         var lease = Host.Output.Subscribe(
             disclosure: in disclosure,
             present: present,
-            sink: sink
+            sink: sink,
+            route: out var route
         );
 
         // Both the definition and the primer go to the NEWLY attached sink only (not a hub-wide broadcast) — an
@@ -85,35 +86,35 @@ public sealed partial class WorldDocument {
         // the SAME way WorldOutputHub isolates an ordinary tick delivery fault (its own remarks): a sink that throws
         // during its own attach primer must not take down whoever called AttachSink, and is detached before it ever
         // reaches an ordinary tick delivery.
-        // A sink that ends its own subscription on the definition is handed no primer snapshot after it.
-        var detachable = (sink as IWorldDetachableSink);
-
+        // A sink that ends its own subscription on the definition is handed no primer snapshot after it. The primer
+        // takes the subscription's own route, so a sink the outbox defers is primed in the same order as everything
+        // after it.
         try {
-            sink.DeliverDefinition(definition: m_definition, version: Host.DocumentVersion, stream: WorldStreamStamp.Unspanned);
+            route.DeliverDefinition(definition: m_definition, version: Host.DocumentVersion, stream: WorldStreamStamp.Unspanned);
 
-            if (detachable?.DetachReason is null) {
+            if (route.DetachReason is null) {
                 var primer = BuildPrimerSnapshot();
 
                 if (disclosure.IsFull) {
-                    sink.DeliverSnapshot(snapshot: in primer, stream: WorldStreamStamp.Unspanned);
+                    route.DeliverSnapshot(snapshot: in primer, stream: WorldStreamStamp.Unspanned);
                 } else {
                     var frame = WorldInterestFrame.ForPrimer(primer);
                     var redacted = primer with { Entries = frame.Project(disclosure), Inputs = default, InputAnswers = default };
 
-                    sink.DeliverSnapshot(snapshot: in redacted, stream: WorldStreamStamp.Unspanned);
+                    route.DeliverSnapshot(snapshot: in redacted, stream: WorldStreamStamp.Unspanned);
                 }
             }
 
-            if (detachable?.DetachReason is { } reason) {
+            if (route.DetachReason is { } reason) {
                 lease.Dispose();
 
                 if (Host.Output.HasNarrationSink) {
-                    Host.Output.Narrate(channel: "world.output", text: $"[world.output: {sink.GetType().Name} detached during its own attach primer: {reason}]");
+                    Host.Output.Narrate(channel: "world.output", text: $"[world.output: {route.SinkName} detached during its own attach primer: {reason}]");
                 }
             }
         } catch (Exception exception) {
             if (Host.Output.HasNarrationSink) {
-                Host.Output.Narrate(channel: "world.output", text: $"[world.output: {sink.GetType().Name} threw during its own attach primer — detached] {exception}");
+                Host.Output.Narrate(channel: "world.output", text: $"[world.output: {route.SinkName} threw during its own attach primer — detached] {exception}");
             }
             lease.Dispose();
         }

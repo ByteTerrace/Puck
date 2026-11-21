@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Puck.Commands;
 using Puck.World.Protocol;
 
@@ -284,14 +285,19 @@ public sealed partial class WorldServer : IWorldServerHost {
     public Action<IReadOnlyList<DurableStateOutput>>? DurableStateOutputTap { get; set; }
     /// <summary>Gets an optional edit-echo tap invoked beside the loud stderr accept/reject lines — mutation outcomes,
     /// grant/revoke outcomes, and their document-only class — so a UI surface (the overlay toast, the editor HUD)
-    /// narrates them without scraping stderr. Fires synchronously inline with the apply, never from a background
-    /// thread: at submit-time for the ordered-domain kinds applied inline (grant, revoke, command, designation,
-    /// composition, screen op), and inside <see cref="Step"/> for the kinds buffered to the tick boundary (mutation,
-    /// rebuild, undo, addon lifecycle) and for a fired world-rule effect. A mutation carrying
-    /// <see cref="Principal.World"/> — one the World makes itself, such as a deal or response sweep's or a rule's
-    /// document-row effect — was submitted by no session and raises no echo; it is narrated on the transcript
-    /// alone.</summary>
-    public Action<WorldEditEcho>? EchoTap { get; set; }
+    /// narrates them without scraping stderr. Raised at submit-time for the ordered-domain kinds applied inline (grant,
+    /// revoke, command, designation, composition, screen op), and inside <see cref="Step"/> for the kinds buffered to
+    /// the tick boundary (mutation, rebuild, undo, addon lifecycle) and for a fired world-rule effect. The tap is the
+    /// host loop's: the delegate assigned here is stored routed through the server's outbox, so an echo raised while a
+    /// tick executes, or on a thread other than the outbox's collector, reaches it when the outbox collects, in the
+    /// order raised. The getter returns that routed delegate. A mutation carrying <see cref="Principal.World"/> — one
+    /// the World makes itself, such as a deal or response sweep's or a rule's document-row effect — was submitted by no
+    /// session and raises no echo; it is narrated on the transcript alone.</summary>
+    public Action<WorldEditEcho>? EchoTap {
+        get => m_echoTap;
+        set => m_echoTap = m_output.Route(action: value);
+    }
+    private Action<WorldEditEcho>? m_echoTap;
     internal WorldSnapshot PresentCues(in WorldSnapshot snapshot, WorldRecipientView view, bool fullBodies, WorldBodyView? bodies = null) =>
         Tick.PresentCues(snapshot, view, fullBodies, bodies);
     /// <summary>Gets the engagement fold (headless design §1.8) — the seat/peer→screen route decision
@@ -440,8 +446,10 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <see cref="EnqueueRebuild"/>'s remarks). The replay tape attaches only while armed; clients never receive this
     /// submission-only seam.</summary>
     public Action<WorldRebuildRequest, Principal, string>? RebuildTap { get; set; }
-    /// <summary>Gets the rule-fired <c>save</c> effect's own I/O seam, invoked with the settling tick from
-    /// <c>WorldRuleHost.FireDocument</c> — mirroring <see cref="EchoTap"/>/<see cref="ScreenOpTap"/>'s "the server calls
+    /// <summary>Gets the rule-fired <c>save</c> effect's own I/O seam, invoked with the authority half of the save
+    /// (<see cref="WorldSaveCapture"/>), which <c>WorldRuleHost.FireDocument</c> captures where the rule fires. The
+    /// delegate assigned here is stored routed through the server's outbox, so the presentation fold and the file write
+    /// run when the outbox collects, on the host loop — mirroring <see cref="EchoTap"/>/<see cref="ScreenOpTap"/>'s "the server calls
     /// out, the composition root supplies the capability" shape: this project (<c>Puck.World.Server</c>) references
     /// no rendering or input, so it cannot itself compose the snapshot the manual <c>world.save</c> verb writes
     /// (<see cref="WorldSessionCapture.Capture"/> folds the authority half, but the lever half,
@@ -453,7 +461,11 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// than left indistinguishable from a rule that never fired. See <c>WorldEffect.Save</c>'s remarks for why this
     /// effect submits no <see cref="WorldMutation"/> and so needs a seam other than <c>TryApplyMutation</c> at
     /// all.</summary>
-    public Action<ulong>? SaveEffectTap { get; set; }
+    public Action<WorldSaveCapture>? SaveEffectTap {
+        get => m_saveEffectTap;
+        set => m_saveEffectTap = m_output.Route(action: value);
+    }
+    private Action<WorldSaveCapture>? m_saveEffectTap;
     /// <summary>Observes every screen op (<c>screen.select</c>/<c>.link</c>/<c>.unlink</c>) after
     /// <see cref="WorldDocument.ApplyScreenOp"/> finishes — success or refusal alike, so a
     /// screen op the Control-authority gate refuses is still taped and reproduces as the identical refusal on
@@ -492,6 +504,26 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// console path behind the stdin barrier.</summary>
     public void Compact() {
         using (EnterAtTickBoundary()) { ThrowIfTickPending(); m_document.Compact(); }
+    }
+    /// <summary>Captures the authority half of a save as the authority stands now: what a rule's <c>save</c> effect
+    /// hands <see cref="SaveEffectTap"/>, taken on the thread running the tick at the point the rule fired.</summary>
+    /// <param name="tick">The tick moving state cells settle at.</param>
+    /// <returns>The capture.</returns>
+    public WorldSaveCapture CaptureSave(ulong tick) => ExecuteAuthorityOperation(operation: () => new WorldSaveCapture(
+        @base: MaterializeArena(),
+        journal: m_document.Journal,
+        server: this,
+        snapshot: WorldSessionCapture.Capture(
+            definition: m_document.Definition,
+            engineTick: m_tick.CompletedEngineTicks,
+            machines: m_machines,
+            population: m_population,
+            tick: tick
+        ),
+        tick: tick
+    ));
+    internal bool CompactThrough(WorldDefinition @base, ImmutableList<WorldJournalEntry> saved) {
+        using (EnterAtTickBoundary()) { ThrowIfTickPending(); return m_document.CompactThrough(@base: @base, saved: saved); }
     }
     /// <summary>Executes a narrow authority operation without racing the fixed-step population fold.</summary>
     /// <exception cref="InvalidOperationException">This activation has frozen for retirement.</exception>

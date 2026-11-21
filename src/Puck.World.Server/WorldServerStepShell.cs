@@ -50,7 +50,12 @@ public static class WorldServerStepShell {
         while (true) {
             using var work = HostFrameWork.MeasureWorld(server.InstanceIdentity);
             var resuming = server.Tick.PendingReason is not null;
-            if (!resuming) { server.DrainMailbox(); }
+            // Opening a new tick replays what the outbox recorded since the last collect (a socket task's operation
+            // between ticks), so the host loop's sinks hold it before this tick's input closes.
+            if (!resuming) {
+                server.Output.Collect();
+                server.DrainMailbox();
+            }
             // Keep the simulation step and tape close atomic with other authority readers and writers.
             lock (server.AuthorityGate) {
                 try {
@@ -77,6 +82,9 @@ public static class WorldServerStepShell {
                 tape?.NoteTick();
             }
 
+            // The collect: the tick's recorded deliveries and callbacks reach the host loop's sinks, in order, before
+            // any hook reads the completed tick.
+            server.Output.Collect();
             var tick = (current.Tick + 1UL);
 
             // The caller's own tick clock: a queued script held by world.wait resumes off THIS count, so the barrier
