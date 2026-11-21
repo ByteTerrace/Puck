@@ -533,6 +533,8 @@ public sealed partial class SdfWorldPassesLawTests {
         private readonly VirtualClock m_clock = VirtualClock.ForDevice();
         // The frames that carry the clock past the volume's lighting interval (a tenth of a second).
         private const int SettledFrames = 8;
+        // The most frames the volume's first lighting, or a relight, may take to settle.
+        private const int SettleFrames = 600;
         private readonly UploadModelGpu m_gpu;
 
         private readonly FrameContext m_context;
@@ -596,14 +598,15 @@ public sealed partial class SdfWorldPassesLawTests {
                 FrameDeltaTicks: ((displayHertz > 0) ? (Puck.Maths.FixedTickConversion.TicksPerSecond / ((ulong)displayHertz)) : 0UL),
                 Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = m_gpu }),
                 StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent, DisplayHertz: displayHertz, GridHertz: displayHertz);
-            // The irradiance volume's first lighting lands over the frames it is granted, so the rig settles it before a law
-            // counts frames: a view stands only once its lighting has settled (SdfWorldResidency.IsUnchanged).
+            // The pipelines build on the thread pool, so the rig waits on them under the liveness bound.
             TestLiveness.Until(step: () => {
                 Produce();
                 return (Selected.IsReady && Passes.HasRenderedResolvedView(instance: "world") &&
-                    (World.Extent == (Extent, Extent)) && !World.IsBuildingCandidate && !Selected.MeshPathBake.Pending &&
-                    !Selected.MeshIrradiance.Settling && !(Second?.MeshIrradiance.Settling ?? false));
-            }, reason: () => Selected.NotReadyReason, wait: Selected.WaitPipelineBuilds);
+                    (World.Extent == (Extent, Extent)) && !World.IsBuildingCandidate && !Selected.MeshPathBake.Pending);
+            }, reason: () => $"{Selected.NotReadyReason} ready={Selected.IsReady} resolved={Passes.HasRenderedResolvedView(instance: "world")} extent={World.Extent} candidate={World.IsBuildingCandidate} bake={Selected.MeshPathBake.Pending}", wait: Selected.WaitPipelineBuilds);
+            // The irradiance volume's first lighting lands over the frames it is granted, so the rig settles it before a law
+            // counts frames: a view stands only once its lighting has settled (SdfWorldResidency.IsUnchanged).
+            SettleLighting();
             // Past one lighting interval, so the capture the volume throttles to it has run, and then settled again: a
             // law counts frames from a rig the periodic lighting work has nothing more to change.
             for (var settled = 0; (settled < SettledFrames); settled++) { Produce(); }
@@ -659,10 +662,11 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         // Produces frames until the irradiance volume's lighting has settled, which a lighting change relights over the
         // frames it is granted: a view stands only once its lighting has (SdfWorldResidency.IsUnchanged).
-        public void SettleLighting() => TestLiveness.Until(step: () => {
+        // The frames bound it, not the clock: a volume that never settles fails the law within them.
+        public void SettleLighting() => TestLiveness.Within(frames: SettleFrames, step: () => {
             Produce();
             return !(Selected.MeshIrradiance.Settling || (Second?.MeshIrradiance.Settling ?? false));
-        }, reason: static () => "The irradiance volume's lighting never settled.");
+        }, building: static () => false, reason: () => $"The irradiance volume's lighting never settled within {SettleFrames} frames.");
         // Whether the latest frame let the view's previous output stand.
         public bool Stood() => (World.FrameCounter == m_rendered);
         // Refuses the next frame's render submission, after its passes recorded: the residency's table upload is the
