@@ -365,6 +365,74 @@
               "additionalProperties": false,
               "default": null,
               "title": "SdfViewsRate"
+            },
+            "nested": {
+              "description": "The nested-view table the preset runs (WorldNestedViewQuality), in place of the world\u0027s render.nested, so each device chooses what its windows, portals and filmed screens give up at each size. Absent runs the world\u0027s table.",
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "description": "One row of the nested-view table (render.nested): what a view shown inside another (through a window or portal, on a screen a camera films, or a session\u0027s screen) gives up while it is presented at or below a share of the display\u0027s height. A nested view takes the first row, in ascending Share, whose share it does not exceed, and gives up nothing past the last row; a world with no table gives up nothing at any size, so a portal that fills the screen is lit as the room behind it.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "share": {
+                    "description": "The largest share of the display\u0027s height, in (0, 1], at which the row applies; rows ascend strictly.",
+                    "type": "number"
+                  },
+                  "shadows": {
+                    "description": "The finest shadow tier the view keeps: Off drops its cascades, so its lights take the probes\u0027 answer. Absent keeps the world\u0027s.",
+                    "enum": [
+                      "Off",
+                      "Low",
+                      "Medium",
+                      "High",
+                      null
+                    ],
+                    "default": null,
+                    "title": "ShadowTier",
+                    "x-enumDescriptions": {
+                      "Off": "No shadows: no cascade renders or is held, and every light goes unshadowed.",
+                      "Low": "Cascades at a quarter of the full resolution, 512 texels a side.",
+                      "Medium": "Cascades at half the full resolution, 1024 texels a side.",
+                      "High": "Cascades at the full resolution, 2048 texels a side."
+                    }
+                  },
+                  "ambientOcclusion": {
+                    "description": "Whether the view keeps ambient occlusion: false drops it. Absent keeps the world\u0027s.",
+                    "type": [
+                      "boolean",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "indirectLevels": {
+                    "description": "How many of the viewed world\u0027s irradiance-volume levels the view reads, counted from the coarsest, at least one: that world traces, relights and publishes those alone, so a world seen through a small glass measures only its coarse light. Absent, or at least the volume\u0027s level count, reads every level.",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "renderScale": {
+                    "description": "The render-scale ceiling the view renders at, in [0.125, 1] of its presented extent, below the presentation\u0027s own (the world\u0027s or device\u0027s renderScale), which every nested view keeps as its ceiling in any case. A nested view never reconstructs over time, so a reduced one is upscaled spatially. Absent keeps the presentation\u0027s.",
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "share"
+                ],
+                "additionalProperties": false,
+                "title": "WorldNestedViewQuality"
+              },
+              "default": null
             }
           },
           "required": [
@@ -517,6 +585,10 @@
             "viewsRate": {
               "$ref": "#/properties/render/properties/low/properties/viewsRate",
               "default": null
+            },
+            "nested": {
+              "$ref": "#/properties/render/properties/low/properties/nested",
+              "default": null
             }
           },
           "required": [
@@ -668,6 +740,10 @@
             },
             "viewsRate": {
               "$ref": "#/properties/render/properties/low/properties/viewsRate",
+              "default": null
+            },
+            "nested": {
+              "$ref": "#/properties/render/properties/low/properties/nested",
               "default": null
             }
           },
@@ -12166,6 +12242,10 @@
                   "viewsRate": {
                     "$ref": "#/properties/render/properties/low/properties/viewsRate",
                     "default": null
+                  },
+                  "nested": {
+                    "$ref": "#/properties/render/properties/low/properties/nested",
+                    "default": null
                   }
                 },
                 "required": [
@@ -12195,56 +12275,7 @@
             "null"
           ],
           "items": {
-            "description": "One row of the nested-view table (render.nested): what a view shown inside another (through a window or portal, on a screen a camera films, or a session\u0027s screen) gives up while it is presented at or below a share of the display\u0027s height. A nested view takes the first row, in ascending Share, whose share it does not exceed, and gives up nothing past the last row; a world with no table gives up nothing at any size, so a portal that fills the screen is lit as the room behind it.",
-            "type": [
-              "object",
-              "null"
-            ],
-            "properties": {
-              "share": {
-                "description": "The largest share of the display\u0027s height, in (0, 1], at which the row applies; rows ascend strictly.",
-                "type": "number"
-              },
-              "shadows": {
-                "description": "The finest shadow tier the view keeps: Off drops its cascades, so its lights take the probes\u0027 answer. Absent keeps the world\u0027s.",
-                "enum": [
-                  "Off",
-                  "Low",
-                  "Medium",
-                  "High",
-                  null
-                ],
-                "default": null,
-                "title": "ShadowTier",
-                "x-enumDescriptions": {
-                  "Off": "No shadows: no cascade renders or is held, and every light goes unshadowed.",
-                  "Low": "Cascades at a quarter of the full resolution, 512 texels a side.",
-                  "Medium": "Cascades at half the full resolution, 1024 texels a side.",
-                  "High": "Cascades at the full resolution, 2048 texels a side."
-                }
-              },
-              "ambientOcclusion": {
-                "description": "Whether the view keeps ambient occlusion: false drops it. Absent keeps the world\u0027s.",
-                "type": [
-                  "boolean",
-                  "null"
-                ],
-                "default": null
-              },
-              "indirectLevels": {
-                "description": "How many of the viewed world\u0027s irradiance-volume levels the view reads, counted from the coarsest, at least one: that world traces, relights and publishes those alone, so a world seen through a small glass measures only its coarse light. Absent, or at least the volume\u0027s level count, reads every level.",
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "default": null
-              }
-            },
-            "required": [
-              "share"
-            ],
-            "additionalProperties": false,
-            "title": "WorldNestedViewQuality"
+            "$ref": "#/properties/render/properties/low/properties/nested/items"
           },
           "default": null
         },

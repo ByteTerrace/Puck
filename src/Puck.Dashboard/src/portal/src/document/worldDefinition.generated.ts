@@ -3908,6 +3908,8 @@ export type ShadeReference = string | SdfShadeDefinition;
  */
 export type ShadowTier = "Off" | "Low" | "Medium" | "High";
 
+export type ShadowTierNullable = "Off" | "Low" | "Medium" | "High";
+
 export type Shape = {
   at: number;
   value: [number, number, number];
@@ -10083,6 +10085,9 @@ export type WorldNavigationSharing = {
   expandedNodesPerTick: number;
 };
 
+/**
+ * One row of the nested-view table (render.nested): what a view shown inside another (through a window or portal, on a screen a camera films, or a session's screen) gives up while it is presented at or below a share of the display's height. A nested view takes the first row, in ascending Share, whose share it does not exceed, and gives up nothing past the last row; a world with no table gives up nothing at any size, so a portal that fills the screen is lit as the room behind it.
+ */
 export type WorldNestedViewQuality = {
   /**
    * The largest share of the display's height, in (0, 1], at which the row applies; rows ascend strictly.
@@ -10091,7 +10096,7 @@ export type WorldNestedViewQuality = {
   /**
    * The finest shadow tier the view keeps: Off drops its cascades, so its lights take the probes' answer. Absent keeps the world's.
    */
-  shadows?: ShadowTier | null;
+  shadows?: ShadowTierNullable | null;
   /**
    * Whether the view keeps ambient occlusion: false drops it. Absent keeps the world's.
    */
@@ -10100,7 +10105,13 @@ export type WorldNestedViewQuality = {
    * How many of the viewed world's irradiance-volume levels the view reads, counted from the coarsest, at least one: that world traces, relights and publishes those alone, so a world seen through a small glass measures only its coarse light. Absent, or at least the volume's level count, reads every level.
    */
   indirectLevels?: number | null;
+  /**
+   * The render-scale ceiling the view renders at, in [0.125, 1] of its presented extent, below the presentation's own (the world's or device's renderScale), which every nested view keeps as its ceiling in any case. A nested view never reconstructs over time, so a reduced one is upscaled spatially. Absent keeps the presentation's.
+   */
+  renderScale?: number | null;
 };
+
+export type WorldNestedViewQualityList = (WorldNestedViewQuality | null)[];
 
 export type WorldObserverDisclosure = {
   /**
@@ -11165,6 +11176,10 @@ export type WorldQualityPreset = {
    * The maximum shared shading footprint and classification tile size. Absent shades every pixel.
    */
   viewsRate?: SdfViewsRate | null;
+  /**
+   * The nested-view table the preset runs (WorldNestedViewQuality), in place of the world's render.nested, so each device chooses what its windows, portals and filmed screens give up at each size. Absent runs the world's table.
+   */
+  nested?: WorldNestedViewQualityList | null;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;

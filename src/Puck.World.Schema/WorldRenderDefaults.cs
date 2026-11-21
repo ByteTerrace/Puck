@@ -93,6 +93,9 @@ public static class WorldApplicationDefaults {
 /// <param name="FarShadows">How often the device refreshes the far shadow cascade and the light turn a held cascade
 /// tolerates (<see cref="WorldFarShadows"/>). Absent refreshes it every frame.</param>
 /// <param name="ViewsRate">The maximum shared shading footprint and classification tile size. Absent shades every pixel.</param>
+/// <param name="Nested">The nested-view table the preset runs (<see cref="WorldNestedViewQuality"/>), in place of the
+/// world's <c>render.nested</c>, so each device chooses what its windows, portals and filmed screens give up at each size.
+/// Absent runs the world's table.</param>
 [method: JsonConstructor]
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
@@ -112,7 +115,8 @@ public readonly record struct WorldQualityPreset(
     bool RayQueries = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDistantShadows? DistantShadows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarShadows? FarShadows = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfViewsRate? ViewsRate = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfViewsRate? ViewsRate = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNestedViewQuality>? Nested = null
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -495,11 +499,16 @@ public sealed record WorldFarShadows(int Hertz, float TurnDegrees) {
 /// <param name="IndirectLevels">How many of the viewed world's irradiance-volume levels the view reads, counted from the
 /// coarsest, at least one: that world traces, relights and publishes those alone, so a world seen through a small glass
 /// measures only its coarse light. Absent, or at least the volume's level count, reads every level.</param>
+/// <param name="RenderScale">The render-scale ceiling the view renders at, in <c>[0.125, 1]</c> of its presented extent, below
+/// the presentation's own (the world's or device's <c>renderScale</c>), which every nested view keeps as its ceiling in any
+/// case. A nested view never reconstructs over time, so a reduced one is upscaled spatially. Absent keeps the
+/// presentation's.</param>
 public sealed record WorldNestedViewQuality(
     float Share,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShadowTier? Shadows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? AmbientOcclusion = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? IndirectLevels = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? IndirectLevels = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? RenderScale = null);
 /// <summary>Authored tier, sources, bounce depth and receiver application for the baked-mesh path's irradiance volume.</summary>
 /// <param name="Sources">Bindable source gains in [0, 1]; absent gains are one.</param>
 /// <param name="Bounces">Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier's limit.</param>

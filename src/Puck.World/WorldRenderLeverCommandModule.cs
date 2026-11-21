@@ -326,7 +326,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     }
 
     /// <inheritdoc/>
-    public CommandResult Apply(Principal principal, QualityTier tier, WorldQualityPreset preset) {
+    public CommandResult Apply(Principal principal, QualityTier tier, WorldQualityPreset preset, string table) {
         SubmitLever(
             link: link,
             principal: principal,
@@ -360,6 +360,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         link.SubmitSessionLever(lever: WorldSessionLevers.ShadowPolicy(preset: preset), principal: principal);
         link.SubmitSessionLever(lever: WorldSessionLevers.DistantShadowPolicy(preset: preset), principal: principal);
         link.SubmitSessionLever(lever: WorldSessionLevers.FarShadowPolicy(preset: preset), principal: principal);
+        link.SubmitSessionLever(lever: new WorldSessionLever(Section: WorldSection.Render, Name: WorldSessionLevers.NestedTable, A: 0d, View: table), principal: principal);
         SubmitLever(
             link: link,
             principal: principal,
@@ -957,7 +958,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     return CommandResult.Error(output: $"[world.quality: this world authors no {QualityTiers.Name(tier: tier)} preset]");
                 }
 
-                return Apply(principal: context.Principal, preset: preset, tier: tier);
+                return Apply(principal: context.Principal, preset: preset, table: QualityTiers.Name(tier: tier), tier: tier);
             }
         );
     }

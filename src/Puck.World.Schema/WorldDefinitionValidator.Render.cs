@@ -14,7 +14,7 @@ public static partial class WorldDefinitionValidator {
             catch (SdfShadeException error) { errors.Add($"shades['{key}']: {error.Code}: {error.Message}"); }
         }
         ValidateShadowCoverage(definition.Render.ShadowCoverage, errors);
-        ValidateNested(definition.Render.Nested, errors);
+        ValidateNested(definition.Render.Nested, "render.nested", errors);
         ValidateBloom(definition.Render.Bloom, "render.bloom", errors);
         if (definition.Render.Tone is { IsValid: false }) {
             errors.Add(item: "render.tone needs finite values: peak, contrast and toe positive, linearStart above zero and below peak, linearLength from 0 to below 1.");
@@ -47,22 +47,25 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    private static void ValidateNested(IReadOnlyList<WorldNestedViewQuality>? rows, List<string> errors) {
+    private static void ValidateNested(IReadOnlyList<WorldNestedViewQuality>? rows, string path, List<string> errors) {
         var previous = 0f;
 
         for (var index = 0; (index < (rows?.Count ?? 0)); index++) {
             if (rows![index] is not { } row) {
-                errors.Add(item: $"render.nested[{index}] is empty.");
+                errors.Add(item: $"{path}[{index}] is empty.");
                 continue;
             }
             if (!float.IsFinite(f: row.Share) || (row.Share <= previous) || (row.Share > 1f)) {
-                errors.Add(item: $"render.nested[{index}].share is {row.Share}; each row's share of the display's height lies in (0, 1] above the row before it.");
+                errors.Add(item: $"{path}[{index}].share is {row.Share}; each row's share of the display's height lies in (0, 1] above the row before it.");
             }
             if ((row.Shadows is { } shadows) && !Enum.IsDefined(value: shadows)) {
-                errors.Add(item: $"render.nested[{index}].shadows names no shadow tier.");
+                errors.Add(item: $"{path}[{index}].shadows names no shadow tier.");
             }
             if (row.IndirectLevels is <= 0) {
-                errors.Add(item: $"render.nested[{index}].indirectLevels is {row.IndirectLevels}; a view reads at least the coarsest level.");
+                errors.Add(item: $"{path}[{index}].indirectLevels is {row.IndirectLevels}; a view reads at least the coarsest level.");
+            }
+            if (row.RenderScale is { } scale) {
+                RequireRange(scale, 0.125f, 1f, $"{path}[{index}].renderScale", errors);
             }
             previous = (float.IsFinite(f: row.Share) ? Math.Max(val1: previous, val2: row.Share) : previous);
         }

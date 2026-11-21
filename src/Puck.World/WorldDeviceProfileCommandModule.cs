@@ -14,8 +14,11 @@ internal interface IWorldQualityPresets {
     /// <param name="principal">The principal the lever submissions act as.</param>
     /// <param name="tier">The tier the preset is authored under.</param>
     /// <param name="preset">The preset.</param>
+    /// <param name="table">The name the preset is found by again: a tier's name for a tier's preset, a device profile's
+    /// for its own table (<see cref="WorldDeviceProfile.TableName"/>), which the presentation reads the preset's nested-view
+    /// table by (<see cref="WorldRenderSettings.NestedTable"/>).</param>
     /// <returns>The <c>world.quality</c> echo of the settings the preset left.</returns>
-    CommandResult Apply(Principal principal, QualityTier tier, WorldQualityPreset preset);
+    CommandResult Apply(Principal principal, QualityTier tier, WorldQualityPreset preset, string table);
 }
 /// <summary>What the process runs as: the device profile selected for it, how it was selected, the adapter it ran on and
 /// the memory bars it applied. One per process, read by <c>world.device-profile</c> and by a benchmark's report.</summary>
@@ -105,7 +108,7 @@ public sealed class WorldDeviceProfileState {
             return new CommandResult(Output: Echo());
         }
 
-        var result = presets!.Apply(principal: principal, preset: table, tier: profile.Quality);
+        var result = presets!.Apply(principal: principal, preset: table, table: profile.TableName, tier: profile.Quality);
 
         _ = Apply(adapter: adapter, profile: profile, source: source, table: (result.IsError ? null : profile.TableName));
 

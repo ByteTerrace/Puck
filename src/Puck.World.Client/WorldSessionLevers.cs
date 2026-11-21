@@ -58,6 +58,9 @@ public static partial class WorldSessionLevers {
     public const string FarShadows = "far-shadows";
     /// <summary>The maximum shading footprint in A and the classification tile edge in B.</summary>
     public const string ViewsRate = "views-rate";
+    /// <summary>The quality table whose nested-view table the presentation runs, named in
+    /// <see cref="WorldSessionLever.View"/> (<see cref="WorldRenderSettings.NestedTable"/>); no name runs the world's.</summary>
+    public const string NestedTable = "nested-table";
     /// <summary>The sky's quality tier ordinal (<c>world.sky-quality</c>), a <see cref="WorldSkyTier"/>.</summary>
     public const string SkyQuality = "sky-quality";
     /// <summary>The independent sky field grid fraction (<c>world.sky-field-scale</c>), one or one half.</summary>
@@ -268,6 +271,7 @@ public static partial class WorldSessionLevers {
             }
             settings.FarShadows = rate;
         });
+        sink.Register(name: NestedTable, setter: lever => settings.NestedTable = lever.View);
         sink.Register(name: ViewsRate, setter: lever => {
             var rate = new SdfViewsRate(MaxRate: (int)lever.A, TileSize: (int)lever.B);
             if (rate.Refusal(path: ViewsRate) is { } refusal) {

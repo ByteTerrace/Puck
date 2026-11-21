@@ -438,8 +438,11 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_SHADOW_OPTICAL_CLEAR_STEP", value: SdfKernelInterfaces.MeshShadowOpticalClearStep);
         declarations.Count(name: "SDF_SHADOW_OPTICAL_TILE_EDGE", value: SdfWorldPackage.ShadowOpticalTileEdge);
         declarations.Count(name: "SDF_SHADOW_OPTICAL_TEXEL_WORDS", value: SdfWorldPackage.ShadowOpticalTexelWords);
+        declarations.Count(name: "SDF_OCCLUSION_COUNT_STEP", value: SdfKernelInterfaces.MeshOcclusionCountStep);
+        declarations.Count(name: "SDF_OCCLUSION_COMPACT_STEP", value: SdfKernelInterfaces.MeshOcclusionCompactStep);
         declarations.Count(name: "SDF_RECEIVER_SHIFT", value: SdfKernelInterfaces.MeshReceiverShift);
         declarations.Count(name: "SDF_RECEIVER_ROW", value: SdfKernelInterfaces.MeshReceiverRow);
+        declarations.Count(name: "SDF_COMPACT_ROW", value: SdfKernelInterfaces.MeshCompactRow);
         declarations.Count(name: "SDF_SIGHT_ROW", value: SdfKernelInterfaces.MeshSightRow);
         declarations.Count(name: "SDF_SHADOW_CULLED_ENTRY_PHASE", value: SdfKernelInterfaces.MeshShadowCulledEntryPhase);
         declarations.Count(name: "SDF_SIGHT_COUNT_BASE", value: SdfKernelInterfaces.MeshSightCountBase);

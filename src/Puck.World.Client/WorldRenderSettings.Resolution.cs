@@ -197,12 +197,13 @@ public sealed partial class WorldRenderSettings {
         }
         return true;
     }
-    // The world's own player views, which the world-wide ceiling, automatic mode and default pin govern: camera and
-    // session views keep their native extent unless a row or a lever names them.
+    // The world's own player views, which the world-wide ceiling, automatic mode and default pin govern. Every other view
+    // a presentation dresses is nested (a filmed camera's, a session's, a window's): its ceiling is the presentation's own
+    // with its nested row's below it (NestedCeiling), unless a views.quality row or a lever names it.
     private static bool IsPlayerView(string view) => ((view == WorldViewGraphs.WorldInstance) || (WorldViewNames.ViewOf(instance: view) is not null));
     private static bool Governed(string view) => ((view == "*") || IsPlayerView(view: view));
     private float Authored(string view) => (Quality(view: view)?.RenderScale ??
-        (Governed(view: view) ? (Quality(view: "*")?.RenderScale ?? RenderScale) : 1f));
+        (Governed(view: view) ? (Quality(view: "*")?.RenderScale ?? RenderScale) : NestedCeiling(view: view)));
     private WorldViewQuality? Quality(string view) => m_renderQuality.GetValueOrDefault(key: view);
     private QualityTier? GraphTier(string view) {
         if (m_resolutionDefinition?.Views.Graphs is { } graphs) {

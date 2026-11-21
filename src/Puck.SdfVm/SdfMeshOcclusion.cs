@@ -76,7 +76,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private uint[] m_readWords = [];
 
     private sealed class ReadbackSlot {
-        internal readonly SdfPortalSight.Query?[] Queries = new SdfPortalSight.Query?[SdfPortalSight.Capacity];
+        internal readonly SdfPortalSight.Sighting?[] Sightings = new SdfPortalSight.Sighting?[SdfPortalSight.Capacity];
         internal required GpuFittedBuffer Buffer;
         internal long Epoch;
         internal bool Sight;
@@ -138,7 +138,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         var read = m_readWords.AsSpan(length: words, start: 0);
 
         ((IGpuReadbackBuffer)slot.Buffer.Buffer!).Read(System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: read));
-        if (slot.Sight) { m_sight!.Complete(slot.Epoch, slot.Queries, read.Slice(start: SdfKernelInterfaces.MeshSightCountBase, length: SdfPortalSight.Capacity)); }
+        if (slot.Sight) { m_sight!.Complete(slot.Epoch, slot.Sightings, read.Slice(start: SdfKernelInterfaces.MeshSightCountBase, length: SdfPortalSight.Capacity)); }
         if (slot.Marks) { slot.Tables?.ObserveSelectionMarks(draws: slot.Draws, epoch: slot.RowEpoch, marks: read[SdfKernelInterfaces.MeshMarkBase..], source: this); }
     }
     // The bytes of the counts a frame marking a list of draws reads back: through the last draw's mark word.
@@ -176,18 +176,24 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         var sightSlot = m_readbackSlots[slot];
         Span<System.Numerics.Vector4> rows = stackalloc System.Numerics.Vector4[SdfKernelInterfaces.MeshSightRow + (4 * SdfPortalSight.Capacity)];
         rows.Clear();
-        if (occlude && m_sight is not null) { sightSlot.Epoch = m_sight.Capture(rows[SdfKernelInterfaces.MeshSightRow..], sightSlot.Queries, in camera); }
+        if (occlude && m_sight is not null) { sightSlot.Epoch = m_sight.Capture(rows[SdfKernelInterfaces.MeshSightRow..], sightSlot.Sightings, in camera); }
         var words = System.Runtime.InteropServices.MemoryMarshal.Cast<System.Numerics.Vector4, uint>(span: rows);
 
         words[0] = count;
         words[1] = m_levels;
         words[2] = (occlude ? 1u : 0u) | (splitExit ? 2u : 0u) | (m_argumentPhases << 2);
         words[3] = (glass ? 1u : 0u) | (skipsDepth ? 2u : 0u) | (skipsExit ? 4u : 0u) | (m_marking ? 8u : 0u) | ((motion == SdfMeshMotion.Static) ? 16u : 0u) | ((motion == SdfMeshMotion.Dynamic) ? 32u : 0u) | (m_optical ? 64u : 0u) |
-            (((uint)(slices - 1)) << 8) | (((uint)slice) << 16);
+            (NearChain(occlude: occlude) ? 128u : 0u) | (((uint)(slices - 1)) << 8) | (((uint)slice) << 16);
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
         rows[SdfKernelInterfaces.MeshReceiverRow] = new(receiverWidth, receiverHeight, jitter.X, jitter.Y);
         EnsureBuffers(depth: occlude, draws: count);
+        var compact = (SdfKernelInterfaces.MeshCompactRow * 4);
+
+        words[compact] = m_capacity;
+        words[compact + 1] = CompactFirstWord;
+        words[compact + 2] = GroupFirstWord;
+        words[compact + 3] = GroupsOf(capacity: m_capacity);
         // Generations are table-local. Follow can preserve this pass while changing its tables, whose first cells
         // can carry the same tokens as the previous owner. Reset after growth so its seed cannot restore old history.
         if (!ReferenceEquals(objA: m_historyOwner, objB: tables)) {
@@ -268,6 +274,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             }
         }
         Dispatch(commandBuffer: commandBuffer, invocations: m_count, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionEarlyStep);
+        Compact(commandBuffer: commandBuffer, late: false, pipeline: pipeline, recorder: recorder);
         if (!m_lateFollows) { RecordReadback(commandBuffer: commandBuffer, recorder: recorder, sight: false); }
         ToIndirect(commandBuffer: commandBuffer, recorder: recorder);
     }
@@ -314,7 +321,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         );
         recorder.DrawIndirectCount(
             argumentBufferHandle: m_draws.Buffer!.BufferHandle,
-            argumentBufferOffset: ((((ulong)phase) * m_capacity) * GpuDrawIndirectCommand.StrideBytes),
+            argumentBufferOffset: ((((ulong)(m_argumentPhases + ((uint)phase))) * m_capacity) * GpuDrawIndirectCommand.StrideBytes),
             commandBufferHandle: commandBuffer,
             countBufferHandle: m_counts.Buffer!.BufferHandle,
             countBufferOffset: (((ulong)phase) * sizeof(uint)),
@@ -353,6 +360,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         Ready(buffer: m_counts.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.IndirectCommandRead, sourceStage: GpuStage.DrawIndirect);
         recorder.EndBarriers(commandBufferHandle: commandBuffer);
         Dispatch(commandBuffer: commandBuffer, invocations: m_count, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionLateStep);
+        Compact(commandBuffer: commandBuffer, late: true, pipeline: pipeline, recorder: recorder);
         if (m_sight is not null) {
             Ready(buffer: m_counts.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
             Dispatch(commandBuffer: commandBuffer, invocations: SdfPortalSight.Capacity, level: 0u, pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionSightStep);
@@ -420,12 +428,12 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             m_seedVisible = previous;
             m_visibleCleared = false;
         }
-        m_draws.Fit((ulong)m_argumentPhases * grown * GpuDrawIndirectCommand.StrideBytes);
         m_capacity = grown;
+        m_draws.Fit((((ulong)GroupFirstWord) + (m_argumentPhases * GroupsOf(capacity: grown))) * sizeof(uint));
         m_counts.Fit(MarkedBytes(draws: grown));
 
         if (!depth) { return; }
-        var depthBytes = (DepthWords(height: m_height, levels: m_levels, width: m_width) * sizeof(uint));
+        var depthBytes = (DepthWords(height: m_height, levels: m_levels, width: m_width) * sizeof(uint) * (NearChain(occlude: depth) ? 2UL : 1UL));
         if (m_receivers) {
             var width = Extent(m_width, SdfKernelInterfaces.MeshReceiverShift);
             var height = Extent(m_height, SdfKernelInterfaces.MeshReceiverShift);
@@ -435,6 +443,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         m_depth.Fit(depthBytes);
     }
     private GpuObjectName Name(string detail, int index = 0) => new(detail: detail, index: index, owner: m_owner, part: m_part);
+    // Whether the pyramid builds its nearest chain after its farthest, which the portal sight's test over a reach of eyes
+    // reads (sdfOcclusionHiddenWithin): only an occluding pass that tests portal sight.
+    private bool NearChain(bool occlude) => (occlude && (m_sight is not null));
     private static void Bind(IGpuRecorder recorder, nint commandBuffer, IGpuComputePipeline pipeline, nint set) {
         recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, pipelineHandle: pipeline.Handle);
         recorder.BindDescriptorSet(
@@ -464,6 +475,21 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         recorder.Dispatch(commandBufferHandle: commandBuffer,
             groupCountX: Math.Min(val1: groups, val2: SdfKernelInterfaces.MeshSelectionGroupsPerRow),
             groupCountY: groups.CeilingDivide(divisor: SdfKernelInterfaces.MeshSelectionGroupsPerRow), groupCountZ: 1u);
+    }
+    // The first word of each phase's compact list in the draws buffer, past every phase's slots, and of the group counts,
+    // past every compact list (sdfOcclusionCompact).
+    private uint CompactFirstWord => checked(m_argumentPhases * m_capacity * GpuDrawIndirectCommand.StrideBytes / sizeof(uint));
+    private uint GroupFirstWord => checked(2u * CompactFirstWord);
+    private static uint GroupsOf(uint capacity) => capacity.CeilingDivide(divisor: SdfKernelInterfaces.MeshSelectionGroupSize);
+    // Compacts the phases the step just recorded emitted (the early step's, or the late step's second phase) into their
+    // compact lists and draw counts, in staged order: each group counts its emitted commands, then copies them past the
+    // counts of the groups before it (sdfOcclusionCompact).
+    private void Compact(IGpuRecorder recorder, nint commandBuffer, IGpuComputePipeline pipeline, bool late) {
+        Ready(buffer: m_draws.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
+        Dispatch(commandBuffer: commandBuffer, invocations: m_count, level: (late ? 1u : 0u), pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionCountStep);
+        Ready(buffer: m_draws.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
+        Dispatch(commandBuffer: commandBuffer, invocations: m_count, level: (late ? 1u : 0u), pipeline: pipeline, recorder: recorder, step: SdfKernelInterfaces.MeshOcclusionCompactStep);
+        Ready(buffer: m_counts.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.ShaderWrite, sourceStage: GpuStage.ComputeShader);
     }
     // Readies a buffer a kernel wrote or read for the next kernel's reads and writes.
     private static void Ready(IGpuRecorder recorder, nint commandBuffer, IGpuBuffer buffer, GpuAccess source, GpuStage sourceStage) =>

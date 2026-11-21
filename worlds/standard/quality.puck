@@ -48,7 +48,13 @@ render {
   // side (a texel about 2.3 m across the 1200 m reach) and holds through a fifth of a degree of the sun's turn, so the
   // standard's day redraws it a little over once a second, each step about one of its texels, and spreads each redraw
   // over four frames, so no frame pays a whole one; its far cascade refreshes 15 times a second, the medium tier's rate,
-  // so three of every four 60 Hz frames stand where the high tier's stand every other frame.
+  // so three of every four 60 Hz frames stand where the high tier's stand every other frame. Its bloom scatters from the
+  // low pyramid and its sky field shades at half the grid, each a soft term whose full grid the 2060 cannot afford. It
+  // keeps the second shadow slot: that cascade draws only while a second shadowed light (a hearth, a lantern) is in reach,
+  // and dropping it would drop that light's shadow. Every nested view takes the 2060's render scale as its ceiling, and
+  // its own nested table gives up more than the world's: a view up to half the display's height draws half-size
+  // cascades, one up to a third quarter-size cascades, and one smaller than a postcard draws none and renders at half
+  // its size, where the fixed cost of a view dominates its pixels.
   devices [
     { name: "rtx4070", match: "RTX 4070", quality: high, deviceMemoryMiB: 8192, hostMemoryMiB: 8192 }
     {
@@ -61,10 +67,10 @@ render {
         viewsRate { maxRate: 2, tileSize: 4 }
         distantShadows { reach: 1200, texels: 1024, turnDegrees: 0.2, frames: 4 }
         farShadows { hertz: 15, turnDegrees: 0.1 }
-        bloom: High
+        bloom: Low
         indirect: Medium
         sky: high
-        skyFieldScale: 1
+        skyFieldScale: 0.5
         shadows: High
         shadowLights: 2
         shadowFadeSlots: 0
@@ -76,12 +82,19 @@ render {
         renderScaleFloor: Quarter
         renderScale: 0.75
         rayQueries: true
+        nested [
+          { share: 0.125, shadows: Off, ambientOcclusion: false, indirectLevels: 1, renderScale: 0.5 }
+          { share: 0.33, shadows: Low, indirectLevels: 2 }
+          { share: 0.5, shadows: Medium, indirectLevels: 2 }
+        ]
       }
     }
     { name: "steamdeck", match: "VANGOGH", quality: high, hostMemoryMiB: 10240 }
   ]
   // What a nested view (a window, a portal, a filmed camera's screen, a session's screen) gives up at each share of the
-  // display's height it is presented at, the same at every tier until a device table chooses per device. A view the
+  // display's height it is presented at, at every tier and on every device whose table (`nested`) chooses none. A view
+  // holds its row until its share leaves the row's bound by a tenth, so one presented near a bound does not rebuild its
+  // cascades as its size wavers. A view the
   // size of a postcard on screen keeps every term but draws its cascades at half resolution; one smaller than that
   // drops its cascades and ambient occlusion, and its lights take the probes' answer, as a point past every cascade does.
   // The world behind a view up to half the display's height measures only the irradiance volume's storey and far levels
