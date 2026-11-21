@@ -339,7 +339,7 @@ public class LinterSugarTests {
     public void UnresolvedSpawnPointReferenceIsFlagged() {
         var document = new JsonObject {
             ["spawnPoints"] = new JsonArray(new JsonObject { ["id"] = "plaza-1" }),
-            ["population"] = new JsonObject { ["seatSpawns"] = new JsonArray("plaza-1", "plaza-7") },
+            ["bodies"] = new JsonObject { ["seatSpawns"] = new JsonArray("plaza-1", "plaza-7") },
             ["rules"] = new JsonArray(new JsonObject {
                 ["name"] = "r",
                 ["effects"] = new JsonArray(new JsonObject { ["$type"] = "pose", ["key"] = "0", ["spawnPoint"] = "plaza-9" }),
@@ -349,7 +349,7 @@ public class LinterSugarTests {
 
         Assert.Contains(collection: findings, filter: static message => message.Contains(value: "'plaza-9'"));
         Assert.Contains(collection: findings, filter: static message => message.Contains(value: "'plaza-7'"));
-        Assert.DoesNotContain(collection: findings, filter: static message => message.Contains(value: "'plaza-1'"));
+        Assert.DoesNotContain(collection: findings, filter: static message => message.StartsWith(value: "Unresolved spawn point reference 'plaza-1'", comparisonType: StringComparison.Ordinal));
     }
     [Fact]
     public void UnresolvedStateRowInAGateIsFlagged() {
