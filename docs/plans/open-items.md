@@ -4300,6 +4300,12 @@ the stages; this packet holds what a stage does not.
     (`WorldFederationProjectionSink.PendingDeliveryLimit`), which on a loaded
     machine happened twice in fifteen seconds; each detach is a quarter second
     and a whole document again. A route's report shows it as a delivery gap.
+    It also happens on a small world: a headless pair on one machine, on a
+    staged document of one avatar and a floor, detached once in two of seven
+    runs, each within the first seconds of the stream. After each detach the
+    traveller's input profile was admitted again (its revision went from 1 to
+    3), and the input batches sent meanwhile named a past epoch and were
+    dropped: 35 in one such run against 2 in a run with no detach.
   The pair's staging, until `puck benchmark` does it: a delta over the world
   (`basis` the world's entry by absolute path) authoring
   `host.authorityNamespace`, `bodies.networkPlayers` and two admission rows, a
