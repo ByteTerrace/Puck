@@ -1512,7 +1512,16 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 Produce is split into `produce-work`, the frame thread's own work, and
 `produce-fence`, its time blocked on submission fences (`GpuFenceBlocking`,
 counted in `GpuBatchedSubmissionFence`'s one wait door): a produce that grows
-by its fence share is GPU back-pressure, not CPU work.
+by its fence share is GPU back-pressure, not CPU work. Its usual home is the
+upload's ring wait (`SdfWorldTables.SubmitUpload` waits the previous upload's
+fence, so the frame thread waits for the GPU to finish the frame two back), and
+`begin` is the presenter's own wait for the previous frame. The `produce-work
+parts` are `HostFrameWorkPart`s: `capture` is the residency's scene capture
+(`SdfWorldResidency.Capture`: the composition's pose and transform pack, the
+creations' drivers and effector surface probes, and the mesh dresser), never a
+screenshot, so it costs whatever the scene animates with nothing armed; `pack`
+is `SdfWorldTables.Pack`, mostly the changed mesh records
+(`sdf.instances.records.changed` per frame).
 
 - **The far cascade is the frame's largest variable pass; read whether it
   holds.** With box-only selection it draws nearly every caster in a 280 m box out to 200 m toward the

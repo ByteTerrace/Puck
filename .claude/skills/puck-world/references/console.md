@@ -544,7 +544,7 @@ after adoption, so an edit between the load's read and adoption is not lost.
 Failed reads retain their missing-input facts for recovery. A poll stats every
 input through `CompileInputs`, which re-reads contents only where the stamp moved or was within
 `CompileInputs.RacyStampWindow` of its last read (`StampReads`, `ContentReads`
-count both); never hash every input per poll. `WorldSourceWatch`
+count both); never hash every input per poll. The stats run on a pool thread (`DependencyWatch` adopts them on a later poll), never on the host pump. `WorldSourceWatch`
 keeps the last reload diagnostic for the inspector; the normal command path
 and the editor report fan-out cover the terminal and toast. An accepted rebuild
 drops removed placement ids from editor selection and snap references while
