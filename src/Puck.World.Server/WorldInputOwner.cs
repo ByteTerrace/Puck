@@ -178,12 +178,25 @@ public sealed partial class WorldInputOwner {
             Array.Clear(array: m_matchCached);
         }
     }
+    /// <summary>Gets how many events' capture times this owner moved to the tick that admitted them.</summary>
+    public long RetimedEvents { get; private set; }
+
     /// <summary>Preflights every source, timestamp and transition before atomically installing levels and history.</summary>
+    /// <param name="batch">The batch to admit.</param>
+    /// <param name="admission">The interval that admits the batch.</param>
+    /// <param name="captureIntervals">The earlier intervals an event may still claim.</param>
+    /// <param name="reason">The named refusal, on failure.</param>
+    /// <param name="facing">Each crossing's authority orientation.</param>
+    /// <param name="retime">Whether an event whose claimed capture time cannot be honoured is moved to
+    /// <paramref name="admission"/>, at or after the last event admitted, instead of refusing the batch. A batch from
+    /// another process claims times its sender could only estimate, so its authority decides them; a batch stamped in
+    /// this process is refused.</param>
+    /// <returns><see langword="true"/> when the batch was installed.</returns>
     public bool TryAdmit(in WorldInputBatch batch, WorldInputInterval admission, ReadOnlySpan<WorldInputInterval> captureIntervals, out string reason,
-        ReadOnlySpan<int> facing = default) {
+        ReadOnlySpan<int> facing = default, bool retime = false) {
         reason = string.Empty;
         if ((batch.Revision != Revision) || (batch.Epoch != Epoch) || (batch.Mapping != Mapping.Id) || (batch.Tick != admission.Tick) || (batch.NumericCount != Mapping.NumericCount)) {
-            reason = "input.mapping: stale revision, epoch, mapping or assigned tick";
+            reason = $"input.mapping: stale revision, epoch, mapping or assigned tick (the batch names revision {batch.Revision} epoch {batch.Epoch} mapping {batch.Mapping} numerics {batch.NumericCount}{((batch.Tick != admission.Tick) ? $" tick {batch.Tick}" : string.Empty)}; the owner holds revision {Revision} epoch {Epoch} mapping {Mapping.Id} numerics {Mapping.NumericCount}{((batch.Tick != admission.Tick) ? $" tick {admission.Tick}" : string.Empty)})";
             return false;
         }
         if (m_usesFacing && (facing.Length != m_crossings.Length)) { reason = "input.facing: authority orientation is missing"; return false; }
@@ -274,8 +287,11 @@ public sealed partial class WorldInputOwner {
         var lastCapture = m_lastCapture;
         var lastOffset = m_lastOffset;
         var eventCount = 0;
+        var moved = 0;
 
-        foreach (var input in batch.Events.Span) {
+        foreach (var claimed in batch.Events.Span) {
+            var input = claimed;
+
             if ((input.Channel >= m_catalog.Channels.Length) || !Mapping.IsLive(logicalId: input.Channel)) { reason = "input.event: unknown or inactive logical action"; return false; }
             if ((input.Sequence <= sequence) || (input.Kind > WorldInputEventKind.Text)) { reason = "input.sequence: duplicate, exhausted or invalid event kind"; return false; }
             var capture = default(WorldInputInterval);
@@ -286,7 +302,25 @@ public sealed partial class WorldInputOwner {
                     if (interval.Tick == input.CaptureTick) { capture = interval; found = true; break; }
                 }
             }
-            if (!found || (capture.Tick > admission.Tick) || !capture.Contains(offset: input.Offset)) { reason = "input.time: unknown, future or out-of-interval capture"; return false; }
+            if (retime && !(
+                found && (capture.Tick <= admission.Tick) && capture.Contains(offset: input.Offset) &&
+                ((sequence == 0) || (capture.EngineStart > lastCapture.EngineStart) || ((capture.EngineStart == lastCapture.EngineStart) && (input.Offset >= lastOffset))) &&
+                ((capture.Tick == admission.Tick) || ((admission.Time(default) - capture.Time(input.Offset)) <= m_lateness))
+            )) {
+                // The claim is late, ahead or out of order, so the event happened when it was admitted: in this
+                // interval, no earlier than the last event, which keeps the checks below true by construction.
+                capture = admission;
+                input = input with {
+                    CaptureTick = admission.Tick,
+                    Offset = (((sequence != 0) && (lastCapture.EngineStart == admission.EngineStart)) ? lastOffset : default),
+                };
+                found = true;
+                moved++;
+            }
+            if (!found || (capture.Tick > admission.Tick) || !capture.Contains(offset: input.Offset)) {
+                reason = $"input.time: unknown, future or out-of-interval capture (captured at tick {input.CaptureTick}, admitted at tick {admission.Tick}, {captureIntervals.Length} earlier intervals held)";
+                return false;
+            }
             if ((sequence != 0) && ((capture.EngineStart < lastCapture.EngineStart) || ((capture.EngineStart == lastCapture.EngineStart) && (input.Offset < lastOffset)))) {
                 reason = "input.time: capture must be monotonic with sequence";
                 return false;
@@ -363,6 +397,7 @@ public sealed partial class WorldInputOwner {
         m_lastCapture = lastCapture;
         m_lastOffset = lastOffset;
         m_eventId += ((ulong)eventCount);
+        RetimedEvents += moved;
         m_step = admission.Tick;
         m_stepEvents = (stepEvents + eventCount);
         Image = folded;

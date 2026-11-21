@@ -344,7 +344,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             var self = reads![reads.IndexOf(producer: "mirror")];
 
-            Seen.Add(item: ((int)self.Lease.ImageViewHandle));
+            Seen.Add(item: (self.TryRead(latch: context.Latch, read: out var resolved) ? ((int)resolved.ImageViewHandle) : 0));
             m_completed++;
 
             return FrameRender.Rendered;
@@ -359,19 +359,19 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
             Acquired++;
             output = new RenderGraphExternalOutput(
-                Image: Surface.SameDeviceImage(
+                image: Surface.SameDeviceImage(
                     format: GpuPixelFormat.R8G8B8A8Unorm,
                     height: 1,
                     imageHandle: (0x100 + m_completed),
                     imageViewHandle: m_completed,
                     width: 1
                 ),
-                Layout: GpuImageLayout.ShaderReadOnly,
-                Lease: new GpuImageLease(
+                label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(source: Puck.Abstractions.Presentation.DeliveryPublicSource.Host),
+                layout: GpuImageLayout.ShaderReadOnly,
+                lease: new GpuImageLease(
                     ImageViewHandle: m_completed,
                     Release: _ => Released++
-                ),
-                Tainted: false
+                )
             );
 
             return true;
@@ -450,20 +450,20 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
             Acquired++;
             output = new RenderGraphExternalOutput(
-                Image: (ViewOnly ? default : Surface.SameDeviceImage(
+                image: (ViewOnly ? default : Surface.SameDeviceImage(
                     format: GpuPixelFormat.R8G8B8A8Unorm,
                     height: image.Height,
                     imageHandle: image.ImageHandle,
                     imageViewHandle: image.ImageViewHandle,
                     width: image.Width
                 )),
-                Layout: GpuImageLayout.ShaderReadOnly,
-                Lease: new GpuImageLease(
+                label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(source: Puck.Abstractions.Presentation.DeliveryPublicSource.DeviceOrCapture),
+                layout: GpuImageLayout.ShaderReadOnly,
+                lease: new GpuImageLease(
                     ImageViewHandle: image.ImageViewHandle,
                     Publication: new ReferenceRevision(Owner: this, Revision: Produced),
                     Release: _ => Released++
-                ),
-                Tainted: false
+                )
             );
 
             return true;
@@ -497,11 +497,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Publications.Clear();
 
             for (var index = 0; (index < (reads?.Count ?? 0)); index++) {
-                Seen.Add(item: (reads![index].Producer, reads[index].Image.ImageViewHandle));
-                Publications.Add(item: reads[index].Publication);
+                _ = reads![index].TryRead(latch: context.Latch, read: out var resolved);
+                Seen.Add(item: (reads[index].Producer, resolved.Image.ImageViewHandle));
+                Publications.Add(item: resolved.Publication);
 
-                if (Takes) {
-                    Held.Hold(lease: reads.Take(index: index));
+                if (Takes && reads.TryTake(index: index, latch: context.Latch, lease: out var lease, read: out _)) {
+                    Held.Hold(lease: in lease);
                 }
             }
 

@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -14,7 +15,15 @@ namespace Puck.Shaders;
 /// <param name="Buffer">The buffer holding a buffer version, or <see langword="null"/> for an image.</param>
 /// <param name="Owned">The instance's own image holding an image version, which a recorder may bind as an attachment, or
 /// <see langword="null"/> for a buffer or an external image another producer binds.</param>
-public readonly record struct RenderGraphPackageResource(string Version, ShaderPipelineResourceKind Kind, ShaderPipelineExternalImage Image, IGpuBuffer? Buffer, IGpuImage? Owned);
+public readonly record struct RenderGraphPackageResource(string Version, ShaderPipelineResourceKind Kind, ShaderPipelineExternalImage Image, IGpuBuffer? Buffer, IGpuImage? Owned) {
+    /// <summary>Reads the bound image at <paramref name="latch"/>, refusing an unclassified or ended image.</summary>
+    /// <param name="latch">The frame's delivery latch.</param>
+    /// <returns>The resolved image.</returns>
+    /// <exception cref="InvalidDataException"><see cref="Image"/> was refused at <paramref name="latch"/>.</exception>
+    public ShaderPipelineResolvedImage ReadImage(DeliveryLatch latch) => (Image.TryRead(latch: in latch, image: out var image)
+        ? image
+        : throw new InvalidDataException(message: $"Resource '{Version}' was refused at the frame's latch."));
+}
 /// <summary>What a package recorder records into for one frame: the command buffer the pass owns in its instance's
 /// submission, already begun, with the pass's planned barriers recorded, and the versions bound to its ports.</summary>
 /// <param name="CommandBuffer">The command buffer to record into. The instance ends and submits it.</param>
@@ -43,7 +52,8 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// in the indirect-argument state, or <see langword="null"/> for a pass that is not dispatched indirectly.</param>
 /// <param name="Reads">The latest completed image of each instance the pass's instance reads that its graph binds to no
 /// version, such as the sources an SDF view's screens show, or <see langword="null"/> when there is none. A recording
-/// takes the lease of each image it samples (<see cref="RenderGraphExternalReads.Take"/>) and holds it in
+/// takes the lease of each image it samples (<see cref="RenderGraphExternalReads.TryTake"/> or
+/// <see cref="RenderGraphExternalReads.TrySample"/>) and holds it in
 /// <paramref name="Leases"/>; the runtime retires the rest once the frame is produced. Each image rests in its producer's
 /// published layout, shader-readable, and the planner plans no barrier for it.</param>
 /// <param name="WorkCounters">Where the pass's kernels count their own work this frame: the frame slot's counter
@@ -93,6 +103,8 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public LeaseRetireList Leases { get; } = Leases;
     /// <summary>Gets the host's frame context.</summary>
     public FrameContext Context { get; } = Context;
+    /// <summary>Gets the frame's delivery latch.</summary>
+    public DeliveryLatch Latch => Context.Latch;
     /// <summary>Gets whether the recording may draw nothing and leave each output standing for its input.</summary>
     public bool MayStandIn { get; } = MayStandIn;
     /// <summary>Gets the buffer holding an indirect dispatch's group counts, or <see langword="null"/>.</summary>
@@ -401,7 +413,13 @@ public sealed record RenderGraphPackageRecorderContext(string Instance, string P
 /// <param name="HostsOnDirectX">Whether the device is Direct3D 12.</param>
 /// <param name="Settings">A source instance's settings object (<see cref="RenderGraphInstance.Settings"/>), which its
 /// producer opens the image with, or <see langword="null"/> for its defaults and for any other instance.</param>
-public sealed record RenderGraphExternalProducerContext(string Instance, string Package, IGpuDeviceContext Device, bool HostsOnDirectX, IReadOnlyDictionary<string, JsonElement>? Settings = null);
+public sealed record RenderGraphExternalProducerContext(string Instance, string Package, IGpuDeviceContext Device, bool HostsOnDirectX, IReadOnlyDictionary<string, JsonElement>? Settings = null) {
+    /// <summary>Mints a public <see cref="DeliveryLabel"/> for a device or capture source producer.</summary>
+    /// <param name="external">Whether the output holds external pixels the capture gate did not fill.</param>
+    /// <returns>The classified public label.</returns>
+    public DeliveryLabel PublicLabel(bool external = false) =>
+        DeliveryLabel.ForSource(external: external, source: DeliveryPublicSource.DeviceOrCapture);
+}
 /// <summary>The engine work a host offers render graphs, by package id: the recorders that run a package pass inside a
 /// graph instance's submission, the external producers that render an external instance
 /// (<see cref="RenderGraphInstanceKind.External"/>) through submissions of their own, and the uploads an uploaded

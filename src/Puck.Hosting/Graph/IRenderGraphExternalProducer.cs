@@ -4,9 +4,8 @@ using Puck.Abstractions.Sources;
 
 namespace Puck.Hosting;
 
-/// <summary>One acquisition of an external producer's latest completed output: the image, the layout the producer
-/// leaves it in between its submissions, and the lease that keeps it alive until the submission that samples it has
-/// finished.</summary>
+/// <summary>The image, resting layout and lease unlocked from a <see cref="RenderGraphExternalOutput"/> at a
+/// <see cref="DeliveryLatch"/>.</summary>
 /// <param name="Image">The same-device image the producer last completed, or an empty surface for a source whose image
 /// arrives from another thread or device as an image view alone, which the lease carries and only an external producer
 /// samples; a graph instance reading it draws a stand-in.</param>
@@ -14,10 +13,49 @@ namespace Puck.Hosting;
 /// back in this layout.</param>
 /// <param name="Lease">The acquisition, retired exactly once by the consumer that sampled it, after that submission's
 /// fence, on device loss or at disposal.</param>
-/// <param name="Tainted">Whether the image holds external content the capture gate did not fill (a camera, a desktop
-/// capture or a probe of either, resolved outside a capture frame), or was rendered from such an image. An instance that
-/// reads a tainted image is tainted until it renders again from untainted ones, and no capture reads it.</param>
-public readonly record struct RenderGraphExternalOutput(Surface Image, GpuImageLayout Layout, GpuImageLease Lease, bool Tainted);
+public readonly record struct RenderGraphAcquiredImage(Surface Image, GpuImageLayout Layout, GpuImageLease Lease);
+
+/// <summary>One acquisition of an external producer's latest completed output, pairing the image and its lease with its
+/// <see cref="DeliveryLabel"/> so the handle and surface can be obtained only through <see cref="TryRead"/>.</summary>
+public readonly struct RenderGraphExternalOutput {
+    private readonly DeliveryContent<RenderGraphAcquiredImage> m_content;
+    private readonly GpuImageLease m_retire;
+
+    /// <summary>Initializes a new instance of the <see cref="RenderGraphExternalOutput"/> struct.</summary>
+    /// <param name="image">The same-device image the producer last completed, or an empty surface for a view-only
+    /// source.</param>
+    /// <param name="layout">The layout the image rests in between its producer's submissions.</param>
+    /// <param name="lease">The acquisition that keeps the image alive until retired.</param>
+    /// <param name="label">The output's provenance and external-content classification; an unclassified label is
+    /// refused at every read.</param>
+    public RenderGraphExternalOutput(Surface image, GpuImageLayout layout, GpuImageLease lease, DeliveryLabel label) {
+        m_content = new DeliveryContent<RenderGraphAcquiredImage>(
+            label: label,
+            value: new RenderGraphAcquiredImage(
+                Image: image,
+                Layout: layout,
+                Lease: lease
+            )
+        );
+        m_retire = lease;
+    }
+
+    /// <summary>Gets the output's provenance and external-content classification.</summary>
+    public DeliveryLabel Label => m_content.Label;
+    /// <summary>Gets whether the output carries a classified label.</summary>
+    public bool IsClassified => m_content.IsClassified;
+
+    /// <summary>Reads the acquired image and lease when <see cref="Label"/> allows <paramref name="latch"/>.</summary>
+    /// <param name="latch">The frame's latch.</param>
+    /// <param name="acquired">The image, layout and lease when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when <see cref="Label"/> is classified and every span in it is current at
+    /// <paramref name="latch"/>.</returns>
+    public bool TryRead(in DeliveryLatch latch, out RenderGraphAcquiredImage acquired) =>
+        m_content.TryRead(latch: in latch, value: out acquired);
+    /// <summary>Retires the underlying acquisition when a caller does not hand the lease to a submission.</summary>
+    public void Retire() => m_retire.Retire();
+}
+
 /// <summary>Renders a render-graph instance through its own submissions rather than a graph of its own, such as an image
 /// producer whose image another device writes. The graph runtime produces it before its
 /// consumers when the schedule renders it, at the scheduled extent, handing it the latest completed image of every
@@ -43,18 +81,20 @@ public interface IRenderGraphExternalProducer : ICaptureRequestTarget, IDisposab
     /// <param name="width">The extent width, in pixels, at least one.</param>
     /// <param name="height">The extent height, in pixels, at least one.</param>
     /// <param name="reads">The latest completed image of each instance the producer's instance reads, whose leases the
-    /// producer takes for the images its submission samples (<see cref="RenderGraphExternalReads.Take"/>), or
+    /// producer takes for the images its submission samples (<see cref="RenderGraphExternalReads.TryTake"/>), or
     /// <see langword="null"/> when it reads none.</param>
     /// <returns>Whether the frame was submitted: <see cref="FrameRender.Rendered"/>; waiting, with what for, only while
     /// asking again for the same frame can deliver it (its pipelines building, a first frame arriving on another
     /// thread); refused, naming why, when it cannot until something it was built from changes (a feed that ended or
     /// failed to open). An offscreen host holds its tick for a wait and steps on past a refusal.</returns>
     FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null);
-    /// <summary>Acquires the latest completed output. Each acquisition is retired once, through its lease.</summary>
+    /// <summary>Acquires the latest completed output. Each acquisition is retired once, through its lease or
+    /// <see cref="RenderGraphExternalOutput.Retire"/>.</summary>
     /// <param name="output">The output, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="false"/> when the producer has completed no output.</returns>
     bool TryAcquireOutput(out RenderGraphExternalOutput output);
 }
+
 /// <summary>The external producer of a source instance (<see cref="RenderGraphInstance.IsSource"/>): an image another
 /// thread, device or process writes, such as a camera, a desktop capture or a machine's framebuffer. Its descriptor is
 /// what the runtime declares to the scheduler each frame (<see cref="RenderGraphSourceState"/>), so the instance renders

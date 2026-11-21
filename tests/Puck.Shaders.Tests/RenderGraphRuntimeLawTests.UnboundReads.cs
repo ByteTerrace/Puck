@@ -226,12 +226,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
                 var index = reads.IndexOf(producer: ReadSource);
 
-                if (reads[index].Image.IsSameDeviceImage) {
-                    owner.Seen.Add(item: reads[index].Image.ImageViewHandle);
+                if (
+                    reads[index].TryRead(latch: recording.Latch, read: out var resolved) &&
+                    resolved.Image.IsSameDeviceImage
+                ) {
+                    owner.Seen.Add(item: resolved.Image.ImageViewHandle);
 
-                    if (owner.Takes) {
-                        var lease = reads.Take(index: index);
-
+                    if (owner.Takes && reads.TryTake(index: index, latch: recording.Latch, lease: out var lease, read: out _)) {
                         recording.Leases.Hold(lease: in lease);
                     }
                 }

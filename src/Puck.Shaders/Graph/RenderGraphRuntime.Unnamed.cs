@@ -69,9 +69,8 @@ public sealed partial class RenderGraphRuntime {
                 m_unnamed.Add(key: node, value: new Retiring(instance: m_set.Instances[index].Name, node: node, producer: null));
             }
 
-            m_current[index] = Output.None;
-            m_previous[index] = Output.None;
-            m_producerTainted[index] = false;
+            m_outputs.Forget(index: index);
+            m_producerLabels[index] = default;
             schedule.Next.Forget(index: index);
             m_released.Add(item: index);
         }
@@ -118,7 +117,7 @@ public sealed partial class RenderGraphRuntime {
                 return true;
             }
 
-            captured = m_current[captured].StandsFor.Producer;
+            captured = m_outputs.StandsForProducer(index: captured, latch: in m_latch);
         }
 
         return false;

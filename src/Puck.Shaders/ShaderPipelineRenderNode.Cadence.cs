@@ -10,7 +10,7 @@ namespace Puck.Shaders;
 public sealed partial class ShaderPipelineRenderNode {
     private long m_contentGeneration;
 
-    private readonly record struct ExternalBuffer(IGpuBuffer Buffer, ReferenceRevision Publication = default, long Generation = 0);
+    private readonly record struct ExternalBuffer(ShaderPipelineExternalBuffer Binding, IGpuBuffer? LastBuffer = null, ReferenceRevision LastPublication = default, long Generation = 0);
     private sealed class CadenceVersion(string name) {
         public readonly string Name = name;
 
@@ -82,10 +82,30 @@ public sealed partial class ShaderPipelineRenderNode {
         foreach (var resource in m_resources) {
             if (!resource.Spec.IsExternal) { continue; }
             foreach (var version in resource.Cadence) {
-                var known = (m_externalBuffers.TryGetValue(key: version.Name, value: out var binding) && binding.Publication.IsPublished());
+                if (
+                    m_externalBuffers.TryGetValue(key: version.Name, value: out var entry) &&
+                    entry.Binding.TryRead(latch: in m_frameLatch, resolved: out var resolved)
+                ) {
+                    var generation = ((ReferenceEquals(objA: entry.LastBuffer, objB: resolved.Buffer) &&
+                        (entry.LastPublication == resolved.Publication) &&
+                        (entry.Generation != 0))
+                        ? entry.Generation
+                        : ++m_contentGeneration);
 
-                version.Valid = known;
-                version.Generation = (known ? binding.Generation : 0);
+                    m_externalBuffers[version.Name] = (entry with {
+                        Generation = generation,
+                        LastBuffer = resolved.Buffer,
+                        LastPublication = resolved.Publication,
+                    });
+
+                    var known = resolved.Publication.IsPublished();
+
+                    version.Valid = known;
+                    version.Generation = (known ? generation : 0);
+                } else {
+                    version.Valid = false;
+                    version.Generation = 0;
+                }
             }
         }
     }

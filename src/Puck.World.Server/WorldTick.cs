@@ -120,9 +120,11 @@ public sealed partial class WorldTick {
     // logs once, not the state itself), so two addons left permanently double-granted over one body log the collision
     // ONCE rather than flooding stderr at the 240 Hz sim rate.
     private readonly bool[] m_contended;
-    // Per-body "an intent was denied last drain" latch, so a revoked driver that keeps submitting logs its loud drop
-    // ONCE per denial episode (reset when an allowed intent for that body arrives) rather than once per tick.
-    private readonly bool[] m_driveDenied;
+    // The denial each body's intents last met, so a revoked driver that keeps submitting narrates its drop once for
+    // the denial's span (released when an allowed intent for that body arrives) rather than once a tick.
+    private readonly Puck.Abstractions.ReasonLatch<int> m_driveDenied = new();
+    // The reason each body's own input batch was last refused for, narrated once until it changes or a batch is taken.
+    private readonly Puck.Abstractions.ReasonLatch<int> m_inputRefused = new();
     // The tick-denominated musical clock, compiled once at construction from the FIRST declared definition.Music row
     // (a world authoring none has none). The score's segments, layers and embellishments are each listener's own
     // (WorldAudioDirector), stepped from what it is delivered; the authority owns only the grid they share.
@@ -135,6 +137,8 @@ public sealed partial class WorldTick {
     // The stream lease id is server-minted; an older socket's finally block can therefore never clear a replacement
     // socket's state after a reconnect.
     private readonly WorldFederatedIntentState[] m_federatedIntents;
+    // The reason each body's federated input was last dropped for; an input that names no body shares key -1.
+    private readonly Puck.Abstractions.ReasonLatch<int> m_federatedDrops = new();
 
     // Reentrancy guard, guarded by m_authorityGate with m_ordered: DrainOrdered dequeues and applies until empty, so
     // a re-entrant enqueue from inside an apply is a defined no-op (re-enqueue, return to the outer drain) instead
@@ -238,7 +242,6 @@ public sealed partial class WorldTick {
         m_trustedSum = new long[(capacity * ChannelLimits.MaxChannels)];
         m_untrustedAcceptedMask = new ChannelHeldMask[capacity];
         m_untrustedSum = new long[(capacity * ChannelLimits.MaxChannels)];
-        m_driveDenied = new bool[capacity];
         m_federatedIntents = new WorldFederatedIntentState[capacity];
         m_host = host;
 

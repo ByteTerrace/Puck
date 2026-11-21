@@ -138,6 +138,55 @@ public sealed class JobPoolLawTests {
         }
         Assert.Equal(WaitOutcome.Completed, pool.Fork(JobClass.Tick, 2, tick, ref fork, WaitDeadline.In(TimeSpan.FromSeconds(10))));
     }
+    [Theory]
+    [InlineData(JobClass.Frame)]
+    [InlineData(JobClass.Tick)]
+    public void TwoForksStartedTogetherFromTwoThreadsBothGetWorkers(JobClass needy) {
+        // Four workers. The holding fork keeps one worker until the needy fork completes, and the needy fork completes
+        // only once four threads run its partitions at once, so it needs the other three workers woken whatever the
+        // holding fork's wake left pending. Both classes take each role, since a worker takes the higher class first. No
+        // engine partition waits on another fork; this one does only to hold a worker.
+        using var pool = new JobPool(workers: new JobWorkers(requested: 5));
+        var holding = ((needy == JobClass.Frame) ? JobClass.Tick : JobClass.Frame);
+
+        for (var round = 0; (round < 50); round++) {
+            using var needyDone = new ManualResetEventSlim();
+            using var allEntered = new ManualResetEventSlim();
+            using var start = new Barrier(participantCount: 2);
+            var entered = 0;
+            Exception? holdingFailure = null;
+            var holdingOwner = -1;
+            var holdingWorkers = 0;
+            // Only the first worker to take a holding partition is held, so the holding fork keeps exactly one worker
+            // however its partitions fall between its owner and the workers.
+            var held = new Partitions(run: _ => {
+                if ((Environment.CurrentManagedThreadId != Volatile.Read(ref holdingOwner)) && (Interlocked.Increment(ref holdingWorkers) == 1)) {
+                    Assert.True(needyDone.Wait(TimeSpan.FromSeconds(10)));
+                }
+            });
+            var gathered = new Partitions(run: _ => {
+                if (Interlocked.Increment(ref entered) == 4) {
+                    allEntered.Set();
+                }
+                Assert.True(allEntered.Wait(TimeSpan.FromSeconds(5)), "the needy fork never had four threads at once");
+            });
+            var holdingThread = new Thread(start: () => holdingFailure = Record.Exception(testCode: () => {
+                Volatile.Write(ref holdingOwner, Environment.CurrentManagedThreadId);
+                start.SignalAndWait(TestContext.Current.CancellationToken);
+                pool.Fork(jobClass: holding, partitions: 2, body: held);
+            }));
+
+            holdingThread.Start();
+            try {
+                start.SignalAndWait(TestContext.Current.CancellationToken);
+                pool.Fork(jobClass: needy, partitions: 4, body: gathered);
+            } finally {
+                needyDone.Set();
+                holdingThread.Join();
+            }
+            Assert.Null(holdingFailure);
+        }
+    }
     [Fact]
     public void PendingWakesNeverExceedTheWorkerCount() {
         using var pool = new JobPool(workers: new JobWorkers(requested: 3));

@@ -254,6 +254,7 @@ public sealed class ImportedImageConversionDeviceLawTests {
                 Height: Extent,
                 ImageHandle: filled.ImageHandle,
                 ImageViewHandle: filled.ImageViewHandle,
+                Label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(external: true, source: Puck.Abstractions.Presentation.DeliveryPublicSource.DeviceOrCapture),
                 Layout: GpuImageLayout.General,
                 Width: Extent
             )
@@ -262,6 +263,7 @@ public sealed class ImportedImageConversionDeviceLawTests {
                 Height: Extent,
                 ImageHandle: shared.ImageHandle,
                 ImageViewHandle: shared.ImageViewHandle,
+                Label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(external: true, source: Puck.Abstractions.Presentation.DeliveryPublicSource.DeviceOrCapture),
                 Layout: GpuImageLayout.External,
                 Width: Extent
             ));
@@ -352,7 +354,7 @@ public sealed class ImportedImageConversionDeviceLawTests {
                 step: () => converter.TryConvert(
                     context: default,
                     image: image,
-                    lease: new GpuImageLease(ImageViewHandle: image.ImageViewHandle)
+                    lease: new GpuImageLease(ImageViewHandle: (shared?.ImageViewHandle ?? filled.ImageViewHandle))
                 )
             );
             converted = MemoryMarshal.Cast<byte, Half>(span: readback.Read(

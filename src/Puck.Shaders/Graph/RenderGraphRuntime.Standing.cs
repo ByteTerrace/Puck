@@ -28,17 +28,125 @@ namespace Puck.Shaders;
 // CollectRerenders names it, and a frame that releases an instance another's output stood for is scheduled again
 // (RescheduleAfterRelease), so the reader binds the released producer's stand-in in the same frame. Only an output
 // standing for a one-frame image costs a render every frame it is shown.
+//
+// Every record carries the label of what it was rendered from (DeliveryLabel), and the records are private to
+// OutputRecords, whose reads answer nothing for a record whose label the frame's latch refuses. A resolved output
+// carries the union of every hop's label, so an output standing for an ended producer resolves to nothing too.
 public sealed partial class RenderGraphRuntime {
     // The frame outputs are read at, retained when a reconfiguration replaces the scheduling history.
     private long m_readFrame = -1;
 
     // The ordinals of instances whose latest output must render again to stay shown, reused from frame to frame.
     private readonly MarkedIndexSet m_standingIndices = new();
-    // Sparse candidates whose current output became non-Own (tracked on write, lazily pruned when back to Own).
+    // Sparse candidates whose current output stands for another image or carries a span that can end (tracked on write,
+    // lazily pruned once it is neither).
     private readonly List<int> m_standingCandidates = [];
     private bool[] m_standingCandidateMark = [];
     // The instances the frame's release forgot, reused from frame to frame.
     private readonly List<int> m_released = [];
+
+    // The completed output records: every read passes a DeliveryLatch, and RememberOutput is the one writer.
+    private sealed class OutputRecords {
+        private Output[] m_current;
+        private Output[] m_previous;
+
+        public OutputRecords(int count) {
+            m_current = new Output[count];
+            m_previous = new Output[count];
+            Clear();
+        }
+
+        public Output ReadAt(int producer, long frame, in DeliveryLatch latch) {
+            var current = m_current[producer];
+
+            if (current.StandsFor.IsRetired) {
+                return Output.None;
+            }
+            if (
+                (current.Frame >= 0) &&
+                (current.Frame <= frame)
+            ) {
+                return (current.Label.Allows(latch: in latch)
+                    ? current
+                    : Output.None);
+            }
+
+            var previous = m_previous[producer];
+
+            return (((previous.Frame >= 0) && (previous.Frame <= frame) && !previous.StandsFor.IsRetired && previous.Label.Allows(latch: in latch))
+                ? previous
+                : Output.None);
+        }
+        public Output ReadCurrent(int index, in DeliveryLatch latch) {
+            var current = m_current[index];
+
+            return (((current.Frame >= 0) && !current.StandsFor.IsRetired && current.Label.Allows(latch: in latch))
+                ? current
+                : Output.None);
+        }
+        public void Write(int index, ShaderPipelineRenderNode node, long frame, in Surface surface, DeliveryLabel label, Standing standsFor, ReferenceRevision publication) {
+            var buffer = node.LatestOutputBuffer();
+            var buffers = node.LatestOutputBuffers(reuse: m_previous[index].Buffers);
+
+            m_previous[index] = m_current[index];
+            m_current[index] = new Output(
+                Buffer: buffer.Buffer,
+                BufferPublication: buffer.Publication,
+                Buffers: buffers,
+                Frame: frame,
+                Image: surface,
+                Label: label,
+                Layout: node.PublishedLayout,
+                Publication: publication,
+                StandsFor: standsFor,
+                StateTick: node.PublishedStateTick
+            );
+        }
+        public void Forget(int index) {
+            m_current[index] = Output.None;
+            m_previous[index] = Output.None;
+        }
+        public void Clear() {
+            Array.Fill(array: m_current, value: Output.None);
+            Array.Fill(array: m_previous, value: Output.None);
+        }
+        public void Reconfigure(int count, ReadOnlySpan<int> kept, int[] renumbered) {
+            var current = new Output[count];
+            var previous = new Output[count];
+
+            for (var index = 0; (index < count); index++) {
+                var old = kept[index];
+
+                current[index] = ((old >= 0)
+                    ? Renumbered(output: in m_current[old], renumbered: renumbered)
+                    : Output.None);
+                previous[index] = ((old >= 0)
+                    ? Renumbered(output: in m_previous[old], renumbered: renumbered)
+                    : Output.None);
+            }
+
+            m_current = current;
+            m_previous = previous;
+        }
+        public int Count => m_current.Length;
+        // What the current record stands for, which says nothing of its content.
+        public Standing StandsFor(int index) => m_current[index].StandsFor;
+        // The producer the current record stands for, or -1 when it stands for none or the latch refuses it.
+        public int StandsForProducer(int index, in DeliveryLatch latch) =>
+            (m_current[index].Label.Allows(latch: in latch)
+                ? m_current[index].StandsFor.Producer
+                : -1);
+        // Whether the current record must stay a standing candidate: it stands for another image, or its label names a
+        // span that can end.
+        public bool IsStandingCandidate(int index) => (
+            !m_current[index].StandsFor.IsOwn ||
+            ((m_current[index].Frame >= 0) && (m_current[index].Label.SpanCount != 0))
+        );
+        public bool HasEnded(int index, in DeliveryLatch latch) =>
+            ((m_current[index].Frame >= 0) && !m_current[index].Label.Allows(latch: in latch));
+        public bool ExternalAt(int index, in DeliveryLatch latch) =>
+            (m_current[index].Label.Allows(latch: in latch) && m_current[index].Label.External);
+    }
 
     private void TrackStandingCandidate(int index) {
         if (!m_standingCandidateMark[index]) {
@@ -48,10 +156,10 @@ public sealed partial class RenderGraphRuntime {
     }
     private void RebuildStandingCandidates() {
         m_standingCandidates.Clear();
-        m_standingCandidateMark = new bool[m_current.Length];
+        m_standingCandidateMark = new bool[m_outputs.Count];
 
-        for (var index = 0; (index < m_current.Length); index++) {
-            if (!m_current[index].StandsFor.IsOwn) {
+        for (var index = 0; (index < m_outputs.Count); index++) {
+            if (m_outputs.IsStandingCandidate(index: index)) {
                 TrackStandingCandidate(index: index);
             }
         }
@@ -82,39 +190,31 @@ public sealed partial class RenderGraphRuntime {
         public bool IsRetired => (Producer == -2);
     }
 
-    // The newest completed output of a producer that is no newer than a frame, as recorded, standing or not.
-    private Output RecordedAt(int producer, long frame) {
-        var current = m_current[producer];
-
-        if (
-            (current.Frame >= 0) &&
-            (current.Frame <= frame)
-        ) {
-            return current;
+    // The newest completed output of a producer that is no newer than a frame and allowed at the latch, as recorded.
+    private Output RecordedAt(int producer, long frame, in DeliveryLatch latch) =>
+        m_outputs.ReadAt(frame: frame, latch: in latch, producer: producer);
+    // An output as a reader at a frame sees it: an instance's own output as it is; one standing for a producer's output,
+    // that producer's output no newer than the frame (the frame before it for a previous-frame read), resolved in turn
+    // with every standing hop's label unioned; one standing for a one-frame image, itself within that frame. Nothing
+    // when what it stands for is gone or refused at the latch. A node never stands for its own image, so a chain ends at
+    // another instance's own output; the bound only guards the walk.
+    private Output Resolve(in Output output, long frame, in DeliveryLatch latch) {
+        if (output.Frame < 0) {
+            return Output.None;
         }
 
-        var previous = m_previous[producer];
-
-        return (((previous.Frame >= 0) && (previous.Frame <= frame))
-            ? previous
-            : Output.None);
-    }
-    // An output as a reader at a frame sees it: an instance's own output as it is; one standing for a producer's output,
-    // that producer's output no newer than the frame (the frame before it for a previous-frame read), resolved in turn;
-    // one standing for a one-frame image, itself within that frame. Nothing when what it stands for is gone. A node never
-    // stands for its own image, so a chain ends at another instance's own output; the bound only guards the walk.
-    private Output Resolve(in Output output, long frame) {
         var resolved = output;
+        var combinedLabel = output.Label;
 
         for (var depth = 0; (depth <= (2 * m_nodes.Length)); depth++) {
             var standing = resolved.StandsFor;
 
             if (standing.IsOwn) {
-                return resolved;
+                return (resolved with { Label = combinedLabel });
             }
             if (standing.IsOneFrame) {
                 return ((standing.Frame == m_latest?.Frame)
-                    ? resolved
+                    ? (resolved with { Label = combinedLabel })
                     : Output.None);
             }
             if (standing.IsRetired) {
@@ -124,16 +224,22 @@ public sealed partial class RenderGraphRuntime {
             frame -= (standing.PreviousFrame ? 1L : 0L);
             resolved = RecordedAt(
                 frame: frame,
+                latch: in latch,
                 producer: standing.Producer
             );
+            if (resolved.Frame < 0) {
+                return Output.None;
+            }
+            combinedLabel = combinedLabel.Union(other: resolved.Label);
         }
 
         return Output.None;
     }
-    // An instance's latest output as the display, a host or a capture sees it now.
-    private Output LatestOf(int index) => Resolve(
+    // An instance's latest output as the display, a host or a capture sees it at the latch.
+    private Output LatestOf(int index, in DeliveryLatch latch) => Resolve(
         frame: m_readFrame,
-        output: in m_current[index]
+        latch: in latch,
+        output: m_outputs.ReadCurrent(index: index, latch: in latch)
     );
     // What an instance's new output stands for: nothing when its node published an image of its own, otherwise the
     // producer of the image this frame bound to the external version its node published in its output's place. A stand-in
@@ -161,6 +267,7 @@ public sealed partial class RenderGraphRuntime {
                     consumer: index,
                     producer: binding.Producer
                 ),
+                latch: in m_latch,
                 producer: binding.Producer,
                 readFrame: (schedule.Frame - (binding.PreviousFrame ? 1L : 0L))
             );
@@ -179,16 +286,18 @@ public sealed partial class RenderGraphRuntime {
             Producer: -1
         );
     }
-    // Collects every instance whose latest output must render again to stay shown, visiting only sparse standing
-    // candidates (and withdrawing instances only while m_withdrawing is non-empty), returning whether there is any.
+    // Collects every instance whose latest output must render again to stay shown, returning whether there is any: its
+    // outputs were withdrawn (RenderGraphRuntime.Withdrawal.cs), its label names a span the frame's latch refuses, it
+    // resolves to nothing, or it stands for a one-frame image, which resolves to nothing once the frame it was bound in
+    // has passed. Only the sparse standing candidates are visited, and withdrawing instances only while there are any.
     private bool CollectStanding() {
         m_standingIndices.Clear();
 
         for (var position = (m_standingCandidates.Count - 1); (position >= 0); position--) {
             var index = m_standingCandidates[position];
-            var standing = m_current[index].StandsFor;
+            var standing = m_outputs.StandsFor(index: index);
 
-            if (standing.IsOwn) {
+            if (!m_outputs.IsStandingCandidate(index: index)) {
                 m_standingCandidateMark[index] = false;
                 var last = (m_standingCandidates.Count - 1);
 
@@ -199,7 +308,13 @@ public sealed partial class RenderGraphRuntime {
             }
             if (
                 (m_sources[index] is null) &&
-                (standing.IsOneFrame || (LatestOf(index: index).Frame < 0))
+                (
+                    m_outputs.HasEnded(index: index, latch: in m_latch) ||
+                    (
+                        !standing.IsOwn &&
+                        (standing.IsOneFrame || (LatestOf(index: index, latch: in m_latch).Frame < 0))
+                    )
+                )
             ) {
                 _ = m_standingIndices.Add(index: index);
             }

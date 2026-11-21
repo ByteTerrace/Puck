@@ -240,6 +240,7 @@ public sealed partial class WorldScreenBinder {
                 m_accessBindingsVersion++;
             }
         }
+        entry.Access.Close();
         entry.Envelope?.Dispose();
         entry.Emitter.Dispose();
         if (entry.Residency is { } residency) {

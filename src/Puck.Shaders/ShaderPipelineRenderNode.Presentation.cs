@@ -45,7 +45,11 @@ public sealed partial class ShaderPipelineRenderNode {
         );
         if (previewed) { m_preview!.Submitted(slot: slot); }
         m_frameLeases.MoveTo(destination: m_slots[slot].Leases);
+        var (_, publishedName, _) = PublicationOf(selected: PresentationResource(selected: selected), slot: slot);
         Publish(surface: Output(slot: slot));
+        if (selected.Spec.IsExternal && m_externalImages.TryGetValue(key: publishedName, value: out var bound)) {
+            m_publishedLabel = (m_publishedLabel.IsClassified ? m_publishedLabel.Union(other: bound.Image.Label) : bound.Image.Label);
+        }
         m_outputRefreshRequested = false;
     }
     private RuntimeResource PresentationResource(RuntimeResource selected) {

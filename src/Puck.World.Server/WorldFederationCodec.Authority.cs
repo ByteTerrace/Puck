@@ -1,5 +1,5 @@
+using Puck.Attestation;
 using Puck.Networking;
-using System.Security.Cryptography;
 
 namespace Puck.World.Server;
 
@@ -23,16 +23,11 @@ public static partial class WorldFederationCodec {
             throw new ArgumentException(message: "federation challenges must have a bounded, nonzero length");
         }
         var context = new WireWriter();
-        context.WriteString(value: "puck.world.federation-proof.v2");
         context.WriteBoolean(value: serverProof);
-        context.WriteString(value: clientKeyHash);
-        context.WriteString(value: serverKeyHash);
         context.WriteString(value: authority);
         context.WriteBlock(value: counterChallenge);
-        var bound = new byte[challenge.Length];
-        HKDF.DeriveKey(hashAlgorithmName: HashAlgorithmName.SHA256, ikm: challenge,
-            output: bound, salt: default, info: context.WrittenSpan);
-        return bound;
+        return ChannelBinding.Bind(label: "puck.world.federation-proof.v2", nonce: challenge,
+            clientKeyHash: clientKeyHash, serverKeyHash: serverKeyHash, context: context.WrittenSpan);
     }
     /// <summary>Encodes the destination's authority namespace and its proof in the authentication acknowledgement.</summary>
     /// <param name="authority">The destination's nonempty authority namespace.</param>

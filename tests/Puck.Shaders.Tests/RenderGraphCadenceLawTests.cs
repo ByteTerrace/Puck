@@ -1,5 +1,5 @@
-using Puck.Abstractions.Collections;
 using System.Text.Json;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.Testing;
@@ -222,7 +222,7 @@ public sealed partial class RenderGraphCadenceLawTests {
         using var external = gpu.CreateDeviceLocal(16, GpuBufferUsage.Storage, new GpuObjectName("test", "external"));
         using var node = Node(gpu, model, input: input);
 
-        if (kind == "external") { node.BindBuffer(buffer: external, name: "source"); }
+        if (kind == "external") { node.BindBuffer(buffer: new ShaderPipelineExternalBuffer(buffer: external, label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(source: Puck.Abstractions.Presentation.DeliveryPublicSource.Host)), name: "source"); }
         node.ProduceUntilInstalled();
         for (var frame = 0; (frame < 5); frame++) { node.ProduceFrame(context: default); }
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (6, 6));
@@ -237,30 +237,31 @@ public sealed partial class RenderGraphCadenceLawTests {
         using var replacement = gpu.CreateDeviceLocal(16, GpuBufferUsage.Storage, new GpuObjectName("test", "replacement"));
         using var node = Node(gpu, model, input: input);
         var publication = new ReferenceRevision(Owner: new ByReference<object>(first), Revision: 1);
+        var hostLabel = Puck.Abstractions.Presentation.DeliveryLabel.ForSource(source: Puck.Abstractions.Presentation.DeliveryPublicSource.Host);
 
-        node.BindBuffer(buffer: first, name: "source", publication: publication);
+        node.BindBuffer(buffer: new ShaderPipelineExternalBuffer(buffer: first, label: hostLabel, publication: publication), name: "source");
         node.ProduceUntilInstalled();
         for (var frame = 0; (frame < 4); frame++) {
-            node.BindBuffer(buffer: first, name: "source", publication: publication);
+            node.BindBuffer(buffer: new ShaderPipelineExternalBuffer(buffer: first, label: hostLabel, publication: publication), name: "source");
             node.ProduceFrame(context: default);
         }
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (1, 1));
 
         publication = publication with { Revision = 2 };
-        node.BindBuffer(buffer: first, name: "source", publication: publication);
+        node.BindBuffer(buffer: new ShaderPipelineExternalBuffer(buffer: first, label: hostLabel, publication: publication), name: "source");
         node.ProduceFrame(context: default);
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (2, 2));
         publication = publication with { Owner = new ByReference<object>(replacement) };
-        node.BindBuffer(buffer: first, name: "source", publication: publication);
+        node.BindBuffer(buffer: new ShaderPipelineExternalBuffer(buffer: first, label: hostLabel, publication: publication), name: "source");
         node.ProduceFrame(context: default);
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (3, 3));
-        node.BindBuffer(buffer: replacement, name: "source", publication: publication);
+        node.BindBuffer(buffer: new ShaderPipelineExternalBuffer(buffer: replacement, label: hostLabel, publication: publication), name: "source");
         node.ProduceFrame(context: default);
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (4, 4));
         node.ProduceFrame(context: default);
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (4, 4));
 
-        node.BindBuffer(buffer: replacement, name: "source");
+        node.BindBuffer(buffer: new ShaderPipelineExternalBuffer(buffer: replacement, label: hostLabel), name: "source");
         node.ProduceFrame(context: default);
         node.ProduceFrame(context: default);
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (6, 6));
@@ -286,7 +287,14 @@ public sealed partial class RenderGraphCadenceLawTests {
         using var buffer = gpu.CreateDeviceLocal(16, GpuBufferUsage.Storage, new GpuObjectName("test", "mutable"));
         using var node = Node(gpu, model, graph: graph, input: input, compositeReadsPredecessor: true);
 
-        node.BindBuffer(buffer: buffer, name: "source", publication: new ReferenceRevision(Owner: new ByReference<object>(buffer), Revision: 1));
+        node.BindBuffer(
+            buffer: new ShaderPipelineExternalBuffer(
+                buffer: buffer,
+                label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(source: Puck.Abstractions.Presentation.DeliveryPublicSource.Host),
+                publication: new ReferenceRevision(Owner: new ByReference<object>(buffer), Revision: 1)
+            ),
+            name: "source"
+        );
         node.ProduceUntilInstalled();
         var records = model.Writes;
 

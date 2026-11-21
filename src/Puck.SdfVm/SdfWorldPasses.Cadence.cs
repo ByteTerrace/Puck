@@ -28,7 +28,7 @@ public sealed partial class SdfWorldPasses {
             return FarSignatureOf(entry: entry, signature: null);
         }
         if (!frame.EnableCadenceGate || entry.Picker.Pending || (entry.Convergence is { IsActive: true }) ||
-            (ReadSignatureOf(entry: entry, frame: frame, part: part, reads: reads, tables: tables, view: view) is not { } images)) {
+            (ReadSignatureOf(entry: entry, frame: frame, latch: context.Latch, part: part, reads: reads, tables: tables, view: view) is not { } images)) {
             SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Forced);
             return ((part == SdfWorldPackage.Parts.ShadowFar) ? FarSignatureOf(entry: entry, signature: null) : null);
         }
