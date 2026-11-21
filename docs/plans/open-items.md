@@ -632,15 +632,19 @@ wait behind them.
 1. **The authority's step leaves the frame thread.** The in-process authority
    steps on a thread of its own and the frame presents the latest completed
    tick, as a client of a remote authority already does. A frame then costs
-   the longer of the tick and the produce, not their sum. This is
-   [the job system's open question 7](engine-job-system.md#open-questions),
-   and the design lane answers it before any code. What the design must
-   state: the frame reads only a completed tick's published state
-   ([the presentation view](runtime-and-delivery.md#the-presentation-view)),
-   so no thread timing can change simulation state (AGENTS.md rule 4), and
-   what enforces that; where input is sampled, with the input-to-display time
-   measured before and after
-   ([the pipelining decision](../decisions/rendering.md#the-pipeline-foundation)). Check: `host.frames` shows the
+   the longer of the tick and the produce, not their sum.
+   [The design](tick-thread.md) states the invariant (a tick executes from
+   input the loop closed before handing it over, and the loop reads the
+   authority only between a collect and the next hand-off, so no thread
+   timing can change simulation state, AGENTS.md rule 4), what enforces it,
+   every frame-thread reader and where it moves, and the input-to-display
+   budget ([the pipelining decision](../decisions/rendering.md#the-pipeline-foundation)).
+   The memo is reviewed and its findings answered. The frame cannot run
+   beside the tick until it reads no live authority state, so
+   [its steps](tick-thread.md#the-steps) come in three stages, and the second
+   stage's steps (the outbox, a delivered document bound to its sink's values,
+   adjacency in prepare, the link, presentation out of the composition root)
+   can run in separate lanes. Next: stage one. Check: `host.frames` shows the
    step outside the frame's interval on the route, and
    `puck test --reproduce` passes at every worker count. At scale: every
    world a client runs steps on its own thread, which is the shape the silo's

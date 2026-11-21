@@ -1529,74 +1529,18 @@ step that meets it.
 6. Whether the built change-set closure matches a full retrace on a windowed
    World after a wall is removed and after a draw moves; B1's check reads it.
 7. Where the tick runs. This memo keeps the tick ahead of produce on the
-   frame thread and forks its partitions from there. It forks nothing across
-   world instances: every instance steps in series on the frame thread
-   (`WorldInstanceHost.StepInstances`). That serves one world. Puck is built
-   for many worlds in view at once, and a frame that steps all of them before
-   it draws cannot hold its bar however short each step is. So a tick on a
-   thread of its own is not ruled out. It is this plan's design question,
-   starting from the marginal cost of one more world instance in frame
-   ([frame-thread measurements owed](#frame-thread-measurements-owed)) and the
-   [benchmark's input-to-display latency column](benchmark.md#presentation-timing-and-admission-stage-8),
-   which reports tick-integrated motion and between-tick pointer look
-   (`WorldSeatViewState.PresentedLook`) apart. The pump thread steps the
-   authority before it produces (`HostLoop.Run`), so whatever a step does (a
-   shape change's whole-document delivery, a machine's drain, rules) is frame
-   time; the 2060's one reading put `simulate` at a p50 of 30 ms at the stage,
-   which alone is past its 16.7 ms frame (read before its device table
-   applied, which changes no tick work). The silo has the same shape on a server: one
-   thread steps every row in turn (T4 forks them, since rows never observe one
-   another). The design weighs three arrangements:
-   - *Worlds the player is not acting in step on other threads*, while the
-     world the player's body is in keeps its tick ahead of the frame: adds no
-     input-to-display latency and stops the frame thread paying for worlds it
-     only looks at.
-   - *Every world steps on its own thread and the frame reads the latest
-     complete state*, lowering the frame interval from tick plus produce to
-     the longer of the two, at the risk of showing the tick before the
-     player's input reached it. Moving any tick off the frame thread requires
-     a produce path that reads no live server state
-     ([the presentation view](runtime-and-delivery.md#the-presentation-view)),
-     as a remote authority already works.
-   - *The tick stays on the frame thread*, shortened by C0, J1, T3, T2 and the
-     serial tick fixes.
-   Each arrangement is judged beside today's measured input-to-display latency.
-   The register allows the simulation to run pipelined beside the frame, a
-   tick behind at most, provided look, camera and cursor read input at present
-   time and the input-to-display time stays within the budget the design
-   states ([the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation)). Whether an unseen world may step less often
-   is its authority's choice and is part of the same design: authority is
-   placed per world, so where a world steps is a property of that world
-   ([the world model](../architecture/worlds.md#the-idea-in-plain-terms)).
-
-   This question is now the plan's next design, ahead of the build order
-   above ([the CPU frame](open-items.md#the-cpu-frame), item 1). The owner's
-   ruling makes structural change the aim (AGENTS.md, "Change is the
-   default"), and both bar machines are CPU-bound on one thread that steps
-   and then produces. Leaving the tick serial fixes nothing: the frame stays
-   the sum of tick and produce. The design lane settles the arrangement with
-   the measurement this memo lacked: ruling a tick thread out on the latency
-   ruling alone settles one world and leaves the many-world case unanswered,
-   and ruling it in adds a hand-off whose latency no source we read measures,
-   so the lane measures it.
-   The partitions' order still matters meanwhile. With the pool in place, a
-   join that passes its wait budget keeps the logical tick open across loop
-   iterations and lets the control plane run; without it, new partitions go
-   through today's join, which waits inside one call, so input and the console
-   would be held for the slowest partition. The bounded waits and the pool pay
-   for themselves whatever the partitions save, because every other piece of
-   CPU work the rendering plan moves off the frame thread runs on that pool.
-   The kit bodies and rule gates stay serial until their transaction is
-   redesigned, so partitions shorten the tick without removing it, and in the
-   debug world they may shorten it little.
-
-   *What the readings show.* A console verb issued while a tick's join is
-   overdue is answered within one iteration. Through a cold bake the process's
-   threads are counted as pool workers, the frame and control threads and
-   dedicated threads, each against this plan's figure. The tick is reported in
-   milliseconds by phase for each chapter, before and after. The report states
-   whether the tick and produce each fit the period while their sum does not,
-   which is the reading that would reopen a tick on its own thread.
+   frame thread and forks its partitions from there, and it forks nothing
+   across world instances. [The tick on its own thread](tick-thread.md)
+   answers the question: the in-process authority executes each tick on a
+   step thread, the frame presents the last tick the loop collected, and every
+   world instance's tick is handed over in a wave that T4 later forks. That
+   memo states the determinism invariant and what enforces it, the frame
+   thread's readers of simulation state and where each moves, and the time
+   from input to display. Two things in this plan follow from it. The tick's
+   forks and the frame's forks will overlap, each in its own `JobClass`, so
+   the pool's wake and its worker count must hold with two forking threads.
+   And T4's fork needs every world in a wave to read its neighbours as of the
+   previous collect, which that memo's outbox provides.
 
 ---
 

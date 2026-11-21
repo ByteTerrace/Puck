@@ -181,7 +181,6 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private int m_activePeerCount;
     private long m_activeRevision;
     private long m_renderPoseRevision;
-    private readonly bool[] m_lastActiveFlags = new bool[EntityCapacity];
     private WorldChannelTable m_channels;
     // The server's live world definition — the boot definition at construction, replaced by DeliverDefinition after an
     // applied mutation batch or a swap. The frame source re-reads scene/screens from this behind the revision check.
@@ -1150,16 +1149,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         var stepSeconds = ((float)FixedTickConversion.ToSeconds(ticks: snapshot.StepTicks));
 
         m_poses.Complete();
-        var activeChanged = false;
-        for (var index = 0; (index < EntityCapacity); index++) {
-            var active = m_poses.IsActive(index: index);
-
-            if (active != m_lastActiveFlags[index]) {
-                m_lastActiveFlags[index] = active;
-                activeChanged = true;
-            }
-        }
-        if (activeChanged) {
+        m_posesDelivered = true;
+        if (m_poses.ActiveChanged) {
             m_activeRevision++;
         }
         m_renderPoseRevision++;
@@ -1480,40 +1471,93 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// zero sub-steps previous == current, so both hold stably (no snap-back). Presentation only: <c>body.where</c>
     /// reports the server sim pose, never this.</summary>
     /// <param name="alpha">How far this frame sits between the last and next fixed sim step, in <c>[0, 1)</c>.</param>
+    /// <remarks>The first frame after a delivery resolves every live body and notes which of them moved between the
+    /// delivery's two tick poses. A later frame of the same delivery resolves only those: a body whose two poses are
+    /// equal resolves to the same pose at every alpha (<see cref="WorldPoseInterpolation"/>), and a correction eases
+    /// once a delivery, never between two, so its pose stands until the next delivery. A frame therefore costs the
+    /// bodies that moved, and a delivery the bodies that are live, never <see cref="EntityCapacity"/>.</remarks>
     public void UpdateRenderPoses(float alpha) {
         m_solidScaleAlpha = alpha;
-        var moved = false;
+        WorldPoseWork.Process.Count(kind: WorldPoseWork.Frames);
 
-        for (var index = 0; (index < EntityCapacity); index++) {
+        var changed = false;
+
+        if (!m_posesDelivered) {
+            foreach (var index in m_moving.AsSpan(start: 0, length: m_movingCount)) {
+                _ = ResolveRenderPose(index: index, alpha: alpha, changed: ref changed);
+            }
+            if (changed) {
+                m_renderPoseRevision++;
+            }
+            WorldPoseWork.Process.Add(kind: WorldPoseWork.Resolved, amount: m_movingCount);
+
+            return;
+        }
+
+        var live = m_poses.Live;
+
+        if (m_moving.Length < live.Length) {
+            m_moving = new int[((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)live.Length)))];
+        }
+
+        var moving = 0;
+        var resolved = 0;
+
+        foreach (var index in live) {
             if (!m_poses.IsActive(index: index)) {
                 continue;
             }
 
-            var position = WorldPoseInterpolation.Position(
-                previous: m_poses.PreviousPosition(index: index),
-                current: m_poses.CurrentPosition(index: index),
-                alpha: alpha
-            );
-            // Quaternion.Lerp is the nlerp: shortest-path dot-sign flip and renormalize.
-            var orientation = WorldPoseInterpolation.Orientation(
-                previous: m_poses.PreviousOrientation(index: index),
-                current: m_poses.CurrentOrientation(index: index),
-                alpha: alpha
-            );
-
-            m_easers[index].Apply(
-                orientation: ref orientation,
-                position: ref position
-            );
-            if ((m_renderPosition[index] != position) || (m_renderOrientation[index] != orientation)) {
-                m_renderPosition[index] = position;
-                m_renderOrientation[index] = orientation;
-                moved = true;
+            resolved++;
+            if (ResolveRenderPose(index: index, alpha: alpha, changed: ref changed)) {
+                m_moving[moving++] = index;
             }
         }
-        if (moved) {
+        if (changed) {
             m_renderPoseRevision++;
         }
+
+        m_movingCount = moving;
+        m_posesDelivered = false;
+        WorldPoseWork.Process.Add(kind: WorldPoseWork.Resolved, amount: resolved);
+    }
+
+    // The live bodies whose two tick poses differ in the latest delivery (the only ones a frame between two deliveries
+    // interpolates), and whether a delivery has arrived since a frame last resolved every live body.
+    private int[] m_moving = [];
+    private int m_movingCount;
+    private bool m_posesDelivered = true;
+
+    // Resolves one body's render pose at alpha, sets changed when the pose it stores differs from the one held, and
+    // returns whether the body's two tick poses differ.
+    private bool ResolveRenderPose(int index, float alpha, ref bool changed) {
+        var previousPosition = m_poses.PreviousPosition(index: index);
+        var currentPosition = m_poses.CurrentPosition(index: index);
+        var previousOrientation = m_poses.PreviousOrientation(index: index);
+        var currentOrientation = m_poses.CurrentOrientation(index: index);
+        var position = WorldPoseInterpolation.Position(
+            previous: previousPosition,
+            current: currentPosition,
+            alpha: alpha
+        );
+        // Quaternion.Lerp is the nlerp: shortest-path dot-sign flip and renormalize.
+        var orientation = WorldPoseInterpolation.Orientation(
+            previous: previousOrientation,
+            current: currentOrientation,
+            alpha: alpha
+        );
+
+        m_easers[index].Apply(
+            orientation: ref orientation,
+            position: ref position
+        );
+        if ((m_renderPosition[index] != position) || (m_renderOrientation[index] != orientation)) {
+            m_renderPosition[index] = position;
+            m_renderOrientation[index] = orientation;
+            changed = true;
+        }
+
+        return ((previousPosition != currentPosition) || (previousOrientation != currentOrientation));
     }
     /// <summary>Writes this client's program-rebuild watch counters side by side, never added together: the seat-metadata
     /// revision (colors, pending state), the server's declared-set revision from the latest snapshot, the
