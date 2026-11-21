@@ -538,14 +538,20 @@ laws exercise that boundary.
   naming of kept floors and the trace judge read, the judge through the groups
   whose floor, done state or product changed (`Judgeable`). The retier decision
   still reads every group once a measure.
-- **A stage's scratch is rented, its result exact.** A CPU stage grows its
-  per-vertex and per-quad workspace in `RentedList<T>` and leases its tables
-  (`RentedArrays.Rent(minimumLength, out array)`). Arrays up to 1 MiB reuse the
-  shared pool's buckets, and larger arrays of reference-free elements a bounded
-  large pool (`RentedArrays`, trimmed when a bake's last group finishes and on
-  `MemoryAccount.TrimCaches`), so a group's workspace is reused by the next
-  group instead of left on the large object heap. The stage copies
-  out only the arrays its result keeps. A group's lattices and point tables
+- **A stage's scratch is owned, its result exact.** A CPU stage grows its
+  per-vertex and per-quad workspace in `OwnedBuffer<T>` lists and tables, taken
+  through a `RentedScope` or the contour lattice's `Allocator`, which is the
+  group's native allocator (`SdfMeshLibrary.Allocator`) in a World: that scratch
+  never reaches the managed heap, so a bake cannot set off the collections that
+  pause the frame thread. Offline (no allocator) the same buffers rent from
+  `RentedArrays`, whose arrays up to 1 MiB reuse the shared pool's buckets and
+  whose larger arrays of reference-free elements reuse a bounded large pool
+  (trimmed when a bake's last group finishes and on `MemoryAccount.TrimCaches`).
+  Tables a stage still leases as arrays (`RentedArrays.Rent(minimumLength, out
+  array)`, `RentedScope.Rent`) take that managed path in a World too. Storage
+  types are stop types of the bake's code identity (`SdfMeshBakeClosure`), so
+  changing them bakes nothing again. The stage copies out only the arrays its
+  result keeps. A group's lattices and point tables
   stay in owned native storage. A rental can be longer than requested and its
   contents are unspecified. Fill the range before reading it and track the
   logical count separately. The

@@ -1037,13 +1037,20 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
     collapse, planar merge, chunk binning, the material cut's lists and the
     entry encoder now rent through a `RentedScope` or write in chunks; a cold
     debug-world bake's `allocated:` fell from 78.5 GB to about 50 GB (`done`
-    line, windowed Direct3D 12). What is left is mostly large rentals the pool
-    cannot answer (`rented-large-fresh`, about 29 GB), above all
-    `ExtractRefined`'s per-vertex lists (about 200 bytes a fine vertex, with the
-    plane data twice, then the merged copy of each): a chunk-wise or in-place
-    merge, or a narrower per-vertex record, is the next cut. A pool that keeps
-    1 GB, evicts its oldest array and matches up to twice the length did not
-    change `allocated`.
+    line, windowed Direct3D 12). The contour's lists and tables
+    (`SdfDualContouring.Extract`, `ExtractRefined`, `Merge`'s merged copies and
+    plane runs, the crease split), the weld's and crease split's lists, and every
+    stage's `RentedScope.RentList` and `Buffer` now take the group's native
+    allocator (`OwnedBuffer`), so in a World they never reach the managed heap;
+    that was the bulk of the `rented-large-fresh` share (about 29 GB). Still
+    managed: the tables a stage leases as arrays (`RentedScope.Rent`, the
+    collapse's and planar merge's per-place tables), `ExtractRefined`'s
+    `fineCells` dictionary (one entry per crossed fine cell; a native
+    long-to-int map in `Puck.Abstractions` is its home), the stages' exact
+    outputs listed above, and the mesh store's `RentedMemoryStream` payloads
+    (the stream takes an allocator; `SdfMeshStoreCodec` does not pass one yet).
+    Read the `done` line's `allocated:` and `rented-large-fresh` on the next
+    cold bake to confirm what moved.
   - GPU side: `SdfMeshProbeGpuWork` recreates a slot's origins buffer
     whenever the batch size changes.
 
@@ -1126,9 +1133,11 @@ runtime is [later work](memory-pooling.md). Open beside them:
 - [medium] Managed working memory per admitted bake group is not all in a
   group's peak, so the account cannot pace the collections it causes. The
   field check's projection, the crossing roots, the contour's rented scratch
-  and the refinement's per-cell masks are charged to the group's owner; the
-  stages after the contour (the planar merge, the collapse, chunks, the
-  material cut's builds) still allocate managed arrays no owner claims.
+  and the refinement's per-cell masks are charged to the group's owner, and the
+  contour's and the later stages' lists are native under it; the per-place
+  tables the planar merge, the collapse and chunks lease as arrays are charged
+  but managed, and the stages' exact outputs are managed arrays no owner
+  claims.
 - [low] The library releases evicted claims, which frees native payloads,
   under its own gate (`SdfMeshLibrary`'s `Retain`), the gate the frame thread
   takes in `Restart` through `TryTake`.
@@ -1926,11 +1935,6 @@ in [sweep](#sweep-and-visual-checks).
   and the managed heap holds only what the collector should walk. At scale a
   hub of a dozen worlds holds a dozen worlds' products, so anything a world
   holds must be evictable by the residency that asked for it.
-- [high] A program's field and its appearance are one object, so each
-  appearance change clones the whole program's words
-  (`SdfProgram.WithAppearance`), tens of megabytes for the debug world. Split
-  the field from the appearance, so a colour edit or a state-bound look
-  shares the field's words.
 - [medium] Under the RTX 2060's profile a player build's check declined well
   over a hundred stored mesh loads because the host account had no room to
   read them, and each kept the coarser tier it drew

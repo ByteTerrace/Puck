@@ -209,8 +209,9 @@ public sealed class WorldSolidField : IContactField {
     /// <summary>Gets the deterministic gameplay-query view over the same compiled solid program.</summary>
     public IWorldQuery Query => m_query;
 
-    // The bake's inputs, folded so two fields with equal hashes carry equal grids: the packed program, the cell size,
-    // and the contact reach the band starts from. Zero when no grid is authored.
+    // The bake's inputs, folded so two fields with equal hashes carry equal grids: the program's field words (its
+    // appearance moves no distance), the cell size, and the contact reach the band starts from. Zero when no grid is
+    // authored.
     private static ulong BakeHash(SdfProgram program, FixedQ4816 cellSize, FixedQ4816 contactReach) {
         if (cellSize <= FixedQ4816.Zero) {
             return 0UL;
@@ -218,7 +219,7 @@ public sealed class WorldSolidField : IContactField {
 
         var hash = Fnv1aHash.Create();
 
-        foreach (var word in program.Words) {
+        foreach (var word in program.FieldWords) {
             hash.Add(value: word);
         }
 

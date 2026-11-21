@@ -433,7 +433,7 @@ Savings are against run D's 77-second lockstep bake unless stated; run C's
    boot's done line approaches run D's seconds, with `owed-jobs` carrying the
    holes' batches and `budget-holds` near zero while groups owe floors.
 2. **Stop allocating the CPU stages' scratch afresh.** The contour, crossing
-   search, weld and crease split now rent their workspace (`RentedList`,
+   search, weld and crease split now rent their workspace (`OwnedBuffer`,
    `RentedArrays`), which took a cold debug-world bake's collections from
    748/709/106 (gen0/gen1/gen2) to about 330/290/35 and its allocation by about
    a third; the collapse, planar merge, chunking and material cut still

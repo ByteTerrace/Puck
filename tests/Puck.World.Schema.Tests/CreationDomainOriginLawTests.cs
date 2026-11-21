@@ -262,8 +262,8 @@ public sealed class CreationDomainOriginLawTests {
         ));
 
         Assert.Equal(
-            actual: withZeroOrigin.Words.ToArray(),
-            expected: withoutOrigin.Words.ToArray()
+            actual: withZeroOrigin.CopyWords(),
+            expected: withoutOrigin.CopyWords()
         );
     }
     /// <summary>A zero origin is byte-identical to an absent one, on the render chain: the sandwiching translates
@@ -288,8 +288,8 @@ public sealed class CreationDomainOriginLawTests {
         ));
 
         Assert.Equal(
-            actual: withZeroOrigin.Words.ToArray(),
-            expected: withoutOrigin.Words.ToArray()
+            actual: withZeroOrigin.CopyWords(),
+            expected: withoutOrigin.CopyWords()
         );
     }
     /// <summary>The subject: an origin at the shape's own rest position folds the lattice around it, so all three

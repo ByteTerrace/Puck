@@ -83,19 +83,19 @@ public sealed class SdfMaterialLawTests {
             Inset: (inset ? new SdfInset(Vector3.Zero, Quaternion.Identity, 0.1f, 1f,
                 new([new(0, Vector3.Zero), new(1, Vector3.One)])) : null));
         var program = TestPrograms.Of([Shape()], [material]);
-        var offset = (((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) * 4);
+        var offset = (((int)program.CopyWords()[SdfProgram.ProgramMaterialOffsetLane]) * 4);
 
-        Assert.Equal(0.5f, BitConverter.UInt32BitsToSingle(value: program.Words[(offset + 11)]));
-        Assert.Equal(2f, BitConverter.UInt32BitsToSingle(value: program.Words[(offset + 15)]));
-        Assert.Equal(0.6f, BitConverter.UInt32BitsToSingle(value: program.Words[(offset + 30)]));
-        Assert.Equal(0.7f, BitConverter.UInt32BitsToSingle(value: program.Words[(offset + 31)]));
-        Assert.Equal(0.2f, BitConverter.UInt32BitsToSingle(value: program.Words[(offset + 12)]));
+        Assert.Equal(0.5f, BitConverter.UInt32BitsToSingle(value: program.CopyWords()[(offset + 11)]));
+        Assert.Equal(2f, BitConverter.UInt32BitsToSingle(value: program.CopyWords()[(offset + 15)]));
+        Assert.Equal(0.6f, BitConverter.UInt32BitsToSingle(value: program.CopyWords()[(offset + 30)]));
+        Assert.Equal(0.7f, BitConverter.UInt32BitsToSingle(value: program.CopyWords()[(offset + 31)]));
+        Assert.Equal(0.2f, BitConverter.UInt32BitsToSingle(value: program.CopyWords()[(offset + 12)]));
 
         var defaults = TestPrograms.Of([Shape()], [new SdfMaterial(Vector3.One)]);
-        var defaultOffset = (((int)defaults.Words[SdfProgram.ProgramMaterialOffsetLane]) * 4);
+        var defaultOffset = (((int)defaults.CopyWords()[SdfProgram.ProgramMaterialOffsetLane]) * 4);
 
         foreach (var lane in new[] { 11, 15, 30, 31 }) {
-            Assert.Equal(1f, BitConverter.UInt32BitsToSingle(value: defaults.Words[(defaultOffset + lane)]));
+            Assert.Equal(1f, BitConverter.UInt32BitsToSingle(value: defaults.CopyWords()[(defaultOffset + lane)]));
         }
     }
     // A caller carrying over the retired raw exponent's magnitude (32, the old default) into the new normalized
@@ -286,7 +286,7 @@ public sealed class SdfMaterialLawTests {
             instructions: [Shape()],
             materials: [new SdfMaterial(Albedo: Vector3.One)]
         );
-        var words = program.Words;
+        var words = program.CopyWords();
         var materialOffsetVectors = words[3];
         var m1Base = ((int)((materialOffsetVectors * 4u) + 4u));
         var m2Base = (m1Base + 4);
@@ -377,33 +377,33 @@ public sealed class SdfMaterialLawTests {
         var sweep = new SdfPaint(Color: Vector3.One, Origin: Vector3.Zero, Rotation: Quaternion.Identity, Shape: SdfPaintShape.Of(curve: new SdfSweepParameters(A: Vector3.Zero, B: new Vector3(x: 0.5f, y: 0.25f, z: 0f), Bulge: 0f, C: Vector3.UnitX, RadiusEnd: 0.01f, RadiusStart: 0.01f, StrandOffset: 0f, Strands: 1, Twist: 0f), scale: new Vector3(value: 2f), type: SdfSolidPrimitive.Sweep), Stroke: 0f, Slot: 5);
         var program = TestPrograms.Of([Shape()], [new SdfMaterial(Vector3.One), new SdfMaterial(Vector3.One, Paints: [plane, sweep])]);
 
-        float Lane(int word) => BitConverter.UInt32BitsToSingle(value: program.Words[word]);
-        var materialVector = ((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]);
+        float Lane(int word) => BitConverter.UInt32BitsToSingle(value: program.CopyWords()[word]);
+        var materialVector = ((int)program.CopyWords()[SdfProgram.ProgramMaterialOffsetLane]);
         var paintVector = (materialVector + (2 * SdfAppearance.MaterialVectorsPerEntry));
         var secondMaterial = (((materialVector + SdfAppearance.MaterialVectorsPerEntry) + 20) * 4);
 
-        Assert.Equal(expected: 0u, actual: program.Words[(((materialVector + 20) * 4) + 1)]);
-        Assert.Equal(expected: ((uint)paintVector), actual: program.Words[secondMaterial]);
-        Assert.Equal(expected: 2u, actual: program.Words[(secondMaterial + 1)]);
-        Assert.Equal(expected: (((paintVector + (2 * SdfAppearance.PaintVectorsPerEntry)) + 3) * 4), actual: program.Words.Length);
+        Assert.Equal(expected: 0u, actual: program.CopyWords()[(((materialVector + 20) * 4) + 1)]);
+        Assert.Equal(expected: ((uint)paintVector), actual: program.CopyWords()[secondMaterial]);
+        Assert.Equal(expected: 2u, actual: program.CopyWords()[(secondMaterial + 1)]);
+        Assert.Equal(expected: (((paintVector + (2 * SdfAppearance.PaintVectorsPerEntry)) + 3) * 4), actual: program.WordCount);
         // The shading words, which a lighting-only upload rewrites, are the stream's tail: the materials, then the paints.
-        Assert.Equal(expected: new Range(start: (materialVector * 4), end: program.Words.Length), actual: program.ShadingWords);
+        Assert.Equal(expected: (program.WordCount - (materialVector * 4)), actual: program.ShadingWords.Length);
         Assert.Equal(expected: (materialVector * 4), actual: program.FieldWords.Length);
 
         var first = (paintVector * 4);
 
         Assert.Equal(expected: [0f, 2f, 0f], actual: [Lane(word: first), Lane(word: (first + 1)), Lane(word: (first + 2))]);
-        Assert.Equal(expected: ((uint)SdfShapeType.Plane), actual: program.Words[(first + 3)]);
+        Assert.Equal(expected: ((uint)SdfShapeType.Plane), actual: program.CopyWords()[(first + 3)]);
         Assert.Equal(expected: [0f, 0f, 0f, 1f], actual: Enumerable.Range(count: 4, start: (first + 4)).Select(selector: Lane));
         Assert.Equal(expected: [0.5f, 0.25f, 0.125f, 0.02f], actual: Enumerable.Range(count: 4, start: (first + 20)).Select(selector: Lane));
-        Assert.Equal(expected: SdfAppearance.PaintWinningFrame, actual: program.Words[(first + 24)]);
+        Assert.Equal(expected: SdfAppearance.PaintWinningFrame, actual: program.CopyWords()[(first + 24)]);
         Assert.Equal(expected: [float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity], actual: Enumerable.Range(count: 3, start: (first + 28)).Select(selector: Lane));
 
         var second = ((paintVector + SdfAppearance.PaintVectorsPerEntry) * 4);
 
-        Assert.Equal(expected: ((uint)SdfShapeType.Sweep), actual: program.Words[(second + 3)]);
-        Assert.Equal(expected: ((uint)((paintVector + SdfAppearance.PaintVectorsPerEntry) + 9)), actual: program.Words[(second + 12)]);
-        Assert.Equal(expected: 5u, actual: program.Words[(second + 24)]);
+        Assert.Equal(expected: ((uint)SdfShapeType.Sweep), actual: program.CopyWords()[(second + 3)]);
+        Assert.Equal(expected: ((uint)((paintVector + SdfAppearance.PaintVectorsPerEntry) + 9)), actual: program.CopyWords()[(second + 12)]);
+        Assert.Equal(expected: 5u, actual: program.CopyWords()[(second + 24)]);
         Assert.Equal(expected: [0f, 0f, 0f, 0.02f, 1f, 0.5f, 0f, 0.02f, 2f, 0f, 0f, 0f], actual: Enumerable.Range(count: 12, start: (second + 36)).Select(selector: Lane));
         foreach (var paint in new[] {
             plane with { Rotation = default }, plane with { Stroke = -1f },
@@ -477,11 +477,11 @@ public sealed class SdfMaterialLawTests {
         var scale = new Vector3(x: 0.115f, y: 0.105f, z: 0.06f);
         var paint = new SdfPaint(Color: Vector3.One, Origin: Vector3.Zero, Rotation: Quaternion.Identity, Shape: SdfPaintShape.Of(profile: profile, scale: scale, type: SdfSolidPrimitive.Prism), Stroke: 0f);
         var program = TestPrograms.Of([Shape()], [new SdfMaterial(Vector3.One, Paints: [paint])]);
-        var first = ((((int)program.Words[SdfProgram.ProgramMaterialOffsetLane]) + SdfAppearance.MaterialVectorsPerEntry) * 4);
-        var reference = program.Words[(first + 12)];
+        var first = ((((int)program.CopyWords()[SdfProgram.ProgramMaterialOffsetLane]) + SdfAppearance.MaterialVectorsPerEntry) * 4);
+        var reference = program.CopyWords()[(first + 12)];
         var count = ((int)((reference & ((1u << SdfPrismProfile.ConvexCountBits) - 1u)) + 1u));
         var tableWord = ((int)((reference >> SdfPrismProfile.ConvexCountBits) * 4u));
-        var packed = Enumerable.Range(count: count, start: 0).Select(selector: index => new Vector2(x: BitConverter.UInt32BitsToSingle(value: program.Words[(tableWord + (2 * index))]), y: BitConverter.UInt32BitsToSingle(value: program.Words[((tableWord + (2 * index)) + 1)]))).ToArray();
+        var packed = Enumerable.Range(count: count, start: 0).Select(selector: index => new Vector2(x: BitConverter.UInt32BitsToSingle(value: program.CopyWords()[(tableWord + (2 * index))]), y: BitConverter.UInt32BitsToSingle(value: program.CopyWords()[((tableWord + (2 * index)) + 1)]))).ToArray();
 
         Assert.Equal(actual: count, expected: sides);
         Assert.Equal(expected: vertices.Select(selector: vertex => (vertex * new Vector2(x: scale.X, y: scale.Y))), actual: packed);
@@ -569,7 +569,7 @@ public sealed class SdfMaterialLawTests {
             [Shape()],
             [material]
         );
-        var words = program.Words;
+        var words = program.CopyWords();
         var offset = (((int)words[3]) * 4);
 
         Assert.Equal(
@@ -612,7 +612,7 @@ public sealed class SdfMaterialLawTests {
             instructions: [Shape()],
             materials: [material]
         );
-        var words = program.Words;
+        var words = program.CopyWords();
         var materialOffsetVectors = words[3];
         var m1Base = ((int)((materialOffsetVectors * 4u) + 4u));
         var m2Base = (m1Base + 4);
@@ -721,13 +721,13 @@ public sealed class SdfMaterialLawTests {
             [Shape()],
             [new SdfMaterial(Vector3.One)]
         );
-        var offset = (((int)program.Words[3]) * 4);
+        var offset = (((int)program.CopyWords()[3]) * 4);
 
         // The inset's unused tail shares two lanes with the material's unit-default indirect bleed channels.
         for (var i = (4 * 4); (i < (SdfAppearance.MaterialVectorsPerEntry * 4)); i++) {
             Assert.Equal(
                 ((i is 30 or 31) ? BitConverter.SingleToUInt32Bits(value: 1f) : 0u),
-                program.Words[(offset + i)]
+                program.CopyWords()[(offset + i)]
             );
         }
     }
@@ -750,10 +750,10 @@ public sealed class SdfMaterialLawTests {
         var program = TestPrograms.Of([Shape()], [new(Vector3.One, Weathering: weathering)]);
         var plain = TestPrograms.Of([Shape()], [new(Vector3.One)]);
 
-        Assert.Equal(plain.Words.Length, program.Words.Length);
-        var offset = (((int)program.Words[3]) * 4);
+        Assert.Equal(plain.WordCount, program.WordCount);
+        var offset = (((int)program.CopyWords()[3]) * 4);
 
-        float At(int row, int component) => BitConverter.UInt32BitsToSingle(value: program.Words[((offset + (row * 4)) + component)]);
+        float At(int row, int component) => BitConverter.UInt32BitsToSingle(value: program.CopyWords()[((offset + (row * 4)) + component)]);
         Assert.Equal(16f, At(component: 3, row: 15));
         Assert.Equal(0.6f, At(component: 3, row: 17));
         Assert.Equal(16f, At(component: 2, row: 19));
@@ -769,7 +769,7 @@ public sealed class SdfMaterialLawTests {
             Octaves = 2, OctaveRatio = 2.03f, OctaveGain = 0.534f, Turn = new Quaternion(w: 0.8f, x: 0.2f, y: -0.4f, z: -0.4f),
         })]);
 
-        float Character(int row, int component) => BitConverter.UInt32BitsToSingle(value: character.Words[((offset + (row * 4)) + component)]);
+        float Character(int row, int component) => BitConverter.UInt32BitsToSingle(value: character.CopyWords()[((offset + (row * 4)) + component)]);
         Assert.Equal(2.03f, Character(component: 2, row: 15));
         Assert.Equal(0.534f, Character(component: 3, row: 18));
         Assert.Equal(new Vector4(w: 0.8f, x: 0.2f, y: -0.4f, z: -0.4f), new Vector4(Character(component: 0, row: 26), Character(component: 1, row: 26), Character(component: 2, row: 26), Character(component: 3, row: 26)));
@@ -777,8 +777,8 @@ public sealed class SdfMaterialLawTests {
             Turn = new Quaternion(w: 4f, x: 0f, y: 0f, z: 3f),
         })]);
 
-        Assert.Equal(0.6f, BitConverter.UInt32BitsToSingle(value: unnormalised.Words[((offset + (26 * 4)) + 2)]), precision: 6);
-        Assert.Equal(0.8f, BitConverter.UInt32BitsToSingle(value: unnormalised.Words[((offset + (26 * 4)) + 3)]), precision: 6);
+        Assert.Equal(0.6f, BitConverter.UInt32BitsToSingle(value: unnormalised.CopyWords()[((offset + (26 * 4)) + 2)]), precision: 6);
+        Assert.Equal(0.8f, BitConverter.UInt32BitsToSingle(value: unnormalised.CopyWords()[((offset + (26 * 4)) + 3)]), precision: 6);
         foreach (var bad in new[] {
             weathering with { Octaves = 0 }, weathering with { Octaves = 3 }, weathering with { OctaveRatio = 1f },
             weathering with { OctaveGain = 0f }, weathering with { OctaveGain = 1.5f },

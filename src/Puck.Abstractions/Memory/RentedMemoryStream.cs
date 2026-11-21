@@ -1,15 +1,16 @@
 namespace Puck.Abstractions.Memory;
 
 /// <summary>
-/// A write-only stream that collects bytes in rented storage (<see cref="RentedList{T}"/>), for an encoder whose output
+/// A write-only stream that collects bytes in owned storage (<see cref="OwnedBuffer{T}"/>), for an encoder whose output
 /// must be complete before its length is known: a <see cref="MemoryStream"/> grows by doubling and leaves every outgrown
-/// buffer for the collector, where this stream hands them back to <see cref="RentedArrays"/> for the next entry's
-/// buffer. Disposing it releases the storage, so <see cref="Written"/> is a borrow that ends there.
+/// buffer for the collector, where this stream keeps its storage native or hands it back to <see cref="RentedArrays"/>
+/// for the next entry's buffer. Disposing it releases the storage, so <see cref="Written"/> is a borrow that ends there.
 /// </summary>
-/// <param name="capacity">The bytes the first rented array holds at least.</param>
+/// <param name="capacity">The bytes the first storage holds at least.</param>
 /// <param name="owner">The workspace owner charged for the storage, or null for an unmetered stream.</param>
-public sealed class RentedMemoryStream(int capacity = 0, IAllocationObserver? owner = null) : Stream {
-    private readonly RentedList<byte> m_bytes = new(capacity: capacity, owner: owner);
+/// <param name="allocator">The native allocator the storage comes from, or null to rent it.</param>
+public sealed class RentedMemoryStream(int capacity = 0, IAllocationObserver? owner = null, IAllocator? allocator = null) : Stream {
+    private readonly OwnedBuffer<byte> m_bytes = new(allocator: allocator, capacity: capacity, observer: owner);
 
     /// <inheritdoc/>
     public override bool CanRead => false;
@@ -18,14 +19,14 @@ public sealed class RentedMemoryStream(int capacity = 0, IAllocationObserver? ow
     /// <inheritdoc/>
     public override bool CanWrite => true;
     /// <inheritdoc/>
-    public override long Length => m_bytes.Count;
+    public override long Length => m_bytes.Length;
     /// <inheritdoc/>
     public override long Position {
-        get => m_bytes.Count;
+        get => m_bytes.Length;
         set => throw new NotSupportedException();
     }
     /// <summary>Gets the bytes written so far, valid until the next write or disposal.</summary>
-    public ReadOnlySpan<byte> Written => m_bytes.AsSpan();
+    public ReadOnlySpan<byte> Written => m_bytes.GetSpan();
 
     /// <inheritdoc/>
     public override void Flush() { }

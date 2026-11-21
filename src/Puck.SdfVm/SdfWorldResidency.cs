@@ -211,7 +211,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             $"{(m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none")} late-stagings={LateStagings}{(m_tables?.GpuWork.Describe() ?? string.Empty)}",
             (m_tables?.DescribeFrameSampled() ?? "frame-sampled=none"),
             $"change-history-logical-bytes transforms={(m_frame?.MovedTransforms?.StorageBytes ?? 0)} draws={(m_frame?.DrawRows.Changes?.StorageBytes ?? 0)} dresser-scratch={m_meshDresser.ScratchBytes} staging-runs={(m_tables?.DrawChangeScratchBytes ?? 0)} (array payload; headers excluded)",
-            string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"program-instances={(program?.Instances.Count ?? 0)} program-words={(program?.Words.Length ?? 0)} program-builds={(composition?.ProgramBuilds ?? 0)} emit-ms={(composition?.EmitMilliseconds ?? 0d):0.0} build-ms={(composition?.BuildMilliseconds ?? 0d):0.0}"),
+            string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"program-instances={(program?.Instances.Count ?? 0)} program-words={(program?.WordCount ?? 0)} program-builds={(composition?.ProgramBuilds ?? 0)} emit-ms={(composition?.EmitMilliseconds ?? 0d):0.0} build-ms={(composition?.BuildMilliseconds ?? 0d):0.0}"),
             MeshIrradiance.DescribeCache(),
             .. MeshPathBake.DescribeDemand(),
         ];
@@ -1271,7 +1271,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         NoteProgram(program: program);
     }
     private void NoteProgram(SdfProgram program) {
-        LiveProgramWords = program.Words.Length;
+        LiveProgramWords = program.WordCount;
         LiveProgramInstances = program.Instances.Count;
         LiveProgramStepScale = program.StepScale;
         LiveProgramStepScaleBinder = program.StepScaleBinder;

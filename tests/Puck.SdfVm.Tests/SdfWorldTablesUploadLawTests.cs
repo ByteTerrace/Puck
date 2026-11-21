@@ -55,14 +55,14 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         var large = builder.Build();
 
-        Assert.True(condition: (large.Words.Length > GpuRegion.CopyRowThreads));
-        Assert.True(condition: (GpuRegion.CopyGroups(count: ((uint)large.Words.Length)).Y >= 2U));
+        Assert.True(condition: (large.WordCount > GpuRegion.CopyRowThreads));
+        Assert.True(condition: (GpuRegion.CopyGroups(count: ((uint)large.WordCount)).Y >= 2U));
         rig.Warm();
         rig.Engine.UploadProgram(program: large);
         rig.Render(time: 0f);
         Assert.Equal(
-            expected: MemoryMarshal.AsBytes(span: large.Words).ToArray(),
-            actual: rig.Gpu.DeviceLocal(sizeBytes: (((ulong)large.Words.Length) * sizeof(uint)))
+            expected: MemoryMarshal.AsBytes(span: large.CopyWords()).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: (((ulong)large.WordCount) * sizeof(uint)))
         );
     }
     [Fact]
@@ -301,11 +301,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // One ring slot's program staging buffer takes the changed words, their runs and the header, and the copy
         // leaves the device-local program exactly the edited words.
         Assert.Equal(expected: (programBytes + StagingReserveBytes), actual: Assert.Single(collection: writes).SizeBytes);
-        Assert.InRange(actual: writes[0].Written, high: (StagingReserveBytes + (edited.Words.Length * sizeof(uint))), low: ((HeaderBytes + RunEntryBytes) + sizeof(uint)));
+        Assert.InRange(actual: writes[0].Written, high: (StagingReserveBytes + (edited.WordCount * sizeof(uint))), low: ((HeaderBytes + RunEntryBytes) + sizeof(uint)));
         Assert.Equal(
-            expected: MemoryMarshal.AsBytes(span: edited.Words).ToArray(),
+            expected: MemoryMarshal.AsBytes(span: edited.CopyWords()).ToArray(),
             actual: rig.Gpu.DeviceLocal(sizeBytes: programBytes).AsSpan(
-                length: (edited.Words.Length * sizeof(uint)),
+                length: (edited.WordCount * sizeof(uint)),
                 start: 0
             ).ToArray()
         );
@@ -337,11 +337,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         var programBytes = (((ulong)rig.Engine.ProgramWordCapacity) * sizeof(uint));
 
-        Assert.InRange(actual: Assert.Single(collection: rig.Gpu.HostWrites()).Written, high: (StagingReserveBytes + (edited.Words.Length * sizeof(uint))), low: ((HeaderBytes + RunEntryBytes) + sizeof(uint)));
+        Assert.InRange(actual: Assert.Single(collection: rig.Gpu.HostWrites()).Written, high: (StagingReserveBytes + (edited.WordCount * sizeof(uint))), low: ((HeaderBytes + RunEntryBytes) + sizeof(uint)));
         Assert.Equal(
-            expected: MemoryMarshal.AsBytes(span: edited.Words).ToArray(),
+            expected: MemoryMarshal.AsBytes(span: edited.CopyWords()).ToArray(),
             actual: rig.Gpu.DeviceLocal(sizeBytes: programBytes).AsSpan(
-                length: (edited.Words.Length * sizeof(uint)),
+                length: (edited.WordCount * sizeof(uint)),
                 start: 0
             ).ToArray()
         );
@@ -353,7 +353,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             programWordReserve: Reserve,
             slots: 1
         );
-        var words = Program(albedo: Vector3.One).Words.Length;
+        var words = Program(albedo: Vector3.One).WordCount;
 
         rig.Warm();
 
@@ -361,7 +361,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: Reserve, actual: rig.Engine.ProgramWordCapacity);
         _ = Assert.Throws<InvalidOperationException>(testCode: () => rig.Gpu.DeviceLocal(sizeBytes: (Reserve * sizeof(uint))));
         Assert.Equal(
-            expected: MemoryMarshal.AsBytes(span: Program(albedo: Vector3.One).Words).ToArray(),
+            expected: MemoryMarshal.AsBytes(span: Program(albedo: Vector3.One).CopyWords()).ToArray(),
             actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(words * sizeof(uint))))
         );
 
@@ -378,21 +378,21 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         var larger = builder.Build();
         var grown = Math.Max(
-            val1: larger.Words.Length,
+            val1: larger.WordCount,
             val2: (words + (words / 2))
         );
 
         // The delta names the words the larger program differs in from the live one, but the grown region holds none of
         // the live program's words, so the upload writes the program whole.
-        Assert.True(condition: (larger.Words.Length > words));
+        Assert.True(condition: (larger.WordCount > words));
         rig.Engine.UploadProgram(
             delta: SdfProgramDelta.Between(from: rig.LiveProgram, to: larger),
             program: larger
         );
         rig.Render(time: 0f);
         Assert.Equal(
-            expected: MemoryMarshal.AsBytes(span: larger.Words).ToArray(),
-            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(grown * sizeof(uint))))[..(larger.Words.Length * sizeof(uint))]
+            expected: MemoryMarshal.AsBytes(span: larger.CopyWords()).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(grown * sizeof(uint))))[..(larger.WordCount * sizeof(uint))]
         );
         Assert.Equal(expected: Reserve, actual: rig.Engine.ProgramWordCapacity);
     }
@@ -1122,17 +1122,17 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         }
 
         var larger = builder.Build();
-        var words = Program(albedo: Vector3.One).Words.Length;
+        var words = Program(albedo: Vector3.One).WordCount;
         var grown = Math.Max(
-            val1: larger.Words.Length,
+            val1: larger.WordCount,
             val2: (words + (words / 2))
         );
 
         rig.Engine.UploadProgram(program: larger);
         rig.Render(time: 0f);
         Assert.Equal(
-            expected: MemoryMarshal.AsBytes(span: larger.Words).ToArray(),
-            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(grown * sizeof(uint))))[..(larger.Words.Length * sizeof(uint))]
+            expected: MemoryMarshal.AsBytes(span: larger.CopyWords()).ToArray(),
+            actual: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(grown * sizeof(uint))))[..(larger.WordCount * sizeof(uint))]
         );
 
         builder = new SdfProgramBuilder();

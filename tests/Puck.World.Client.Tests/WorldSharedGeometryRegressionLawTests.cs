@@ -35,7 +35,7 @@ public sealed class WorldSharedGeometryRegressionLawTests {
             fresh.Deliver(look, 1);
             var expected = fresh.Frame();
 
-            Assert.Equal(expected.Program.Words.ToArray(), changed.Program.Words.ToArray());
+            Assert.Equal(expected.Program.CopyWords(), changed.Program.CopyWords());
             Assert.Equal(expected.DynamicTransforms.ToArray(), changed.DynamicTransforms.ToArray());
         }
     }

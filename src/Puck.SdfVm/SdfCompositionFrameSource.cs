@@ -274,7 +274,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// <summary>Gets the live program's instance count, or zero before its first build.</summary>
     public int InstanceCapacity => (m_program?.Instances.Count ?? 0);
     /// <summary>Gets the live program's word count, or zero before its first build.</summary>
-    public int ProgramWordCapacity => (m_program?.Words.Length ?? 0);
+    public int ProgramWordCapacity => (m_program?.WordCount ?? 0);
 
     // The composition owns its emission storage. Capture emits only after the previous asynchronous build has joined;
     // Build snapshots its inputs, so neither a built program nor an observer borrows this builder after that join.
@@ -765,7 +765,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         dressed.Compose(meshAssetSlots: m_meshAssetSlots, meshInstances: m_meshInstances, sampled: m_sampled, slotClips: ComposeSlotClips(),
             copyChanges: m_copyChanges.Reader, copyChangesSerial: m_copyChanges.Serial);
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
-        if (Frames == 0) { Console.Error.WriteLine(value: $"[world.render] envelope: {m_program!.Instances.Count} instances, {m_program.MaterialCount} materials, {m_program.Words.Length} program words, {m_transforms.Length} dynamic slots, {m_meshAssetSlots.Count} geometry assets, {m_meshInstances.Count} rigid copies"); }
+        if (Frames == 0) { Console.Error.WriteLine(value: $"[world.render] envelope: {m_program!.Instances.Count} instances, {m_program.MaterialCount} materials, {m_program.WordCount} program words, {m_transforms.Length} dynamic slots, {m_meshAssetSlots.Count} geometry assets, {m_meshInstances.Count} rigid copies"); }
         Frames++;
         return dressed;
     }

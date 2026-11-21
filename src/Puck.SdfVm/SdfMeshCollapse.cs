@@ -53,7 +53,8 @@ public static class SdfMeshCollapse {
     /// enough (<see cref="KeptShare"/>).</returns>
     /// <param name="owner">The workspace owner charged for the collapse's tables, or <see langword="null"/> for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
-    public static SdfMesh Levels(SdfMesh mesh, bool preserveFeatures = false, IAllocationObserver? owner = null) {
+    /// <param name="allocator">The native allocator the collapse's lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> to rent them.</param>
+    public static SdfMesh Levels(SdfMesh mesh, bool preserveFeatures = false, IAllocationObserver? owner = null, IAllocator? allocator = null) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
 
         var cell = MathF.Max(x: mesh.BakeCell.X, y: MathF.Max(x: mesh.BakeCell.Y, y: mesh.BakeCell.Z));
@@ -62,7 +63,7 @@ public static class SdfMeshCollapse {
             return mesh;
         }
 
-        using var scope = new RentedScope(owner: owner);
+        using var scope = new RentedScope(allocator: allocator, owner: owner);
         var collapser = new Collapser(mesh: mesh, preserveFeatures: preserveFeatures, scope: scope);
 
         if (preserveFeatures && !collapser.HasFeatures) { return mesh; }
@@ -125,11 +126,11 @@ public static class SdfMeshCollapse {
         // The line samples: each crease or material edge vertex and each such edge's midpoint, tracked to the edge of the
         // line it lies nearest now, keyed by the edge's places; and each one's distance there. A surface sample can sit
         // inside a triangle that fills a notch in a face's outline at no distance, so the line itself is measured.
-        private readonly RentedList<double> m_lineX;
-        private readonly RentedList<double> m_lineY;
-        private readonly RentedList<double> m_lineZ;
-        private readonly RentedList<double> m_lineDistance;
-        private readonly RentedList<int> m_lineNext;
+        private readonly OwnedBuffer<double> m_lineX;
+        private readonly OwnedBuffer<double> m_lineY;
+        private readonly OwnedBuffer<double> m_lineZ;
+        private readonly OwnedBuffer<double> m_lineDistance;
+        private readonly OwnedBuffer<int> m_lineNext;
         private readonly Dictionary<long, (int First, int Last)> m_lines = new(comparer: PackedIntPairComparer.Instance);
 
         // Each triangle's bound on how far it strays from the mesh's own surface (zero for the mesh's own triangles).
@@ -175,7 +176,7 @@ public static class SdfMeshCollapse {
         private readonly List<int> m_seams = [];
         // Sorted targets in independent runs. A commit invalidates the old source fan and
         // the old target fan: every edge whose topology or endpoint quadric changed touches one of them.
-        private readonly RentedList<(double Cost, int Place)> m_prices;
+        private readonly OwnedBuffer<(double Cost, int Place)> m_prices;
         private readonly (int Start, int Capacity, int Count, bool Ready)[] m_priceRuns;
         private readonly List<int> m_samples = [];
         private readonly List<(int Triangle, double Distance)> m_choices = [];
@@ -305,11 +306,11 @@ public static class SdfMeshCollapse {
                 }
             }
 
-            var samples = sampleTriangles.Count;
+            var samples = sampleTriangles.Length;
 
             m_sampleCount = samples;
             m_sampleVertex = scope.Rent<int>(minimumLength: samples);
-            sampleVertices.AsSpan().CopyTo(destination: m_sampleVertex);
+            sampleVertices.GetSpan().CopyTo(destination: m_sampleVertex);
             m_sampleMaterial = scope.Rent<uint>(minimumLength: samples);
             m_sampleDistance = scope.Rent<double>(minimumLength: samples, clear: true);
             m_sampleNext = scope.Rent<int>(minimumLength: samples);
@@ -373,7 +374,7 @@ public static class SdfMeshCollapse {
             foreach (var distance in m_sampleDistance.AsSpan(start: 0, length: m_sampleCount)) {
                 largest = Math.Max(val1: largest, val2: distance);
             }
-            foreach (var distance in m_lineDistance.AsSpan()) {
+            foreach (var distance in m_lineDistance.GetSpan()) {
                 largest = Math.Max(val1: largest, val2: distance);
             }
             for (var triangle = 0; (triangle < m_triangles); triangle++) {
@@ -436,11 +437,11 @@ public static class SdfMeshCollapse {
                 Targets(place);
                 var count = m_targetPlaces.Count;
                 if (count > run.Capacity) {
-                    run.Start = m_prices.Count;
+                    run.Start = m_prices.Length;
                     run.Capacity = Math.Max(count, 2 * run.Capacity);
                     _ = m_prices.Extend(count: run.Capacity);
                 }
-                var prices = m_prices.AsSpan().Slice(run.Start, count);
+                var prices = m_prices.GetSpan().Slice(run.Start, count);
                 for (var index = 0; index < count; index++) {
                     var target = m_targetPlaces[index];
                     prices[index] = (Cost(place, target), target);
@@ -449,7 +450,7 @@ public static class SdfMeshCollapse {
                 run.Count = count;
                 run.Ready = true;
             }
-            return m_prices.AsSpan().Slice(run.Start, run.Count);
+            return m_prices.GetSpan().Slice(run.Start, run.Count);
         }
 
         private bool Refused(int from, int to) {
@@ -927,7 +928,7 @@ public static class SdfMeshCollapse {
         }
         private static long Key(int a, int b) => PackedIntPair.Pack(high: Math.Min(val1: a, val2: b), low: Math.Max(val1: a, val2: b));
         private void AddLine(int a, int b, double x, double y, double z) {
-            var sample = m_lineX.Count;
+            var sample = m_lineX.Length;
 
             m_lineNext.Add(item: -1);
             AppendLine(a: a, b: b, sample: sample);

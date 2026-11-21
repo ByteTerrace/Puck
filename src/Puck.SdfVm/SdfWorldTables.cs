@@ -161,7 +161,7 @@ public sealed partial class SdfWorldTables : IDisposable {
     private readonly byte[] m_volumeScratch = new byte[(MaxVolumes * VolumeByteLength)];
     private SdfProgram m_liveProgram = null!;
 
-    internal uint[] CopyLiveProgramWords() => m_liveProgram.Words.ToArray();
+    internal uint[] CopyLiveProgramWords() => m_liveProgram.CopyWords();
 
     /// <summary>Gets or sets the debug-group label wrapping each upload the tables record — the outer scope a GPU capture
     /// (RenderDoc / PIX / Nsight) shows around its copies. Presentation-only; defaults to
