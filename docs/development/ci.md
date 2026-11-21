@@ -958,7 +958,15 @@ World workers use the Azure Linux Marketplace image `main.bicepparam` pins
 (`imageReference`). The silo container retains its Ubuntu-based .NET runtime;
 the host OS and container libraries are upgraded independently. The bootstrap
 installs Microsoft's Moby packages on Azure Linux and retains Ubuntu support
-for rollback. It preserves the host firewall policy and installs only the
+for rollback. Those packages come from the live repository, not the pinned
+image, and their daemons are built with Microsoft's Go, which loads the host's
+`libcrypto` at start; neither `moby-engine` nor `containerd2` requires a
+minimum `openssl-libs`. So the bootstrap takes the repository's `openssl-libs`
+in its own transaction on every pass, before installing or restarting any
+daemon. Without that step, an image older than `openssl-libs` 3.3.7-5.azl3
+rejects the ML-KEM key share that Go 1.27 offers by default
+(microsoft/go#2472, fixed by microsoft/azurelinux#18630), and `docker login`
+fails its TLS handshake. It preserves the host firewall policy and installs only the
 configured QUIC UDP port and the health port from Azure's load-balancer probe
 address. The service restores those rules after reboot. The deployment is the
 one place that names every interface: the world document it publishes sets
