@@ -1,7 +1,7 @@
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Imports
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-import { worldSiloConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.6'
+import { worldSiloConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.7'
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Parameters

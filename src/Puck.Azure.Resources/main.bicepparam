@@ -625,9 +625,8 @@ param resources = {
       osDiskSizeGB: 64
       osDiskStorageType: 'StandardSSD_LRS'
       sku: 'Standard_D2as_v5'
-      // Presence selects Spot priority. restoreTimeout is read by nothing: Flexible scale sets refuse Try & Restore, and
-      // the published world-silo type still requires the field until its next Template Spec version drops it.
-      spot: { restoreTimeout: 'PT1H' }
+      // Presence selects Spot priority.
+      spot: {}
       vmNamePrefix: '${prefix}vmp000'
       zones: [1]
     }

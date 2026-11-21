@@ -609,6 +609,13 @@ public static partial class AzureCommand {
             throw new InvalidOperationException(message: $"World guest operation on {worker} did not confirm completion: {output.Trim()}");
         }
     }
+    // Asks the worker's lifecycle listener for one health route on loopback. --fail-with-body keeps the reason a withheld
+    // readiness writes, so a failure names it.
+    private static Task WorldHealthAsync(string group, string worker, int port, string route) => WorldGuestAsync(
+        group: group,
+        script: $"curl --fail-with-body --silent --show-error --max-time 30 http://127.0.0.1:{port}{route}",
+        worker: worker
+    );
     /// <summary>Runs a shell script on a world worker through the VM agent and returns its combined output. The agent
     /// reports success whatever the script's exit status, so a caller proves completion by a marker the script prints
     /// last and, when it is missing, reports this output: it carries the script's stderr, the failure's cause.</summary>

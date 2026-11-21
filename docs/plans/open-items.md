@@ -3006,14 +3006,6 @@ is pushed to `main` ([the player channel](../development/ci.md#the-player-channe
   `lnr0626/certmagic-azureblob` (MIT, managed identity, blob-lease locks) is
   the candidate found, young and from one author, and it needs a custom
   `xcaddy` build in place of the pinned official image.
-- [low] `worldSiloConfigType`'s `compute.spot.restoreTimeout`
-  (`avm/ptn/platform/world-silo/main.bicep`) is read by nothing, since Flexible
-  scale sets refuse Spot Try & Restore and `worldSiloCompute.bicep` holds the
-  worker count with an autoscale setting instead. The type comes from the
-  published `ptn_platform_world-silo` Template Spec, so dropping the field
-  needs a new spec version in `template-specs.json`, every `ts/bvm` import
-  moved to it, and `puck azure publish-template-specs` run before CI builds
-  against it.
 - [medium] Composite ReadyToRun puts the framework and Puck in one image of
   about 291 MB (`Puck.World.r2r.dll`), so every engine change re-downloads it
   whole through a channel built to ship only the files that changed. Read
