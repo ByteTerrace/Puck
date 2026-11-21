@@ -804,8 +804,9 @@ only. Pull requests have no Azure credentials. Trusted infrastructure
 builds authenticate before restoring the pinned `ts/bvm` Template Specs through
 `src/Puck.Azure.Resources/bicepconfig.json`, and refuse a pattern whose pinned
 version is unpublished or differs from its source, since the deploy reads the
-published version; `puck azure publish-template-specs`, run by the owner,
-publishes a new version.
+published version. `puck azure publish-template-specs`, run by the owner or the
+lead, publishes a new version or republishes a changed one in place: a published
+version is greenfield, since this repository's deployments are its only clients.
 
 The `Puck` GitHub environment supplies `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and
 `AZURE_SUBSCRIPTION_ID` for the single CI identity, `bytrcidpzzz` (client ID

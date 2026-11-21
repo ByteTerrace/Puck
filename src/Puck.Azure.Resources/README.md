@@ -236,7 +236,7 @@ puck azure publish-template-specs
 Run that command from the repository root after authenticating Azure CLI and
 installing the CI-pinned Bicep version. Bootstrap calls the same publisher.
 The publisher compiles sources in dependency order, skips identical published
-versions and rejects changed content under an existing version. The comparison
+versions and republishes changed content under an existing version in place (a published version is greenfield: this repository's deployments are its only clients). The comparison
 ignores the compiler's `_generator` stamp, so a Bicep upgrade alone needs no new
 version. Bump the manifest
 version and consuming Bicep references together; existing published versions are

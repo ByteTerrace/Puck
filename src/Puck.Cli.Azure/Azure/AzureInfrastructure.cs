@@ -560,14 +560,17 @@ public static partial class AzureCommand {
 
                 NormalizeTemplate(node: published);
                 NormalizeTemplate(node: compiled);
-                if (!JsonNode.DeepEquals(
+                if (JsonNode.DeepEquals(
                     node1: published,
                     node2: compiled
-                )) { throw new InvalidDataException(message: $"Template Spec {name}:{version} differs from source. Author a new version; published versions are immutable."); }
-                Console.WriteLine(value: $"Already published: {name}:{version}");
-                continue;
-            }
-            if (!publish) { throw new InvalidOperationException(message: $"Template Spec {name}:{version} is not published. Run `puck azure publish-template-specs` before CI builds against it."); }
+                )) {
+                    Console.WriteLine(value: $"Already published: {name}:{version}");
+                    continue;
+                }
+                // A published version is greenfield like any other artifact: its only clients are this repository's
+                // own deployments, so a changed source republishes the version in place rather than demanding a new one.
+                if (!publish) { throw new InvalidDataException(message: $"Template Spec {name}:{version} differs from source. Run `puck azure publish-template-specs` before CI builds against it."); }
+            } else if (!publish) { throw new InvalidOperationException(message: $"Template Spec {name}:{version} is not published. Run `puck azure publish-template-specs` before CI builds against it."); }
             var location = await AzAsync(
                 "group",
                 "show",
@@ -598,6 +601,7 @@ public static partial class AzureCommand {
                 template,
                 "--tags",
                 "ManagedBy=Bicep",
+                "--yes",
                 "-o",
                 "none"
             );
