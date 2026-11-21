@@ -341,7 +341,7 @@ public sealed partial class DocumentScope {
     /// <summary>Reads a deferred binding together with its lexical scope, for vocabulary compilers that lower
     /// expressions rather than evaluate document values. Locals still take precedence at the caller.</summary>
     public bool TryGetExpression(string name, out ExpressionNode? expression, out DocumentScope lexical) {
-        lexical = (m_arguments.GetValueOrDefault(key: name) ?? ForConstant());
+        lexical = LexicalScopeOf(name: name);
         return Constants.TryGetValue(key: name, value: out expression);
     }
 
@@ -363,44 +363,14 @@ public sealed partial class DocumentScope {
         )) {
             return false;
         }
-        var lexical = (m_arguments.TryGetValue(
-            key: name,
-            value: out var caller
-        )
-            ? caller
-            : ForConstant()
-        );
+        var lexical = LexicalScopeOf(name: name);
         var memo = MemoFor(lexical: lexical);
         (ByReference<ExpressionNode> Expression, string? Field) key = (expression, fieldKey);
 
-        if (memo.TryGetValue(
-            key: key,
-            value: out value
-        )) {
-            return true;
+        if (!memo.TryGetValue(key: key, value: out value)) {
+            value = memo[key] = Guarded(evaluate: _ => EvaluateAtNoPosition(expression: expression, fieldKey: fieldKey, lexical: lexical), expression: expression, lexical: lexical, name: name);
         }
-        var bindingSourcePath = (lexical.SourcePath ?? DefinitionPathOf(value: expression));
-
-        if (!m_evaluating.Add(item: name)) {
-            throw new DocumentEvaluationException(
-                $"The binding '{name}' refers to itself.",
-                expression.Span,
-                PuckDiagnosticCodes.InvalidValue
-            ) {
-                SourceAttributed = true,
-                SourcePath = bindingSourcePath,
-            };
-        }
-        using var sourceScope = Diagnostics.PushSource(sourcePath: bindingSourcePath);
-        try {
-            value = EvaluateAtNoPosition(expression: expression, fieldKey: fieldKey, lexical: lexical);
-            memo[key] = value;
-            return true;
-        } catch (DocumentEvaluationException error) when (!error.SourceAttributed) {
-            throw error.WithSource(sourcePath: bindingSourcePath);
-        } finally {
-            m_evaluating.Remove(item: name);
-        }
+        return true;
     }
 
     /// <summary>Lowers a <c>let</c> holding a record at the position it lands in, as the record written there would
@@ -417,14 +387,22 @@ public sealed partial class DocumentScope {
             return false;
         }
         // Lowered once per position, so a let read in many places refuses a misspelling once, against its own source.
-        var lexical = (m_arguments.TryGetValue(key: name, value: out var caller) ? caller : ForConstant());
+        var lexical = LexicalScopeOf(name: name);
         var memo = MemoFor(lexical: lexical);
         (ByReference<ExpressionNode> Expression, string? Field) key = (expression, $"{fieldKey}\0{position}");
 
-        if (memo.TryGetValue(key: key, value: out var cached)) {
-            value = cached?.DeepClone();
-            return true;
+        if (!memo.TryGetValue(key: key, value: out var lowered)) {
+            lowered = memo[key] = Guarded(evaluate: _ => DocumentLowering.At(context: position, lower: () => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: lexical), scope: lexical), expression: expression, lexical: lexical, name: name);
         }
+        value = lowered?.DeepClone();
+        return true;
+    }
+    // The scope a binding evaluates in: the caller's for a template argument, the declaring scope for a `let`, and a
+    // locals-free view of this one for any other constant.
+    private DocumentScope LexicalScopeOf(string name) => (m_arguments.GetValueOrDefault(key: name) ?? ForConstant());
+    // The one guarded evaluation of a binding: a binding that refers to itself is refused, and a refusal is attributed
+    // to the source that wrote the binding, whose path `evaluate` is handed.
+    private T Guarded<T>(string name, ExpressionNode expression, DocumentScope lexical, Func<string?, T> evaluate) {
         var bindingSourcePath = (lexical.SourcePath ?? DefinitionPathOf(value: expression));
 
         if (!m_evaluating.Add(item: name)) {
@@ -435,11 +413,7 @@ public sealed partial class DocumentScope {
         }
         using var sourceScope = Diagnostics.PushSource(sourcePath: bindingSourcePath);
         try {
-            var lowered = DocumentLowering.At(context: position, lower: () => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: lexical), scope: lexical);
-
-            memo[key] = lowered;
-            value = lowered?.DeepClone();
-            return true;
+            return evaluate(arg: bindingSourcePath);
         } catch (DocumentEvaluationException error) when (!error.SourceAttributed) {
             throw error.WithSource(sourcePath: bindingSourcePath);
         } finally {
@@ -650,44 +624,27 @@ public sealed partial class DocumentScope {
         if (Locals.ContainsKey(key: name) || !Constants.TryGetValue(key: name, value: out var expression)) {
             return false;
         }
-        var lexical = (m_arguments.GetValueOrDefault(key: name) ?? ForConstant());
-        var bindingSourcePath = (lexical.SourcePath ?? DefinitionPathOf(value: expression));
+        var lexical = LexicalScopeOf(name: name);
 
-        if (!m_evaluating.Add(item: name)) {
-            throw new DocumentEvaluationException($"The binding '{name}' refers to itself.", expression.Span, PuckDiagnosticCodes.InvalidValue) {
-                SourceAttributed = true,
-                SourcePath = bindingSourcePath,
-            };
-        }
-
-        using var sourceScope = Diagnostics.PushSource(sourcePath: bindingSourcePath);
-        try {
-            var positioned = new DocumentScope(
-                annotations: Annotations,
-                arguments: lexical.m_arguments,
-                basePath: lexical.BasePath,
-                budget: Budget,
-                constants: lexical.Constants,
-                currentPointer: CurrentPointer,
-                diagnostics: Diagnostics,
-                evaluating: m_evaluating,
-                locals: lexical.Locals,
-                schema: Schema,
-                sourceMap: SourceMap,
-                sourcePath: bindingSourcePath,
-                templates: lexical.Templates,
-                templateScopes: lexical.m_templateScopes,
-                values: lexical.m_values,
-                vocabulary: Vocabulary
-            );
-
-            value = DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: positioned);
-            return true;
-        } catch (DocumentEvaluationException error) when (!error.SourceAttributed) {
-            throw error.WithSource(sourcePath: bindingSourcePath);
-        } finally {
-            m_evaluating.Remove(item: name);
-        }
+        value = Guarded(evaluate: bindingSourcePath => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: new DocumentScope(
+            annotations: Annotations,
+            arguments: lexical.m_arguments,
+            basePath: lexical.BasePath,
+            budget: Budget,
+            constants: lexical.Constants,
+            currentPointer: CurrentPointer,
+            diagnostics: Diagnostics,
+            evaluating: m_evaluating,
+            locals: lexical.Locals,
+            schema: Schema,
+            sourceMap: SourceMap,
+            sourcePath: bindingSourcePath,
+            templates: lexical.Templates,
+            templateScopes: lexical.m_templateScopes,
+            values: lexical.m_values,
+            vocabulary: Vocabulary
+        )), expression: expression, lexical: lexical, name: name);
+        return true;
     }
     /// <summary>Creates a scope identical to this one but carrying a different constant set, for a template
     /// invocation's bound parameters.</summary>

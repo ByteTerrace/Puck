@@ -71,7 +71,7 @@ public sealed class WorldDirectoryClaims {
 /// and the official build, read names through here and nowhere else.
 /// <para>
 /// Every read goes through <see cref="CompileInputs"/>, and a compile that reads a directory's claims here rests on one
-/// fact for it (<see cref="CompileInputKind.Claims"/>, which the index answers as the claimer it registers when its
+/// fact for it (<see cref="CompileInputKind.Claims"/>, which the index answers as the declarer it registers when its
 /// assembly loads): the claiming files' names and what each claims. The compile cache serves it again only while that
 /// holds: a claiming file added beside it, removed, or renamed in any letter case, and an edit that changes whether a
 /// source there is a world source, whether it parses, or which names it emits, moves it. An edit to anything else in a
@@ -130,11 +130,11 @@ public static class WorldSourceIndex {
             var held = Build(directory: listed);
 
             return (held.Claims, held.Canonical);
-        }, claimer: DeclarerName, directory: directory);
+        }, declarer: DeclarerName, directory: directory);
     }
     // A directory's claims, built from its listing and what each source there declares, read through the door, or the
     // claims held for the same listing and digests. The one function behind both a claims fact's recording (Index) and
-    // its answer (the claimer RegisterDeclarer registers), so the two cannot disagree.
+    // its answer (the claim RegisterDeclarer registers), so the two cannot disagree.
     private static HeldClaims Build(string directory) {
         var files = CompileInputs.List(directory: directory);
         var digests = new string?[files.Count];
@@ -211,16 +211,11 @@ public static class WorldSourceIndex {
         checkId: "CA2255",
         Justification = "A persisted compile's declaration facts are checked through CompileInputs, which this assembly does not own, before any type here need run; registering when the module loads is the one point every such check follows."
     )]
-    internal static void RegisterDeclarer() {
-        CompileInputs.RegisterDeclarer(
-            declare: static (digest, read) => Canonical(known: Know(digest: digest, read: read)),
-            name: DeclarerName
-        );
-        CompileInputs.RegisterClaimer(
-            claim: static directory => Build(directory: directory).Canonical,
-            name: DeclarerName
-        );
-    }
+    internal static void RegisterDeclarer() => CompileInputs.RegisterDeclarer(
+        claim: static directory => Build(directory: directory).Canonical,
+        declare: static (digest, read) => Canonical(known: Know(digest: digest, read: read)),
+        name: DeclarerName
+    );
 
     // A source's declaration through the door, recorded as a declaration fact: the compile rests on what the source
     // declares, not on its bytes, so a value edit there leaves it standing. Null for a source that is absent or cannot

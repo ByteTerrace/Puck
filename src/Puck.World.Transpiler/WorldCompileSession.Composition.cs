@@ -303,26 +303,6 @@ public sealed partial class WorldCompileSession {
             catalog: catalog
         );
     }
-    /// <summary>Composes <paramref name="rootBytes"/>' basis-and-imports graph exactly as <see cref="TryCompose"/>
-    /// does, without building its tree: a held composition answers its image's bytes, which are shared and never to be
-    /// written.</summary>
-    /// <param name="rootResolvedPath">The root's resolved path.</param>
-    /// <param name="rootBytes">The root document's bytes.</param>
-    /// <param name="composedJson">The composed document's compact UTF-8 JSON, or <see langword="null"/> when the root
-    /// names neither a basis nor imports, so <paramref name="rootBytes"/> is the document.</param>
-    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
-    /// <returns><see langword="true"/> when the graph composed.</returns>
-    public bool TryComposeBytes(string rootResolvedPath, byte[] rootBytes, out byte[]? composedJson, out string reason) {
-        using var pass = CompileInputs.Pass();
-
-        return WorldDefinitionFileSource.TryComposeChainBytes(
-            composedJson: out composedJson,
-            reason: out reason,
-            rootBytes: rootBytes,
-            rootResolvedName: Puck.Abstractions.PuckPaths.Slashed(path: rootResolvedPath),
-            source: this
-        );
-    }
     /// <inheritdoc />
     public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
         content = null;
