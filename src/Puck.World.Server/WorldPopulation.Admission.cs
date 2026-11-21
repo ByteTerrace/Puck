@@ -1028,6 +1028,14 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].AdmissionInstalledGrantTemplates = grantTemplates;
         }
     }
+    /// <summary>Updates one connected peer's live disclosure entitlement after rebuild re-authorization.</summary>
+    /// <param name="bodyIndex">The 0-based remote-peer body index.</param>
+    /// <param name="tier">The matched policy's current disclosure tier.</param>
+    public void SetPeerAdmissionTier(int bodyIndex, WorldDisclosureTier tier) {
+        if (((uint)bodyIndex) < Capacity) {
+            m_entries[bodyIndex].AdmissionTier = tier;
+        }
+    }
     /// <summary>Replaces one connected peer's persistent explicit-revocation set after rebuild re-authorization.</summary>
     /// <param name="bodyIndex">The 0-based remote-peer body index.</param>
     /// <param name="revokedKeys">The currently remembered revoked keys.</param>

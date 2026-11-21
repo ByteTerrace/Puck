@@ -1,6 +1,10 @@
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Text;
+
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 
 using Puck.Abstractions;
 using Puck.Launcher;
@@ -85,6 +89,59 @@ public sealed class WorldSiloHealthListenerLawTests {
             );
         } finally {
             await service.StopAsync(cancellationToken: TestToken);
+        }
+    }
+    [InlineData("127.0.0.1", true)]
+    [InlineData("168.63.129.16", false)]
+    [InlineData(null, false)]
+    [Theory]
+    public async Task PublicHealthRouteRedactsRefusalDetailsForNonLoopbackProbes(string? remoteAddress, bool expectDetailedReason) {
+        using var directory = new TemporaryDirectory();
+        using var output = new BufferedConsoleOutput();
+        var clock = new VirtualClock();
+        var silo = WorldSiloDeadlineLawTests.Silo(
+            clock: clock,
+            directory: directory.RootPath,
+            output: output,
+            store: new FakeObjectBlobStore()
+        );
+        using var instances = silo.Instances;
+        silo.Ready = true;
+        silo.NoteMasterStep(stepTicks: Fixtures.StepTicks);
+
+        var service = new WorldSiloLifecycleService(
+            extensions: PuckExtensionSet.Compose(extensions: []),
+            lifetime: new WorldSiloDeadlineLawTests.Lifetime(),
+            silo: silo
+        );
+        var responseBody = new MemoryStream();
+        var context = new DefaultHttpContext {
+            RequestAborted = TestToken,
+            RequestServices = new ServiceCollection().BuildServiceProvider(),
+        };
+
+        context.Connection.RemoteIpAddress = ((remoteAddress is null) ? null : IPAddress.Parse(ipString: remoteAddress));
+        context.Request.Method = "GET";
+        context.Request.Path = "/healthz";
+        context.Response.Body = responseBody;
+
+        var handled = service.HandleAsync(context: context);
+
+        await WorldSiloHost.PumpActivationMailboxesAsync(
+            cancellationToken: TestToken,
+            hosts: [silo],
+            operation: handled
+        );
+        await handled;
+
+        var body = Encoding.UTF8.GetString(bytes: responseBody.ToArray());
+
+        Assert.Equal(expected: StatusCodes.Status503ServiceUnavailable, actual: context.Response.StatusCode);
+        if (expectDetailedReason) {
+            Assert.Equal(expected: "row: inactive", actual: body);
+        } else {
+            Assert.Equal(expected: "unavailable", actual: body);
+            Assert.DoesNotContain(expectedSubstring: "row", actualString: body);
         }
     }
 }

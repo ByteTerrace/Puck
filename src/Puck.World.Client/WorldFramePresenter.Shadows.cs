@@ -28,6 +28,7 @@ public sealed partial class WorldFramePresenter {
     }
     /// <summary>Releases subscriptions held by the boot world's and routed worlds' presentations.</summary>
     public void Dispose() {
+        m_binder.MachinesChanged -= m_audio.InvalidateMachineBindings;
         m_client.DeliveredState -= AdvanceShadows;
         m_environment.Dispose();
         foreach (var scene in m_routedScenes.Values) { scene.Dispose(); }

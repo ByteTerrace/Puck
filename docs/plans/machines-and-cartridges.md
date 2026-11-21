@@ -451,7 +451,7 @@ The Humble Gaming Deck's packages are in [its plan](humble-gaming-deck.md#open-i
   runahead armed shows at the tick rate. Advancing the lookahead per part would
   restore the native rate.
 - **Let a machine source stand unchanged.** A render-graph instance that reads
-  a source never stands unchanged (`RenderGraphRuntime.WithUnchanged` excludes
+  a source never stands unchanged (`RenderGraphRuntime.CollectUnchanged` excludes
   every source), so a view showing a paused machine still renders every frame.
   A source whose upload answers `HasNewImage` false could stand, and so could
   the views that read only such sources.

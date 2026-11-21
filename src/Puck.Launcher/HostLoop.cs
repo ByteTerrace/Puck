@@ -190,7 +190,6 @@ public sealed class HostLoop(
                 }
                 timeline.NoteSteps(steps: steps);
                 timeline.Mark(phase: HostFramePhase.Simulate);
-                output.Flush();
                 timeline.Mark(phase: HostFramePhase.Commands);
 
                 if (produce is not null && pump?.StepPending != true) {
@@ -234,7 +233,7 @@ public sealed class HostLoop(
         } finally {
             HostWaits.EndPump();
             try {
-                LauncherHostRun.RunTeardown(fault, logger, ("flush output", output.Flush));
+                LauncherHostRun.RunTeardown(fault, logger, ("flush output", output.Drain));
             } finally {
                 if (produce is null) {
                     lifetime.StopApplication();

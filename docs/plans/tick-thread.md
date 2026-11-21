@@ -766,8 +766,10 @@ These need a quiet machine and a window, which a lane does not have.
 
 ## The review's findings
 
-The review argued from source. Each line it cited was reopened before its
-ruling, on the tree the review read and on the integration tip after it.
+The review argued from source. The code behind H1, H3, H7 and L2 was
+reopened before its ruling. H2, H4, H5 and the mediums were accepted on the
+code the review quoted, so the step that builds each one reads that code
+first and corrects this table if it differs.
 
 | Finding | Ruling |
 |---|---|

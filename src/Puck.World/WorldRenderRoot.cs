@@ -281,6 +281,8 @@ public static class WorldRenderRoot {
             presenter: frameSource,
             width: width
         );
+        var cursorFeed = (overlaid ? null : sp.GetRequiredService<WorldCursorFeed>());
+        var inspector = (overlaid ? null : sp.GetRequiredService<WorldInspector>());
         var root = new RenderGraphRuntimeNode(
             footprints: host.Footprints,
             height: height,
@@ -290,8 +292,8 @@ public static class WorldRenderRoot {
             // The windowed overlay ticks these feeds immediately before drawing them. A root without an overlay
             // still follows the same published views and polls explanation fences, including on retained frames.
             FrameProduced = (overlaid ? null : () => {
-                sp.GetRequiredService<WorldCursorFeed>().Tick();
-                sp.GetRequiredService<WorldInspector>().Tick();
+                cursorFeed!.Tick();
+                inspector!.Tick();
             }),
             // The host rewrites its footprint and root lists in place, so the node reads those lists rather than the copy
             // its constructor takes.

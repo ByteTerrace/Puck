@@ -4494,10 +4494,6 @@ their lane order; this packet keeps the single duplicates and leads.
 - [low] What a scene reads is listed twice: `WorldSceneInputs`' rows omit the
   look lanes and the poses, which a second list holds. One shared list of a
   scene's reads, by the lane's report.
-- [low] The recorder writes a pass block per pass and selects the light mask
-  again each time, and `SdfShadeDispatch.ViewLights` selects it once more.
-  Select once per view per frame, in the memo that already holds the pass
-  block.
 - [low] Leads a duplication hunt named and did not pursue:
   `WorldPopulation.CompleteStep` walks every slot for durable outputs where a
   dirty set would do; `WorldEventFeed.CollectRegions` tests every region

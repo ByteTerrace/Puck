@@ -4,9 +4,12 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
+    /// <summary>Raised on the tick thread after an install replaces the live <c>admission</c> section.</summary>
+    public event Action? AdmissionChanged;
     /// <summary>Closes transports attached to a generation when its ordered disconnect applies.</summary>
     public event Action<Principal>? PeerDisconnected;
 
+    internal void NotifyAdmissionChanged() => AdmissionChanged?.Invoke();
     internal void ClosePeerTransport(Principal principal) => PeerDisconnected?.Invoke(principal);
 
     /// <summary>Whether a peer generation is still connected and may submit commands.</summary>
