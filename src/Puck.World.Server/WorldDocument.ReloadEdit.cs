@@ -9,7 +9,7 @@ public sealed partial class WorldDocument {
     // moves to the next one and the accepted patch enters the undo journal. The candidate
     // was validated off the tick as its kind needs when its preparation still stands; otherwise it is validated here.
     private bool ApplyReloadEdit(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string verb, WorldInstallKind kind, string changed,
-        WorldDefinition candidate, WorldDefinition next, string contentHash, IReadOnlyList<string> conflicts, WorldReloadPreparation? prepared, byte[]? journalPatch) {
+        WorldDefinition candidate, WorldDefinition next, string contentHash, IReadOnlyList<string> conflicts, WorldReloadPreparation? prepared, byte[]? journalPatch, int requestBytes) {
         var current = ((prepared is not null) && ReferenceEquals(objA: prepared.Candidate, objB: candidate));
 
         if (!TryInstallEdit(candidate: candidate, detail: out var detail, kind: kind, principal: principal, reason: out var reason,
@@ -20,12 +20,8 @@ public sealed partial class WorldDocument {
 
         var history = AcceptReload(request, next, contentHash, journalPatch);
 
-        var message = $"{verb} applied — {history}{detail}{changed}{DescribeConflicts(conflicts: conflicts)}";
+        var message = $"{verb} applied — {history}{detail}{changed}{DescribeConflicts(conflicts: conflicts)}{DescribeDelta(request: request, requestBytes: requestBytes)}";
 
-        if ((request.Delta is { } appliedDelta) &&
-            WorldSubmissionCodec.TryEncodeRebuild(request with { Definition = null }, out var payload, out _)) {
-            message += $", delta={appliedDelta.Patch.Length} bytes payload={payload.Length} bytes";
-        }
         if (Host.Output.HasNarrationSink) {
             Host.Output.Narrate(channel: "world.definition", text: $"[world.definition: {message}]");
         }
@@ -116,6 +112,12 @@ public sealed partial class WorldDocument {
 
     // The parts of the document a reload changed, for its verdict.
     internal static string DescribeChanged(WorldDocumentInputs changed) => (changed.IsEmpty ? string.Empty : (", changed " + changed));
+    // The delta a reload carried and, when its preparation measured it, the request's wire size, for its verdict.
+    private static string DescribeDelta(WorldRebuildRequest request, int requestBytes) => ((request.Delta is not { } delta)
+        ? string.Empty
+        : ((requestBytes == 0)
+            ? $", delta={delta.Patch.Length} bytes"
+            : $", delta={delta.Patch.Length} bytes payload={requestBytes} bytes"));
     // The rows and values a reload's source won from the session's own edits, for its verdict.
     private static string DescribeConflicts(IReadOnlyList<string> conflicts) => DescribeList(items: conflicts, lead: ", the source won over the session's edits at ");
     private static string DescribeList(IReadOnlyList<string> items, string lead) => ((items.Count == 0) ? string.Empty : (lead + string.Join(separator: ", ", values: items)));

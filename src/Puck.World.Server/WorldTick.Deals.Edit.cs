@@ -18,8 +18,8 @@ public sealed partial class WorldTick {
             var ordinal = arena.Catalog.TryResolve(StateLane.Document, deal.Row, out var handle) ? handle.Ordinal : -1;
             var variantOrdinal = deal.Variants is { } declared && arena.Catalog.TryResolve(StateLane.Document, declared.Row, out var variantHandle) ? variantHandle.Ordinal : -1;
             var memo = new DealMemo();
-            for (var index = 0; (index < definition.Placements.Count); index++) {
-                if (WorldPlacementDeal.IsChild(placement: definition.Placements[index], parent: template)) { memo.Children.Add(item: index); }
+            foreach (var child in WorldPlacementIndex.Of(placements: definition.Placements).ChildrenOf(parentId: template.Id)) {
+                if (WorldPlacementDeal.IsChild(placement: definition.Placements[child], parent: template)) { memo.Children.Add(item: child); }
             }
             Deal(definition.Placements, arena, template, deal, ordinal, variantOrdinal, memo, definition.Generation?.WorldSeed ?? 0UL);
         }

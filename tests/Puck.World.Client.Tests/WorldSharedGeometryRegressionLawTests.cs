@@ -40,19 +40,15 @@ public sealed class WorldSharedGeometryRegressionLawTests {
         }
     }
     [Fact]
-    public void ARigidInhabitantLightKeepsItsShapesOffsetAndRotation() {
+    public void ARigidInhabitantAnchorKeepsItsShapesOffsetAndRotation() {
         var scene = new Scene(RigidDefinition());
 
         scene.Deliver(0, 1, "placed");
-        var frame = scene.Frame();
+        _ = scene.Frame();
 
-        Assert.True(scene.Pool.TryShapePosition("placed", 0, scene.Client, out var tip));
-        var anchor = WorldLightAnchorResolver.Resolve(new WorldAnchor.Placement("placed", 0), scene.Client, scene.Pool, frame.DynamicTransforms.ToArray());
-
-        Assert.NotNull(anchor);
-        Assert.Equal(tip, anchor.Value.Position);
+        Assert.True(WorldAnchorPoses.TryPlacement("placed", 0, scene.Client, scene.Pool, out var anchor));
         Assert.True(scene.Pool.Rigid.TryShapePose(8, 0, scene.Client, out var pose));
-        Assert.Equal(pose.Orientation, anchor.Value.Orientation);
+        Assert.Equal(pose, anchor);
     }
     [Fact]
     public void RigidIsolationKeepsOnlyTheSelectedShapeAndItsPaints() {

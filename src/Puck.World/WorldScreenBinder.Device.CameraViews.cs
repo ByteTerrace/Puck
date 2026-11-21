@@ -20,6 +20,9 @@ public sealed partial class WorldScreenBinder {
         return ((views.Count > 0) ? views[0].Quality.Restrict(other: restriction) : restriction);
     }
 
+    // The pose a camera's anchor holds this frame for a seat: the winning ranked candidate (or the bare anchor) resolved
+    // through the one resolver every presentation consumer reads. A presentation whose anchor source is no world pose
+    // source (no client) resolves an entity through that source alone, and the world frame when nothing is anchored.
     private bool TryResolveRankedAnchor(WorldCamera camera, int slot, out SdfAnchor anchor) {
         var selected = WorldSeatAnchors.SelectAnchor(
             camera: camera,
@@ -28,79 +31,33 @@ public sealed partial class WorldScreenBinder {
             slot: slot
         );
 
+        if (m_anchors is IWorldStampSource source) {
+            return WorldAnchorPoses.TryResolve(
+                anchor: selected,
+                pose: out anchor,
+                scope: new WorldAnchorScope(
+                    Perception: m_perception,
+                    Slot: slot,
+                    Source: source,
+                    Speech: m_speech,
+                    Stamps: m_stamps,
+                    Transforms: m_viewTransforms
+                )
+            );
+        }
+
         switch (selected) {
             case null:
-                anchor = new SdfAnchor(
-                    Position: Vector3.Zero,
-                    Orientation: Quaternion.Identity
-                );
+                anchor = new SdfAnchor(Position: Vector3.Zero, Orientation: Quaternion.Identity);
 
                 return true;
             case WorldAnchor.Entity entity:
-                return m_anchors.TryResolveAnchor(
-                    anchor: out anchor,
-                    anchorId: entity.Index
-                );
-            case WorldAnchor.EntityPart part:
-                return TryResolveEntityPart(
-                    anchor: out anchor,
-                    part: part
-                );
-            case WorldAnchor.Placement placement:
-                anchor = new SdfAnchor(
-                    Position: (((m_anchors is WorldClient client) && m_stamps.TryShapePosition(
-                        client: client,
-                        placementId: placement.PlacementId,
-                        position: out var live,
-                        shapeId: placement.ShapeId
-                    ))
-                    ? live
-                    : StaticAnchorPosition(placement: placement)),
-                    Orientation: Quaternion.Identity
-                );
-
-                return true;
-            case WorldAnchor.Group group:
-                anchor = new SdfAnchor(
-                    Position: GroupCentroid(group: group),
-                    Orientation: Quaternion.Identity
-                );
-
-                return true;
+                return m_anchors.TryResolveAnchor(anchor: out anchor, anchorId: entity.Index);
             default:
-                if (m_anchors is WorldClient seatClient) {
-                    return WorldSeatAnchors.TryResolve(
-                        anchor: selected,
-                        client: seatClient,
-                        perception: m_perception,
-                        pose: out anchor,
-                        slot: slot,
-                        speech: m_speech,
-                        stamps: m_stamps,
-                        transforms: m_viewTransforms
-                    );
-                }
-
                 anchor = default;
 
                 return false;
         }
-    }
-    private bool TryResolveEntityPart(WorldAnchor.EntityPart part, out SdfAnchor anchor) {
-        if (m_anchors is WorldClient client) {
-            return WorldEntityPartResolver.TryPackedPose(
-                client: client,
-                stamps: m_stamps,
-                entityIndex: part.Index,
-                partId: part.PartId,
-                transforms: m_viewTransforms,
-                pose: out anchor
-            );
-        }
-
-        anchor = default;
-
-        return false;
     }
 
     /// <inheritdoc/>
@@ -203,15 +160,13 @@ public sealed partial class WorldScreenBinder {
     // that just despawned) keeps the camera it last filmed from; one that has never filmed frames from its rig at the
     // default anchor, and one with no rig (no client to compile against) from the world origin.
     private CameraSnapshot FilmCamera(string name, CameraRegistration registration, float presentationSeconds) {
-        var anchor = default(SdfAnchor);
+        // An unanchored camera rides the world frame, as the one resolver answers a null anchor.
+        var anchor = new SdfAnchor(Position: Vector3.Zero, Orientation: Quaternion.Identity);
         var resolved = (
             (registration.AnchorSource is not { } source) ||
-            (
-                (registration.AnchorIdSource?.Invoke() is { } anchorId) &&
-                source.TryResolveAnchor(
-                    anchor: out anchor,
-                    anchorId: anchorId
-                )
+            source.TryResolveAnchor(
+                anchor: out anchor,
+                anchorId: 0
             )
         );
 
@@ -249,19 +204,8 @@ public sealed partial class WorldScreenBinder {
         return camera;
     }
 
-    private sealed class EntityPartAnchorSource(WorldScreenBinder owner, WorldAnchor.EntityPart part) : ISdfAnchorSource {
-        public bool TryResolveAnchor(int anchorId, out SdfAnchor anchor) {
-            _ = anchorId;
-
-            return owner.TryResolveEntityPart(
-                anchor: out anchor,
-                part: part
-            );
-        }
-    }
-    // Resolves a camera's anchor every frame: the winning ranked candidate (or the bare seat-relative anchor) for the
-    // registration's seat, then that anchor's pose through the same resolvers the configure-time sources use. A
-    // frame with no holding candidate rides the world frame.
+    // Resolves a camera's anchor every frame: the winning ranked candidate (or the bare anchor) for the registration's
+    // seat, then that anchor's pose (TryResolveRankedAnchor). A frame with no holding candidate rides the world frame.
     private sealed class RankedAnchorSource(WorldScreenBinder owner, WorldCamera camera, int slot) : ISdfAnchorSource {
         public bool TryResolveAnchor(int anchorId, out SdfAnchor anchor) {
             _ = anchorId;

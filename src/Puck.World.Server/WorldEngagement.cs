@@ -94,9 +94,8 @@ public sealed partial class WorldEngagement {
     // cleared and refilled every FoldTick call, since screen indices are document-authored and not a compact 0..N
     // space a fixed-size array could index directly.
     private readonly Dictionary<int, MachinePadState> m_screenPads = new();
-    // The reused, capacity-only-grows backing array BuildPadSnapshot slices into — the same "grow, never shrink"
-    // idiom WorldServer.BuildSnapshot's m_snapshotEntries uses, sized against however many screens are EVER
-    // simultaneously applied to rather than a document-declared screen count (there is no such cap).
+    // The reused, capacity-only-grows backing array BuildPadSnapshot slices into, sized against however many screens
+    // are EVER simultaneously applied to rather than a document-declared screen count (there is no such cap).
     private ScreenPadSnapshot[] m_padEntries = Array.Empty<ScreenPadSnapshot>();
     // This tick's body-target contributions — cleared and refilled every FoldTick call, drained by
     // WorldServer.Step right after FoldTick returns (queued for the NEXT tick's intent drain through the ordinary

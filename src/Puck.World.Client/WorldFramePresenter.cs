@@ -1112,12 +1112,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         x: ((region.Width == 0f) ? 1f : (region.Width * width)),
         y: ((region.Height == 0f) ? 1f : (region.Height * height))
     );
-    // The one shared anchor→pose resolver the camera path reads: entity/part ride the live snapshot pose, a
-    // placement rides its stamped transform (WorldAnchorGeometry, the same math speakers read), a group rides its
-    // smoothed centroid + spread, a seat-relative anchor rides the seat's perceived body (or the recent speaker),
-    // and a null anchor is the world origin. A ranked list selects its winner every frame for the slot the view is
-    // resolved for; a camera-bearing layout slot has no seat and resolves as seat 1. A group has no facing →
-    // identity orientation.
+    // A named camera's anchor pose through the one resolver (WorldAnchorPoses), which lights, speakers and filmed views
+    // read too. A ranked list selects its winner every frame for the slot the view is resolved for; a camera-bearing
+    // layout slot has no seat and resolves as seat 1. Only a group differs: this camera smooths its centroid and
+    // widens for its spread, a per-camera state keyed by the row. An anchor that resolves nothing frames the origin.
     private (Vector3 Position, Quaternion Orientation, float Spread) ResolveCameraAnchorPose(WorldCamera row, float deltaSeconds) {
         var anchor = WorldSeatAnchors.SelectAnchor(
             camera: row,
@@ -1126,57 +1124,31 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             slot: 0
         );
 
-        switch (anchor) {
-            case WorldAnchor.Entity entity:
-                return (m_client.Position(index: entity.Index), m_client.Orientation(index: entity.Index), 0f);
-            case WorldAnchor.EntityPart part: {
-                    return (WorldEntityPartResolver.TryPackedPose(
-                        client: m_client,
-                        stamps: m_animator,
-                        entityIndex: part.Index,
-                        partId: part.PartId,
-                        transforms: m_transforms,
-                        pose: out var pose
-                    )
-                        ? (pose.Position, pose.Orientation, 0f)
-                        : (Vector3.Zero, Quaternion.Identity, 0f)
-                    );
-                }
-            case WorldAnchor.Placement placement:
-                return (WorldAnchorGeometry.StaticPlacementPosition(
-                    definition: m_client.Definition,
-                    placementId: placement.PlacementId,
-                    shapeId: placement.ShapeId
-                ), Quaternion.Identity, 0f);
-            case WorldAnchor.Group group: {
-                    var (centroid, spread) = m_groupAnchors.Resolve(
-                        key: row.Name,
-                        group: group,
-                        client: m_client,
-                        maxPopulation: m_client.Definition.Population.Capacity,
-                        deltaSeconds: deltaSeconds
-                    );
+        if (anchor is WorldAnchor.Group group) {
+            var (centroid, spread) = m_groupAnchors.Resolve(
+                key: row.Name,
+                group: group,
+                client: m_client,
+                maxPopulation: m_client.Definition.Population.Capacity,
+                deltaSeconds: deltaSeconds
+            );
 
-                    return (centroid, Quaternion.Identity, spread);
-                }
-            case WorldAnchor.Seat or WorldAnchor.RecentSpeaker:
-                return (WorldSeatAnchors.TryResolve(
-                    anchor: anchor,
-                    client: m_client,
-                    perception: m_anchor,
-                    pose: out var seatPose,
-                    slot: 0,
-                    speech: m_speech,
-                    stamps: m_animator,
-                    transforms: m_transforms
-                )
-                    ? (seatPose.Position, seatPose.Orientation, 0f)
-                    : (Vector3.Zero, Quaternion.Identity, 0f)
-                );
-            default:
-                return (Vector3.Zero, Quaternion.Identity, 0f);
+            return (centroid, Quaternion.Identity, spread);
         }
+
+        return (WorldAnchorPoses.TryResolve(anchor: anchor, pose: out var pose, scope: AnchorScope())
+            ? (pose.Position, pose.Orientation, 0f)
+            : (Vector3.Zero, Quaternion.Identity, 0f));
     }
+    // What this presentation's anchors resolve against this frame: the client's render poses, the stamp pool's last
+    // pack and the frame's packed transforms, for seat 1.
+    private WorldAnchorScope AnchorScope() => new(
+        Perception: m_anchor,
+        Source: m_client,
+        Speech: m_speech,
+        Stamps: m_animator,
+        Transforms: m_transforms
+    );
     private IWorldCameraProgramRig ResolveCameraModeRig(WorldCameraProgram cameraRig, WorldDefinition definition, WorldStateMirror mirror, int slot) =>
         (m_cameraModeRigCache[slot] ??= new WorldCameraRigCompiler.Cache()).Resolve(
             definition: definition,
@@ -1210,13 +1182,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         return state;
     }
-    private SdfAnchor? ResolveLightAnchor(WorldAnchor anchor) =>
-        WorldLightAnchorResolver.Resolve(
-            anchor: anchor,
-            client: m_client,
-            stamps: m_animator,
-            transforms: m_transforms
-        );
+    private SdfAnchor? ResolveLightAnchor(WorldAnchor anchor) => (WorldAnchorPoses.TryResolve(anchor: anchor, pose: out var pose, scope: AnchorScope())
+        ? pose
+        : null);
     // Resolves a color field that may be absent (a marker row's style.ringColor, meaningful only when a ring is
     // authored) — Zero (transparent black) when absent, matching every other absence-is-meaning field.
     private static RgbaColor ResolveMarkerColor(BindableColor? color, WorldStateMirror mirror) {

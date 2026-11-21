@@ -30,8 +30,8 @@ public sealed partial class WorldTick {
     private IReadOnlyList<WorldPlacement>? m_dealTemplatesOf;
     private StateCatalog? m_dealTemplatesCatalog;
 
-    // Indexes a placement list's templates and groups its dealt children under them in one pass over the rows, once per
-    // list and catalog, and drops the memo of a template the list no longer deals from. Returns whether it indexed.
+    // Indexes a placement list's templates and their dealt children from the list's placement index, once per list and
+    // catalog, and drops the memo of a template the list no longer deals from. Returns whether it indexed.
     private bool IndexDealTemplates(IReadOnlyList<WorldPlacement> placements, StateCatalog catalog) {
         if (ReferenceEquals(objA: m_dealTemplatesOf, objB: placements) && ReferenceEquals(objA: m_dealTemplatesCatalog, objB: catalog)) { return false; }
         m_dealTemplatesOf = placements;
@@ -41,27 +41,27 @@ public sealed partial class WorldTick {
             memo.Row = -1;
             memo.Children.Clear();
         }
-        for (var index = 0; (index < placements.Count); index++) {
-            if (placements[index] is not { Deal: { } deal } template) { continue; }
+
+        var index = WorldPlacementIndex.Of(placements: placements);
+
+        foreach (var row in index.Dealers) {
+            var template = placements[row];
+            var deal = template.Deal!;
             if (!m_dealMemos.TryGetValue(key: template.Id, value: out var memo)) {
                 memo = new DealMemo();
                 m_dealMemos[template.Id] = memo;
             }
-            if (memo.Row < 0) { memo.Row = index; }
+            if (memo.Row < 0) { memo.Row = row; }
             memo.RowOrdinal = (catalog.TryResolve(StateLane.Document, deal.Row, out var rowHandle) ? rowHandle.Ordinal : -1);
             memo.VariantOrdinal = (((deal.Variants is { } variants) && catalog.TryResolve(StateLane.Document, variants.Row, out var variantHandle)) ? variantHandle.Ordinal : -1);
-            m_dealTemplates.Add(item: (index, memo));
+            m_dealTemplates.Add(item: (row, memo));
         }
         foreach (var (templateId, memo) in m_dealMemos) {
             if (memo.Row < 0) { _ = m_dealMemos.Remove(key: templateId); }
         }
-        for (var index = 0; (index < placements.Count); index++) {
-            if (
-                (placements[index] is { Parent: { } parent } row) &&
-                m_dealMemos.TryGetValue(key: parent, value: out var memo) &&
-                WorldPlacementDeal.IsChild(placement: row, parent: placements[memo.Row])
-            ) {
-                memo.Children.Add(item: index);
+        foreach (var (templateId, memo) in m_dealMemos) {
+            foreach (var child in index.ChildrenOf(parentId: templateId)) {
+                if (WorldPlacementDeal.IsChild(placement: placements[child], parent: placements[memo.Row])) { memo.Children.Add(item: child); }
             }
         }
         return true;

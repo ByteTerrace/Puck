@@ -278,12 +278,12 @@ Partly true. A destination that ends a session admits the next one into the
 same mirror (`src/Puck.World.Server/WorldInstanceHost.ScreenSessions.cs:608-612`),
 and a delivered definition clears no body. Admission delivers a primer snapshot
 in the same call, and a snapshot retires every body it does not name
-(`WorldPoseTable.Complete`, `src/Puck.World.Protocol/Protocol/WorldPoseTable.cs:101-109`).
+(`WorldPoseTable.Complete`, `src/Puck.World.Protocol/Protocol/WorldPoseTable.cs:104-114`).
 That replaces membership. It does not replace the pose of a body both sessions
 hold at the same index: an admitted body that was already active takes its
 earlier endpoint from what the table held,
 
-`src/Puck.World.Protocol/Protocol/WorldPoseTable.cs:224-225`
+`src/Puck.World.Protocol/Protocol/WorldPoseTable.cs:258-259`
 
 ```csharp
             m_previousPosition[index] = priorPosition;

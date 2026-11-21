@@ -408,9 +408,9 @@ keeping any pending follower motion for the next advancing frame.
 `SdfAnchor` is one resolved pose and `ISdfAnchorSource` resolves an anchor id
 to it. `Puck.World`'s `WorldScreenBinder` resolves camera anchors through that
 interface. The live sources are
-`Puck.World.Client`'s `WorldClient` and `FixedAnchorSource`
-(`WorldCameraRigCompiler.cs`) and the entity-part and ranked-candidate sources
-in `WorldScreenBinder.CameraViews.cs`. `Puck.SdfVm.Views` holds the camera-rig
+`Puck.World.Client`'s `WorldClient` and the per-frame camera source in
+`WorldScreenBinder.Device.CameraViews.cs`, which resolves every anchor kind
+through `WorldAnchorPoses`. `Puck.SdfVm.Views` holds the camera-rig
 seam (`ISdfCameraRig`, worn by `SdfCameraProgramRig`) and the shared orbit math
 (`OrbitRig`). A
 camera view is one more view of the world's frame (`SdfViewSnapshot`), with its

@@ -4,6 +4,7 @@ using System.Text;
 using Puck.Abstractions.Machines;
 using Puck.Abstractions;
 using Puck.Maths;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.Audio.Mixing;
 using Puck.Audio.Simulation;
@@ -316,39 +317,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     };
     // ---- small shared derivations ----------------------------------------------------------------------------------
 
-    // A seat-relative anchor (Seat, RecentSpeaker) resolves its body at plan time against seat 1 (a speaker has no
-    // enclosing seat) and is re-planned every derive, so possession and a new speaker follow on the next publish.
-    private EmitterAnchor AnchorOf(WorldAnchor anchor, Vector3 offset) => anchor switch {
-        WorldAnchor.Entity entity => EmitterAnchor.EntityRoot(
-        index: entity.Index,
-        offset: offset
-    ),
-        WorldAnchor.Seat or WorldAnchor.RecentSpeaker when (SeatRelativeBody(anchor: anchor) is { } seatBody) => ((WorldSeatAnchors.PartOf(anchor: anchor) is { } seatPart)
-        ? EmitterAnchor.EntityPart(
-            index: seatBody,
-            offset: offset,
-            partId: seatPart
-        )
-        : EmitterAnchor.EntityRoot(
-            index: seatBody,
-            offset: offset
-        )),
-        WorldAnchor.EntityPart part => EmitterAnchor.EntityPart(
-        index: part.Index,
-        partId: part.PartId,
-        offset: offset
-    ),
-        WorldAnchor.Placement placement => EmitterAnchor.PlacementPoint(
-        placementId: placement.PlacementId,
-        shapeId: placement.ShapeId,
-        staticPosition: StaticPlacementPosition(
-            placementId: placement.PlacementId,
-            shapeId: placement.ShapeId
-        ),
-        offset: offset
-    ),
-        _ => EmitterAnchor.FixedPoint(position: offset),
-    };
+    // An anchored emitter resolves its anchor's pose every publish through the one resolver (WorldAnchorPoses), and its
+    // offset in that pose's axes; a seat-relative anchor resolves for seat 1, since a speaker has no enclosing seat.
+    private static EmitterAnchor AnchorOf(WorldAnchor? anchor, Vector3 offset) => EmitterAnchor.Anchored(anchor: anchor, offset: offset);
     // ---- source hosting --------------------------------------------------------------------------------------------
 
     // Apply the derived bindings to the attached mixer: master gain, the patch set, and tune acquire/release with
@@ -545,16 +516,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                     plan: new EmitterPlan {
                         Key = key,
                         Kind = AudioEmitterKind.Point,
-                        Anchor = EmitterAnchor.PlacementPoint(
-                        placementId: placement.Id,
-                        shapeId: sound.ShapeId,
-                        staticPosition: WorldAnchorGeometry.StaticShapePosition(
-                            definition: definition,
-                            placement: placement,
-                            creation: creation,
-                            shapeId: sound.ShapeId
-                        )
-                    ),
+                        Anchor = AnchorOf(anchor: new WorldAnchor.Placement(PlacementId: placement.Id, ShapeId: sound.ShapeId), offset: Vector3.Zero),
                         MinRadius = FixedQ4816.Zero,
                         MaxRadius = FixedQ4816.FromDouble(value: (sound.Radius ?? audio.DefaultSpeakerRadius)),
                         Curve = CurveOf(token: audio.DefaultCurve),
@@ -574,17 +536,11 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                 (placement.Emission is { } emission) &&
                 (placement.Deal is null)
             ) {
-                // Root-only under Pattern (documented on WorldPlacement): the emission binds the placement root.
-                // isAttached tells TryResolvePosition to go SILENT rather than fall back to the row's inert static
-                // Position when the attach target is not live this frame.
+                // Root-only under Pattern (documented on WorldPlacement): the emission binds the placement root, and an
+                // attached row whose carrier is not live this frame resolves no pose, so it goes silent.
                 AdmitEmission(
                     key: $"placement:{placement.Id}",
-                    anchor: EmitterAnchor.PlacementPoint(
-                        placementId: placement.Id,
-                        shapeId: null,
-                        staticPosition: WorldDefinitionRows.ResolvedPosition(definition: definition, placement: placement),
-                        isAttached: (placement.Attach is not null)
-                    ),
+                    anchor: AnchorOf(anchor: new WorldAnchor.Placement(PlacementId: placement.Id, ShapeId: null), offset: Vector3.Zero),
                     emission: emission,
                     audio: audio,
                     definition: definition
@@ -807,30 +763,6 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
 
         return false;
     }
-    private WorldAnchor? ListenerAnchor(WorldCamera camera) {
-        var anchor = WorldSeatAnchors.SelectAnchor(
-            camera: camera,
-            candidateIndex: out _,
-            evaluator: m_evaluator,
-            slot: 0
-        );
-
-        if (!WorldSeatAnchors.IsSeatRelative(anchor: anchor)) {
-            return anchor;
-        }
-
-        if (SeatRelativeBody(anchor: anchor!) is not { } body) {
-            return null;
-        }
-
-        return ((WorldSeatAnchors.PartOf(anchor: anchor) is { } partId)
-            ? new WorldAnchor.EntityPart(
-                Index: body,
-                PartId: partId
-            )
-            : new WorldAnchor.Entity(Index: body)
-        );
-    }
     private static string PatchHash(WorldDefinition definition, string patchId) {
         foreach (var patch in definition.Patches) {
             if (string.Equals(
@@ -948,9 +880,13 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                 return null;
             }
 
-            // The anchor the camera rides for seat 1 this derive: the bare anchor or the winning ranked candidate,
-            // with a seat-relative kind rewritten to the body it resolves to so the entity arms below apply.
-            var cameraAnchor = ListenerAnchor(camera: camera);
+            // The anchor the camera rides for seat 1: the bare anchor or the winning ranked candidate.
+            var cameraAnchor = WorldSeatAnchors.SelectAnchor(
+                camera: camera,
+                candidateIndex: out _,
+                evaluator: m_evaluator,
+                slot: 0
+            );
 
             // An unanchored world-axis offset aimed at a world point has a directly resolvable listener pose.
             if (cameraAnchor is null) {
@@ -960,51 +896,18 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                 );
             }
 
-            if (camera.Rig.OffsetOp is not { WorldAxes: false } follow) {
+            // An offset in the anchor's own axes places the eye on the anchor's pose, facing its forward.
+            if (
+                (camera.Rig.OffsetOp is not { WorldAxes: false } follow) ||
+                !TryResolveAnchorPose(anchor: cameraAnchor, pose: out var pose, transforms: transforms)
+            ) {
                 return null;
             }
 
-            var plan = new EmitterPlan {
-                Anchor = AnchorOf(
-                anchor: cameraAnchor,
-                offset: follow.Value
-            ),
-            };
-
-            if (
-                TryResolvePosition(
-                plan: in plan,
-                position: out var eye,
-                transforms: transforms
-            ) &&
-                (m_client is { } client) &&
-                (cameraAnchor is WorldAnchor.Entity or WorldAnchor.EntityPart)
-            ) {
-                var orientation = ((cameraAnchor is WorldAnchor.Entity entity)
-                    ? client.Orientation(index: entity.Index)
-                    : (((m_animator is { } animator) && WorldEntityPartResolver.TryPackedPose(
-                        client: client,
-                        stamps: animator,
-                        entityIndex: ((WorldAnchor.EntityPart)cameraAnchor).Index,
-                        partId: ((WorldAnchor.EntityPart)cameraAnchor).PartId,
-                        transforms: transforms,
-                        pose: out var partPose
-                    ))
-                        ? partPose.Orientation
-                        : Quaternion.Identity
-                ));
-
-                return (Eye: eye, Forward: Vector3.Transform(
-                    value: new Vector3(
-                        x: 0f,
-                        y: 0f,
-                        z: -1f
-                    ),
-                    rotation: orientation
-                ));
-            }
-
-            return null;
+            return (
+                Eye: (pose.Position + Vector3.Transform(value: follow.Value, rotation: pose.Orientation)),
+                Forward: Vector3.Transform(value: -Vector3.UnitZ, rotation: pose.Orientation)
+            );
         }
 
         return null;
@@ -1115,26 +1018,6 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             _ = m_registry.Remove(key: key);
         }
     }
-    private int? SeatRelativeBody(WorldAnchor anchor) {
-        if (
-            (m_perception is not { } perception) ||
-            (m_speech is not { } speech)
-        ) {
-            return null;
-        }
-
-        var body = WorldSeatAnchors.BodyOf(
-            anchor: anchor,
-            perception: perception,
-            slot: 0,
-            speech: speech
-        );
-
-        return ((((uint)body) < ((uint)WorldClient.EntityCapacity))
-            ? body
-            : null
-        );
-    }
     private static AudioSourceKey SourceKey(WorldSpeakerSource source) => source switch {
         WorldSpeakerSource.Machine machine => AudioSourceKey.Machine(
         instance: machine.Instance,
@@ -1179,16 +1062,6 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         AudioSourceKind.Synth => $"synth:{source.Id}",
         _ => "none",
     };
-    // A static placement anchor's stamped position — the ONE shared resolver cameras and speakers both read.
-    private Vector3 StaticPlacementPosition(string placementId, int? shapeId) =>
-        ((m_definition is { } definition)
-            ? WorldAnchorGeometry.StaticPlacementPosition(
-                definition: definition,
-                placementId: placementId,
-                shapeId: shapeId
-            )
-            : Vector3.Zero
-        );
     // Diff the binder's live machines against the cached bindings for every machine-fed plan row — the per-frame
     // reconcile/self-heal (called under the gate from Publish, the only resolver call site). Reference compares only
     // in steady state; a change rebinds the STABLE Machine(slot) key so the mixer's emitter ramps never notice a
@@ -1304,90 +1177,60 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     }
     // ---- pose resolution -------------------------------------------------------------------------------------------
 
+    // An emitter's position this publish: a fixed point, or its anchor's pose with the offset in the anchor's own axes
+    // (WorldSpeaker.Anchored's contract), absent while the anchored thing is not drawn.
     private bool TryResolvePosition(in EmitterPlan plan, ReadOnlySpan<DynamicTransform> transforms, out Vector3 position) {
         var anchor = plan.Anchor;
 
-        switch (anchor.Kind) {
-            case EmitterAnchorKind.Fixed:
-                position = anchor.Position;
+        if (anchor.Kind == EmitterAnchorKind.Fixed) {
+            position = anchor.Position;
+
+            return true;
+        }
+
+        if (!TryResolveAnchorPose(anchor: anchor.Anchor, pose: out var pose, transforms: transforms)) {
+            position = default;
+
+            return false;
+        }
+
+        position = (pose.Position + Vector3.Transform(value: anchor.Offset, rotation: pose.Orientation));
+
+        return true;
+    }
+    // An anchor's pose through the one resolver, for seat 1. Without a client to read body poses from, only a placement
+    // (at rest) and the world frame resolve.
+    private bool TryResolveAnchorPose(WorldAnchor? anchor, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
+        if (m_client is { } client) {
+            return WorldAnchorPoses.TryResolve(
+                anchor: anchor,
+                pose: out pose,
+                scope: new WorldAnchorScope(
+                    Perception: m_perception,
+                    Source: client,
+                    Speech: m_speech,
+                    Stamps: m_animator,
+                    Transforms: transforms
+                )
+            );
+        }
+
+        switch (anchor) {
+            case null:
+                pose = new SdfAnchor(Position: Vector3.Zero, Orientation: Quaternion.Identity);
 
                 return true;
-            case EmitterAnchorKind.Entity: {
-                    if (
-                        (m_client is not { } client) ||
-                        !client.IsActive(index: anchor.EntityIndex)
-                    ) {
-                        position = default;
+            case WorldAnchor.Placement placement when (m_definition is { } definition):
+                return WorldAnchorPoses.TryRestPlacement(
+                    definition: definition,
+                    placementId: placement.PlacementId,
+                    pose: out pose,
+                    shapeId: placement.ShapeId
+                );
+            default:
+                pose = default;
 
-                        return false;
-                    }
-
-                    position = (client.Position(index: anchor.EntityIndex) + Vector3.Transform(
-                        value: anchor.Offset,
-                        rotation: client.Orientation(index: anchor.EntityIndex)
-                    ));
-
-                    return true;
-                }
-            case EmitterAnchorKind.EntityPart: {
-                    if (
-                        (m_client is not { } client) ||
-                        (m_animator is not { } animator) ||
-                        !WorldEntityPartResolver.TryPackedPose(
-                        client: client,
-                        stamps: animator,
-                        entityIndex: anchor.EntityIndex,
-                        partId: anchor.PartId!,
-                        transforms: transforms,
-                        pose: out var partPose
-                    )
-                    ) {
-                        position = default;
-
-                        return false;
-                    }
-
-                    position = (partPose.Position + Vector3.Transform(
-                        value: anchor.Offset,
-                        rotation: partPose.Orientation
-                    ));
-
-                    return true;
-                }
-            case EmitterAnchorKind.Placement:
-            default: {
-                    // Animated placements ride the stamp pool's current frame; an INHABITED placement rides its live body
-                    // pose (both through TryShapePosition); a static placement uses the reconcile-time stamp math.
-                    if (
-                        (m_animator is { } animator) &&
-                        (m_client is { } client) &&
-                        (anchor.PlacementId is { } placementId) &&
-                        animator.TryShapePosition(
-                        placementId: placementId,
-                        shapeId: anchor.ShapeId,
-                        client: client,
-                        out var animated
-                    )
-                    ) {
-                        position = (animated + anchor.Offset);
-
-                        return true;
-                    }
-
-                    // An ATTACHED row's pool lookup just failed — its target body is not live THIS frame (the SAME
-                    // verdict WorldCreationInstances.PackTransforms already renders as a hidden stamp), so the row is absent
-                    // rather than falling back to its INERT static Position (which neither the resolve nor the renderer
-                    // reads for an attached row — see WorldPlacement's own doc).
-                    if (anchor.IsAttached) {
-                        position = default;
-
-                        return false;
-                    }
-
-                    position = (anchor.Position + anchor.Offset);
-
-                    return true;
-                }
+                return false;
         }
     }
 
@@ -2087,32 +1930,18 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
 
     private enum EmitterAnchorKind : byte {
         Fixed,
-        Entity,
-        EntityPart,
-        Placement,
+        Anchored,
     }
-    // WHERE one derived emitter rides — a fixed point, an entity root/part, or a placement (with the static stamp
-    // position precomputed at reconcile so per-frame resolution allocates nothing).
+    // Where one derived emitter rides: a fixed point, or an anchor whose pose TryResolvePosition reads each publish,
+    // with an offset in that pose's axes.
     private readonly struct EmitterAnchor {
-        public int EntityIndex { get; init; }
-        // Whether the carrying placement row itself carries an ATTACH facet — the ONE fact TryResolvePosition needs
-        // to tell "the pool has no live position for this row's target body right now" (absent — the row contributes
-        // nothing, same as an inactive body's render stamp) apart from "this row was never pool-rooted at all" (an
-        // ordinary static/animated placement, where the STATIC-position fallback is correct). Defaults false, so
-        // every OTHER PlacementPoint caller (a speaker anchored to a placement's stamp) is unaffected.
-        public bool IsAttached { get; init; }
+        public WorldAnchor? Anchor { get; init; }
         public EmitterAnchorKind Kind { get; init; }
         public Vector3 Offset { get; init; }
-        public string? PartId { get; init; }
-        public string? PlacementId { get; init; }
         public Vector3 Position { get; init; }
-        public int? ShapeId { get; init; }
 
-        public static EmitterAnchor EntityPart(int index, string partId, Vector3 offset) => new() { EntityIndex = index, Kind = EmitterAnchorKind.EntityPart, Offset = offset, PartId = partId };
-        public static EmitterAnchor EntityRoot(int index, Vector3 offset) => new() { EntityIndex = index, Kind = EmitterAnchorKind.Entity, Offset = offset };
+        public static EmitterAnchor Anchored(WorldAnchor? anchor, Vector3 offset) => new() { Anchor = anchor, Kind = EmitterAnchorKind.Anchored, Offset = offset };
         public static EmitterAnchor FixedPoint(Vector3 position) => new() { Kind = EmitterAnchorKind.Fixed, Position = position };
-        public static EmitterAnchor PlacementPoint(string placementId, int? shapeId, Vector3 staticPosition, Vector3 offset = default, bool isAttached = false) =>
-            new() { IsAttached = isAttached, Kind = EmitterAnchorKind.Placement, Offset = offset, PlacementId = placementId, Position = staticPosition, ShapeId = shapeId };
     }
     // One derived emitter row — the document-derived stable facts Publish resolves a pose for each frame, plus the
     // last publish's LIVE status (the speaker.state echo: where the row resolved and whether the listener sits

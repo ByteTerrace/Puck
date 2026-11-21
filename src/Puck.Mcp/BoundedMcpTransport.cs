@@ -20,10 +20,6 @@ internal sealed class BoundedMcpTransport(Stream input, Stream output, Action<Ex
 
     private int m_pendingSends;
 
-    private static async Task ObserveAsync(Task send) {
-        try { await send.ConfigureAwait(continueOnCapturedContext: false); } catch (Exception) { /* The adapter is closing; observe the abandoned SDK write. */ }
-    }
-
     public override async Task SendMessageAsync(JsonRpcMessage message, CancellationToken cancellationToken = default) {
         var pending = Interlocked.Increment(location: ref m_pendingSends);
         Task? send = null;
@@ -50,7 +46,8 @@ internal sealed class BoundedMcpTransport(Stream input, Stream output, Action<Ex
                 message: "MCP output failed or stalled; attachment closed."
             ));
             }
-            if (send is not null) { _ = ObserveAsync(send: send); }
+            // The adapter is closing; the abandoned SDK write is observed.
+            send?.Observe();
             throw;
         } finally { Interlocked.Decrement(location: ref m_pendingSends); }
     }

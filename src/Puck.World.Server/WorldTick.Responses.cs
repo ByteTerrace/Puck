@@ -194,14 +194,14 @@ public sealed partial class WorldTick {
         m_responders.Clear();
         var placements = definition.Placements;
 
-        for (var index = 0; (index < placements.Count); index++) {
-            if (placements[index] is { Respond: { Count: > 0 } responses } placement) {
-                m_responders.Add(item: new Responder(
-                    index: index,
-                    position: FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(definition: definition, placement: placement)),
-                    rows: ResponderRows(responses: responses)
-                ));
-            }
+        foreach (var index in WorldPlacementIndex.Of(placements: placements).Responders) {
+            var placement = placements[index];
+
+            m_responders.Add(item: new Responder(
+                index: index,
+                position: FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(definition: definition, placement: placement)),
+                rows: ResponderRows(responses: placement.Respond!)
+            ));
         }
     }
     // The rows every State entry reads (its primary and its comparand), or null when an entry is a Field condition or

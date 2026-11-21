@@ -69,7 +69,7 @@ public sealed partial class WorldPersistence {
 
                 var authority = Host.GrantTable.PrepareDocument(Principal.World, Host.Definition, definition);
 
-                if (machines is not null) { Host.Machines.Commit(plan: machines); Host.Machines.Finish(plan: machines); }
+                if (machines is not null) { WorldDocument.CommitAndFinish(host: Host.Machines, plan: machines); }
                 Host.Document.InstallReplayStart(authority: authority, compilation: admission.Compilation, definition: definition, solidRevision: checkpoint.Server.SolidRevision, solids: solids);
                 RestoreCheckpointCore(keys, checkpoint, admission, resetSessionEpochs: true,
                     restoreOwnedIdentities: restoreOwnedIdentities, preparedAddons: addonPlan, validated: validated);

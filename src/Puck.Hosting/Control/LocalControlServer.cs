@@ -123,7 +123,8 @@ public sealed class LocalControlServer : IAsyncDisposable, IDisposable {
             // A deadline is enforced at this boundary, even if an injected session ignores cancellation.
             return await work.WaitAsync(cancellationToken: token).ConfigureAwait(continueOnCapturedContext: false);
         } catch (OperationCanceledException) {
-            if (work is not null) { _ = ObserveAbandonedAsync(work: work); }
+            // The ingress is closed; a late failure is observed without replaying work.
+            work?.Observe();
             throw;
         } catch (Exception error) {
             return new(
@@ -135,9 +136,6 @@ public sealed class LocalControlServer : IAsyncDisposable, IDisposable {
         }
     }
     private static bool IsConnectionError(Exception error) => (error is IOException or InvalidDataException or SocketException or OperationCanceledException or ObjectDisposedException or JsonException or UnauthorizedAccessException or ArgumentException or OverflowException);
-    private static async Task ObserveAbandonedAsync(Task work) {
-        try { await work.ConfigureAwait(continueOnCapturedContext: false); } catch (Exception) { /* The ingress is closed; observe a late failure without replaying work. */ }
-    }
     private async Task ServeAsync(TcpClient client) {
         using (client)
         using (var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: m_stop.Token)) {

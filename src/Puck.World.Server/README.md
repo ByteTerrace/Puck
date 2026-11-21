@@ -785,9 +785,10 @@ Rebuild payload cap remains 16 MiB.
 A live Load or Reload is prepared off the authority's tick and gate. Its
 submission captures what the candidate alone decides from
 (`WorldRebuildPreparation`: the source revision, the live document, the operator
-check, the proof transport and the machine catalog), and a host with workers runs
-the preparation on the thread pool (`WorldRebuildPreparations`, one
-`BackgroundBuild` per rebuild); the drain at the start of each tick's pending ops
+check, the proof transport and the machine catalog), and a host that prepares off the
+tick (`WorldServer.PreparesRebuildsOffTick`: set by a job pool with workers, as on
+the desktop, and by every silo row, which has none) runs the preparation on the
+thread pool (`WorldRebuildPreparations`, one `BackgroundBuild` per rebuild); the drain at the start of each tick's pending ops
 takes finished ones, oldest first, so a prepared rebuild enters the buffered ops at
 a tick boundary as a submission arriving then would, and the tape records it where
 it applies. The replay drive and a history seek prepare inline

@@ -125,6 +125,7 @@ public sealed partial class WorldTick {
             WorldPendingOp.Rebuild rebuild => Host.Document.ApplyRebuild(
             admitMilliseconds: rebuild.AdmitMilliseconds,
             reconstructMilliseconds: rebuild.ReconstructMilliseconds,
+            requestBytes: rebuild.RequestBytes,
             request: rebuild.Request,
             principal: rebuild.Principal,
             connectionId: rebuild.ConnectionId,

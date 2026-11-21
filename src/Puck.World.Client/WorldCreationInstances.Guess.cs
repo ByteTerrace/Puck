@@ -74,7 +74,8 @@ public sealed partial class WorldCreationInstances {
         GuessOverlay = default;
         if ((m_guessLayer is not { } layer) || (m_guessOf is not { } live)) { return; }
 
-        var poolIndex = Array.IndexOf(array: m_pool, value: live);
+        // The registration may have left the pool since PrepareGuess; the body's slot then names another or none.
+        var poolIndex = ((live.BodyIndex is { } body) && TryFindBody(bodyIndex: body, live: out var held, poolIndex: out var slot) && ReferenceEquals(objA: held, objB: live)) ? slot : -1;
         var overlaySlot = (slotBase + ArticulatedSlotCount + Rigid.SlotCount);
 
         m_guessClock += deltaSeconds;

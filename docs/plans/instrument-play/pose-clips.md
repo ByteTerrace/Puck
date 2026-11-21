@@ -1293,7 +1293,7 @@ The capability searched for, what was read, and why nothing existing owns it.
   three.
 - **A target on a body.** Read `CreationEffectorTargetDocument` and the
   resolve in the effector code. The pose read a `shape` target needs already
-  exists for anchors (`WorldCreationInstances.TryShapePosition`), and the
+  exists for anchors (`WorldCreationInstances.TryLivePlacementPose`), and the
   other body's part read exists too
   (`WorldCreationInstances.TryBodyPartAuthoredPose`). The designation
   register (`WorldTargetDesignation`) was traced and is not delivered to

@@ -1011,8 +1011,7 @@ public sealed partial class WorldPersistence {
         BoardEnforcement.Restore(checkpoint: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty));
         m_pendingAddonCheckpoint = ((Host.Addons is null) ? checkpoint.Addons : null);
         if (addonPlan is not null) {
-            Host.Addons!.Commit(plan: addonPlan);
-            Host.Addons.Finish(plan: addonPlan);
+            WorldDocument.CommitAndFinish(host: Host.Addons!, plan: addonPlan);
         }
         if (resetSessionEpochs) {
             // A replay start must deliver its restored grants and seed clocks, including to attached sinks.

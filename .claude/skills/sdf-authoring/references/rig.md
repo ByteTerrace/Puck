@@ -42,9 +42,10 @@ chains under and the delta the last frame composed for it
 (`shape:<name> parent=<name>|root delta=(x, y, z) turn=r`).
 `WorldCreationInstancesLiveRigEditLawTests` pins both edits through the scene emitter.
 
-A placement anchor naming a shape (an audio emitter, an overlay subject, a
-camera view's `placement` anchor) reads `WorldCreationInstances.TryShapePosition`, which
-answers where the last frame drew the shape: its rest or frame pose under the
+A placement anchor naming a shape (an audio emitter, an overlay subject, a light,
+a camera's `placement` anchor) resolves through `WorldAnchorPoses`, which reads
+`WorldCreationInstances.TryLivePlacementPose` and answers where the last frame
+drew the shape, position and facing: its rest or frame pose under the
 composed delta (own swings and slides, the parent chain, effector corrections)
 and its part follower. It reads the latch `PackRegistration` left, the same one
 `TryBodyPartAuthoredPose` reads (`LatchedShapePose`), and evaluates no rig of its

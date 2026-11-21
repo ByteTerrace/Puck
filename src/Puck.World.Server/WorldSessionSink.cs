@@ -315,8 +315,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     // Completes a document a definition path delivered with the primer snapshot it owes: a generation a cut opened is
     // primed alone, whatever the cadence and whether or not a tick follows.
     private void PrimeSnapshot() {
-        // Resume already has its caller's snapshot in hand. Rebuilding a primer here would overwrite that
-        // borrowed carrier while the hub is still fanning it out to other sinks.
+        // Inside this sink's own DeliverSnapshot (Resume, a cut), the snapshot in hand completes the document instead,
+        // and a primer delivered here would re-enter DeliverSnapshot.
         if (m_deliveringSnapshot) { return; }
         FollowObserverDetach();
         if (DetachReason is null) { DeliverSnapshot(snapshot: server.Document.BuildPrimerSnapshot(), stream: WorldStreamStamp.Unspanned); }

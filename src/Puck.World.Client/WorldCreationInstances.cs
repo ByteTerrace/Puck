@@ -204,7 +204,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         // The root position/orientation followers — set only for a body-rooted registration whose look names a root
         // Motion.Dynamics row (see ApplyMotion; a row-rooted registration never has this true). FollowedPosition/
         // FollowedOrientation are the values PackTransforms actually rendered this frame: the followers step at most
-        // once per frame, there, so TryBodyPartAuthoredPose/TryShapePosition read the latch instead of re-stepping.
+        // once per frame, there, so TryBodyPartAuthoredPose/TryLivePlacementPose read the latch instead of re-stepping.
         public bool HasRootDynamics;
 
         // The body's IWorldStampSource.PoseEpoch/EntityAddress this registration's followers last seeded against — -1/
@@ -418,7 +418,18 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
 
         return null;
     }
-    private Registration? FindRow(string id) => m_rowSlots.TryGetValue(id, out var slot) ? m_pool[slot] : null;
+    private bool TryFindRow(string id, out int poolIndex, out Registration live) {
+        if (m_rowSlots.TryGetValue(key: id, value: out poolIndex)) {
+            live = m_pool[poolIndex]!;
+
+            return true;
+        }
+
+        poolIndex = -1;
+        live = null!;
+
+        return false;
+    }
     // The memoized shape-id → pose index for one frame cursor (null at cursor 0 — the rest pose).
     private static Dictionary<int, FrameTransformDocument>? FramePoses(Registration live, int frameCursor) {
         if (
@@ -1046,7 +1057,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
                 creation: creation,
                 row: placement
             ) ||
-                (FindRow(id: placement.Id) is not null)
+                TryFindRow(id: placement.Id, live: out _, poolIndex: out _)
             ) {
                 continue;
             }
@@ -1136,7 +1147,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     /// <returns><see langword="true"/> when the live creation look publishes the part.</returns>
     /// <remarks>The pose carries the shape's COMPOSED delta — its own swings and slides, the parent chain, and any
     /// effector correction — read off the latch the last <see cref="PackTransforms"/> left, so an anchor consumer
-    /// and the rendered geometry answer with the same pose (<see cref="TryShapePosition"/> reads the same latch). A
+    /// and the rendered geometry answer with the same pose (<see cref="TryLivePlacementPose"/> reads the same latch). A
     /// shape with no animation has an identity delta, so its anchor is its authored pose.</remarks>
     public bool TryBodyPartAuthoredPose(int bodyIndex, string partId, IWorldStampSource client, out SdfAnchor pose) {
         if (Rigid.ContainsBody(body: bodyIndex)) { return Rigid.TryPartPose(body: bodyIndex, partId: partId, pose: out pose, source: client); }
@@ -1275,50 +1286,76 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         slotCount = SlotsAt(index: poolIndex);
         return true;
     }
-    /// <summary>Resolves a live registration's world position for one of its shapes (or its root when
-    /// <paramref name="shapeId"/> is null or names no shape) as the last <see cref="PackTransforms"/> drew it — the
-    /// placement-anchor seam the audio director, the overlay facts and placement-anchored camera views ride. A shape's
-    /// position carries its composed delta (its own swings and slides, the parent chain, effector corrections) and its
-    /// part follower, read off the pack's latch with no rig evaluation of its own; before the first pack it is the
-    /// rest or frame pose. Returns <see langword="false"/> when no live registration holds the placement (a static
-    /// placement resolves through the stamp math instead), and for an attached row whose target body is not active
-    /// this frame (the row contributes nothing, the same verdict <see cref="PackTransforms"/> renders as a hidden
-    /// stamp).</summary>
-    /// <param name="placementId">The placement row id.</param>
-    /// <param name="shapeId">The creation shape id to ride, or <see langword="null"/> for the stamped root.</param>
-    /// <param name="client">The client whose interpolated body poses root the body-rooted stamps.</param>
-    /// <param name="position">The resolved world position.</param>
-    public bool TryShapePosition(string placementId, int? shapeId, IWorldStampSource client, out Vector3 position) {
-        if (client.TryInhabitantBody(index: out var rigidBody, placementId: placementId) && Rigid.ContainsBody(body: rigidBody) && Rigid.TryShapePose(body: rigidBody, pose: out var rigidPose, shapeId: shapeId, source: client)) { position = rigidPose.Position; return true; }
-        var live = FindRow(id: placementId);
-
-        // An inhabited placement (a body-rooted stamp) resolves through the client's body pose, keyed by placement id.
-        if (
-            (live is null) &&
-            client.TryInhabitantBody(
-            index: out var bodyIndex,
-            placementId: placementId
-        )
-        ) {
-            live = FindBody(bodyIndex: bodyIndex);
-        }
-
-        if (live is null) {
-            position = default;
+    /// <summary>Resolves an entity's drawn root pose: its rigid copy's, or its registration's root as the last
+    /// <see cref="PackTransforms"/> drew it (followers included), before the first pack its un-followed root.</summary>
+    /// <param name="bodyIndex">The population entity index.</param>
+    /// <param name="client">The body poses a registration roots on.</param>
+    /// <param name="pose">The pose, or default.</param>
+    /// <returns><see langword="false"/> when the body draws no stamp.</returns>
+    public bool TryBodyRootPose(int bodyIndex, IWorldStampSource client, out SdfAnchor pose) {
+        if (Rigid.ContainsBody(body: bodyIndex)) { return Rigid.TryShapePose(body: bodyIndex, pose: out pose, shapeId: null, source: client); }
+        if (!TryFindBody(bodyIndex: bodyIndex, live: out var live, poolIndex: out _)) {
+            pose = default;
 
             return false;
         }
 
-        // An attached row whose target body is not live resolves no position — the SAME inactive-body verdict
-        // PackTransforms already applies before hiding the render stamp below the floor, mirrored here for every
-        // OTHER reader of the stamped position (the audio director's placement anchor is the caller today). Without
-        // this, an inactive carrier would leave the caller reading a stale/default body pose instead of treating the
-        // row as absent.
+        var (position, rotation, _) = FollowedRootPose(client: client, live: live);
+
+        pose = new SdfAnchor(Position: position, Orientation: rotation);
+
+        return true;
+    }
+    /// <summary>Resolves a placement's live pose, for one of its shapes or its root, as the last
+    /// <see cref="PackTransforms"/> drew it: a shape's pose carries its composed delta (its own swings and slides, the
+    /// parent chain, effector corrections) and its part follower, read off the pack's latch with no rig evaluation of
+    /// its own; before the first pack it is the rest or frame pose. An inhabited placement rides its lowest live
+    /// inhabitant's registration or rigid copy, or the inhabitant's body pose before the pool registers it.</summary>
+    /// <param name="placementId">The placement row id.</param>
+    /// <param name="shapeId">The creation shape id to ride, or <see langword="null"/> for the root; one the creation
+    /// does not name rides the root.</param>
+    /// <param name="client">The body poses an inhabited or attached row roots on.</param>
+    /// <param name="pose">The pose, or default.</param>
+    /// <param name="held">Whether the pool holds a registration for the placement, so that a <see langword="false"/>
+    /// answer means it draws nothing this frame rather than that it is not pool-rooted.</param>
+    /// <returns><see langword="true"/> when the pool draws the placement this frame; <see langword="false"/> when no
+    /// registration holds it, or for an attached row whose carrier is not active (the row contributes nothing, the
+    /// same verdict <see cref="PackTransforms"/> renders as a hidden stamp).</returns>
+    public bool TryLivePlacementPose(string placementId, int? shapeId, IWorldStampSource client, out SdfAnchor pose, out bool held) {
+        var inhabitant = (client.TryInhabitantBody(index: out var body, placementId: placementId) ? body : -1);
+
+        if ((inhabitant >= 0) && Rigid.ContainsBody(body: inhabitant) && Rigid.TryShapePose(body: inhabitant, pose: out pose, shapeId: shapeId, source: client)) {
+            held = true;
+
+            return true;
+        }
+
+        held = true;
+
+        if (
+            !TryFindRow(id: placementId, live: out var live, poolIndex: out _) &&
+            ((inhabitant < 0) || !TryFindBody(bodyIndex: inhabitant, live: out live, poolIndex: out _))
+        ) {
+            // An inhabitant the pool has not registered yet is drawn at its body's pose all the same.
+            if (inhabitant >= 0) {
+                pose = new SdfAnchor(Position: client.Position(index: inhabitant), Orientation: client.Orientation(index: inhabitant));
+
+                return true;
+            }
+
+            pose = default;
+            held = false;
+
+            return false;
+        }
+
+        // An attached row whose target body is not live resolves no pose: the same inactive-body verdict PackTransforms
+        // applies before hiding the render stamp below the floor, so no reader treats a stale carrier pose as the row's.
         if (
             (live.Row?.Attach is { } attach) &&
             ((((uint)attach.BodyIndex) >= ((uint)WorldClient.EntityCapacity)) || !client.IsActive(index: attach.BodyIndex))
         ) {
-            position = default;
+            pose = default;
 
             return false;
         }
@@ -1329,87 +1366,21 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
             for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
                 if (shapes[shapeIndex].Id == targetShapeId) {
                     NotePoseRead(live: live);
-                    position = LatchedShapePose(
+                    pose = LatchedShapePose(
                         client: client,
                         live: live,
                         shapeSlot: shapeIndex,
                         shapes: shapes
-                    ).Position;
+                    );
 
                     return true;
                 }
             }
         }
 
-        position = FollowedRootPose(
-            client: client,
-            live: live
-        ).Position;
+        var (position, rotation, _) = FollowedRootPose(client: client, live: live);
 
-        return true;
-    }
-    /// <summary>Resolves a live registration's current dynamic-transform slot for one of its shapes (or its root when
-    /// <paramref name="shapeId"/> is null) — the seam an anchored point light rides so its GPU-read position tracks
-    /// the shape every frame without a per-frame CPU pose readback. Same live/inactive verdicts as
-    /// <see cref="TryShapePosition"/>, and the same root/shape slot numbering <see cref="Emit"/> packs.</summary>
-    /// <param name="placementId">The placement row id.</param>
-    /// <param name="shapeId">The creation shape id to ride, or <see langword="null"/> for the stamped root.</param>
-    /// <param name="client">The client whose inhabitant lookup resolves a body-rooted placement.</param>
-    /// <param name="transformSlot">The absolute packed dynamic-transform slot, or -1 when unresolved.</param>
-    public bool TryShapeTransformSlot(string placementId, int? shapeId, IWorldStampSource client, out int transformSlot) {
-        if (client.TryInhabitantBody(index: out var rigidBody, placementId: placementId) && Rigid.TryRootSlot(body: rigidBody, slot: out transformSlot)) { return true; }
-        transformSlot = -1;
-
-        if (m_packedSlotBase < 0) {
-            return false;
-        }
-
-        var live = FindRow(id: placementId);
-
-        if (
-            (live is null) &&
-            client.TryInhabitantBody(
-            index: out var bodyIndex,
-            placementId: placementId
-        )
-        ) {
-            live = FindBody(bodyIndex: bodyIndex);
-        }
-
-        if ((live is null) || ((live.BodyIndex is { } activeBody) && !client.IsActive(index: activeBody))) {
-            return false;
-        }
-
-        if (
-            (live.Row?.Attach is { } attach) &&
-            ((((uint)attach.BodyIndex) >= ((uint)WorldClient.EntityCapacity)) || !client.IsActive(index: attach.BodyIndex))
-        ) {
-            return false;
-        }
-
-        var poolIndex = Array.IndexOf(array: m_pool, value: live);
-
-        if (poolIndex < 0) {
-            return false;
-        }
-
-        var rootSlot = (m_packedSlotBase + RootSlotOffset(index: poolIndex));
-
-        if (shapeId is { } targetShapeId) {
-            var shapes = (live.Creation.EngineDocument.Shapes ?? []);
-
-            for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
-                if (shapes[shapeIndex].Id == targetShapeId) {
-                    NotePoseRead(live: live);
-                    transformSlot = (rootSlot + live.Motion.ShapeSlots[shapeIndex]);
-
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        transformSlot = rootSlot;
+        pose = new SdfAnchor(Position: position, Orientation: rotation);
 
         return true;
     }
