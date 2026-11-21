@@ -759,6 +759,18 @@ manifest; the debug world's transfer does not commit until both land. Steps 1
 and 2 (the pair from `puck_world_start`, and the remote seat's input) are
 built, and the design carries its review's answers.
 
+- [medium] A remote seat's push is shorter than the same push in one process.
+  On a headless pair on one machine, on a staged world that steps once for
+  each delivery, ten pushes of ten ticks moved the remote body 15.83 units
+  where the same script on the authority's own seat moved its body 17.67:
+  about nine ticks' worth for each ten. On a staged world that steps eight
+  times for each delivery, four pushes of eighty ticks moved it 6.83 against
+  6.50. The cause is not shown. The likely one is that a seat's input waits
+  for the next delivery before it is sent (`WorldClient.SubmitAuthorityIntents`
+  submits once for each observed tick), so each stick movement lands up to one
+  delivery interval late. Read it after the design's step 4, with a counter of
+  the ticks between a stick movement and the tick that applies it.
+
 - [high] A world delivered from another authority shows no text, no machines
   and no session screens on the client that presents it
   ([worlds](../architecture/worlds.md#observation-and-display)). On the RTX
