@@ -294,7 +294,8 @@ public sealed class RuleCompilerLawTests {
             Name: RulesFixture.Name(value: "bound")
         ));
         var effect = Assert.IsType<WriteEffect>(@object: compiled.Effects[0]);
-        var operand = Assert.IsType<LocalOperand>(@object: effect.Source.Expression![0].Operand);
+        // A lone read is that operand (CompiledValueSource.FromExpression).
+        var operand = Assert.IsType<LocalOperand>(@object: effect.Source.Operand);
 
         Assert.Equal(
             actual: operand.Ordinal,
@@ -578,9 +579,10 @@ public sealed class RuleCompilerLawTests {
         ));
         var effect = Assert.IsType<WriteEffect>(@object: compiled.Effects[0]);
 
-        Assert.Single(collection: effect.Source.Expression!);
+        // A program the folder reduced to one constant is that literal (CompiledValueSource.FromExpression).
+        Assert.True(condition: effect.Source.IsLiteral);
         Assert.Equal(
-            actual: effect.Source.Expression![0].Constant,
+            actual: effect.Source.RawValue,
             expected: 5L
         );
     }

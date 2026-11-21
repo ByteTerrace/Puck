@@ -786,8 +786,8 @@ public static partial class RuleCompiler {
                 gate.Add(item: new GateToken(
                     Comparison: comparison,
                     Describe: $"compareValue {valueKind} {comparison.Symbol()}",
-                    LeftSource: CompiledValueSource.FromExpression(carrierKind: leftCarrier, expression: left),
-                    RightSource: CompiledValueSource.FromExpression(carrierKind: rightCarrier, expression: right),
+                    LeftSource: CompiledValueSource.FromExpression(carrierKind: leftCarrier, expression: left, kind: valueKind),
+                    RightSource: CompiledValueSource.FromExpression(carrierKind: rightCarrier, expression: right, kind: valueKind),
                     ValueKind: valueKind
                 ));
 

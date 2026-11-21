@@ -65,6 +65,33 @@ public static partial class RuleCompiler {
             verb: verb
         );
     }
+    /// <summary>Returns the value a program of whole literals has whichever numeric kind reads it: this compiler's
+    /// constant folder run in an Int and in a Fixed carrier. A front end that cannot know a destination's kind
+    /// substitutes a value only when both agree, so its fold never decides what this compiler would decide otherwise.</summary>
+    /// <param name="expression">The authored program.</param>
+    /// <returns>The whole number both readings leave, or <see langword="null"/> when the program reads anything,
+    /// spells a fractional literal, refuses or faults in either kind, or the readings disagree (an Int quotient
+    /// truncates where a Fixed one keeps its fraction).</returns>
+    public static long? FoldKindFree(ExpressionProgram expression) {
+        ArgumentNullException.ThrowIfNull(argument: expression);
+
+        return (((expression.Subprograms.Count == 0) &&
+            expression.Instructions.All(predicate: static instruction => (instruction?.Payload is null or InstructionPayload.Constant { Value.Scale: 0 })) &&
+            (Whole(kind: CellKind.Int) is { } whole) && (Whole(kind: CellKind.Fixed) == whole)) ? whole : null);
+
+        long? Whole(CellKind kind) {
+            try {
+                var context = new RuleCompileContext(catalog: KindFreeCatalog, generators: null, patterns: null, section: null, simulationRateHz: 1, tables: null, vocabulary: RuleVocabulary.Core);
+
+                return ((CompileExpression(context: context, expression: expression, kind: kind, result: out var result, resultKind: null, ruleName: "fold", verb: "fold") is [{ Operation: ExpressionOp.Constant } constant])
+                    ? ((result != CellKind.Fixed) ? constant.Constant : (((constant.Constant & 0xFFFFL) == 0L) ? (constant.Constant >> 16) : null))
+                    : null);
+            } catch (RuleException) {
+                return null;
+            }
+        }
+    }
+    private static readonly StateCatalog KindFreeCatalog = StateCatalog.Compile(section: null);
 
     // Unconstrained literals start in the caller's carrier. Reads retain their declared kinds and
     // arithmetic matches its operands; comparisons and truth operations can leave an Int result.
@@ -645,11 +672,12 @@ public static partial class RuleCompiler {
                 );
             }
 
+            // A local bound to a compile-time constant reads as that constant, so the constant folder reaches through
+            // it and a constant local costs what the literal written in its place costs.
             return Push(
-                new CompiledExpressionToken(
-                    Operand: resolved.Operand,
-                    Operation: ExpressionOp.Operand
-                ),
+                (((resolved.Operand is LocalOperand local) && local.TryConstant(raw: out var bound))
+                    ? new CompiledExpressionToken(Constant: bound, Operation: ExpressionOp.Constant)
+                    : new CompiledExpressionToken(Operand: resolved.Operand, Operation: ExpressionOp.Operand)),
                 readKind
             );
         }
@@ -686,6 +714,17 @@ public static partial class RuleCompiler {
                 arity: 3,
                 operation: ExpressionOp.Select
             );
+            // A condition is a truth, which every comparison leaves as an Int; a literal condition reads as that Int
+            // whatever kind the arms compute in.
+            var condition = (depth - 3);
+
+            if ((literalAt[condition] >= 0) && (kinds[condition] != CellKind.Int)) {
+                tokens[literalAt[condition]] = tokens[literalAt[condition]] with {
+                    Constant = LiteralToRaw(kind: CellKind.Int, literal: literals[condition], ruleName: ruleName, verb: verb),
+                    CarrierKind = CellKind.Int,
+                };
+                kinds[condition] = CellKind.Int;
+            }
             RequireKind(
                 operation: ExpressionOp.Select,
                 required: CellKind.Int,

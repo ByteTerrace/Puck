@@ -1061,13 +1061,20 @@ public static partial class WorldDocumentEmitter {
     private static void ExpandTemplateInvocation(CallExpressionNode call, JsonObject target, DocumentScope scope, bool isViewsContext = false) {
         DocumentLowering.ExpandTemplate(
             call: call,
-            initializeInvocation: (invocationScope, statements) => IndexTypesAndDerivedState(scope: invocationScope, statements: statements),
+            initializeInvocation: InitializeInvocation,
             scope: scope,
             sink: (isViewsContext
             ? ProcessViewsStatement
             : ProcessStatement),
             target: target
         );
+    }
+    // Indexes what a template body declares before the body lowers, as the document's own statements are indexed
+    // before they do, so a family, type or derived row a template declares reads the same as one written in place.
+    // Every expansion route (a template call, one inside a state section, a module `use`) indexes through here.
+    private static void InitializeInvocation(DocumentScope invocationScope, IReadOnlyList<StatementNode> statements) {
+        IndexStateFamilies(scope: invocationScope, statements: statements);
+        IndexTypesAndDerivedState(scope: invocationScope, statements: statements);
     }
     private static void ExpandModuleUse(ExpressionStatementNode statement, CallExpressionNode call, JsonObject target, DocumentScope scope, out DocumentScope? invocation) {
         var expanded = new JsonObject();
@@ -1089,8 +1096,7 @@ public static partial class WorldDocumentEmitter {
                 (parameter, value, bindingScope) => PreserveExternalReference(invocationAnnotations: moduleAnnotations, parameter: parameter, replacements: replacements, scope: bindingScope, value: value),
                 (invocationScope, statements) => {
                     expansionScope = invocationScope;
-                    IndexStateFamilies(scope: invocationScope, statements: statements);
-                    IndexTypesAndDerivedState(scope: invocationScope, statements: statements);
+                    InitializeInvocation(invocationScope: invocationScope, statements: statements);
                 }
             );
             if (expansionScope is not null) {

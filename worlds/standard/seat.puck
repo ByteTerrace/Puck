@@ -15,8 +15,10 @@ let seatButtons = concat(
   seatSteps
 )
 
-// Seat 1 holds `channelName` past half way in the direction `sign` names.
-function seatPast(channelName, sign) = (sign > 0) ? channel(1, channelName) >= 0.5 : channel(1, channelName) <= -0.5
+// Seat 1 holds `channelName` past half way in the direction `sign` names. The test of `sign` short-circuits, so a
+// constant sign leaves only its own comparison in the gate, where a choice (`?:`) would read both.
+function seatPast(channelName, sign) = (sign > 0 and channel(1, channelName) >= 0.5) or
+  (sign <= 0 and channel(1, channelName) <= -0.5)
 
 // Seat 1 is at `boardName` and holds `channelName` past half way in the direction `sign` names.
 function seatHeld(boardName, channelName, sign = 1) = board(engaged, boardName, 1) == 1 and seatPast(channelName, sign)

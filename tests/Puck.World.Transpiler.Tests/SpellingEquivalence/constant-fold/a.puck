@@ -1,5 +1,5 @@
 // Operators over compile-time constants fold: an effect's value, a gate's comparand and a constant conjunct are the
-// values they compute.
+// values they compute, and an `if` a constant decides is the branch it chooses.
 schema: "puck.world.definition.v1"
 documentId: "pair"
 
@@ -16,5 +16,9 @@ state {
 rule "climb" {
   when enabled and level < (width * 5 - 1)
   moves += width * 2
-  level = (width > 3) ? level + 1 : level
+  if width > 3 {
+    level = level + 1
+  } else {
+    level = 0
+  }
 }

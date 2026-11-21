@@ -634,18 +634,12 @@ public sealed partial class WorldRuleHost {
             );
         }
 
-        long value;
-
-        if (effect.Source.Expression is not null) {
-            if (!values[WorldBodyStateEffect.ValueSource].TryFinite(raw: out value)) {
-                return Refuse(
-                    code: WorldRuleEffectRefusal.BodyStateFaulted,
-                    reason: "the value expression names no number",
-                    refusal: out refusal
-                );
-            }
-        } else {
-            value = effect.Source.RawValue;
+        if (!TryArmValue(position: WorldBodyStateEffect.ValueSource, source: effect.Source, value: out var value, values: in values)) {
+            return Refuse(
+                code: WorldRuleEffectRefusal.BodyStateFaulted,
+                reason: "the value names no number",
+                refusal: out refusal
+            );
         }
 
         body.ApplyRuleState(
@@ -656,6 +650,17 @@ public sealed partial class WorldRuleHost {
         refusal = EffectRefusal.None;
 
         return true;
+    }
+    // The value an arm writes to an addressed body: a literal's raw value, or what its declared value source read at
+    // `position` (WorldFactEffect.BodyValueSources), false when that read left no number.
+    private static bool TryArmValue(in CompiledValueSource source, in EffectValues values, int position, out long value) {
+        if (source.IsLiteral) {
+            value = source.RawValue;
+
+            return true;
+        }
+
+        return values[position].TryFinite(raw: out value);
     }
     // The lane cell is an arena row, so this arm is rewound by the firing's own scope; only the persisted identity
     // document write waits for the commit.
@@ -689,18 +694,12 @@ public sealed partial class WorldRuleHost {
             );
         }
 
-        long value;
-
-        if (effect.Expression is not null) {
-            if (!values[WorldIdentityFactEffect.ValueSource].TryFinite(raw: out value)) {
-                return Refuse(
-                    code: WorldRuleEffectRefusal.IdentityFactUnwritable,
-                    reason: "the value expression names no number",
-                    refusal: out refusal
-                );
-            }
-        } else {
-            value = effect.Source.RawValue;
+        if (!TryArmValue(position: WorldIdentityFactEffect.ValueSource, source: effect.Source, value: out var value, values: in values)) {
+            return Refuse(
+                code: WorldRuleEffectRefusal.IdentityFactUnwritable,
+                reason: "the value names no number",
+                refusal: out refusal
+            );
         }
 
         var key = IdentityLaneKey(

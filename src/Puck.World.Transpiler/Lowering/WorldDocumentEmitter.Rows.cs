@@ -256,6 +256,7 @@ public static partial class WorldDocumentEmitter {
             case ExpressionStatementNode { Expression: CallExpressionNode call } when scope.Templates.ContainsKey(key: call.Name):
                 foreach (var (produced, invocation) in DocumentLowering.ExpandTemplateStatements(
                     call: call,
+                    initializeInvocation: InitializeInvocation,
                     scope: scope
                 )) {
                     foreach (var nested in ExpandOne(

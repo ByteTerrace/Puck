@@ -121,6 +121,10 @@ public static partial class WorldDocumentEmitter {
                         scope: stmtScope
                     );
 
+                    // A `when` constants decide true adds no conjunct, so a rule with no other gate has none.
+                    if (IsAlways(gate: ruleGate)) {
+                        break;
+                    }
                     scope.SourceMap?.Register(
                         jsonPointer: DocumentJsonPointer.Child(name: "gate", pointer: rulePointer),
                         span: when1.Span
@@ -469,6 +473,8 @@ public static partial class WorldDocumentEmitter {
         (null, false) => new JsonObject { ["$type"] = "not", ["predicate"] = new JsonObject { ["$type"] = "all", ["predicates"] = new JsonArray() } },
         ( { } gate, _) => LowerGate(node: gate, ruleObj: ruleObj, scope: scope),
     });
+    // Whether a lowered gate is the one a constant decides true, which reads nothing and holds always.
+    private static bool IsAlways(JsonObject gate) => ((gate["$type"]?.ToString() == "all") && (gate["predicates"] is JsonArray { Count: 0 }));
     // The gate with its constants folded, or null and the constant truth it folds to.
     private static (PredicateNode? Gate, bool Constant) FoldGate(PredicateNode node, DocumentScope scope) {
         switch (node) {
@@ -830,14 +836,22 @@ public static partial class WorldDocumentEmitter {
             scope: scope,
             statements: [statement]
         )) {
+            var (test, chosen) = ((produced is IfStatementNode choice) ? FoldGate(node: choice.Condition, scope: iteration) : (null, false));
+
+            // An `if` constants decide is the branch it chooses, spliced in place (its loops and template calls
+            // expanding as any statement's do), so neither the test nor the other branch is shipped or priced.
+            if ((produced is IfStatementNode decided) && (test is null)) {
+                foreach (var branch in (chosen ? decided.Then : (decided.Else ?? []))) {
+                    AppendEffect(effects: effects, pointer: pointer, ruleObj: ruleObj, scope: iteration, statement: branch);
+                }
+                continue;
+            }
+
             var element = DocumentJsonPointer.Child(index: effects.Count, pointer: pointer);
 
-            if (LowerEffectStatement(
-                pointer: element,
-                ruleObj: ruleObj,
-                scope: iteration,
-                stmt: produced
-            ) is { } lowered) {
+            if (((produced is IfStatementNode conditional)
+                ? LowerIf(condition: test!, ifStmt: conditional, pointer: element, ruleObj: ruleObj, scope: iteration)
+                : LowerEffectStatement(pointer: element, ruleObj: ruleObj, scope: iteration, stmt: produced)) is { } lowered) {
                 scope.SourceMap?.Register(
                     jsonPointer: element,
                     span: produced.Span
@@ -927,12 +941,6 @@ public static partial class WorldDocumentEmitter {
         )!,
         CompoundAssignStatementNode compound => LowerCompoundAssignment(
             compound: compound,
-            ruleObj: ruleObj,
-            scope: scope
-        ),
-        IfStatementNode ifStmt => LowerIf(
-            ifStmt: ifStmt,
-            pointer: pointer,
             ruleObj: ruleObj,
             scope: scope
         ),
@@ -1080,11 +1088,11 @@ public static partial class WorldDocumentEmitter {
         obj["expression"] = DocumentExpression(text: $"{left} {compound.Operator} ({right})");
         return obj;
     }
-    // `if Gate { ... } [else { ... }]` lowers to ActionEffect.If, reusing the same predicate lowering `when` uses
-    // for its own condition. An `else if` chain is already one nested IfStatementNode per level (the parser's own
-    // shape), so recursing through LowerEffectStatement nests it the same way with no separate case. `repeat` and
-    // `break` still have nothing to lower onto in a straight-line rule body.
-    private static JsonObject LowerIf(IfStatementNode ifStmt, DocumentScope scope, string pointer, JsonObject? ruleObj = null) {
+    // `if Gate { ... } [else { ... }]` whose gate still reads something (AppendEffect splices one constants decide)
+    // lowers to ActionEffect.If over its folded condition, the gate lowering `when` uses. An `else if` chain is already
+    // one nested IfStatementNode per level (the parser's own shape), so its branches recurse through AppendEffect and
+    // nest the same way. `repeat` and `break` still have nothing to lower onto in a straight-line rule body.
+    private static JsonObject LowerIf(IfStatementNode ifStmt, PredicateNode condition, DocumentScope scope, string pointer, JsonObject? ruleObj) {
         var thenArr = LowerEffectList(
             pointer: DocumentJsonPointer.Child(name: "then", pointer: pointer),
             ruleObj: ruleObj,
@@ -1093,11 +1101,7 @@ public static partial class WorldDocumentEmitter {
         );
         var obj = new JsonObject {
             ["$type"] = "if",
-            ["condition"] = LowerPredicate(
-                node: ifStmt.Condition,
-                ruleObj: ruleObj,
-                scope: scope
-            ),
+            ["condition"] = LowerGate(node: condition, ruleObj: ruleObj, scope: scope),
             ["then"] = thenArr,
         };
 

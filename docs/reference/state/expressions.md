@@ -307,6 +307,23 @@ arm. This warning covers that common trap, not every possible domain or overflow
 fault. Use an `if`/`else` effect or `and`/`or` short-circuiting to guard an operation.
 Work budgets price the program after folding.
 
+This folder is the only one whose answer depends on a destination's kind: an Int
+destination rounds each literal to even before the arithmetic, so `0.5 + 0.5` is
+0 there and 1 in a Fixed one, and `5 / 2` is 2 and 2.5. The `.puck` compiler
+substitutes a value before lowering only where every kind agrees on it
+(`RuleCompiler.FoldKindFree` folds a program of whole literals in an Int and a
+Fixed carrier and keeps the value only when both readings match), so a source
+and a JSON document spelling the same expression compile to the same rule.
+
+A value source that is a program (`CompiledValueSource.FromExpression`) is
+canonical: a program the folder reduced to one constant is that literal, a lone
+read in its own kind with no computed address is that read, and a rule local
+bound to a constant reads as the constant. A constant spelling therefore costs
+what its literal costs, and `compareValue(level, 6 / 2)` compiles and prices as
+`compareState(level, 3)`. A lone read keeps a fact's semantics: a forever fact
+compares as infinity and a copy of one skips, where a program computing with it
+faults.
+
 `Outcome` carries the answer as one of four `FaultCase` cases. Its default is
 `Faulted` with `ExpressionFault.Domain`; a number is available only through
 `Outcome.TryFinite`. `Fact` carries an outcome beside its cell kind, and
