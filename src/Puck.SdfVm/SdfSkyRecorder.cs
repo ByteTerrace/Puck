@@ -305,40 +305,14 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
         m_portTables[slot] = tables;
     }
     private void DeclareScreens(SdfWorldResidency residency) => residency.DeclareScreens(declared: m_declaredScreens);
-    // Writes each screen the frame's sky samples into the slot's pass set every frame, since a host's image handle is
-    // unique only among live objects, and the filler once at every other screen. The image is the one the views pass
-    // binds (SdfWorldResidency.ScreenImage), under the lease it already holds.
+    // Writes each declared screen the frame's sky samples into the slot's pass set. The image is the one the views pass
+    // binds, under the lease it already holds.
     private void BindScreens(SdfFrame frame, in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
-        var bound = m_screens[recording.Slot];
-        var filler = tables.SampledFiller.ImageViewHandle;
-        var residency = m_view.Residency;
         frame.Sky.MarkScreens(screens: m_sampledScreens);
-        for (var screen = 0; (screen < SdfWorldTables.MaxScreenSurfaces); screen++) {
-            var image = ((m_sampledScreens[screen] && m_declaredScreens[screen])
-                ? residency.ScreenImage(
-                    leases: recording.Leases,
-                    reads: recording.Reads,
-                    screen: screen,
-                    view: m_view.View
-                )
-                : 0);
-
-            if (image == 0) {
-                if (bound[screen] == filler) {
-                    continue;
-                }
-
-                image = filler;
-            }
-
-            m_context.Services.Bindings.WriteSampledImage(
-                arrayElement: ((uint)screen),
-                binding: m_sets.BindingOf(member: SdfWorldPackage.ScreenSources),
-                descriptorSetHandle: set,
-                imageViewHandle: image
-            );
-            bound[screen] = image;
-        }
+        for (var screen = 0; (screen < m_sampledScreens.Length); screen++) { m_sampledScreens[screen] &= m_declaredScreens[screen]; }
+        _ = m_view.Residency.BindScreenImages(view: m_view.View, shown: m_sampledScreens, recording: in recording, bindings: m_context.Services.Bindings,
+            binding: m_sets.BindingOf(member: SdfWorldPackage.ScreenSources), set: set, filler: tables.SampledFiller.ImageViewHandle,
+            bound: m_screens[recording.Slot]);
     }
     // Each consumer carries its own fit. Images come from the same completed graph reads and submission-held leases
     // as physical screens, without allocating a screen index or changing the residency's authored sky table.
