@@ -154,12 +154,12 @@ public sealed partial class SdfMeshPathBake {
     // The simplifier consumes all shape inputs through this call. The contour closure stops here, and the simplifier
     // closure starts here. Calling another simplification routine upstream makes it part of the contour closure.
     internal static class SimplificationStage {
-        internal static SdfMesh Run(SdfMesh mesh, bool dynamic, bool glass, int instances, bool preserveFeatures, IAllocationObserver? owner) {
+        internal static SdfMesh Run(SdfMesh mesh, bool dynamic, bool glass, int instances, bool preserveFeatures, IAllocationObserver? owner, IAllocator? allocator) {
             if (!dynamic && !glass && ((instances > 1) || (mesh.TriangleCount >= SdfMeshChunks.WholeTriangles))) {
-                return SdfMeshChunks.Bake(mesh, preserveFeatures, owner);
+                return SdfMeshChunks.Bake(mesh, preserveFeatures, owner, allocator);
             }
-            var merged = SdfMeshPlanarMerge.Merge(mesh, owner);
-            return glass ? merged : SdfMeshCollapse.Levels(merged, preserveFeatures, owner);
+            var merged = SdfMeshPlanarMerge.Merge(mesh, owner, allocator);
+            return glass ? merged : SdfMeshCollapse.Levels(merged, preserveFeatures, owner, allocator);
         }
     }
 

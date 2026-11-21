@@ -72,12 +72,26 @@ public sealed record WorldLaunchRequest(string Step, string Artifact) {
     public string? Checkout { get; init; }
     /// <summary>Gets whether the World opens a GPU device, and so starts only under the GPU lease.</summary>
     public bool OpensDevice => (Shape is WorldShape.Windowed or WorldShape.Document);
+    /// <summary>Gets whether the World runs alone on the machine's GPU, as a timing leg must: it takes the GPU lease
+    /// exclusively and waits for every other device holder to finish, instead of sharing the device by measured
+    /// headroom.</summary>
+    public bool Timing { get; init; }
     /// <summary>Gets what the World is to the host admission, which sets the commit it is expected to peak at.</summary>
     public HostStartKind Kind => Shape switch {
         WorldShape.TestBatch => HostStartKind.ReproduceReplica,
         WorldShape.Windowed or WorldShape.Document => HostStartKind.WindowedWorld,
         _ => HostStartKind.HeadlessWorld,
     };
+    /// <summary>Gets the profile the host admission judges the World by: its <see cref="Kind"/>, and for a World that opens a
+    /// device the backend it boots on and whether its mesh store is warm (<see cref="WorldDevices.StoreOf"/>, read from
+    /// <see cref="Arguments"/> when the profile is asked for).</summary>
+    public HostStartProfile Profile => ((Kind == HostStartKind.WindowedWorld)
+        ? new HostStartProfile(Kind: Kind, Device: Backend switch {
+            WorldBackendPreference.DirectX => WorldBackendTokens.DirectX,
+            WorldBackendPreference.Vulkan => WorldBackendTokens.Vulkan,
+            _ => null,
+        }, Store: WorldDevices.StoreOf(arguments: Arguments))
+        : new HostStartProfile(Kind: Kind));
     /// <summary>Gets the program the launch starts: <see cref="Executable"/>, or <c>dotnet</c>.</summary>
     public string FileName => (Executable ?? "dotnet");
 
@@ -119,12 +133,15 @@ public sealed class WorldLaunch : IDisposable {
     public const int BackstopGraceSeconds = 120;
 
     private readonly WorldLaunchRequest m_request;
+    // Read as the admission ends, before the World starts and fills its store, so the mark records the store it started with.
+    private readonly HostStartProfile m_profile;
 
     private IDisposable? m_gpu;
     private bool m_used;
 
     private WorldLaunch(WorldLaunchRequest request, IDisposable? gpu) {
         m_request = request;
+        m_profile = request.Profile;
         m_gpu = gpu;
     }
 
@@ -250,18 +267,19 @@ public sealed class WorldLaunch : IDisposable {
         var name = (request.OpensDevice ? "gpu" : "heavy");
         var holder = (request.Holder ?? request.Step);
         var lane = (request.Lane ?? CliLease.LaneOf(checkout: checkout));
+        var profile = request.Profile;
         var gpu = await WorldWorkHold.AcquireAsync(checkout, name, holder, lane,
             (root, token) => LeasedAdmission.AcquireAsync(root, name, holder, lane,
-                (place, step, device, heavy, kind, bound, reserve, progress, phase, cancel) => WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancel, checkout: place, device: device, heavySuite: heavy, kind: kind, reserve: reserve, stage: phase, step: step),
-                checkout, request.Step, request.OpensDevice, request.HeavySuite, request.Kind, TimeProvider.System,
-                (request.AdmissionWait ?? CliLease.DefaultWait), Console.Error, stage, token),
+                (place, step, device, heavy, held, bound, reserve, progress, phase, cancel) => WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancel, checkout: place, device: device, heavySuite: heavy, kind: held, reserve: reserve, stage: phase, step: step),
+                checkout, request.Step, request.OpensDevice, request.HeavySuite, profile, TimeProvider.System,
+                (request.AdmissionWait ?? CliLease.DefaultWait), Console.Error, stage, token, request.Timing),
             token => AdmitHostAsync(bound: request.AdmissionWait, cancellationToken: token, refuse: false, request: request, reserve: true, stage: stage), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
         return new WorldLaunch(gpu: gpu, request: request);
     }
 
     private static async Task<bool> AdmitHostAsync(WorldLaunchRequest request, TimeSpan? bound, bool reserve, bool refuse, Action<string>? stage, CancellationToken cancellationToken) {
-        var admitted = await WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancellationToken, device: request.OpensDevice, heavySuite: request.HeavySuite, kind: request.Kind, reserve: reserve, stage: stage, step: request.Step, checkout: request.Checkout).ConfigureAwait(continueOnCapturedContext: false);
+        var admitted = await WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancellationToken, device: request.OpensDevice, heavySuite: request.HeavySuite, kind: request.Profile, reserve: reserve, stage: stage, step: request.Step, checkout: request.Checkout).ConfigureAwait(continueOnCapturedContext: false);
 
         if (!admitted && refuse) { throw new HostAdmissionRefusedException(step: request.Step); }
 
@@ -271,7 +289,8 @@ public sealed class WorldLaunch : IDisposable {
     private WorldReadiness Readiness(Process process) => WorldReadiness.For(
         checkout: (m_request.Checkout ?? (CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root) ? root : Environment.CurrentDirectory)),
         opensDevice: m_request.OpensDevice,
-        process: process
+        process: process,
+        profile: m_profile
     );
 
     /// <summary>Runs the admitted World to exit with its streams captured, as <see cref="CliProcess.RunCaptured"/> does,

@@ -25,12 +25,13 @@ namespace Puck.Cli.Host;
 /// <param name="Growing">How many admitted starts are still below their expected commit peak.</param>
 /// <param name="Kind">The start's kind.</param>
 /// <param name="WorkingSetOwnGb">The start's own expected whole working-set peak, in gigabytes, which admission reports and
-/// never judges; NaN before the kind has an observation.</param>
+/// never judges; NaN before the profile has an observation.</param>
 /// <param name="LoneOwnGb">The lesser of the start's expected commit peak and the kind's fallback, in gigabytes:
 /// <paramref name="OwnGb"/> is this when the expected peak exceeds what the machine could hold with no admitted start
 /// running, and a start whose lone need the machine could never hold is refused by name.</param>
 /// <param name="LoneResidentOwnGb">The lone need in private working set, in gigabytes.</param>
-public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalCovered, double HeadroomGb, double FreeRamGb, double NeedGb, double OwnGb, double GrowthGb, double ResidentNeedGb, double ResidentOwnGb, double ResidentGrowthGb, int Growing, HostStartKind Kind, double WorkingSetOwnGb = double.NaN, double LoneOwnGb = double.NaN, double LoneResidentOwnGb = double.NaN) {
+/// <param name="Profile">The profile the start was judged by, or <see langword="null"/> for its kind alone.</param>
+public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalCovered, double HeadroomGb, double FreeRamGb, double NeedGb, double OwnGb, double GrowthGb, double ResidentNeedGb, double ResidentOwnGb, double ResidentGrowthGb, int Growing, HostStartKind Kind, double WorkingSetOwnGb = double.NaN, double LoneOwnGb = double.NaN, double LoneResidentOwnGb = double.NaN, HostStartProfile? Profile = null) {
     /// <summary>Gets whether the machine can hold the start: both the commit headroom and free physical memory cover it.</summary>
     public bool Covered => (CommitCovered && PhysicalCovered);
 }
@@ -42,10 +43,13 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 /// no page); a whole working set overstates what it needs resident (the clean pages of mapped files and images are shared and
 /// reclaimed under pressure); so commit is judged by private bytes and free memory by the private working set
 /// (<see cref="HostRunningStart.ResidentGb"/>).
-/// Before a kind has an observation it uses <see cref="HostLoadThresholds.DefaultPeakGb"/> and, for its private working set,
-/// <see cref="HostLoadThresholds.ResidentFraction"/> of its expected commit peak. After, a kind's expected peak in each
+/// A start is judged by its own profile (<see cref="HostStartProfile"/>): its kind and, for a windowed World, the backend it
+/// boots on and whether its mesh store is warm or cold, so the cold bakes' far larger peak never sets what a warm session
+/// must find free. The profile of a running process is the one its launch recorded (<see cref="StartProfiles"/>).
+/// Before a profile has an observation it uses <see cref="HostLoadThresholds.DefaultPeakGb"/> and, for its private working set,
+/// <see cref="HostLoadThresholds.ResidentFraction"/> of its expected commit peak. After, a profile's expected peak in each
 /// quantity is the high percentile of its recent distribution (<see cref="HostPeakWindow"/>: the last ten processes of the
-/// kind, each observed at a plateau or for a full plateau window), so one outlier session raises it only until a few
+/// profile, each observed at a plateau or for a full plateau window), so one outlier session raises it only until a few
 /// ordinary starts follow, a sustained rise is learned, and the estimate moves down as readily as up. The windows are shared
 /// between CLI processes under the lease root (<see cref="ObservationDirectory"/>), where the file decides: a long-lived
 /// process adds what it observed since its last write and keeps nothing else of its own. A live process above the
@@ -76,7 +80,7 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 public sealed class HostStartTracker {
     private sealed record Reservation(HostStartKind Kind, long At, double Gb, double ResidentGb, HashSet<(int Id, long StartTicks)> Known);
     // CpuAnchor is the process's CPU time when BusyAt was last set.
-    private sealed record Observation(HostStartKind Kind, HostPeaks Peaks, double AnchorGb, long GrewAt, long FirstAt, double CpuAnchor, long BusyAt);
+    private sealed record Observation(HostStartProfile Profile, HostPeaks Peaks, double AnchorGb, long GrewAt, long FirstAt, double CpuAnchor, long BusyAt);
 
     /// <summary>Without material growth for this long, a live process reserves no further growth; without CPU use for this
     /// long it is idle.</summary>
@@ -86,11 +90,11 @@ public sealed class HostStartTracker {
     /// idle (<see cref="StartIdleness"/>), whatever its private bytes do. A hung process still wakes for a timer or a
     /// collection now and then, which this tolerates.</summary>
     public const double BusyCpuSeconds = 1.0;
-    /// <summary>The directory under the lease root that holds each kind's observation window, one file per
-    /// <see cref="HostStartKind"/> name. A change to the files' lines takes a new name and raises <see cref="CliLease.Protocol"/>:
-    /// every CLI copy on the machine rewrites these files on each reading, so two copies that disagree on the lines must not
-    /// share one.</summary>
-    public const string ObservationDirectory = "host-peaks";
+    /// <summary>The directory under the lease root that holds each profile's observation window, one file per
+    /// <see cref="HostStartProfile.Name"/>. A change to the files' lines or to what their names mean takes a new name and
+    /// raises <see cref="CliLease.Protocol"/>: every CLI copy on the machine rewrites these files on each reading, so two
+    /// copies that disagree on them must not share one.</summary>
+    public const string ObservationDirectory = "host-profiles";
     private readonly string? m_root;
 
     /// <summary>Creates a tracker, optionally sharing measured peaks in the machine's lease root.</summary>
@@ -101,7 +105,7 @@ public sealed class HostStartTracker {
     public static readonly TimeSpan ReservationHold = TimeSpan.FromSeconds(seconds: 90);
 
     private readonly Lock m_gate = new();
-    private readonly Dictionary<HostStartKind, HostPeakWindow> m_windows = [];
+    private readonly Dictionary<HostStartProfile, HostPeakWindow> m_windows = [];
     private readonly List<Reservation> m_reservations = [];
     // Keyed by process id and start ticks: a recycled id is another start, and carries none of the last one's peak.
     private readonly Dictionary<(int Id, long StartTicks), Observation> m_seen = [];
@@ -111,31 +115,32 @@ public sealed class HostStartTracker {
     /// <summary>Gets the tracker of this process's host session, which the admission of a real machine reading uses.</summary>
     public static HostStartTracker Session { get; } = new(leaseRoot: CliLease.RootAsync(Environment.CurrentDirectory).GetAwaiter().GetResult());
 
-    private HostPeakWindow Window(HostStartKind kind) {
-        if (!m_windows.TryGetValue(kind, out var window)) {
+    private HostPeakWindow Window(HostStartProfile profile) {
+        profile = profile.Class;
+        if (!m_windows.TryGetValue(profile, out var window)) {
             window = new HostPeakWindow();
-            m_windows[kind] = window;
+            m_windows[profile] = window;
         }
 
         return window;
     }
-    // The one expected-peak door: the recent observations' high percentile once the kind has any, else its fallbacks (the
-    // kind's default commit peak, a fixed share of it as the private working set, and no whole working set, which is
+    // The one expected-peak door: the recent observations' high percentile once the profile has any, else its fallbacks (the
+    // profile's default commit peak, a fixed share of it as the private working set, and no whole working set, which is
     // reported only and has nothing to stand in for it).
     // The fallbacks are held to the machine's size (installedRamGb, the judging thresholds' InstalledRamGb).
-    private HostPeaks Expected(HostStartKind kind, double? installedRamGb) => ((m_windows.TryGetValue(kind, out var window) && (window.Count > 0))
+    private HostPeaks Expected(HostStartProfile kind, double? installedRamGb) => ((m_windows.TryGetValue(kind.Class, out var window) && (window.Count > 0))
         ? new HostPeaks(PrivateGb: window.PrivateGb, ResidentGb: window.ResidentGb, WorkingSetGb: window.WorkingSetGb)
         : Fallback(installedRamGb: installedRamGb, kind: kind));
-    private static HostPeaks Fallback(HostStartKind kind, double? installedRamGb) {
+    private static HostPeaks Fallback(HostStartProfile kind, double? installedRamGb) {
         var peak = HostLoadThresholds.DefaultPeakGb(installedRamGb: installedRamGb, kind: kind);
 
         return new(PrivateGb: peak, ResidentGb: (HostLoadThresholds.ResidentFraction * peak), WorkingSetGb: double.NaN);
     }
     // What a start is judged by when its learned expectation exceeds what the machine could hold with no admitted start
-    // running: the lesser of that expectation and the fallback an unmeasured kind gets. Such an expectation could otherwise
-    // refuse every start of its kind however long it waits, and a refused kind runs nothing that could teach the window a
-    // lower figure.
-    private HostPeaks Lone(HostStartKind kind, double? installedRamGb) {
+    // running: the lesser of that expectation and the fallback an unmeasured profile gets. Such an expectation could otherwise
+    // refuse every start of its profile however long it waits, and a refused profile runs nothing that could teach the window
+    // a lower figure.
+    private HostPeaks Lone(HostStartProfile kind, double? installedRamGb) {
         var learned = Expected(installedRamGb: installedRamGb, kind: kind);
         var fallback = Fallback(installedRamGb: installedRamGb, kind: kind);
 
@@ -144,13 +149,14 @@ public sealed class HostStartTracker {
     // A live process's peaks as one reading shows them.
     private static HostPeaks Reading(HostRunningStart start) => new(PrivateGb: start.PrivateGb, ResidentGb: start.ResidentGb, WorkingSetGb: start.HeldGb);
 
-    // Folds one reading of a start, or of a hold's process tree, into its observation: its peaks, when its private bytes
-    // last grew materially, and when it last used CPU. A tree's CPU time falls when a busy child exits; the anchor follows
-    // it down without counting the fall as use, so the next child's work is measured from there.
-    private static (Observation Seen, bool Busy) Follow(Observation? seen, HostStartKind kind, HostPeaks peaks, double cpuSeconds, TimeProvider clock) {
+    // Folds one reading of a start, or of a hold's process tree, into its observation: its profile (which a launch can make
+    // cold while the process runs), its peaks, when its private bytes last grew materially, and when it last used CPU. A
+    // tree's CPU time falls when a busy child exits; the anchor follows it down without counting the fall as use, so the
+    // next child's work is measured from there.
+    private static (Observation Seen, bool Busy) Follow(Observation? seen, HostStartProfile kind, HostPeaks peaks, double cpuSeconds, TimeProvider clock) {
         var now = clock.GetTimestamp();
 
-        seen ??= new Observation(kind, peaks, peaks.PrivateGb, now, now, cpuSeconds, now);
+        seen = ((seen ?? new Observation(kind, peaks, peaks.PrivateGb, now, now, cpuSeconds, now)) with { Profile = kind });
         var grew = (peaks.PrivateGb >= (seen.AnchorGb + MaterialGrowthGb));
         var busy = (!double.IsFinite(cpuSeconds) || !double.IsFinite(seen.CpuAnchor) || (cpuSeconds >= (seen.CpuAnchor + BusyCpuSeconds)));
 
@@ -171,11 +177,11 @@ public sealed class HostStartTracker {
         return (((Math.Max(expected.PrivateGb, seen.Peaks.PrivateGb) - privateGb) * remaining), ((Math.Max(expected.ResidentGb, seen.Peaks.ResidentGb) - residentGb) * remaining));
     }
 
-    // A process is an observation of its kind once it has been seen for a full plateau (live: its growth stopped for one;
-    // exited: it was watched for one). Before that it counts only to raise a kind that already has observations, since a
+    // A process is an observation of its profile once it has been seen for a full plateau (live: its growth stopped for one;
+    // exited: it was watched for one). Before that it counts only to raise a profile that already has observations, since a
     // short focused check says nothing of an ordinary start's peak. A process already in the window keeps its entry current.
-    private void Record(HostStartKind kind, (int Id, long StartTicks) id, HostPeaks peaks, bool settled) {
-        var window = Window(kind: kind);
+    private void Record(HostStartProfile kind, (int Id, long StartTicks) id, HostPeaks peaks, bool settled) {
+        var window = Window(profile: kind);
 
         // Only the judged quantities raise a kind early: a reported working set alone never brings a short run in.
         if (window.Contains(id: id.Id, startTicks: id.StartTicks) || settled || ((window.Count > 0) && (Expected(installedRamGb: null, kind: kind) is var expected) && ((peaks.PrivateGb > expected.PrivateGb) || (peaks.ResidentGb > expected.ResidentGb)))) {
@@ -183,10 +189,10 @@ public sealed class HostStartTracker {
         }
     }
 
-    // Each kind has one observation file under the lease root, the truth of its window. An exclusive guard merges it with
+    // Each profile has one observation file under the lease root, the truth of its window. An exclusive guard merges it with
     // what this process observed since its last write, so what a long-lived process remembers never outvotes the file.
     private static void Synchronize(HostPeakWindow window, string path) {
-        using var held = FileLock.TryAcquire(path + ".guard");
+        using var held = FileLock.TryAcquire(path + GuardSuffix);
         if (held is null) { return; }
 
         var stored = (File.Exists(path) ? File.ReadAllText(path) : null);
@@ -195,24 +201,34 @@ public sealed class HostStartTracker {
         if ((text.Length > 0) && (text != stored)) { AtomicFile.WriteAllText(path, text); }
         window.Written();
     }
+    // Every profile a file names or this process has observed: the files are the machine's windows, so a profile another CLI
+    // measured is read before this process has met one of its own.
     private void Measurements() {
         if (m_root is null) { return; }
         var directory = Path.Combine(m_root, ObservationDirectory);
         Directory.CreateDirectory(directory);
-        foreach (var kind in Enum.GetValues<HostStartKind>()) {
-            Synchronize(Window(kind: kind), Path.Combine(directory, kind.ToString()));
+
+        var known = new HashSet<HostStartProfile>(collection: m_windows.Keys);
+
+        foreach (var kind in Enum.GetValues<HostStartKind>()) { _ = known.Add(item: new HostStartProfile(Kind: kind)); }
+        foreach (var file in Directory.EnumerateFiles(directory)) {
+            if (!file.EndsWith(GuardSuffix, StringComparison.Ordinal) && HostStartProfile.TryParse(name: Path.GetFileName(file), profile: out var stored)) { _ = known.Add(item: stored); }
+        }
+        foreach (var profile in known) {
+            Synchronize(Window(profile: profile), Path.Combine(directory, profile.Name));
         }
     }
+    private const string GuardSuffix = ".guard";
 
-    /// <summary>Returns the kind's expected peaks, each the high percentile of its recent observations, read from the shared
-    /// window first. Before the kind has an observation the private bytes are <see cref="HostLoadThresholds.DefaultPeakGb"/>,
-    /// the private working set <see cref="HostLoadThresholds.ResidentFraction"/> of that, and the whole working set, which
-    /// admission reports and never judges, NaN.</summary>
-    /// <param name="kind">The start's kind.</param>
+    /// <summary>Returns the profile's expected peaks, each the high percentile of its recent observations, read from the
+    /// shared window first. Before the profile has an observation the private bytes are
+    /// <see cref="HostLoadThresholds.DefaultPeakGb"/>, the private working set <see cref="HostLoadThresholds.ResidentFraction"/>
+    /// of that, and the whole working set, which admission reports and never judges, NaN.</summary>
+    /// <param name="kind">The start's profile.</param>
     /// <param name="thresholds">The thresholds of the machine the start runs on, whose installed memory holds the fallbacks
-    /// (<see cref="HostLoadThresholds.DefaultPeakGb"/>); <see langword="null"/> judges by the kinds' figures alone.</param>
+    /// (<see cref="HostLoadThresholds.DefaultPeakGb"/>); <see langword="null"/> judges by the profiles' figures alone.</param>
     /// <returns>The expected peaks, in gigabytes.</returns>
-    public HostPeaks ExpectedPeaks(HostStartKind kind, HostLoadThresholds? thresholds = null) {
+    public HostPeaks ExpectedPeaks(HostStartProfile kind, HostLoadThresholds? thresholds = null) {
         lock (m_gate) {
             Measurements();
             return Expected(installedRamGb: thresholds?.InstalledRamGb, kind: kind);
@@ -222,23 +238,31 @@ public sealed class HostStartTracker {
     /// folding the reading's processes into the tracker first, and, when <paramref name="reserve"/> is set and the start is
     /// covered, holds its peak as a reservation in the same step so a concurrent start reads it.</summary>
     /// <param name="reading">The machine reading.</param>
-    /// <param name="kind">The start's kind.</param>
+    /// <param name="kind">The start's profile.</param>
     /// <param name="thresholds">The thresholds that judge the commit headroom (with its reserve) and free physical memory.</param>
     /// <param name="clock">The clock a reservation's hold is measured on.</param>
     /// <param name="reserve">Whether a covered start is admitted by this call and so reserves its peak.</param>
     /// <returns>The start's demand.</returns>
-    public HostStartDemand Judge(HostSample reading, HostStartKind kind, HostLoadThresholds thresholds, TimeProvider clock, bool reserve) {
+    public HostStartDemand Judge(HostSample reading, HostStartProfile kind, HostLoadThresholds thresholds, TimeProvider clock, bool reserve) {
         lock (m_gate) {
             Measurements();
             var live = (reading.Starts ?? []);
             var liveIds = new HashSet<(int Id, long StartTicks)>(collection: live.Select(selector: static start => (start.Id, start.StartTicks)));
+
+            // Records, machine-wide, that a start or a hold's tree has gone idle, or has used CPU again after another observer
+            // marked it idle; the marks are how every other process's admission sees that a holder gave its place back.
+            void Mark(bool busy, bool quiet, DateTimeOffset? markedSince, HostStartKind markKind, int id, long startTicks, Observation seen) {
+                if (m_root is not { } root) { return; }
+                if (busy && (markedSince is not null)) { StartIdleness.Clear(root: root, processId: id, startTicks: startTicks); }
+                else if (quiet && (markedSince is null)) { StartIdleness.Mark(root: root, start: new IdleStart(Kind: markKind, ProcessId: id, Since: (clock.GetUtcNow() - clock.GetElapsedTime(seen.BusyAt)), StartTicks: startTicks)); }
+            }
 
             // The idle starts: no CPU use for a plateau, which settles a start whatever its private bytes do.
             HashSet<(int Id, long StartTicks)> idleStarts = [];
 
             foreach (var start in live) {
                 var id = (start.Id, start.StartTicks);
-                var (seen, busy) = Follow(clock: clock, cpuSeconds: start.CpuSeconds, kind: start.Kind, peaks: Reading(start: start), seen: m_seen.GetValueOrDefault(id));
+                var (seen, busy) = Follow(clock: clock, cpuSeconds: start.CpuSeconds, kind: start.Profile, peaks: Reading(start: start), seen: m_seen.GetValueOrDefault(id));
 
                 m_seen[id] = seen;
 
@@ -246,14 +270,11 @@ public sealed class HostStartTracker {
                 var quiet = (clock.GetElapsedTime(seen.BusyAt) >= Plateau) || ((start.IdleSince is not null) && (seen.BusyAt == seen.FirstAt));
 
                 if (quiet) { _ = idleStarts.Add(item: id); }
-                if (m_root is { } root) {
-                    if (busy && (start.IdleSince is not null)) { StartIdleness.Clear(root: root, processId: start.Id, startTicks: start.StartTicks); }
-                    else if (quiet && (start.IdleSince is null)) { StartIdleness.Mark(root: root, start: new IdleStart(Kind: start.Kind, ProcessId: start.Id, Since: (clock.GetUtcNow() - clock.GetElapsedTime(seen.BusyAt)), StartTicks: start.StartTicks)); }
-                }
-                Record(start.Kind, id, seen.Peaks, settled: (quiet || (clock.GetElapsedTime(seen.GrewAt) >= Plateau)));
+                Mark(busy: busy, quiet: quiet, markedSince: start.IdleSince, markKind: start.Kind, id: start.Id, startTicks: start.StartTicks, seen: seen);
+                Record(seen.Profile, id, seen.Peaks, settled: (quiet || (clock.GetElapsedTime(seen.GrewAt) >= Plateau)));
             }
             foreach (var (id, seen) in m_seen.Where(predicate: pair => !liveIds.Contains(item: pair.Key)).ToArray()) {
-                Record(seen.Kind, id, seen.Peaks, settled: (clock.GetElapsedTime(seen.FirstAt) >= Plateau));
+                Record(seen.Profile, id, seen.Peaks, settled: (clock.GetElapsedTime(seen.FirstAt) >= Plateau));
                 _ = m_seen.Remove(key: id);
             }
             Measurements();
@@ -298,7 +319,7 @@ public sealed class HostStartTracker {
             var startsLeft = new Dictionary<int, (double Commit, double Resident)>();
 
             foreach (var start in live) {
-                startsLeft[start.Id] = (start.Ready ? (0, 0) : Left(clock: clock, expected: Expected(installedRamGb: thresholds.InstalledRamGb, kind: start.Kind), idle: idleStarts.Contains(item: (start.Id, start.StartTicks)), privateGb: start.PrivateGb, residentGb: start.ResidentGb, seen: m_seen[(start.Id, start.StartTicks)]));
+                startsLeft[start.Id] = (start.Ready ? (0, 0) : Left(clock: clock, expected: Expected(installedRamGb: thresholds.InstalledRamGb, kind: start.Profile), idle: idleStarts.Contains(item: (start.Id, start.StartTicks)), privateGb: start.PrivateGb, residentGb: start.ResidentGb, seen: m_seen[(start.Id, start.StartTicks)]));
             }
             // A hold another process admitted covers its holder's whole process tree from the grant on, before any start in it
             // appears: the tree still has to grow toward the hold's expected peak, or the tracked starts inside it still have
@@ -309,11 +330,13 @@ public sealed class HostStartTracker {
 
             foreach (var hold in (reading.Holds ?? [])) {
                 var id = (hold.Id, hold.StartTicks);
-                var (seen, _) = Follow(clock: clock, cpuSeconds: hold.CpuSeconds, kind: hold.Kind, peaks: new HostPeaks(PrivateGb: hold.PrivateGb, ResidentGb: hold.ResidentGb, WorkingSetGb: double.NaN), seen: m_holds.GetValueOrDefault(id));
-                var tree = Left(clock: clock, expected: Expected(installedRamGb: thresholds.InstalledRamGb, kind: hold.Kind), idle: (clock.GetElapsedTime(seen.BusyAt) >= Plateau), privateGb: hold.PrivateGb, residentGb: hold.ResidentGb, seen: seen);
+                var (seen, holdBusy) = Follow(clock: clock, cpuSeconds: hold.CpuSeconds, kind: hold.Profile, peaks: new HostPeaks(PrivateGb: hold.PrivateGb, ResidentGb: hold.ResidentGb, WorkingSetGb: double.NaN), seen: m_holds.GetValueOrDefault(id));
+                var holdQuiet = (clock.GetElapsedTime(seen.BusyAt) >= Plateau) || ((hold.IdleSince is not null) && (seen.BusyAt == seen.FirstAt));
+                var tree = Left(clock: clock, expected: Expected(installedRamGb: thresholds.InstalledRamGb, kind: hold.Profile), idle: holdQuiet, privateGb: hold.PrivateGb, residentGb: hold.ResidentGb, seen: seen);
                 var inner = (Commit: 0.0, Resident: 0.0);
 
                 m_holds[id] = seen;
+                Mark(busy: holdBusy, quiet: holdQuiet, markedSince: hold.IdleSince, markKind: hold.Kind, id: hold.Id, startTicks: hold.StartTicks, seen: seen);
                 _ = holdIds.Add(item: id);
                 foreach (var member in hold.Members) {
                     if (covered.Add(item: member) && startsLeft.TryGetValue(key: member, value: out var left)) { inner = ((inner.Commit + left.Commit), (inner.Resident + left.Resident)); }
@@ -350,8 +373,8 @@ public sealed class HostStartTracker {
             var commitCovered = thresholds.CommitCovers(reading: reading, needGb: need);
             var physicalCovered = thresholds.PhysicalCovers(reading: reading, needGb: residentNeed);
 
-            if (reserve && commitCovered && physicalCovered && (kind != HostStartKind.Step)) {
-                m_reservations.Add(item: new Reservation(Kind: kind, At: clock.GetTimestamp(), Gb: own, ResidentGb: residentOwn, Known: liveIds));
+            if (reserve && commitCovered && physicalCovered && (kind.Kind != HostStartKind.Step)) {
+                m_reservations.Add(item: new Reservation(Kind: kind.Kind, At: clock.GetTimestamp(), Gb: own, ResidentGb: residentOwn, Known: liveIds));
             }
 
             return new HostStartDemand(
@@ -360,12 +383,13 @@ public sealed class HostStartTracker {
                 Growing: growing,
                 GrowthGb: growth,
                 HeadroomGb: (reading.CommitLimitGb - reading.CommitChargeGb),
-                Kind: kind,
+                Kind: kind.Kind,
                 LoneOwnGb: lone.PrivateGb,
                 LoneResidentOwnGb: lone.ResidentGb,
                 NeedGb: need,
                 OwnGb: own,
                 PhysicalCovered: physicalCovered,
+                Profile: kind.Class,
                 ResidentGrowthGb: residentGrowth,
                 ResidentNeedGb: residentNeed,
                 ResidentOwnGb: residentOwn,

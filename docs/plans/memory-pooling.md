@@ -27,8 +27,9 @@ Memory ownership for the desktop runtime is the job system's work and lands
 first, with the fundamentals (frame time, the bake, state storage). Its first
 parts are in: one byte account per process (`MemoryAccount`), published mesh
 payloads in native storage, a bake group's working buffers as `OwnedBuffer`
-storage through the group's allocator, and shared workspace arrays
-(`RentedArrays`, `RentedList`) for the bake's CPU stages
+storage through the group's allocator, the bake's CPU stages' lists and
+tables as `OwnedBuffer` storage through the same allocator, and shared
+workspace arrays (`RentedArrays`) for the tables a stage still leases
 ([the job system's native-storage list](engine-job-system.md#the-native-storage-list)
 holds the rest). What this page owns is later: Puck's own runtime with no
 garbage collector, started only after the fundamentals. Its memory subsystem
@@ -57,7 +58,7 @@ or run the archived tree.
 |---|---|
 | [Allocator contract](../../src/Puck.Abstractions/Memory/IAllocator.cs) and [mimalloc adapter](../../src/Puck.Platform/Memory/MimallocAllocator.cs) | Allocation already has failure and resize contracts. Relocate and extend this boundary with its consumers rather than creating a competing abstraction. |
 | [Owned native buffers](../../src/Puck.Abstractions/Memory/OwnedBuffer.cs) | Reference-free storage from an `IAllocator`, charged to its owner's byte observer, growing by allocate, copy, publish and then free, with no finalizer recovery. This is already the native-buffer row of the typed-array contract below; the port compiles it against the custom system module rather than writing another. |
-| [Shared workspace arrays](../../src/Puck.Abstractions/Memory/RentedArrays.cs) and [their growable list](../../src/Puck.Abstractions/Memory/RentedList.cs) | Rentals of up to 1 MiB of payload come from `ArrayPool<T>.Shared`; a larger rental is a fresh array the caller drops for the collector to reclaim, so no idle pool bucket keeps a large array alive. That oversize path depends on a garbage collector: on Puck's own runtime it has nothing to reclaim it, so the port gives oversize workspace an owner (a job slot's retained workspace or `OwnedBuffer` storage) before it gives anything a pool. |
+| [Shared workspace arrays](../../src/Puck.Abstractions/Memory/RentedArrays.cs), which [owned storage](../../src/Puck.Abstractions/Memory/OwnedBuffer.cs) rents when it has no allocator | Rentals of up to 1 MiB of payload come from `ArrayPool<T>.Shared`; a larger rental is a fresh array the caller drops for the collector to reclaim, so no idle pool bucket keeps a large array alive. That oversize path depends on a garbage collector: on Puck's own runtime it has nothing to reclaim it, so the port gives oversize workspace an owner (a job slot's retained workspace or `OwnedBuffer` storage) before it gives anything a pool. |
 | [The byte account](../../src/Puck.Hosting/Jobs/MemoryAccount.cs) | One account per process, read as disjoint physical rows (device blocks, the native allocator's committed bytes, native storage outside it, the collector's committed bytes, the runtime's and driver's private memory), with admission by reservation. The custom runtime keeps the account and loses the collector's row. |
 | [State scratch](../../src/Puck.State/Arena/ArenaScratch.cs) | Buffers are retained by type and nesting depth. Preserve local reuse; add ownership of backing buffers and metadata. |
 | [State columns](../../src/Puck.State/Arena/ArenaColumnBuffer.cs) and [journal](../../src/Puck.State/Arena/ArenaJournal.cs) | Rows allocate on demand and journal storage grows. Declared capacity is not an already committed working set. |
@@ -129,7 +130,7 @@ no arbitrary simulation ceiling.
 ## Dependency placement and bootstrap
 
 The desktop's shared owned-storage types landed in `Puck.Abstractions.Memory`
-(the allocator contract, `OwnedBuffer`, `RentedArrays` and `RentedList`). The
+(the allocator contract, `OwnedBuffer`, `RentedArrays` and `RentedScope`). The
 port moves them into a small foundational `Puck.Memory` project. It contains
 the allocator contracts, checked storage operations, and reusable buffer/cache
 logic. It depends on no other Puck project, DI, engine diagnostics, or

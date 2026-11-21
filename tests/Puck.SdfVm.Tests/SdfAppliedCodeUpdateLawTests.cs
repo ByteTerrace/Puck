@@ -133,7 +133,7 @@ public sealed class SdfAppliedCodeUpdateLawTests {
             _ = builder.Sphere(material: material, radius: 1f);
             _ = builder.EndInstance();
         }
-        public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
+        public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) {
         }
         public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) => new(Program: program, ProgramChanged: false, Time: 0f, Views: []) { DynamicTransforms = transforms };
     }

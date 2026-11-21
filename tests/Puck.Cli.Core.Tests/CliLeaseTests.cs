@@ -468,8 +468,8 @@ public sealed class CliLeaseTests : IDisposable {
     public async Task HeavyAndGpuLeasesWaitWithoutTheirLeaseAndARefusalStartsNothing() {
         var asked = new List<(string Step, bool Device, bool Heavy, bool Held, bool Reserve, TimeSpan? Bound, HostStartKind Kind)>();
         var refuse = false;
-        HostAdmit admit = (_, step, device, heavySuite, kind, bound, reserve, _, _, _) => {
-            asked.Add(item: (step, device, heavySuite, Directory.Exists(path: Path.Combine(path1: m_root, path2: (device ? "gpu" : "heavy"))), reserve, bound, kind));
+        HostAdmit admit = (_, step, device, heavySuite, profile, bound, reserve, _, _, _) => {
+            asked.Add(item: (step, device, heavySuite, Directory.Exists(path: Path.Combine(path1: m_root, path2: (device ? "gpu" : "heavy"))), reserve, bound, profile.Kind));
 
             return Task.FromResult(result: !refuse);
         };

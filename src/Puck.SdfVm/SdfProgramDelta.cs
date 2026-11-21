@@ -6,7 +6,7 @@ namespace Puck.SdfVm;
 /// <summary>
 /// The words a program differs in from the program built before it, found where the program is built, off the frame
 /// thread, so tables that hold the earlier program upload the later one by copying only those words
-/// (<see cref="SdfWorldTables.UploadProgram"/>). Runs are in words from the program's first; past
+/// (<see cref="SdfWorldTables.UploadProgram"/>). Runs are in words of the whole stream, the field's words then the appearance section; past
 /// <see cref="GpuRegion.MaxCopyRuns"/> runs, neighbours pair up and the words between them are owed again.
 /// </summary>
 public sealed class SdfProgramDelta {
@@ -39,10 +39,16 @@ public sealed class SdfProgramDelta {
             mergeGap: GpuRegion.StagedMergeGapWords
         );
 
-        runs.AddDifferences(
-            current: to.Words,
-            previous: from.Words
-        );
+        // A program that shares the earlier one's field shares its field words, so only the appearance section can
+        // differ. Where the field's length moved, the appearance section starts at another word and is owed whole.
+        var field = to.FieldWords.Length;
+
+        if (!to.SharesField(other: from)) { _ = runs.AddDifferences(current: to.FieldWords, previous: from.FieldWords); }
+        if (from.FieldWords.Length == field) {
+            _ = runs.AddDifferences(current: to.ShadingWords, previous: from.ShadingWords, startWord: field);
+        } else {
+            runs.Add(length: to.ShadingWords.Length, start: field);
+        }
 
         return new SdfProgramDelta(
             from: from,

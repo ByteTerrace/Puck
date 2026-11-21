@@ -3,63 +3,78 @@ namespace Puck.SdfVm;
 /// <summary>
 /// The word layout of one draw's record in the mesh region (<c>SdfMeshRegion</c>), which the region's writer writes and
 /// the mesh, surface and views passes read (<c>frame/sdf-mesh.hlsli</c>); <see cref="SdfIsaHlsl"/> writes every offset and
-/// flag into the kernels. A record is <see cref="DrawWords"/> words: the row-vector object-to-world matrix row by row
-/// (words 0 to 15), the material, the word the mesh's first index sits at, its index count, the word its first vertex sits
-/// at, its attribute flags, the word its first triangle material sits at, the normal matrix row by row (nine words), the
-/// frame slot or -1, the word the mesh's members sit at, the carry every world position and normal the draw resolves
-/// goes through last (a unit rotation quaternion, a translation, then the uniform scale a position takes before the
-/// translation), the world-space clip plane (<c>dot(n, x) + d</c>, a point with a negative value not drawn; all zeros
-/// draws everything), the shared level table's address and count, the draw's bounds and selection metadata, and the
-/// handle of the heights the draw is displaced by (<see cref="DisplacementWord"/>).
+/// flag into the kernels. A record is <see cref="DrawWords"/> words: its pose (<see cref="PoseWords"/> words), the
+/// material, the word the mesh's first index sits at, its index count, the word its first vertex sits at, its attribute
+/// flags, the word its first triangle material sits at, the frame slot or -1, the word the mesh's members sit at, the
+/// carry every world position and normal the draw resolves goes through last (a unit rotation quaternion, a translation,
+/// then the uniform scale a position takes before the translation), the world-space clip plane (<c>dot(n, x) + d</c>, a
+/// point with a negative value not drawn; all zeros draws everything), the shared level table's address and count, the
+/// draw's bounds and selection metadata, and the handle of the heights the draw is displaced by
+/// (<see cref="DisplacementWord"/>).
+/// <para>
+/// A draw with a frame slot rides it: its object-to-world transform is the slot's row of the frame's dynamic transforms
+/// (position and orientation) at the scale its record holds (<see cref="ScaleWord"/>), so a body that moves rewrites its
+/// slot's row and no record, and the kernels derive its matrix, its normal matrix and its world box from the row. A draw
+/// with no frame slot holds its affine matrix in its pose words, and the kernels derive its normal matrix from it.
+/// </para>
 /// </summary>
 public static class SdfMeshRecord {
-    /// <summary>The leading object-to-world matrix words, also the compact previous-pose stride.</summary>
-    public const int MatrixWords = 16;
+    /// <summary>The leading pose words, also the compact previous-pose stride: a draw with no frame slot holds its
+    /// row-vector object-to-world matrix's three basis rows and then its translation (each three words, the matrix's
+    /// fourth column being 0, 0, 0, 1); a draw riding its frame slot holds its scale (<see cref="ScaleWord"/>) and
+    /// zeros.</summary>
+    public const int PoseWords = 12;
+    /// <summary>The pose word a draw riding its frame slot holds its uniform scale in, as a float: the length its
+    /// object-space unit takes in the world before the carry.</summary>
+    public const int ScaleWord = 0;
     /// <summary>The words of one draw's record.</summary>
-    public const int DrawWords = 64;
+    public const int DrawWords = 51;
     /// <summary>The handle, in the frame's sampled table (<see cref="SdfFrameSampled"/>), of the heights a height field's
     /// draw displaces its baked reference by, or <see cref="SdfFrameSampled.None"/> for a draw drawn as it was
     /// baked.</summary>
-    public const int DisplacementWord = 63;
+    public const int DisplacementWord = 50;
     /// <summary>The first of four four-word rows used by GPU draw selection: center and flags; half X and stretch;
-    /// half Y and staged instance generation; half Z and level count.</summary>
-    public const int SelectionWord = 47;
+    /// half Y and staged instance generation; half Z and level count. The box is in world space, or, for a record
+    /// carrying <see cref="SlotBoxFlag"/>, in its frame slot's frame before the slot's pose, the record's scale and its
+    /// carry.</summary>
+    public const int SelectionWord = 34;
     /// <summary>The selection flag for a row with no standing mesh. Its other words, including generation and
     /// placement, are zero; selection rejects it before reading them and the hit resolver rejects its empty indices.</summary>
     public const uint AbsentFlag = 8u;
     /// <summary>The selection flag for a draw outside the static scene (<c>SdfMeshDraw.IsStatic</c>): one that
     /// moves or animates, or glass. A pass drawing static casters alone (the distant shadow map) rejects it.</summary>
     public const uint DynamicFlag = 16u;
+    /// <summary>The selection flag for a box held in the draw's frame slot's frame: a draw riding its slot, whose world
+    /// box every reader derives from the slot's row as its vertices are (<c>sdfSelectionBox</c>, <c>SdfMeshBox.Ridden</c>).</summary>
+    public const uint SlotBoxFlag = 32u;
     /// <summary>The first of two words: the absolute word of the mesh's shared level table, then its coarser level count.
     /// Each level, zero included, stores its first triangle, vertex count and error as three words.</summary>
-    public const int LevelTableWord = 45;
+    public const int LevelTableWord = 32;
     /// <summary>The first of the carry rotation's four words (x, y, z, w).</summary>
-    public const int CarryRotationWord = 33;
+    public const int CarryRotationWord = 20;
     /// <summary>The first of the carry translation's three words.</summary>
-    public const int CarryTranslationWord = 37;
+    public const int CarryTranslationWord = 24;
     /// <summary>The carry's uniform scale, as a float: one for a draw drawn where it stands.</summary>
-    public const int CarryScaleWord = 40;
+    public const int CarryScaleWord = 27;
     /// <summary>The first of the clip plane's four words (the normal, then the offset).</summary>
-    public const int ClipPlaneWord = 41;
+    public const int ClipPlaneWord = 28;
     /// <summary>The record's material.</summary>
-    public const int MaterialWord = 16;
+    public const int MaterialWord = 12;
     /// <summary>The word the mesh's first index sits at.</summary>
-    public const int IndexWord = 17;
+    public const int IndexWord = 13;
     /// <summary>The mesh's index count.</summary>
-    public const int IndexCountWord = 18;
+    public const int IndexCountWord = 14;
     /// <summary>The word the mesh's first vertex sits at.</summary>
-    public const int VertexWord = 19;
+    public const int VertexWord = 15;
     /// <summary>The mesh's attribute flags (<see cref="NormalsFlag"/>, <see cref="MaterialsFlag"/>,
     /// <see cref="SkinFlag"/>).</summary>
-    public const int FlagsWord = 20;
+    public const int FlagsWord = 16;
     /// <summary>The word the mesh's first triangle material sits at.</summary>
-    public const int TriangleMaterialWord = 21;
-    /// <summary>The first of the normal matrix's nine words.</summary>
-    public const int NormalMatrixWord = 22;
-    /// <summary>The dynamic-transform slot whose frame the mesh is stored in, or -1.</summary>
-    public const int FrameSlotWord = 31;
+    public const int TriangleMaterialWord = 17;
+    /// <summary>The dynamic-transform slot the draw rides and whose frame the mesh is stored in, or -1.</summary>
+    public const int FrameSlotWord = 18;
     /// <summary>The word the mesh's members sit at.</summary>
-    public const int SkinWord = 32;
+    public const int SkinWord = 19;
     /// <summary>The words of one vertex: its position and its normal, as floats.</summary>
     public const int VertexWords = 6;
     /// <summary>The words of one member in a mesh's members: its slot offset, its position and its orientation.</summary>

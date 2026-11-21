@@ -307,7 +307,7 @@ public static class SdfEncodingProbe {
     public static string Describe(IReadOnlyList<SdfEncodingProbeCall> calls) =>
         Describe(
             calls: calls,
-            wordsOf: static program => program.Words.ToArray()
+            wordsOf: static program => program.CopyWords()
         );
     /// <summary>Describes the encoding a set of probe calls exercises, as <see cref="Describe(IReadOnlyList{SdfEncodingProbeCall})"/>
     /// does, over the words a function takes from each packed program: the program's own, or those of a packer that laid

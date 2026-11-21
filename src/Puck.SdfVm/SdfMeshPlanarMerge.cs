@@ -38,11 +38,12 @@ public static class SdfMeshPlanarMerge {
     /// <returns>The merged mesh, with the same <see cref="SdfMesh.BakeCell"/> and members, and the attributes of the
     /// vertices it keeps; <paramref name="mesh"/> itself when nothing merges or it carries no vertex normals.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
-    public static SdfMesh Merge(SdfMesh mesh, IAllocationObserver? owner = null) {
+    /// <param name="allocator">The native allocator the merge's lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> to rent them.</param>
+    public static SdfMesh Merge(SdfMesh mesh, IAllocationObserver? owner = null, IAllocator? allocator = null) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
         if ((mesh.Normals.Length == 0) || (mesh.TriangleCount < 2)) { return mesh; }
 
-        using var scope = new RentedScope(owner: owner);
+        using var scope = new RentedScope(allocator: allocator, owner: owner);
 
         return new Merger(mesh: mesh, scope: scope).Run();
     }
@@ -262,7 +263,7 @@ public static class SdfMeshPlanarMerge {
 
             // The vertices are taken in a scattered order, so the holes removals leave stay a few vertices wide: in lattice
             // order each removal widens the last one's hole, and its ears and flips grow with it.
-            var candidates = Candidates().AsSpan();
+            var candidates = Candidates().GetSpan();
 
             candidates.Sort();
             foreach (var (_, vertex) in candidates) {
@@ -396,7 +397,7 @@ public static class SdfMeshPlanarMerge {
         }
         // The vertices a removal may take, each the one vertex one region's triangles name at its place, no triangle outside
         // that region naming the place, keyed by a scattered order.
-        private RentedList<(uint Order, int Vertex)> Candidates() {
+        private OwnedBuffer<(uint Order, int Vertex)> Candidates() {
             const int None = -1;
             const int Blocked = -2;
             var vertices = m_vertices;

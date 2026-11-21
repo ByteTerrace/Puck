@@ -28,8 +28,8 @@ public sealed class StaticEmissionLawTests {
                     scope?.Dispose();
                     return builder.Build();
                 }
-                Assert.Equal(Build(cache: null).Words.ToArray(), Build(cache: palettes).Words.ToArray());
-                Assert.Equal(Build(cache: null).Words.ToArray(), Build(cache: palettes).Words.ToArray());
+                Assert.Equal(Build(cache: null).CopyWords(), Build(cache: palettes).CopyWords());
+                Assert.Equal(Build(cache: null).CopyWords(), Build(cache: palettes).CopyWords());
             }
         }
     }

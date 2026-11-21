@@ -15,6 +15,7 @@ namespace Puck.Cli.Host;
 /// </summary>
 /// <param name="checkoutRoot">The checkout whose drive's free disk is read.</param>
 public sealed partial class HostProbe(string checkoutRoot) {
+    private readonly HostGpuMeter m_gpu = new();
     private (ulong Idle, ulong Total)? m_previous;
     private string? m_leaseRoot;
     private bool m_leaseRootRead;
@@ -29,17 +30,22 @@ public sealed partial class HostProbe(string checkoutRoot) {
             return m_leaseRoot;
         }
     }
-    // The Worlds that have reported steady state (WorldReadiness) and the starts another observer found idle
-    // (StartIdleness), read from the checkout's shared lease directory; none when the checkout names no such directory.
-    private (IReadOnlySet<(int ProcessId, long StartTicks)> Ready, IReadOnlyDictionary<(int ProcessId, long StartTicks), IdleStart> Idle) Marks(Dictionary<int, (int Parent, DateTime Started)> tree) {
-        if (LeaseRoot is not { } root) { return (new HashSet<(int, long)>(), new Dictionary<(int, long), IdleStart>()); }
+    /// <summary>What other observers recorded about the running processes: the Worlds that reported steady state
+    /// (<see cref="WorldReadiness"/>), the starts found idle (<see cref="StartIdleness"/>) and the profile each launch recorded
+    /// (<see cref="StartProfiles"/>).</summary>
+    private readonly record struct ProcessMarkSet(IReadOnlySet<(int ProcessId, long StartTicks)> Ready, IReadOnlyDictionary<(int ProcessId, long StartTicks), IdleStart> Idle, IReadOnlyDictionary<(int ProcessId, long StartTicks), HostStartProfile> Profiles) {
+        public static ProcessMarkSet None => new(new HashSet<(int, long)>(), new Dictionary<(int, long), IdleStart>(), new Dictionary<(int, long), HostStartProfile>());
+    }
+    // The marks of the checkout's shared lease directory; none when the checkout names no such directory.
+    private ProcessMarkSet Marks(Dictionary<int, (int Parent, DateTime Started)> tree) {
+        if (LeaseRoot is not { } root) { return ProcessMarkSet.None; }
 
         try {
             var running = tree.Where(predicate: static entry => (entry.Value.Started != DateTime.MinValue)).ToDictionary(keySelector: static entry => entry.Key, elementSelector: static entry => entry.Value.Started.ToUniversalTime().Ticks);
 
-            return (WorldReadiness.ReadyAmong(root: root, running: running), StartIdleness.Among(root: root, running: running));
+            return new ProcessMarkSet(WorldReadiness.ReadyAmong(root: root, running: running), StartIdleness.Among(root: root, running: running), StartProfiles.Among(root: root, running: running));
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            return (new HashSet<(int, long)>(), new Dictionary<(int, long), IdleStart>());
+            return ProcessMarkSet.None;
         }
     }
 
@@ -47,7 +53,7 @@ public sealed partial class HostProbe(string checkoutRoot) {
     // one of its ancestors is left out (HostSample.Holds), and so is one whose holder runs inside another counted hold's tree,
     // which already covers it. Only the processes of a hold's tree pay the handles their CPU time and private working set are
     // read through.
-    private List<HostLeaseHold> Holds(Dictionary<int, (int Parent, DateTime Started)> tree, Dictionary<int, (double PrivateGb, double WorkingSetGb)> running, int self) {
+    private List<HostLeaseHold> Holds(Dictionary<int, (int Parent, DateTime Started)> tree, Dictionary<int, (double PrivateGb, double WorkingSetGb)> running, int self, IReadOnlyDictionary<(int ProcessId, long StartTicks), IdleStart> idle) {
         List<HostLeaseHold> holds = [];
 
         if (LeaseRoot is not { } root) { return holds; }
@@ -82,7 +88,7 @@ public sealed partial class HostProbe(string checkoutRoot) {
                     }
                 } catch (ArgumentException) { }
             }
-            holds.Add(item: new HostLeaseHold(CpuSeconds: (timed ? cpuSeconds : double.NaN), Device: hold.Device, Holder: hold.Holder, Id: hold.ProcessId, Kind: hold.Kind, Lease: hold.Lease, Members: members, PrivateGb: privateGb, ResidentGb: residentGb, StartTicks: hold.StartTicks));
+            holds.Add(item: new HostLeaseHold(CpuSeconds: (timed ? cpuSeconds : double.NaN), Device: hold.Device, Holder: hold.Holder, Id: hold.ProcessId, IdleSince: (idle.TryGetValue(key: (hold.ProcessId, hold.StartTicks), value: out var idleStart) ? idleStart.Since : null), Kind: hold.Kind, Lease: hold.Lease, Marked: hold.Profile, Members: members, PrivateGb: privateGb, ResidentGb: residentGb, StartTicks: hold.StartTicks));
         }
 
         return [.. holds.Where(predicate: hold => !holds.Any(predicate: other => (other.Id != hold.Id) && other.Members.Contains(value: hold.Id)))];
@@ -214,7 +220,7 @@ public sealed partial class HostProbe(string checkoutRoot) {
         var own = HostProcesses.Descendants(processes: tree, root: self);
 
         List<HostRunningStart> starts = [];
-        var (ready, idle) = Marks(tree: tree);
+        var (ready, idle, profiles) = Marks(tree: tree);
 
         foreach (var (id, name, commandLine, privateGb, workingSetGb, tracked, cpuSeconds) in running) {
             var label = $"{name} {id.ToString(provider: CultureInfo.InvariantCulture)}";
@@ -225,10 +231,11 @@ public sealed partial class HostProbe(string checkoutRoot) {
             if (tracked is { } kind) {
                 var privateResidentGb = ((Puck.Hosting.HostMemory.PrivateResidentBytes(processId: id) is { } bytes) ? (bytes / 1073741824.0) : double.NaN);
 
-                starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb, PrivateResidentGb: privateResidentGb, Ready: ready.Contains(item: (id, startTicks)), StartTicks: startTicks, WorkingSetGb: workingSetGb, CpuSeconds: cpuSeconds, IdleSince: idleSince));
+                starts.Add(item: new HostRunningStart(Id: id, Kind: kind, Marked: (profiles.TryGetValue(key: (id, startTicks), value: out var marked) ? marked : null), PrivateGb: privateGb, PrivateResidentGb: privateResidentGb, Ready: ready.Contains(item: (id, startTicks)), StartTicks: startTicks, WorkingSetGb: workingSetGb, CpuSeconds: cpuSeconds, IdleSince: idleSince));
             }
 
-            if ((holder is null) && !own.Contains(item: id) && HostProcesses.IsGpuWork(commandLine: commandLine, name: name)) {
+            // A device process that has gone idle gives its place on the GPU back, as an idle start gives back its growth.
+            if ((holder is null) && (idleSince is null) && !own.Contains(item: id) && HostProcesses.IsGpuWork(commandLine: commandLine, name: name)) {
                 holder = label;
             }
             // A heavy test run that has gone idle is not running its suite, so a quiet window stops waiting for it.
@@ -240,14 +247,15 @@ public sealed partial class HostProbe(string checkoutRoot) {
             }
         }
 
-        var holds = Holds(running: running.ToDictionary(keySelector: static process => process.Id, elementSelector: static process => (process.PrivateGb, process.WorkingSetGb)), self: self, tree: tree);
+        var holds = Holds(idle: idle, running: running.ToDictionary(keySelector: static process => process.Id, elementSelector: static process => (process.PrivateGb, process.WorkingSetGb)), self: self, tree: tree);
 
-        // A hold whose work opens a device holds the GPU from its grant, before its device process appears.
-        if ((holder is null) && (holds.FirstOrDefault(predicate: hold => hold.Device && !own.Contains(item: hold.Id)) is { Holder: not null } device)) {
+        // A hold whose work opens a device holds the GPU from its grant, before its device process appears, until it goes idle.
+        if ((holder is null) && (holds.FirstOrDefault(predicate: hold => hold.Device && (hold.IdleSince is null) && !own.Contains(item: hold.Id)) is { Holder: not null } device)) {
             holder = $"{device.Holder} (its {device.Lease} lease, PID {device.Id.ToString(provider: CultureInfo.InvariantCulture)})";
         }
 
         var commit = Puck.Hosting.HostMemory.CommitBytes();
+        var memory = ((holder is null) ? null : m_gpu.Read());
 
         var sample = new HostSample(
             At: DateTimeOffset.UtcNow,
@@ -260,7 +268,9 @@ public sealed partial class HostProbe(string checkoutRoot) {
             ReuseNodes: reuse,
             HeavyTestHolder: heavy,
             Starts: starts,
-            Holds: holds
+            Holds: holds,
+            DeviceTotalGb: (memory?.TotalGb ?? double.NaN),
+            DeviceUsedGb: (memory?.UsedGb ?? double.NaN)
         );
         // Existing host samplers (including the benchmark recorder) feed the same tracker while starts run,
         // so a completed/plateaued start teaches later CLI processes its measured peak.

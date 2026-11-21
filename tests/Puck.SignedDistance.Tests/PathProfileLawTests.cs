@@ -111,7 +111,7 @@ public sealed class PathProfileLawTests {
         Assert.Equal(0.04f, instruction.Data0.W);
         var offset = (((int)BitConverter.SingleToUInt32Bits(value: instruction.Data0.X)) * 4);
 
-        Assert.Equal(-0.5f, BitConverter.UInt32BitsToSingle(value: program.Words[offset]));
+        Assert.Equal(-0.5f, BitConverter.UInt32BitsToSingle(value: program.CopyWords()[offset]));
         Assert.Equal(1f, program.StepScale);
         Assert.Throws<ArgumentException>(testCode: () => TestPrograms.Of(program.Instructions, [new SdfMaterial(Albedo: Vector3.One)]));
         // The contact reading takes the path through the program's own edge table: at the origin the extrusion's half-depth
@@ -121,7 +121,7 @@ public sealed class PathProfileLawTests {
         builder.ReservePathTables(shapeCount: 2);
         var probe = builder.Build();
 
-        Assert.Equal(program.Words.Length, probe.Words.Length);
+        Assert.Equal(program.WordCount, probe.WordCount);
         Assert.Equal((program.PartCompilationWordCapacity + ((2 * SdfPathProfile.MaxEdges) * 8)), probe.PartCompilationWordCapacity);
     }
 

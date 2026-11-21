@@ -392,7 +392,7 @@ public sealed partial class SdfWorldTables {
             return false;
         }
         foreach (var index in m_glassIndices) {
-            if (SdfMeshRegion.ReadSelection(box: out var box, glass: out _, record: m_meshDrawWords.AsSpan(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords))) && cull.Keeps(box: in box)) {
+            if (RowSelection(row: index, box: out var box, glass: out _) && cull.Keeps(box: in box)) {
                 return true;
             }
         }
@@ -417,7 +417,7 @@ public sealed partial class SdfWorldTables {
         var bottom = float.NegativeInfinity;
 
         foreach (var index in m_glassIndices) {
-            if (!SdfMeshRegion.ReadSelection(box: out var box, glass: out _, record: m_meshDrawWords.AsSpan(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords)))) {
+            if (!RowSelection(row: index, box: out var box, glass: out _)) {
                 continue;
             }
             if (box is not { } bounded) {
@@ -651,8 +651,11 @@ public sealed partial class SdfWorldTables {
 
                 var sameRoster = (ReferenceEquals(objA: m_meshSource, objB: draws.Roster) && (draws.Occupancy(row: index) == m_stagedOccupancies[index]));
                 var difference = draw.StagedDifference(other: in m_stagedDraws[index]);
+                // A draw that moved with the slot it rides has the record it had: the kernels pose it from the slot's row,
+                // and the motion scopes judge it as that slot moves (NoteMovedSlots).
+                var recordStands = ((difference == SdfMeshDrawDifference.None) || (difference == SdfMeshDrawDifference.Slot));
 
-                if (!sameRoster || (difference != SdfMeshDrawDifference.None) ||
+                if (!sameRoster || !recordStands ||
                     ((draw.Mesh is not null) && (m_absentRows.Contains(item: index) == MeshStands(mesh: draw.Mesh))) || m_meshArena.Relocated || ((draw.Mesh is not null) && m_meshArena.Moved.Contains(item: draw.Mesh)) ||
                     (m_reseatedDraws.Contains(value: index) && MeshTransformWasReseated(draw: in draw))) {
                     var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
@@ -696,6 +699,8 @@ public sealed partial class SdfWorldTables {
 
                     m_stagedDraws[index] = draw;
                     m_stagedOccupancies[index] = draws.Occupancy(row: index);
+                } else if (difference == SdfMeshDrawDifference.Slot) {
+                    m_stagedDraws[index] = draw;
                 }
             }
         }
