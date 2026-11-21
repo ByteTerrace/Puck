@@ -1862,7 +1862,7 @@ on both backends, once the frame time allows the refresh cadence.
 
 ### Standing passes
 
-Owner: integration rendering follow-up · medium · Next: the owner bound below.
+Owner: integration rendering follow-up · medium · Next: the companion's rate.
 
 A pass signs with the changes its own draws can show
 ([decision](../decisions/rendering.md#a-pass-stands-on-what-it-can-show)), so
@@ -1870,10 +1870,21 @@ what keeps a pass rendering on a still frame is now each of these, in the order
 `world.residency`'s motion line and `world.counters render.record` show them on
 the debug world:
 
-- [low] A staging judges each changed draw against each open scope. A patch of
-  several hundred blades is one owner with one reach
-  (`WorldCreationInstances`' rate sphere); carrying an owner's bound with its
-  changed run would let a scope refuse the whole run with one test.
+- [medium] At the stage spawn the main view's shading and cascade scopes are
+  met on most stagings by the companion (`body:42`, a hovering `companion`
+  creation beside the player), which drifts while it hovers, so it counts as
+  moving and poses at the stride tier (60 Hz at about 250 px/m). Whether a
+  hover's drift should rate as a stride is a question for the body rate
+  (`WorldCreationInstances`' `BodyHertz`): its root target moves by
+  millimetres. The lawn grass (30 Hz) and the falls (60 Hz) are real motion.
+- [low] A staging judges changes in batches of consecutive rows
+  (`SdfWorldTables`' `FlushMotion`), whose bound refuses a batch for a scope in
+  one test. The bound is derived from the rows' boxes; the owner's rate sphere
+  (`WorldCreationInstances`) carried with its changed slot run through
+  `SdfMovedTransforms` would refuse it without visiting the rows.
+- [low] An opening's emission reaches every scope that shades, since no peak
+  bounds the luminance it shows; a bound from the window's exposure share would
+  let a view out of its reach stand.
 
 ### Depth of field
 

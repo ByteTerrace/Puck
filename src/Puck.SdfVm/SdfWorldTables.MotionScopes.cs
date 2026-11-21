@@ -33,7 +33,9 @@ namespace Puck.SdfVm;
 // The field interpreter reads slots too, but only the bake runs it, which no pass signature covers.
 //
 // Scopes are judged in the order changes are staged, each until its first change of the staging, so a staging costs a
-// scope nothing more once something it shows has moved.
+// scope nothing more once something it shows has moved. Changes are judged in batches of consecutive changes
+// (FlushMotion): a scope whose cull keeps none of a batch's bound refuses the whole batch in one test. A creation's rows
+// are staged together, so a patch of grass out of a view's sight costs that view's scopes a test or two.
 public sealed partial class SdfWorldTables {
     /// <summary>The stagings a scope stays held without being asked about (<see cref="ObserveMotion(SdfMotionScope, in SdfMeshCull, int)"/>):
     /// about a second of frames, so a view rendered at a reduced rate keeps its scope and a parked one lets it go.</summary>
@@ -46,6 +48,10 @@ public sealed partial class SdfWorldTables {
     // The staging's judged changes and the scopes they were judged against, published once at its end.
     private long m_motionChanges;
     private long m_motionTests;
+    // The changes noted and not yet judged (NoteMotion, FlushMotion).
+    private const int MotionBatch = 64;
+    private readonly PendingMotion[] m_pendingMotion = new PendingMotion[MotionBatch];
+    private int m_pendingMotionCount;
     // The staging that last staged each row's record.
     private long[] m_rowStagings = [];
     // The boxed draws by the slot whose row they shade in.
@@ -79,6 +85,8 @@ public sealed partial class SdfWorldTables {
             ? SdfMeshBox.Turned(center: Center, half: Half, offset: position, turn: (orientation * Turn))
             : null);
     }
+    // A change noted for judgement: what changed as it stood before and as it stands after (NoteMotion).
+    private readonly record struct PendingMotion(SdfMotionCause Cause, int Row, bool WasLive, SdfMeshBox? Before, bool WasGlass, bool IsLive, SdfMeshBox? After, bool IsGlass, bool Shading);
     private struct SkinRow {
         public int Order;
         public int FirstSlot;
@@ -274,20 +282,55 @@ public sealed partial class SdfWorldTables {
         }
         if (met) { SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.ScopeUnbounded); }
     }
-    // Judges one change against every open scope: what changed as it stood before and as it stands after, each a box
-    // and whether it is glass, and null for one no box bounds. A side that draws nothing is not live. Shading names a
-    // change only shading reads, which no cascade's scope shows.
+    // Notes one change for judgement against every open scope: what changed as it stood before and as it stands after,
+    // each a box and whether it is glass, and null for one no box bounds. A side that draws nothing is not live. Shading
+    // names a change only shading reads, which no cascade's scope shows. Judged with its batch (FlushMotion).
     private void NoteMotion(SdfMotionCause cause, int row, bool wasLive, in SdfMeshBox? before, bool wasGlass, bool isLive, in SdfMeshBox? after, bool isGlass, bool shading = false) {
         if ((m_motionOpen == 0) || !(wasLive || isLive)) { return; }
+        m_pendingMotion[m_pendingMotionCount++] = new(After: after, Before: before, Cause: cause, IsGlass: isGlass, IsLive: isLive, Row: row, Shading: shading, WasGlass: wasGlass, WasLive: wasLive);
+        if (m_pendingMotionCount == MotionBatch) { FlushMotion(); }
+    }
+    // Judges the noted changes against every open scope: first by the box that holds every live side of the batch, which
+    // refuses the batch in one test for a scope whose cull keeps none of it, then change by change until the scope meets
+    // one. A side no box bounds leaves the batch unbounded.
+    private void FlushMotion() {
+        var count = m_pendingMotionCount;
+
+        if (count == 0) { return; }
+        m_pendingMotionCount = 0;
+        var batch = m_pendingMotion.AsSpan(length: count, start: 0);
+        SdfMeshBox? bound = null;
+        var bounded = true;
+
+        foreach (ref readonly var change in batch) {
+            if (change.WasLive) { Hold(side: change.Before); }
+            if (change.IsLive) { Hold(side: change.After); }
+        }
+
         var tests = 0;
 
         foreach (var scope in m_motionScopes) {
-            if ((scope.MetStaging == m_motionStaging) || (shading && (scope.Reader == SdfMotionReader.Caster))) { continue; }
-            tests++;
-            if ((wasLive && scope.Shows(box: in before, isGlass: wasGlass)) || (isLive && scope.Shows(box: in after, isGlass: isGlass))) { Meet(cause: cause, detail: row, scope: scope); }
+            if (scope.MetStaging == m_motionStaging) { continue; }
+            if (bounded && (bound is { } held)) {
+                tests++;
+                if (!scope.Shows(box: held, isGlass: true)) { continue; }
+            }
+            foreach (ref readonly var change in batch) {
+                if (change.Shading && (scope.Reader == SdfMotionReader.Caster)) { continue; }
+                tests++;
+                if ((change.WasLive && scope.Shows(box: change.Before, isGlass: change.WasGlass)) || (change.IsLive && scope.Shows(box: change.After, isGlass: change.IsGlass))) {
+                    Meet(cause: change.Cause, detail: change.Row, scope: scope);
+                    break;
+                }
+            }
         }
-        m_motionChanges++;
+        m_motionChanges += count;
         m_motionTests += tests;
+
+        void Hold(SdfMeshBox? side) {
+            if (side is not { } box) { bounded = false; }
+            else { bound = ((bound is { } held) ? SdfMeshBox.Enclosing(first: in held, second: in box) : box); }
+        }
     }
 
     // What a row's record says its draw was before a staging writes it, read before the write (NoteStagedRow).
@@ -491,11 +534,16 @@ public sealed partial class SdfWorldTables {
     // Ends a staging of the draw records: the skinned rows and the moved slots, judged after every record is staged.
     // A previous table seeded whole moves every scope, since every draw's motion then reads as none.
     private void EndMotionStaging() {
+        FlushMotion();
         if (m_seedDynamicHistory || m_seedMeshHistory) { MeetEveryScope(cause: SdfMotionCause.Seed, detail: 0); }
         NoteSkinnedRows();
+        FlushMotion();
         NoteMovedReaders();
+        FlushMotion();
         NoteMovedSlots(slots: m_changedTransforms);
+        FlushMotion();
         NoteMovedSlots(slots: m_reseatedTransforms);
+        FlushMotion();
         SdfCadenceWork.ProcessWork.Add(kind: SdfCadenceWork.ScopeChanges, amount: m_motionChanges);
         SdfCadenceWork.ProcessWork.Add(kind: SdfCadenceWork.ScopeTests, amount: m_motionTests);
         (m_motionChanges, m_motionTests) = (0L, 0L);
