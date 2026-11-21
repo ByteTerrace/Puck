@@ -20,12 +20,14 @@ namespace Puck.SignedDistance.Queries;
 //   interval's upper end, which is at least any point's accumulator. The primer's clearance is held one raw past the
 //   primer's upper end, since an instance it skips may stand before the primer in the stream, where an equal candidate
 //   would keep its own material.
-// - A chain whose every join the walk found inert (RegionJoinIsInert): the join's candidate, enclosed over the box by the
+// - A chain whose every join the walk found inert (RegionJoinClears): the join's candidate, enclosed over the box by the
 //   interval rules, stands past the accumulator's upper end by the blend's identity margin. This needs no certificate,
 //   so it reaches the shapes and folds that have none.
-// - Everything before a chain whose join takes the root accumulator over (RegionJoinTakesOver): the candidate stands
-//   below the accumulator's lower end by the same margin, so the accumulator after it is the candidate at every point of
-//   the box, whatever the stream read before.
+// - Everything before a chain whose join takes the root accumulator over (RegionJoinClears, the other way): the
+//   accumulator's lower end stands past the candidate by the same margin, so the accumulator after the join is the
+//   candidate at every point of the box, whatever the stream read before. The first two are skips at a chain's own
+//   place in the stream, which keep every chain that stands before the nearest geometry in stream order; this is the
+//   one that drops those, as a program emitted in rows needs.
 //
 // A jump lands on a chain's or an instance's first instruction and an inert chain is dropped whole, so a tape holds
 // whole chains and a point walk's root frame finds its prefix on whichever chain it reads first. A point walk over a

@@ -146,6 +146,7 @@ public sealed partial class SdfFieldEvaluator {
         Span<(FixedQ4816 Distance, int Material)> scopes = stackalloc (FixedQ4816, int)[SdfProgramBuilder.MaxFieldScopeDepth];
         var scopeDepth = 0;
         var cullIndex = (reaches.IsEmpty ? cullBounds.Length : 0);
+        var test = new PointReachTest(point: worldPosition);
         var tapeAt = 0;
 
         if (!tape.IsEmpty) {
@@ -173,7 +174,7 @@ public sealed partial class SdfFieldEvaluator {
                     continue;
                 }
 
-                if (InstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], threshold: primer.Threshold(resultDistance: resultDistance), worldPosition: worldPosition)) {
+                if (InstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], test: in test, threshold: primer.Threshold(resultDistance: resultDistance))) {
                     index = (cullBounds[bound].End - 1);
 
                     continue;
@@ -193,7 +194,7 @@ public sealed partial class SdfFieldEvaluator {
                         worldPosition: worldPosition
                     );
 
-                    if (InstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], threshold: primer.Threshold(resultDistance: resultDistance), worldPosition: worldPosition)) {
+                    if (InstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], test: in test, threshold: primer.Threshold(resultDistance: resultDistance))) {
                         index = (cullBounds[bound].End - 1);
 
                         continue;
@@ -220,7 +221,7 @@ public sealed partial class SdfFieldEvaluator {
 
                         var segment = segmentSlots[index];
 
-                        if ((influence is null) && (segment >= 0) && (SkippedChainsEnd(answer: resultDistance, segment: segment, worldPosition: worldPosition) is var skipped and >= 0)) {
+                        if ((influence is null) && (segment >= 0) && (SkippedChainsEnd(above: resultDistance, below: resultDistance, segment: segment, test: in test) is var skipped and >= 0)) {
                             index = (skipped - 1);
                         } else if (!frames.IsEmpty) {
                             root.Reset(frame: frames[index], index: ref index, point: ref localPosition, scale: ref distanceScale);
@@ -654,28 +655,6 @@ public sealed partial class SdfFieldEvaluator {
             (((Bound >= 0) && (Distance < resultDistance)) ? (Distance + FixedQ4816.Epsilon) : resultDistance);
     }
 
-    // The end of the chains a point walk skips from the ResetPoint opening the chain in this slot: the largest node of the
-    // segment hierarchy starting there whose certificate clears the answer, else the chain alone; minus one when neither
-    // clears.
-    private int SkippedChainsEnd(int segment, FixedVector3 worldPosition, FixedQ4816 answer) {
-        for (var group = m_segmentGroupHeads[segment]; (group >= 0); group = m_segmentGroupNext[group]) {
-            ref readonly var node = ref m_segmentGroups[group];
-
-            if (node.Reach.PointClears(point: worldPosition, threshold: SegmentThreshold(above: answer, below: answer, bound: in node))) {
-                return node.End;
-            }
-        }
-
-        ref readonly var chain = ref m_segmentBounds[segment];
-
-        return (chain.Reach.PointClears(point: worldPosition, threshold: SegmentThreshold(above: answer, below: answer, bound: in chain)) ? chain.End : -1);
-    }
-    // Whether an instance's candidates clear the threshold: its certificate at the largest axis distance first, then at
-    // the exact distance, then each lowering member's.
-    private bool InstanceClears(in CullBound bound, FixedQ4816 cheapReach, FixedQ4816 threshold, FixedVector3 worldPosition) =>
-        ((threshold.Value <= bound.SeedFloor) && ((cheapReach >= threshold) ||
-            bound.Reach.PointClears(point: worldPosition, threshold: threshold.Value) ||
-            ((bound.MemberCount > 1) && MembersClear(bound: in bound, threshold: threshold.Value, worldPosition: worldPosition))));
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsIdentityRotation(in CompiledInstruction instruction) =>
         ((instruction.Data0X == FixedQ4816.Zero) && (instruction.Data0Y == FixedQ4816.Zero) && (instruction.Data0Z == FixedQ4816.Zero) &&

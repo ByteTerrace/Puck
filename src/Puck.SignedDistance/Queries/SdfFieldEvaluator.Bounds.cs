@@ -247,6 +247,7 @@ public sealed partial class SdfFieldEvaluator {
         var cullIndex = (reaches.IsEmpty ? cullBounds.Length : 0);
         var tapeAt = 0;
         var regional = (record is not null);
+        var test = new BoxReachTest(query: query, regional: regional);
 
         if (!tape.IsEmpty) {
             (first, end, tapeAt) = (tape[0], tape[1], 2);
@@ -255,7 +256,7 @@ public sealed partial class SdfFieldEvaluator {
         // The start of the stretch the walk is reading: every jump a certificate grants closes it into the record.
         var live = first;
         // A regional walk's chain, from its ResetPoint, and whether every instruction read in it so far leaves the
-        // accumulator of every point of the box as it was (RegionJoinIsInert). A chain inert to its end is left out of
+        // accumulator of every point of the box as it was (RegionJoinClears). A chain inert to its end is left out of
         // the record: its shapes need no certificate, since the walk has enclosed their candidates over the box.
         var chain = -1;
         var inert = false;
@@ -287,7 +288,7 @@ public sealed partial class SdfFieldEvaluator {
                     continue;
                 }
 
-                if (BoxInstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], query: in query, regional: regional, threshold: primer.Clearance(strict: regional, upper: result.Upper))) {
+                if (BoxInstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], regional: regional, test: in test, threshold: primer.Clearance(strict: regional, upper: result.Upper))) {
                     record?.Add(item: (live, index));
                     live = cullBounds[bound].End;
                     index = (cullBounds[bound].End - 1);
@@ -313,7 +314,7 @@ public sealed partial class SdfFieldEvaluator {
                         world: world
                     );
 
-                    if (BoxInstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], query: in query, regional: regional, threshold: primer.Clearance(strict: regional, upper: result.Upper))) {
+                    if (BoxInstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], regional: regional, test: in test, threshold: primer.Clearance(strict: regional, upper: result.Upper))) {
                         record?.Add(item: (live, index));
                         live = cullBounds[bound].End;
                         index = (cullBounds[bound].End - 1);
@@ -348,8 +349,8 @@ public sealed partial class SdfFieldEvaluator {
                         var skipped = ((!cull || (segment < 0))
                             ? -1
                             : (regional
-                                ? RegionSkippedChainsEnd(query: in query, result: result, segment: segment)
-                                : ((segmentBounds[segment].Reach.Boxed && segmentBounds[segment].Reach.BoxClears(query: in query, threshold: SegmentThreshold(above: result.Upper, below: result.Lower, bound: in segmentBounds[segment]))) ? segmentBounds[segment].End : -1)));
+                                ? SkippedChainsEnd(above: result.Upper, below: result.Lower, segment: segment, test: in test)
+                                : ((segmentBounds[segment].Reach.Boxed && test.Clears(reach: in segmentBounds[segment].Reach, threshold: SegmentThreshold(above: result.Upper, below: result.Lower, bound: in segmentBounds[segment]))) ? segmentBounds[segment].End : -1)));
 
                         chain = index;
                         inert = (regional && (skipped < 0));
@@ -460,18 +461,19 @@ public sealed partial class SdfFieldEvaluator {
 
                         var candidate = ScaleCandidateBounds(candidate: ((ShapeBounds(instruction: instruction, p: local) * distanceScale) + erosion), scale: instruction.ScopeScale);
 
-                        // An inert join leaves every point's accumulator as it was, so the interval that encloses them
-                        // stands as it is, tighter than the blend's rule would leave it.
-                        if (regional && RegionJoinIsInert(candidate: candidate, current: result, instruction: in instruction)) {
+                        // An inert join, its candidate past the accumulator, leaves every point's accumulator as it was,
+                        // so the interval that encloses them stands as it is, tighter than the blend's rule would
+                        // leave it.
+                        if (regional && RegionJoinClears(farther: candidate, instruction: in instruction, nearer: result, strictly: false)) {
                             break;
                         }
 
                         inert = false;
 
-                        // A join that takes the root accumulator over at every point of the box leaves nothing the
-                        // stream read before its chain to reach any later instruction. The primer's own walk holds its
-                        // instance's accumulator, not the root's, and a scope its own.
-                        if (regional && !nested && (scopeDepth == 0) && (chain >= 0) && RegionJoinTakesOver(candidate: candidate, current: result, instruction: in instruction)) {
+                        // A join that takes the root accumulator over, the accumulator past its candidate, leaves
+                        // nothing the stream read before its chain to reach any later instruction. The primer's own
+                        // walk holds its instance's accumulator, not the root's, and a scope holds its own.
+                        if (regional && !nested && (scopeDepth == 0) && (chain >= 0) && RegionJoinClears(farther: result, instruction: in instruction, nearer: candidate, strictly: true)) {
                             var kept = 0;
 
                             for (var entry = 0; (entry < record!.Count); entry++) {
@@ -509,35 +511,23 @@ public sealed partial class SdfFieldEvaluator {
 
         return result;
     }
-    // Whether a shape's join leaves the accumulator, and its material, as it was at every point of a box: the join's
-    // candidate, enclosed over the box, stands at or past the accumulator's upper end for a union, which takes only a
-    // lesser candidate, and past it by the identity margin for a smooth union. No other blend is judged.
-    private static bool RegionJoinIsInert(in CompiledInstruction instruction, FixedInterval candidate, FixedInterval current) {
-        if (candidate.IsUnbounded || current.IsUnbounded) {
+    // Whether one operand of a shape's join stands past the other at every point of a box by enough that the blend
+    // returns the nearer one to the bit, with its material: at or past it for a union, and past it by the identity margin
+    // for a smooth union, whose weight then rounds to exactly one or exactly zero. A union returns the accumulator on a
+    // tie, so the candidate is the nearer one only when it is strictly nearer. No other blend is judged.
+    //
+    // The margin on the candidate's side: for b − a ≤ −(k + ⌊k·2⁻¹⁵⌋ + 16) raws, ½·(b − a) rounds to at most
+    // −(k + ⌊k·2⁻¹⁵⌋ + 15)/2, whose quotient by k is below −½ before it rounds, so it rounds to −½ or less however the
+    // division rounds, and the weight clamps to zero.
+    private static bool RegionJoinClears(in CompiledInstruction instruction, FixedInterval nearer, FixedInterval farther, bool strictly) {
+        if (nearer.IsUnbounded || farther.IsUnbounded) {
             return false;
         }
 
-        var clearance = (((Int128)candidate.Lower.Value) - current.Upper.Value);
+        var clearance = (((Int128)farther.Lower.Value) - nearer.Upper.Value);
 
         return (SdfFieldBlends.CullGuardOf(value: ((SdfBlendOp)instruction.Blend)) switch {
-            SdfCullGuardAction.Union => (clearance >= 0),
-            SdfCullGuardAction.SmoothUnion => (clearance >= SmoothUnionIdentityMargin(smoothRadius: instruction.Data1X)),
-            _ => false,
-        });
-    }
-    // Whether a shape's join leaves the accumulator equal to its own candidate, with its material, at every point of a
-    // box, whatever the accumulator held: the candidate, enclosed over the box, stands below the accumulator's lower end
-    // for a union, which takes a lesser candidate whole, and below it by the identity margin for a smooth union, whose
-    // weight then rounds to exactly zero as it rounds to exactly one on the far side. No other blend is judged.
-    private static bool RegionJoinTakesOver(in CompiledInstruction instruction, FixedInterval candidate, FixedInterval current) {
-        if (candidate.IsUnbounded || current.IsUnbounded) {
-            return false;
-        }
-
-        var clearance = (((Int128)current.Lower.Value) - candidate.Upper.Value);
-
-        return (SdfFieldBlends.CullGuardOf(value: ((SdfBlendOp)instruction.Blend)) switch {
-            SdfCullGuardAction.Union => (clearance > 0),
+            SdfCullGuardAction.Union => (strictly ? (clearance > 0) : (clearance >= 0)),
             SdfCullGuardAction.SmoothUnion => (clearance >= SmoothUnionIdentityMargin(smoothRadius: instruction.Data1X)),
             _ => false,
         });
@@ -643,52 +633,15 @@ public sealed partial class SdfFieldEvaluator {
     private static void ThrowNoInclusionRule(SdfOp op) =>
         throw new NotSupportedException(message: $"The bounds interpreter has no inclusion rule for op {op}.");
     // Whether the box walk may skip an instance: every candidate interval it can join has its lower end at or past the
-    // threshold, as its certificate proves, or, for an unscoped instance, each of its members' does. A regional walk
+    // threshold, as its box certificate proves, or, for an unscoped instance, each of its members' does. A regional walk
     // asks the point walk's question (InstanceClears) of every point of the box at once.
-    private bool BoxInstanceClears(in CullBound bound, in BoxQuery query, FixedQ4816 cheapReach, FixedQ4816 threshold, bool regional) =>
+    private bool BoxInstanceClears(in CullBound bound, in BoxReachTest test, FixedQ4816 cheapReach, FixedQ4816 threshold, bool regional) =>
         (regional
-            ? ((threshold.Value <= bound.SeedFloor) && (
-                (cheapReach >= threshold) ||
-                bound.Reach.RegionClears(query: in query, threshold: threshold.Value) ||
-                ((bound.MemberCount > 1) && MembersRegionClear(bound: in bound, query: in query, threshold: threshold.Value))))
+            ? InstanceClears(bound: in bound, cheapReach: cheapReach, test: in test, threshold: threshold)
             : ((threshold.Value <= bound.SeedFloor) && bound.Reach.Boxed && (
                 (cheapReach >= threshold) ||
-                bound.Reach.BoxClears(query: in query, threshold: threshold.Value) ||
-                (!bound.Scoped && (bound.MemberCount > 1) && MembersBoxClear(bound: in bound, query: in query, threshold: threshold.Value)))));
-    private bool MembersRegionClear(in CullBound bound, in BoxQuery query, Int128 threshold) {
-        foreach (ref readonly var member in m_members.AsSpan(start: bound.MemberFirst, length: bound.MemberCount)) {
-            if (!member.RegionClears(query: in query, threshold: threshold)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-    // The end of the chains a regional walk skips from the ResetPoint opening the chain in this slot, the box form of
-    // SkippedChainsEnd: the largest node of the segment hierarchy starting there whose point certificate clears the
-    // running interval at every point of the box, else the chain alone; minus one when neither clears.
-    private int RegionSkippedChainsEnd(int segment, in BoxQuery query, FixedInterval result) {
-        for (var group = m_segmentGroupHeads[segment]; (group >= 0); group = m_segmentGroupNext[group]) {
-            ref readonly var node = ref m_segmentGroups[group];
-
-            if (node.Reach.RegionClears(query: in query, threshold: SegmentThreshold(above: result.Upper, below: result.Lower, bound: in node))) {
-                return node.End;
-            }
-        }
-
-        ref readonly var chain = ref m_segmentBounds[segment];
-
-        return (chain.Reach.RegionClears(query: in query, threshold: SegmentThreshold(above: result.Upper, below: result.Lower, bound: in chain)) ? chain.End : -1);
-    }
-    private bool MembersBoxClear(in CullBound bound, in BoxQuery query, Int128 threshold) {
-        foreach (ref readonly var member in m_members.AsSpan(start: bound.MemberFirst, length: bound.MemberCount)) {
-            if (!member.BoxClears(query: in query, threshold: threshold)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
+                test.Clears(reach: in bound.Reach, threshold: threshold.Value) ||
+                (!bound.Scoped && (bound.MemberCount > 1) && MembersClear(bound: in bound, test: in test, threshold: threshold.Value)))));
     // The box's least corner, the point whose reach orders an uncertified instance as a primer.
     private static FixedVector3 Corner(IntervalVector3 box) => new(X: box.X.Lower, Y: box.Y.Lower, Z: box.Z.Lower);
     private static ulong CentreMagnitude(in Reach reach) =>

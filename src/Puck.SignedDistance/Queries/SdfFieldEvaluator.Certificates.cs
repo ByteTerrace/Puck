@@ -563,40 +563,33 @@ public sealed partial class SdfFieldEvaluator {
             );
         }
 
-        // Whether every candidate the certificate bounds is at least threshold raws at a point: the largest axis
-        // distance first, then the exact sum of squares; |p − C| ≥ L exactly when that sum reaches L².
-        public bool PointClears(FixedVector3 point, Int128 threshold) {
-            var least = Least(inverseGain: InverseGain, required: (threshold + Radius));
-
-            if (least <= 0L) {
-                return true;
-            }
-
-            return ((least < LeastLimit) && Reaches(least: ((UInt128)least), x: Magnitude(raw: (point.X.Value - CenterX)), y: Magnitude(raw: (point.Y.Value - CenterY)), z: Magnitude(raw: (point.Z.Value - CenterZ))));
-        }
+        // Whether every candidate the certificate bounds is at least threshold raws at a point.
+        public bool PointClears(FixedVector3 point, Int128 threshold) =>
+            ClearsAt(threshold: threshold, x: Magnitude(raw: (point.X.Value - CenterX)), y: Magnitude(raw: (point.Y.Value - CenterY)), z: Magnitude(raw: (point.Z.Value - CenterZ)));
         // The point bound read off the largest axis distance alone, no greater than the bound at the exact distance.
-        public long CheapPointReach(FixedVector3 point) {
-            var axis = Math.Max(val1: Magnitude(raw: (point.X.Value - CenterX)), val2: Math.Max(val1: Magnitude(raw: (point.Y.Value - CenterY)), val2: Magnitude(raw: (point.Z.Value - CenterZ))));
-
-            return Clamp(value: (((Int128)Scaled(magnitude: axis, factor: Gain)) - Radius));
-        }
+        public long CheapPointReach(FixedVector3 point) =>
+            CheapReachAt(x: Magnitude(raw: (point.X.Value - CenterX)), y: Magnitude(raw: (point.Y.Value - CenterY)), z: Magnitude(raw: (point.Z.Value - CenterZ)));
         // Whether every candidate the certificate bounds is at least threshold raws at every point of the box: the point
         // test at the box's nearest point to the centre, which no point of the box stands nearer than.
-        public bool RegionClears(in BoxQuery query, Int128 threshold) {
+        public bool RegionClears(in BoxQuery query, Int128 threshold) =>
+            ClearsAt(threshold: threshold, x: Gap(axis: query.Box.X, centre: CenterX), y: Gap(axis: query.Box.Y, centre: CenterY), z: Gap(axis: query.Box.Z, centre: CenterZ));
+        // The point bound over a box read off the largest axis gap alone, no greater than the bound at any point of it.
+        public long CheapRegionReach(in BoxQuery query) =>
+            CheapReachAt(x: Gap(axis: query.Box.X, centre: CenterX), y: Gap(axis: query.Box.Y, centre: CenterY), z: Gap(axis: query.Box.Z, centre: CenterZ));
+
+        // The point test at a point these axis distances from the centre: the largest axis distance first, then the
+        // exact sum of squares; |p − C| ≥ L exactly when that sum reaches L².
+        private bool ClearsAt(Int128 threshold, ulong x, ulong y, ulong z) {
             var least = Least(inverseGain: InverseGain, required: (threshold + Radius));
 
             if (least <= 0L) {
                 return true;
             }
 
-            return ((least < LeastLimit) && Reaches(least: ((UInt128)least), x: Gap(axis: query.Box.X, centre: CenterX), y: Gap(axis: query.Box.Y, centre: CenterY), z: Gap(axis: query.Box.Z, centre: CenterZ)));
+            return ((least < LeastLimit) && Reaches(least: ((UInt128)least), x: x, y: y, z: z));
         }
-        // The point bound over a box read off the largest axis gap alone, no greater than the bound at any point of it.
-        public long CheapRegionReach(in BoxQuery query) {
-            var axis = Math.Max(val1: Gap(axis: query.Box.X, centre: CenterX), val2: Math.Max(val1: Gap(axis: query.Box.Y, centre: CenterY), val2: Gap(axis: query.Box.Z, centre: CenterZ)));
-
-            return Clamp(value: (((Int128)Scaled(magnitude: axis, factor: Gain)) - Radius));
-        }
+        private long CheapReachAt(ulong x, ulong y, ulong z) =>
+            Clamp(value: (((Int128)Scaled(magnitude: Math.Max(val1: x, val2: Math.Max(val1: y, val2: z)), factor: Gain)) - Radius));
         // The most CheapPointReach can fall, in raws, between two points whose largest axis distances from any centre
         // differ by at most `move` raws: the gain is at most MaxGain, the floor in Scaled adds one raw, and the clamp only
         // narrows a difference.

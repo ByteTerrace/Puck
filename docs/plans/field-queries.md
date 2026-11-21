@@ -138,12 +138,17 @@ every op, shape and blend. Against that interval the walk drops three things:
   over the cube stands past the accumulator's upper end by the margin at which
   the blend returns the accumulator to the bit;
 - everything before a chain whose join takes the root accumulator over,
-  because its candidate stands below the accumulator's lower end by the same
+  because the accumulator's lower end stands past its candidate by the same
   margin.
 
 Each of those leaves every point walk in the cube with the distance and
 material it had. Nothing is dropped on a tolerance, a Lipschitz bound or a
 value at one point, and the order of the stream is kept.
+
+The third rule changes no tape on the debug world's field, whose stream order
+puts near geometry early. It is what a program emitted in rows needs: beside
+one shape of a grid of a thousand, a walk reads a few shapes with it and a few
+dozen without (`SdfFieldEvaluatorRegionLawTests.ATapeHoldsASmallPartOfALargeStream`).
 
 The presentation field (`WorldFramePresenter`'s static field), a routed
 scene's dressed field (`WorldSessionSceneEmitter`) and the motion check's
@@ -268,9 +273,7 @@ to split across runs and levels.
 **M2. Rounded smooth minimum can amplify an error.** Confirmed as stated for
 fixed point. It no longer bears on region tapes, which introduce no error to
 amplify: a dropped join returns the accumulator to the bit by the margin the
-cull already proves (`SdfFieldEvaluator`'s smooth-union identity margin), and
-a take-over returns the candidate to the bit by the same margin on the other
-arm.
+cull already proves (`SdfFieldEvaluator`'s smooth-union identity margin), and a take-over returns the candidate to the bit by the same margin on the blend's other arm.
 
 **M3. A hand-written vector walk is another implementation of field
 semantics.** Accepted, and it is the larger correction to the float reader.

@@ -478,10 +478,15 @@ bounds query does, and drops three things against it:
   it by the smooth union's identity margin for a smooth union. This needs no
   certificate, so it reaches the shapes and folds that carry none: a repeat's
   copies are enclosed by the fold's own interval rule.
-- **Everything before a take-over.** A join whose candidate stands below the
+
+- **Everything before a take-over.** The first two are skips at a chain's own
+  place in the stream, so they keep every chain that stands before the nearest
+  geometry in stream order. A join whose candidate stands below the
   accumulator's lower end by the same margin leaves the accumulator equal to
   the candidate at every point of the cube, whatever the stream read before
-  that chain.
+  that chain, so everything before it goes. A program emitted in rows needs
+  this: beside one shape of a grid of a thousand, it is the difference between
+  reading a few shapes and reading a few dozen.
 
 Each drop leaves every point walk in the cube with the distance and material
 it had, so a regional evaluator answers what a plain one answers, to the bit.
