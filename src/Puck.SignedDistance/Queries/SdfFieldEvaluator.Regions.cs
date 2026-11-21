@@ -38,7 +38,8 @@ namespace Puck.SignedDistance.Queries;
 // it is dropped whole, so a point walk's root frame finds its prefix on whichever chain it reads first. A point walk
 // over a tape still makes its own skips at its own point.
 //
-// Regions are cubes of a power-of-two edge. A root region is recorded over the whole stream. A child, half its parent's
+// Regions are cubes of a power-of-two edge, each recorded over its cube and RegionPad either side, which is the box its
+// tape answers. A root region is recorded over the whole stream. A child, half its parent's
 // edge, is recorded over its parent's tape: what the parent dropped is dropped for every point of the child. A region
 // divides until its tape is short or its edge is the least. A region is recorded by the second walk that reaches it;
 // the first marks it and reads the region around it, so scattered points record nothing. A region is immutable once
@@ -54,6 +55,9 @@ public sealed partial class SdfFieldEvaluator {
     // A region whose tape holds no more instructions than this does not divide.
     private const int RegionShortTape = 32;
     private const int RegionLimit = (1 << 14);
+    // How far past its cube a region's tape is recorded: 2⁻⁵ units in raws. A tape answers every point within the pad
+    // of its cube, which is what lets one walk read the taps of a gradient around a point of the cube.
+    private const long RegionPad = (1L << (FixedQ4816.FractionBitCount - 5));
 
     // A tape that holds nothing: one empty range, since a walk reads an empty span as the whole stream.
     private static readonly int[] EmptyTape = [0, 0];
@@ -202,13 +206,14 @@ public sealed partial class SdfFieldEvaluator {
 
         return new RegionNode(bounds: (divides ? BoundsIn(candidates: parent?.Bounds, tape: tape) : []), instructions: instructions, tape: tape);
     }
-    // One side of a region's box: the cell's raws, less what lies outside the frame, whose points no walk reads.
+    // One side of a region's box: the cell's raws and the pad either side, less what lies outside the frame, whose
+    // points no walk reads.
     private static FixedInterval RegionSide(long cell, int shift, long frame) {
         var lower = (cell << shift);
 
         return new FixedInterval(
-            lower: FixedQ4816.FromRawBits(value: Math.Max(val1: lower, val2: -frame)),
-            upper: FixedQ4816.FromRawBits(value: Math.Min(val1: (lower + ((1L << shift) - 1L)), val2: frame))
+            lower: FixedQ4816.FromRawBits(value: Math.Max(val1: (lower - RegionPad), val2: -frame)),
+            upper: FixedQ4816.FromRawBits(value: Math.Min(val1: ((lower + ((1L << shift) - 1L)) + RegionPad), val2: frame))
         );
     }
     // A walk's record as a tape: its ranges in stream order, joined where they meet or overlap (the primer's own walk

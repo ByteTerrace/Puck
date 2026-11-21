@@ -148,7 +148,7 @@ internal class SdfFormula {
             }
             return text;
         });
-        if (!shader && UsesPower) { arguments = arguments.Concat(["ref powerWork"]); }
+        if (!shader && !Widening && UsesPower) { arguments = arguments.Concat(["ref powerWork"]); }
         return Call(NameIn(shader), arguments);
     }
 
@@ -193,6 +193,64 @@ internal class SdfFormula {
         return source.Append(indent).Append("}\n").ToString();
     }
 
+    // === The wide reader ===============================================================================================
+    // A third lowering, for presentation: the fixed-point reader's text over double-precision lanes, one lane a point
+    // (SdfFieldEvaluator's Wide carriers, which name every operation as the fixed carriers do). The nodes whose lowering
+    // is not that renaming say so in Render. A guarded return cannot branch per lane: each guard selects its value
+    // into the lanes it holds and the formula returns once every lane is taken, so a guard on an instruction's own
+    // operands, which every lane shares, still skips what it guards. A formula that answers a condition has no wide
+    // form; only material winners do, and the wide reader reads distances alone.
+    [ThreadStatic]
+    private static bool Widening;
+
+    internal bool Widens => (Result != SdfFormulaType.Condition);
+
+    internal static string Widen(string text) => text
+        .Replace("FixedQ4816", "Wide").Replace("FixedVector2", "Wide2").Replace("FixedVector3", "Wide3").Replace("FixedQuaternion", "WideRotation");
+
+    internal string DispatchWide() {
+        Widening = true;
+        try { return Widen(Dispatch(shader: false)); } finally { Widening = false; }
+    }
+
+    internal static string EmitAllWide(params SdfFormula[] formulas) {
+        var written = new HashSet<SdfFormula>();
+        var output = new StringBuilder();
+        foreach (var formula in formulas) { Write(formula); }
+        return output.ToString().TrimEnd() + "\n";
+
+        void Write(SdfFormula formula) {
+            if (!formula.Widens || !written.Add(formula)) { return; }
+            foreach (var dependency in formula.Dependencies()) { Write(dependency); }
+            output.Append(formula.EmitWide()).Append('\n');
+        }
+    }
+
+    private string EmitWide() {
+        Widening = true;
+        try {
+            var source = new StringBuilder();
+            var arguments = Parameters(shader: false).Select(static parameter => TypeName(parameter.Type, shader: false) + " " + parameter.Name);
+            var guarded = m_steps.Any(static step => step.When is not null);
+            if (guarded && (Result != SdfFormulaType.Scalar)) { throw new InvalidOperationException($"Field formula {Name} guards a return that is not a scalar."); }
+            source.Append("    private static ").Append(TypeName(Result, shader: false)).Append(' ').Append(Call(NameIn(shader: false), arguments)).Append(" {\n");
+            if (guarded) { source.Append("        var taken = WideMask.None;\n        var result = FixedQ4816.Zero;\n"); }
+            foreach (var step in m_steps) {
+                var value = Render(step.Value, shader: false);
+                source.Append("        ");
+                if (step.When is { } condition) {
+                    source.Append("{ var when = (").Append(Render(condition, shader: false)).Append(").Without(taken); if (when.Any) { result = Wide.Select(when, ")
+                        .Append(value).Append(", result); taken |= when; if (taken.All) { return result; } } }\n");
+                } else if (step.Name is { } name) {
+                    source.Append(TypeName(step.Value.Type, shader: false)).Append(' ').Append(name).Append(" = ").Append(value).Append(";\n");
+                } else {
+                    source.Append(guarded ? $"return Wide.Select(taken, result, {value});\n" : $"return {value};\n");
+                }
+            }
+            return Widen(source.Append("    }\n").ToString());
+        } finally { Widening = false; }
+    }
+
     protected SdfFormulaNode Invoke(params ISdfFormulaValue[] arguments) {
         if (m_parameters.Any(static parameter => parameter.Bound)
             || !m_parameters.Select(static parameter => parameter.Type).SequenceEqual(arguments.Select(static argument => argument.Node.Type))) {
@@ -207,7 +265,7 @@ internal class SdfFormula {
         SdfFormulaType.Scalar => shader ? "float" : "FixedQ4816",
         SdfFormulaType.Vector2 => shader ? "float2" : "FixedVector2",
         SdfFormulaType.Vector3 => shader ? "float3" : "FixedVector3",
-        SdfFormulaType.Condition => "bool",
+        SdfFormulaType.Condition => Widening ? "WideMask" : "bool",
         SdfFormulaType.Index => "uint",
         SdfFormulaType.Rotation => shader ? "float4" : "FixedQuaternion",
         _ => throw new ArgumentOutOfRangeException(nameof(type)),
@@ -225,7 +283,7 @@ internal class SdfFormula {
         return node.Op switch {
             SdfFormulaOp.Name => node.Text,
             SdfFormulaOp.Literal => RenderLiteral(double.Parse(node.Text, CultureInfo.InvariantCulture), shader),
-            SdfFormulaOp.Constant => shader ? node.Shader! : node.Text,
+            SdfFormulaOp.Constant => shader ? node.Shader! : Widening ? $"((double){node.Text})" : node.Text,
             SdfFormulaOp.Add => Binary("+"),
             SdfFormulaOp.Subtract => Binary("-"),
             SdfFormulaOp.Multiply => Binary("*"),
@@ -257,7 +315,7 @@ internal class SdfFormula {
             SdfFormulaOp.ScaledRatio => shader
                 ? $"({At(0)} * ({At(1)} * {At(3)}))"
                 : $"SuperellipsoidScaledRatio({At(0)}, {At(2)}, {At(1)})",
-            SdfFormulaOp.Power => shader ? $"pow({At(0)}, {At(1)})" : $"memo.Pow({At(0)}, {At(1)}, ref powerWork)",
+            SdfFormulaOp.Power => shader ? $"pow({At(0)}, {At(1)})" : Widening ? $"Wide.Pow({At(0)}, {At(1)})" : $"memo.Pow({At(0)}, {At(1)}, ref powerWork)",
             // A float that overflowed to infinity or NaN takes the fallback; the fixed carrier saturates instead.
             SdfFormulaOp.FiniteOr => shader
                 ? $"((asuint({At(0)}) & 0x7F800000u) == 0x7F800000u ? {At(1)} : {At(0)})"
@@ -281,6 +339,7 @@ internal class SdfFormula {
             // sdfCellDistance (field/sdf-noise.hlsli).
             SdfFormulaOp.Fbm3 => shader
                 ? $"sdfFbm3({Arguments()})"
+                : Widening ? $"WideFbm3({Arguments()})"
                 : $"Pcg3dLatticeNoise.Fbm3(q: {At(0)}, seed: {At(1)}, octaves: ((int){At(2)}), gain: {At(3)}, lacunarity: {At(4)})",
             SdfFormulaOp.CellDistance => shader
                 ? $"sdfCellDistance({Arguments()})"
@@ -290,10 +349,10 @@ internal class SdfFormula {
             SdfFormulaOp.LessEqual => Binary("<="),
             SdfFormulaOp.Greater => Binary(">"),
             SdfFormulaOp.GreaterEqual => Binary(">="),
-            SdfFormulaOp.And => Binary("&&"),
-            SdfFormulaOp.Select => $"({At(0)} ? {At(1)} : {At(2)})",
+            SdfFormulaOp.And => Binary(Widening ? "&" : "&&"),
+            SdfFormulaOp.Select => Widening ? $"Wide.Select({At(0)}, {At(1)}, {At(2)})" : $"({At(0)} ? {At(1)} : {At(2)})",
             SdfFormulaOp.Call => Call(node.Function!.NameIn(shader), node.Inputs.Select(input => Render(input, shader))
-                .Concat(!shader && node.Function!.UsesPower ? ["ref powerWork"] : [])),
+                .Concat(!shader && !Widening && node.Function!.UsesPower ? ["ref powerWork"] : [])),
             _ => throw new ArgumentOutOfRangeException(nameof(node)),
         };
     }

@@ -28,14 +28,13 @@ owner authorized the design round.
   silhouette coverage and curvature finer than the bake's cell. This is the
   mesh-first trade more than the interpreter, and is recorded here because a
   better field pipeline may recover some of it.
-- **The stream's semantics are written twice.** The shared formulas cover
-  shapes and blends. A fold, a field edit, the masked relief and a scope's pop
-  are still one body in `SdfFieldEvaluator` and one in the kernels. A morph
-  pop shows the cost: the kernels read its lane and the evaluator reads zero,
-  a convention no shared definition states.
-  [Presentation field queries](field-queries.md#the-float-reader)
-  moves them into shared definitions before it adds a third reader in vector
-  width.
+- **Some ops are still written twice.** The shared formulas cover shapes,
+  blends, the contact stream's point maps and field edits, scope pops,
+  material winners and the masked relief. The two warps and the render-only
+  ops are still one body in `SdfFieldEvaluator` and one in the kernels, and
+  the interval rules are hand-written beside the point rules
+  ([presentation field queries](field-queries.md#build-order), steps 5 and
+  6).
 
 The two readers no longer drift apart by construction. One catalogue entry per
 op, shape, blend and relief-row kind (`SdfFieldOps`, `SdfFieldShapes`,

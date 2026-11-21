@@ -517,6 +517,30 @@ the drops. Regions pay for a program large enough that walking all of it is
 what a query costs; the presentation field is regional and the server's
 per-collider fields are not.
 
+### A surface normal in one walk
+
+A tape is recorded over its cube and 2⁻⁵ units either side, so it answers
+every point within that pad of the cube. That is what lets
+`SdfFieldEvaluator.TrySurfaceNormal` read the six central taps of a gradient
+as one walk of the tape of the point's cube, in place of six point walks. The
+walk is the wide reader: the stream read in double precision at several
+points at once, one point a lane of a hardware vector, with none of the point
+walk's skips.
+
+The wide reader is the third lowering of the shared formulas
+(`SdfFieldFormulas`), after the fixed-point C# and the kernels' HLSL, so it
+states no shape, blend or op again. What a formula calls that is not a formula
+(a shape with a hand-written reader, the lattice noises) it reads a lane at a
+time through the fixed-point reader. It reads distances alone and answers a
+float vector, for presentation: nothing decides a hit, a contact or a
+material on it, and a march's samples stay fixed point. A double holds every
+fixed-point operand exactly, but the two readers round differently, so a wide
+answer is held to the fixed one by an angle (`SdfFieldEvaluatorWideLawTests`),
+never by bits. Where the wide reader cannot answer (the point's cube is not
+recorded yet, its tape holds an op with no formula, the point stands within a
+step of the frame) the fixed-point gradient does. `world.counters sdf.wide`
+reads the walks, the instructions they visited and those refusals.
+
 Pruning research has different preservation contracts.
 [Barbier et al., Lipschitz Pruning (2025)](https://wbrbr.org/publications/LipschitzPruning/)
 construct region-local reductions of primitive CSG trees.
