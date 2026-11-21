@@ -37,6 +37,20 @@ internal static class NamedTypes {
 
         return false;
     }
+    /// <summary>Returns whether a type is, or derives from, the named type.</summary>
+    /// <param name="type">The type, or <see langword="null"/>.</param>
+    /// <param name="namespace">The namespace's display name.</param>
+    /// <param name="name">The type's name, without arity.</param>
+    /// <returns><see langword="true"/> when the type or one of its base types is the named one.</returns>
+    public static bool Derives(ITypeSymbol? type, string @namespace, string name) {
+        for (var current = type; (current is not null); current = current.BaseType) {
+            if (Is(type: current, @namespace: @namespace, name: name)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Returns whether a type is, or implements, the named type.</summary>
     /// <param name="type">The type, or <see langword="null"/>.</param>
     /// <param name="namespace">The namespace's display name.</param>

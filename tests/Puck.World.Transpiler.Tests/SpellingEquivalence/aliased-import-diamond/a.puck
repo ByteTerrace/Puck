@@ -1,0 +1,12 @@
+// Two unaliased routes to one library under one alias are one load of it, as they are with no alias at all.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+import "outer" as o
+
+state {
+  world {
+    slot sum = o.z
+    slot leaf = o.x
+  }
+}

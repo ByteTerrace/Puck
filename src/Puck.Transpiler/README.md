@@ -14,9 +14,12 @@ language: syntax trees, parsing, diagnostics, formatting, and value lowering.
 Operand trees share the state expression parser and retain unresolved names, explicit grouping and interpolation
 atoms. Vocabularies bind these nodes by position; member values convert structurally from the compile-time AST.
 `PuckSyntaxRewriter.RewriteOperandSyntax` traverses their names and operators without editing source strings.
-`Ast/SyntaxWalk` is the one enumeration of a node's children (`Children`) and the one search for the nodes a source
-position stands in (`PathAt`); a reader that walks a tree without rebuilding it walks through there, while a rewrite
-keeps its typed descent. `Ast/QualifiedName` is the one reading of a dotted name (`box.child.score`, `alias.name`,
+A syntax node's own declaration is the one description of its children: `SyntaxNode.Children` and
+`SyntaxNode.MapChildren` are generated from each node record's node-typed properties (`SyntaxChildrenGenerator`), a
+walk reads the first and every rebuild (`PuckSyntaxRewriter`, the trivia pass) goes through the second, and a node
+that carries children some other way writes both by hand. `Ast/SyntaxWalk.PathAt` is the one search for the nodes a
+source position stands in, and `Ast/SyntaxScopes` the one description of the names a node binds for its children,
+which the import rewriter, hover and go-to-definition all read. `Ast/QualifiedName` is the one reading of a dotted name (`box.child.score`, `alias.name`,
 `binding.field`, `Suit.hearts`): it splits and joins the segments, and spells a member-access chain in either the
 document or the operand grammar as the name it reads. `Editing/LspJson` builds every Language Server Protocol completion item, position and range
 the world and cartridge editor services answer with, and converts between an LSP position and a source offset; a

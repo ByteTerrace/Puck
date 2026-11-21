@@ -11,7 +11,7 @@ namespace Puck.Transpiler.Ast;
 /// <param name="Length">The statement's length in characters.</param>
 /// <param name="Line">The statement's 1-based line.</param>
 /// <param name="Column">The statement's 1-based column.</param>
-public sealed record GraphParameterNode(
+public sealed partial record GraphParameterNode(
     string Pass,
     string Member,
     ExpressionNode Value,

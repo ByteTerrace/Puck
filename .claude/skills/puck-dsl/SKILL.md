@@ -19,6 +19,7 @@ file is corrected in the same change.
 | Thing | Where |
 |---|---|
 | Parser, printer, lowering, diagnostics | `src/Puck.Transpiler` (`Parsing/PuckParser*.cs`, `Formatting/PuckPrinter*.cs`, `Lowering/DocumentLowering*.cs` and `DocumentBuiltins.cs`, `Diagnostics/PuckDiagnosticCodes.cs`) |
+| The syntax tree and everything that walks it | `src/Puck.Transpiler/Ast`: a node record's node-typed properties are its children, and `SyntaxNode.Children` and `MapChildren` are generated from them (`SyntaxChildrenGenerator` in `Puck.Analyzers`), so a new property reaches every walk, the rewriter and the trivia pass when it compiles; `SyntaxScopes.Binds` is the one description of what a node binds for its children (the import rewriter, hover, go-to-definition); `Parsing/SourceLexemes.End` is the one string, backquote and comment scanner |
 | World vocabulary, its linter and language server | `src/Puck.World.Transpiler` (`Vocabulary/` describes every construct once; `Validation/PuckLinter*.cs`; `Lsp/`) |
 | World compile contract | `src/Puck.World.Transpiler/WorldCompileSession.cs`, the one door every host compiles, composes, loads and diagnoses through (it holds library parses by content in `Puck.Transpiler.Modules.PuckSourceTable`, held compiles, and each editor buffer's latest compile), over the internal stage order in `WorldCompiler.cs`; `WorldDocumentMembers.cs` walks the emitted document along `WorldModelShape`: it refuses unconsumed members (naming the nearest declared members through `DocumentNearestNames`), lowers authored pins to canonical document identities, and writes each typed value's canonical form (float spelling, rotation sign, convex profile start, zero-is-absent shape members, a write's `value`/`fromState`, model member order) |
 | Cartridge vocabulary | `src/Puck.GamingBricks.Transpiler` |
@@ -117,6 +118,12 @@ A document's `schema:` field selects its vocabulary, never the filename.
   A rule has one gate and one decision, so a `when`, `decision` or nested
   `rule` inside a rule-body `for` is **PUCK114**; write the condition in the
   rule's own `when`, or in an `if` inside the loop.
+- **An effect names its row one way.** An assignment, `remove`, `schedule`,
+  `push`, `draw`, `deal` and `shuffle` all read their row as a target and lower it
+  through `ResolveEffectTarget`: a template parameter or loop variable holding a
+  name is that row, as are `$"hand{s}"`, a module instance's `alias.row` and a
+  `$zones[index]` selector; `claim` and `for each` take a binding holding the
+  pool's name. `deal count from a to b` reads its count as a value.
 - Units (`s ms min h m cm mm hz % pct deg rad`) convert in the core; a unit on
   a field the vocabulary does not dimension is **PUCK024**, an inadmissible
   unit **PUCK025**.

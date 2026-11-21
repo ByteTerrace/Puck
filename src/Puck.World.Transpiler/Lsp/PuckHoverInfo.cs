@@ -74,109 +74,28 @@ internal static class PuckHoverInfo {
             return fieldCard;
         }
         if (word is not null) {
-            for (var index = (path.Count - 1); (index >= 0); --index) {
-                switch (path[index]) {
-                    case LambdaExpressionNode lambda when lambda.Parameters.Contains(value: word):
-                        return Card(
-                            $"{word} — lambda parameter",
-                            Slice(
-                                node: lambda,
-                                source: source
-                            )
-                        );
-                    case TemplateNode template:
-                        var parameter = template.Parameters.FirstOrDefault(predicate: item => (item.Name == word));
-                        if (parameter is not null) {
-                            return Card(
-                                $"{word} — template parameter",
-                                Slice(
-                                    node: parameter,
-                                    source: source
-                                ),
-                                $"Parameter of {template.Name}."
-                            );
-                        }
-                        if (template.Body.Statements.OfType<LetNode>().FirstOrDefault(predicate: item => (item.Name == word)) is { } templateLet) {
-                            return Describe(node: templateLet, source: source, title: $"{word} — local constant");
-                        }
-                        break;
-                    case ForStatementNode loop when (((loop.Item == word) || (loop.Index == word)) && !SyntaxWalk.Spans(
-                    node: loop.Sequence,
-                    offset: offset
-                )):
-                        return Card(
-                            $"{word} — loop variable",
-                            $"for {loop.Item}{((loop.Index is null)
-                            ? ""
-                            : $", {loop.Index}")} in {Slice(
-                                source,
-                                loop.Sequence
-                            )}",
-                            ((word == loop.Index)
-                            ? "Zero-based element index."
-                            : "One element of the source sequence.")
-                        );
-                    case RepeatStatementNode repeat when ((repeat.Index == word) && !SyntaxWalk.Spans(
-                    node: repeat.Count,
-                    offset: offset
-                )):
-                        return Card(
-                            $"{word} — loop index",
-                            $"repeat {Slice(
-                                source,
-                                repeat.Count
-                            )} as {word}",
-                            "Runs from zero to count minus one."
-                        );
-                    case RuleBlockNode rule:
-                        var local = rule.Statements.OfType<LocalStatementNode>().FirstOrDefault(predicate: item => (item.Name == word));
-                        if (local is not null) {
-                            return Describe(
-                                node: local,
-                                source: source,
-                                title: $"{word} — rule local"
-                            );
-                        }
-                        break;
-                    case CallExpressionNode call: {
-                            var argument = call.Arguments.FirstOrDefault(predicate: item => ((item.Name == word) && SyntaxWalk.Spans(
-                                node: item,
-                                offset: offset
-                            ) && (offset < item.Value.Offset)));
+            if (PuckSymbolResolver.ResolveLexical(document: document, imported: imported, offset: offset, path: path, word: word) is { } lexical) {
+                var declaration = lexical.Binder.Declaration;
+                var origin = lexical.Origin;
+                var declaring = ((origin is null) ? source : readSource?.Invoke(arg: origin.SourcePath));
+                var owner = (((TemplateNode?)origin?.Node)
+                    ?? path.OfType<TemplateNode>().LastOrDefault(predicate: template => template.Parameters.Contains(value: declaration))
+                    ?? document.Statements.OfType<TemplateNode>().FirstOrDefault(predicate: template => template.Parameters.Contains(value: declaration)));
 
-                            if (argument is null) {
-                                break;
-                            }
-                            if (
-                                document.Statements.OfType<TemplateNode>().FirstOrDefault(predicate: item => (item.Name == call.Name)) is { } called &&
-                                called.Parameters.FirstOrDefault(predicate: item => (item.Name == argument.Name)) is { } formal
-                            ) {
-                                return Card(
-                                    $"{word} — template parameter",
-                                    Slice(
-                                        node: formal,
-                                        source: source
-                                    ),
-                                    $"Parameter of {called.Name}."
-                                );
-                            }
-                            if (
-                                (imported is not null) &&
-                                (imported.FirstOrDefault(predicate: item => ((item.Name == call.Name) && (item.Node is TemplateNode))) is { Node: TemplateNode importedTemplate } sym) &&
-                                (importedTemplate.Parameters.FirstOrDefault(predicate: item => (item.Name == argument.Name)) is { } importedFormal)
-                            ) {
-                                var importedSource = readSource?.Invoke(arg: sym.SourcePath);
-                                var decl = ((importedSource is not null) ? Slice(node: importedFormal, source: importedSource) : importedFormal.Name);
-
-                                return Card(
-                                    $"{word} — template parameter",
-                                    decl,
-                                    $"Parameter of {sym.Name} (from `{Path.GetFileName(path: sym.SourcePath)}`)."
-                                );
-                            }
-                            break;
-                        }
-                }
+                return lexical.Binder.Kind switch {
+                    SyntaxBinderKind.LambdaParameter => Card($"{word} — lambda parameter", Slice(node: declaration, source: source)),
+                    SyntaxBinderKind.Parameter when (owner is null) => Card($"{word} — function parameter", Slice(node: declaration, source: source)),
+                    SyntaxBinderKind.Parameter => Card(
+                        $"{word} — template parameter",
+                        ((declaring is not null) ? Slice(node: declaration, source: declaring) : word),
+                        ((origin is null) ? $"Parameter of {owner.Name}." : $"Parameter of {origin.Name} (from `{Path.GetFileName(path: origin.SourcePath)}`).")
+                    ),
+                    SyntaxBinderKind.Constant => Describe(node: declaration, source: source, title: $"{word} — local constant"),
+                    SyntaxBinderKind.LoopItem => Card($"{word} — loop variable", Header(node: declaration, source: source), "One element of the source sequence."),
+                    SyntaxBinderKind.LoopIndex => Card($"{word} — loop index", Header(node: declaration, source: source), "Zero-based, counting each pass."),
+                    SyntaxBinderKind.PoolBinding => Card($"{word} — pool binding", Header(node: declaration, source: source), "One live instance of the pool."),
+                    _ => Describe(node: declaration, source: source, title: $"{word} — rule local"),
+                };
             }
             foreach (var statement in document.Statements) {
                 switch (statement) {
@@ -325,6 +244,19 @@ internal static class PuckHoverInfo {
             source: source
         )
     );
+    // A loop's or a claim's own line: its source up to the body it opens.
+    private static string Header(string source, SyntaxNode node) {
+        var end = Math.Min(val1: (node.Offset + node.Length), val2: source.Length);
+        var index = node.Offset;
+
+        while ((index < end) && (source[index] != '{')) {
+            var lexeme = SourceLexemes.End(offset: index, source: source);
+
+            index = ((lexeme > index) ? lexeme : (index + 1));
+        }
+
+        return source[node.Offset..Math.Min(val1: index, val2: end)].Trim();
+    }
     private static string Slice(string source, SyntaxNode node) => source.Substring(
         node.Offset,
         Math.Min(

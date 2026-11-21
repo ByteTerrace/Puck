@@ -126,7 +126,9 @@ public static partial class PuckParser {
             cursor.ResetPosition(position: beforeFor);
         }
 
-        if (TryMatchKeyword(context: context, keyword: "when")) {
+        var opening = BodyKeywordAt(context: context);
+
+        if (TryMatchBodyKeyword(context: context, keyword: "when", opening: opening)) {
             return ParseWhenStatement(
                 col: col,
                 context: context,
@@ -136,7 +138,7 @@ public static partial class PuckParser {
             );
         }
 
-        if (TryMatchKeyword(context: context, keyword: "local")) {
+        if (TryMatchBodyKeyword(context: context, keyword: "local", opening: opening)) {
             return ParseLocalStatement(
                 col: col,
                 context: context,

@@ -121,7 +121,7 @@ public static partial class RuleWorkBudget {
                         priced[(call.Body, kind)] = body;
                     }
 
-                    cost += body;
+                    cost += token.Operation is ExpressionOp.And or ExpressionOp.Or or ExpressionOp.Not ? 1L + body : body;
 
                     break;
                 default:

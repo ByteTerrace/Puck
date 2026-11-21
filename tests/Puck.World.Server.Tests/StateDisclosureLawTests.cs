@@ -308,8 +308,7 @@ public sealed class StateDisclosureLawTests {
         Assert.True(condition: GeneratorEngine.TryFire(
             generator,
             CellKind.Int,
-            8,
-            9,
+            new DrawSeed(8, 9),
             100,
             null,
             out var a,
@@ -319,8 +318,7 @@ public sealed class StateDisclosureLawTests {
         Assert.True(condition: GeneratorEngine.TryFire(
             generator,
             CellKind.Int,
-            8,
-            9,
+            new DrawSeed(8, 9),
             100,
             null,
             out var b,
@@ -334,8 +332,7 @@ public sealed class StateDisclosureLawTests {
         Assert.True(condition: GeneratorEngine.TryFire(
             generator,
             CellKind.Int,
-            8,
-            9,
+            new DrawSeed(8, 9),
             101,
             null,
             out var c,
@@ -349,8 +346,7 @@ public sealed class StateDisclosureLawTests {
         Assert.False(condition: GeneratorEngine.TryFire(
             generator,
             CellKind.Fixed,
-            8,
-            9,
+            new DrawSeed(8, 9),
             100,
             null,
             out _,

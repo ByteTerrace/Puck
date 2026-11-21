@@ -115,9 +115,8 @@ public static class ArenaDraws {
             reason: out reason,
             result: out result,
             secret: secret,
-            seedState: seed.State,
+            seed: seed,
             skip: skip,
-            stream: seed.Stream,
             targetKind: arena.Layout[rowOrdinal].Kind
         )) {
             return false;

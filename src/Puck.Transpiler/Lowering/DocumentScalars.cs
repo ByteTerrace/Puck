@@ -179,34 +179,14 @@ public static class DocumentScalars {
             allIntegers &&
             (call.Name is not ("cosine" or "sine" or "squareRoot"))
         ) {
-            if (
-                (call.Name == "absolute") &&
-                (integers[0] == long.MinValue)
-            ) {
-                return Refuse(
-                    call: call,
-                    message: "absolute overflows a signed 64-bit integer",
-                    scope: scope
-                );
-            }
-            return JsonValue.Create(call.Name switch {
-                "absolute" => Math.Abs(value: integers[0]),
-                "clamp" => Math.Clamp(
-                integers[0],
-                integers[1],
-                integers[2]
-            ),
-                "maximum" => Math.Max(
-                val1: integers[0],
-                val2: integers[1]
-            ),
-                "minimum" => Math.Min(
-                val1: integers[0],
-                val2: integers[1]
-            ),
-                "sign" => Math.Sign(value: integers[0]),
-                _ => integers[0],
-            });
+            long value;
+            var evaluated = function.Operation switch {
+                ExpressionOp.Absolute or ExpressionOp.Sign => ExpressionArithmetic.TryUnary(function.Operation, CellKind.Int, integers[0], out value),
+                ExpressionOp.Minimum or ExpressionOp.Maximum => ExpressionArithmetic.TryBinary(function.Operation, CellKind.Int, integers[0], integers[1], out value),
+                ExpressionOp.Clamp => ExpressionArithmetic.TryClamp(integers[0], integers[1], integers[2], out value),
+                _ => ExpressionArithmetic.TryFunction(function.Operation, CellKind.Int, integers, out value),
+            };
+            return evaluated ? JsonValue.Create(value) : Refuse(scope, call, $"{call.Name} overflows a signed 64-bit integer");
         }
 
         return DocumentLowering.NumberNode(

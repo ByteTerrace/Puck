@@ -15,10 +15,17 @@ namespace Puck.World.Transpiler.Lowering;
 // Shade uses the shared parser, lexical bindings, template argument binding, function recursion guard and for
 // expansion. This vocabulary only assigns meanings to stamp reads, runtime slots and phase output assignments.
 internal sealed class WorldShadeLowering {
+    // Both stand in a tree as leaves: a bound source is lowered under the scope it carries, never where it stands.
     private sealed record Bound(ExpressionNode Source, DocumentScope Scope) : ExpressionNode {
         public Dictionary<SdfShadeType, SdfShadeExpression> Values { get; } = [];
+
+        public override IReadOnlyList<SyntaxNode> Children() => [];
+        public override SyntaxNode MapChildren(ISyntaxMap map) => this;
     }
-    private sealed record Runtime(string Parameter) : ExpressionNode;
+    private sealed record Runtime(string Parameter) : ExpressionNode {
+        public override IReadOnlyList<SyntaxNode> Children() => [];
+        public override SyntaxNode MapChildren(ISyntaxMap map) => this;
+    }
 
     private readonly List<SdfShadeParameter> m_parameters = [];
     private readonly Dictionary<string, JsonNode?> m_values = new(comparer: StringComparer.Ordinal);

@@ -290,96 +290,12 @@ public static partial class RuleCompiler {
             space: space
         );
     }
-    private static (StateRowDeclaration Row, int RowOrdinal, CellKey Key, CompiledCellRef? KeyFrom, string Spelling) ResolveVectorDestination(string intoSpelling, RuleCompileContext context, string ruleName, string where) {
-        intoSpelling = intoSpelling.Trim();
+    private static CompiledVector ResolveVectorDestination(string intoSpelling, RuleCompileContext context, string ruleName, string where, StateSpace? expectedSpace = null) =>
+        VectorOperand.CellOf(intoSpelling) is { } cell
+            ? ResolveVectorCellOperand(cell.Name, cell.Key, context, ruleName, where, expectedSpace)
+            : throw new RuleException(detail: $"{where} requires a vector cell destination, got '{intoSpelling}'",
+                refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName);
 
-        var bracketIndex = intoSpelling.IndexOf(value: '[');
-        string? key;
-        string rowName;
-
-        if (
-            (bracketIndex > 0) &&
-            intoSpelling.EndsWith(value: ']')
-        ) {
-            key = intoSpelling[(bracketIndex + 1)..^1].Trim();
-            rowName = intoSpelling[..bracketIndex].Trim();
-        } else {
-            key = null;
-            rowName = intoSpelling;
-        }
-
-        var row = (context.FindRow(name: rowName)
-            ?? throw new RuleException(
-            detail: $"{where} addresses unknown row '{rowName}'",
-            refusal: RuleRefusal.StateRowUnknown,
-            ruleName: ruleName
-        ));
-
-        if (row.Kind != CellKind.Vector) {
-            throw new RuleException(
-                detail: $"{where} destination row '{rowName}' is kind={StateSpelling.Kind(kind: row.Kind)}, not Vector",
-                refusal: RuleRefusal.VectorOperandNotVector,
-                ruleName: ruleName
-            );
-        }
-
-        var rowOrdinal = ResolveRowOrdinal(
-            context: context,
-            name: rowName
-        );
-
-        if (row.IsSlot) {
-            if (
-                (key is not null) &&
-                !string.Equals(
-                a: key,
-                b: StateRow.SlotKey.Value,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                throw new RuleException(
-                    detail: $"Slot row '{rowName}' cannot be indexed with key '{key}' in {where}",
-                    refusal: RuleRefusal.StateCellUnaddressable,
-                    ruleName: ruleName
-                );
-            }
-
-            return (row, rowOrdinal, InternKey(
-                context: context,
-                name: StateRow.SlotKey.Value
-            ), null, rowName);
-        }
-        if (key is null) {
-            throw new RuleException(
-                detail: $"Keyed vector destination '{rowName}' requires a cell key in {where}",
-                refusal: RuleRefusal.StateCellUnaddressable,
-                ruleName: ruleName
-            );
-        }
-        if (TryResolveDynamicKey(
-            cell: out var dynamicKey,
-            context: context,
-            reference: StateChannelRef.OfNullable(spelling: key),
-            keyFieldLabel: "key",
-            ruleName: ruleName,
-            verb: where
-        )) {
-            return (row, rowOrdinal, default, dynamicKey, $"{rowName}[{key}]");
-        }
-        if (!CellName.TryParse(
-            candidate: key,
-            name: out var parsed,
-            reason: out var reason
-        )) {
-            throw new RuleException(
-                detail: $"Invalid destination cell key '{key}' on row '{rowName}' in {where}: {reason}",
-                refusal: RuleRefusal.StateCellUnaddressable,
-                ruleName: ruleName
-            );
-        }
-
-        return (row, rowOrdinal, context.Catalog.Keys.Intern(name: parsed), null, $"{rowName}[{key}]");
-    }
     private static CompiledVector ResolveVectorLiteralOperand(string literal, RuleCompileContext context, string ruleName, string where, StateSpace? expectedSpace) {
         var space = (expectedSpace
             ?? (context.FindSpace(name: null)
@@ -407,61 +323,29 @@ public static partial class RuleCompiler {
             space: space
         );
     }
-    private static VectorMeanEffect ResolveVectorMeanTransform(StateTransform.Mean mean, string ruleName, RuleCompileContext context) {
-        var fromRow = (context.FindRow(name: mean.From)
-            ?? throw new RuleException(
-            detail: $"mean from row '{mean.From}' is unknown",
-            refusal: RuleRefusal.StateRowUnknown,
-            ruleName: ruleName
-        ));
-
-        if (
-            (fromRow.Kind != CellKind.Vector) ||
-            !fromRow.IsKeyed
-        ) {
-            throw new RuleException(
-                detail: $"mean from row '{mean.From}' must be a keyed Vector table",
-                refusal: RuleRefusal.VectorOperandNotVector,
-                ruleName: ruleName
-            );
+    private static (StateRowDeclaration Row, StateSpace Space) ResolveVectorTable(string spelling, RuleCompileContext context, string ruleName, string where) {
+        if (VectorOperand.CellOf(spelling) is not { Key: null } cell || context.FindRow(cell.Name.Spelling) is not { } row) {
+            throw new RuleException(detail: $"{where} addresses unknown table '{spelling}'", refusal: RuleRefusal.StateRowUnknown, ruleName: ruleName);
         }
-
-        var space = (context.FindSpace(name: fromRow.Space)
-            ?? throw new RuleException(
-            detail: $"Row '{fromRow.Name}' names undeclared vector space '{fromRow.Space}'",
-            refusal: RuleRefusal.VectorSpaceMismatch,
-            ruleName: ruleName
-        ));
+        if (row.Kind != CellKind.Vector || !row.IsKeyed) {
+            throw new RuleException(detail: $"{where} row '{spelling}' must be a keyed Vector table", refusal: RuleRefusal.VectorOperandNotVector, ruleName: ruleName);
+        }
+        var space = context.FindSpace(row.Space) ?? throw new RuleException(
+            detail: $"Row '{row.Name}' names undeclared vector space '{row.Space}'", refusal: RuleRefusal.VectorSpaceMismatch, ruleName: ruleName);
+        return (row, space);
+    }
+    private static VectorMeanEffect ResolveVectorMeanTransform(StateTransform.Mean mean, string ruleName, RuleCompileContext context) {
+        var (fromRow, space) = ResolveVectorTable(mean.From, context, ruleName, "mean from");
         var into = ResolveVectorDestination(
             context: context,
             intoSpelling: mean.Into,
             ruleName: ruleName,
-            where: "mean into"
+            where: "mean into",
+            expectedSpace: space
         );
-        var intoSpace = (context.FindSpace(name: into.Row.Space)
-            ?? throw new RuleException(
-            detail: $"Row '{into.Row.Name}' names undeclared vector space '{into.Row.Space}'",
-            refusal: RuleRefusal.VectorSpaceMismatch,
-            ruleName: ruleName
-        ));
-
-        if (
-            !string.Equals(
-            a: space.Name.Value,
-            b: intoSpace.Name.Value,
-            comparisonType: StringComparison.Ordinal
-        ) ||
-            (space.Identity != intoSpace.Identity)
-        ) {
-            throw new RuleException(
-                detail: $"mean from space '{space.Name}' does not match into space '{intoSpace.Name}'",
-                refusal: RuleRefusal.VectorSpaceMismatch,
-                ruleName: ruleName
-            );
-        }
 
         return new VectorMeanEffect(
-            describe: $"mean {mean.From} -> {into.Spelling}",
+            describe: $"mean {mean.From} -> {into.Describe}",
             dimensions: space.Identity.Dimensions,
             fromCapacity: fromRow.Capacity.GetValueOrDefault(),
             fromRowOrdinal: ResolveRowOrdinal(
@@ -494,12 +378,7 @@ public static partial class RuleCompiler {
             ruleName: ruleName,
             where: "mix into"
         );
-        var space = (context.FindSpace(name: into.Row.Space)
-            ?? throw new RuleException(
-            detail: $"Row '{into.Row.Name}' names undeclared vector space '{into.Row.Space}'",
-            refusal: RuleRefusal.VectorSpaceMismatch,
-            ruleName: ruleName
-        ));
+        var space = into.Space;
         var terms = new MixTermFact[mix.Terms.Count];
 
         for (var index = 0; (index < mix.Terms.Count); index++) {
@@ -526,7 +405,7 @@ public static partial class RuleCompiler {
         }
 
         return new VectorMixEffect(
-            describe: $"mix {into.Spelling}",
+            describe: $"mix {into.Describe}",
             dimensions: space.Identity.Dimensions,
             key: into.Key,
             keyFrom: into.KeyFrom,
@@ -535,30 +414,7 @@ public static partial class RuleCompiler {
         );
     }
     private static VectorNearestEffect ResolveVectorNearestTransform(StateTransform.Nearest nearest, string ruleName, RuleCompileContext context) {
-        var fromRow = (context.FindRow(name: nearest.From)
-            ?? throw new RuleException(
-            detail: $"nearest from row '{nearest.From}' is unknown",
-            refusal: RuleRefusal.StateRowUnknown,
-            ruleName: ruleName
-        ));
-
-        if (
-            (fromRow.Kind != CellKind.Vector) ||
-            !fromRow.IsKeyed
-        ) {
-            throw new RuleException(
-                detail: $"nearest from row '{nearest.From}' must be a keyed Vector table",
-                refusal: RuleRefusal.VectorOperandNotVector,
-                ruleName: ruleName
-            );
-        }
-
-        var space = (context.FindSpace(name: fromRow.Space)
-            ?? throw new RuleException(
-            detail: $"Row '{fromRow.Name}' names undeclared vector space '{fromRow.Space}'",
-            refusal: RuleRefusal.VectorSpaceMismatch,
-            ruleName: ruleName
-        ));
+        var (fromRow, space) = ResolveVectorTable(nearest.From, context, ruleName, "nearest from");
         var query = ResolveVectorOperand(
             context: context,
             expectedSpace: space,

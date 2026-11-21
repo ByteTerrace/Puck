@@ -11,7 +11,7 @@ namespace Puck.Transpiler.Ast;
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record PatternSymbolDeclarationNode(
+public sealed partial record PatternSymbolDeclarationNode(
     string Name,
     decimal Minimum,
     decimal Maximum,
@@ -41,7 +41,7 @@ public sealed record PatternSymbolDeclarationNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record PatternDeclarationNode(
+public sealed partial record PatternDeclarationNode(
     string Name,
     string Kind,
     IReadOnlyList<PatternSymbolDeclarationNode> Symbols,
@@ -66,7 +66,7 @@ public sealed record PatternDeclarationNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record CellSetDeclarationNode(
+public sealed partial record CellSetDeclarationNode(
     string Name,
     string Expression,
     int Offset = 0,

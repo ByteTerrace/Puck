@@ -5,13 +5,12 @@ using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary>The child law: every descent arm rebuilds every syntax-node child its own node declares. A node type
-/// gaining a child that its arm does not rewrite fails here under the node's name, which is the only thing that
-/// stops a new structured member from being skipped silently.</summary>
-/// <remarks>Distinct from <c>TheDescentReachesEveryNodeKind</c>, which walks each node with empty children and so
-/// proves only that an arm exists. The members that carry a sub-grammar as a <see cref="string"/> rather than as a
-/// child — the operand spans, a pattern's <c>Match</c> — are outside both laws by
-/// construction, and the manual's rewriting section names them.</remarks>
+/// <summary>The child law: the descent hands every syntax-node child a node declares to a hook. The descent is each
+/// node's own <see cref="SyntaxNode.MapChildren"/>, generated from the node's declaration, so this holds the
+/// generator and the nodes that write the member by hand to it.</summary>
+/// <remarks>The members that carry a sub-grammar as a <see cref="string"/> rather than as a child — the operand
+/// spans, a pattern's <c>Match</c> — are outside the law by construction, and the manual's rewriting section names
+/// them.</remarks>
 public class DescentChildLawTests {
     // Records every node the descent hands to a hook, so the law can ask afterwards whether each planted child
     // arrived.
@@ -53,40 +52,7 @@ public class DescentChildLawTests {
             objA: seen,
             objB: node
         ));
-        public void Walk(SyntaxNode node) {
-            switch (node) {
-                case DocumentNode document: {
-                        this.DescendDocument(document: document);
-
-                        break;
-                    }
-                case StatementNode statement: {
-                        this.DescendStatement(statement: statement);
-
-                        break;
-                    }
-                case ExpressionNode expression: {
-                        this.DescendExpression(expression: expression);
-
-                        break;
-                    }
-                case PredicateNode predicate: {
-                        this.DescendPredicate(predicate: predicate);
-
-                        break;
-                    }
-                case RhsNode value: {
-                        this.DescendRhs(value: value);
-
-                        break;
-                    }
-                default: {
-                        this.DescendNode(node: node);
-
-                        break;
-                    }
-            }
-        }
+        public void Walk(SyntaxNode node) => _ = this.Descend(node: node);
     }
 
     [Fact]

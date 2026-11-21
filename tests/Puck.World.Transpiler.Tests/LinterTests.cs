@@ -21,6 +21,17 @@ public class LinterTests {
         PuckLinter.Lint(PuckParser.ParseDocument($"rule \"guarded\" {{\nlocal value = {expression}\na = value\n}}"), diagnostics);
         Assert.Equal(warns, diagnostics.Any(diagnostic => diagnostic.Code == PuckDiagnosticCodes.EagerConditionalArithmetic));
     }
+    // Every child a node declares is walked, so a constant read only where an effect takes a value is a use.
+    [InlineData("schedule due in cooldown")]
+    [InlineData("deal cooldown from deck to hand")]
+    [Theory]
+    public void AConstantReadOnlyInAnEffectsValueIsAUse(string effect) {
+        var diagnostics = new DiagnosticBag();
+
+        PuckLinter.Lint(PuckParser.ParseDocument($"let cooldown = 2\nrule \"r\" {{\n{effect}\n}}"), diagnostics);
+
+        Assert.DoesNotContain(collection: diagnostics, filter: diagnostic => (diagnostic.Code == PuckDiagnosticCodes.LintUnusedLet));
+    }
     [Fact]
     public void CompositionReferencesCountAsUses() {
         var source = """
@@ -63,7 +74,7 @@ host {
         );
     }
     // A source, the lint finding it draws, and the name that finding must mention.
-    [InlineData("puck: 1\nentities [\n    {\n        name: \"Box\"\n        color: \"#FF0000\"\n    }\n]\n", "PUCK_LINT_003", "#FF0000")]
+    [InlineData("puck: 1\nentities [\n    {\n        name: \"Box\"\n        color: \"#FF0000\"\n    }\n]\n", "PUCK_LINT_004", "#FF0000")]
     [InlineData("puck: 1\nlet UNUSED_VAL = 42\nhost {\n    authority: \"test\"\n}\n", "PUCK_LINT_001", "UNUSED_VAL")]
     [InlineData("puck: 1\ntemplate UnusedTemplate() {\n    components []\n}\nhost {\n    authority: \"test\"\n}\n", "PUCK_LINT_001", "UnusedTemplate")]
     [Theory]

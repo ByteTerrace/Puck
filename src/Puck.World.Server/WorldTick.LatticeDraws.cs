@@ -55,12 +55,11 @@ public sealed partial class WorldTick {
             draw: (Span<long> pass) => GeneratorEngine.TryFireBatch(
                 generator: generator,
                 targetKind: CellKind.Fixed,
-                seedState: GeneratorEngine.ComputeSeedState(
+                seed: GeneratorEngine.ComputeDrawSeed(
                     documentSeed: worldSeed,
                     instanceIdentity: Host.InstanceIdentity,
                     site: site
                 ),
-                stream: GeneratorEngine.ComputeStreamId(site: site),
                 cursor: row.DrawCursor,
                 masks: row.DrawnMasks,
                 values: pass,

@@ -1,0 +1,18 @@
+// A library read under an alias means what it means read without one: a name a function, a list `for`, a `let` in its
+// body or a lambda binds is that binding wherever the library is imported, and never the library constant of the same
+// name; a function's default, evaluated where it is called, still reads the constant.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+import "lib" as m
+
+state {
+  world {
+    slot scaled = m.scaled(10)
+    slot looped = m.doubled[1]
+    slot mapped = m.mapped[0]
+    slot nested = m.nested[1]
+    slot based = m.based()
+    slot plain = m.size
+  }
+}

@@ -1,4 +1,3 @@
-using System.Reflection;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Parsing;
@@ -7,23 +6,12 @@ using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary>The rewrite law: a rewriter that overrides nothing is the identity, its descent reaches every node kind
-/// the tree can carry, and a rewrite that touches one node leaves every other node's comments and blank lines
-/// exactly where their author put them.</summary>
+/// <summary>The rewrite law: a rewriter that overrides nothing is the identity, and a rewrite that touches one node
+/// leaves every other node's comments and blank lines exactly where their author put them.</summary>
 /// <remarks>It runs over every shipped <c>.puck</c> source and over one generated source per construct
-/// <see cref="ConstructRegistry"/> registers, so a node kind the descent drops fails under its own name.</remarks>
+/// <see cref="ConstructRegistry"/> registers. That the descent reaches every node kind is the compiler's to hold:
+/// a node without <see cref="SyntaxNode.MapChildren"/> does not build.</remarks>
 public class SyntaxRewriterLawTests {
-    // Exposes the descent so one node kind can be walked on its own, without a source that produces it.
-    private sealed class Descent : PuckSyntaxRewriter {
-        public SyntaxNode Walk(SyntaxNode node) => (node switch {
-            DocumentNode document => this.DescendDocument(document: document),
-            StatementNode statement => this.DescendStatement(statement: statement),
-            ExpressionNode expression => this.DescendExpression(expression: expression),
-            PredicateNode predicate => this.DescendPredicate(predicate: predicate),
-            RhsNode value => this.DescendRhs(value: value),
-            _ => this.DescendNode(node: node),
-        });
-    }
     private sealed class Identity : PuckSyntaxRewriter {
     }
     // Renames one bare identifier wherever it is read, which is what a compile-time constant's rename is.
@@ -93,55 +81,6 @@ public class SyntaxRewriterLawTests {
         return parsed.Value!;
     }
     private static string Print(DocumentNode document) => PuckPrinter.Print(document: document);
-    // Every parameter a node's own primary constructor demands, with an optional one taken at its default: the
-    // descent cares about a node's shape, never about whether the values in it mean anything.
-    private static object? Seed(ParameterInfo parameter) {
-        if (parameter.HasDefaultValue) {
-            return parameter.DefaultValue;
-        }
-
-        var type = parameter.ParameterType;
-
-        if (type == typeof(string)) {
-            return "x";
-        }
-        if (type == typeof(PatternNode)) {
-            return new PatternNode.Nothing();
-        }
-        if (typeof(SyntaxNode).IsAssignableFrom(c: type)) {
-            return Instance(type: (type.IsAbstract
-                ? Concrete(declared: type)
-                : type
-            ));
-        }
-        if (
-            type.IsGenericType &&
-            (type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>))
-        ) {
-            return Array.CreateInstance(
-                elementType: type.GetGenericArguments()[0],
-                length: 0
-            );
-        }
-        if (type.IsEnum) {
-            return Enum.GetValues(enumType: type).GetValue(index: 0);
-        }
-
-        return (Activator.CreateInstance(type: type) ?? throw new InvalidOperationException(message: $"no seed for {type.Name}"));
-    }
-    private static SyntaxNode Instance(Type type) {
-        var constructor = type.GetConstructors().Single();
-
-        return ((SyntaxNode)constructor.Invoke(parameters: [.. constructor.GetParameters().Select(selector: Seed)]));
-    }
-    private static Type Concrete(Type declared) => (declared switch {
-        _ when (declared == typeof(ExpressionNode)) => typeof(LiteralExpressionNode),
-        _ when (declared == typeof(PredicateNode)) => typeof(ComparisonPredicateNode),
-        _ when (declared == typeof(RhsNode)) => typeof(RhsTextNode),
-        _ when (declared == typeof(StatementNode)) => typeof(FlagStatementNode),
-        _ when (declared == typeof(TestStepNode)) => typeof(TestTicksStepNode),
-        _ => throw new InvalidOperationException(message: $"no concrete stand-in for {declared.Name}"),
-    });
     private static void AssertRewritingChangesNothing(string source, string label) {
         var printed = Print(document: Parse(
             label: label,
@@ -161,21 +100,9 @@ public class SyntaxRewriterLawTests {
     /// <summary>Returns every construct the registry names, so a verdict names one construct.</summary>
     /// <returns>The construct corpus as xUnit theory data.</returns>
     public static TheoryData<string> Constructs() => new(values: ConstructCorpus.Sources.Keys.Order(comparer: StringComparer.Ordinal));
-    /// <summary>Returns every concrete syntax node type the tree can carry.</summary>
-    /// <returns>The node kinds as xUnit theory data.</returns>
-    public static TheoryData<string> NodeKinds() => SyntaxNodeKinds.Names();
     /// <summary>Returns every shipped world source.</summary>
     /// <returns>The source corpus as xUnit theory data.</returns>
     public static TheoryData<string> ShippedSources() => ShippedWorlds.Sources();
-    // A node kind with no descent arm never reaches a source-driven law until somebody authors a source that
-    // produces it, so each kind is walked on its own.
-    [MemberData(nameof(NodeKinds))]
-    [Theory]
-    public void TheDescentReachesEveryNodeKind(string kind) {
-        var type = typeof(SyntaxNode).Assembly.GetType(name: kind)!;
-
-        new Descent().Walk(node: Instance(type: type));
-    }
     [MemberData(nameof(Constructs))]
     [Theory]
     public void RewritingNothingChangesNothingForAConstruct(string construct) => AssertRewritingChangesNothing(

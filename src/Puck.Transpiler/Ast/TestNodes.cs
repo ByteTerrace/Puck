@@ -21,7 +21,7 @@ public abstract record TestGivenItemNode(int Offset = 0, int Length = 0, int Lin
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TestGivenNode(
+public sealed partial record TestGivenNode(
     RowRefNode Target,
     RhsNode Value,
     int Offset = 0,
@@ -42,7 +42,7 @@ public sealed record TestGivenNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TestGivenWorldNode(
+public sealed partial record TestGivenWorldNode(
     string World,
     IReadOnlyList<TestGivenNode> Cells,
     int Offset = 0,
@@ -67,7 +67,7 @@ public sealed record TestGivenWorldNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TestGivenForNode(
+public sealed partial record TestGivenForNode(
     string Item,
     string? Index,
     ExpressionNode Sequence,
@@ -102,7 +102,7 @@ public abstract record TestStepNode(int Offset = 0, int Length = 0, int Line = 1
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TestTicksStepNode(
+public sealed partial record TestTicksStepNode(
     long Ticks,
     int Offset = 0,
     int Length = 0,
@@ -126,7 +126,7 @@ public sealed record TestTicksStepNode(
 /// <param name="Refused">Whether the step declares that the ingress refuses the line.</param>
 /// <param name="Refusal">Text the recorded refusal must contain, or <see langword="null"/> for any refusal; written only
 /// beside <paramref name="Refused"/>.</param>
-public sealed record TestSeatStepNode(
+public sealed partial record TestSeatStepNode(
     int Seat,
     string Command,
     int Offset = 0,
@@ -150,7 +150,7 @@ public sealed record TestSeatStepNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TestWhenWorldNode(
+public sealed partial record TestWhenWorldNode(
     string World,
     IReadOnlyList<TestSeatStepNode> Steps,
     int Offset = 0,
@@ -176,7 +176,7 @@ public sealed record TestWhenWorldNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TestWhenLoopNode(
+public sealed partial record TestWhenLoopNode(
     string? Item,
     string? Index,
     ExpressionNode Sequence,
@@ -214,7 +214,7 @@ public abstract record TestExpectItemNode(int Offset = 0, int Length = 0, int Li
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TestExpectationNode(
+public sealed partial record TestExpectationNode(
     PredicateNode Predicate,
     int Offset = 0,
     int Length = 0,
@@ -235,7 +235,7 @@ public sealed record TestExpectationNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TestExpectWorldNode(
+public sealed partial record TestExpectWorldNode(
     string World,
     IReadOnlyList<TestExpectationNode> Expectations,
     int Offset = 0,
@@ -254,7 +254,7 @@ public sealed record TestExpectWorldNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TestGivenBlockNode(
+public sealed partial record TestGivenBlockNode(
     IReadOnlyList<TestGivenItemNode> Cells,
     int Offset = 0,
     int Length = 0,
@@ -284,7 +284,7 @@ public sealed record TestGivenBlockNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TestWhenBlockNode(
+public sealed partial record TestWhenBlockNode(
     IReadOnlyList<TestStepNode> Steps,
     int Offset = 0,
     int Length = 0,
@@ -313,7 +313,7 @@ public sealed record TestWhenBlockNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TestExpectBlockNode(
+public sealed partial record TestExpectBlockNode(
     IReadOnlyList<TestExpectItemNode> Expectations,
     int Offset = 0,
     int Length = 0,
@@ -347,7 +347,7 @@ public sealed record TestExpectBlockNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TestDeclarationNode(
+public sealed partial record TestDeclarationNode(
     string Name,
     TestGivenBlockNode? Given,
     TestWhenBlockNode? When,
