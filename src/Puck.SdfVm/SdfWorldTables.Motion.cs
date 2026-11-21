@@ -243,10 +243,19 @@ public sealed partial class SdfWorldTables {
             sourceAccessMask: (compute ? GpuAccess.ShaderWrite : GpuAccess.CopyWrite), sourceStageMask: (compute ? GpuStage.ComputeShader : GpuStage.Transfer),
             destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
     }
-    // Observes and packs one record through the same door for full and incremental staging.
-    private ulong StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old, ref StagingTally tally, bool incremental = false) {
+    // Observes and packs one record through the same door for full and incremental staging. A posed row (the caller saw
+    // the same roster and occupancy, and a draw that differs from the staged one in its matrix alone) whose record
+    // stood live, whose mesh still stands at the same placement and whose transforms were not reseated takes StagePose;
+    // posed is left set only where it did.
+    private ulong StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old, ref StagingTally tally, ref bool posed, bool incremental = false) {
         var absent = ((draw.Mesh is null) || !MeshStands(mesh: draw.Mesh));
         var wasAbsent = m_absentRows.Contains(item: index);
+
+        posed = (posed && incremental && !absent && !wasAbsent && !m_meshArena.Relocated && ((m_meshArena.Moved.Count == 0) || !m_meshArena.Moved.Contains(item: draw.Mesh!)) &&
+            !MeshTransformWasReseated(draw: in draw));
+        if (posed) {
+            return StagePose(draw: in draw, index: index, record: record, tally: ref tally);
+        }
         Span<uint> before = stackalloc uint[SdfMeshRecord.DrawWords];
 
         if (incremental && (absent || wasAbsent)) { record.CopyTo(destination: before); }
@@ -307,6 +316,26 @@ public sealed partial class SdfWorldTables {
         return changedWords;
     }
 
+    // Packs a posed row: only its matrix moved, so its record's placement words, glass membership and live state stand,
+    // and its history cell's observation would neither seed nor move its generation (SdfMeshHistory.Observe keys on
+    // none of the matrix), so the row is neither observed nor looked up again. Only the pose words are written
+    // (SdfMeshRegion.WriteDrawPose), leaving the record as the full incremental packing would.
+    private ulong StagePose(int index, in SdfMeshDraw draw, Span<uint> record, ref StagingTally tally) {
+        var work = SdfMeshRegion.WriteDrawPose(draw: in draw, previous: in m_stagedDraws[index], record: record);
+
+        if (work.NormalComputed) { tally.Normals++; }
+        if (work.SelectionComputed) { tally.Selections++; }
+        m_meshRevision++;
+        tally.Records++;
+        tally.Posed++;
+        tally.RecordBytes += (work.PackedWords * sizeof(uint));
+        if ((work.ChangedWords & ((1UL << SdfMeshRecord.MatrixWords) - 1)) != 0) {
+            m_changedMeshMatrices.Add(length: 1, start: index);
+            tally.Matrices++;
+        }
+        return work.ChangedWords;
+    }
+
     // The staging work of one pass over draw records, counted locally and published once: an interlocked count per
     // record and kind was a measurable share of staging thousands of records a frame. One staging packs through one
     // tally, so its records reach RecordsPacked and their causes together: under the staging's one cause, or, when it
@@ -320,6 +349,7 @@ public sealed partial class SdfWorldTables {
         public long Landings;
         public long RecordBytes;
         public long Matrices;
+        public long Posed;
 
         public readonly void Publish() {
             var work = SdfMeshHistory.ProcessWork;
@@ -335,6 +365,7 @@ public sealed partial class SdfWorldTables {
             work.Add(kind: SdfMeshHistory.NormalMatricesComputed, amount: Normals);
             work.Add(kind: SdfMeshHistory.SelectionBoxesComputed, amount: Selections);
             work.Add(kind: SdfMeshHistory.RecordsPacked, amount: Records);
+            work.Add(kind: SdfMeshHistory.RecordsPosed, amount: Posed);
             SdfMeshHistory.PublishCauses(records: causes);
             work.Add(kind: SdfMeshHistory.RecordBytesPacked, amount: RecordBytes);
             work.Add(kind: SdfMeshHistory.MatricesChanged, amount: Matrices);

@@ -137,8 +137,10 @@ field. What that means for the design of the packet's first item:
   is not the only tier a distant body can take.
 - **Answers live on their owners.** Each effector and each of the chase arm's
   clearance questions holds its own answer (`WorldFieldAnswer`), so packing on
-  a worker thread keeps its hits. A surface probe is reused only for
-  bit-identical inputs, since a ray's hit is not continuous in its origin; a
+  a worker thread keeps its hits. A surface probe that reads a target is
+  reused only for bit-identical inputs, since a ray's hit is not continuous in
+  its origin; a resting foot's stance test reads no normal and reuses its hit
+  while the replant decision provably stands (`WorldSurfaceQuery.Covers`); a
   clearance sweep is cast a small margin wider and reused while the boom
   drifts less than that margin (`world.counters world.field-queries`).
 

@@ -759,13 +759,15 @@ public readonly record struct BodyProgramSection(
 /// <summary>The contacts a rigid body owns: every occupied manifold slot, in contact then slot order. They carry the
 /// warm-start impulses the next rigid step solves from and the edges a sleeping island wakes along.</summary>
 /// <param name="Slots">The occupied slots.</param>
-public readonly record struct BodyContactsSection(ReadOnlyMemory<WorldRigidContactSlotImage> Slots) : IContinuationSection<BodyContactsSection> {
+public readonly record struct BodyContactsSection(ReadOnlyMemory<WorldRigidContactSlotImage> Slots) : IContinuationTableSection<BodyContactsSection, WorldRigidContactSlotImage> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.Contacts;
 
     /// <inheritdoc/>
-    public static void Write(WireWriter writer, in BodyContactsSection section) {
-        var slots = section.Slots.Span;
+    public static void Write(WireWriter writer, in BodyContactsSection section) => WriteTable(elements: section.Slots.Span, writer: writer);
+    /// <inheritdoc/>
+    public static void WriteTable(WireWriter writer, ReadOnlySpan<WorldRigidContactSlotImage> elements) {
+        var slots = elements;
 
         writer.WriteArrayCount(count: slots.Length);
         for (var index = 0; (index < slots.Length); index++) {

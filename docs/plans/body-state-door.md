@@ -73,14 +73,21 @@ citations are leads: recheck the symbol before building from one.
 entry as a view (`WorldPopulation.EntryCheckpoint`, which calls
 `WorldBody.CaptureSections`), digests each section through its own static
 encoder (`WorldAuthorityCheckpointCodec.SectionDigest`) and folds the digests
-(step D1). Its own remark states the problem, for
-every section not yet behind a holder (Action and the two Input sections are)
+(step D1). The larger sections not yet behind a body holder (pose, motion,
+clocks, contacts, and the entry's producer, steering, cadence and navigation)
+fold through `WorldContinuationMemo`: each fold copies the slot's image of them
+into holders of its own, which compare content and encode only what moved. It
+has no version, so it pays a copy and a compare per section per fold that the
+holders of D5 to D7 save; as each of those steps moves a section's storage
+behind the body's own holder, that section leaves the memo. The rest (admission,
+tape, program, motion recency, designations, route) still encode on every fold
 **[opened]** (`src/Puck.World.Server/WorldPopulation.Checkpoint.cs:28`):
 
 ```csharp
-    /// holder hands out, which is cached while the section is unchanged. Every other section of every active slot
-    /// encodes afresh on every fold: its state is still written directly by the step, commands, contacts and tethers,
-    /// so nothing says it is unchanged.</remarks>
+    /// holder hands out, which is cached while the section is unchanged. The larger sections the step writes directly
+    /// fold through the slot's <see cref="WorldContinuationMemo"/>, which encodes one only when its content differs
+    /// from the content its cached digest was taken from; the rest encode afresh on every fold. A recompute reads
+    /// neither cache.</remarks>
 ```
 
 The view hands out the body's live arrays **[opened]**

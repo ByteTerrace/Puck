@@ -291,6 +291,25 @@ public sealed class WorldRigReads {
             towards: towards
         );
     }
+    /// <summary>Asks whether a resting effector's latched stance has drifted past its replant distance
+    /// (<see cref="WorldEffectorSolver.StanceDrifted"/>).</summary>
+    /// <param name="read">One of the rig's <see cref="CreationRigReadKind.Probe"/> reads.</param>
+    /// <param name="answer">The probe's held answer.</param>
+    /// <param name="origin">The probe's world origin.</param>
+    /// <param name="towards">The probe direction, in the creation's frame.</param>
+    /// <param name="rootRotation">The creation root's world attitude.</param>
+    /// <param name="reach">The probe's reach, metres.</param>
+    /// <param name="latch">The latched stance's surface point, world units.</param>
+    /// <param name="distance">The replant distance, metres.</param>
+    /// <returns><see langword="true"/> when the probe found a surface point farther than
+    /// <paramref name="distance"/> from <paramref name="latch"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="read"/> is not one of the rig's probe reads.</exception>
+    public bool StanceDrifted(CreationRigRead read, ref WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer> answer, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, Vector3 latch, float distance) {
+        Require(kind: CreationRigReadKind.Probe, read: read);
+
+        return WorldEffectorSolver.StanceDrifted(answer: ref answer, distance: distance, field: m_client?.StaticField, latch: latch, origin: origin, reach: reach,
+            rootRotation: rootRotation, towards: towards);
+    }
 
     /// <summary>Returns the field a probe read asks this frame, which stays the same field through a frame in which one
     /// probe misses.</summary>

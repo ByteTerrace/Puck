@@ -747,7 +747,9 @@ The frame thread's CPU work, largest first:
   runs while its effector's gate is shut and its weight at rest
   (`WorldCreationInstances.Effectors.cs`).
 - [medium] Two thirds of a surface probe's cost is the hit's gradient, six
-  exact walks (`SdfFieldEvaluator.TryFieldGradient`), shared with physics. A
+  exact walks (`SdfFieldEvaluator.TryFieldGradient`), shared with physics; a
+  resting stance's test now takes none (`WorldEffectorSolver.StanceDrifted`),
+  so the gradient falls only on targets a foot draws. A
   four-tap tetrahedral difference, the GPU interpreter's form, cuts every
   gradient consumer by a third; it moves contact normals, so it is a measured
   change of the deterministic query.

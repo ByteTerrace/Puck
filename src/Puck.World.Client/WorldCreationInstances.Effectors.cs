@@ -378,7 +378,8 @@ public sealed partial class WorldCreationInstances {
         return true;
     }
 
-    // The effector's goal for one frame: resolved (TryResolveTarget) at most once, and only when a branch reads it.
+    // The effector's goal for one frame: resolved (TryResolveTarget) at most once, and only when a branch reads it, or
+    // asked only whether it drifted from a latch (Drifted).
     private ref struct EffectorGoal(CreationRigEffector effector, Registration live, int index, WorldRigReads reads, IReadOnlyList<ShapeDocument> shapes, Dictionary<int, FrameTransformDocument>? poses, Vector3 tipWorld, Vector3 rootPosition, Quaternion rootRotation, float scale) {
         private bool m_asked;
         private bool m_resolved;
@@ -408,6 +409,28 @@ public sealed partial class WorldCreationInstances {
             normal = m_normal;
 
             return m_resolved;
+        }
+        // Whether the target has drifted farther than the distance from a latched one. A surface probe compares the
+        // surface points under the latch and under the tip (the latch less its standoff along its normal), which a held
+        // march answers without the field gradient (WorldEffectorSolver.StanceDrifted); every other target compares the
+        // resolved target itself.
+        public bool Drifted(Vector3 latch, Vector3 latchNormal, float distance) {
+            var goal = effector.Document.Target;
+
+            if ((effector.TargetShape >= 0) || (effector.Target is not { Kind: CreationRigReadKind.Probe } read)) {
+                return (Resolve(normal: out _, target: out var target) && (Vector3.Distance(value1: latch, value2: target) > distance));
+            }
+
+            return reads.StanceDrifted(
+                answer: ref live.EffectorProbe[index],
+                distance: distance,
+                latch: (latch - (latchNormal * MathF.Max(x: 0f, y: ((goal.Standoff?.Value ?? 0f) * scale)))),
+                origin: tipWorld,
+                reach: ((goal.Reach?.Value ?? 0f) * scale),
+                read: read,
+                rootRotation: rootRotation,
+                towards: (goal.Direction?.Value ?? Vector3.Zero)
+            );
         }
     }
     // Who an effector's target is this frame: the shape, for a target on the creation's own shape; the body's address
@@ -471,18 +494,16 @@ public sealed partial class WorldCreationInstances {
         }
         if (plant.Replant is { } replant) {
             if (driverWeight <= WorldGaitDrivers.RestWeight) {
-                var resting = goal.Resolve(normal: out normal, target: out target);
-
                 return ApplyRestingPlant(
                     deltaSeconds: deltaSeconds,
                     driver: effector.PlantDriver,
+                    goal: ref goal,
                     index: index,
                     live: live,
-                    normal: ref normal,
+                    normal: out normal,
                     replant: replant,
-                    resolved: resting,
                     scale: scale,
-                    target: ref target,
+                    target: out target,
                     up: StepUp(
                         effector: effector.Document,
                         rootRotation: rootRotation
@@ -538,12 +559,13 @@ public sealed partial class WorldCreationInstances {
     // driver at a time. A latch survives a probe that misses this frame; a step heading for a point the probe has
     // since lost keeps the last point it found. The contact normal travels with the point: latched with it, and
     // turned from the left point's normal to the landing point's over the step. The replant's lengths are the body's own,
-    // at its scale.
-    private static bool ApplyRestingPlant(Registration live, int driver, int index, CreationReplantDocument replant, float scale, bool resolved, float deltaSeconds, Vector3 up, ref Vector3 target, ref Vector3 normal) {
+    // at its scale. A latched stance that is not stepping asks only whether it drifted (EffectorGoal.Drifted), and
+    // resolves its target afresh only when it did.
+    private static bool ApplyRestingPlant(Registration live, int driver, int index, ref EffectorGoal goal, CreationReplantDocument replant, float scale, float deltaSeconds, Vector3 up, out Vector3 target, out Vector3 normal) {
         if (!live.EffectorPlanted[index]) {
             live.EffectorStepping[index] = false;
 
-            if (!resolved) {
+            if (!goal.Resolve(normal: out normal, target: out target)) {
                 return false;
             }
 
@@ -554,12 +576,10 @@ public sealed partial class WorldCreationInstances {
             return true;
         }
 
-        var fresh = target;
-        var freshNormal = normal;
         var latch = live.EffectorPlantTarget[index];
 
         if (live.EffectorStepping[index]) {
-            if (resolved) {
+            if (goal.Resolve(normal: out var freshNormal, target: out var fresh)) {
                 live.EffectorStepTo[index] = fresh;
                 live.EffectorStepToNormal[index] = freshNormal;
             }
@@ -606,18 +626,18 @@ public sealed partial class WorldCreationInstances {
         normal = live.EffectorPlantNormal[index];
 
         if (
-            resolved &&
-            (Vector3.Distance(value1: latch, value2: fresh) > (replant.Distance * scale)) &&
             !SiblingStepping(
                 driver: driver,
                 index: index,
                 live: live
-            )
+            ) &&
+            goal.Drifted(distance: (replant.Distance * scale), latch: latch, latchNormal: normal) &&
+            goal.Resolve(normal: out var landingNormal, target: out var landing)
         ) {
             live.EffectorStepping[index] = true;
             live.EffectorStepFrom[index] = latch;
-            live.EffectorStepTo[index] = fresh;
-            live.EffectorStepToNormal[index] = freshNormal;
+            live.EffectorStepTo[index] = landing;
+            live.EffectorStepToNormal[index] = landingNormal;
             live.EffectorStepProgress[index] = 0f;
         }
 
