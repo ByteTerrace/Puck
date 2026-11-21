@@ -101,13 +101,14 @@ Each authority tick has three parts, and the design places each on a thread.
    intents (`WorldInstanceHost.PrepareBootSeatIntents`), and the transfer
    drain (`WorldInstanceHost.DrainPendingTransfers`). For each world it is the
    server's mailbox drain and the tick's adjacency record, which stay on the
-   pump because both can reach the host's own tables.
-2. **Execute, on the step thread.** The part `WorldServerStepShell.TryStep`
-   runs under `WorldServer.AuthorityGate` today: the replay tape's injection,
-   `WorldTick.TryAdvance`, the mutation journal's flush, the journal fold and
-   the tape's tick close. A wait inside the tick (a machine's drain, a fork's
-   join) is waited out on the step thread, under the stall deadline the tick
-   already has.
+   pump because both can reach the host's own tables, and with the record the
+   replay tape's injection and the ordered submissions, which must be applied
+   before the neighbours are sampled ([the prepared tick](#the-prepared-tick)).
+2. **Execute, on the step thread.** The part that runs under
+   `WorldServer.AuthorityGate`: `WorldTick.TryAdvance`, the mutation journal's
+   flush, the journal fold and the tape's tick close. A wait inside the tick
+   (a machine's drain, a fork's join) is waited out on the step thread, under
+   the stall deadline the tick already has.
 3. **Collect, on the pump.** The work that follows a completed tick: replay
    what the tick delivered ([the outbox](#from-the-authority-to-the-client-the-outbox)),
    publish the tick to its hooks (`WorldConsoleWaitGate.PublishTick`,
@@ -274,26 +275,30 @@ fraction it yields today.
 
 ### What a delivered document may reach
 
-A record in the outbox must not lead back into the authority. Today it does.
-The server binds its live document to its own arena
-(`WorldStateDocumentValues.BindLive`, `WorldStateReader.Bind`) and delivers
-that same object, so a state-bound value the frame reads in
-`WorldClient.Definition` reads the arena the tick is writing, and
-`WorldClient.DeliverPresentation` even carries the binding onto the document
-it builds. No seam of `WorldServer` is crossed, so no check sees it.
+A record in the outbox must not lead back into the authority. The server
+binds its live document to its own arena (`WorldStateDocumentValues.BindLive`,
+`WorldStateReader.Bind`) and delivers that same object. Kept as delivered, a
+state-bound value the frame reads in `WorldClient.Definition` would read the
+arena the tick is writing, and no seam of `WorldServer` would be crossed, so
+no check would see it.
 
-The document a local sink receives is therefore bound to that sink's own
-values, never to the server's arena. The client already keeps those values for
-an authority in another process: a delivery that changes only values leaves
-the declaration fixed, and the snapshot that follows carries the cells that
-moved (`WorldStateStamp.ArenaValues`, `WorldDocumentStateView.ApplyFieldCells`).
-The local client takes the same path. The server keeps its bound document to
-itself and hands a sink the document rebound to the sink's replica, and the
-rebinding copies only the paths to the values it replaces, as `BindLive` does.
-This is the last cut of [the presentation view](runtime-and-delivery.md#the-presentation-view),
-taken for the local client's state values. Step 5 builds it, and its check is
-the conformance law that plan already owes: the local view and a view rebuilt
-from the same deliveries answer every state read identically.
+The document a local sink holds is therefore bound to that sink's own values,
+never to the server's arena. The client already keeps those values for an
+authority in another process: a delivery that changes only values leaves the
+declaration fixed, and the snapshot that follows carries the cells that moved
+(`WorldStateStamp.ArenaValues`, `WorldDocumentStateView.ApplyFieldCells`). The
+local client takes the same path. Each client-side sink holds only what
+`WorldDocumentStateView.Adopt` returns. Adopt binds every state-bound value
+again (`WorldStateDocumentValues.BindLive`) to a `WorldLiveValues` of the
+sink's own, over the arena its snapshot cells fill, read at its delivered
+tick. A mirror whose deliveries arrive on another thread passes its follow
+gate, which every bound read takes. No client document is registered with
+`WorldStateReader.Bind`. The bind memo answers a row delivered unchanged with
+the copy it made before (`IWorldDocumentRewriter.Reuse`), so adoption costs
+what the delivery changed, and reference comparisons still see only changed
+rows. This is the last cut of
+[the presentation view](runtime-and-delivery.md#the-presentation-view), taken
+for the local client's state values, and step 5 built it.
 
 ### From the client to the authority: the boundary window and the link
 
@@ -481,16 +486,16 @@ reaches outside the server is one of these.
 | `HostFrameWork` measurements | The step thread binds its own; collect folds its parts into the iteration (`HostFrameWork.Fold`) |
 | `WorldNarrationScope` | Flows with the execution context the lane runs each unit in (`JobLane`); a wave of several ticks sets it for each |
 
-One thing the tick reaches is not the authority's and is not safe where it
-is. `WorldAdjacencyFields.BeginTick` runs inside the tick and resolves a
-neighbour through the host (`WorldInstanceHost.TryResolveObservedProjection`).
-That reads and writes the host's tables, can start a world instance, and
+One thing a tick needs is not the authority's: its neighbours. Resolving a
+neighbour goes through the host (`WorldInstanceHost.TryResolveObservedProjection`),
+which reads and writes the host's tables, can start a world instance, and
 attaches or disposes an observation, whose first delivery is made straight to
 the sink. The host's tables are the pump's. So the resolution, the start, the
-attach and the pin all move into prepare, on the pump, after the previous
-wave's collect has replayed the mirrors' deliveries. Prepare then publishes
-one immutable adjacency record for the tick. The tick reads that record, and
-so does the frame, which is the reader the table above already moves.
+attach and the pin run in prepare, on the pump (`WorldAdjacencyFields.Prepare`,
+from `WorldTick.PrepareAdvance`), after the previous collect. Prepare hands
+the tick one immutable array of projections. The tick reads that array, and
+so does the frame, which is the reader the table above already moves
+([the prepared tick](#the-prepared-tick)).
 
 The job pool expects the step thread. Each `JobClass` holds its own fork, so
 the frame's fork and the tick's run side by side and both are given workers,
@@ -629,12 +634,13 @@ included, executes on one step thread, and the loop waits for each tick before
 it does anything else. Nothing overlaps yet, so the same document and input
 give the same state as before.
 
-- **Three parts.** `WorldServerStepShell.Prepare` drains the server's mailbox
-  on the pump. `WorldServerStepShell.Execute` takes the authority gate and
-  runs the tick. `WorldServerStepShell.Collect` publishes the completed tick
-  to the caller's hooks on the pump. `WorldServerStepShell.TryStep` runs them
-  in order and takes the host's `WorldStepThread` to execute on. Without one
-  (a law, a replay's shadow server) all three run on the calling thread.
+- **Three parts.** `WorldServerStepShell.Prepare` closes the tick's input on
+  the pump ([the prepared tick](#the-prepared-tick)).
+  `WorldServerStepShell.Execute` takes the authority gate and runs the tick
+  over that input. `WorldServerStepShell.Collect` publishes the completed
+  tick to the caller's hooks on the pump. `WorldServerStepShell.TryStep` runs
+  them in order and takes the host's `WorldStepThread` to execute on. Without
+  one (a law, a replay's shadow server) all three run on the calling thread.
 - **The lane.** `JobLane`, in `Puck.Hosting.Jobs`, is a thread that runs one
   unit at a time for one owner, which posts a unit and collects it. Its
   thread starts with the first unit and idles as a consumer between units. It
@@ -659,6 +665,47 @@ give the same state as before.
   is in flight (`WorldInstanceHost.StepInFlight`), and answer what they last
   read while one is. The silo's `WorldSiloSimulation.RatePerSecond` still
   reads its rows directly, which step 10 moves the same way.
+
+### The prepared tick
+
+Step 6 moved more than the adjacency record into prepare. A tick's neighbour
+projections must be sampled after its ordered submissions are applied, and
+the sampling reaches the host's tables, so both run on the pump, with the
+replay drive's injection ahead of them. `WorldServerStepShell.Prepare` does,
+in this order: the mailbox drain; then, under the authority gate, the replay
+tape's injection (`WorldReplayTape.InjectDriveTick`) and
+`WorldTick.PrepareAdvance`, which applies the ordered submissions and samples
+the projections into an immutable array. The step thread's execute then runs
+the tick over that array (`WorldTick.TryAdvance`). The description of prepare
+and execute in [three parts of a tick](#three-parts-of-a-tick) is read with
+this: the injection and the ordered drain belong to prepare.
+
+That split leaves a span the single-threaded step never had. After the pump
+leaves the gate and before the step thread takes it, the gate is free, the
+tick's ordered submissions are applied and its neighbours are sampled. A
+submission another thread applied there (a socket task's grant, a session
+lever) would land after the sampling and before the tick, a place no replay
+can put it: a replay injects a tick's recorded entries before that tick's
+prepare.
+
+So a prepared tick is a held tick. `WorldTick.HoldPrepared` marks the tick
+held for the preparing thread, and `WorldTick.TryAdvance` releases the hold
+once the executing thread has the gate. Over the span, a thread other than
+the owner that enters the gate waits for the boundary without the gate
+(`WorldTick.AwaitsBoundary`), and a submission from a thread that cannot wait,
+because it already holds another authority's gate, queues for the boundary or
+is refused with the reason (`WorldTick.BlockedReason`), exactly as for a tick
+held across wait slices. `WorldServerStepShell.Prepare` is the only producer
+of a `WorldPreparedTick`, and it always holds, so no executor can run a tick
+whose span was open. Where the guarantee stops: a caller that takes the gate
+with a plain `lock` and never asks whether a tick is held (`WorldTick.EnqueueIntent`)
+still enters; an intent queued there is taken by this tick or the next, as it
+always could be.
+
+Stage three keeps the hold and widens its use. A wave prepares all its ticks
+before any executes, so every tick of the wave is held from its prepare, and
+a tick's submission into a later tick's authority queues behind that tick's
+closed input. That is the order [waves](#waves) already states.
 
 ### Two things the later stages keep
 
@@ -801,14 +848,16 @@ what stages two and three must keep.
    effect's split. Check: a law delivers twice to one session sink in a tick
    and reads both records intact at the collect; the scenarios that fire cues
    keep their hashes.
-5. **A delivered document bound to its sink's values.** Check: the
-   conformance law of [the presentation view](runtime-and-delivery.md#the-presentation-view)
-   over the debug world, and `puck references` finds no `WorldStateReader.Bind`
-   outside the server.
-6. **Adjacency in prepare**, with the tick's immutable record. Check: a law
-   steps a world whose neighbour restarts and finds no call into
-   `WorldInstanceHost` from inside the tick; the crossing scenarios pass
-   `puck test --reproduce`.
+5. **A delivered document bound to its sink's values.** Built
+   ([what a delivered document may reach](#what-a-delivered-document-may-reach)).
+   Check: `DeliveredStateConformanceLawTests`, over a fixture and over the
+   debug world; `puck references WorldStateReader.Bind` finds only
+   `WorldDocument.AdoptDefinition`.
+6. **Adjacency in prepare**, with the tick's immutable record. Built
+   ([the prepared tick](#the-prepared-tick)): `WorldTick.PrepareAdvance` runs
+   on the pump and hands the step thread its projections. Check: a law steps a
+   world whose neighbour restarts and finds no call into `WorldInstanceHost`
+   from inside the tick; the crossing scenarios pass `puck test --reproduce`.
 7. **The link.** Queued submissions mint when the window opens; `Query` and
    `SubmitSession` refuse outside it; the roster reads published profiles.
    Check: a law joins a controller from a window event while a tick is held

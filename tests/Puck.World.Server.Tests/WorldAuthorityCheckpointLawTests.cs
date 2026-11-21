@@ -103,6 +103,38 @@ public sealed class WorldAuthorityCheckpointLawTests {
         Assert.False(thread.InFlight);
     }
 
+    // Between a tick's prepare, which applies its ordered submissions and samples its neighbours, and its execute, the
+    // authority gate is free while another thread is about to run the tick. The tick is held for the preparing thread
+    // over that span, so another thread waits for the boundary instead of applying something no replay could place.
+    [Fact]
+    public void APreparedTickIsHeldForItsPreparingThreadUntilItExecutes() {
+        using var fixture = Fixtures.FreshServer();
+        var server = fixture.Server;
+        var context = new FixedStepContext(0, Fixtures.StepTicks, Fixtures.StepTicks);
+        static bool OnAnotherThread(Func<bool> read) {
+            var answer = false;
+            var thread = new Thread(() => answer = read());
+            thread.Start();
+            thread.Join();
+            return answer;
+        }
+
+        Assert.False(OnAnotherThread(() => server.Tick.AwaitsBoundary));
+
+        var prepared = WorldServerStepShell.Prepare(server, null, in context, WaitDeadline.In(TimeSpan.FromSeconds(10)));
+
+        Assert.False(server.Tick.AwaitsBoundary);
+        Assert.True(OnAnotherThread(() => server.Tick.AwaitsBoundary));
+        Assert.Contains("the prepared tick's execution", Assert.Throws<InvalidOperationException>(() => _ = server.Population).Message);
+
+        var executed = WorldServerStepShell.Execute(in prepared);
+
+        Assert.True(executed.Completed);
+        Assert.False(OnAnotherThread(() => server.Tick.AwaitsBoundary));
+        Assert.Equal(1UL, server.CompletedTick);
+        _ = server.Population;
+    }
+
     [Fact]
     public void AHostWithoutDurableCheckpointsNamesOnlyItsSteppedMachine() {
         using var fixture = Fixtures.FreshServer();
