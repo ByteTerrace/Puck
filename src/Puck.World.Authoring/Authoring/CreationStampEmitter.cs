@@ -169,18 +169,20 @@ public static partial class CreationStampEmitter {
             ).Rotate(rotation: shape.Rotation)
             : origin.Rotate(rotation: (frame.Rotation * FixedQuaternion.FromQuaternion(value: shape.Rotation).Normalize()).Normalize()));
     }
-    // A primitive dilated by its contact margin inside the field scope the caller just opened, so the dilation applies
-    // before the authored blend; pops that scope.
-    private static void EmitMarginedPrimitive(SdfProgramBuilder chain, ShapeDocument shape, Vector3 shapeScale, int material, float margin, bool detail) =>
-        _ = ShapeEmission.AppendPrimitive(
-            chain: chain,
+    // A primitive in a field scope of its own that composes by the shape's blend (ShapeScope.Open, the opener the render
+    // emission uses), dilated by its contact margin inside it so the dilation applies before the blend; pops that scope.
+    // A pop-only blend (Morph, the stairs blends) composes only this way.
+    private static void EmitScopedPrimitive(SdfProgramBuilder chain, ShapeDocument shape, Vector3 shapeScale, int material, SdfBlendOp blend, float smooth, float margin, bool detail) {
+        var scoped = ShapeEmission.AppendPrimitive(
+            chain: ShapeScope.Open(blend: blend, chain: chain, morph: shape.Morph, smooth: smooth, steps: shape.Steps),
             shape: shape,
             scale: shapeScale,
             material: material,
             detail: detail
-        )
-            .Dilate(radius: margin)
-            .PopField();
+        );
+
+        _ = ((margin == 0f) ? scoped : scoped.Dilate(radius: margin)).PopField();
+    }
     // The point's mirror image across the plane through the origin with the given unit normal.
     private static FixedVector3 Reflect(FixedVector3 value, FixedVector3 unitNormal) {
         var projection = FixedVector3.Dot(
@@ -452,10 +454,9 @@ public static partial class CreationStampEmitter {
 
                 chain = ShapePointOps.Apply(chain, twist: (shape.Twist ?? 0f), bend: (shape.Bend ?? 0f));
 
-                if (
-                    (contactMargin is not { } margin) ||
-                    (margin == 0f)
-                ) {
+                var margin = (contactMargin ?? 0f);
+
+                if ((margin == 0f) && !ShapeScope.IsPopOnly(blend: blend)) {
                     _ = ShapeEmission.AppendPrimitive(
                         chain: chain,
                         shape: shape,
@@ -468,16 +469,15 @@ public static partial class CreationStampEmitter {
                     continue;
                 }
 
-                EmitMarginedPrimitive(
-                    chain: chain.PushField(
-                        compose: blend,
-                        smooth: smooth
-                    ),
+                EmitScopedPrimitive(
+                    blend: blend,
+                    chain: chain,
                     detail: false,
                     margin: margin,
                     material: materialFor(arg: shape),
                     shape: shape,
-                    shapeScale: shapeScale
+                    shapeScale: shapeScale,
+                    smooth: smooth
                 );
             }
         }

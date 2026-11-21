@@ -1295,7 +1295,7 @@ screens [
       look: "moth-pilot"
       pose: "hold"
       shape: "brickPicture"
-      camera: "brick-hold"
+      camera: `brick-hold`
     }
   }
   {

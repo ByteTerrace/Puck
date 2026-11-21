@@ -1,0 +1,26 @@
+// A rule local hides a document constant of the same name inside its rule, as every inner binding does: the rule
+// reads the local, in a value and in a key, and the constant still means itself outside the rule.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let step = 9
+
+state {
+  world {
+    row {
+      name: "cards"
+      kind: "Int"
+      capacity: 3
+      cells: map(range(0, 3), k => { key: $"{k}", value: 0 })
+    }
+    slot count = 0
+    slot limit = step
+  }
+}
+
+rule "tick" {
+  local step = count + 1
+  when count < 2
+  count = step * 2
+  cards[step] = step
+}

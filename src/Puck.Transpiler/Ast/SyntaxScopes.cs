@@ -22,14 +22,11 @@ public enum SyntaxBinderKind {
 /// <param name="Declaration">The node that declares it: the parameter, <c>let</c> or <c>local</c> itself, or the
 /// lambda, loop or claim whose header names it.</param>
 /// <param name="Kind">What the name is.</param>
-public readonly record struct SyntaxBinder(string Name, SyntaxNode Declaration, SyntaxBinderKind Kind) {
-    /// <summary>Gets a value indicating whether the name hides a document constant of the same name where it is in
-    /// scope. A rule local does not: a bare name in a rule reads the compile-time binding first.</summary>
-    public bool Shadows => (Kind != SyntaxBinderKind.RuleLocal);
-}
+public readonly record struct SyntaxBinder(string Name, SyntaxNode Declaration, SyntaxBinderKind Kind);
 /// <summary>The one description of the names a syntax node binds and where in it each is visible, which every reader
 /// that resolves a name without lowering the tree goes by: the import rewriter's shielding, hover and
-/// go-to-definition.</summary>
+/// go-to-definition. Every binder hides a document constant of the same name where it is in scope, a rule local
+/// included, as the world emitter's operand binder reads it.</summary>
 /// <remarks>It states what lowering binds (<see cref="Lowering.DocumentLowering"/> and the vocabularies' rule
 /// bodies): a parameter in its body and in the defaults after it, a template's <c>let</c> anywhere in its body, a
 /// block's or a loop body's <c>let</c> in the statements after it, a loop's variables in its body and never in the
@@ -129,15 +126,13 @@ public static class SyntaxScopes {
     /// <paramref name="path"/>, walking outward.</summary>
     /// <param name="path">The nodes the position stands in, outermost first (<see cref="SyntaxWalk.PathAt"/>).</param>
     /// <param name="name">The name read at the position.</param>
-    /// <returns>The nearest binder that hides a document constant of the same name; failing that, the nearest rule
-    /// local, which a document constant of that name still outranks; <see langword="null"/> when no node on
-    /// <paramref name="path"/> binds <paramref name="name"/>.</returns>
+    /// <returns>The nearest binder of <paramref name="name"/>; <see langword="null"/> when no node on
+    /// <paramref name="path"/> binds it.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> or <paramref name="name"/> is
     /// <see langword="null"/>.</exception>
     public static SyntaxBinder? Resolve(IReadOnlyList<SyntaxNode> path, string name) {
         ArgumentNullException.ThrowIfNull(argument: path);
         ArgumentNullException.ThrowIfNull(argument: name);
-        SyntaxBinder? local = null;
 
         // A position on a nested declaration's own name is that declaration, which is not in scope in itself.
         if ((path.Count >= 2) && (path[^2] is not DocumentNode) && ((path[^1] switch {
@@ -152,16 +147,12 @@ public static class SyntaxScopes {
             // The last matching binder is the nearest declaration, which is the one a later `let` of the same name
             // leaves in force.
             foreach (var binder in Binds(child: (((index + 1) < path.Count) ? path[(index + 1)] : null), node: path[index]).Reverse()) {
-                if (!string.Equals(a: binder.Name, b: name, comparisonType: StringComparison.Ordinal)) {
-                    continue;
-                }
-                if (binder.Shadows) {
+                if (string.Equals(a: binder.Name, b: name, comparisonType: StringComparison.Ordinal)) {
                     return binder;
                 }
-                local ??= binder;
             }
         }
 
-        return local;
+        return null;
     }
 }

@@ -1,0 +1,14 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot count = 0
+  }
+}
+
+rule "tick" {
+  local next = count + 1
+  when count < 3
+  count = next
+}

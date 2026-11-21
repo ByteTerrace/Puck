@@ -304,7 +304,7 @@ internal static class PuckSymbolResolver {
     /// <param name="offset">The 0-based source offset of the cursor.</param>
     /// <param name="imported">The declarations the document's library imports hand it.</param>
     /// <returns>The binder, with the imported template that declares it when it is another file's; otherwise
-    /// <see langword="null"/>, including for a rule local a document constant of the same name outranks.</returns>
+    /// <see langword="null"/>.</returns>
     internal static (SyntaxBinder Binder, ImportedSymbol? Origin)? ResolveLexical(
         DocumentNode document,
         IReadOnlyList<SyntaxNode> path,
@@ -322,17 +322,7 @@ internal static class PuckSymbolResolver {
                 return (new SyntaxBinder(Declaration: formal, Kind: SyntaxBinderKind.Parameter, Name: word), origin);
             }
         }
-        if (SyntaxScopes.Resolve(name: word, path: path) is not { } binder) {
-            return null;
-        }
-        if (!binder.Shadows && (
-            document.Statements.Any(predicate: statement => ((statement is LetNode constant) && (constant.Name == word))) ||
-            (imported?.Any(predicate: item => (item.Name == word)) == true)
-        )) {
-            return null;
-        }
-
-        return (binder, null);
+        return ((SyntaxScopes.Resolve(name: word, path: path) is { } binder) ? (binder, null) : null);
     }
 
     /// <summary>Finds a declared state row or enum directly in the parsed AST without running a compile.</summary>

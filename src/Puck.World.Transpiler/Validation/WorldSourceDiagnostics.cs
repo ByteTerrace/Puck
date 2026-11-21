@@ -48,6 +48,8 @@ public static class WorldSourceDiagnostics {
     /// <param name="cancellationToken">Cancels evaluation and expansion.</param>
     /// <param name="session">The compile session the source compiles through; <see cref="WorldCompileSession.Shared"/>
     /// when omitted.</param>
+    /// <param name="libraries">Collects which library declarations the source declares and reads, for a lint over
+    /// several sources; <see langword="null"/> collects nothing.</param>
     /// <returns>Every diagnostic, in the order the stages ran.</returns>
     public static DiagnosticBag Diagnose(
         string source,
@@ -57,7 +59,8 @@ public static class WorldSourceDiagnostics {
         IMachineValidationCatalog? machines = null,
         string catalogFingerprint = "",
         CancellationToken cancellationToken = default,
-        WorldCompileSession? session = null
+        WorldCompileSession? session = null,
+        PuckLibraryUse? libraries = null
     ) {
         var diagnosis = DiagnoseSource(
             cancellationToken: cancellationToken,
@@ -67,6 +70,10 @@ public static class WorldSourceDiagnostics {
             sourcePath: sourcePath,
             vocabularies: vocabularies
         );
+
+        if ((libraries is not null) && (sourcePath is not null) && (diagnosis is { Document: { } document, Compilation: { } compilation })) {
+            libraries.Add(document: document, library: !compilation.EmitsDocument, sourcePath: sourcePath);
+        }
 
         diagnosis.Diagnostics.AddRange(diagnostics: DiagnoseSemantic(
             cancellationToken: cancellationToken,

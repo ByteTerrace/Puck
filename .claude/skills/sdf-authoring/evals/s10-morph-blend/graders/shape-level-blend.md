@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response points the author to a blend that composes on a shape (such as Union, SmoothUnion, or a chamfer, groove or pipe blend) in place of Morph.
+The response says a static placement reads the lane as zero, so the shape shows only when the lane moves from `from` toward `to`: drive the lane from a riding dynamic slot, or set `from` and `to` so lane 0 shows the shape.

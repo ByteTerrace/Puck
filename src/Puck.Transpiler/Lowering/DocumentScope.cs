@@ -674,7 +674,7 @@ public sealed partial class DocumentScope {
         templateScopes: m_templateScopes,
         values: [],
         vocabulary: Vocabulary
-    );
+    ) { RuleBinders = RuleBinders };
     /// <summary>Creates a scope whose relative paths resolve from a defining source directory.</summary>
     /// <param name="basePath">The defining source directory.</param>
     /// <returns>The rebased lexical scope.</returns>
@@ -695,12 +695,13 @@ public sealed partial class DocumentScope {
         templateScopes: m_templateScopes,
         values: [],
         vocabulary: Vocabulary
-    );
+    ) { RuleBinders = RuleBinders };
     /// <summary>Creates a scope identical to this one but carrying a different local set, for one application of a
     /// lambda.</summary>
     /// <param name="lambdaLocals">The locals the nested scope sees.</param>
     /// <returns>The nested scope.</returns>
-    public DocumentScope WithLocals(Dictionary<string, JsonNode?> lambdaLocals) => new(
+    public DocumentScope WithLocals(Dictionary<string, JsonNode?> lambdaLocals) => Derive(locals: lambdaLocals, ruleBinders: RuleBinders);
+    private DocumentScope Derive(Dictionary<string, JsonNode?> locals, IReadOnlySet<string> ruleBinders) => new(
         annotations: Annotations,
         arguments: m_arguments,
         basePath: BasePath,
@@ -709,7 +710,7 @@ public sealed partial class DocumentScope {
         currentPointer: CurrentPointer,
         diagnostics: Diagnostics,
         evaluating: m_evaluating,
-        locals: lambdaLocals,
+        locals: locals,
         schema: Schema,
         sourceMap: SourceMap,
         sourcePath: SourcePath,
@@ -717,7 +718,24 @@ public sealed partial class DocumentScope {
         templateScopes: m_templateScopes,
         values: m_values,
         vocabulary: Vocabulary
-    );
+    ) { RuleBinders = ruleBinders };
+    /// <summary>Gets the names a rule body's expansion binds above the rule's own locals: a spliced rule template's
+    /// parameters and a compile-time <c>for</c>'s variables. Inside a rule they are the inner
+    /// bindings, so such a name reads its binding even where one of the rule's locals has the same name; empty
+    /// outside a rule body's expansion.</summary>
+    public IReadOnlySet<string> RuleBinders { get; private init; } = System.Collections.Frozen.FrozenSet<string>.Empty;
+    /// <summary>Creates a scope identical to this one that also binds <paramref name="names"/> above the rule's
+    /// locals (<see cref="RuleBinders"/>).</summary>
+    /// <param name="names">The names the expansion binds.</param>
+    /// <returns>This scope when <paramref name="names"/> adds nothing; otherwise the nested scope.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="names"/> is <see langword="null"/>.</exception>
+    public DocumentScope WithRuleBinders(IEnumerable<string> names) {
+        ArgumentNullException.ThrowIfNull(argument: names);
+        var binders = new HashSet<string>(collection: RuleBinders, comparer: StringComparer.Ordinal);
+
+        binders.UnionWith(other: names);
+        return ((binders.Count == RuleBinders.Count) ? this : Derive(locals: Locals, ruleBinders: binders));
+    }
 }
 /// <summary>JSON helpers every lowering pass needs and none should restate.</summary>
 public static class JsonNodeExtensions {

@@ -233,7 +233,7 @@ public static class WorldEffect {
     /// <summary>Teleports a world-addressed body to a spawn point or a literal position.</summary>
     public sealed record Pose(
         [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef Key,
-        [property: DocumentText("a spawn point id")]
+        [property: DocumentName(WorldNameKind.SpawnPoint, WorldNameRole.Names)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SpawnPoint = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Position = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float YawDegrees = 0f,

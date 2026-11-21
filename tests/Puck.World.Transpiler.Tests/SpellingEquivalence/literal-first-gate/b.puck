@@ -1,0 +1,23 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot count = 0
+    row {
+      name: "label"
+      kind: "Text"
+      cells [{ key: "0", value: "a" }]
+    }
+  }
+}
+
+rule "first" {
+  when count > 3 and label[0] != "a"
+  count = 1
+}
+
+rule "relational" {
+  when label[0] > "a" or count <= 2
+  count = 2
+}

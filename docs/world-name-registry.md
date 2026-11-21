@@ -15,6 +15,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 
 | Path | Kind | Role | Facet | Member |
 |---|---|---|---|---|
+| `spawnPoints[].id` | SpawnPoint | Declares |  | `WorldSpawnPoint.Id` |
 | `spawnPoints[].position` | State | Binding | Binding | `WorldSpawnPoint.Position` |
 | `render.lighting.lights[].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
 | `render.lighting.lights[].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -600,11 +601,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `screens[].right` | State | Binding | Binding | `WorldScreen.Right` |
 | `screens[].up` | State | Binding | Binding | `WorldScreen.Up` |
 | `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
+| `screens[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `screens[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
 | `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
+| `screens[].magazine.entries[][view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `screens[].magazine.entries[][text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
+| `screens[].carry.camera` | Camera | Names | Read | `WorldScreenCarry.Camera` |
 | `screens[].material` | ScreenMaterial | Names | Binding | `WorldScreen.Material` |
 | `screenMaterials[].id` | ScreenMaterial | Declares |  | `WorldScreenMaterial.Id` |
+| `cameras[].name` | Camera | Declares |  | `WorldCamera.Name` |
 | `cameras[].rig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `cameras[].rig.operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
 | `cameras[].rig.operations[][offset].value` | State | Binding | Binding | `WorldCameraProgramOp.Offset.Value` |
@@ -662,6 +667,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].anchors[].when[near].subject[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
 | `cameras[].anchors[].when[near].of[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
 | `cameras[].anchors[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `bodies.seatSpawns` | SpawnPoint | Names | Read | `WorldBodiesDefaults.SeatSpawnsRaw` |
+| `bodies.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `bodies.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `bodies.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `bodies.capacityRow` | State | Names | Read | `WorldBodiesDefaults.CapacityRow` |
@@ -948,6 +955,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.visible[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].binding` | State | Binding | Binding | `WorldHudElement.Binding` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].template` | State | Template | Binding | `WorldHudElement.Template` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
@@ -958,12 +967,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
@@ -1013,6 +1025,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `kits.rows[].actions{*}.onPress.effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `kits.rows[].actions{*}.onPress.effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -1292,6 +1305,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.visible[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].binding` | State | Binding | Binding | `WorldHudElement.Binding` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].template` | State | Template | Binding | `WorldHudElement.Template` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
@@ -1302,12 +1317,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
@@ -1357,6 +1375,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `kits.rows[].actions{*}.onRelease.effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `kits.rows[].actions{*}.onRelease.effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -1636,6 +1655,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.visible[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].binding` | State | Binding | Binding | `WorldHudElement.Binding` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].template` | State | Template | Binding | `WorldHudElement.Template` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
@@ -1646,12 +1667,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
@@ -1701,6 +1725,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `kits.rows[].actions{*}.onFact[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `kits.rows[].actions{*}.onFact[].effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -1810,12 +1835,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `placements.rows[].prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
 | `placements.rows[].position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `placements.rows[].distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `placements.rows[].distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `placements.rows[].distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `placements.rows[].mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `placements.rows[].inhabit.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `placements.rows[].inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `placements.rows[].inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `placements.rows[].faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
+| `placements.rows[].faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `placements.rows[].faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
 | `placements.rows[].faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `placements.rows[].attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
@@ -2012,6 +2040,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.programs[].operations[][clearance].obstructedTargetSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.ObstructedTargetSkin` |
 | `views.programs[].operations[][clearance].obstructedTargetSkin.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.programs[].operations[][clearance].closeTargetOffset` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetOffset` |
+| `views.layouts[].slots[].camera` | Camera | Names | Read | `WorldViewSlot.Camera` |
 | `looks.rows[].name` | State | Binding | Binding | `WorldLook.Name` |
 | `looks.rows[].source[creation].prototypeId` | Prototype | Names | Read | `WorldLookSource.Creation.PrototypeId` |
 | `looks.rows[].source[creation].prototypeId` | State | Binding | Binding | `WorldLookSource.Creation.PrototypeId` |
@@ -2060,6 +2089,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `hud.panels[].visible[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `hud.panels[].elements[].binding` | State | Binding | Binding | `WorldHudElement.Binding` |
 | `hud.panels[].elements[].template` | State | Template | Binding | `WorldHudElement.Template` |
+| `hud.panels[].elements[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
+| `hud.panels[].elements[].sources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `hud.panels[].elements[].sources[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `hud.panels[].elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `hud.panels[].elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
@@ -2435,6 +2466,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertHudPanel].panel.visible[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `rules[].effects[][upsertHudPanel].panel.elements[].binding` | State | Binding | Binding | `WorldHudElement.Binding` |
 | `rules[].effects[][upsertHudPanel].panel.elements[].template` | State | Template | Binding | `WorldHudElement.Template` |
+| `rules[].effects[][upsertHudPanel].panel.elements[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
+| `rules[].effects[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
@@ -2445,12 +2478,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `rules[].effects[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
 | `rules[].effects[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `rules[].effects[][upsertPlacement].placement.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `rules[].effects[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `rules[].effects[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `rules[].effects[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `rules[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `rules[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `rules[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `rules[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
@@ -2500,6 +2536,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `rules[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `rules[].effects[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `rules[].effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `rules[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `rules[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -2797,6 +2834,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.visible[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].binding` | State | Binding | Binding | `WorldHudElement.Binding` |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].template` | State | Template | Binding | `WorldHudElement.Template` |
+| `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
+| `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
@@ -2807,12 +2846,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
@@ -2862,6 +2904,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `rules[].decision.options[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `rules[].decision.options[].effects[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `rules[].decision.options[].effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `rules[].decision.options[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `rules[].decision.options[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -3182,6 +3225,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.visible[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].binding` | State | Binding | Binding | `WorldHudElement.Binding` |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].template` | State | Template | Binding | `WorldHudElement.Template` |
+| `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
+| `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
@@ -3192,12 +3237,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
@@ -3247,6 +3295,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `rules[].decision.onNoChoice[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `rules[].decision.onNoChoice[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `rules[].decision.onNoChoice[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `rules[].decision.onNoChoice[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -3509,6 +3558,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertHudPanel].panel.visible[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].binding` | State | Binding | Binding | `WorldHudElement.Binding` |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].template` | State | Template | Binding | `WorldHudElement.Template` |
+| `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
+| `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
@@ -3519,12 +3570,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.id` | Placement | Declares |  | `WorldPlacement.Id` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.prototypeId` | Prototype | Names | Read | `WorldPlacement.PrototypeId` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.position` | State | Binding | Binding | `WorldPlacement.Position` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.mirror.normal` | State | Binding | Binding | `WorldPlacementMirror.Normal` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | SpawnPoint | Names | Read | `WorldDistributionRegion.Points.Names` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepA` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepA` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.distribution.region[lattice].stepB` | State | Binding | Binding | `WorldDistributionRegion.Lattice.StepB` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
@@ -3574,6 +3628,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
 | `interactions.interactions[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `interactions.interactions[].effects[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `interactions.interactions[].effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
 | `interactions.interactions[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
 | `interactions.interactions[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
@@ -3613,6 +3668,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `generators[].name` | Generator | Declares |  | `GeneratorRow.Name` |
 | `adjacencies[].boundary.center` | State | Binding | Binding | `WorldAdjacencyBoundary.Center` |
+| `probes[].inputs{*}[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `probes[].bindings[][parameter].range` | State | Binding | Binding | `WorldProbeBinding.Parameter.Range` |
 | `curves[].knots[].position` | State | Binding | Binding | `WorldCurveKnot.Position` |
 | `navigation.domains[].medium` | Field | Names | Read | `WorldNavigationDomain.Medium` |
@@ -3749,6 +3805,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `replays[].control` | State | Names | Action | `WorldScopedReplay.Control` |
 | `replays[].inputs[].cells[].row` | State | Names | Action | `WorldScopedReplayCell.Row` |
 | `replays[].inputs[].cells[].key` | State | Key | Read | `WorldScopedReplayCell.Key` |
+| `routes[].chapters[].steps[][pose].spawn` | SpawnPoint | Names | Read | `WorldRouteStep.PoseBody.Spawn` |
 | `routes[].chapters[].steps[][pose].point` | State | Binding | Binding | `WorldRouteStep.PoseBody.Point` |
 | `routes[].chapters[].steps[][go].point` | State | Binding | Binding | `WorldRouteStep.Go.Point` |
 | `routes[].chapters[].steps[][rest].lookAt` | State | Binding | Binding | `WorldRouteStep.Rest.LookAt` |
@@ -3762,7 +3819,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 
 | Path | Member | Reason |
 |---|---|---|
-| `spawnPoints[].id` | `WorldSpawnPoint.Id` | a spawn point id |
 | `render.lighting.lights[][directional].name` | `WorldRenderLight.Directional.Name` | a light name a section key addresses |
 | `render.lighting.lights[][rim].name` | `WorldRenderLight.Rim.Name` | a light name a section key addresses |
 | `render.lighting.lights[][point].anchor[entityPart].partId` | `WorldAnchor.EntityPart.PartId` | a part id local to a creation |
@@ -3819,7 +3875,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.devices[].match` | `WorldDeviceProfile.Match` | a device match pattern |
 | `screens[].source[machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `screens[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `screens[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `screens[].source[session].destination` | `WorldScreenSource.Session.Destination` | a destination name |
 | `screens[].source[session].camera` | `WorldScreenSource.Session.CameraName` | a camera name |
 | `screens[].source[session].fallback` | `WorldScreenSource.Session.Fallback` | a fallback color |
@@ -3835,7 +3890,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `screens[].route.display.fill` | `WorldScreenDisplay.Fill` | a color literal |
 | `screens[].magazine.entries[][machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `screens[].magazine.entries[][producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `screens[].magazine.entries[][view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `screens[].magazine.entries[][session].destination` | `WorldScreenSource.Session.Destination` | a destination name |
 | `screens[].magazine.entries[][session].camera` | `WorldScreenSource.Session.CameraName` | a camera name |
 | `screens[].magazine.entries[][session].fallback` | `WorldScreenSource.Session.Fallback` | a fallback color |
@@ -3846,8 +3900,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `screens[].carry.look` | `WorldScreenCarry.Look` | a look in the composed world |
 | `screens[].carry.pose` | `WorldScreenCarry.Pose` | a creation frame |
 | `screens[].carry.shape` | `WorldScreenCarry.Shape` | a creation shape |
-| `screens[].carry.camera` | `WorldScreenCarry.Camera` | a camera name |
-| `cameras[].name` | `WorldCamera.Name` | a camera name |
 | `cameras[].rig.name` | `WorldCameraProgram.Name` | a camera program name |
 | `cameras[].rig.version` | `WorldCameraProgram.Version` | a schema or program version |
 | `cameras[].rig.operations[][path].curve` | `WorldCameraProgramOp.Path.Curve` | a curve name |
@@ -3863,8 +3915,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].anchors[].anchor[recentSpeaker].partId` | `WorldAnchor.RecentSpeaker.PartId` | a part id local to a creation |
 | `cameras[].anchors[].when[state].text` | `OverlayPredicate.State.Text` | literal text |
 | `cameras[].anchors[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
-| `bodies.seatSpawns` | `WorldBodiesDefaults.SeatSpawnsRaw` | a spawn point id |
-| `bodies.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `bodies.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `bodies.peerVariation.phase.name` | `WorldSequence.Name` | a sequence name |
 | `bodies.peerVariation.weave.name` | `WorldSequence.Name` | a sequence name |
@@ -4114,10 +4164,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].text` | `WorldHudElement.Text` | literal text |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[state].text` | `OverlayPredicate.State.Text` | literal text |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
@@ -4125,18 +4173,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onPress.effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
-| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
-| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.inhabit.role` | `WorldPlacementInhabit.Role` | a role name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].face` | `WorldPlacementFace.Face` | a creation face name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[session].destination` | `WorldScreenSource.Session.Destination` | a destination name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[session].camera` | `WorldScreenSource.Session.CameraName` | a camera name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[session].fallback` | `WorldScreenSource.Session.Fallback` | a fallback color |
@@ -4166,7 +4211,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `kits.rows[].actions{*}.onPress.effects[][pose].spawnPoint` | `WorldEffect.Pose.SpawnPoint` | a spawn point id |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
@@ -4362,10 +4406,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].text` | `WorldHudElement.Text` | literal text |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[state].text` | `OverlayPredicate.State.Text` | literal text |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
@@ -4373,18 +4415,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onRelease.effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
-| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
-| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.inhabit.role` | `WorldPlacementInhabit.Role` | a role name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].face` | `WorldPlacementFace.Face` | a creation face name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[session].destination` | `WorldScreenSource.Session.Destination` | a destination name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[session].camera` | `WorldScreenSource.Session.CameraName` | a camera name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[session].fallback` | `WorldScreenSource.Session.Fallback` | a fallback color |
@@ -4414,7 +4453,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `kits.rows[].actions{*}.onRelease.effects[][pose].spawnPoint` | `WorldEffect.Pose.SpawnPoint` | a spawn point id |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
@@ -4610,10 +4648,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].text` | `WorldHudElement.Text` | literal text |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].text` | `OverlayPredicate.State.Text` | literal text |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
@@ -4621,18 +4657,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onFact[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
-| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
-| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.inhabit.role` | `WorldPlacementInhabit.Role` | a role name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].face` | `WorldPlacementFace.Face` | a creation face name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[session].destination` | `WorldScreenSource.Session.Destination` | a destination name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[session].camera` | `WorldScreenSource.Session.CameraName` | a camera name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[session].fallback` | `WorldScreenSource.Session.Fallback` | a fallback color |
@@ -4662,7 +4695,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `kits.rows[].actions{*}.onFact[].effects[][pose].spawnPoint` | `WorldEffect.Pose.SpawnPoint` | a spawn point id |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
@@ -4791,18 +4823,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `bindingOverlays[].bindingBar.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `storage.userId` | `WorldStorageDefaults.UserId` | a principal identifier |
 | `prototypes[].hash` | `WorldPrototype.HashRaw` | a content digest |
-| `placements.rows[].distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `placements.rows[].distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `placements.rows[].emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
 | `placements.rows[].inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `placements.rows[].inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
-| `placements.rows[].inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `placements.rows[].inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `placements.rows[].inhabit.role` | `WorldPlacementInhabit.Role` | a role name |
 | `placements.rows[].faceSources[].face` | `WorldPlacementFace.Face` | a creation face name |
 | `placements.rows[].faceSources[].source[machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `placements.rows[].faceSources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `placements.rows[].faceSources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `placements.rows[].faceSources[].source[session].destination` | `WorldScreenSource.Session.Destination` | a destination name |
 | `placements.rows[].faceSources[].source[session].camera` | `WorldScreenSource.Session.CameraName` | a camera name |
 | `placements.rows[].faceSources[].source[session].fallback` | `WorldScreenSource.Session.Fallback` | a fallback color |
@@ -4893,7 +4922,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.programs[].operations[][selectProgram].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
 | `views.programs[].operations[][selectProgram].default` | `WorldCameraProgramOp.SelectProgram.Default` | a camera program name |
 | `views.layouts[].name` | `WorldViewLayout.Name` | a view layout name |
-| `views.layouts[].slots[].camera` | `WorldViewSlot.Camera` | a camera name |
 | `views.layouts[].slots[].instance` | `WorldViewSlot.Instance` | a view instance name |
 | `looks.rows[].motion.cues[].frame` | `WorldLookCue.Frame` | a creation frame |
 | `looks.rows[].motion.lanes[]{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
@@ -4925,10 +4953,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `hud.panels[].elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `hud.panels[].elements[].text` | `WorldHudElement.Text` | literal text |
 | `hud.panels[].elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `hud.panels[].elements[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `hud.panels[].elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `hud.panels[].elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `hud.panels[].elements[].sources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `hud.panels[].elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `hud.panels[].elements[].sources[].when[state].text` | `OverlayPredicate.State.Text` | literal text |
 | `hud.panels[].elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
@@ -5143,10 +5169,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `rules[].effects[][upsertHudPanel].panel.elements[].text` | `WorldHudElement.Text` | literal text |
 | `rules[].effects[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `rules[].effects[][upsertHudPanel].panel.elements[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `rules[].effects[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `rules[].effects[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].text` | `OverlayPredicate.State.Text` | literal text |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
@@ -5154,18 +5178,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
 | `rules[].effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
-| `rules[].effects[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].effects[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
 | `rules[].effects[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `rules[].effects[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
-| `rules[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].effects[][upsertPlacement].placement.inhabit.role` | `WorldPlacementInhabit.Role` | a role name |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].face` | `WorldPlacementFace.Face` | a creation face name |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `rules[].effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[session].destination` | `WorldScreenSource.Session.Destination` | a destination name |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[session].camera` | `WorldScreenSource.Session.CameraName` | a camera name |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[session].fallback` | `WorldScreenSource.Session.Fallback` | a fallback color |
@@ -5195,7 +5216,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `rules[].effects[][pose].spawnPoint` | `WorldEffect.Pose.SpawnPoint` | a spawn point id |
 | `rules[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].effects[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].effects[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
@@ -5408,10 +5428,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].text` | `WorldHudElement.Text` | literal text |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].text` | `OverlayPredicate.State.Text` | literal text |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
@@ -5419,18 +5437,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].decision.options[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
-| `rules[].decision.options[].effects[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
-| `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.inhabit.role` | `WorldPlacementInhabit.Role` | a role name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].face` | `WorldPlacementFace.Face` | a creation face name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[session].destination` | `WorldScreenSource.Session.Destination` | a destination name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[session].camera` | `WorldScreenSource.Session.CameraName` | a camera name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[session].fallback` | `WorldScreenSource.Session.Fallback` | a fallback color |
@@ -5460,7 +5475,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `rules[].decision.options[].effects[][pose].spawnPoint` | `WorldEffect.Pose.SpawnPoint` | a spawn point id |
 | `rules[].decision.options[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].decision.options[].effects[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
@@ -5691,10 +5705,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].text` | `WorldHudElement.Text` | literal text |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[state].text` | `OverlayPredicate.State.Text` | literal text |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
@@ -5702,18 +5714,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].decision.onNoChoice[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
-| `rules[].decision.onNoChoice[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
-| `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.inhabit.role` | `WorldPlacementInhabit.Role` | a role name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].face` | `WorldPlacementFace.Face` | a creation face name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[session].destination` | `WorldScreenSource.Session.Destination` | a destination name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[session].camera` | `WorldScreenSource.Session.CameraName` | a camera name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[session].fallback` | `WorldScreenSource.Session.Fallback` | a fallback color |
@@ -5743,7 +5752,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `rules[].decision.onNoChoice[][pose].spawnPoint` | `WorldEffect.Pose.SpawnPoint` | a spawn point id |
 | `rules[].decision.onNoChoice[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].decision.onNoChoice[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
@@ -5945,10 +5953,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].text` | `WorldHudElement.Text` | literal text |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].text` | `OverlayPredicate.State.Text` | literal text |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
@@ -5956,18 +5962,15 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `interactions.interactions[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
-| `interactions.interactions[].effects[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `interactions.interactions[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.emission.patchId` | `WorldEmission.PatchId` | a synth patch id |
 | `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.kit` | `WorldPlacementInhabit.Kit` | a kit in the composed world |
 | `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.look` | `WorldPlacementInhabit.Look` | a look in the composed world |
-| `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.inhabit.role` | `WorldPlacementInhabit.Role` | a role name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].face` | `WorldPlacementFace.Face` | a creation face name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[session].destination` | `WorldScreenSource.Session.Destination` | a destination name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[session].camera` | `WorldScreenSource.Session.CameraName` | a camera name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[session].fallback` | `WorldScreenSource.Session.Fallback` | a fallback color |
@@ -5997,7 +6000,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
 | `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
 | `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
-| `interactions.interactions[].effects[][pose].spawnPoint` | `WorldEffect.Pose.SpawnPoint` | a spawn point id |
 | `interactions.interactions[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `interactions.interactions[].effects[][setIdentityFact].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `interactions.interactions[].effects[][setIdentityFact].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
@@ -6070,7 +6072,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `probes[].id` | `WorldProbe.Id` | a probe id |
 | `probes[].kind` | `WorldProbe.Kind` | a probe kind |
 | `probes[].inputs{*}[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
-| `probes[].inputs{*}[view].cameraName` | `WorldScreenSource.View.CameraName` | a camera name |
 | `probes[].inputs{*}[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `probes[].track` | `WorldProbe.Track` | a path or document locator |
 | `probes[].bindings[][axis].channel` | `WorldProbeBinding.Axis.Channel` | logical input channels |
@@ -6217,7 +6218,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `routes[].name` | `WorldRoute.Name` | a route's name, which world.benchmark and puck benchmark take |
 | `routes[].program` | `WorldRoute.Program` | a seat program name |
 | `routes[].chapters[].name` | `WorldRouteChapter.Name` | a chapter's name, local to its route |
-| `routes[].chapters[].steps[][pose].spawn` | `WorldRouteStep.PoseBody.Spawn` | a spawn point id |
 | `routes[].chapters[].steps[][line].text` | `WorldRouteStep.Line.Text` | console command text |
 | `routes[].chapters[].steps[][go].place` | `WorldRouteStep.Go.Place` | a route place or corridor |
 | `routes[].chapters[].steps[][go].pace` | `WorldRouteStep.Go.Pace` | a route pace |

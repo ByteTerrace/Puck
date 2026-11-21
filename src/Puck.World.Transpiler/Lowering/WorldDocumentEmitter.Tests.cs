@@ -96,6 +96,9 @@ public sealed record WorldTestForeign(string Document, int Line, string Gate, IR
 
     /// <summary>Gets the name of the verdict row this expectation declares in its document.</summary>
     public string Row => WorldDocumentEmitter.VerdictRow(line: Line);
+    /// <summary>Gets the span of the expectation in its source, where a refusal of it is reported; the default span
+    /// for an expectation read back from a compile cache.</summary>
+    public SourceSpan Span { get; init; }
 
     /// <summary>Adds this expectation to a sibling document: its verdict row, the witness rows for what the gate reads
     /// of rows that are not Int, and the rule that passes the verdict on every tick the claim holds, so a document
@@ -1394,7 +1397,7 @@ public static partial class WorldDocumentEmitter {
             Line: line,
             Reads: reads,
             Rule: rule
-        );
+        ) { Span = expectation.Span };
     }
 
     // The verdict row for one expectation, and one witness row for each kind other than Int its gate read, appended to

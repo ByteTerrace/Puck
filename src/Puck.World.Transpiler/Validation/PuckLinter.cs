@@ -79,6 +79,17 @@ public static partial class PuckLinter {
             }
         }
     }
+    // Every name the document's statements read, as the unused-declaration pass counts them.
+    internal static HashSet<string> ReferencedNames(DocumentNode document) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var unreported = new DiagnosticBag();
+
+        foreach (var statement in document.Statements) {
+            CollectReferences(diagnostics: unreported, node: statement, references: names);
+        }
+
+        return names;
+    }
     private static bool HoldsUnreadStatement(SyntaxNode node) => ((node is ErrorStatementNode) || node.Children().Any(predicate: HoldsUnreadStatement));
     private static bool IsImported(StatementNode statement) => (statement is LetNode { DefinitionPath: not null } or TemplateNode { DefinitionPath: not null });
 
@@ -90,6 +101,9 @@ public static partial class PuckLinter {
         switch (node) {
             case IdentifierExpressionNode ident:
                 references.Add(item: ident.Name);
+                if (QualifiedName.Parse(text: ident.Name) is { IsQualified: true, Head.Length: > 0 } dotted) {
+                    references.Add(item: dotted.Head);
+                }
                 break;
 
             case CallExpressionNode call:

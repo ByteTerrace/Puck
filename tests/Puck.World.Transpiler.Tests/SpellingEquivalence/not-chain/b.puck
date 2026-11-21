@@ -1,0 +1,19 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot count = 0
+    slot other = 0
+  }
+}
+
+rule "even" {
+  when count == 0 and other
+  count = 1
+}
+
+rule "odd" {
+  when not count > 1
+  count = 2
+}

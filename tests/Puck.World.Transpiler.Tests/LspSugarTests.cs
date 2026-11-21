@@ -170,6 +170,7 @@ public class LspSugarTests {
     [InlineData("let item = 99\nvalues: map([1, 2], item => item + 1)\ncount: it|em\n", "let item = 99", "compile-time constant")]
     [InlineData("for item in range(0, 2) { value: it|em }\n", "for item in range(0, 2)", "loop variable")]
     [InlineData("rule \"x\" {\nlocal amount = 2\nhp += amo|unt\n}\n", "local amount = 2", "rule local")]
+    [InlineData("let amount = 9\nrule \"x\" {\nlocal amount = 2\nhp += amo|unt\n}\n", "local amount = 2", "rule local")]
     [InlineData("let size = 99\nfunction scaled(size) = si|ze * 3\n", "size", "function parameter")]
     [InlineData("let item = 99\nvalues: [for item in range(0, 2) { it|em }]\n", "for item in range(0, 2)", "loop variable")]
     [InlineData("host {\n  let depth = 3\n  width: de|pth\n}\n", "let depth = 3", "local constant")]
