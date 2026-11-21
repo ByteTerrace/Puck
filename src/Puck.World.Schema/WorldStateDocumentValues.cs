@@ -3,24 +3,31 @@ using Puck.Maths;
 
 namespace Puck.World;
 
-/// <summary>The live store a server's document values read once <see cref="WorldStateDocumentValues.BindLive"/> binds
-/// them: the arena the server holds now and the clocks it reads that arena at.</summary>
-/// <remarks>One per server, and the binder every value it binds names (<see cref="IDocumentStateValue.Binder"/>). A
-/// bound value reads whichever arena its server holds when it is read, so an arena the server replaces needs no new
-/// binding, and a definition the server installs again keeps the values it bound before. A value bound to another
-/// server is bound again rather than shared.</remarks>
-/// <param name="clock">Reads the server's tick pair and dynamics.</param>
-public sealed class WorldLiveValues(Func<ArenaTime> clock) {
-    /// <summary>Gets or sets the arena the server holds now, or <see langword="null"/> before it builds one.</summary>
+/// <summary>The store a document's values read once <see cref="WorldStateDocumentValues.BindLive"/> binds them: the
+/// arena its owner holds now and the clocks it reads that arena at. A server binds its own document to its live arena;
+/// a client binds each delivered document to the arena its deliveries fill, so a value it reads never reaches the
+/// authority's store.</summary>
+/// <remarks>One per owner, and the binder every value it binds names (<see cref="IDocumentStateValue.Binder"/>). A
+/// bound value reads whichever arena its owner holds when it is read, so an arena the owner replaces needs no new
+/// binding, and a definition installed again keeps the values bound before. A value bound to another owner is bound
+/// again rather than shared.</remarks>
+/// <param name="clock">Reads the owner's tick pair and dynamics.</param>
+/// <param name="gate">The lock every read of a bound value takes, for an owner whose arena another thread writes under
+/// it; <see langword="null"/> when the arena is written only on the thread that reads it.</param>
+public sealed class WorldLiveValues(Func<ArenaTime> clock, Lock? gate = null) {
+    /// <summary>Gets or sets the arena the owner holds now, or <see langword="null"/> before it builds one.</summary>
     public StateArena? Arena { get; set; }
-    /// <summary>Gets the tick pair and dynamics the server reads its arena at now.</summary>
+    /// <summary>Gets the tick pair and dynamics the owner reads its arena at now.</summary>
     public ArenaTime Time => clock();
+    /// <summary>Gets the lock a read of a bound value takes, or <see langword="null"/> for none.</summary>
+    public Lock? Gate => gate;
 
-    // The values the last bind left holding no reference it did not bind: a later bind keeps each whole without
-    // entering it, so binding a definition composed over the last projection walks only what the composition replaced.
-    // Sound because a document value never changes once built (records with init members, immutable holders, lists no
-    // composition mutates in place).
-    internal HashSet<object> Bound { get; set; } = new(comparer: ReferenceEqualityComparer.Instance);
+    // What the last bind turned each value it met into: itself for a value that holds no reference it did not bind,
+    // and the bound copy for any other. A later bind answers each from here without entering it, so binding a definition
+    // composed over the last projection, or delivered again with most of its rows unchanged, walks only what changed and
+    // hands back the same copies. Sound because a document value never changes once built (records with init members,
+    // immutable holders, lists no composition mutates in place).
+    internal Dictionary<object, object> Bound { get; set; } = new(comparer: ReferenceEqualityComparer.Instance);
 }
 /// <summary>Resolves state-backed values embedded anywhere in a world document against its Text state cells.</summary>
 /// <remarks>
@@ -50,17 +57,19 @@ public static class WorldStateDocumentValues {
     // (a flattening) but never add one, so a set collected earlier is never missing a row the definition names.
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, HashSet<string>> ReferencedRowSets = new();
 
-    /// <summary>Returns the server's own projection of a definition, whose state-bound values read the live arena
-    /// through <paramref name="live"/>. Seed rows remain declarations.</summary>
+    /// <summary>Returns an owner's own projection of a definition, whose state-bound values read the arena held by
+    /// <paramref name="live"/>: a server's live arena, or the arena a client's deliveries fill. Seed rows remain
+    /// declarations.</summary>
     /// <remarks>A value already bound to <paramref name="live"/> is kept, so a candidate composed over the projection
-    /// a server installed comes back holding the same rows; any other referenced value is replaced by a copy bound to
-    /// <paramref name="live"/> on a copied path. A row or section the previous bind left fully bound is kept without
-    /// being entered, so the walk costs what the composition replaced. The state section is never rewritten, so the
-    /// state catalog the arena was built over carries across. The projection is always a new definition object, so a
-    /// definition another server or a cache holds is never the one this server's arena is bound to
+    /// an owner installed comes back holding the same rows; any other referenced value, including one bound to another
+    /// owner's store, is replaced by a copy bound to <paramref name="live"/> on a copied path. A row or section the
+    /// previous bind met is answered with what it became then, without being entered, so the walk costs what changed
+    /// and a definition delivered again keeps the copies it was handed before. The state section is never rewritten,
+    /// so the state catalog the arena was built over carries across. The projection is a definition object this owner
+    /// alone holds, so a definition another owner or a cache holds is never the one this owner's arena is bound to
     /// (<see cref="WorldStateReader.Bind"/>).</remarks>
     /// <param name="definition">The definition to project.</param>
-    /// <param name="live">The server's live store.</param>
+    /// <param name="live">The owner's store.</param>
     /// <returns>The projection.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">A reference names no row of the live arena.</exception>
@@ -99,6 +108,16 @@ public static class WorldStateDocumentValues {
         private Memo? m_memo;
 
         public string? Read() {
+            if (live.Gate is not { } gate) {
+                return ReadArena();
+            }
+
+            lock (gate) {
+                return ReadArena();
+            }
+        }
+
+        private string? ReadArena() {
             if (live.Arena is not { } arena) {
                 return null;
             }
@@ -155,33 +174,37 @@ public static class WorldStateDocumentValues {
         return $"{((path.Length == 0) ? root : $"{root}.{path}")} reference '{reference}' {message}";
     }
 
-    // Binds every referenced value not already bound to the server's store, keeping whole each value the last bind
-    // left fully bound and recording, for the next, each value this one leaves so. The state section is kept whole:
-    // its lattice origins stay the resolved seeds the catalog was compiled beside.
+    // Binds every referenced value not already bound to the owner's store, answering each value the last bind met from
+    // what it became then and recording, for the next, what each value this one meets becomes. The state section is
+    // kept whole: its lattice origins stay the resolved seeds the catalog was compiled beside.
     private sealed class Binder(WorldLiveValues live) : IWorldDocumentRewriter {
-        public HashSet<object> Kept { get; } = new(comparer: ReferenceEqualityComparer.Instance);
+        public Dictionary<object, object> Kept { get; } = new(comparer: ReferenceEqualityComparer.Instance);
         public string Reason { get; private set; } = string.Empty;
         public bool Stopped { get; private set; }
 
-        public bool Enters(object value, WorldDocumentSite site) {
-            if (value is WorldStateSection) {
-                return false;
-            }
-            if (value.GetType().IsValueType || !live.Bound.Contains(item: value)) {
-                return true;
+        public object? Reuse(object value) {
+            if (!live.Bound.TryGetValue(key: value, value: out var bound)) {
+                return null;
             }
 
-            _ = Kept.Add(item: value);
+            Keep(value: value, rewritten: bound);
 
-            return false;
+            return bound;
         }
+        public bool Enters(object value, WorldDocumentSite site) => (value is not WorldStateSection);
         public void Left(object value, object rewritten) {
             if (!rewritten.GetType().IsValueType) {
-                _ = Kept.Add(item: rewritten);
+                Keep(value: value, rewritten: rewritten);
                 if (!ReferenceEquals(value, rewritten)) {
                     BindingSources.AddOrUpdate(rewritten, SourceOfBinding(value));
                 }
             }
+        }
+        // A value and what it became both answer the next bind: the source when it is delivered or composed again, the
+        // copy when the projection itself is bound again.
+        private void Keep(object value, object rewritten) {
+            Kept[value] = rewritten;
+            Kept[rewritten] = rewritten;
         }
         public object Replace(object value, WorldDocumentSite site) {
             var holder = (IDocumentStateValue)value;
@@ -191,6 +214,11 @@ public static class WorldStateDocumentValues {
                 ReferenceEquals(objA: holder.Binder, objB: live)
             ) {
                 return value;
+            }
+            if (live.Bound.TryGetValue(key: value, value: out var bound)) {
+                Keep(value: value, rewritten: bound);
+
+                return bound;
             }
 
             var name = default(CellName);
@@ -210,7 +238,11 @@ public static class WorldStateDocumentValues {
 
             WorldBootWork.Count(kind: WorldBootWork.DocumentValueCopies);
 
-            return holder.Bound(binder: live, read: new LiveValue(live: live, name: name, row: row).Read);
+            var rebound = holder.Bound(binder: live, read: new LiveValue(live: live, name: name, row: row).Read);
+
+            Keep(value: value, rewritten: rebound);
+
+            return rebound;
         }
     }
     // Resolves every referenced value (or every one naming a sought row) against a document's state cells, or the live

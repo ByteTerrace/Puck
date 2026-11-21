@@ -317,8 +317,12 @@ types the closure reads; an unrelated edit in the same assembly preserves the ke
 
 Presentation code receives a view and never the authority's document, as
 [the decision](../decisions/runtime-and-delivery.md#the-presentation-view)
-states. The primary client holds the authority's own definition by reference,
-and presentation reads document members the projection omits. Presentation
+states. The primary client shares the authority's immutable rows by reference,
+and presentation reads document members the projection omits. Its state values
+are already cut: every sink adopts a delivered document through
+`WorldDocumentStateView.Adopt`, which binds each state-bound value to the cells
+that sink was delivered, so no value it reads leads back to the authority's
+arena (`DeliveredStateConformanceLawTests` holds it over the debug world). Presentation
 `state.*` reads already go through `WorldStateMirror` and `IWorldStateView`,
 whose one implementation, `WorldDocumentStateView`, answers from the delivered
 definition; `WorldProjection.Compose` sets `FieldRegions` and `TryToDefinition`

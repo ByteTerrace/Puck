@@ -141,7 +141,10 @@ added to the debug world is added to that fragment.
 The arena is the live gameplay store. `WorldServer.Definition` holds declarations
 and seeds; use `ExportDefinition()` only at an explicit snapshot/edit boundary.
 Runtime value readers use `WorldStateReader` bound to the live arena, and
-publication carries journal changes without rebuilding document rows. Rules,
+publication carries journal changes without rebuilding document rows. A
+client-side sink never holds the server's bound document: it adopts each
+delivery through `WorldDocumentStateView.Adopt`, which binds every state-bound
+value to the cells that sink was delivered. Rules,
 bound addon batches and host cell commands share the grant-checked transaction.
 Every untrusted read and delivery checks `WorldStateDisclosure` again; caching
 a bound address never caches permission. Responses, deals and tenure are

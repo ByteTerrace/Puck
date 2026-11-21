@@ -17,12 +17,90 @@ namespace Puck.World.Client;
 /// the client, and every presentation consumer, a field's brick and a pass's array alike, reads them through the state
 /// mirror as it reads any other row.
 /// </para>
+/// <para>
+/// A sink that receives documents from an authority builds its view with the delivering constructor, and the view is
+/// then the one door a delivered document passes to become the sink's (<see cref="Adopt"/>): every state-bound value in
+/// it is bound again to the arena this view's deliveries fill, so nothing the sink holds reads the authority's store or
+/// its clock, whichever thread the authority's tick runs on.
+/// </para>
 /// </summary>
-/// <param name="definition">Returns the definition currently delivered; read on every call.</param>
-public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : IWorldStateView {
+public sealed class WorldDocumentStateView : IWorldStateView {
     private StateArena m_arena = null!;
 
-    private readonly Func<WorldDefinition> m_definition = (definition ?? throw new ArgumentNullException(paramName: nameof(definition)));
+    private readonly Func<WorldDefinition> m_definition;
+    // The store a delivered document's values are bound to, and the document Adopt last bound to it; both null for a
+    // view over a document its caller owns.
+    private readonly WorldLiveValues? m_values;
+    private WorldDefinition? m_delivered;
+
+    /// <summary>Initializes a new instance of the <see cref="WorldDocumentStateView"/> class over a document its caller
+    /// owns.</summary>
+    /// <param name="definition">Returns the document the view reads; read on every call.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public WorldDocumentStateView(Func<WorldDefinition> definition) {
+        m_definition = (definition ?? throw new ArgumentNullException(paramName: nameof(definition)));
+    }
+    /// <summary>Initializes a new instance of the <see cref="WorldDocumentStateView"/> class as a sink's door for the
+    /// documents its authority delivers, adopting <paramref name="delivered"/> as the first.</summary>
+    /// <param name="delivered">The first delivered document.</param>
+    /// <param name="clock">Reads the tick pair of the latest delivered snapshot, which a bound value with a
+    /// value-over-time trait is read at.</param>
+    /// <param name="gate">The lock the sink holds while a delivery writes this view, which a bound value's read takes
+    /// too; <see langword="null"/> for a sink whose deliveries arrive on the thread that reads it.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="delivered"/> or <paramref name="clock"/> is
+    /// <see langword="null"/>.</exception>
+    public WorldDocumentStateView(WorldDefinition delivered, Func<(ulong Tick, ulong EngineTick)> clock, Lock? gate = null) {
+        ArgumentNullException.ThrowIfNull(argument: delivered);
+        ArgumentNullException.ThrowIfNull(argument: clock);
+
+        m_definition = () => m_delivered!;
+        m_values = new WorldLiveValues(
+            clock: () => {
+                var (tick, engineTick) = clock();
+                var document = m_delivered!;
+
+                return new ArenaTime(Tick: tick, EngineTick: engineTick, TicksPerSecond: document.SimulationRateHz, Dynamics: document.Dynamics);
+            },
+            gate: gate
+        );
+        _ = Adopt(delivered: delivered);
+    }
+
+    /// <summary>Gets the document the view reads: for a sink's door, the document <see cref="Adopt"/> last
+    /// returned.</summary>
+    public WorldDefinition Definition => m_definition();
+
+    /// <summary>Adopts a delivered document as the sink's own: shapes the view for it and returns it with every
+    /// state-bound value bound to the arena this view's deliveries fill, read at the sink's delivered tick. Every
+    /// document a sink holds comes from here, so none of its values reads the authority's arena or clock.</summary>
+    /// <remarks>A row or holder delivered unchanged comes back as the copy handed back before, so a consumer comparing
+    /// documents by reference sees only what the delivery changed.</remarks>
+    /// <param name="delivered">The document the authority delivered, which may hold values bound to its own store.</param>
+    /// <param name="valuesFollow">Whether the delivery changed values alone and the snapshot that follows carries the
+    /// cells that moved, so the view keeps the cells it holds while the state catalog is unchanged.</param>
+    /// <returns>The sink's own document, which <see cref="Definition"/> answers until the next adoption.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="delivered"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The view is over a document its caller owns, or a value in
+    /// <paramref name="delivered"/> names a row its own state section does not declare.</exception>
+    public WorldDefinition Adopt(WorldDefinition delivered, bool valuesFollow = false) {
+        ArgumentNullException.ThrowIfNull(argument: delivered);
+
+        var values = (m_values ?? throw new InvalidOperationException(message: "Only a view built as a sink's door adopts delivered documents."));
+
+        if (!valuesFollow || (m_shaped is not { } shaped) || !ReferenceEquals(objA: shaped.StateCatalog, objB: delivered.StateCatalog)) {
+            _ = Shape(document: delivered);
+        }
+
+        values.Arena = m_arena;
+
+        var adopted = WorldStateDocumentValues.BindLive(definition: delivered, live: values);
+
+        // The projection shares the delivered state section and catalog, so the shape just taken stands for it.
+        m_shaped = adopted;
+        m_delivered = adopted;
+
+        return adopted;
+    }
     // The delivered field cells, one raw Q48.16 array per declared field over the lattice they were delivered on; the
     // field each document ordinal names (-1 for a row that is no field) and the ordinal each field's row holds, both
     // resolved against the definition last shaped for.
@@ -40,13 +118,6 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
 
     private WorldDefinition? m_shaped;
     private readonly Dictionary<int, WorldObservedRow> m_observations = [];
-
-    /// <summary>Keeps the existing shape for a value delivery whose following snapshot carries the changed cells.</summary>
-    public void KeepValueShape(WorldDefinition previous, WorldDefinition next) {
-        if (ReferenceEquals(m_shaped, previous) && ReferenceEquals(previous.StateCatalog, next.StateCatalog)) {
-            m_shaped = next;
-        }
-    }
 
     /// <summary>The last delivered observable row metadata, including a hidden count or anonymous backs.</summary>
     public WorldObservedRow? Observation(int ordinal) => m_observations.GetValueOrDefault(ordinal);
@@ -453,9 +524,8 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
     }
     // Resolves the field rows of the definition currently delivered, keeping the delivered cells while the lattice
     // keeps its shape; a definition already shaped for costs one comparison.
-    private WorldDefinition Shape() {
-        var document = m_definition();
-
+    private WorldDefinition Shape() => Shape(document: m_definition());
+    private WorldDefinition Shape(WorldDefinition document) {
         if (ReferenceEquals(
             objA: document,
             objB: m_shaped
