@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Abstractions.Documents;
+using Puck.Assets.Documents;
 
 namespace Puck.World;
 
@@ -14,6 +15,13 @@ public sealed partial class WorldDocumentWalker {
     internal static ReloadEdit? MergeReloadRows(object? previous, object? live, object? next, JsonNode? before, JsonNode? after, JsonNode? patch,
         string path, ICollection<string> conflicts) =>
         new Cursor(rewriter: null!, tables: Everything.CurrentTables(), visitor: null!).MergeReloadRows(previous, live, next, before, after, patch, path, conflicts);
+
+    // Applies a member's overlay delta to its typed value row by row: every keyed row the delta leaves alone is the value's
+    // own instance, and each row it names is written, merged under the keyed-list rules and read again alone. Null when
+    // the delta's shape is outside what a row-wise apply reproduces (a wholesale list, a positioned row, a dictionary, a
+    // removed member, a polymorphic object), which the caller applies to the whole member instead.
+    internal static ReloadEdit? ApplyPatchRows(object? value, JsonNode? patch, string path) =>
+        new Cursor(rewriter: null!, tables: Everything.CurrentTables(), visitor: null!).ApplyPatchRows(value, patch, path);
 
     private static object? ResolveReloadValue(WorldDefinition source, object? value) {
         if (value is null) { return null; }
@@ -88,21 +96,7 @@ public sealed partial class WorldDocumentWalker {
             var liveKeys = new List<JsonNode?>(liveItems.Length);
             foreach (var item in liveItems) {
                 if (item is null) { return null; }
-                if (priorByInstance.TryGetValue(WorldStateDocumentValues.SourceOfBinding(item), out var original)) {
-                    liveKeys.Add(original);
-                    continue;
-                }
-                if (tables.ShapeOf(item.GetType()) is not { Described: true, Kind: JsonTypeInfoKind.Object } rowShape) {
-                    liveKeys.Add(JsonSerializer.SerializeToNode(item, WorldJsonContext.Default.Options.GetTypeInfo(element)));
-                    continue;
-                }
-                var identity = new JsonObject();
-                foreach (var member in tables.MembersOf(rowShape)) {
-                    if (WorldDocumentBasis.IsRowKeyMember(member.Name) && member.Read(item) is { } value) {
-                        identity.Add(member.Name, JsonSerializer.SerializeToNode(value, WorldJsonContext.Default.Options.GetTypeInfo(member.Property.PropertyType)));
-                    }
-                }
-                liveKeys.Add(identity);
+                liveKeys.Add(priorByInstance.TryGetValue(WorldStateDocumentValues.SourceOfBinding(item), out var original) ? original : IdentityOf(item, element));
             }
 
             if (!WorldDocumentBasis.TryFindRowKey(before, liveKeys, out var key, out _) ||
@@ -166,10 +160,141 @@ public sealed partial class WorldDocumentWalker {
             if (!WorldDocumentBasis.TryFindRowKey(liveKeys, accepted, out var acceptedKey, out _) || acceptedKey != key) { return null; }
             foreach (var conflict in found) { conflicts.Add(conflict); }
 
-            return new ReloadEdit(Rebuild(live, [], merged, dictionary: false), accepted, patch.Count, resolveAt.Count == 0 ? null : source => {
-                foreach (var index in resolveAt) { merged[index] = ResolveReloadValue(source, merged[index]); }
-                return Rebuild(live, [], merged, dictionary: false);
+            return RowsEdit(live, merged, resolveAt, accepted, patch.Count);
+        }
+
+        // A list rebuilt from its rows, with the rows at resolveAt resolved against the assembled document.
+        private ReloadEdit RowsEdit(object list, List<object?> rows, List<int> resolveAt, JsonNode? patch, int count) =>
+            new(Rebuild(list, [], rows, dictionary: false), patch, count, resolveAt.Count == 0 ? null : source => {
+                foreach (var index in resolveAt) { rows[index] = ResolveReloadValue(source, rows[index]); }
+                return Rebuild(list, [], rows, dictionary: false);
             });
+
+        // A row's identity as the serializer writes it: the row-key members of a row whose shape the model lists, or the
+        // whole row.
+        private JsonNode? IdentityOf(object item, Type element) {
+            if (tables.ShapeOf(item.GetType()) is not { Described: true, Kind: JsonTypeInfoKind.Object or JsonTypeInfoKind.None } rowShape) {
+                return JsonSerializer.SerializeToNode(item, WorldJsonContext.Default.Options.GetTypeInfo(element));
+            }
+            var identity = new JsonObject();
+            foreach (var member in tables.MembersOf(rowShape)) {
+                if (WorldDocumentBasis.IsRowKeyMember(member.Name) && member.Read(item) is { } value) {
+                    identity.Add(member.Name, JsonSerializer.SerializeToNode(value, WorldJsonContext.Default.Options.GetTypeInfo(member.Property.PropertyType)));
+                }
+            }
+            return identity;
+        }
+
+        // A list's element type: the one its shape names, or, where the shape enumerates only objects (an owned list held
+        // as an immutable array, which the model does not describe), the one its generic enumeration yields.
+        private static Type? ElementOf(WorldModelType shape, Type type) =>
+            ((shape.ElementType == typeof(object)) && (Enumerated(type: type, definition: typeof(IEnumerable<>)) is { } typed)) ? typed.GenericTypeArguments[0] : shape.ElementType;
+
+        internal ReloadEdit? ApplyPatchRows(object? value, JsonNode? patch, string path) {
+            if (value is null || patch is null || value is string || (value.GetType().IsValueType && value is not IEnumerable) || tables.ShapeOf(value.GetType()) is not { } shape) { return null; }
+
+            if (shape.Kind == JsonTypeInfoKind.Enumerable && ElementOf(shape, value.GetType()) is { } element && value is IEnumerable items &&
+                patch is JsonArray { Count: > 0 } rowPatch && !WorldDocumentBasis.IsReplaceMarker(rowPatch[0])) {
+                return ApplyPatchList(items, element, rowPatch, path);
+            }
+            if (shape.Kind != JsonTypeInfoKind.Object || !shape.Described || patch is not JsonObject objectPatch ||
+                WorldDocumentBasis.ReplacesObject(objectPatch) || objectPatch.ContainsKey("$type")) { return null; }
+
+            var members = tables.MembersOf(shape);
+            var values = new Dictionary<string, object?>();
+            var pending = new Dictionary<string, Func<WorldDefinition, object?>>();
+            var rows = 0;
+            foreach (var (name, delta) in objectPatch) {
+                if (Array.Find(members, member => member.Name == name) is not { } member) { return null; }
+
+                var held = member.Read(value);
+                var memberPath = $"{path}.{name}";
+                if ((ApplyPatchRows(held, delta, memberPath) ?? ApplyPatchValue(member.Property.PropertyType, name, held, delta, path)) is not { } edit) { return null; }
+                rows += edit.Rows;
+                if (ReferenceEquals(edit.Value, held)) { continue; }
+                values.Add(name, edit.Value);
+                if (edit.Resolve is { } resolve) { pending.Add(name, resolve); }
+            }
+            if (values.Count == 0) { return new ReloadEdit(value, null, rows); }
+
+            var merged = WithMembers(value, values);
+            return new ReloadEdit(merged, null, rows, pending.Count == 0 ? null : source =>
+                WithMembers(merged, pending.ToDictionary(pair => pair.Key, pair => pair.Value(source))));
+        }
+
+        // One member's value with its delta merged whole: written, merged under the member's rules and read again. Null
+        // for a delta that removes the member, whose absent value only its owner's read knows.
+        private static ReloadEdit? ApplyPatchValue(Type type, string name, object? held, JsonNode? delta, string path) {
+            var tree = JsonSerializer.SerializeToNode(held, WorldJsonContext.Default.Options.GetTypeInfo(type));
+            var before = tree?.DeepClone();
+            var merged = WorldDocumentBasis.MergeMember(path, name, tree, delta, out var present);
+            if (!present || merged is null) { return null; }
+            if (OrderedJson.Equals(before, merged)) { return new ReloadEdit(held, null, 0); }
+
+            var value = merged.Deserialize(WorldJsonContext.Authored.Options.GetTypeInfo(type));
+            return new ReloadEdit(value, null, merged switch { JsonArray list => list.Count, JsonObject => 1, _ => 0 }, source => ResolveReloadValue(source, value));
+        }
+
+        // A keyed list's rows under its delta, as the keyed-list merge composes them: surviving rows in their order, each
+        // named row refined or dropped, then new rows in the delta's order.
+        private ReloadEdit? ApplyPatchList(IEnumerable items, Type element, JsonArray patch, string path) {
+            var held = items.Cast<object?>().ToArray();
+            if (held.Length == 0 || Array.IndexOf(held, null) >= 0) { return null; }
+
+            var identities = new List<JsonNode?>(held.Length);
+            foreach (var item in held) { identities.Add(IdentityOf(item!, element)); }
+            if (!WorldDocumentBasis.TryFindRowKey(identities, patch, out var key, out _)) { return null; }
+
+            var index = WorldDocumentBasis.IndexRows(identities, key, out _);
+            var rowInfo = WorldJsonContext.Default.Options.GetTypeInfo(element);
+            var readInfo = WorldJsonContext.Authored.Options.GetTypeInfo(element);
+            var changed = new Dictionary<int, object?>();
+            var added = new List<object?>();
+            var rows = 0;
+
+            foreach (var node in patch) {
+                if (node is not JsonObject row || row.ContainsKey(WorldDocumentBasis.BeforeMemberName)) { return null; }
+
+                var identity = WorldDocumentBasis.RowIdentity(row, key)!;
+                var at = index.GetValueOrDefault(identity, -1);
+                if (at < 0) {
+                    if (row.ContainsKey(WorldDocumentBasis.DropMemberName)) { return null; }
+                    WorldDocumentBasis.RefuseAppendedRow(row, path);
+                    added.Add(row.Deserialize(readInfo));
+                    rows++;
+                    continue;
+                }
+                if (row.ContainsKey(WorldDocumentBasis.DropMemberName)) {
+                    WorldDocumentBasis.RequireTombstone(row, key, path);
+                    changed[at] = null;
+                    continue;
+                }
+
+                // The identity read from the row's members must be the one its written form carries.
+                if (JsonSerializer.SerializeToNode(held[at], rowInfo) is not JsonObject tree ||
+                    !DocumentValueEqualityComparer.Instance.Equals(WorldDocumentBasis.RowIdentity(tree, key), identity)) { return null; }
+
+                var before = tree.DeepClone();
+                var refined = WorldDocumentBasis.RefineKeyedRow(tree, row, key, path);
+                if (OrderedJson.Equals(before, refined)) { continue; }
+                changed[at] = refined.Deserialize(readInfo);
+                rows++;
+            }
+            if (changed.Count == 0 && added.Count == 0) { return new ReloadEdit(items, null, rows); }
+
+            var merged = new List<object?>(held.Length + added.Count);
+            var resolveAt = new List<int>();
+            for (var at = 0; at < held.Length; at++) {
+                if (!changed.TryGetValue(at, out var replacement)) { merged.Add(held[at]); continue; }
+                if (replacement is null) { continue; }
+                resolveAt.Add(merged.Count);
+                merged.Add(replacement);
+            }
+            foreach (var row in added) {
+                resolveAt.Add(merged.Count);
+                merged.Add(row);
+            }
+            return RowsEdit(items, merged, resolveAt, null, rows);
         }
     }
 

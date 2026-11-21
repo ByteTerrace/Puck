@@ -14,7 +14,7 @@ internal static class FixedConvexGeometry {
             return (collider with { Center = FixedVector3.Zero, Rotation = FixedQuaternion.Identity }).SupportPoint(direction: direction);
         }
         if (collider.Kind == FixedStaticColliderKind.Superellipsoid) {
-            if (collider.Exponent == Two) {
+            if (collider.MeasuresDistance()) {
                 var weightedDirection = FixedVector3.Multiply(left: direction, right: collider.Extent).Normalize();
 
                 return (FixedVector3.Multiply(left: weightedDirection, right: collider.Extent) + (direction.Normalize() * collider.Radius));
@@ -68,12 +68,25 @@ internal static class FixedConvexGeometry {
     private static FixedQ4816 Power(FixedQ4816 value, FixedQ4816 exponent) =>
         ((value == FixedQ4816.Zero) ? FixedQ4816.Zero : FixedQ4816.Pow(x: value, y: exponent));
 
-    // The drawn field and its active outward gradient. The field is a signed bound outside a bevel vertex;
-    // distance queries still use GJK. This recognizes a boundary probe before a vanishing EPA tetrahedron is built.
+    // The drawn field and its active outward gradient, in the collider's frame. An ellipsoid
+    // (FixedStaticCollider.MeasuresDistance) answers its true signed distance less its Radius, measured to the projection's
+    // foot, whose outward normal is the implicit gradient there. A higher exponent answers its gauge, and a chamfered box a
+    // signed bound outside a bevel vertex; their distance queries still use GJK, and this recognizes a boundary probe
+    // before a vanishing EPA tetrahedron is built.
     internal static (FixedQ4816 Distance, FixedVector3 Normal) Field(in FixedStaticCollider collider, FixedVector3 point) {
         var p = FixedVector3.Abs(value: point);
         var e = collider.Extent;
 
+        if (collider.MeasuresDistance()) {
+            var projection = FixedEllipsoidProjection.Project(foot: out var foot, point: point, radii: e);
+            // foot_i / r_i², scaled by the least radius so each component is a ratio under one and keeps Q16's resolution;
+            // a radius under one raw is taken as one raw, as the projection takes it.
+            var r = FixedVector3.Max(left: e, right: new FixedVector3(X: FixedQ4816.Epsilon, Y: FixedQ4816.Epsilon, Z: FixedQ4816.Epsilon));
+            var least = FixedQ4816.Min(x: r.X, y: FixedQ4816.Min(x: r.Y, y: r.Z));
+            var footGradient = new FixedVector3(X: ((foot.X / r.X) * (least / r.X)), Y: ((foot.Y / r.Y) * (least / r.Y)), Z: ((foot.Z / r.Z) * (least / r.Z)));
+
+            return ((projection.Distance - collider.Radius), ((footGradient == FixedVector3.Zero) ? FixedVector3.UnitY : footGradient.Normalize()));
+        }
         if (collider.Kind == FixedStaticColliderKind.Superellipsoid) {
             var q = new FixedVector3(X: (p.X / e.X), Y: (p.Y / e.Y), Z: (p.Z / e.Z));
             var exponent = collider.Exponent;

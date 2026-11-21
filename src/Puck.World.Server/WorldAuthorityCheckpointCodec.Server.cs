@@ -388,6 +388,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     value: entry.Mutation,
                     what: "journal mutation"
                 ));
+                w.WriteBoolean(entry.Played);
                 WriteDrawHistory(w, entry.DrawHistory);
             }
         );
@@ -611,7 +612,8 @@ public static partial class WorldAuthorityCheckpointCodec {
                     tryDecode: WorldSubmissionCodec.TryDecodeCommittedMutation
                 );
 
-                return new WorldJournalEntry(tick, engineTick, mutation!) { DrawHistory = ReadDrawHistory(ref r) };
+                var played = r.ReadBoolean();
+                return new WorldJournalEntry(tick, engineTick, mutation!) { Played = played, DrawHistory = ReadDrawHistory(ref r) };
             },
             maximum: MaxCollectionCount
         );

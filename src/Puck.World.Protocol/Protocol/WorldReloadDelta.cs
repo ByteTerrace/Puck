@@ -136,25 +136,20 @@ public sealed record WorldReloadDelta(string BaseHash, string TargetHash, byte[]
         return false;
     }
 
-    /// <summary>Applies the already admitted form of a reload to a reconstructed journal prefix.</summary>
+    /// <summary>Applies a reload's patch to a document (a reconstructed journal prefix, a checkpoint's journal base)
+    /// through <see cref="WorldDefinitionMembers.ApplyPatch"/>, so every row the patch leaves alone stays the document's
+    /// own instance.</summary>
+    /// <param name="previous">The document the patch applies to.</param>
+    /// <param name="patch">The patch's compact JSON bytes.</param>
+    /// <param name="directory">The result's asset directory.</param>
+    /// <param name="candidate">The patched document, or <see langword="null"/> on refusal.</param>
+    /// <param name="reason">The named refusal, or empty on success.</param>
+    /// <returns>Whether the patch applied.</returns>
     public static bool TryApplyPatch(WorldDefinition previous, ReadOnlySpan<byte> patch, string? directory,
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldDefinition? candidate, out string reason) {
         candidate = null;
         try {
-            var replacements = new List<(string Name, ReadOnlyMemory<byte>? Value)>();
-            var trees = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
-            foreach (var (name, delta) in PatchTree(patch)) {
-                if (delta is null) { replacements.Add((name, null)); continue; }
-                var tree = WorldDefinitionMembers.Write(name, WorldDefinitionMembers.Value(previous, name));
-                trees.Add(name, tree);
-                var basis = new JsonObject { [name] = tree };
-                if (!WorldDocumentBasis.TryMerge(basis, new JsonObject { [name] = delta.DeepClone() }, out var merged, out reason)) {
-                    reason = $"{InvalidCode}: the member '{name}' does not merge: {reason}";
-                    return false;
-                }
-                replacements.Add((name, merged![name] is { } value ? CanonicalJsonDocument.SerializeCompact(value) : null));
-            }
-            candidate = WorldDefinitionMembers.Replace(previous, replacements, directory, trees);
+            candidate = WorldDefinitionMembers.ApplyPatch(previous, PatchTree(patch), directory);
             reason = string.Empty;
             return true;
         } catch (Exception exception) when (exception is ArgumentException or InvalidDataException or JsonException or NotSupportedException) {

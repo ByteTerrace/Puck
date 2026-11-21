@@ -6,8 +6,23 @@ set -euo pipefail
 umask 077
 federation_keys="${PUCK_FEDERATION_KEYS:?the launcher passes the federation signing keys}"
 unset PUCK_FEDERATION_KEYS
+. /etc/os-release
+crypto_stale=0
+if [ "$ID" = azurelinux ]; then
+    # Azure Linux builds moby-engine and containerd2 with Microsoft's Go, whose system crypto loads the host's
+    # libcrypto when each daemon starts, yet neither package requires a minimum openssl-libs. The packages come from
+    # the live repository while the library comes from the pinned image, so a newer Go meeting an older library can
+    # break every TLS handshake (Go 1.27's default X25519MLKEM768 against an openssl-libs older than 3.3.7-5.azl3,
+    # which lacks the provider-backed EVP_PKEY_Q_keygen fix). Take the repository's openssl-libs in its own
+    # transaction first, so no daemon an install starts can load the old library, and take it on every pass, so a
+    # re-run repairs a VM that an earlier pass left on the old library.
+    crypto_before="$(rpm -q openssl-libs || true)"
+    tdnf install -y openssl-libs
+    if [ "$(rpm -q openssl-libs)" != "$crypto_before" ] && systemctl is-active --quiet containerd.service docker.service; then
+        crypto_stale=1
+    fi
+fi
 if ! command -v docker >/dev/null || ! command -v curl >/dev/null || ! command -v python3 >/dev/null || ! command -v flock >/dev/null; then
-    . /etc/os-release
     case "$ID" in
         azurelinux)
             tdnf install -y moby-engine moby-cli curl python3 util-linux
@@ -32,6 +47,11 @@ release_guard() {
 }
 release_guard
 systemctl enable --now docker
+# A daemon an earlier pass started before the library was replaced still holds the old one. Restart it only while no
+# world runs: restarting Docker stops its containers, and a running writer is the coordinator's to drain.
+if [ "$crypto_stale" = 1 ] && ["$(docker inspect -f '{{.State.Running}}' puck-world 2>/dev/null || true)" != true ]; then
+    systemctl try-restart containerd.service docker.service
+fi
 install -d -m 700 /etc/puck /var/lib/puck
 # The runtime uses the .NET image's unprivileged app UID; bootstrap remains root-owned.
 chown -R 1654:1654 /var/lib/puck

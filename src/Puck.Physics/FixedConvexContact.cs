@@ -344,11 +344,36 @@ public static class FixedConvexContact {
         return (push.Penetration > FixedQ4816.Zero);
     }
 
+    // A ball against a collider whose field is its true signed distance (FixedStaticCollider.MeasuresDistance): the push
+    // is the ball's reach less the distance at its centre, along the field's normal there, with no support descent.
+    internal static bool TryMeasuredPush(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume, FixedQ4816 skin, out FixedContactPush push) {
+        var local = collider.Rotation.RotateInverse(vector: ((position + orientation.Rotate(vector: volume.Center)) - collider.Center));
+        var reach = ((volume.Radius + skin) + collider.Radius);
+
+        push = default;
+        // A centre past the radii and the reach on any axis is clear without a projection.
+        if ((FixedQ4816.Abs(value: local.X) > (collider.Extent.X + reach)) || (FixedQ4816.Abs(value: local.Y) > (collider.Extent.Y + reach)) ||
+            (FixedQ4816.Abs(value: local.Z) > (collider.Extent.Z + reach))) {
+            return false;
+        }
+
+        var (distance, normal) = FixedConvexGeometry.Field(collider: in collider, point: local);
+        var penetration = ((volume.Radius + skin) - distance);
+
+        if (penetration <= FixedQ4816.Zero) {
+            return false;
+        }
+
+        push = new FixedContactPush(Normal: collider.Rotation.Rotate(vector: normal), Penetration: penetration);
+        return true;
+    }
+
     internal static (FixedVector3 Point, FixedVector3 Normal) Nearest(in FixedStaticCollider collider, FixedVector3 probe) {
         var local = collider.Rotation.RotateInverse(vector: (probe - collider.Center));
         var field = FixedConvexGeometry.Field(collider: in collider, point: local);
 
-        if (FixedQ4816.Abs(value: field.Distance) <= Tolerance) {
+        if (collider.MeasuresDistance() || (FixedQ4816.Abs(value: field.Distance) <= Tolerance)) {
             return ((collider.Center + collider.Rotation.Rotate(vector: (local - (field.Normal * field.Distance)))), collider.Rotation.Rotate(vector: field.Normal));
         }
         var pointVolume = new FixedBodyColliderVolume(FixedBodyColliderKind.Sphere, FixedVector3.Zero, FixedVector3.Zero,
