@@ -146,7 +146,7 @@ byte-plane deltas (about 6 bytes a triangle, per level), and the payload is zlib
 zstd level -1 decompresses at about 1550 MB/s against zlib's 390 (*summary*). *Move:* topology-aware index coding
 written independently, fewer normal bits or normals derived from the field, and zstd (inbox in .NET 11's
 `System.IO.Compression`, so no vendor binary). *Check:* store bytes per triangle and decode time on the debug world's stored meshes, with
-the decoded meshes inside the codec's error budget (identical wherever a change is lossless). *Filed:* [the shared store step of bake proportional to change](../open-items.md#bake-proportional-to-change).
+the decoded meshes inside the codec's error budget (identical wherever a change is lossless). *Filed:* [the shared store step of the cold bake](../iteration.md#the-cold-bakes-steps).
 
 ### 12. Checkpoints are full and uncompressed
 

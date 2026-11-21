@@ -211,17 +211,116 @@ not reach.
 5. **The cold bake fed.** Built: an arriving group's bake work takes its own
    allowance of the GPU the frame leaves idle, the bake starts once its own two
    kernels compile, only groups arriving in view plan a coarse first tier, the
-   contour and crossing stages rent their scratch, and an in-flight bake is
-   shared across residencies. In flight: the bake's critical path from the
-   sample checkpoint probe to the store write (`bake-latency`), its remaining
-   garbage (`bake-garbage`) and its repeated CPU work (`bake-cpu`). After
-   them, the quiet readings and the shared cross-backend store, in
-   [bake proportional to change](open-items.md#bake-proportional-to-change).
+   contour and crossing stages rent their scratch, an in-flight bake is
+   shared across residencies, store entries stream to their file through a
+   background writer, and the take walks only groups offering work. What it
+   still owes is [below](#the-cold-bakes-steps).
    *Check:* a free-running cold boot's `[sdf.mesh-bake] done` line on each
    backend, read in the lead's quiet window, against the minute figure.
 
 The missing look tools, authored large terrain form and a stylized surface
 detail layer, are built alongside, each judged through these loops.
+
+## The cold bake's steps
+
+Step 5 above is built; these are what the cold bake still owes, in order.
+[Open items](open-items.md#bake-proportional-to-change) holds the defects
+beside them. The first candidate of step 3 changes the bake's shape and goes
+ahead of further cuts to its CPU stages.
+
+1. **Read staged reuse in the windowed debug world.** The stage products
+   resume in a device-free replay; the windowed reading is owed. Start from an
+   empty store, then boot with that store unchanged, with a simplification
+   edit, and with a field-kernel edit. Compare bake time, checkpoint hit and
+   miss counts, GPU sampling dispatches, and disk bytes. A simplification edit
+   should load stored contours and dispatch no sampling. The field-kernel edit
+   should rebake from sampling. The
+   [derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
+   describes where the cache resumes.
+2. **Read the cold bake under the live frame allowance.** Budgeted batches
+   are cut to the allowance at a mean-following rate (`SdfMeshBakeGpuWork`),
+   an arrival's lattices take their own allowance
+   (`SdfGpuWorkBudget.OwedAllowance`), and held frames keep
+   `SdfMeshPathBake.BatchTaps`. Read the cold bake held and free-running, and
+   a cold arrival in play, on a quiet machine; split a lattice only if
+   `over-allowance` shows the unsplit first lattice matters.
+3. **The candidates.** A quiet cold bake recording worker activity, GPU wait
+   per request, GPU timestamps and total time ranks what is left on the
+   critical path. The first candidate changes the bake's shape and goes
+   first; with it,
+   [the audit's](state-of-the-art/audit.md#where-each-finding-went)
+   coarse-to-fine pruning by interval bounds on the GPU. The candidates (GPU
+   contouring is rejected as a second mesher):
+   - *GPU sampling in one round trip per stage* (cutting ~20 round trips per
+     group to ~4 by moving root search and gradients onto GPU with a per-stage
+     sample cap): requires generating or reading `SdfSampledLattice`'s root
+     search (bracket, tolerance, round limit, step) from **one single source**
+     shared by CPU and GPU, verified on bracket, residual and thin-feature
+     checks on both backends. Writing the root search again by hand in shader
+     code would make two copies of one rule, whoever is asked to keep them
+     equal. No source measures a root search on the GPU; Dreams ran a
+     hierarchical GPU evaluator on a console, the nearest precedent.
+   - *The Land stage on the job pool* (check the removed vertex first in
+     `SdfMeshCollapse` before laying out the new fan, since the acceptance
+     search makes about five attempts a collapse and `Measure` refuses half at
+     the removed vertex's own samples, and share one error sample set between
+     `Measure` and `MeasureReverse`, both in bake-cpu's collapse
+     pricing; restrict `SdfSampledLattice.CloseSheets`'s second slit pass,
+     which re-reads every measured fine sample's six neighbours, to neighbours
+     of first-pass closings; schedule chunks on `JobPool` ordered by visibility
+     demand before size, largest first only among chunks of equal priority;
+     and split the serial tail's largest lattices into slabs contoured in
+     parallel, the research's fix 4). A cheaper collapse whose meshes
+     differ but audit as well is a valid cut: judge changed witnesses with the
+     field audit at each rendered level, raw millimetre errors beside threshold
+     counts. Try the cheaper collapse and a different error measure (attribute
+     quadrics) inside `SdfMeshCollapse` before considering a replacement
+     simplifier ([visibility V3b](visibility.md#the-build-order)). Not checked:
+     Kapoulkine's clustering pipeline falling from about 9 minutes to under 3
+     on the same class of fixes.
+   - *Check:* `puck bench startup --bake` under `puck lease quiet` reads about
+     a minute or less on each backend from its own empty store, and turning
+     into a new place during a bake delivers the first visible surface no
+     later than before. If the sampling fix is the one that lands, a group
+     takes about four round trips.
+4. **One shared cross-backend store (last, judged separately from cold bake).**
+   Key meshes by authored inputs rather than backend bytecode, recording which
+   backend derived each entry and accepting cross-backend entries by audit
+   within recorded error (never byte equality; `SdfMeshCpuField.TapSpacing`
+   already differs near creases, and native forest triangle counts differ by
+   backend). This is the first use of
+   [shared product naming and verification](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
+   (with fetch disclosure owned by
+   [disclosure](disclosure.md#presentation-and-derived-product-disclosure)).
+   - *Memo and three-part prototype:* write a memo fixing (a) what goes into a
+     shared product's name (source program, authored parameters, byte-format
+     version), (b) attribute-by-attribute verification against the analytic
+     source at receiver tolerance/coverage and inconclusive handling, (c)
+     format version computed from both writer and reader code so a
+     layout-preserving reader change still moves it, and (d) unified pricing of
+     fetching versus local derivation (keeping local store reuse distinct from
+     machine-to-machine exchange). Prototype over every stored debug-world
+     group at route tiers: (i) one desktop store read by both D3D12 and Vulkan
+     in both directions (verified by audit, materials, seams and motion); (ii)
+     one public gallery mesh fetched from another process beside one refused
+     fetch, one permitted local miss, timing cold bake vs warm read vs fetch
+     on a stated link, plus rejecting tampered products (removed part, swapped
+     material id, flipped normal patch) and a layout-preserving reader-change
+     refusal/recheck; (iii) RTX ↔ Steam Deck cross-vendor exchange in both
+     directions once Deck hardware is on hand (unmeasured until then), because
+     two graphics APIs on one card compare no vendors. Parts (i) and (ii) run on
+     the desktop inside the bet's time box; part (iii) has its own box. Amend
+     the decision register when adopted.
+   - *Judged apart from the cold bake.* The cold-bake figure is each backend's
+     own bake from an empty store with floors on, timed with the other
+     backend's store absent. A shared store has three hazards: the same shader
+     source can compile under different options or generated interfaces;
+     whichever backend writes an entry first can hide which backend derived
+     what is drawn; and a warm hit from the other backend's store is not a cold
+     bake. The stage keys are local cache keys and are not affected.
+   - *What it shows in the debug world:* the second backend's first frame loads
+     the first backend's meshes, which pass verification, and the fetched mesh
+     is ready sooner than it bakes.
 
 ## The live edit path (step 3)
 

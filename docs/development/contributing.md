@@ -1001,7 +1001,11 @@ unverified when no device run exists.
 - A build cut off by a power loss or a killed session can leave a truncated
   assembly under a project's `obj/` (seen as `obj/Release/<tfm>/ref/<Project>.dll`),
   and the next build fails reading it. Delete that project's `obj/` and build
-  again; never test the binaries a failed build left behind.
+  again; never test the binaries a failed build left behind. Two builds of
+  one worktree running at once leave the same damage, so run one at a time
+  there. A missing-namespace error for a project the build does reference
+  (CS0234), seen once right after a merge and gone on the next build, is
+  treated the same way until its cause is found.
 - In PowerShell, quote colon-bearing switches forwarded after `--`: use
   `puck lease heavy --holder <lane> -- dotnet build Puck.slnx -c Release '-nodeReuse:false'`.
   Without the quotes, PowerShell can hand the child `-nodeReuse:` and `false`

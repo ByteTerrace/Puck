@@ -300,6 +300,13 @@ replayed run mints different identities.
   (`src/Puck.World.Schema/WorldSessionResolver.cs`) mints the generation ids
   a transfer continuation's checkpoint carries, and nothing captures the counter.
   Unconfirmed: a restored host's adoption mints afresh rather than reusing.
+- A published copy is named by a version someone types. A Template Spec's
+  source gained a storage right while its pinned version stayed the same, so
+  deployments kept reading the old published copy and the right never
+  deployed; the hosted world then failed its health for want of it.
+  `puck azure build-infrastructure` now compares each pinned version with what
+  its source compiles to and refuses a difference
+  ([CI](ci.md#build-and-validate)).
 
 **Closed by** deriving the value from what is recorded, or carrying the counter
 in the checkpoint codec of the object that mints.
@@ -331,6 +338,10 @@ and its memory; or a ring is flushed by entries that can never match.
   matched again. The fix holds each answer on its owner (`WorldFieldAnswer`), and a
   clearance sweep is cast a margin wider so its answer stands for any drift
   within that margin.
+- A portal's GPU occlusion verdict applied only to the exact camera it was
+  tested for, so it never hid a portal while the camera moved, which is when
+  the saving matters. A verdict now also proves the portal hidden from every
+  eye within a measured reach of the tested one (`SdfPortalSight`).
 
 **Closed by** keying on the resolution the answer is good for (a bound the
 answer was computed under, or a quantized key), holding the answer beside its

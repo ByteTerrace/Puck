@@ -70,15 +70,16 @@ in `worlds/standard/quality.puck`. A windowed boot applies that table on the
 frame thread once the device names its adapter, through the same door
 `world.device-profile` takes (`WorldDeviceProfileState.Select`).
 
-No current reading exists. The only one was taken from a source Release build
-before the table ever applied (`world.device-profile` echoed `table=none`),
-before the far cascade held a static layer, before distant redraws were
-sliced, and before the frame thread stopped waiting on pipeline-cache writes
-and device idles. None of its figures stand. It showed where to look first:
-the views pass was the largest GPU pass by far, the shadow passes and the
-resolve came next, the simulation and the frame's produce each took a large
-share of the CPU's frame, and host memory, not device memory, was what the
-16 GB machine ran out of.
+One reading exists, of a prerelease player build with the authority in
+process and its table applied: the route ran at a fraction of the bar on both
+backends, the frame was CPU-bound on produce and the simulation's steps
+before it was GPU-bound, the process held about twice its host-memory bar,
+and the build baked while it played. The CPU, GPU and memory work that
+answered it has landed and is unread on this machine, and no reading exists
+against a hosted authority. [Open items](open-items.md#hand-off) holds where
+that stands and the release that takes the next reading; the CPU half is
+[the CPU frame](open-items.md#the-cpu-frame)'s, and a player build that bakes
+is [its own packet](open-items.md#the-player-build-never-bakes).
 
 The steps, each after the one it names:
 
@@ -89,10 +90,10 @@ The steps, each after the one it names:
    [the benchmark's frame-bar reading](benchmark.md#comparing-runs) describes for
    this machine), read `world.device-profile` and `world.quality`,
    `world.iteration`, `host.frames`, `world.gpu-timing` with its timeline,
-   `world.rates`, `host.memory` and a gc-verbose trace. A pass's rolling mean
-   counts only the frames that recorded it (`ShaderPipelineRenderNode`'s
-   timing window), so a held pass's mean is the cost of one redraw: the
-   timeline shows the frame's real shape. A gap between the backends is
+   `world.rates`, `host.memory` and a gc-verbose trace. `world.gpu-timing`
+   reports each pass in milliseconds per frame and marks a row that has not
+   recorded lately as stale, so a held pass no longer reads as its one
+   redraw's cost. A gap between the backends is
    attributed only at matched clocks or from a capture
    ([the Vulkan packet](open-items.md#vulkan-regressions-and-gpu-robustness)
    records the earlier, unattributed one). Check: the reading names the
@@ -158,11 +159,9 @@ The steps, each after the one it names:
    Vulkan's aperture heaps, live and retiring residency and graph bytes, and
    the host's private bytes and managed heap. Share tables for the same
    mirror and stage infrequently changed data where the measured budget calls
-   for it. The `rtx2060` row sets a device bar and no host bar, so its host
-   pool follows the account's own budget (`MemoryAccount.DefaultBudget`); the
-   [streaming plan](streaming-and-memory.md#how-the-bars-are-read) sets the
-   RTX 4070's and the Steam Deck's memory bars and no plan yet sets this
-   machine's host bar.
+   for it. The `rtx2060` row authors a device bar and a host bar
+   (`worlds/standard/quality.puck`), and the one reading held about twice the
+   host bar; [memory](open-items.md#memory-on-the-deck-tier) owns closing it.
 6. **Passes past the local budget.** After 1. The `glass-clear` reading
    that cost about as much as the resolve was sustained, not one-off: the
    process ran past its local budget and the sums ran from system memory
@@ -258,6 +257,63 @@ uses, instead of reading and filling the store inside its version directory,
 which duplicates the set on disk beside the install's object store. The
 [derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
 owns identity and cache semantics.
+
+##### The contour rule for cells the lattice cannot resolve
+
+This is gap 7 of [the engine gaps](rendering-research.md#engine-gaps-filled-first),
+and [the bake detail packet](open-items.md#bake-detail) holds the exhibits and
+groups that wait on it.
+
+**A feature thinner than a bake
+cell is lost or faceted.** The count is in: `puck mesh audit --cpu` prints
+each failing shape's defect class (vertex off the surface at a crease,
+sliver beside a crease, face narrower than the cell, or thin tip stopping
+short) and whether its cell was flagged for finer sampling
+(`SdfSampledLattice.Refine`). The failing cells of the blend exhibits and
+nearly all of the Moth's were flagged and measured, so the fix is the
+contour rule, not a trigger. Built: a near-crease row takes the crease's
+vertices, and so does the crowd where creases meet (`SdfContour.Weld`, in
+`SdfContour.Finished`); a material boundary beside a crease vertex lies at
+the vertex (`SdfMeshMaterialCut.Boundary`), which closed most of the hard
+blends' rim folds; the audit counts a fold the field's own crease explains
+apart (a carve's rim meets a face at up to 125 degrees); and a lattice at its
+tier's floor still refines the cells it cannot resolve at all
+(`SdfMeshPathBake.FactorOf`), so the swallow's streamer tips are no longer
+lost. A broad sheet can also take an extra split when the ordinary
+refinement would still leave a coarse cell (`SdfMeshPathBake.ThinSplit`), and
+so do the measured cells beside it (`SdfSampledLattice.Refine`), which closed
+the range windows' flips, folds and off-surface vertices.
+Still open, each read in the exhibit's own vertices: the junction
+where a groove's lips meet a box edge (`shape-groove-union`) and where a
+rounded rim fades into a sharp edge (`shape-smooth-subtraction`), where the
+field check moves solved vertices up to half a cell or refuses a kinked one;
+the Moth's shin blades; and closed thin sheets (the lawn's blades,
+the swallow's streamers), whose rims fold against a field the closing
+deliberately thickens. A crossing whose gradient blends two faces
+contributing no plane, and a sub-cell face closing to one crease, are the
+steps left for those.
+- *Whole-world stored-mesh audit check:* audit every stored mesh of the
+  world at the tier each group was stored at on both backends (fixing the
+  tier-0 audit gap the packet records). Count groups the audit cannot judge
+  (glyphs and sampled regions) and unsampled groups apart from passed
+  groups. Require no defect class worse than before, zero wrongly facing
+  triangles on the fourteen blend exhibits, every audited group non-empty,
+  `open` and `uncovered` no higher than before, blend seams and the Moth's
+  rim captured in motion from failing sides, and cold-bake time reported
+  beside each fix. State the audit's blind spot: it samples around the
+  output mesh box, so vanished parts are caught only by authored-bounds
+  deviation ([virtual geometry](virtual-geometry.md#the-build-order)).
+  The fourteen exhibits are not enough because the rule reaches every
+  bake: an earlier attempt that narrowed the lattice along one axis was
+  worse over the whole world, and an empty or missing patch also lowers
+  the wrongly-facing count. Whether the rule holds where a surface folds
+  or a feature disappears is evidence Puck produces itself: no source
+  covers those, or two creases in one cell (Ju and others chose their
+  singular-value cut-off by experiment, which says nothing for or against
+  dropping a blended gradient's plane; Schaefer and others note a manifold
+  criterion "may still contain intersecting polygons"). Not checked: that
+  the refinement takes the finest split that fits and is never skipped
+  silently (a reviewer's reading).
 
 ##### A true distance under a non-uniform scale
 

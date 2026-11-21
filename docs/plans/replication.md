@@ -71,9 +71,8 @@ with field classification, caps, change masks and exact deltas in its definition
 start, converting the body's continuation sections first. [The first step](#the-first-step-as-a-brief)
 is written tightly enough to brief.
 
-**For the owner:** one question, which blocks nothing: whether replication gets a bar with the
-frame bar's standing, and at what scale the debug world proves it
-([owner questions](#owner-questions)).
+**The bar:** replication gets one, set from step 3's measurement
+([owner questions](#owner-questions) holds the decision).
 
 ## How the reports were weighed
 
@@ -868,12 +867,13 @@ window; the rest are counts.
 
 ## Owner questions
 
-**One, and it blocks nothing.** Should replication have a bar with the frame bar's standing, and
-at what scale does the debug world prove it? The plan needs two numbers as forcing functions: how
-many moving bodies one recipient is expected to see at once, and how many recipients one world is
-expected to serve. Until they are set, the steps use 200 visible moving bodies as the crowd and
-report megabits a second for one recipient, which is this plan's working figure and nobody's
-ruling. The options:
+**None is open.** The owner delegated the one question to the lead, who decided it: replication
+gets a bar, set from step 3's measurement and not before it, and the crowd of bot peers
+([the debug world at MMO scale](open-items.md#the-debug-world-at-mmo-scale)) is what reads it.
+The bar needs two numbers as forcing functions: how many moving bodies one recipient is expected
+to see at once, and how many recipients one world is expected to serve. Until step 3 has run, the
+steps use 200 visible moving bodies as the crowd and report megabits a second for one recipient,
+which is this plan's working figure and nobody's ruling. The options that were weighed:
 
 | Option | Cost |
 |---|---|
@@ -881,8 +881,7 @@ ruling. The options:
 | A bar set now | Set before step 3's measurement exists, so it is a guess |
 | A bar set from step 3's measurement | One round trip to the owner after step 3 |
 
-The third is recommended. The budget each world gives its recipients is an authored value either
-way.
+The third is taken. The budget each world gives its recipients is an authored value either way.
 
 **For the lead, not the owner:** whether a format identity computed from the record definitions
 and compared at the handshake ([decision 1](#decision-1-one-definition-generates-every-codec)) is

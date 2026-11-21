@@ -88,8 +88,11 @@ decided:
   specialized kernels wherever `terrain+cel` covers the view (hundreds of
   milliseconds a views pass at 2560×1440), so a cold specialization (a first
   boot after an engine change, a program edit) shows frames of that length
-  until the set publishes. Whether the surface shades with neutral shading
-  instead while it compiles is the owner's question this matrix's rule names.
+  until the set publishes. That is settled
+  ([the decision](../decisions/rendering.md#authored-shading)): the frame
+  keeps the last specialized kernel while a new one compiles, draws plain
+  shading for a program no specialization has seen, and runs the interpreter
+  only when asked.
 - *Bins stay on by default.* On Vulkan the binned views pass, its filter
   included, is at or under the unsplit one at every stop; on Direct3D 12 it is
   slower at the slope, which no longer comes from dispatch count and waits on

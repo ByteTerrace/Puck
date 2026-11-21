@@ -1437,7 +1437,11 @@ laws exercise that boundary.
   record the code merely copies with `with` has its synthesized clone and copy
   constructor hashed by signature (they read no field). A record the bake
   constructs counts its whole layout, since its synthesized equality and
-  printing read every field. `SdfMeshBakeClosureLawTests` pins both ways. It
+  printing read every field. `SdfMeshBakeClosureLawTests` pins both ways. One
+  observation contradicts this and is open: an edit to `SdfMeshPathBake` that
+  the bake's content never reads moved the identity
+  ([open items](../../../../docs/plans/open-items.md#bake-proportional-to-change)),
+  so check with `puck mesh identity --against` before relying on it. It
   stops at `SdfMeshLibrary` and `SdfMeshStore`,
   which hold meshes, at a mesh's claims and restorable parts (the stop types `SdfMesh/Payload` and
   `SdfMesh/Restorable`: `CodeClosure` stops a nested type named by its full name), and at `GpuRegion` and

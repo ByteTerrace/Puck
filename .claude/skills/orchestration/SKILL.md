@@ -947,7 +947,10 @@ it arrives; the brief never asks such a lane for a file beside its hand-back. A
 document meant for the tree (a plan, a memo) is committed on the lane's branch,
 which keeps the worktree. An Opus thesis draft and a Fable critique were each
 left in a removed worktree before this rule. The lead never removes a worktree that a running
-review or lane still reads: point the reader at the merged branch first. Shared
+review or lane still reads: point the reader at the merged branch first. The lead also never
+chains a worktree's removal after its merge in one command: a merge that stops on a conflict
+still lets the removal run, and two lanes' worktrees were removed that way with their merges
+unfinished. Remove a worktree only after its merge commit exists. Shared
 inputs that live only in ignored scratch (findings, briefs, readings) are lost
 to another machine, so while lanes consume them the lead pushes them to a
 temporary `backup/` branch, deleted once the work lands. A headless run also ends when the agent
