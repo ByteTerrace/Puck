@@ -135,6 +135,56 @@ public sealed class WorldAuthorityCheckpointLawTests {
         _ = server.Population;
     }
 
+    // A caller that polls leaves its tick executing on the step thread. Until it collects the tick it reads none of the
+    // authority: a read then would see whatever part of the tick had run. The caller's next call collects the same tick.
+    [Fact]
+    public void AThreadThatLeftItsTickInFlightReadsNoAuthorityUntilItCollectsIt() {
+        using var fixture = Fixtures.FreshServer();
+        var baseline = fixture.Server;
+        var machines = System.Reflection.DispatchProxy.Create<IWorldMachineHost, NonDurableMachines>();
+        var proxy = (NonDurableMachines)machines;
+        using var reached = new ManualResetEventSlim(false);
+        using var leave = new ManualResetEventSlim(false);
+        proxy.Inner = baseline.Machines;
+        proxy.Reached = reached;
+        proxy.Leave = leave;
+        var server = new WorldServer(baseline.Definition, new WorldPopulation(baseline.Definition),
+            baseline.Profiles, new WorldRenderEnvelope(), machines);
+        var context = new FixedStepContext(0, Fixtures.StepTicks, Fixtures.StepTicks);
+        var published = 0UL;
+        var woken = 0;
+        Action<ulong> publish = tick => published = tick;
+        using var thread = new WorldStepThread { Progressed = () => Interlocked.Increment(ref woken) };
+        var slice = WaitDeadline.In(TimeSpan.FromSeconds(20));
+
+        var first = WorldServerStepShell.TryStep(server, null, publish, in context, HostPacing.OneTickPerFrame,
+            slice, out var pending, thread, collectBy: default(WaitDeadline));
+        Assert.Equal(0UL, first);
+        Assert.Equal(WorldStepThread.ExecuteWait, pending);
+        Assert.True(thread.InFlight);
+        Assert.True(reached.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+        _ = Assert.Throws<InvalidOperationException>(() => _ = server.Population);
+        Assert.Equal(0UL, published);
+
+        // A second poll finds the tick still executing and prepares nothing again.
+        _ = WorldServerStepShell.TryStep(server, null, publish, in context, HostPacing.OneTickPerFrame,
+            slice, out pending, thread, collectBy: default(WaitDeadline));
+        Assert.Equal(WorldStepThread.ExecuteWait, pending);
+        Assert.Equal(1, proxy.Attempts);
+
+        leave.Set();
+        var final = WorldServerStepShell.TryStep(server, null, publish, in context, HostPacing.OneTickPerFrame,
+            slice, out pending, thread);
+        Assert.Null(pending);
+        Assert.Equal(1UL, final);
+        Assert.Equal(1UL, published);
+        // The step thread reports the finished slice after it is ready to collect, so the report may trail the collect.
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref woken) == 1, TimeSpan.FromSeconds(10)));
+        _ = server.Population;
+        baseline.Advance(Fixtures.StepTicks);
+        Assert.Equal(WorldStateHashComposition.HashAuthoritative(baseline, 1UL), WorldStateHashComposition.HashAuthoritative(server, 1UL));
+    }
+
     [Fact]
     public void AHostWithoutDurableCheckpointsNamesOnlyItsSteppedMachine() {
         using var fixture = Fixtures.FreshServer();
@@ -155,12 +205,18 @@ public sealed class WorldAuthorityCheckpointLawTests {
         public WaitReason Wait { get; } = new("machines", "held fixture segment");
         public bool Hold { get; set; }
         public int Attempts { get; private set; }
+        // Set when a tick reaches its machines, which then stay there until Leave is set: a tick that is still
+        // executing for as long as a law needs.
+        public ManualResetEventSlim? Reached { get; set; }
+        public ManualResetEventSlim? Leave { get; set; }
         private bool m_stepped;
         protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? arguments) {
             if (method!.Name == "get_AnyEverPumped") { return m_stepped; }
             if (method.Name == nameof(IWorldMachineHost.Advance)) { m_stepped = true; }
             if (method.Name == nameof(IWorldMachineHost.TryAdvance)) {
                 Attempts++;
+                Reached?.Set();
+                _ = Leave?.Wait(TimeSpan.FromSeconds(30));
                 if (Hold) { return Wait; }
             }
             return method.Invoke(Inner, arguments);

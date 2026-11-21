@@ -76,10 +76,12 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null) : IJobLane
 
         m_prepared = prepared;
         m_executed = default;
+        server.Tick.NoteHandOver(handedOver: true);
         try {
             m_lane.Post(unit: this);
         } catch {
             // The tick's input is closed and nothing will execute it: let the threads its hold keeps out back in.
+            server.Tick.NoteHandOver(handedOver: false);
             server.Tick.AbandonPrepared();
             m_prepared = default;
             throw;
@@ -125,6 +127,7 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null) : IJobLane
 
     // Folds what the step thread measured into the collecting thread's iteration and frees the slice's record.
     private void Settle() {
+        m_prepared.Server?.Tick.NoteHandOver(handedOver: false);
         HostFrameWork.Fold(source: m_work);
         m_prepared = default;
         m_executed = default;

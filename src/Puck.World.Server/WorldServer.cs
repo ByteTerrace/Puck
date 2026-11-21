@@ -528,6 +528,11 @@ public sealed partial class WorldServer : IWorldServerHost {
         if (m_tick?.BlockedDetail is { } reason) {
             throw new InvalidOperationException($"Authority tick is incomplete while waiting for {reason}.");
         }
+        // The thread that handed a tick to the step thread reads the authority again only once it has collected the
+        // tick: before that the read would see whatever part of the tick had run by then.
+        if (m_tick is { HandedOverByCallingThread: true }) {
+            throw new InvalidOperationException("The thread that handed this authority's tick to the step thread read the authority before it collected the tick.");
+        }
     }
 
     // How many authority gates (of any server) the calling thread holds through EnterAtTickBoundary. A thread holding one
