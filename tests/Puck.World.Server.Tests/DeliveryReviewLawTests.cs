@@ -223,7 +223,7 @@ public sealed class DeliveryReviewLawTests {
     }
 
     [Fact]
-    public void AFrameMoveCompletesTheReplicaWithItsRowsAloneAndLeavesItAsAFreshPrimeWould() {
+    public async Task AFrameMoveCompletesTheReplicaWithItsRowsAloneAndLeavesItAsAFreshPrimeWould() {
         var accounts = new WorldStateRow(Name: CellName.Parse("accounts"), Kind: CellKind.Text, Capacity: 4, Cells: []);
         var template = new WorldPlacement(Id: "stores", PrototypeId: "store", Position: new DocumentVector3(10, 0, 10), YawDegrees: 0f, Scale: 1f,
             Distribution: new WorldDistribution(
@@ -237,20 +237,51 @@ public sealed class DeliveryReviewLawTests {
         });
         var dealt = new Replica();
         using var observation = Observe(fixture, dealt);
+        // A federation peer, the public observer, whose cadence samples none of this law's ticks.
+        var current = true;
+        var peer = new WorldFederationProjectionSink(WorldDisclosureTier.Replica, fixture.Server.AuthorityIdentity,
+            () => new WorldSinkDisclosure(new WorldObserverDisclosure(UpdateSeconds: WorldObserverDisclosure.MaximumUpdateSeconds), -1), server: fixture.Server, isCurrent: () => current);
+        using var attached = fixture.Server.AttachSink(peer);
         fixture.Step();
+        // A grant moves no reader's disclosure, so a value it shares a step with travels in the tick's cells alone: no
+        // document and no primer.
+        var definitions = dealt.Definitions;
         var states = dealt.States;
         var snapshots = dealt.Snapshots;
+        Assert.True(fixture.Server.GrantTable.TryGrant(new WorldGrant(Principal.Seat(2), WorldCapability.Edit, GrantSubject.State(name: "accounts"), false), Principal.Console, out var reason), reason);
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "hand", "pub", 9L, WorldDocumentWriteKind.Set));
+        fixture.Step();
+        Assert.Equal((definitions, states, snapshots + 1), (dealt.Definitions, dealt.States, dealt.Snapshots));
+        Assert.Equal(9L, dealt.Read("hand", "pub"));
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "accounts", "a", 0L, WorldDocumentWriteKind.Set, Text: "a"));
         fixture.Step();
         // The deal moved the observer's frame, so its document was replaced; only the tick's own snapshot followed it,
         // carrying the restricted row's header the replaced arena dropped.
         Assert.Equal(states + 1, dealt.States);
-        Assert.Equal(snapshots + 1, dealt.Snapshots);
+        Assert.Equal(snapshots + 2, dealt.Snapshots);
         Assert.Contains(dealt.Definition.Placements, placement => placement.Id == WorldPlacementDeal.ChildId(key: "a", template: "stores"));
         Assert.NotNull(dealt.State.Observation(0));
         var fresh = new Replica();
         using var primed = Observe(fixture, fresh);
         Assert.Equal(Describe(fresh), Describe(dealt));
+        // The peer was handed the deal's document and, in the same step and whatever its cadence, the tick's snapshot
+        // carrying the header; the grant's step handed it no document.
+        current = false;
+        peer.DeliverDefinition(fixture.Server.Definition, fixture.Server.DocumentVersion, stream: default);
+        using var wire = new ProjectionWire();
+        await peer.StreamAsync(wire, TestContext.Current.CancellationToken);
+        using var read = new MemoryStream(wire.ToArray());
+        var records = new List<(byte Kind, byte[] Body)>();
+        while (read.Position < read.Length) {
+            var frame = await WorldFederationCodec.ReadResponseAsync(read, TestContext.Current.CancellationToken);
+            Assert.True(frame.Ok);
+            records.Add((frame.Kind, frame.Body.ToArray()));
+        }
+        Assert.Equal(2, records.Count(record => record.Kind == (byte)WorldFederationResponse.Definition));
+        var completing = records[records.FindLastIndex(record => record.Kind == (byte)WorldFederationResponse.Definition) + 1];
+        Assert.Equal((byte)WorldFederationResponse.Snapshot, completing.Kind);
+        Assert.True(WorldFederationCodec.TryDecodeSnapshot(completing.Body.AsSpan(WorldFederationCodec.StreamStampBytes), out var completed, out var failure), failure.ToString());
+        Assert.Contains(completed.FieldCells.ToArray(), delta => (delta.Row == 0) && (delta.Cell == -1) && (delta.Observation is not null));
     }
 
     // Every value, motion and observation header a replica's state view reads, in row order.
@@ -307,6 +338,7 @@ public sealed class DeliveryReviewLawTests {
         public WorldDocumentStateView State { get; }
         public List<FieldCellDelta> Deltas { get; } = [];
         public List<long> Versions { get; } = [];
+        public int Definitions { get; private set; }
         public int States { get; private set; }
         public int Snapshots { get; private set; }
         public WorldDefinition Definition => m_definition;
@@ -317,13 +349,17 @@ public sealed class DeliveryReviewLawTests {
             return sample.Value.Raw;
         }
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
-            m_definition = definition;
-            Versions.Add(version.Sequence);
-            State.TryResolveRow("hand", out _);
+            Definitions++;
+            Hold(definition, version);
         }
         public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
             States++;
-            DeliverDefinition(definition, version, stream: default);
+            Hold(definition, version);
+        }
+        private void Hold(WorldDefinition definition, WorldDocumentVersion version) {
+            m_definition = definition;
+            Versions.Add(version.Sequence);
+            State.TryResolveRow("hand", out _);
         }
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
         public void CloseSpan(ulong stream) { }

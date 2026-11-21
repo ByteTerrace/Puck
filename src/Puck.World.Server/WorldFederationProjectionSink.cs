@@ -196,8 +196,10 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         // The hub's fan-out has one span that never ends; this stream decides its own cuts.
     }
     public void CloseSpan(ulong stream) { }
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => DeliverDocument();
-    private void DeliverDocument(WorldPresentationRows? rows = null) {
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => DeliverDocument(replaced: true);
+    // Queues what a document owes the peer: replaced is whether it came through the whole-document door (a shape change
+    // or a jump) rather than a state delivery whose frame moved.
+    private void DeliverDocument(bool replaced, WorldPresentationRows? rows = null) {
         if (!Current()) {
             return;
         }
@@ -240,20 +242,24 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
 
             WriteRecord(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
                 payload: WorldDefinitionSerialization.SerializeCompact(definition: delivered), tier: tier, version: Version));
-            if (cut) { PrimeSnapshot(); }
+            // The same decision a session sink completes its replica by. The running tick's snapshot reaches the peer
+            // whatever its cadence while the cursor owes rows (DeliverSnapshot), so it counts as following.
+            var completion = m_cursor.Completion(cut: cut, replaced: replaced, snapshotFollows: server!.SnapshotFollows);
+            if (completion != WorldReplicaCompletion.None) { PrimeSnapshot(cells: (completion == WorldReplicaCompletion.Whole)); }
         } else if (AnnounceCut()) {
             PrimeAfterCut();
             PrimeSnapshot();
         }
     }
-    // Completes a generation a document delivery opened with the primer snapshot it owes, outside the cadence: the
-    // authority's current table under the live body policy, so the peer is never left on a cut with no bodies to show
-    // while no tick follows.
-    private void PrimeSnapshot() {
+    // Completes a document delivery with the primer snapshot it owes, outside the cadence: the authority's current table
+    // under the live body policy, so the peer is never left on a cut with no bodies to show, or on a replaced arena
+    // without its restricted rows' headers, while no tick follows. Without cells it carries the body table alone, whose
+    // rows carry those headers.
+    private void PrimeSnapshot(bool cells = true) {
         if (m_invalidated || (server is null)) {
             return;
         }
-        var primer = server.Document.BuildPrimerSnapshot();
+        var primer = server.Document.BuildPrimerSnapshot(cells: cells);
 
         var frame = WorldInterestFrame.ForPrimer(primer);
         WriteSnapshot(primer with { Entries = frame.Project(disclosure()), Cues = default, MusicBoundary = 0, MusicSenses = 0 }, frame);
@@ -265,7 +271,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         // A body policy that moved with the edit owes a cut, which the row path refuses so the document door primes it.
         _ = ObserveBodies();
         if (tier != WorldDisclosureTier.Replica || m_view is null || !m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
-            DeliverDocument(rows);
+            DeliverDocument(replaced: true, rows: rows);
         } else if (moved) {
             WriteRecord(WorldFederationResponse.PresentationRows, WorldFederationCodec.DocumentLeaf(rows.Payload.Span, tier, Version));
             WorldOutputHub.CountPresentationRows(rows);
@@ -298,12 +304,13 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             }
         }
         // The body policy is observed at every authoritative tick, sampled or not, so a policy that turns redacting cuts
-        // at once rather than at the cadence's next sample.
+        // at once rather than at the cadence's next sample. A tick is sampled whatever the cadence while a cut, or the
+        // restricted rows' headers a replaced document could not carry, are owed.
         var currentDisclosure = ObserveBodies();
         var bodies = new WorldBodyView(frame, currentDisclosure);
         var atCadence = m_view is null ? snapshot : server!.PresentCues(snapshot, m_view, currentDisclosure.IsFull, bodies);
         m_sampler.SetUpdateSeconds(currentDisclosure.Policy.UpdateSeconds);
-        if (m_sampler.TryProject(atCadence, out var projected, m_cursor.CutOwed, bodies)) {
+        if (m_sampler.TryProject(atCadence, out var projected, (m_cursor.CutOwed || m_cursor.OwesRows), bodies)) {
             WriteSnapshot(projected, frame);
         }
     }
@@ -347,7 +354,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     // The replica wire carries one definition-frame kind, so a value-only delivery rides the same encode; a
     // presentation-tier peer is owed only the members of its projection that the values moved.
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
-        if ((m_feed is not null) || !stamp.ArenaValues || ((m_view is not null) && m_cursor.FrameMoved(view: m_view))) { DeliverDefinition(definition: definition, stream: in stream, version: version); }
+        if ((m_feed is not null) || !stamp.ArenaValues || ((m_view is not null) && m_cursor.FrameMoved(view: m_view))) { DeliverDocument(replaced: false); }
     }
     public void PrimeRoute(in WorldAuthorityRouteDescription route) => WriteRecord(
         WorldFederationResponse.Route,

@@ -276,7 +276,15 @@ public sealed partial class WorldGrants {
             return true;
         }
         internal void Install() {
-            if ((m_owner.m_host is { } host) && ((m_adds.Count != 0) || (m_removes.Count != 0) || !ReferenceEquals(objA: m_owner.m_authorityDefinition?.Groups, objB: m_candidate?.Groups))) { host.Document.MarkDefinitionDeliveryPending(); }
+            // The groups section is part of the document, so a transition that replaces it delivers the document whole.
+            // A grant or revocation alone leaves the document as it was (a document install that changes its grants
+            // delivers the document itself). What it moves of a recipient's disclosure, a state delivery re-discloses:
+            // an Observe hold through each sink's own admission check, an operator's authority through
+            // WorldDeliveryCursor.FrameMoved. Policies read state rows, never grants.
+            if (m_owner.m_host is { } host) {
+                if (!ReferenceEquals(objA: m_owner.m_authorityDefinition?.Groups, objB: m_candidate?.Groups)) { host.Document.MarkDefinitionDeliveryPending(); }
+                else if ((m_adds.Count != 0) || (m_removes.Count != 0)) { host.Document.MarkStateDeliveryPending(); }
+            }
             if (m_installed) { throw new InvalidOperationException(message: "Authority transition already consumed."); }
             m_installed = true;
             var groupsChanged = !ReferenceEquals(objA: m_owner.m_authorityDefinition?.Groups, objB: m_candidate?.Groups);
