@@ -37,6 +37,13 @@ public readonly record struct WorldJournalEntry {
     internal WorldDrawPositions? ReloadDrawPositions { get; init; }
     internal string Description => m_mutation is { } mutation ? WorldServer.Describe(mutation) : "world.reload";
     internal object? Identity => (object?)m_mutation ?? ReloadPatch;
+    /// <summary>Gets whether a program applied the mutation in a principal's name rather than a session submitting it: a
+    /// scoped replay acting as the seat that recorded it, or an addon guest.</summary>
+    internal bool Played { get; init; }
+    /// <summary>Gets whether a principal authored the entry: a source edit, or a mutation a session submitted. An entry
+    /// the World applied itself (a sweep's, a search's, a field's or a rule's document write, or a <see cref="Played"/>
+    /// one) is document history that undo replays and never drops.</summary>
+    internal bool Authored => (m_mutation is not { } mutation) || (!Played && (mutation.Principal != Puck.Commands.Principal.World));
 
     internal static bool MayDraw(WorldDefinition current, WorldMutation mutation) =>
         current.StateRaw?.DrawInstallCount > 0 || mutation is WorldMutation.Batch or WorldMutation.UpsertStateRow { Row.Draw.PrivateStream: true };

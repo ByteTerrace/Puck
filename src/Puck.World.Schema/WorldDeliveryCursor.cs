@@ -8,6 +8,16 @@ namespace Puck.World;
 /// <summary>A replacement computed from the current view and this stream's last delivered image.</summary>
 public readonly record struct WorldRowReplacement(int Row, WorldRecipientImage Image);
 
+/// <summary>What a replica stream owes its reader, now, to complete a document it was just handed.</summary>
+public enum WorldReplicaCompletion : byte {
+    /// <summary>Nothing now: the stream's attach primer, or the running tick's own snapshot, completes it.</summary>
+    None,
+    /// <summary>The observation headers of its restricted rows, which a snapshot of the body table alone carries.</summary>
+    Rows,
+    /// <summary>The whole primer: every body, document cell and lattice cell.</summary>
+    Whole,
+}
+
 /// <summary>One delivery stream's history. Definition and row delivery seed the same hashes; reads cannot move
 /// them. Versions count observable deliveries in this stream, never authority installs.</summary>
 /// <remarks><para>The cursor is the one place that knows what its stream was delivered, so it is the one place that
@@ -36,6 +46,12 @@ public sealed class WorldDeliveryCursor {
     private int[] m_ordered = [];
     private ContentPin? m_definition;
     private ContentPin? m_frame;
+    // The field regions of the stream's last document, whether that document kept every field cell of the one before
+    // it, and whether it was the stream's first, which its attach primer completes.
+    private IReadOnlyList<WorldFieldsSection>? m_fields;
+    private bool m_keepsFields;
+    private bool m_attachDocument;
+    private bool m_admitted;
     private bool m_operator;
     // The stream's opaque identity, its span and the last record it stamped. The identity is random so that it says
     // nothing about the recipient, its policies or the table.
@@ -59,9 +75,11 @@ public sealed class WorldDeliveryCursor {
     /// subsequent row snapshots. Used at a traveller's install boundary, never against the authority identity.</summary>
     public bool Holds(WorldRecipientView view) => m_definition is null || m_definition == view.Images.DefinitionIdentity(view);
     /// <summary>Whether a replica's disclosed document less its state rows (its placements among them) moved since
-    /// this stream last delivered a document. A value-only change moves it when it changes what the recipient's
-    /// placements read, a dealt cell turning readable or a zone move among them; a hidden-only change never does, so
-    /// whether a value-only delivery carries the document is a function of the recipient's view alone.</summary>
+    /// this stream last delivered a document, or the recipient's authority did. A value-only change moves it when it
+    /// changes what the recipient's placements read, a dealt cell turning readable or a zone move among them; an
+    /// authority transition moves it when it makes or unmakes the recipient an operator; a hidden-only change never
+    /// does, so whether a value-only delivery carries the document is a function of the recipient's view
+    /// alone.</summary>
     /// <param name="view">The stream's view.</param>
     /// <returns><see langword="true"/> when the stream owes a document for a value-only change.</returns>
     public bool FrameMoved(WorldRecipientView view) => view.Observes && (view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica) &&
@@ -79,7 +97,31 @@ public sealed class WorldDeliveryCursor {
         m_definition = identity;
         Seed(view);
         Delivered();
-        return WorldAssetRowLoader.EmbedAudio(definition: view.Images.Definition(view));
+        var document = view.Images.Definition(view);
+        var fields = document.FieldRegions;
+        m_keepsFields = (m_fields is not null) && WorldFieldsSection.KeepsCells(held: m_fields, next: fields);
+        m_fields = fields;
+        m_attachDocument = !m_admitted;
+        m_admitted = true;
+        return WorldAssetRowLoader.EmbedAudio(definition: document);
+    }
+
+    /// <summary>Decides what the stream owes its reader, now, to complete the document <see cref="DeliverDefinition"/>
+    /// just returned. A reader's arena is replaced with every document, which carries every cell the reader may read but
+    /// no observation header, so the headers of its restricted rows are owed (<see cref="OwesRows"/>) until a snapshot's
+    /// rows advance through this cursor. The stream's first document is completed by its attach primer. A cut, a
+    /// whole-document replacement (a shape change or a jump, whose bodies and lattice values may have moved without a
+    /// delta) and a document whose fields the reader does not all keep owe the whole primer. Any other replacement (a
+    /// frame move, an authority transition) owes only the headers, which the running tick's own snapshot carries when it
+    /// follows the delivery to this reader.</summary>
+    /// <param name="cut">Whether the delivery opened a new generation.</param>
+    /// <param name="replaced">Whether the document came through the whole-document door rather than a state delivery.</param>
+    /// <param name="snapshotFollows">Whether the running tick's snapshot reaches this reader after the delivery.</param>
+    /// <returns>What completes the document now.</returns>
+    public WorldReplicaCompletion Completion(bool cut, bool replaced, bool snapshotFollows) {
+        if (m_attachDocument) { return WorldReplicaCompletion.None; }
+        if (cut || replaced || !m_keepsFields) { return WorldReplicaCompletion.Whole; }
+        return (OwesRows && !snapshotFollows) ? WorldReplicaCompletion.Rows : WorldReplicaCompletion.None;
     }
 
     /// <summary>Advances an already primed replica over a presentation edit, provided its disclosed state and
@@ -232,6 +274,6 @@ public sealed class WorldDeliveryCursor {
     /// sequence continues.</summary>
     public void Release() {
         if (m_seeded) { Cut(); }
-        m_rows.Clear(); m_metadataPrimers.Clear(); m_definition = null; m_seeded = false;
+        m_rows.Clear(); m_metadataPrimers.Clear(); m_definition = null; m_fields = null; m_seeded = false;
     }
 }

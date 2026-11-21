@@ -369,6 +369,27 @@ public sealed record WorldFieldsSection(
         }
         return new WorldStateSection(Lattices: topologies, World: rows);
     }
+
+    /// <summary>Returns whether a reader holding the field cells of <paramref name="held"/> keeps every one of them when
+    /// <paramref name="next"/> replaces it: each field of <paramref name="next"/> is a field of <paramref name="held"/>
+    /// in the same region over the same lattice. A reader's state view keeps a field's delivered cells by the same rule
+    /// (<c>WorldDocumentStateView</c>'s reshape, keyed by region and field name with an equal lattice).</summary>
+    /// <param name="held">The regions the reader holds.</param>
+    /// <param name="next">The regions replacing them.</param>
+    /// <returns><see langword="true"/> when no field of <paramref name="next"/> starts from zero.</returns>
+    public static bool KeepsCells(IReadOnlyList<WorldFieldsSection> held, IReadOnlyList<WorldFieldsSection> next) {
+        ArgumentNullException.ThrowIfNull(argument: held);
+        ArgumentNullException.ThrowIfNull(argument: next);
+        if (ReferenceEquals(held, next)) { return true; }
+        foreach (var region in next) {
+            var match = held.FirstOrDefault(candidate => string.Equals(candidate.Name, region.Name, StringComparison.Ordinal));
+            if ((match is null) || (match.Lattice != region.Lattice)) { return false; }
+            foreach (var field in region.Fields) {
+                if (!match.Fields.Any(candidate => string.Equals(candidate.Name, field.Name, StringComparison.Ordinal))) { return false; }
+            }
+        }
+        return true;
+    }
 }
 /// <summary>The physical <c>state.lattices</c> topology: a scalar field over the lattice's footprint, evolved by
 /// reactions each <paramref name="StepEveryTicks"/> — the document's own case of <see cref="LatticeTopology"/>,

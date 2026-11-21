@@ -21,12 +21,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     );
 
     private WorldDefinition? m_hydrated;
-    // The replica document whose fields the observer holds, set wherever a whole document or state replacement is handed
-    // to it and forgotten when its stream is released: a later replacement is judged against it to know whether the
-    // observer keeps its field cells.
-    private WorldDefinition? m_replicaDocument;
     private bool m_withheld;
-    private bool m_replicaDefined;
     private bool m_deliveringSnapshot;
     private bool m_streamEnded;
 
@@ -241,7 +236,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         }
         m_cursor.ForgetDocument();
         if (m_cursor.DeliverDefinition(view: m_view) is { } whole) {
-            HandReplica(document: whole);
+            inner.DeliverDefinition(definition: whole, stream: m_cursor.Stamp(), version: Version);
         }
         return true;
     }
@@ -281,7 +276,6 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         observation.CloseSceneProof(end: server.DeliveryTime.Tick);
         m_feed.Release();
         m_hydrated = null;
-        m_replicaDocument = null;
         m_cursor.Release();
         m_roster.Forget();
         server.DetachCursor(observation.Session, m_cursor);
@@ -292,9 +286,9 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     // a cut that composed no document primes the observer alone all the same.
     private void DeliverReplicaDocument(WorldDefinition? delivered) {
         if (delivered is not null) {
-            _ = AnnounceCut();
-            HandReplica(document: delivered);
-            PrimeReplica();
+            var cut = AnnounceCut();
+            inner.DeliverDefinition(definition: delivered, stream: m_cursor.Stamp(), version: Version);
+            CompleteReplica(cut: cut, replaced: true);
         } else if (m_cursor.TakeCut()) {
             Reprime();
         }
@@ -304,46 +298,31 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         inner.DeliverCut(stream: m_cursor.Stamp(), terminal: false);
         m_cursor.ForgetDocument();
         if (m_cursor.DeliverDefinition(view: m_view) is { } whole) {
-            HandReplica(document: whole);
-            PrimeReplica();
+            inner.DeliverDefinition(definition: whole, stream: m_cursor.Stamp(), version: Version);
+            CompleteReplica(cut: true, replaced: true);
         }
     }
-    // Hands the observer a whole replica document.
-    private void HandReplica(WorldDefinition document) {
-        m_replicaDocument = document;
-        inner.DeliverDefinition(definition: document, stream: m_cursor.Stamp(), version: Version);
+    // Completes a replica document just handed to the observer with what the cursor decides it owes now
+    // (WorldDeliveryCursor.Completion), rather than leaving policy-dependent work for a later quiet tick.
+    private void CompleteReplica(bool cut, bool replaced) {
+        var completion = m_cursor.Completion(cut: cut, replaced: replaced, snapshotFollows: server.SnapshotFollows);
+        if (completion != WorldReplicaCompletion.None) { PrimeSnapshot(cells: (completion == WorldReplicaCompletion.Whole)); }
     }
-    // Completes a replaced replica document whose fields the observer keeps, with only what the replacement cost it.
-    // The document carries every cell the observer may read, so its replaced arena holds them; it carries no
-    // observation header, so the headers of its restricted rows are owed, and the cursor keeps them owed until a
-    // snapshot's rows advance through it. The tick's own snapshot carries them when it follows this delivery;
-    // otherwise a primer of the body table alone does, now, so a paused world never shows a row without its header.
-    // A body table is never omitted: a snapshot without it erases every body.
-    private void CompleteReplacement() {
-        if (!m_cursor.OwesRows || server.SnapshotFollows || m_deliveringSnapshot) { return; }
-        FollowObserverDetach();
-        if (DetachReason is null) { DeliverSnapshot(snapshot: server.Document.BuildPrimerSnapshot(cells: false), stream: WorldStreamStamp.Unspanned); }
-    }
-    // Replacing a replica document replaces its state arena and observation metadata together, and a document a cut,
-    // a resumed span or a shape change delivered also replaces what its fields and bodies hold. Complete that delivery
-    // with the whole non-consuming primer now, rather than leaving policy-dependent work for a later quiet tick.
-    private void PrimeReplica() {
-        // AttachSink supplies the first primer itself. Subsequent definition/state replacements have no such
-        // caller, so they must complete the same pair here.
-        if (!m_replicaDefined) { m_replicaDefined = true; return; }
-        PrimeSnapshot();
-    }
-    // Completes a document a definition path delivered with the primer snapshot it owes: a generation a cut opened is
-    // primed alone, whatever the cadence and whether or not a tick follows.
-    private void PrimeSnapshot() {
+    // Completes a document with the primer snapshot it owes: a generation a cut opened is primed alone, whatever the
+    // cadence and whether or not a tick follows. Without cells it carries the body table alone, whose rows carry the
+    // observation headers the document could not; a body table is never omitted, since a snapshot without it erases
+    // every body.
+    private void PrimeSnapshot(bool cells = true) {
         // Inside this sink's own DeliverSnapshot (Resume, a cut), the snapshot in hand completes the document instead,
         // and a primer delivered here would re-enter DeliverSnapshot.
         if (m_deliveringSnapshot) { return; }
         FollowObserverDetach();
         if (DetachReason is null) {
-            var primer = server.Document.BuildPrimerSnapshot();
-            WorldBootWork.Count(WorldBootWork.SessionPrimers);
-            WorldBootWork.Count(WorldBootWork.SessionPrimerCells, primer.FieldCells.Length);
+            var primer = server.Document.BuildPrimerSnapshot(cells: cells);
+            if (cells) {
+                WorldBootWork.Count(WorldBootWork.SessionPrimers);
+                WorldBootWork.Count(WorldBootWork.SessionPrimerCells, primer.FieldCells.Length);
+            }
             DeliverSnapshot(snapshot: primer, stream: WorldStreamStamp.Unspanned);
         }
     }
@@ -566,16 +545,15 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
             // Values travel in the snapshots' cell channel. The document is owed again only when what this
             // recipient's frame reads moved (its placements as it may read them, which a readable dealt cell or a
-            // zone move can change without a placement install), never because a hidden-only install happened; the
+            // zone move can change without a placement install) or its operator authority did, never because a
+            // hidden-only install happened; the
             // observer's state stands, so it is handed the same section again, never a state exported and loaded
             // whole.
             if (stamp.ArenaValues && !m_cursor.FrameMoved(view: m_view)) { return; }
             if (DiscloseToReplica(definition: definition) is { } delivered) {
                 var cut = AnnounceCut();
-                var held = m_replicaDocument;
-                m_replicaDocument = delivered;
                 inner.DeliverState(delivered, Version, stamp with { Everything = true, MovedRows = default, ArenaValues = false }, m_cursor.Stamp());
-                if (cut || (held is null) || !Puck.World.Client.WorldDocumentStateView.KeepsFieldCells(previous: held, next: delivered)) { PrimeReplica(); } else { CompleteReplacement(); }
+                CompleteReplica(cut: cut, replaced: false);
             } else if (m_cursor.TakeCut()) {
                 Reprime();
             }
