@@ -9,4 +9,11 @@ public static class WorldSiloImageLayout {
     public const string WorldsDirectory = "/app/worlds";
     /// <summary>The entry assembly of the Puck CLI the image carries beside the silo.</summary>
     public const string CliAssembly = "/puck-cli/Puck.Cli.dll";
+
+    /// <summary>Returns the arguments that follow the image in <c>docker run --entrypoint dotnet</c> to run the hosted MCP
+    /// shape: the image's CLI running <c>puck mcp</c>, which composes the installed extensions over the silo it hosts.</summary>
+    /// <param name="silo">The silo document's path inside the container.</param>
+    /// <param name="http">The remote MCP configuration's path inside the container.</param>
+    /// <returns>The command arguments, in order.</returns>
+    public static string[] McpArguments(string silo, string http) => [CliAssembly, "mcp", "--silo", silo, "--http", http];
 }
