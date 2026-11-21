@@ -115,13 +115,7 @@ public sealed partial class StateArena {
                 previous: destination
             );
         } else if (!destination.SequenceEqual(other: components)) {
-            RetainDirectWrite(column: ArenaColumn.Vector, index: slot, number: 0L, components: destination);
-            m_changeEpoch++;
-
-            MarkVersion(
-                column: ArenaColumn.Vector,
-                index: slot
-            );
+            MarkOutOfScope(components: destination, previous: new ArenaJournalEntry(Column: ArenaColumn.Vector, Index: slot, Number: 0L, Reference: null));
         }
 
         if (components.IsEmpty) {

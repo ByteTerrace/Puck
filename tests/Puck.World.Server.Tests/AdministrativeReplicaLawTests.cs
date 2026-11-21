@@ -12,38 +12,21 @@ public sealed class AdministrativeReplicaLawTests {
             .WithWorldState(rows: [new WorldStateRow(Name: CellName.Parse(candidate: "value"), Kind: CellKind.Int, Min: 0, Max: 100,
                 Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 1))])]);
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var sink = new Replica();
+        var sink = new SessionReplica();
         using var observation = fixture.Server.TryObserveAsSession(refusal: out var refusal, sink: sink, sourceAuthority: "reader");
 
         Assert.NotNull(@object: observation);
         Assert.True(condition: string.IsNullOrEmpty(value: refusal), userMessage: refusal);
-        Assert.Equal(actual: sink.Value, expected: 1);
+        Assert.Equal(actual: sink.ReadSlot(row: "value"), expected: 1);
         fixture.WriteSlot(row: "value", value: 7);
         Assert.True(condition: fixture.Server.DrainAdministrative());
         Assert.Equal(expected: 7, actual: fixture.SlotValue(row: "value"));
-        Assert.Equal(actual: sink.Value, expected: 7);
+        Assert.Equal(actual: sink.ReadSlot(row: "value"), expected: 7);
         Assert.Equal(expected: 0UL, actual: fixture.Server.CompletedTick);
         fixture.Step();
-        Assert.Equal(actual: sink.Value, expected: 7);
+        Assert.Equal(actual: sink.ReadSlot(row: "value"), expected: 7);
         fixture.WriteSlot(row: "value", value: 8);
         fixture.Step();
-        Assert.Equal(actual: sink.Value, expected: 8);
-    }
-
-    private sealed class Replica : IClientSink {
-        public long Value;
-
-        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => Value = definition.State[0].Cells![0].Value.Raw;
-        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) => DeliverDefinition(definition: definition, version: version, stream: default);
-        public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
-        public void CloseSpan(ulong stream) { }
-        public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
-            foreach (var delta in snapshot.FieldCells.Span) {
-                if ((delta.Row == 0) && (delta.Cell >= 0)) { Value = delta.Image!.Value.Raw; }
-            }
-        }
-        public void DeliverAnswer(in QueryAnswer answer) { }
-        public void DeliverComposition(WorldComposition composition) { }
-        public void DeliverSessionLever(WorldSessionLever lever) { }
+        Assert.Equal(actual: sink.ReadSlot(row: "value"), expected: 8);
     }
 }

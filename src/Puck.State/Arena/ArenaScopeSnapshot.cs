@@ -185,9 +185,12 @@ public sealed partial class StateArena {
         foreach (var entry in image.Text) { WriteReferenceRaw(column: ArenaColumn.Text, index: ScopePosition(image, ArenaColumn.Text, entry.Index), value: entry.Value); }
         foreach (var entry in image.Visibility) { WriteReferenceRaw(column: ArenaColumn.Visibility, index: ScopePosition(image, ArenaColumn.Visibility, entry.Index), value: entry.Value); }
         foreach (var entry in image.Observations) { WriteReferenceRaw(column: ArenaColumn.Observation, index: ScopePosition(image, ArenaColumn.Observation, entry.Index), value: entry.Value); }
+        var change = BeginOutOfScope();
+
         foreach (var row in image.Rows) {
             if (m_layout[row].IsStored) { Reindex(row, m_layout[row]); }
-            BumpRowVersion(rowOrdinal: row); m_rowGenerations[row]++; m_deliveryRows[row] = true;
+            m_rowGenerations[row]++;
+            MarkOutOfScope(change: change, restored: null, row: row);
         }
     }
 

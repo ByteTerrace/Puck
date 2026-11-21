@@ -411,6 +411,15 @@ a no-op write, and a rewound scope all leave the version where it was. While
 scopes are open, `FlagOpenRows` reports which rows they've written, since those
 rows may differ from what their version last proved.
 
+A committed change outside every scope can't be rewound, and passes one door,
+`StateArena.MarkOutOfScope`: an unscoped write, a turn rewind
+(`TryRewindGroup`) and a scoped replay restore (`RestoreScope`). The door marks
+the row for delivery, which is all `CopyChangedRows` and publication read, moves
+its version once per change, makes the row opaque to an open change window, and
+ends the rewind of every undo group holding the row, except the group a rewind
+is restoring. A writer that skipped it would change state that no session
+receives.
+
 An unchanged version proves that stored values are unchanged. It doesn't prove
 that a tick-dependent or host-dependent read gives the same answer. Construction
 starts every counter at zero, and a relayout moves each counter above every

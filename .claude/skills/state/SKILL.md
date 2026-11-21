@@ -145,7 +145,11 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   for the seed ladder's framing. The character fold itself belongs to Maths.
 - **Writes outside a scope cannot be rewound**, and a relayout cannot run
   while a scope is open. Open a scope before any change you may need to take
-  back.
+  back. Every committed change outside a scope (an unscoped write, a turn
+  rewind, a scope restore) passes `StateArena.MarkOutOfScope`, which marks
+  delivery, version, the change window and undo invalidation together;
+  publication reads only the delivery mark, so a raw writer that skips the
+  door changes state no session receives.
 - **Addressing shortcuts change only the path, never the value.** Tick-path
   callers read by ordinal and interned key through one entry point; name-keyed
   entry points serve read-backs and validators
@@ -222,6 +226,7 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 | A fault is never dropped; an operand never resolves its own address | `OutcomeAnalyzer` (`OUTCOME001`–`OUTCOME004`), build errors |
 | A holder's state is written only through its write side | the compiler, which will not write through the read side's readonly reference, and `DoorAnalyzer` (`DOOR001`, `DOOR002`, `DOOR003`, `DOOR005`), build errors, for a mutating call on a copy, a reinterpreting cast, a mutable field in a record section and a kept write reference |
 | A firing's writes land together or not at all | the scope `RuleEvaluator.FireProposal`/`FireEffects` open and `RuleEvaluator.Commit` closes |
+| A committed change outside a scope is delivered, versioned and ends the undo turns over its rows | the one door `StateArena.MarkOutOfScope`; a restore marks rows only with the change `BeginOutOfScope` opened. The raw column writers are private to `StateArena`, so only its own files can skip the door, and nothing stops them |
 | Side state rewinds with the arena | `IJournalParticipant`, recorded through `ArenaJournal.RecordParticipant`, which throws with no scope open |
 | Latch lifecycle writes stay outside firings | `RuleLatch` writers take the journal and refuse inside a scope |
 | A transform reads no names while it runs | `RuleCompiler.TryResolveTransform` resolves to an `ArenaTransform` of ordinals |

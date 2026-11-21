@@ -303,6 +303,35 @@ public sealed class ArenaUndoLawTests {
             Assert.Equal(hashes[(turn - 1)], arena.ComputeHash());
         }
     }
+    // A rewind and a scope restore are committed changes outside any scope: publication sees the rows a rewind put
+    // back, and a turn whose rows a restore rewrote can no longer be rewound over them.
+    [Fact]
+    public void ARewindIsDeliveredAndAScopeRestoreEndsTheTurnsOverItsRows() {
+        var (catalog, arena) = ArenaFixture.Build();
+        arena.ConfigureUndo(plans: [new ArenaUndoPlan(Depth: 4, Name: "play", Rows: [ArenaFixture.Score])]);
+        var slot = ArenaFixture.SlotKey(catalog: catalog);
+        var start = arena.CaptureScope(rows: new HashSet<int> { ArenaFixture.Score });
+        var moved = new bool[arena.Layout.RowCount];
+
+        foreach (var value in (long[])[9L, 10L]) {
+            arena.BeginUndoTurn(group: "play");
+            arena.BeginUndoPass(group: "play");
+            var mark = arena.BeginScope();
+
+            Assert.True(condition: arena.TryWrite(key: slot, operand: value, reason: out var written, rowOrdinal: ArenaFixture.Score, write: StateWriteKind.Set), userMessage: written);
+            arena.Commit(mark: mark);
+            arena.EndUndoPass(group: "play");
+            arena.CommitUndoTurn(group: "play");
+        }
+        arena.CopyChangedRows(clear: true, rows: moved);
+        Array.Clear(array: moved);
+        Assert.True(condition: arena.TryRewindGroup(group: "play", reason: out var reason), userMessage: reason);
+        arena.CopyChangedRows(clear: true, rows: moved);
+        Assert.True(condition: moved[ArenaFixture.Score]);
+        arena.RestoreScope(image: start);
+        Assert.False(condition: arena.TryRewindGroup(group: "play", reason: out reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "newest turn");
+    }
     [Fact]
     public void PendingTurnRoundTripsThroughTypedSnapshot() {
         var (_, arena) = ArenaFixture.Build();

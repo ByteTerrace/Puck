@@ -425,40 +425,47 @@ public sealed partial class StateArena {
         }
     }
 
-    private void RetainDirectWrite(ArenaColumn column, int index, long number, object? reference = null, ReadOnlySpan<sbyte> components = default) {
-        WindowOpaque(column: column, index: index);
-        if (m_undo is null) {
-            return;
-        }
-        RetainWrite(new ArenaJournalEntry(Column: column, Index: index, Number: number, Reference: reference), components, differs: null);
-    }
+    // A committed write of one position: the executing pass's group retains what it overwrote (or loses its turn's
+    // rewind when the position is outside its rows), and every other group holding the row is invalidated.
     private void RetainWrite(ArenaJournalEntry entry, ReadOnlySpan<sbyte> components, bool? differs) {
         if (m_undo is null) {
             return;
         }
         var row = m_layout.RowOf(column: entry.Column, index: entry.Index);
 
-        foreach (var group in m_undo.Values) {
-            if (ReferenceEquals(objA: group, objB: m_undoWriter)) {
-                if ((row < 0) || !group.Contains(row: row)) {
-                    group.Pending!.Rewindable = false;
-                } else if (UndoPositionCount(catalog: m_catalog, column: entry.Column, layout: m_layout[row], row: row) == 0) {
-                    // The compact plan admits only mutation columns reachable for this row. If a future write door
-                    // reaches another one, preserve the hard storage bound and refuse this turn's rewind. Member
-                    // insertion and compaction reset every materialized cell column, including irrelevant zero
-                    // metadata. Compare the first pre-scope value with the final value so those resets remain a
-                    // no-op, while a real excluded-column change still makes the turn unrewindable.
-                    if (differs ?? Differs(entry: entry)) {
-                        group.Pending!.Rewindable = false;
-                    }
-                } else {
-                    var memberKey = (((entry.Column == ArenaColumn.MemberKey) && (entry.Number >= 0)) ? m_keys.Names[((int)entry.Number)].Value : null);
-
-                    group.Add(components: components, entry: entry, memberKey: memberKey);
+        if (m_undoWriter is { } writer) {
+            if ((row < 0) || !writer.Contains(row: row)) {
+                writer.Pending!.Rewindable = false;
+            } else if (UndoPositionCount(catalog: m_catalog, column: entry.Column, layout: m_layout[row], row: row) == 0) {
+                // The compact plan admits only mutation columns reachable for this row. If a future write door
+                // reaches another one, preserve the hard storage bound and refuse this turn's rewind. Member
+                // insertion and compaction reset every materialized cell column, including irrelevant zero
+                // metadata. Compare the first pre-scope value with the final value so those resets remain a
+                // no-op, while a real excluded-column change still makes the turn unrewindable.
+                if (differs ?? Differs(entry: entry)) {
+                    writer.Pending!.Rewindable = false;
                 }
-            } else if ((row >= 0) && group.Contains(row: row) && (group.Pending is not null)) {
-                group.Pending.Rewindable = false;
-            } else if ((row >= 0) && group.Contains(row: row)) {
+            } else {
+                var memberKey = (((entry.Column == ArenaColumn.MemberKey) && (entry.Number >= 0)) ? m_keys.Names[((int)entry.Number)].Value : null);
+
+                writer.Add(components: components, entry: entry, memberKey: memberKey);
+            }
+        }
+        InvalidateUndo(row: row, except: m_undoWriter);
+    }
+    // A row changed by something other than the turn that holds it: a group's open turn can no longer be rewound, and
+    // its newest closed turn would write stale values over the change, so it stops being rewindable too.
+    private void InvalidateUndo(int row, ArenaUndoGroup? except) {
+        if ((m_undo is null) || (row < 0)) {
+            return;
+        }
+        foreach (var group in m_undo.Values) {
+            if (ReferenceEquals(objA: group, objB: except) || !group.Contains(row: row)) {
+                continue;
+            }
+            if (group.Pending is { } pending) {
+                pending.Rewindable = false;
+            } else {
                 group.InvalidateLatest();
             }
         }
@@ -645,6 +652,7 @@ public sealed partial class StateArena {
     }
     private void RestoreUndo(ArenaUndoGroup owner, ArenaUndoSegment segment) {
         var epoch = ++m_reindexEpoch;
+        var change = BeginOutOfScope();
 
         m_reindexCount = 0;
         for (var index = (segment.Count - 1); (index >= 0); index--) {
@@ -659,20 +667,7 @@ public sealed partial class StateArena {
             Restore(entry: entry, components: segment.Components(entry: retained));
             BumpGeneration(column: entry.Column, index: entry.Index);
             MarkReindex(column: entry.Column, epoch: epoch, index: entry.Index);
-            var changedRow = m_layout.RowOf(column: entry.Column, index: entry.Index);
-
-            if (changedRow >= 0) {
-                foreach (var group in m_undo!.Values) {
-                    if (!ReferenceEquals(objA: group, objB: owner) && group.Contains(row: changedRow)) {
-                        if (group.Pending is not null) {
-                            group.Pending.Rewindable = false;
-                        } else {
-                            group.InvalidateLatest();
-                        }
-                    }
-                }
-                BumpRowVersion(rowOrdinal: changedRow);
-            }
+            MarkOutOfScope(change: change, restored: owner, row: m_layout.RowOf(column: entry.Column, index: entry.Index));
         }
         for (var index = 0; (index < m_reindexCount); index++) {
             var row = m_reindexRow[index];

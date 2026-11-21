@@ -236,6 +236,36 @@ public sealed partial class StateArena {
                 throw new InvalidOperationException(message: $"Arena column '{column}' stores no reference.");
         }
     }
+    // The one door for a committed change outside every journal scope, which no rewind can take back: a direct write's
+    // position, or the rows a restore rewrote (BeginOutOfScope, then the row overload once per restored position).
+    // Either marks the row for delivery and moves its version once per change, makes the row opaque to an open change
+    // window and invalidates every undo group holding it; a direct write also hands what it overwrote to the
+    // executing undo pass. Publication reads only the delivery marks (CopyChangedRows), so a writer that skips this
+    // door changes state no session receives. The generation moves at every raw write, scoped or not, so each writer
+    // moves it itself.
+    private void MarkOutOfScope(in ArenaJournalEntry previous, ReadOnlySpan<sbyte> components = default) {
+        m_changeEpoch++;
+        WindowOpaque(column: previous.Column, index: previous.Index);
+        RetainWrite(components: components, differs: null, entry: previous);
+        MarkVersion(column: previous.Column, index: previous.Index);
+    }
+    private OutOfScopeChange BeginOutOfScope() => new(Epoch: ++m_changeEpoch);
+    // One restored row of the change BeginOutOfScope opened. The restore's own undo group is the one it rewinds, so it
+    // is left as the restore found it.
+    private void MarkOutOfScope(OutOfScopeChange change, int row, ArenaUndoGroup? restored) {
+        if (change.Epoch != m_changeEpoch) {
+            throw new InvalidOperationException(message: "Another arena change began inside a restore.");
+        }
+        if ((row < 0) || (m_rowChangeStamp[row] == change.Epoch)) {
+            return;
+        }
+        WindowOpaque(row: row);
+        InvalidateUndo(except: restored, row: row);
+        MarkRowVersion(rowOrdinal: row);
+    }
+    // Only BeginOutOfScope makes one, so a restore cannot mark rows without opening its change first.
+    private readonly record struct OutOfScopeChange(long Epoch);
+
     // The one door every number column is written through: it journals what it overwrote while a scope is open,
     // settles the version immediately when none is, and moves the row's generation either way.
     private void WriteNumber(ArenaColumn column, int index, long value) {
@@ -257,13 +287,7 @@ public sealed partial class StateArena {
                 previous: previous
             );
         } else if (previous != value) {
-            RetainDirectWrite(column: column, index: index, number: previous);
-            m_changeEpoch++;
-
-            MarkVersion(
-                column: column,
-                index: index
-            );
+            MarkOutOfScope(previous: new ArenaJournalEntry(Column: column, Index: index, Number: previous, Reference: null));
         }
 
         WriteNumberRaw(
@@ -298,13 +322,7 @@ public sealed partial class StateArena {
             objA: previous,
             objB: value
         )) {
-            RetainDirectWrite(column: column, index: index, number: 0L, reference: previous);
-            m_changeEpoch++;
-
-            MarkVersion(
-                column: column,
-                index: index
-            );
+            MarkOutOfScope(previous: new ArenaJournalEntry(Column: column, Index: index, Number: 0L, Reference: previous));
         }
 
         WriteReferenceRaw(

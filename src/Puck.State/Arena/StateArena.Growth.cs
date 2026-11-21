@@ -89,11 +89,7 @@ public sealed partial class StateArena {
             var previous = m_layout[row].CellCapacity;
             if (previous == next[row].CellCapacity) { continue; }
             if (m_journal.Scopes > 0) { m_journal.Record(column: ArenaColumn.CellCapacity, index: row, previous: previous); }
-            else {
-                RetainDirectWrite(column: ArenaColumn.CellCapacity, index: row, number: previous);
-                m_changeEpoch++;
-                MarkRowVersion(rowOrdinal: row);
-            }
+            else { MarkOutOfScope(previous: new ArenaJournalEntry(Column: ArenaColumn.CellCapacity, Index: row, Number: previous, Reference: null)); }
             m_rowGenerations[row]++;
         }
         InstallReservation(next: next);

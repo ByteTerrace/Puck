@@ -89,8 +89,9 @@ public sealed partial class StateArena {
             m_windowEntries.Add(item: entry);
         }
     }
-    private void WindowOpaque(ArenaColumn column, int index) {
-        if (m_windowOpen && (m_layout.RowOf(column: column, index: index) is var row and >= 0) && (m_windowOpaqueStamp[row] != m_windowEpoch)) {
+    private void WindowOpaque(ArenaColumn column, int index) => WindowOpaque(row: m_layout.RowOf(column: column, index: index));
+    private void WindowOpaque(int row) {
+        if (m_windowOpen && (row >= 0) && (m_windowOpaqueStamp[row] != m_windowEpoch)) {
             m_windowOpaqueStamp[row] = m_windowEpoch;
             m_windowOpaqueRows.Add(item: row);
         }
