@@ -104,13 +104,29 @@ public sealed class CarvedFieldPartitionLawTests {
         Assert.True(condition: (push.Normal.Y > FixedQ4816.FromDouble(value: 0.99d)), userMessage: $"normal {push.Normal}");
     }
 
-    // F3: under a 0.12 m contact margin an ellipsoid carve of radii [4, 1, 4] dilates by its gauge, to x = 4.48 at its
-    // equator, not 4.12; a small ball over x = 4.3, whose reach misses the undilated carve, has the ground cut from under it.
+    // F3: under a 0.12 m contact margin a triaxial ellipsoid carve of radii [4, 1, 3.5] dilates by its gauge, to x = 4.48
+    // at its equator, not 4.12; a small ball over x = 4.3, whose reach misses the undilated carve, has the ground cut from
+    // under it.
     [Fact]
     public void AGaugeScaledCarveUnderAMarginReachesItsDilatedSurface() {
         var collider = Collider(margin: 0.12f, Ground, Shape(blend: SdfBlendOp.Subtraction, id: 1, position: Vector3.Zero,
-            scale: new Vector3(x: 4f, y: 1f, z: 4f), type: SdfSolidPrimitive.Ellipsoid));
+            scale: new Vector3(x: 4f, y: 1f, z: 3.5f), type: SdfSolidPrimitive.Ellipsoid));
 
         Assert.False(condition: Agree(centre: V(x: 4.3d, y: 0.2d, z: 0d), collider: collider, radius: 0.05d).Pushes);
+    }
+
+    // F3: a spheroid carve of radii [4, 1, 4] is its revolved ellipse's true distance, so the same margin dilates it only
+    // to x = 4.12; the ball over x = 4.3 stands on the ground, which its narrowed reach reads alone, and a ball over
+    // x = 4.2, inside the carve's reach, still agrees with the field.
+    [Fact]
+    public void ASpheroidCarveUnderAMarginReachesOnlyItsDistance() {
+        var collider = Collider(margin: 0.12f, Ground, Shape(blend: SdfBlendOp.Subtraction, id: 1, position: Vector3.Zero,
+            scale: new Vector3(x: 4f, y: 1f, z: 4f), type: SdfSolidPrimitive.Ellipsoid));
+        var (pushes, push) = Agree(centre: V(x: 4.3d, y: 0.2d, z: 0d), collider: collider, radius: 0.05d);
+
+        Assert.True(condition: pushes);
+        Assert.True(condition: (push.Normal.Y > FixedQ4816.FromDouble(value: 0.99d)), userMessage: $"normal {push.Normal}");
+        _ = Agree(centre: V(x: 4.2d, y: 0.2d, z: 0d), collider: collider, radius: 0.05d);
+        _ = Agree(centre: V(x: 2.9d, y: 0.2d, z: 2.9d), collider: collider, radius: 0.05d);
     }
 }
