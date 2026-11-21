@@ -2953,6 +2953,14 @@ is pushed to `main` ([the player channel](../development/ci.md#the-player-channe
   and a verbose GC trace. The machine's only readings came from a source
   build before the device table applied and before the far and distant
   shadow work landed, so they describe nothing current.
+- [low] `worldSiloConfigType`'s `compute.spot.restoreTimeout`
+  (`avm/ptn/platform/world-silo/main.bicep`) is read by nothing, since Flexible
+  scale sets refuse Spot Try & Restore and `worldSiloCompute.bicep` holds the
+  worker count with an autoscale setting instead. The type comes from the
+  published `ptn_platform_world-silo` Template Spec, so dropping the field
+  needs a new spec version in `template-specs.json`, every `ts/bvm` import
+  moved to it, and `puck azure publish-template-specs` run before CI builds
+  against it.
 - [medium] Composite ReadyToRun puts the framework and Puck in one image of
   about 291 MB (`Puck.World.r2r.dll`), so every engine change re-downloads it
   whole through a channel built to ship only the files that changed. Read

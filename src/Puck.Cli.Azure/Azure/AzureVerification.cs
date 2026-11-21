@@ -60,24 +60,10 @@ public static partial class AzureCommand {
             }
         }
         var worker = Text(value: workers[0]!["name"]);
-        var result = await AzJsonAsync(
-            "vm",
-            "run-command",
-            "invoke",
-            "-g",
-            group,
-            "-n",
-            worker,
-            "--command-id",
-            "RunShellScript",
-            "--scripts",
-            "cat /etc/puck/release; docker inspect --format '{{.Config.Image}} {{.State.Running}}' puck-world",
-            "-o",
-            "json"
-        );
-        var message = string.Join(
-            separator: "\n",
-            values: result["value"]!.AsArray().Select(selector: value => Text(value: value!["message"]))
+        var message = await WorldGuestOutputAsync(
+            contents: "cat /etc/puck/release; docker inspect --format '{{.Config.Image}} {{.State.Running}}' puck-world",
+            group: group,
+            worker: worker
         );
 
         if (
@@ -89,7 +75,7 @@ public static partial class AzureCommand {
             comparisonType: StringComparison.Ordinal,
             value: $"\n{image}\n"
         )
-        ) { throw new InvalidDataException(message: "The running world container does not match the requested release digest."); }
+        ) { throw new InvalidDataException(message: $"The running world container does not match the requested release digest {image}: {message.Trim()}"); }
         await RetryAsync(
             action: async () => {
                 var view = await AzJsonAsync(

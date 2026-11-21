@@ -526,17 +526,34 @@ public static partial class AzureCommand {
     }
     private static async Task WorldGuestAsync(string group, string script, string worker) {
         var marker = ("puck-operation-" + Guid.NewGuid().ToString(format: "N"));
+        var output = await WorldGuestOutputAsync(
+            contents: $"set -eu\n{script}\nprintf '%s\\n' '{marker}'\n",
+            group: group,
+            worker: worker
+        );
+
+        if (!output.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: marker
+        )) {
+            throw new InvalidOperationException(message: $"World guest operation on {worker} did not confirm completion: {output.Trim()}");
+        }
+    }
+    /// <summary>Runs a shell script on a world worker through the VM agent and returns its combined output. The agent
+    /// reports success whatever the script's exit status, so a caller proves completion by a marker the script prints
+    /// last and, when it is missing, reports this output: it carries the script's stderr, the failure's cause.</summary>
+    private static async Task<string> WorldGuestOutputAsync(string group, string worker, string contents) {
         var path = Path.Combine(
             path1: Path.GetTempPath(),
-            path2: (marker + ".sh")
+            path2: (("puck-release-guest-" + Guid.NewGuid().ToString(format: "N")) + ".sh")
         );
 
         try {
             File.WriteAllText(
-                contents: $"set -eu\n{script}\nprintf '%s\\n' '{marker}'\n",
+                contents: contents,
                 path: path
             );
-            var result = await AzJsonAsync(
+            var response = await AzJsonAsync(
                 "vm",
                 "run-command",
                 "invoke",
@@ -550,14 +567,12 @@ public static partial class AzureCommand {
                 ("@" + path),
                 "-o",
                 "json"
-            );
+            ).ConfigureAwait(continueOnCapturedContext: false);
 
-            if (!result["value"]!.AsArray().Any(predicate: row => Text(value: row?["message"]).Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: marker
-            ))) {
-                throw new InvalidOperationException(message: "World guest operation did not confirm completion.");
-            }
+            return string.Join(
+                separator: "\n",
+                values: response["value"]!.AsArray().Select(selector: row => Text(value: row?["message"]))
+            );
         } finally { File.Delete(path: path); }
     }
     /// <summary>Returns the Azure priority a world compute configuration declares.</summary>
