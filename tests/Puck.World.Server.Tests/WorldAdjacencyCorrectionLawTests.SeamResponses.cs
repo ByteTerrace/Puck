@@ -8,7 +8,12 @@ namespace Puck.World.Server.Tests;
 
 public sealed partial class WorldAdjacencyCorrectionLawTests {
     [Fact]
-    public void AuthoredLinkKeepsItsFirstAuthorityAcrossObservationReplacement() {
+    public Task AuthoredLinkKeepsItsFirstAuthorityAcrossObservationReplacement() => CheckObservationReplacement(false);
+
+    [Fact]
+    public Task ExecuteKeepsItsPreparedImageWhenTheNeighbourRestarts() => CheckObservationReplacement(true);
+
+    private static async Task CheckObservationReplacement(bool executePreparedTick) {
         using var directory = new TemporaryDirectory(prefix: "puck-seam-link-");
         using var state = new TemporaryDirectory(prefix: "puck-seam-link-host-");
         var sourcePath = directory.PathOf("source.world.json");
@@ -33,15 +38,33 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
             host.Admit(localRow.Instance);
             host.Admit(firstRow.Instance);
             using var fields = new WorldAdjacencyFields(host, "source");
-            Assert.Equal("first-authority", fields.Visuals().Single().Neighbour.Authority);
+            var server = localRow.Server;
+            server.Adjacencies = fields;
+            firstRow.Server.Advance(1680);
+            server.PrepareAdjacencyContacts();
+            var prepared = Assert.Single(fields.Visuals());
+            Assert.Equal("first-authority", prepared.Neighbour.Authority);
+            Assert.Equal(1UL, prepared.Neighbour.SnapshotTick);
             Assert.True(host.TryRetire("remote-first", out var reason), reason);
             var changed = remote with { HostRaw = remote.Host with { AuthorityNamespace = "changed-authority" } };
             FileBackedRows.Write((remotePath, changed));
+            if (executePreparedTick) {
+                var before = host.Names.ToArray();
+                var deliveries = new List<string>();
+                server.LinkDeliveryTap = deliveries.Add;
+                // A worker may execute the closed tick while the pump owns the host and its observations.
+                await Task.Run(() => server.Advance(1680), TestContext.Current.CancellationToken);
+                Assert.Equal(new[] { "seam" }, deliveries);
+                Assert.Equal(before, host.Names);
+                Assert.Same(prepared, Assert.Single(fields.Visuals()));
+            }
             var replacement = FileBackedRows.Build("remote-second", remotePath, changed);
             try {
                 host.Admit(replacement.Instance);
-                fields.BeginTick(1);
-                Assert.Equal("first-authority", fields.Visuals().Single().Neighbour.Authority);
+                var fresh = Assert.Single(fields.Prepare());
+                Assert.Equal("first-authority", fresh.Neighbour.Authority);
+                Assert.Equal(0UL, fresh.Neighbour.SnapshotTick);
+                Assert.Equal(1UL, prepared.Neighbour.SnapshotTick);
             } finally {
                 replacement.Instance.Dispose();
                 replacement.StateDirectory.Dispose();
@@ -122,7 +145,7 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
         fixture.Server.Adjacencies = reports;
         fixture.Step();
         riser.Enabled = true;
-        var field = new WorldAdjacencyContactField(new ResponseField(), reports, fixture.Server.Population);
+        var field = new WorldAdjacencyContactField(new ResponseField(), fixture.Server.AuthorityIdentity, fixture.Server.Population);
         var step = new FieldStep(field, body);
         var start = body.FixedPosition;
         Assert.True(Face(fixture).Owns(start));
@@ -163,7 +186,7 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
         fixture.Server.Adjacencies = reports;
         fixture.Step();
         field.Enabled = true;
-        return new WorldAdjacencyContactField(inner ?? new ResponseField(), reports, fixture.Server.Population);
+        return new WorldAdjacencyContactField(inner ?? new ResponseField(), fixture.Server.AuthorityIdentity, fixture.Server.Population);
     }
     private static ContactResolution Resolve(WorldAdjacencyContactField field, WorldBody body,
         ref FixedVector3 position, ref FixedVector3 velocity) =>
@@ -201,6 +224,7 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
         var floor = new ResponseField { Enabled = true, Push = FixedVector3.UnitY * FixedQ4816.FromDouble(0.02),
             Answer = new(true, FixedVector3.Zero, GroundNormal: FixedVector3.UnitY) };
         reports.Extra = [reports.Projection with { Name = "corner", Neighbour = new ReportedField(floor), Direct = false }];
+        fixture.Server.PrepareAdjacencyContacts();
         var position = body.FixedPosition;
         var velocity = FixedVector3.Zero;
         var result = Resolve(field, body, ref position, ref velocity);
@@ -260,6 +284,7 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
             found = true;
         }
         Assert.True(found, "the control must exhibit frame-quantization growth");
+        fixture.Server.PrepareAdjacencyContacts();
         response.Push = push;
         var position = body.FixedPosition;
         var velocity = FixedVector3.Zero;
@@ -278,6 +303,7 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
         var response = new ResponseField { Enabled = true, Push = FixedVector3.UnitX };
         var reports = new Reports(body, new ReportedField(response), 0.25f, 0, FixedVector3.UnitX);
         fixture.Server.Adjacencies = reports;
+        fixture.Server.PrepareAdjacencyContacts();
         var start = body.FixedPosition;
         for (var arrival = 0; arrival < 2; arrival++) {
             var at = body.FixedPosition;

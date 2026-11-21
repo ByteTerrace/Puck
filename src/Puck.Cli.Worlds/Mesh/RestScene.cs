@@ -315,7 +315,7 @@ public sealed class RestScene {
     }
 
     /// <summary>The world around a rest scene, which has none: a server link that sends nothing and is answered nothing,
-    /// an audio sink that plays nothing, and no neighbouring worlds, every body solid.</summary>
+    /// an audio sink that plays nothing, and no neighbouring worlds.</summary>
     public sealed class Inert : IServerLink, IWorldAudioCueSink, IWorldAdjacencySource {
         /// <inheritdoc/>
         public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) { }
@@ -328,22 +328,6 @@ public sealed class RestScene {
         /// <inheritdoc/>
         public void SubmitCue(string eventToken, Vector3? site) { }
         /// <inheritdoc/>
-        public void BeginTick(ulong tick) { }
-        /// <inheritdoc/>
-        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
-        /// <inheritdoc/>
-        public WorldEntityAddress LocalEntityAddress(int index) => default;
-        /// <inheritdoc/>
-        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
-            neighbour = null;
-            return false;
-        }
-        /// <inheritdoc/>
         public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [];
-        /// <inheritdoc/>
-        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
-            departedFrom = default;
-            return false;
-        }
     }
 }

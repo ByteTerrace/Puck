@@ -415,7 +415,7 @@ public sealed partial class WorldPopulation {
             return;
         }
 
-        var bands = ((m_adjacencies is not null)
+        var bands = ((m_adjacencyAuthority is not null)
             ? WorldAdjacencyBands.CollectFrom(definition: definition)
             : []
         );
@@ -426,11 +426,11 @@ public sealed partial class WorldPopulation {
             inner: baseField
         );
 
-        m_contactField = (((m_adjacencies is { } source) && (bands.Count > 0))
+        m_contactField = (((m_adjacencyAuthority is { } authority) && (bands.Count > 0))
             ? new WorldAdjacencyContactField(
                 inner: opened,
                 population: this,
-                source: source
+                authority: authority
             )
             : opened
         );
@@ -620,16 +620,15 @@ public sealed partial class WorldPopulation {
     /// <see cref="WorldServer.Adjacencies"/>, the one writer. Recomposes <see cref="m_contactField"/> immediately
     /// against the current definition/base field, without rebuilding either — a border resolver becoming reachable
     /// (or unreachable) never itself re-derives the world's own solid geometry.</summary>
-    /// <param name="source">The resolver, or <see langword="null"/> to fall back to this world's own geometry alone.</param>
-    public void ConfigureAdjacencies(IWorldAdjacencySource? source) {
-        if (ReferenceEquals(
-            objA: m_adjacencies,
-            objB: source
-        )) {
+    /// <param name="authority">The local identity, or <see langword="null"/> to use local geometry alone.</param>
+    internal void ConfigureAdjacencies(string? authority) {
+        if (string.Equals(m_adjacencyAuthority, authority, StringComparison.Ordinal)) {
             return;
         }
 
-        m_adjacencies = source;
+        m_adjacencyAuthority = authority;
+        m_adjacencyImageTick = null;
+        AdjacencyProjections = [];
         ComposeContactField();
 
         // The composition root configures the runtime adjacency source after the boot seats already exist. Bodies retain

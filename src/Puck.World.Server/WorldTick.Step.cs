@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Puck.Abstractions.Waiting;
 using Puck.Commands;
 using Puck.Hosting;
@@ -249,14 +250,8 @@ public sealed partial class WorldTick {
     // is exactly "nothing was delivered" — the staleness count rises and the grace comparison decides. Replay drives
     // this from taped LinkDelivery entries instead; a shadow server holds no adjacency source, so the two never
     // double-count.
-    private void ObserveAdjacencyDeliveries() {
-        if (Host.Population.Adjacencies is not { } adjacencies) {
-            return;
-        }
-
-        var projections = adjacencies.Visuals();
-
-        for (var index = 0; (index < projections.Count); index++) {
+    private void ObserveAdjacencyDeliveries(ImmutableArray<WorldAdjacencyProjection> projections) {
+        for (var index = 0; index < projections.Length; index++) {
             var projection = projections[index];
 
             if (
@@ -272,7 +267,7 @@ public sealed partial class WorldTick {
             Host.LinkDeliveryTap?.Invoke(obj: projection.Name);
         }
     }
-    private void StepCore(in FixedStepContext context) {
+    private void StepCore(in FixedStepContext context, ImmutableArray<WorldAdjacencyProjection> adjacency) {
         m_cues.Clear();
         m_cueMusicBoundary = 0;
         using var work = HostFrameWork.Measure(HostFrameWorkPart.TickIngress);
@@ -286,9 +281,9 @@ public sealed partial class WorldTick {
         // end (m_lastCompletedEngineTicks = context.ElapsedTicks); setting it again there is a no-op.
         m_lastCompletedEngineTicks = context.ElapsedTicks;
         m_deliveryTick = (context.Tick + 1UL);
-        Host.Population.BeginAdjacencyContacts(tick: m_deliveryTick);
+        Host.Population.BeginAdjacencyContacts(tick: m_deliveryTick, adjacency: adjacency);
         // Read the same pinned image that arrivals, contact and rendering use for this tick.
-        ObserveAdjacencyDeliveries();
+        ObserveAdjacencyDeliveries(adjacency);
         // The per-tick mutation-dispatch allowance opens HERE, before either half of the tick that spends it: the
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
@@ -1015,13 +1010,9 @@ public sealed partial class WorldTick {
     /// submitted tier is produced differs by occupancy.</remarks>
     /// <param name="context">Explicit simulation coordinates for this tick. Hosts and ordinary replay drivers
     /// use <see cref="Advance"/> to derive these from the authority's own checkpointed clock.</param>
-    internal void Step(in FixedStepContext context) {
-        lock (Host.AuthorityGate) {
-            HostWaits.ThrowIfPending(RunTick(in context, WaitDeadline.Synchronous()));
-        }
-    }
+    internal void Step(in FixedStepContext context) => Advance(context.StepTicks, context);
 
-    private WaitReason? RunTick(in FixedStepContext context, WaitDeadline slice) {
+    private WaitReason? RunTick(in FixedStepContext context, ImmutableArray<WorldAdjacencyProjection> adjacency, WaitDeadline slice) {
         Host.Persistence.RequireAddonsRestored();
         if (ExecutionInterrupted) { return PendingReason; }
         if (PendingReason is { } waiting && m_pendingTick.Stall.HasPassed) {
@@ -1032,7 +1023,6 @@ public sealed partial class WorldTick {
         if (PendingReason is null) {
             m_pendingTick.Context = context;
             m_pendingTick.PreviousEngineTicks = m_lastCompletedEngineTicks;
-            Host.EnterArenaTick();
         } else if (context != m_pendingTick.Context) {
             throw new InvalidOperationException("A pending tick must resume with its original coordinates.");
         }
@@ -1042,8 +1032,7 @@ public sealed partial class WorldTick {
         var scopes = Host.ScopedReplaySpan;
         try {
             if (PendingReason is null) {
-                DrainOrdered();
-                StepCore(in context);
+                StepCore(in context, adjacency);
                 m_pendingTick.Pads = Host.Engagement.BuildPadSnapshot();
                 m_pendingTick.Stall = WaitDeadline.Synchronous();
             }
@@ -1090,20 +1079,47 @@ public sealed partial class WorldTick {
         return FinishTick(in m_pendingTick.Context, ref m_pendingTick.Snapshot, deadline);
     }
 
-    internal WaitReason? TryAdvance(ulong stepTicks, WaitDeadline deadline) {
-        lock (Host.AuthorityGate) {
-            var context = (PendingReason is not null) ? m_pendingTick.Context : new FixedStepContext(
-                ElapsedTicks: checked(m_lastCompletedEngineTicks + stepTicks),
-                StepTicks: stepTicks,
-                Tick: m_lastCompletedTick
-            );
-            _ = checked(context.Tick + 1UL);
-            return RunTick(in context, deadline);
+    internal readonly record struct PreparedAdvance(FixedStepContext Context, ImmutableArray<WorldAdjacencyProjection> Adjacency);
+
+    // The caller holds the authority gate. Preserve ordered deliveries before sampling the neighbour image.
+    internal PreparedAdvance PrepareAdvance(ulong stepTicks) {
+        var context = (PendingReason is not null) ? m_pendingTick.Context : new FixedStepContext(
+            ElapsedTicks: checked(m_lastCompletedEngineTicks + stepTicks),
+            StepTicks: stepTicks,
+            Tick: m_lastCompletedTick
+        );
+        return PrepareAdvance(in context);
+    }
+
+    private PreparedAdvance PrepareAdvance(in FixedStepContext context) {
+        var tick = checked(context.Tick + 1UL);
+        if (PendingReason is not null) { return new(context, []); }
+        Host.Persistence.RequireAddonsRestored();
+        if (Host.AuthorityRetiring) { return new(context, []); }
+
+        Host.EnterArenaTick();
+        m_resumingTick = true;
+        try {
+            DrainOrdered();
+            return new(context, Host.PrepareAdjacency(tick));
+        } catch {
+            Host.LeaveArenaTick();
+            throw;
+        } finally {
+            m_resumingTick = false;
         }
     }
 
-    internal void Advance(ulong stepTicks) {
-        HostWaits.ThrowIfPending(TryAdvance(stepTicks, WaitDeadline.Synchronous()));
+    internal WaitReason? TryAdvance(in PreparedAdvance prepared, WaitDeadline deadline) {
+        var context = prepared.Context;
+        return RunTick(in context, prepared.Adjacency, deadline);
+    }
+
+    internal void Advance(ulong stepTicks, FixedStepContext? explicitContext = null) {
+        lock (Host.AuthorityGate) {
+            var prepared = explicitContext is { } context ? PrepareAdvance(in context) : PrepareAdvance(stepTicks);
+            HostWaits.ThrowIfPending(TryAdvance(in prepared, WaitDeadline.Synchronous()));
+        }
     }
     /// <summary>Submits one envelope into the ordered domain — the single front door every non-intent submission kind
     /// drains through (see <see cref="IWorldServerHost.Submit"/>'s own remarks). Enqueues, then immediately drains

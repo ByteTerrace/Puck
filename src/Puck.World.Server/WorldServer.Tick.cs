@@ -73,6 +73,7 @@ public sealed partial class WorldServer {
         var tickets = ExecuteAuthorityOperation(() => m_transferEscrow.CommitHopQuestion(key));
         // The arrival answers only once its record is durable and the cohort has landed.
         return Flatten(answer: WithConfirmedHopsAsync(key, tickets, WorldHopPhase.Commit, confirmed => DecideCrossingAsync(decide: () => {
+            using var prepare = PrepareArrivals();
             var status = m_tick.CommitTransfer(confirmed: confirmed, members: members, reason: out var reason,
                 sourceAuthority: sourceAuthority, transferId: transferId);
             return (status, reason);
@@ -104,7 +105,9 @@ public sealed partial class WorldServer {
     [Replaces(root: typeof(StateArena))]
     public bool DrainAdministrative() {
         DrainMailbox();
-        return m_tick.DrainAdministrative();
+        var applied = m_tick.DrainAdministrative();
+        PrepareUnsteppedAdjacencyPresentation();
+        return applied;
     }
     /// <inheritdoc cref="WorldTick.EnqueueIntent"/>
     public void EnqueueIntent(in IntentSubmission submission) => m_tick.EnqueueIntent(submission: in submission);
