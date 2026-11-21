@@ -38,7 +38,7 @@ public sealed class SdfMeshStoreLawTests {
                 if (first is null) { first = bytes; } else { Assert.Equal(actual: bytes, expected: first); }
                 using var library = new SdfMeshLibrary(store: store);
 
-                Assert.True(condition: library.TryLoad(Identity, Geometry, palette, out var loaded, out _));
+                Assert.True(condition: library.TryLoad(Identity, Geometry, palette, out var loaded, out _, out _));
                 Assert.NotNull(@object: loaded);
                 Assert.Equal(source.TriangleMaterials.ToArray(), loaded.TriangleMaterials.ToArray());
                 var read = (chunked ? loaded.Chunks[0] : loaded);
@@ -61,12 +61,12 @@ public sealed class SdfMeshStoreLawTests {
         Assert.Empty(collection: palette);
         var reader = new SdfMeshLibrary(store: store);
 
-        Assert.True(condition: reader.TryLoad(Identity, Geometry, [4, 9], out var loaded, out _));
+        Assert.True(condition: reader.TryLoad(Identity, Geometry, [4, 9], out var loaded, out _, out _));
         Assert.Null(@object: loaded);
         Assert.True(condition: reader.HoldsEmpty(geometry: Geometry, identity: Identity));
         // An empty result is the identity's that found it.
         Assert.False(condition: reader.HoldsEmpty(geometry: Geometry, identity: (Identity + 1)));
-        Assert.False(condition: reader.TryLoad((Identity + 1), Geometry, [], out _, out _));
+        Assert.False(condition: reader.TryLoad((Identity + 1), Geometry, [], out _, out _, out _));
         _ = Assert.Throws<ArgumentException>(testCode: () => store.Write(geometry: Geometry, identity: Identity, materials: [4], mesh: null));
     }
     [Fact]
@@ -75,13 +75,13 @@ public sealed class SdfMeshStoreLawTests {
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
         var library = new SdfMeshLibrary(store: store);
 
-        Assert.False(condition: library.TryLoad(Identity, Geometry, [4, 9], out _, out _));
+        Assert.False(condition: library.TryLoad(Identity, Geometry, [4, 9], out _, out _, out _));
         Assert.True(condition: store.Write(Identity, Geometry, Mesh(), [4, 9]));
-        Assert.True(condition: library.TryLoad(Identity, Geometry, [4, 9], out var first, out _));
+        Assert.True(condition: library.TryLoad(Identity, Geometry, [4, 9], out var first, out _, out _));
         File.Delete(path: Entry(geometry: Geometry, store: store));
-        Assert.True(condition: library.TryLoad(Identity, Geometry, [4, 9], out var again, out _));
+        Assert.True(condition: library.TryLoad(Identity, Geometry, [4, 9], out var again, out _, out _));
         Assert.Same(actual: again, expected: first);
-        Assert.False(condition: library.TryLoad((Identity + 1), Geometry, [4, 9], out _, out _));
+        Assert.False(condition: library.TryLoad((Identity + 1), Geometry, [4, 9], out _, out _, out _));
     }
     [Fact]
     public void AWrittenMeshReadsBackExactlyUnderItsIdentityAndGeometryAlone() {
