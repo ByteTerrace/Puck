@@ -129,7 +129,8 @@ capture and discloses only granted observation names. Downstream user-interactio
 bounded claims in an HTTP 401 bearer challenge; clients obtain fresh authorization before retrying.
 Revocation closes attachments and active requests. Optional Azure services reuse Function self-onboarding
 and observation providers through request-confined OBO with federated managed identity client assertions;
-never substitute host credentials. Deployment uses automatic Caddy TLS behind the existing load balancer,
+never substitute host credentials. Deployment uses automatic Caddy TLS behind the existing load balancer
+(whose MCP rule probes Caddy's port, never the admission-gated `/healthz`, so a fresh worker certifies before its commit),
 persistent certificate state outside World mounts, and Azure expiry/readiness alerts. Durable delegated
 cloud writes and richer participant tools remain uninstalled.
 Run `tests/Puck.Hosting.Tests`, `tests/Puck.Networking.Tests`, `tests/Puck.Mcp.Tests`, `tests/Puck.Cli.Tests` (the `puck mcp` process interop) and the real-host smoke described in

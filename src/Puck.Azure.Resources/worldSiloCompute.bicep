@@ -31,6 +31,7 @@ var frontendId = resourceId(
   'world'
 )
 var probeId = resourceId('Microsoft.Network/loadBalancers/probes', configuration.network.loadBalancerName, 'world')
+var mcpProbeId = resourceId('Microsoft.Network/loadBalancers/probes', configuration.network.loadBalancerName, 'mcp')
 var spot = configuration.compute.?spot
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -143,6 +144,23 @@ resource balancer 'Microsoft.Network/loadBalancers@2025-01-01' = {
           numberOfProbes: 2
         }
       }
+      // The MCP rule judges only that Caddy listens, never /healthz. Caddy's certificate comes from ACME TLS-ALPN-01,
+      // whose validation reaches Caddy through this rule before any certificate exists, and the VM extension waits
+      // for that TLS front before the release commits, while /healthz answers 503 until the commit opens admission.
+      // The silo registers no MCP world session before admission opens, so the rule exposes nothing early.
+      ...(mcpEnabled
+        ? [
+            {
+              name: 'mcp'
+              properties: {
+                protocol: 'Tcp'
+                port: 8443
+                intervalInSeconds: 5
+                numberOfProbes: 2
+              }
+            }
+          ]
+        : [])
     ]
     loadBalancingRules: [
       {
@@ -164,7 +182,7 @@ resource balancer 'Microsoft.Network/loadBalancers@2025-01-01' = {
               properties: {
                 frontendIPConfiguration: { id: frontendId }
                 backendAddressPool: { id: poolId }
-                probe: { id: probeId }
+                probe: { id: mcpProbeId }
                 protocol: 'Tcp'
                 frontendPort: 443
                 backendPort: 8443

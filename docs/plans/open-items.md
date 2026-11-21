@@ -2993,6 +2993,14 @@ is pushed to `main` ([the player channel](../development/ci.md#the-player-channe
   and a verbose GC trace. The machine's only readings came from a source
   build before the device table applied and before the far and distant
   shadow work landed, so they describe nothing current.
+- [medium] The hosted MCP front's certificate and ACME account live on the
+  worker's own disk (`/var/lib/puck-tls`, `build/Start-WorldSilo.sh`), so every
+  fresh scale set (a bootstrap, a priority change) issues a new certificate for
+  the same hostname, and Let's Encrypt allows only five per exact name in a
+  week. Keep Caddy's storage where a fresh worker finds it (the private store,
+  behind Puck's own store abstraction), so recreating compute reuses the
+  certificate. Whether Caddy's TLS front logs the load balancer's TCP probe of
+  8443 as handshake noise is unverified.
 - [low] `worldSiloConfigType`'s `compute.spot.restoreTimeout`
   (`avm/ptn/platform/world-silo/main.bicep`) is read by nothing, since Flexible
   scale sets refuse Spot Try & Restore and `worldSiloCompute.bicep` holds the
