@@ -2712,7 +2712,7 @@ public static partial class CreationCanonicalizer {
                     lift: (shape.Lift ?? SdfLift.Extrude),
                     rounding: (shape.Rounding ?? 0f),
                     chamfer: (shape.Chamfer ?? 0f),
-                    exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent)
+                    exponent: ShapeDocument.EffectiveExponent(exponent: shape.Exponent)
                 )
                 ) {
                     errors.Add(item: new(

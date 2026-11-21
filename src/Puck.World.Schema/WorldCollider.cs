@@ -284,7 +284,8 @@ public readonly struct FixedWorldCollider {
                                     center: copy.Center,
                                     radius: (FixedQ4816.FromDouble(value: sphere.HalfExtents.X) * copy.UniformScale)
                                 ));
-                            } else if (copy.Shape.Type is SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid) {
+                            } else if ((copy.Shape.Type is SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid) || ((copy.Shape.Type == SdfSolidPrimitive.Superellipsoid) &&
+                                (ShapeDocument.EffectiveExponent(exponent: copy.Shape.Exponent) == SdfProgramBuilder.MinSuperellipsoidExponent))) {
                                 volumes.Add(item: new FixedBodyColliderVolume(Kind: FixedBodyColliderKind.Ellipsoid,
                                     Center: copy.Center, Endpoint: FixedVector3.Zero, HalfExtents: copy.LocalHalfExtents,
                                     Rotation: copy.Rotation, Radius: FixedQ4816.Zero));

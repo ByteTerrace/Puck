@@ -18,7 +18,9 @@ public enum FixedStaticColliderKind : byte {
     RoundedBox,
     /// <summary>The drawn chamfered XY rectangle extruded along Z, including its edge fillet.</summary>
     ChamferedBox,
-    /// <summary>An oriented Lp ball with independently scaled radii.</summary>
+    /// <summary>An oriented Lp ball with independently scaled radii, offset by <see cref="FixedStaticCollider.Radius"/>.
+    /// At exponent two it is an ellipsoid whose distance and normal are exact, measured through
+    /// <see cref="FixedEllipsoidProjection"/>; a higher exponent's distance is its gauge, a bound.</summary>
     Superellipsoid,
     /// <summary>The zero set of <see cref="FixedStaticCollider.Field"/>'s scalar field in the collider's frame: a
     /// relieved creation collides with the surface its bake draws.</summary>
@@ -35,7 +37,7 @@ public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 P
 /// into world space. A cylinder carries radius in X/Z and half-height in Y, with the same local-to-world rotation.
 /// A rounded box carries inner half-extents in Extent and the spherical offset in Radius.
 /// A chamfered box carries the drawing builder's inset half-extents, inset Chamfer and final Radius offset.
-/// A superellipsoid carries its per-axis radii in Extent and its Lp Exponent.
+/// A superellipsoid carries its per-axis radii in Extent, its Lp Exponent and the spherical offset in Radius.
 /// A half-space carries its unit normal in <see cref="Extent"/> and one boundary point in <see cref="Center"/>.</remarks>
 /// <param name="Kind">The analytic shape kind.</param>
 /// <param name="Center">The sphere/box center or a point on the half-space boundary.</param>
@@ -398,6 +400,8 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         ? FixedConvexContact.TryPush(collider: in this, orientation: in orientation, position: position,
             push: out push, skin: skin, volume: in volume)
         : Kind switch {
+            FixedStaticColliderKind.Superellipsoid when ((volume.Kind == FixedBodyColliderKind.Sphere) && FixedConvexGeometry.MeasuresDistance(collider: in this)) =>
+                FixedConvexContact.TryMeasuredPush(collider: in this, orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume),
             FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid => FixedConvexContact.TryPush(
                 collider: in this, orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume),
             FixedStaticColliderKind.RoundedBox => FixedRoundedBoxContact.TryPush(box: in this, orientation: in orientation,

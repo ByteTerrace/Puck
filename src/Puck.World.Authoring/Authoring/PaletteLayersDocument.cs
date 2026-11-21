@@ -234,7 +234,7 @@ public sealed record PalettePaintDocument(
         Shape: SdfPaintShape.Of(
             chamfer: ((Chamfer ?? 0f) * scale),
             curve: Curve?.Parameters(),
-            exponent: (Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+            exponent: ShapeDocument.EffectiveExponent(exponent: Exponent),
             lift: (Lift ?? SdfLift.Extrude),
             profile: Profile,
             rounding: ((Rounding ?? 0f) * scale),
