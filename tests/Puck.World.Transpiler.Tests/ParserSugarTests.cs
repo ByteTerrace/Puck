@@ -126,7 +126,7 @@ public class ParserSugarTests {
 
         Assert.Equal(
             2m,
-            Assert.IsType<LiteralExpressionNode>(@object: schedule.Delay).Value
+            Convert.ToDecimal(value: Assert.IsType<LiteralExpressionNode>(@object: schedule.Delay).Value, provider: System.Globalization.CultureInfo.InvariantCulture)
         );
     }
     [InlineData(": Int")]
@@ -484,7 +484,7 @@ public class ParserSugarTests {
         );
         Assert.Equal(
             2m,
-            Assert.IsType<LiteralExpressionNode>(@object: schedule.Delay).Value
+            Convert.ToDecimal(value: Assert.IsType<LiteralExpressionNode>(@object: schedule.Delay).Value, provider: System.Globalization.CultureInfo.InvariantCulture)
         );
     }
     // §2 — effect statements

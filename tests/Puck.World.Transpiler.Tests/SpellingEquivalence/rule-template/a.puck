@@ -18,7 +18,7 @@ state {
 let buttons = [{ name: "up", sign: 1 }, { name: "down", sign: -1 }]
 
 rule template press(row, button) {
-  if ((button.sign > 0) ? level >= 1 : level <= -1) {
+  if (button.sign > 0 and level >= 1) or (button.sign <= 0 and level <= -1) {
     row[$"{button.name}Edge"] = row[$"{button.name}Down"] == 0
     row[$"{button.name}Down"] = 1
   } else {

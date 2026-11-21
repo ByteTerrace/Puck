@@ -150,24 +150,13 @@ public sealed class ComparisonLawTests {
 
 /// <summary>Reads the one side of a compiled comparison the expression spelling leaves.</summary>
 internal static class GateTokenReadBack {
-    /// <summary>Returns the raw constant the comparison's right-hand program carries.</summary>
+    /// <summary>Returns the raw constant a <c>compareValue</c> lowered its constant right-hand side to: a literal, as a
+    /// <c>compareState</c> comparand is.</summary>
     /// <param name="token">The compiled token.</param>
     /// <returns>The constant.</returns>
     public static long Constant(this GateToken token) {
-        foreach (var instruction in token.Expression()) {
-            if (instruction.Operation == ExpressionOp.Constant) {
-                return instruction.Constant;
-            }
-        }
+        Assert.True(condition: token.RightSource.IsLiteral);
 
-        return 0L;
-    }
-    /// <summary>Returns the compiled program a <c>compareValue</c> lowered its right-hand side to.</summary>
-    /// <param name="token">The compiled token.</param>
-    /// <returns>The program.</returns>
-    public static CompiledExpressionToken[] Expression(this GateToken token) {
-        Assert.True(condition: token.RightSource.IsExpression);
-
-        return token.RightSource.Expression!;
+        return token.RightSource.RawValue;
     }
 }

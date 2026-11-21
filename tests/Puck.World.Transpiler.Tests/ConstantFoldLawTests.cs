@@ -28,8 +28,8 @@ public class ConstantFoldLawTests {
 
         """;
 
-    private static (WorldDefinition Definition, JsonObject Json) Compile(string rules) {
-        var source = (State + rules);
+    private static (WorldDefinition Definition, JsonObject Json) Compile(string rules, string state = State) {
+        var source = (state + rules);
         var compiled = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: source);
 
         Assert.False(condition: compiled.Diagnostics.HasErrors, userMessage: compiled.Diagnostics.FormatReport(sourceText: source));
@@ -41,14 +41,26 @@ public class ConstantFoldLawTests {
         options: WorldJsonContext.Default.Options
     )!;
     // The same document with its first rule's first effect, or its gate, replaced by a JSON spelling.
-    private static WorldDefinition Respell(JsonObject json, string? effect = null, string? gate = null) {
+    private static WorldDefinition Respell(JsonObject json, JsonObject? effect = null, JsonObject? gate = null) {
         var copy = json.DeepClone().AsObject();
         var rule = copy["rules"]![0]!.AsObject();
 
-        if (effect is not null) { rule["effects"]![0] = JsonNode.Parse(json: effect); }
-        if (gate is not null) { rule["gate"] = JsonNode.Parse(json: gate); }
+        if (effect is not null) { rule["effects"]![0] = effect; }
+        if (gate is not null) { rule["gate"] = gate; }
         return Read(json: copy);
     }
+    // A document's postfix program for an infix expression.
+    private static JsonObject Program(string text) {
+        Assert.True(condition: ExpressionSpelling.TryParse(error: out var error, program: out var program, text: text), userMessage: error);
+
+        return ExpressionProgramJsonConverter.ToNode(program: program);
+    }
+    private static JsonObject CompareState(int value) => new() { ["$type"] = "compareState", ["state"] = "level", ["comparison"] = "Less", ["value"] = value };
+    private static JsonObject SetState(string row, string expression) => new() {
+        ["$type"] = "setState",
+        ["state"] = row,
+        ["expression"] = Program(text: expression),
+    };
     private static (CompiledRule Rule, RuleCompileContext Context) Lower(WorldDefinition definition, int index = 0) {
         var context = WorldFactsCompiler.Context(definition: definition);
 
@@ -87,7 +99,7 @@ public class ConstantFoldLawTests {
             }
             """);
         var row = effect.Split(separator: ' ')[0];
-        var respelled = Respell(effect: $$"""{"$type":"setState","state":"{{row}}","expression":"{{expression}}"}""", json: json);
+        var respelled = Respell(effect: SetState(expression: expression, row: row), json: json);
 
         AssertSame(left: definition, right: respelled);
         Assert.True(condition: Source(rule: Lower(definition: definition).Rule).IsLiteral);
@@ -118,8 +130,8 @@ public class ConstantFoldLawTests {
               count += 1
             }
             """);
-        var value = Respell(gate: """{"$type":"compareValue","comparison":"Less","left":"level","right":"6 / 2"}""", json: json);
-        var state = Respell(gate: """{"$type":"compareState","state":"level","comparison":"Less","value":3}""", json: json);
+        var value = Respell(gate: new JsonObject { ["$type"] = "compareValue", ["comparison"] = "Less", ["left"] = Program(text: "level"), ["right"] = Program(text: "6 / 2") }, json: json);
+        var state = Respell(gate: CompareState(value: 3), json: json);
 
         AssertSame(left: folded, right: value);
         AssertSame(left: state, right: value);
@@ -135,7 +147,7 @@ public class ConstantFoldLawTests {
               count += 1
             }
             """);
-        var state = Respell(gate: """{"$type":"compareState","state":"level","comparison":"Less","value":2}""", json: json);
+        var state = Respell(gate: CompareState(value: 2), json: json);
 
         Assert.Equal(expected: "compareValue", actual: json["rules"]![0]!["gate"]!["$type"]!.GetValue<string>());
         AssertSame(left: folded, right: state);
@@ -148,7 +160,7 @@ public class ConstantFoldLawTests {
               count = (1 == 1) ? 3 : (1 / 0)
             }
             """);
-        var respelled = Respell(effect: """{"$type":"setState","state":"count","expression":"(1 == 1) ? 3 : (1 / 0)"}""", json: json);
+        var respelled = Respell(effect: SetState(expression: "(1 == 1) ? 3 : (1 / 0)", row: "count"), json: json);
 
         AssertSame(left: definition, right: respelled);
         Assert.True(condition: Source(rule: Lower(definition: definition).Rule).IsExpression);
@@ -185,22 +197,42 @@ public class ConstantFoldLawTests {
         Assert.Equal(expected: "count", actual: rule["effects"]![0]!["state"]!.GetValue<string>());
         Assert.Single(collection: rule["effects"]!.AsArray());
     }
-    [Fact]
-    public void AFamilyATemplateDeclaresIsRegistered() {
-        var (_, json) = Compile(rules: """
-            template seats(n) {
-              state {
-                world {
-                  slot score[n] = 0
-                }
-              }
+    // A family a template declares registers as the same lines written in place do, whether the template is called
+    // among the document's statements or inside a state section.
+    [InlineData("""
+        template seats(n) {
+          state {
+            world {
+              slot score[n] = 0
             }
+          }
+        }
 
+        seats(3)
+        """)]
+    [InlineData("""
+        template seats(n) {
+          slot score[n] = 0
+        }
+
+        state {
+          world {
             seats(3)
+          }
+        }
+        """)]
+    [Theory]
+    public void AFamilyATemplateDeclaresIsRegistered(string declaration) {
+        var (_, json) = Compile(rules: """
 
             rule fold {
               score[2] += 1
             }
+            """, state: $$"""
+            schema: "puck.world.definition.v1"
+            documentId: "fold"
+
+            {{declaration}}
             """);
 
         Assert.Contains(collection: json["state"]!["families"]!.AsArray(), filter: static family => (family!["name"]!.GetValue<string>() == "score"));
