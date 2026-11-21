@@ -654,7 +654,9 @@ public sealed partial class WorldTick {
     /// the same <see cref="TryDriveGateVerdict"/> before its own <see cref="WorldGrants.Allows"/> call, so a
     /// scripted tape segment (<c>body.fly</c>/<c>EnqueueSegment</c>) is refused by the same fact a raw per-tick
     /// channel submission is.</remarks>
-    internal WorldIntentAdmission ApplyIntentSubmission(WorldBody body, in IntentSubmission submission) {
+    /// <param name="remote">Whether the batch came from another process, whose claimed capture times this authority
+    /// decides (<see cref="WorldInputOwner.TryAdmit"/>'s <c>retime</c>) and whose refusal its caller narrates.</param>
+    internal WorldIntentAdmission ApplyIntentSubmission(WorldBody body, in IntentSubmission submission, bool remote = false) {
         var inputOwner = (submission.InputOwner ?? submission.Principal);
         var ownsInput = ((inputOwner == submission.Principal) || Host.Input.IsController(inputOwner, submission.Principal, submission.EntityIndex));
 
@@ -674,28 +676,28 @@ public sealed partial class WorldTick {
         );
 
         if (!verdict.IsAllowed) {
-            if (!m_driveDenied[submission.EntityIndex]) {
-                var actor = submission.Principal;
-                var entityIndex = submission.EntityIndex;
+            // One line for a denial's whole span: the text is built only when the body is not already denied, since a
+            // denied seat submits every tick.
+            if (!m_driveDenied.Has(key: submission.EntityIndex)) {
+                var denial = verdict.DescribeRefusal(
+                    actor: submission.Principal,
+                    dropped: "intent dropped, body idle",
+                    subject: $"body:{submission.EntityIndex}",
+                    verb: "drive"
+                );
 
-                if (Host.Output.HasNarrationSink) {
+                if (m_driveDenied.Set(key: submission.EntityIndex, reason: denial) && Host.Output.HasNarrationSink) {
                     Host.Output.Narrate(
                         channel: "world.grant denied",
-                        text: $"[world.grant denied: {verdict.DescribeRefusal(
-                            actor: actor,
-                            dropped: "intent dropped, body idle",
-                            subject: $"body:{entityIndex}",
-                            verb: "drive"
-                        )}]"
+                        text: $"[world.grant denied: {denial}]"
                     );
                 }
-                m_driveDenied[submission.EntityIndex] = true;
             }
 
             return new(verdict);
         }
 
-        m_driveDenied[submission.EntityIndex] = false;
+        _ = m_driveDenied.Clear(key: submission.EntityIndex);
 
         if (!ownsInput) {
             return new(InputRefusal: "input.owner: this actor does not own the submitted controller session and route", Permission: verdict);
@@ -714,11 +716,14 @@ public sealed partial class WorldTick {
         }
         var input = submission.Input;
 
-        if (!Host.Input.TryAdmit(inputOwner, input, out var reason, submission.EntityIndex)) {
+        if (!Host.Input.TryAdmit(inputOwner, input, out var reason, submission.EntityIndex, retime: remote)) {
             Host.Input.RejectControllerBatch(principal: inputOwner);
-            Host.Output.Narrate(channel: "input.refused", text: reason);
+            if (!remote && m_inputRefused.Set(key: submission.EntityIndex, reason: reason) && Host.Output.HasNarrationSink) {
+                Host.Output.Narrate(channel: "input.refused", text: $"[input.refused: {inputOwner.Describe()} body:{submission.EntityIndex}: {reason}]");
+            }
             return new(InputRefusal: reason, Permission: verdict);
         }
+        if (!remote) { _ = m_inputRefused.Clear(key: submission.EntityIndex); }
         var table = Host.Population.InputCatalog.Mappings[input.Mapping].Channels;
         var target = body.Channels;
         var movement = input.Image with { Channels = default };

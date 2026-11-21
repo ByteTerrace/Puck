@@ -722,6 +722,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         for (var index = 0; (index < count); index++) {
             var current = access[index];
 
+            runtime.SetRoute(instance: index, route: current.Route);
             if (seen[index] && (epochs[index] != current.Epoch)) {
                 runtime.Withdraw(instance: set.Instances[index].Name);
             }

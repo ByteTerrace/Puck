@@ -328,14 +328,14 @@ public sealed partial class RenderGraphRuntimeLawTests : IDisposable {
             counter.Width = recording.Width;
             counter.Height = recording.Height;
             counter.OutputBuffer = (recording.Outputs[0].Buffer?.BufferHandle ?? 0);
-            counter.OutputLayout = recording.Outputs[0].Image.Layout;
-            counter.InputImage = ((recording.Inputs.Length == 0)
-                ? 0
-                : recording.Inputs[0].Image.ImageHandle);
-            counter.InputLayout = ((recording.Inputs.Length == 0)
-                ? GpuImageLayout.Undefined
-                : recording.Inputs[0].Image.Layout);
-            counter.OutputImage = recording.Outputs[0].Image.ImageHandle;
+            _ = recording.Outputs[0].Image.TryRead(latch: recording.Latch, image: out var outputImage);
+            var hasInput = ((recording.Inputs.Length != 0) && recording.Inputs[0].Image.TryRead(latch: recording.Latch, image: out _));
+            ShaderPipelineResolvedImage inputImage = default;
+            if (hasInput) { _ = recording.Inputs[0].Image.TryRead(latch: recording.Latch, image: out inputImage); }
+            counter.OutputLayout = outputImage.Layout;
+            counter.InputImage = (hasInput ? inputImage.ImageHandle : 0);
+            counter.InputLayout = (hasInput ? inputImage.Layout : GpuImageLayout.Undefined);
+            counter.OutputImage = outputImage.ImageHandle;
             counter.PassRecords[pass] = (counter.InputImage, counter.OutputImage, recording.MayStandIn);
             if (counter.CadenceSignature.HasValue) {
                 if (recording.Inputs.Length == 0) { counter.ImageWrites[counter.OutputImage] = counter.Records; } else { counter.SampledWrites[pass] = (counter.ImageWrites.TryGetValue(key: counter.InputImage, value: out var written) ? written : -1); }

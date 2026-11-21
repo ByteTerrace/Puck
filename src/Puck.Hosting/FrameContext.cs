@@ -1,3 +1,4 @@
+using Puck.Abstractions.Presentation;
 using Puck.Maths;
 
 namespace Puck.Hosting;
@@ -51,6 +52,8 @@ public readonly record struct FrameContext(
     ulong PresentedTicks = 0UL,
     bool StepsNext = false
 ) {
+    /// <summary>Gets the frame's delivery latch, which every provenance read in the frame decides against.</summary>
+    public DeliveryLatch Latch { get; init; }
     /// <summary>Gets whether the frame's host iteration ran a simulation step: <see cref="DeltaTicks"/> above zero.</summary>
     public bool Steps => (DeltaTicks > 0UL);
     /// <summary>Gets the seconds the simulation advances this frame (<see cref="DeltaTicks"/> as seconds).</summary>

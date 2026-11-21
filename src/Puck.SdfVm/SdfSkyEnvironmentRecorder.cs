@@ -48,13 +48,13 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) {
         var tables = m_built.Residency.Staged(context: context);
 
-        return (Screens ? tables.ScreenEmissionSignature(m_built.Residency, m_built.View, reads)
-            : tables.SkyEnvironmentSignature(residency: m_built.Residency, view: m_built.View, reads: reads));
+        return (Screens ? tables.ScreenEmissionSignature(m_built.Residency, m_built.View, reads, context.Latch)
+            : tables.SkyEnvironmentSignature(latch: context.Latch, residency: m_built.Residency, view: m_built.View, reads: reads));
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         var tables = m_built.Residency.Staged(context: recording.Context);
 
-        if (Screens) { _ = tables.ScreenEmissionSignature(m_built.Residency, m_built.View, recording.Reads); } else { _ = tables.SkyEnvironmentSignature(residency: m_built.Residency, view: m_built.View, reads: recording.Reads); }
+        if (Screens) { _ = tables.ScreenEmissionSignature(m_built.Residency, m_built.View, recording.Reads, recording.Latch); } else { _ = tables.SkyEnvironmentSignature(latch: recording.Latch, residency: m_built.Residency, view: m_built.View, reads: recording.Reads); }
         if (!Screens && !tables.SkyEnvironmentCanRecord) {
             return RenderGraphPackageOutcome.DrewNothing;
         }

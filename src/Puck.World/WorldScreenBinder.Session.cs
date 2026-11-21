@@ -100,6 +100,7 @@ public sealed partial class WorldScreenBinder {
             }
 
             feed.InstanceGone = true;
+            feed.Route.Access.Close();
 
             Console.Error.WriteLine(value: $"[world.screen: session {slot.Index} -> destination '{feed.Destination}' instance '{feed.InstanceName}' retired — its picture is withdrawn]");
         }
@@ -136,6 +137,7 @@ public sealed partial class WorldScreenBinder {
             feed.Nested = null;
         }
 
+        feed.Route.Access.Close();
         feed.Dispose();
         m_feedsMoved = true;
 

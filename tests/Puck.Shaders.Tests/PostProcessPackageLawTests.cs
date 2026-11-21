@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
@@ -17,13 +18,15 @@ namespace Puck.Shaders.Tests;
 /// </summary>
 public sealed class PostProcessPackageLawTests {
     private const uint Extent = 64;
+    private const nint InputView = 0x7001;
     private const string Pass = "grain";
 
     private static readonly ShaderPipelineExternalImage Input = new(
         Format: GpuPixelFormat.R8G8B8A8Unorm,
         Height: Extent,
         ImageHandle: 0x7000,
-        ImageViewHandle: 0x7001,
+        ImageViewHandle: InputView,
+        Label: DeliveryLabel.ForSource(source: DeliveryPublicSource.Host),
         Layout: GpuImageLayout.ShaderReadOnly,
         Width: Extent
     );
@@ -112,7 +115,7 @@ public sealed class PostProcessPackageLawTests {
         Pipeline: "sdf.film-grain  8 GpuVertexAttribute { Location = 0, Format = R32G32Float, OffsetBytes = 0 }",
         RenderPass: "GpuColorAttachment { Format = R8G8B8A8Unorm, Load = Clear, Store = Store, FinalLayout = RenderTarget } ",
         RenderPasses: 4,
-        Writes: [$"1 {Input.ImageViewHandle}", "3 work counters", $"1 {Input.ImageViewHandle}", "3 work counters", $"1 {Input.ImageViewHandle}", $"1 {Input.ImageViewHandle}"]
+        Writes: [$"1 {InputView}", "3 work counters", $"1 {InputView}", "3 work counters", $"1 {InputView}", $"1 {InputView}"]
     );
     private static void ProduceUntilPublished(ShaderPipelineRenderNode node) => TestLiveness.Until(
         reason: () => "The pass never published a frame.",

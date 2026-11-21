@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.DirectX;
 using Puck.DirectX.Interop;
@@ -128,6 +129,7 @@ public sealed partial class WorldScreenBinder {
                 Height: image.Height,
                 ImageHandle: image.ImageHandle,
                 ImageViewHandle: frame.ImageViewHandle,
+                Label: DeliveryLabel.ForSource(external: true, source: DeliveryPublicSource.DeviceOrCapture),
                 Layout: GpuImageLayout.External,
                 Width: image.Width
             ),
