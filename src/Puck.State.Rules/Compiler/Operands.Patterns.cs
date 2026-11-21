@@ -97,120 +97,43 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand, IWordF
 
     private long ReadBoardMatch(IStateReader reader, int rowOrdinal, BoardNeighbourQuery query, CellKey key) {
         var arena = reader.Arena;
-        using var valuesLease = reader.Scratch.Rent<long>(length: query.Topology.CellCount);
-
-        var values = valuesLease.Span;
-        var word = reader.PatternWord;
+        var topology = query.Topology;
         var origin = -1;
-
-        if (
-            key.IsValid &&
-            reader.Arena.Keys.TryGetName(
-            key: key,
-            name: out var name
-        )
-        ) {
-            _ = query.Topology.TryCell(
-                cell: out origin,
-                key: name.Value
-            );
+        if (key.IsValid && arena.Keys.TryGetName(key, out var name) && topology.TryCell(name.Value, out var cell)) {
+            origin = cell;
         }
 
-        if (query.Direction >= 0) {
-            var length = (ArenaBoards.TryReadRay(
-                arena: arena,
-                direction: query.Direction,
-                origin: origin,
-                ray: out var ray,
-                reason: out _,
-                rowOrdinal: rowOrdinal,
-                values: values,
-                word: word
-            )
-                ? ray.Length
-                : 0
-            );
-
-            if (MatchFacet is MatchFacet.Cell or MatchFacet.Distance) {
-                var prefixLength = Pattern.LongestAcceptedPrefix(values: word[..length]);
-
-                if (prefixLength == length) {
-                    return -1L;
-                }
-                if (MatchFacet == MatchFacet.Distance) {
-                    return (prefixLength + 1L);
-                }
-
-                var blocker = origin;
-
-                for (var step = 0L; (step <= prefixLength); step++) {
-                    blocker = query.Topology.Neighbour(
-                        cell: blocker,
-                        direction: query.Direction
-                    );
-                }
-
-                return blocker;
-            }
-            if (MatchFacet is MatchFacet.At or MatchFacet.Length) {
-                if (!Pattern.TryFindOccurrence(
-                    length: out var matchLength,
-                    occurrence: Occurrence,
-                    start: out var matchStart,
-                    values: word[..length]
-                )) {
-                    return ((MatchFacet == MatchFacet.At) ? -1L : 0L);
-                }
-                if (MatchFacet == MatchFacet.Length) {
-                    return matchLength;
-                }
-
-                var matchCell = origin;
-
-                for (var step = 0; (step <= matchStart); step++) {
-                    matchCell = query.Topology.Neighbour(
-                        cell: matchCell,
-                        direction: query.Direction
-                    );
-                }
-
-                return matchCell;
-            }
-
-            return ((MatchFacet == MatchFacet.Prefix)
-                ? Pattern.LongestAcceptedPrefix(values: word[..length])
-                : Pattern.Match(values: word[..length])
-            );
-        }
-
+        var single = query.Direction >= 0;
+        var first = single ? query.Direction : 0;
+        var end = single ? first + 1 : topology.DirectionCount;
+        using var cells = reader.Scratch.Rent<int>(MatchFacet is MatchFacet.At or MatchFacet.Cell ? topology.LongestRay(first) : 0);
         var mask = 0L;
         var count = 0L;
 
-        for (var direction = 0; (direction < query.Topology.DirectionCount); direction++) {
-            var length = (ArenaBoards.TryReadRay(
-                arena: arena,
-                direction: direction,
-                origin: origin,
-                ray: out var ray,
-                reason: out _,
-                rowOrdinal: rowOrdinal,
-                values: values,
-                word: word
-            )
-                ? ray.Length
-                : 0
-            );
-
-            if (Pattern.Match(values: word[..length]) == 1L) {
+        for (var direction = first; direction < end; direction++) {
+            _ = ArenaBoards.TryReadRay(arena, rowOrdinal, origin, direction, reader.PatternWord, out var ray, out _, cells.Span);
+            if (single) {
+                if (MatchFacet is MatchFacet.Cell or MatchFacet.Distance) {
+                    var prefix = Pattern.LongestAcceptedPrefix(ray);
+                    if (prefix == ray.Length) {
+                        return -1L;
+                    }
+                    return MatchFacet == MatchFacet.Distance ? prefix + 1L : cells.Span[(int)prefix];
+                }
+                if (MatchFacet is MatchFacet.At or MatchFacet.Length) {
+                    if (!Pattern.TryFindOccurrence(ray, Occurrence, out var start, out var length)) {
+                        return MatchFacet == MatchFacet.At ? -1L : 0L;
+                    }
+                    return MatchFacet == MatchFacet.Length ? length : cells.Span[start];
+                }
+                return MatchFacet == MatchFacet.Prefix ? Pattern.LongestAcceptedPrefix(ray) : Pattern.Match(ray);
+            }
+            if (Pattern.Match(ray) == 1L) {
                 count++;
                 mask |= (1L << direction);
             }
         }
-
-        return ((MatchFacet == MatchFacet.DirectionCount)
-            ? count
-            : mask
-        );
+        return MatchFacet == MatchFacet.DirectionCount ? count : mask;
     }
 
     /// <inheritdoc/>
@@ -369,13 +292,9 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand, IWordF
     public override RuleWork Cost(IRuleCostContext context) {
         var occurrenceSearch = (MatchFacet is MatchFacet.At or MatchFacet.Length);
 
-        // A board read copies the row, walks one ray, and an occurrence search then tries every start along that
-        // ray: the square is the ray's, never the whole board's.
         if (Board is { } board) {
-            var cells = ((long)board.Topology.CellCount);
-            var ray = ((board.Direction >= 0) ? ((long)board.Topology.LongestRay(direction: board.Direction)) : cells);
-
-            return RuleWork.Known(units: ((board.Visits + cells) + (occurrenceSearch ? (ray * ray) : 0L)));
+            var ray = board.Direction >= 0 ? board.Topology.LongestRay(board.Direction) : board.Topology.LongestRays();
+            return RuleWork.Known(units: board.Visits + ray + (occurrenceSearch ? ray * ray : 0L));
         }
 
         var capacity = ((RowFrom is { } live) ? live.SelectionCapacity(context: context) : context.RowCapacity(rowOrdinal: RowOrdinal));

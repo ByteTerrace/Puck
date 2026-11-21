@@ -144,8 +144,8 @@ Positions are quantised to an error budget, which is good. Normals are 16-bit oc
 byte-plane deltas (about 6 bytes a triangle, per level), and the payload is zlib at its fastest level
 (`SdfMeshStoreCodec`). meshoptimizer reaches about 1 to 1.2 bytes a triangle for indices and 2 to 4 times on vertices;
 zstd level -1 decompresses at about 1550 MB/s against zlib's 390 (*summary*). *Move:* topology-aware index coding
-written independently, fewer normal bits or normals derived from the field, and zstd (a native dependency, so the
-vendor register governs it). *Check:* store bytes per triangle and decode time on the debug world's stored meshes, with
+written independently, fewer normal bits or normals derived from the field, and zstd (inbox in .NET 11's
+`System.IO.Compression`, so no vendor binary). *Check:* store bytes per triangle and decode time on the debug world's stored meshes, with
 the decoded meshes inside the codec's error budget (identical wherever a change is lossless). *Filed:* [the shared store step of bake proportional to change](../open-items.md#bake-proportional-to-change).
 
 ### 12. Checkpoints are full and uncompressed
@@ -179,10 +179,10 @@ rules per tick falls to the number of changed keys on a many-key world with iden
 | 2, 8, 9. Probe gather, AO, local shadows, cascade span, brick cache | [Illumination](../illumination.md#what-the-state-of-the-art-audit-adds) | Extends decisions 4 and 5 and the field-trace comparison |
 | 3. Bake | [Field programs](../field-programs.md#what-the-state-of-the-art-audit-adds) | Two new steps; GPU pruning stays held by the 2.4 percent measurement |
 | 4. Level of detail | [Virtual geometry's rejected-and-watched table](../virtual-geometry.md#rejected-and-watched) | Extends the cluster-DAG row |
-| 5, 6, 7. Prediction, interest, wire | [Transfers packet](../open-items.md#transfers-federation-and-server); [disclosure I1](../disclosure.md#open-items) | Extends the prediction item, two new items |
+| 5, 6, 7. Prediction, interest, wire | [Transfers packet](../open-items.md#transfers-federation-and-server); [disclosure I1](../disclosure.md#open-items); [replication](../replication.md) | Extends the prediction item, two new items; the replication plan holds the designs and their build order |
 | Tick dilation | [Transfers packet](../open-items.md#transfers-federation-and-server); [MMO synthesis](../mmo-foundations/synthesis.md#4-puck-native-combinations) | New item and a combinations row |
 | 11. Mesh store codec | [Bake proportional to change](../open-items.md#bake-proportional-to-change) | New item |
-| 12. Checkpoints | [Transfers packet](../open-items.md#transfers-federation-and-server) | Extends the checkpoint stall item |
+| 12. Checkpoints | [Transfers packet](../open-items.md#transfers-federation-and-server); [replication, decision 9](../replication.md#decision-9-documents-and-checkpoints-as-records) | Extends the checkpoint stall item |
 | 13. Physics colouring and joints | [Lessons plan](../physics-and-kernels-lessons.md#7-graph-colouring-for-a-parallel-rigid-solve); [rigid-bodies packet](../open-items.md#rigid-bodies-and-physics) | Extends lesson 7, new joint item |
 | 14. Rule scheduling | [State and language](../state-and-language.md#open-items) | New item |
 | Ahead, rejections | The decision registers for [rendering](../../decisions/rendering.md#what-the-state-of-the-art-audit-found-ahead-and-what-stays-rejected), [worlds and federation](../../decisions/worlds-and-federation.md#what-the-state-of-the-art-audit-found-ahead), [state and language](../../decisions/state-and-language.md#rule-evaluation-is-proportional-to-change) and [engine design](../../decisions/engine-design.md#where-the-physics-stands-against-the-state-of-the-art) | Recorded for the next round |

@@ -201,7 +201,8 @@ public sealed record SdfFrame(
     // The dressing a residency's dresser adopted onto its own frame; never copied, since the rows are that dresser's.
     private SdfMeshRows? m_meshRows;
     private ISdfPickMap? m_dressedPickMap;
-    // Each default is built on its first read, so a producer that supplies its own allocates none.
+    // The defaults this frame built (Lights, Sky), kept so a writer's frame whose producer supplies none builds each once
+    // rather than on every write. The content, not these, carries a default once it is read.
     private SdfLights? m_defaultLights;
     private SdfSky? m_defaultSky;
 
@@ -379,17 +380,31 @@ public sealed record SdfFrame(
         get => m_content.MeshDrawChangesSerial;
         init => m_content = (m_content with { MeshDrawChangesSerial = value });
     }
+    // A default is written into the content on its first read, so a copy (a writer's, a `with`) carries the object a
+    // producer that edits the default edits; a default held only beside the content is left behind by a writer's copy.
     /// <summary>The lit path's lights table, its shadow slots and its curvature shading. The default is the pinned sun
     /// an unauthored world renders.</summary>
     public SdfLights Lights {
-        get => (m_content.Lights ?? (m_defaultLights ??= SdfLights.Default()));
+        get {
+            if (m_content.Lights is not { } lights) {
+                lights = (m_defaultLights ??= SdfLights.Default());
+                m_content = (m_content with { Lights = lights });
+            }
+            return lights;
+        }
         init => m_content = (m_content with { Lights = value });
     }
     /// <summary>The sky: its open layer stack, fog and environment gains.
     /// The default is the default look an unauthored world renders: the two-stop gradient and the default fog, as
     /// data.</summary>
     public SdfSky Sky {
-        get => (m_content.Sky ?? (m_defaultSky ??= new SdfSky()));
+        get {
+            if (m_content.Sky is not { } sky) {
+                sky = (m_defaultSky ??= new SdfSky());
+                m_content = (m_content with { Sky = sky });
+            }
+            return sky;
+        }
         init => m_content = (m_content with { Sky = value });
     }
     /// <inheritdoc cref="SdfFrameContent.Exposure"/>

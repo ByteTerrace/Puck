@@ -21,7 +21,6 @@ public static partial class ArenaTransforms {
         using var visitedLease = context.Arena.Scratch.Rent<byte>(length: push.Topology.CellCount);
         var visitedCells = visitedLease.Span;
 
-        visitedCells[origin] = 1;
         using var handlesLease = context.Arena.Scratch.Rent<StateInstanceHandle>(length: pool.Capacity);
         var handles = handlesLease.Span;
         var liveCount = context.Arena.CopyPoolSnapshot(poolOrdinal: pool.Ordinal, destination: handles);
@@ -60,14 +59,12 @@ public static partial class ArenaTransforms {
         movers[0] = binding.Instance;
         var wordLength = 1;
         var moverCount = 1;
-        var cellOrdinal = origin;
         var terminator = -1;
         Span<long> symbol = stackalloc long[1];
 
-        for (var visited = 1; (visited <= push.Topology.CellCount); visited++) {
-            cellOrdinal = push.Topology.Neighbour(cell: cellOrdinal, direction: push.Direction);
-            if ((cellOrdinal < 0) || (visitedCells[cellOrdinal] != 0)) {
-                return Refuse(code: TransformRefusal.PushRayBlocked, reason: "pushRay reached an edge or closed cycle before a passable terminator", refusal: out refusal);
+        foreach (var cellOrdinal in push.Topology.Ray(origin, push.Direction)) {
+            if (visitedCells[cellOrdinal] != 0) {
+                break;
             }
             visitedCells[cellOrdinal] = 1;
 
@@ -110,7 +107,10 @@ public static partial class ArenaTransforms {
             }
         }
 
-        if ((terminator < 0) || (push.Pattern.LongestAcceptedPrefix(values: word[..wordLength]) != wordLength)) {
+        if (terminator < 0) {
+            return Refuse(code: TransformRefusal.PushRayBlocked, reason: "pushRay reached an edge or closed cycle before a passable terminator", refusal: out refusal);
+        }
+        if (push.Pattern.LongestAcceptedPrefix(values: word[..wordLength]) != wordLength) {
             return Refuse(code: TransformRefusal.PushRayBlocked, reason: "pushRay's movable run and terminator do not match its pattern", refusal: out refusal);
         }
 

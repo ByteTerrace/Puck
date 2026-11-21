@@ -32,6 +32,9 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     public const string InvalidatedDetachReason = "world.observation.invalidated";
     /// <summary>The named reason for detaching a projection whose dependencies are no longer disclosed.</summary>
     public const string DisclosureDetachReason = "world.observation.disclosure";
+    /// <summary>The named reason for detaching a projection that composed a record over the receiver's cap for its kind
+    /// (<see cref="WorldFederationCodec.MaxResponseBytes"/>).</summary>
+    public const string OversizeDetachReason = "world.observation.oversize";
 
     private readonly Channel<Record> m_frames = Channel.CreateBounded<Record>(options: new BoundedChannelOptions(capacity: PendingDeliveryLimit) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
     private readonly WorldProjectionSampler m_sampler = new(updateSeconds: disclosure().Policy.UpdateSeconds);
@@ -179,6 +182,13 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
 
     private void Write(Record record) {
         if (m_invalidated) {
+            return;
+        }
+        if (!WorldFederationCodec.WithinResponseCap(kind: record.Kind, length: (((long)record.Head.Length) + record.Bodies.Length + record.Tail.Length))) {
+            // The peer's reader refuses a record over its kind's cap and drops the stream without a reason; detach by
+            // name here so it reopens knowing why, rather than receiving a record it must refuse.
+            End(reason: OversizeDetachReason);
+
             return;
         }
         if (!m_frames.Writer.TryWrite(record)) {

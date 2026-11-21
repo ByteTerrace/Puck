@@ -499,7 +499,14 @@ template goPlay(colour, foe) {
     if taken == 1 {
       transform boardCombine(row: goProbe, operation: Copy, left: goBoard)
       goProbe[goMove.play] = colour
-      transform clearEnclosed(row: goProbe, from: cell(goMove, play), lower: foe, upper: foe)
+      transform clearEnclosed(
+        row: goProbe,
+        from: cell(goMove, play),
+        lower: foe,
+        upper: foe,
+        boundaryLower: goEmpty,
+        boundaryUpper: goEmpty
+      )
       transform boardCombine(row: goKoCheck, operation: Clear)
       transform writeSet(row: goKoCheck, set: goKoDifferent, value: 1)
       goKo = count(goKoCheck, c -> c != 0) == 0
@@ -508,7 +515,14 @@ template goPlay(colour, foe) {
       transform boardCombine(row: goPrevious, operation: Copy, left: goBoard)
       goBoard[goMove.play] = colour
       if taken > 0 {
-        transform clearEnclosed(row: goBoard, from: cell(goMove, play), lower: foe, upper: foe)
+        transform clearEnclosed(
+          row: goBoard,
+          from: cell(goMove, play),
+          lower: foe,
+          upper: foe,
+          boundaryLower: goEmpty,
+          boundaryUpper: goEmpty
+        )
       }
       goStoneCount[$"{colour}"] += 1
       goStoneCount[$"{foe}"] = goStoneCount[$"{foe}"] - taken
@@ -1082,17 +1096,17 @@ state {
       play = -1
     }
 
-    table goStoneCount bounds(0..goPoints) {
+    table goStoneCount capacity(2) bounds(0..goPoints) {
       "1" = 0
       "2" = 0
     }
 
-    table goPrisoners bounds(0..) {
+    table goPrisoners capacity(2) bounds(0..) {
       "1" = 0
       "2" = 0
     }
 
-    table goTerritory bounds(0..goPoints) {
+    table goTerritory capacity(2) bounds(0..goPoints) {
       "1" = 0
       "2" = 0
     }

@@ -350,6 +350,43 @@ body deltas keep naming acknowledged snapshots across it. The cursor observes
 the body policy before taking the rows, and a policy that moved owes a cut,
 which sends the stream through its document door and a new primer.
 
+### The wire's transport lane
+
+**Decided.**
+
+- Replicated state is designed for reliable, ordered QUIC streams. No design
+  may depend on unreliable delivery, because the runtime Puck builds on has no
+  QUIC datagram API. `IPeerConnection` keeps its datagram members
+  (`MaxDatagramBytes`, `SendDatagramAsync`, `ReceiveDatagramAsync`) as the
+  seam a datagram lane would fill, and `QuicPeerTransport` reports their
+  absence.
+- A record's form does not depend on the lane that carries it. A body's record
+  is a difference against what that stream's recipient holds; only the rule
+  for when the sender may count a record as held differs between a reliable
+  stream and an unreliable one. A datagram lane, if one arrives, changes the
+  transport and that rule, never the codecs.
+- A change mask or a baseline is computed per recipient stream, by comparing
+  what the recipient holds with what its view now discloses. It is never an
+  authority-wide dirty flag, which a write the recipient cannot see would set.
+- Building Puck's own binding to msquic for datagrams is a second QUIC binding.
+  It is taken up only when a measurement of how late samples are applied under
+  packet loss shows that reliable streams cost more than the binding would.
+
+**Why.** .NET 11's `System.Net.Quic` exposes streams and no datagram member;
+the proposal to add one is open with no approved API. msquic underneath does
+send datagrams, so the gap is in the managed surface, and closing it ourselves
+means replacing a host primitive the runtime rule says to build on. The games
+of the genre Puck aims at ship on reliable ordered connections, while shooters
+send state unreliably so that priority decides what follows a lost packet;
+which of those Puck's action play needs is a measurement, and keeping the
+record form independent of the lane makes the answer reversible. The third
+point is the disclosure guarantee applied to the wire: a recipient's delivery
+count and sizes are functions of its own view.
+
+**Evidence.** [Replication and the wire, decision 3](../plans/replication.md#decision-3-the-transport-lane)
+and [decision 4](../plans/replication.md#decision-4-what-a-delta-is-a-difference-against),
+with the sources read for them; [disclosure, decision 5](../plans/disclosure.md#5-a-delta-is-a-difference-of-views-owned-by-the-stream).
+
 ## The tables
 
 **Decided.**
