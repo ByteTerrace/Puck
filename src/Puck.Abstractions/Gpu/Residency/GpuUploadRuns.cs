@@ -9,24 +9,29 @@ namespace Puck.Abstractions.Gpu;
 /// touches. The run count is bounded by the construction capacity: when a new run would exceed it, the runs closest
 /// together merge across the narrowest gaps until half the capacity remains, which keeps the upload correct and its run
 /// list sorted and disjoint at the price of re-sending those gaps, and never joins two runs far apart (a table's head and a write at
-/// its far end) while nearer runs stay apart. Allocation-free after construction.
+/// its far end) while nearer runs stay apart. Allocation-free after construction. An exact set never coarsens: past its
+/// capacity it doubles its arrays, so its runs cover only units that were added (and the merge gaps it joined across),
+/// as an owner that can supply no other unit needs (<see cref="GpuRegion.Shadow"/>'s exact source).
 /// </summary>
 public sealed class GpuUploadRuns {
-    private readonly int[] m_ends;
+    private int[] m_ends;
     // The gaps between the runs in order, and the same gaps sorted, as a coarsening reads them.
-    private readonly int[] m_gaps;
-    private readonly int[] m_widths;
+    private int[] m_gaps;
+    private int[] m_widths;
     private readonly int m_mergeGap;
-    private readonly int[] m_starts;
+    private readonly bool m_exact;
+    private int[] m_starts;
 
     private int m_count;
 
     /// <summary>Initializes a new instance of the <see cref="GpuUploadRuns"/> class.</summary>
-    /// <param name="capacity">The most runs held at once; at least two.</param>
+    /// <param name="capacity">The most runs held at once, or for an exact set the runs it holds before it first grows; at
+    /// least two.</param>
     /// <param name="mergeGap">The largest gap after the last run that a new range still joins it across.</param>
+    /// <param name="exact">Whether the set grows past <paramref name="capacity"/> rather than coarsening.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is below two, or
     /// <paramref name="mergeGap"/> is negative.</exception>
-    public GpuUploadRuns(int capacity, int mergeGap = 0) {
+    public GpuUploadRuns(int capacity, int mergeGap = 0, bool exact = false) {
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: 2,
             value: capacity
@@ -36,6 +41,7 @@ public sealed class GpuUploadRuns {
         m_ends = new int[capacity];
         m_gaps = new int[capacity];
         m_mergeGap = mergeGap;
+        m_exact = exact;
         m_starts = new int[capacity];
         m_widths = new int[capacity];
     }
@@ -71,6 +77,7 @@ public sealed class GpuUploadRuns {
                 m_ends[(m_count - 1)] = Math.Max(val1: end, val2: m_ends[(m_count - 1)]);
                 return;
             }
+            if (m_exact && (m_count == m_starts.Length)) { Widen(); }
             if (m_count < m_starts.Length) {
                 m_starts[m_count] = start;
                 m_ends[m_count++] = end;
@@ -89,9 +96,12 @@ public sealed class GpuUploadRuns {
             after++;
         }
         if ((first == after) && (m_count == m_starts.Length)) {
-            Coarsen();
-            Add(length: (end - start), start: start);
-            return;
+            if (!m_exact) {
+                Coarsen();
+                Add(length: (end - start), start: start);
+                return;
+            }
+            Widen();
         }
 
         // Absorb every touched run, not only the first: otherwise a bridging write leaves overlapping GPU copies.
@@ -195,6 +205,15 @@ public sealed class GpuUploadRuns {
         return ((run < m_count) && (((long)m_starts[run]) < (((long)start) + length)));
     }
 
+    // Doubles an exact set's capacity: the one place its arrays change after construction.
+    private void Widen() {
+        var capacity = checked((m_starts.Length * 2));
+
+        Array.Resize(array: ref m_starts, newSize: capacity);
+        Array.Resize(array: ref m_ends, newSize: capacity);
+        Array.Resize(array: ref m_gaps, newSize: capacity);
+        Array.Resize(array: ref m_widths, newSize: capacity);
+    }
     // Halves the run count by closing the smallest gaps: the runs are already ordered, and each gap no wider
     // than the one that leaves half the runs is closed, so the units re-sent are the narrowest gaps between runs and never
     // a span between runs far apart while nearer ones stay separate.

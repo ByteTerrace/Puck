@@ -33,7 +33,10 @@ namespace Puck.SdfVm;
 /// priced length of every charged job still in flight fit <see cref="FrameAllowanceSeconds"/>, so neither several slots
 /// of allowance-sized jobs nor credit banked over a long gap (up to <see cref="MostBankSeconds"/> of the share) queue more
 /// than an allowance ahead of a frame. The one exception keeps work progressing: a job with nothing queued ahead of it is
-/// admitted whatever its price. The queued length moves only through a charge (<see cref="ChargeGpu"/>, which enters the
+/// admitted whatever its price, unless the frame is over its period (<see cref="FrameOver"/>): then the frame itself is
+/// what the job would queue behind, and it is held to the allowance like a job with work queued ahead, so a frame that
+/// already fills its period is never handed a job it cannot hold. The work the frame owes (<see cref="OwedAllowance"/>)
+/// is not held, since it is the frame's own. The queued length moves only through a charge (<see cref="ChargeGpu"/>, which enters the
 /// job) and that charge's leaving (<see cref="Leave"/>, once its job completed or was abandoned); the service leaves each
 /// charge at the one place a slot gives up its job.
 /// </para>
@@ -168,6 +171,7 @@ public sealed class SdfGpuWorkBudget(TimeProvider? time = null) {
     private int m_windowFrames;
     private double m_windowSeconds;
     private double m_frameSeconds;
+    private bool m_over;
     private bool m_holding;
     // The wall time between the frames' readings: when the latest came, the window's sum, and the mean the last step
     // read; and the owed allowance that step set (OwedFrameSecondsOf), with the owed jobs charged and their measured GPU
@@ -255,10 +259,34 @@ public sealed class SdfGpuWorkBudget(TimeProvider? time = null) {
             lock (m_gate) {
                 var allowance = (m_share * m_period);
 
-                return ((m_queuedJobs == 0) ? new(Queued: false, Seconds: allowance) : new(Queued: true, Seconds: Math.Max(val1: 0.0, val2: (allowance - m_queued))));
+                return (((m_queuedJobs == 0) && !m_over) ? new(Queued: false, Seconds: allowance) : new(Queued: true, Seconds: Math.Max(val1: 0.0, val2: (allowance - m_queued))));
             }
         }
     }
+    /// <summary>Gets whether the frames' own GPU time, as the last step of the share read it, fills the display's period
+    /// short of <see cref="HeadroomShare"/> (<see cref="FrameIsOver"/>): the budget then holds even an unqueued job to the
+    /// frame allowance. Safe to read from any thread.</summary>
+    public bool FrameOver {
+        get {
+            lock (m_gate) { return m_over; }
+        }
+    }
+    /// <summary>Gets how long a service whose next job the deadline holds waits before it offers the job again: the priced
+    /// length of the charged jobs in flight, and while the frame is over its period at least one period, since nothing
+    /// queued will complete to wake it. Safe to read from any thread.</summary>
+    public double DeadlineRetrySeconds {
+        get {
+            lock (m_gate) { return (m_over ? Math.Max(val1: m_queued, val2: m_period) : m_queued); }
+        }
+    }
+    /// <summary>Returns whether a frame whose own submissions take <paramref name="frameSeconds"/> of GPU time each
+    /// <paramref name="periodSeconds"/> leaves background work no room: it fills the period short of
+    /// <see cref="HeadroomShare"/> of it, the point past which <see cref="ShareOf"/> falls to its least.</summary>
+    /// <param name="periodSeconds">The display's period, in seconds; positive.</param>
+    /// <param name="frameSeconds">The frame's own GPU time, in seconds.</param>
+    /// <returns><see langword="true"/> when the frame is over its period.</returns>
+    public static bool FrameIsOver(double periodSeconds, double frameSeconds) =>
+        (double.IsFinite(d: frameSeconds) && (frameSeconds >= ((1.0 - HeadroomShare) * periodSeconds)));
     /// <summary>Gets what the next job the frame owes may take before the frame's deadline: the owed frame
     /// allowance (<see cref="OwedFrameSeconds"/>) less the priced length of every charged job in flight, owed or not, and
     /// whether any is. Safe to read from any thread.</summary>
@@ -389,6 +417,7 @@ public sealed class SdfGpuWorkBudget(TimeProvider? time = null) {
             m_windowSeconds += (double.IsFinite(d: frameSeconds) ? Math.Max(val1: 0.0, val2: frameSeconds) : 0.0);
             if (m_windowFrames < FollowFrames) { return; }
             m_frameSeconds = (m_windowSeconds / m_windowFrames);
+            m_over = FrameIsOver(periodSeconds: periodSeconds, frameSeconds: m_frameSeconds);
             m_interval = ((m_windowIntervals > 0) ? (m_windowWall / m_windowIntervals) : 0.0);
             m_owedFrame = OwedFrameSecondsOf(frameSeconds: m_frameSeconds, intervalSeconds: m_interval, periodSeconds: periodSeconds);
             m_windowFrames = 0;
@@ -420,6 +449,7 @@ public sealed class SdfGpuWorkBudget(TimeProvider? time = null) {
 
         lock (m_gate) {
             m_follows = reason;
+            m_over = false;
             m_period = ((periodSeconds > 0.0) ? periodSeconds : ReferencePeriodSeconds);
             m_share = SdfGpuWork.GpuShare;
             m_owedFrame = (SdfGpuWork.GpuShare * m_period);
@@ -637,7 +667,7 @@ public sealed class SdfGpuWorkBudget(TimeProvider? time = null) {
             foreach (var turn in m_turns) {
                 _ = turns.Append(provider: CultureInfo.InvariantCulture, handler: $"{((turns.Length == 0) ? string.Empty : ",")}{turn.Name}:{turn.Weight:0.000}/{(turn.Charged * 1000.0):0}ms/{turn.Holds}");
             }
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" work-turns=[{turns}] work-budget=[gpu-share:{m_share:0.000},share-cap:{SdfGpuWork.GpuShare:0.00},frame-allowance:{(m_share * m_period * 1000.0):0.00}ms,period:{(m_period * 1000.0):0.00}ms,frame-gpu:{(m_frameSeconds * 1000.0):0.00}ms,interval:{(m_interval * 1000.0):0.00}ms,owed-allowance:{(m_owedFrame * 1000.0):0.00}ms,owed-jobs:{m_owedJobs},owed-gpu:{(m_owedSeconds * 1000.0):0}ms,follows:{m_follows},falls:{m_falls},rises:{m_rises},gpu-credit:{(m_credit * 1000.0):0.00}ms,gpu-granted:{(m_granted * 1000.0):0}ms,gpu-charged:{(m_charged * 1000.0):0}ms,upload-rate:{SdfGpuWork.UploadBytesPerSecond:0}B/s,upload-credit:{m_uploadCredit:0}B,uploaded:{m_uploaded:0}B,wants:{m_wants},clamped:{m_clamped},floored:{m_floored},queued:{m_queuedJobs}/{(m_queued * 1000.0):0.00}ms] frames-behind=[judged:{m_framesJudged},behind:{m_framesBehind},missed:{m_framesMissed},behind-gpu:{(m_behindSeconds * 1000.0):0.0}ms,most-behind:{(m_mostBehindSeconds * 1000.0):0.00}ms]");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" work-turns=[{turns}] work-budget=[gpu-share:{m_share:0.000},share-cap:{SdfGpuWork.GpuShare:0.00},frame-allowance:{(m_share * m_period * 1000.0):0.00}ms,period:{(m_period * 1000.0):0.00}ms,frame-gpu:{(m_frameSeconds * 1000.0):0.00}ms,over-period:{(m_over ? "yes" : "no")},interval:{(m_interval * 1000.0):0.00}ms,owed-allowance:{(m_owedFrame * 1000.0):0.00}ms,owed-jobs:{m_owedJobs},owed-gpu:{(m_owedSeconds * 1000.0):0}ms,follows:{m_follows},falls:{m_falls},rises:{m_rises},gpu-credit:{(m_credit * 1000.0):0.00}ms,gpu-granted:{(m_granted * 1000.0):0}ms,gpu-charged:{(m_charged * 1000.0):0}ms,upload-rate:{SdfGpuWork.UploadBytesPerSecond:0}B/s,upload-credit:{m_uploadCredit:0}B,uploaded:{m_uploaded:0}B,wants:{m_wants},clamped:{m_clamped},floored:{m_floored},queued:{m_queuedJobs}/{(m_queued * 1000.0):0.00}ms] frames-behind=[judged:{m_framesJudged},behind:{m_framesBehind},missed:{m_framesMissed},behind-gpu:{(m_behindSeconds * 1000.0):0.0}ms,most-behind:{(m_mostBehindSeconds * 1000.0):0.00}ms]");
         }
     }
 

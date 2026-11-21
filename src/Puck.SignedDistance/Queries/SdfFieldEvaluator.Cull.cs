@@ -42,6 +42,14 @@ public sealed partial class SdfFieldEvaluator {
     // under a tenth of a raw for every radius past SmoothRadiusMin, plus k·2⁻¹⁸ raws for a radius past one metre.
     private const long ScopeBlendRoundingRaws = 8L;
 
+    // How far past the accumulator, in raws, a smooth union's candidate must stand for the blend to return the
+    // accumulator to the bit: its radius k, floored as the blend floors it, plus k·2⁻¹⁵ + 16 raws, at which both walks
+    // round the blend weight to exactly one.
+    private static Int128 SmoothUnionIdentityMargin(FixedQ4816 smoothRadius) {
+        var k = FixedQ4816.Max(x: smoothRadius, y: SmoothRadiusMin);
+
+        return ((((Int128)k.Value) + (k.Value >> 15)) + 16L);
+    }
     // The rounding allowance, in raws, of one soft blend of radius k (see ScopeBlendRoundingRaws).
     private static long SmoothBlendRoundingRaws(FixedQ4816 k) =>
         (ScopeBlendRoundingRaws + (k.Value >> (FixedQ4816.FractionBitCount + 18)));
@@ -331,59 +339,56 @@ public sealed partial class SdfFieldEvaluator {
 
         return all with { BoxGain = gain, BoxRadius = radius, BoxSpread = spread };
     }
+    // One way a walk asks a certificate whether every candidate it bounds clears a threshold: at the walk's point, over
+    // its box by the box certificate, or at every point of its box by the point certificate. The skips are written once
+    // over it, and each walk's test is a struct, so each is compiled for its own question.
+    private interface IReachTest {
+        bool Clears(in Reach reach, Int128 threshold);
+    }
+    private readonly struct PointReachTest(FixedVector3 point) : IReachTest {
+        public bool Clears(in Reach reach, Int128 threshold) => reach.PointClears(point: point, threshold: threshold);
+    }
+    // A box walk's question: the box certificate's, which the caller asks only of a boxed certificate, or, for a
+    // regional walk, the point certificate's at every point of the box.
+    private readonly struct BoxReachTest(BoxQuery query, bool regional) : IReachTest {
+        private readonly BoxQuery m_query = query;
+
+        public bool Clears(in Reach reach, Int128 threshold) =>
+            (regional ? reach.RegionClears(query: in m_query, threshold: threshold) : reach.BoxClears(query: in m_query, threshold: threshold));
+    }
+
     // Whether every lowering member's certificate clears the threshold, which proves the least of them does.
-    private bool MembersClear(in CullBound bound, FixedVector3 worldPosition, Int128 threshold) {
+    private bool MembersClear<TTest>(in CullBound bound, in TTest test, Int128 threshold) where TTest : struct, IReachTest {
         foreach (ref readonly var member in m_members.AsSpan(start: bound.MemberFirst, length: bound.MemberCount)) {
-            if (!member.PointClears(point: worldPosition, threshold: threshold)) {
+            if (!test.Clears(reach: in member, threshold: threshold)) {
                 return false;
             }
         }
 
         return true;
     }
-    // Whether every compose outside a scope is a hard union and nothing outside a scope edits the accumulator: then the
-    // answer is the least of the top-level candidates, each instance's own answer is the least of its own, and any one
-    // of them bounds the answer from above.
-    private static bool ComposesByHardUnion(CompiledInstruction[] compiled) {
-        var depth = 0;
+    // Whether an instance's candidates clear the threshold at a point, or at every point of a regional walk's box: its
+    // certificate at the largest axis distance first, then at the exact distance, then each lowering member's.
+    private bool InstanceClears<TTest>(in CullBound bound, FixedQ4816 cheapReach, FixedQ4816 threshold, in TTest test) where TTest : struct, IReachTest =>
+        ((threshold.Value <= bound.SeedFloor) && ((cheapReach >= threshold) ||
+            test.Clears(reach: in bound.Reach, threshold: threshold.Value) ||
+            ((bound.MemberCount > 1) && MembersClear(bound: in bound, test: in test, threshold: threshold.Value))));
+    // The end of the chains a walk skips from the ResetPoint opening the chain in this slot: the largest node of the
+    // segment hierarchy starting there whose certificate clears the running answer, else the chain alone; minus one when
+    // neither clears. A point walk's answer is one value; a regional walk's is the interval that encloses every point's,
+    // its upper end the answer to clear and its lower end the one a carve must pass.
+    private int SkippedChainsEnd<TTest>(int segment, in TTest test, FixedQ4816 above, FixedQ4816 below) where TTest : struct, IReachTest {
+        for (var group = m_segmentGroupHeads[segment]; (group >= 0); group = m_segmentGroupNext[group]) {
+            ref readonly var node = ref m_segmentGroups[group];
 
-        foreach (ref readonly var instruction in compiled.AsSpan()) {
-            switch (SdfFieldOps.CullInstancesOf(value: instruction.Op)) {
-                case SdfCullInstancesAction.PushField: {
-                        depth++;
-                        break;
-                    }
-                case SdfCullInstancesAction.PopField: {
-                        depth--;
-
-                        if ((depth == 0) && (instruction.Blend != ((uint)SdfBlendOp.Union))) {
-                            return false;
-                        }
-
-                        break;
-                    }
-                case SdfCullInstancesAction.ShapeBlend: {
-                        if ((depth == 0) && !instruction.Detail && (instruction.Blend != ((uint)SdfBlendOp.Union))) {
-                            return false;
-                        }
-
-                        break;
-                    }
-                case SdfCullInstancesAction.EditsField: {
-                        if (depth == 0) {
-                            return false;
-                        }
-
-                        break;
-                    }
-                case SdfCullInstancesAction.Ignore:
-                    break;
-                default:
-                    throw new InvalidOperationException(message: "Invalid CullInstances action.");
+            if (test.Clears(reach: in node.Reach, threshold: SegmentThreshold(above: above, below: below, bound: in node))) {
+                return node.End;
             }
         }
 
-        return true;
+        ref readonly var chain = ref m_segmentBounds[segment];
+
+        return (test.Clears(reach: in chain.Reach, threshold: SegmentThreshold(above: above, below: below, bound: in chain)) ? chain.End : -1);
     }
     // The segment table: for each ResetPoint opening a chain a walk may skip whole, the chain's end and the certificate
     // around its shapes'. A chain qualifies when it runs from its ResetPoint to the next ResetPoint, instance boundary,
@@ -451,8 +456,7 @@ public sealed partial class SdfFieldEvaluator {
                                 break;
                             }
                         case SdfCullGuardAction.SmoothUnion: {
-                                var k = FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin);
-                                var required = ((((Int128)k.Value) + (k.Value >> 15)) + 16L);
+                                var required = SmoothUnionIdentityMargin(smoothRadius: instruction.Data1X);
 
                                 // The radius can fit while its exact-identity margin does not. Such a chain has no
                                 // representable certificate; never wrap its margin into a smaller threshold.

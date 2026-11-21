@@ -128,9 +128,14 @@ skips a pass it has no work for. Every pass of the view counts its own march ste
 volume sample) and the pixels it writes an output for (`sdfWorkTexels`: set by
 the record and output writes; a raster pass one per fragment)
 into its node's kernel counters through the generated `puckCountWork` (one
-wave-summed atomic a wave into the row `workCounterRow` names,
-`GpuKernelCounters`), which the node clears ahead of the first pass and copies
-to the slot's readback behind the last; `world.counters gpu` reads them as
+atomic a thread group into the row `workCounterRow` names, `GpuKernelCounters`,
+every thread of the group calling it, so a counting kernel never returns before
+it), while a reading demands them (`IGpuWorkSource.DemandKernelCounting`, which every
+counts report calls; `world.counters arm`), and none otherwise: a frame outside
+a reading records `GpuKernelCounters.DisabledRow` and its sample reads
+`kernel-counts=off`. The node clears the counters ahead of the first pass and
+copies them to the slot's readback behind the last, whenever counts or named
+detail rows are owed; `world.counters gpu` reads them as
 `march.steps` and `texels.written`, per-backend deterministic. Generated
 `puckCountShapes` adds `sdfWorkShapes` and `sdfWorkGradients` to the same row as
 `shapes.evaluated` and `shapes.gradients`; only the bake evaluates shapes, and

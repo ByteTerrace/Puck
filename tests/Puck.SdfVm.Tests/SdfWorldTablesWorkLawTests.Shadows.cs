@@ -33,7 +33,8 @@ public sealed partial class SdfWorldTablesWorkLawTests {
 
         Assert.True(condition: sample.TryGetPassCount(column: column, pass: pass, value: out var uploaded));
         Assert.Equal(actual: uploaded, expected: ((active == 0) ? 0 : ((active * 16) + ((GpuRegion.CopyHeaderWords + 2) * sizeof(uint)))));
-        Assert.Equal(expected: bytes, actual: rig.Engine.TableBytes);
+        // No device table grows; the handoff region takes a staging ring at its first upload.
+        Assert.Equal(expected: bytes.DeviceLocal, actual: rig.Engine.TableBytes.DeviceLocal);
         slots.SetHandoffs(handoffs: []);
         rig.Render();
         rig.Render();

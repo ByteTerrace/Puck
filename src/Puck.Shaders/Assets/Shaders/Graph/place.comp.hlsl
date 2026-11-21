@@ -45,47 +45,47 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint2 destinationDims;
     uint2 baseDims;
     uint2 sourceDims;
+    uint texels = 0u;
 
     destination.GetDimensions(destinationDims.x, destinationDims.y);
-    if ((id.x >= destinationDims.x) || (id.y >= destinationDims.y)) {
-        return;
-    }
+    if ((id.x < destinationDims.x) && (id.y < destinationDims.y)) {
+        // The rect's pixel edges, each fraction rounded to the nearest pixel edge and clamped to the destination.
+        float4 rect = passGroup.rect;
+        uint2 rectMin = (uint2)clamp(floor((rect.xy * float2(destinationDims)) + 0.5), float2(0.0, 0.0), float2(destinationDims));
+        uint2 rectMax = (uint2)clamp(floor(((rect.xy + rect.zw) * float2(destinationDims)) + 0.5), float2(rectMin), float2(destinationDims));
 
-    // The rect's pixel edges, each fraction rounded to the nearest pixel edge and clamped to the destination.
-    float4 rect = passGroup.rect;
-    uint2 rectMin = (uint2)clamp(floor((rect.xy * float2(destinationDims)) + 0.5), float2(0.0, 0.0), float2(destinationDims));
-    uint2 rectMax = (uint2)clamp(floor(((rect.xy + rect.zw) * float2(destinationDims)) + 0.5), float2(rectMin), float2(destinationDims));
+        float4 written;
 
-    float4 written;
-
-    if (any(id.xy < rectMin) || any(id.xy >= rectMax)) {
-        if (passGroup.letterbox != 0u) {
-            written = passGroup.letterboxColor;
-        } else {
+        if (any(id.xy < rectMin) || any(id.xy >= rectMax)) {
+            if (passGroup.letterbox != 0u) {
+                written = passGroup.letterboxColor;
+            } else {
+                base.GetDimensions(baseDims.x, baseDims.y);
+                written = (passGroup.compareMode == 0u)
+                    ? base.Load(int3(min(id.xy, (baseDims - 1)), 0))
+                    : puckReconstruct(base, id.xy, destinationDims, baseDims, 0.0);
+            }
+        } else if (passGroup.compareMode != 0u) {
             base.GetDimensions(baseDims.x, baseDims.y);
-            written = (passGroup.compareMode == 0u)
-                ? base.Load(int3(min(id.xy, (baseDims - 1)), 0))
-                : puckReconstruct(base, id.xy, destinationDims, baseDims, 0.0);
+            source.GetDimensions(sourceDims.x, sourceDims.y);
+            written = float4(compareColor((id.xy - rectMin), (rectMax - rectMin), baseDims, sourceDims), 1.0);
+        } else {
+            source.GetDimensions(sourceDims.x, sourceDims.y);
+
+            // The crop's pixel edges, rounded as the rect's are: the whole source unless the host shows a part of it.
+            float4 crop = passGroup.crop;
+            uint2 cropMin = (uint2)clamp(floor((crop.xy * float2(sourceDims)) + 0.5), float2(0.0, 0.0), float2(sourceDims - 1));
+            uint2 cropMax = (uint2)clamp(floor(((crop.xy + crop.zw) * float2(sourceDims)) + 0.5), float2(cropMin + 1), float2(sourceDims));
+            uint2 cropDims = (cropMax - cropMin);
+            uint2 rectDims = (rectMax - rectMin);
+            uint2 pixel = (id.xy - rectMin);
+
+            written = float4(puckReconstructRegion(source, pixel, rectDims, cropDims, cropMin, passGroup.sharpness).rgb, 1.0);
         }
-    } else if (passGroup.compareMode != 0u) {
-        base.GetDimensions(baseDims.x, baseDims.y);
-        source.GetDimensions(sourceDims.x, sourceDims.y);
-        written = float4(compareColor((id.xy - rectMin), (rectMax - rectMin), baseDims, sourceDims), 1.0);
-    } else {
-        source.GetDimensions(sourceDims.x, sourceDims.y);
 
-        // The crop's pixel edges, rounded as the rect's are: the whole source unless the host shows a part of it.
-        float4 crop = passGroup.crop;
-        uint2 cropMin = (uint2)clamp(floor((crop.xy * float2(sourceDims)) + 0.5), float2(0.0, 0.0), float2(sourceDims - 1));
-        uint2 cropMax = (uint2)clamp(floor(((crop.xy + crop.zw) * float2(sourceDims)) + 0.5), float2(cropMin + 1), float2(sourceDims));
-        uint2 cropDims = (cropMax - cropMin);
-        uint2 rectDims = (rectMax - rectMin);
-        uint2 pixel = (id.xy - rectMin);
-
-        written = float4(puckReconstructRegion(source, pixel, rectDims, cropDims, cropMin, passGroup.sharpness).rgb, 1.0);
+        destination[id.xy] = written;
+        texels = 1u;
     }
-
-    destination[id.xy] = written;
     // Every pixel inside the destination writes its texel.
-    puckCountWork(0u, 1u);
+    puckCountWork(0u, texels);
 }

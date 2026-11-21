@@ -111,6 +111,7 @@ public sealed class GpuBufferPagesLawTests {
         using var region = new GpuRegion(GpuResidencyPolicy.Staged, GpuHostVisibleMemory.Host, Page, 1,
             gpu.Services.BufferFactory, gpu.Services.Bindings, gpu.Services.Recorder, pipeline, default);
 
+        region.Write(bytes: new byte[] { 1, 2, 3, 4 }, offset: 0);
         region.Flush(slot: 0);
         pages.SetWritable(count: 1, firstPage: 0, writable: false);
         region.RecordCopy(1, 0);
