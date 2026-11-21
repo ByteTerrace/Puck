@@ -182,6 +182,60 @@ public sealed record PaletteInsetDocument(DocumentVector3 Origin, DocumentQuater
         )
     );
 }
+/// <summary>
+/// The lettering a text paint draws (<see cref="PalettePaintDocument.Text"/>): text laid out in the paint's box, on its
+/// local XY plane (+X the advance, +Y the ascent), and drawn as the paint's colour on every surface of the slot the
+/// box holds, projected along local Z. It is colour at the hit, lit as the surface is, and its glyphs come from the
+/// world's text font catalog each frame, so a placeholder's cell changing rewrites the lettering with no new program
+/// and no bake. The block is centred on the box's height and placed across its width by <paramref name="Align"/>.
+/// </summary>
+/// <param name="Template">The text: literal characters and <c>{state.&lt;row&gt;[.&lt;key&gt;]}</c> placeholders, each
+/// replaced by its cell's value (an Int, Fixed, Bool or Text row; an absent cell reads empty). A line feed breaks a
+/// line. With <paramref name="Markup"/>, the substituted text is read as BBCode-style effect tags
+/// (<c>[color=#C0392B]…[/color]</c>, <c>[caret at=3]…[/caret]</c>, <c>[shake]…[/shake]</c>), so a cell can supply a
+/// tag's name or a parameter's value.</param>
+/// <param name="EmHeight">The height of one em, in the paint frame's units; finite and positive.</param>
+/// <param name="Font">The world text catalog font name; null selects that catalog's default font.</param>
+/// <param name="Align"><c>left</c>, <c>center</c> or <c>right</c>: where the block sits across the box, and how its
+/// lines sit against its widest (null = center).</param>
+/// <param name="Tracking">Extra advance after every glyph, in em units (null = 0; negative tightens).</param>
+/// <param name="LineSpacing">A multiplier on the font's line height for the baseline step between lines (null = 1).</param>
+/// <param name="Wrap">Whether lines wrap at the box's width, greedily at word boundaries; otherwise only a line feed
+/// breaks a line.</param>
+/// <param name="Fit">Whether a block wider or taller than the box shrinks, uniformly, to fit it; otherwise the box
+/// clips it.</param>
+/// <param name="Markup">Whether the substituted text is read as effect markup.</param>
+/// <param name="EffectUnit">The length, in the paint frame's units, of one unit of a markup effect's amplitude (a
+/// shake's or wave's travel, a caret's lift); null = a thirty-second of <paramref name="EmHeight"/>.</param>
+public sealed record PalettePaintTextDocument(
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Template, WorldExportFacet.Binding)] string Template,
+    float EmHeight,
+    [property: DocumentText("a font name")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Font = null,
+    [property: DocumentText("a text alignment")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Align = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Tracking = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? LineSpacing = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Wrap = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Fit = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Markup = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? EffectUnit = null
+) {
+    /// <summary>Gets the layout options the lettering is laid out under, for a box of a given width.</summary>
+    /// <param name="boxWidth">The box's full width, in the paint frame's units, which lines wrap at when
+    /// <see cref="Wrap"/> is set.</param>
+    /// <returns>The options.</returns>
+    public Puck.Text.TextLayoutOptions LayoutOptions(float boxWidth) => new(
+        Alignment: Alignment,
+        LineHeightScale: (LineSpacing ?? 1f),
+        MaxLineWidth: ((Wrap && (boxWidth > 0f)) ? boxWidth : null),
+        Tracking: (Tracking ?? 0f)
+    );
+    /// <summary>Gets where the block sits across the box: the alignment <see cref="Align"/> names, center when it names
+    /// none.</summary>
+    [JsonIgnore]
+    public Puck.Text.TextAlignment Alignment => TextRunDocument.AlignmentOf(align: Align, fallback: Puck.Text.TextAlignment.Center);
+}
 /// <summary>A paint over the palette slot's surface: a primitive of the shape vocabulary, placed like a shape, whose
 /// inside (or, with a <paramref name="Stroke"/>, the band within that distance of its surface) takes
 /// <paramref name="Color"/>. It never changes the field or the bake; the views pass draws it crisp at the pixel. A
@@ -204,6 +258,11 @@ public sealed record PaletteInsetDocument(DocumentVector3 Origin, DocumentQuater
 /// <param name="Chamfer">The cap chamfer radius, as a shape's.</param>
 /// <param name="Exponent">Superellipsoid only: the exponent.</param>
 /// <param name="Curve">Sweep only: the curve, in the frame's units.</param>
+/// <param name="Text">The lettering the paint draws in place of filling its primitive, or null for a paint that covers
+/// its primitive: the surface takes <paramref name="Color"/> only inside both the primitive and a glyph, the text laid
+/// out in the primitive's box. A text paint's primitive is bounded (a <c>Box</c> is the plain choice: its
+/// <paramref name="Scale"/> is the box's half-extents, and its z half-extent bounds which side of the part the
+/// lettering reaches) and carries no <paramref name="Stroke"/>.</param>
 public sealed record PalettePaintDocument(
     SdfSolidPrimitive Type,
     [property: DocumentText("a color literal")] string Color,
@@ -219,15 +278,18 @@ public sealed record PalettePaintDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Rounding = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Chamfer = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Exponent = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCurveDocument? Curve = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCurveDocument? Curve = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PalettePaintTextDocument? Text = null
 ) {
     /// <summary>Resolves the engine paint at a placement scale.</summary>
     /// <param name="resolve">The color resolver.</param>
     /// <param name="scale">The placement scale the paint's lengths multiply by; positive.</param>
     /// <param name="slot">The dynamic transform slot of <see cref="Parent"/>, or <see cref="SdfPaint.WinningFrame"/>.</param>
+    /// <param name="text">The surface text slot the paint's <see cref="Text"/> draws through, or
+    /// <see cref="SdfPaint.NoText"/> for a paint without one.</param>
     /// <returns>The paint.</returns>
     /// <exception cref="ArgumentException">The primitive emits something a paint cannot carry.</exception>
-    public SdfPaint ToPaint(Func<string, Vector3> resolve, float scale = 1f, int slot = SdfPaint.WinningFrame) => new(
+    public SdfPaint ToPaint(Func<string, Vector3> resolve, float scale = 1f, int slot = SdfPaint.WinningFrame, int text = SdfPaint.NoText) => new(
         Color: resolve(Color),
         Origin: ((Position?.Value ?? Vector3.Zero) * scale),
         Rotation: (Rotation?.Value ?? Quaternion.Identity),
@@ -243,7 +305,8 @@ public sealed record PalettePaintDocument(
             type: Type
         ),
         Slot: slot,
-        Stroke: ((Stroke ?? 0f) * scale)
+        Stroke: ((Stroke ?? 0f) * scale),
+        Text: text
     );
 }
 /// <summary>Generic weathering coverage and explicitly authored reveal/deposit surfaces. The pattern's character is

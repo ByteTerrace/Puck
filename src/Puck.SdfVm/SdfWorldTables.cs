@@ -26,10 +26,13 @@ namespace Puck.SdfVm;
 /// </para>
 /// </summary>
 public sealed partial class SdfWorldTables : IDisposable {
-    private const int DecalBufferCells = (DecalDescriptorCount + (MaxScreenSurfaces * MaxScreenDecalCells));
-    // The decal buffer's leading DESCRIPTOR band (one uint4 per screen slot) precedes the shared cell region; a screen's
-    // cell run starts at DecalDescriptorCount + screenIndex * MaxScreenDecalCells (KEEP IN SYNC with sdfSampleGlyphDecal).
-    private const int DecalDescriptorCount = MaxScreenSurfaces;
+    private const int DecalBufferCells = (SurfaceTextBase + ((SdfSurfaceTextLayout.MaxTexts * SdfSurfaceTextLayout.MaxGlyphs) * SdfSurfaceTextLayout.EntriesPerGlyph));
+    // The decal buffer's leading DESCRIPTOR band (one uint4 per screen slot, then one per surface text slot) precedes the
+    // shared cell region; a screen's cell run starts at DecalDescriptorCount + screenIndex * MaxScreenDecalCells, and a
+    // surface text's glyph run at SurfaceTextBase + slot * MaxGlyphs * EntriesPerGlyph. Each descriptor carries its run's
+    // first entry, which is all the kernels read of this layout (sdfSampleGlyphDecal, sdfSurfaceTextInk).
+    private const int DecalDescriptorCount = (MaxScreenSurfaces + SdfSurfaceTextLayout.MaxTexts);
+    private const int SurfaceTextBase = (DecalDescriptorCount + (MaxScreenSurfaces * MaxScreenDecalCells));
     private const int DecalWordsPerCell = 4; // one uint4 per cell/descriptor (KEEP IN SYNC with shade/sdf-environment.hlsli's sdfDecalCells)
     private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = the slot's SdfUpdateRateCode while a tier view shows, zero otherwise) + float4 orientation quaternion + float4 anonymous Lanes (DynamicTransform.Lanes) (KEEP IN SYNC with isa/sdf-world.interface.hlsli sdfDynamicTransforms: position.w is read by sdfRateCode in debug/sdf-debug-views.hlsli, the third row by sdfFieldLane for erosion and morphs and by shading for slot-driven appearance)
     // The fillers' format: the views' color format, which the storage image they stand in for declares.

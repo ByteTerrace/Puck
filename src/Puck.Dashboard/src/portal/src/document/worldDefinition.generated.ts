@@ -2991,6 +2991,10 @@ export type PalettePaintDocument = {
    * Sweep only: the curve, in the frame's units.
    */
   curve?: ShapeCurveDocument | null;
+  /**
+   * The lettering the paint draws in place of filling its primitive, or null for a paint that covers its primitive: the surface takes Color only inside both the primitive and a glyph, the text laid out in the primitive's box. A text paint's primitive is bounded (a Box is the plain choice: its Scale is the box's half-extents, and its z half-extent bounds which side of the part the lettering reaches) and carries no Stroke.
+   */
+  text?: PalettePaintTextDocument | null;
 };
 
 export type PalettePaintDocumentVariant2 = {
@@ -3050,6 +3054,56 @@ export type PalettePaintDocumentVariant2 = {
    * Sweep only: the curve, in the frame's units.
    */
   curve?: ShapeCurveDocument | null;
+  /**
+   * The lettering the paint draws in place of filling its primitive, or null for a paint that covers its primitive: the surface takes Color only inside both the primitive and a glyph, the text laid out in the primitive's box. A text paint's primitive is bounded (a Box is the plain choice: its Scale is the box's half-extents, and its z half-extent bounds which side of the part the lettering reaches) and carries no Stroke.
+   */
+  text?: PalettePaintTextDocument | null;
+};
+
+/**
+ * The lettering a text paint draws (Text): text laid out in the paint's box, on its local XY plane (+X the advance, +Y the ascent), and drawn as the paint's colour on every surface of the slot the box holds, projected along local Z. It is colour at the hit, lit as the surface is, and its glyphs come from the world's text font catalog each frame, so a placeholder's cell changing rewrites the lettering with no new program and no bake. The block is centred on the box's height and placed across its width by Align.
+ */
+export type PalettePaintTextDocument = {
+  /**
+   * The text: literal characters and {state.<row>[.<key>]} placeholders, each replaced by its cell's value (an Int, Fixed, Bool or Text row; an absent cell reads empty). A line feed breaks a line. With Markup, the substituted text is read as BBCode-style effect tags ([color=#C0392B]…[/color], [caret at=3]…[/caret], [shake]…[/shake]), so a cell can supply a tag's name or a parameter's value.
+   */
+  template: string;
+  /**
+   * The height of one em, in the paint frame's units; finite and positive.
+   */
+  emHeight: number;
+  /**
+   * The world text catalog font name; null selects that catalog's default font.
+   */
+  font?: string | null;
+  /**
+   * left, center or right: where the block sits across the box, and how its lines sit against its widest (null = center).
+   */
+  align?: string | null;
+  /**
+   * Extra advance after every glyph, in em units (null = 0; negative tightens).
+   */
+  tracking?: number | null;
+  /**
+   * A multiplier on the font's line height for the baseline step between lines (null = 1).
+   */
+  lineSpacing?: number | null;
+  /**
+   * Whether lines wrap at the box's width, greedily at word boundaries; otherwise only a line feed breaks a line.
+   */
+  wrap?: boolean;
+  /**
+   * Whether a block wider or taller than the box shrinks, uniformly, to fit it; otherwise the box clips it.
+   */
+  fit?: boolean;
+  /**
+   * Whether the substituted text is read as effect markup.
+   */
+  markup?: boolean;
+  /**
+   * The length, in the paint frame's units, of one unit of a markup effect's amplitude (a shake's or wave's travel, a caret's lift); null = a thirty-second of EmHeight.
+   */
+  effectUnit?: number | null;
 };
 
 export type PaletteRadialPaintDocument = {
@@ -13777,6 +13831,25 @@ export type WorldSeatFollow = {
   whileIdle?: boolean;
 };
 
+export type WorldSeatFraming = {
+  /**
+   * The row's stable id, unique within the section; the camera read-back names the held row by it.
+   */
+  id: string;
+  /**
+   * The camera program the seat's camera eases to: a name in the document's program table (views.programs, a cameras[].rig). Its anchor's reference subject is the seat's body.
+   */
+  program: string;
+  /**
+   * The row holds while this is positive. A binding keyed $body reads the cell of the seat's own body, so the row frames only the seats that satisfy it.
+   */
+  when: BindableScalar;
+  /**
+   * The framing's near-plane distance from its eye, in world units, so nothing nearer draws (a seated avatar between the eye and what it frames); zero keeps the camera's own. Non-negative.
+   */
+  near?: number;
+};
+
 export type WorldSeatGyro = {
   /**
    * The dimensionless multiplier applied after projection.
@@ -15134,6 +15207,10 @@ export type WorldViewDefaults = {
    * The ease into or out of the built-in seat ladder (the composition no authored layout selects), or null for the neutral WorldViewTransition defaults (a cut). An authored layout brings its own envelope.
    */
   builtinTransition?: WorldViewTransition | null;
+  /**
+   * The framings a seat's camera eases to while their conditions hold (WorldSeatFraming), or null for none.
+   */
+  framings?: (WorldSeatFraming | null)[] | null;
   /**
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */

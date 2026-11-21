@@ -78,4 +78,28 @@ public sealed class WorldSignalEdges {
             value: mirror.Scalar(delivered: true, fallback: 0f, scalar: in signal)
         );
     }
+    /// <summary>Reads a row's authored signal for one holder at the delivered tick and reports what moved since its
+    /// last reading: a <c>$body</c> key reads the body the lease is bound to (<see cref="WorldStateLease.Scalar"/>).
+    /// The lease must already be bound.</summary>
+    /// <param name="lease">The holder's reads, bound to its mirror and body.</param>
+    /// <param name="id">The row's id.</param>
+    /// <param name="signal">The row's authored signal.</param>
+    /// <returns>The edge between the last reading and this one; <see cref="SignalEdge.None"/> for an unbound
+    /// lease.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="lease"/> or <paramref name="id"/> is
+    /// <see langword="null"/>.</exception>
+    public SignalEdge Observe(WorldStateLease lease, string id, in BindableScalar signal) {
+        ArgumentNullException.ThrowIfNull(argument: lease);
+
+        if (lease.Mirror is not { } mirror) {
+            return SignalEdge.None;
+        }
+
+        Bind(mirror: mirror);
+
+        return Observe(
+            id: id,
+            value: lease.Scalar(delivered: true, fallback: 0f, scalar: in signal)
+        );
+    }
 }

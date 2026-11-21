@@ -45,18 +45,16 @@ public sealed class WorldHapticDirector {
 
     private readonly WorldValueDomainGuard m_domains;
     private readonly Func<InputDeviceId, IGamepadOutput?>? m_outputResolver;
-    private readonly WorldPerceptionAnchor? m_perception;
+    private readonly WorldSeatBodies m_bodies;
     private readonly PlayerRoster m_roster;
     private readonly WorldSeatBindings m_seatBindings;
-    private readonly WorldSeatAuthorityRouter m_seatRouter;
     private readonly SeatSlot[] m_seats;
     private readonly Func<long> m_timestamp;
 
     /// <summary>Initializes the director over the seat roster, routed state bindings, and optional pad output resolver.</summary>
     /// <param name="roster">The local seat roster, resolving each seat to its gamepad device.</param>
     /// <param name="seatBindings">The routed definition and state mirror for each seat.</param>
-    /// <param name="seatRouter">The seat authority router, supplying each seat's routed entity index.</param>
-    /// <param name="perception">Optional perception anchor for boot-authority body possession.</param>
+    /// <param name="bodies">The body each seat's <c>$body</c> key names.</param>
     /// <param name="outputResolver">Resolves a gamepad device id to its <see cref="IGamepadOutput"/>, or
     /// <see langword="null"/> when physical devices are disabled (headless or <c>--devices none</c>).</param>
     /// <param name="domains">Optional shared domain guard for reporting out-of-range bound scalars.</param>
@@ -64,20 +62,18 @@ public sealed class WorldHapticDirector {
     public WorldHapticDirector(
         PlayerRoster roster,
         WorldSeatBindings seatBindings,
-        WorldSeatAuthorityRouter seatRouter,
-        WorldPerceptionAnchor? perception = null,
+        WorldSeatBodies bodies,
         Func<InputDeviceId, IGamepadOutput?>? outputResolver = null,
         WorldValueDomainGuard? domains = null,
         Func<long>? timestamp = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: seatBindings);
-        ArgumentNullException.ThrowIfNull(argument: seatRouter);
+        ArgumentNullException.ThrowIfNull(argument: bodies);
 
         m_roster = roster;
         m_seatBindings = seatBindings;
-        m_seatRouter = seatRouter;
-        m_perception = perception;
+        m_bodies = bodies;
         m_outputResolver = outputResolver;
         m_domains = (domains ?? new WorldValueDomainGuard());
         m_timestamp = (timestamp ?? Stopwatch.GetTimestamp);
@@ -243,10 +239,8 @@ public sealed class WorldHapticDirector {
             return;
         }
 
-        var bodyIndex = ResolveBodyIndex(slot: slot);
-
         seat.Lease.Bind(
-            bodyIndex: bodyIndex,
+            bodyIndex: m_bodies.Of(slot: slot),
             mirror: mirror
         );
 
@@ -445,22 +439,6 @@ public sealed class WorldHapticDirector {
             }
         }
     }
-    private int ResolveBodyIndex(int slot) {
-        if (
-            (m_seatRouter.TryRoute(slot: slot) is { } route) &&
-            (route.Entity.Index != slot)
-        ) {
-            return route.Entity.Index;
-        }
-
-        var routed = m_seatBindings.RoutedEntityIndex(slot: slot);
-
-        if (routed != slot) {
-            return routed;
-        }
-
-        return (m_perception?.PerceivedBody(slot: slot) ?? slot);
-    }
     private float ReadScalar(
         WorldStateMirror mirror,
         SeatSlot seat,
@@ -470,25 +448,7 @@ public sealed class WorldHapticDirector {
         int rowIndex,
         float fallback
     ) {
-        float raw;
-
-        if (scalar.State is { Key: StateBinding.BodyKey } binding) {
-            var slot = seat.Lease.Slot(
-                reference: scalar.Binding!,
-                truth: binding.Target
-            );
-
-            if (!seat.Lease.TryDeliveredNumber(slot: slot, value: out raw)) {
-                raw = fallback;
-            }
-        } else {
-            raw = mirror.Scalar(
-                delivered: true,
-                fallback: fallback,
-                scalar: in scalar
-            );
-        }
-
+        var raw = seat.Lease.Scalar(delivered: true, fallback: fallback, scalar: in scalar);
         var site = new WorldValueSite(
             Index: rowIndex,
             Inner: null,

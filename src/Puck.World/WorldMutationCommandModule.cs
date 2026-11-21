@@ -60,15 +60,19 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         return !string.IsNullOrWhiteSpace(value: path);
     }
 
-    // world.undo and world.redo: one optional positive count, submitted as the acting principal's own journal step.
+    // world.undo and world.redo: one optional positive count, submitted as the acting principal's own journal step. Any
+    // principal may submit one and a binding may name it, since the step reaches only the principal's own edits and the
+    // authority admits it as it would admit those edits (WorldPersistence.ApplyUndo).
     private CommandDefinition JournalStep(CommandForms forms, bool redo, string description) {
         var verb = (redo ? "world.redo" : "world.undo");
 
-        return Simulation(
-            audience: CommandAudience.Operator,
+        return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
+            bindability: CommandBindability.Bindable,
             name: verb,
             description: description,
             forms: forms,
+            routing: CommandRouting.Simulation,
             handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
                     definition: server.ReadView(context: context).Definition,
@@ -346,12 +350,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return JournalStep(
             forms: WorldUndoForms,
             redo: false,
-            description: $"Undoes the acting principal's own last n edits (default 1: source edits whose reload it submitted, and mutations it submitted), never another principal's, by replaying the journal without them through the same apply path: {WorldUndoForms.Spelling}. An undone edit keeps its place, and world.redo takes it back there until the principal's next edit. The World's own entries (sweeps, searches, field writes, rule effects, scoped replays) are replayed and never undone, and the verdict names what it undid and the principal's undo and redo depths. Refused by name, naming the row and the other principal, when a later edit by another principal changed a row the undo would change; refused by name, naming host.journalDepth, when n reaches past what a bounded journal has kept — entries beyond that horizon already compacted into the base and cannot be replayed."
+            description: $"Undoes the acting principal's own last n edits (default 1: source edits whose reload it submitted, and mutations it submitted), never another principal's, by replaying the journal without them through the same apply path: {WorldUndoForms.Spelling}. An undone edit keeps its place, and world.redo takes it back there until the principal's next edit. Bindable, and any principal may run it: the step is admitted as submitting each undone edit again would be (the same grants), and undoing a source edit also needs the operator. The World's own entries (sweeps, searches, field writes, rule effects, scoped replays) are replayed and never undone, and the verdict names what it undid and the principal's undo and redo depths. Refused by name, naming the row and the other principal, when a later edit by another principal changed a row the undo would change; refused by name, naming host.journalDepth, when n reaches past what a bounded journal has kept — entries beyond that horizon already compacted into the base and cannot be replayed."
         );
         yield return JournalStep(
             forms: WorldRedoForms,
             redo: true,
-            description: $"Takes back the first n edits the acting principal's undos removed (default 1), each at the place it held, by replaying the journal with them through the same apply path world.undo takes: {WorldRedoForms.Spelling}. The principal's next edit, a load or a save clears what it can redo. Refused by name, naming the row and the other principal, when a later edit by another principal changed a row the redo would change, and when the principal has nothing to redo."
+            description: $"Takes back the first n edits the acting principal's undos removed (default 1), each at the place it held, by replaying the journal with them through the same apply path world.undo takes: {WorldRedoForms.Spelling}. The principal's next edit, a load or a save clears what it can redo. Bindable and admitted as world.undo is. Refused by name, naming the row and the other principal, when a later edit by another principal changed a row the redo would change, and when the principal has nothing to redo."
         );
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Host,
@@ -469,7 +473,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.status",
-            description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path, the source file's basis (its composition template, or none — peeked from the file, the one truth for derivation), schema, row counts, the simulation rate, correction/producer/audio policy (including the mixer's half-radius curve sample), the declared medium field names (or none), for the operator a cheap session-drift hint and dirty = journal length (the authority's edit history, which a recipient's status omits), and journal-depth = host.journalDepth (0 opts into unbounded history). Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
+            description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path, the source file's basis (its composition template, or none — peeked from the file, the one truth for derivation), schema, row counts, the simulation rate, correction/producer/audio policy (including the mixer's half-radius curve sample), the declared medium field names (or none), for the operator a cheap session-drift hint and dirty = journal length (the authority's edit history, which a recipient's status omits), undo and redo = how many of the acting principal's own edits world.undo and world.redo can reach, and journal-depth = host.journalDepth (0 opts into unbounded history). Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
             handler: (context, args) => {
                 if (CommandResult.RequireNoArguments(
                     args: args,
@@ -540,6 +544,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     handler: $"composed {WorldBootWork.Current.Read(kind: WorldBootWork.Compositions)} shared {WorldBootWork.Current.Read(kind: WorldBootWork.CompositionsShared)} held {WorldDefinitionFileSource.ComposedDocumentsHeld} ({WorldDefinitionFileSource.ComposedDocumentBytes} bytes)"
                 ) : string.Empty);
                 var journalDepth = definition.Host.JournalDepth;
+                var (undoable, redoable) = server.JournalDepths(principal: context.Principal);
                 var journalDepthText = ((journalDepth > 0)
                     ? journalDepth.ToString(provider: CultureInfo.InvariantCulture)
                     : "unbounded"
@@ -552,7 +557,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"[world.status:{provenance} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} medium {medium} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####}{sleeping}{journal} journal-depth {journalDepthText}{machineFaults}]"
+                    handler: $"[world.status:{provenance} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} medium {medium} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####}{sleeping}{journal} undo {undoable} redo {redoable} journal-depth {journalDepthText}{machineFaults}]"
                 ));
             }
         );

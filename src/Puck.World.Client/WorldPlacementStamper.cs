@@ -176,8 +176,10 @@ public static partial class WorldPlacementStamper {
         var resolved = new List<SdfPaint>(capacity: paints.Count);
 
         foreach (var paint in paints) {
+            var text = colors.SurfaceTextSlot(paint: paint);
+
             if (paint.Parent is not { } parent) {
-                resolved.Add(item: paint.ToPaint(resolve: colors.LayerColor, scale: (pool?.Scale ?? 1f)));
+                resolved.Add(item: paint.ToPaint(resolve: colors.LayerColor, scale: (pool?.Scale ?? 1f), text: text));
 
                 continue;
             }
@@ -194,7 +196,7 @@ public static partial class WorldPlacementStamper {
             if ((hidden is not null) && hidden[shapeIndex]) {
                 continue;
             }
-            var authored = paint.ToPaint(resolve: colors.LayerColor, scale: frames.Scale, slot: (frames.RootSlot + (motion?.ShapeSlots[shapeIndex] ?? 0)));
+            var authored = paint.ToPaint(resolve: colors.LayerColor, scale: frames.Scale, slot: (frames.RootSlot + (motion?.ShapeSlots[shapeIndex] ?? 0)), text: text);
             var shape = shapes[shapeIndex];
 
             resolved.Add(item: authored with {

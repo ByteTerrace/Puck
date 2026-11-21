@@ -82,6 +82,32 @@ public static partial class CreationCanonicalizer {
             ) {
                 Refuse(field: "scale", message: $"the primitive cannot be emitted: {refusal}.");
             }
+            if (paint.Text is { } text) {
+                if (text.Template is null) {
+                    Refuse(field: "text.template", message: "a text paint requires a template.");
+                }
+                if (!float.IsFinite(f: text.EmHeight) || (text.EmHeight <= 0f)) {
+                    Refuse(field: "text.emHeight", message: "emHeight must be finite and positive.");
+                }
+                if (text.Align is not (null or TextRunDocument.AlignLeft or TextRunDocument.AlignCenter or TextRunDocument.AlignRight)) {
+                    Refuse(field: "text.align", message: $"align '{text.Align}' must be {TextRunDocument.AlignLeft}, {TextRunDocument.AlignCenter} or {TextRunDocument.AlignRight}.");
+                }
+                if ((text.Tracking is { } tracking) && (!float.IsFinite(f: tracking) || (MathF.Abs(x: tracking) > TextRunDocument.MaxTracking))) {
+                    Refuse(field: "text.tracking", message: $"tracking must be finite and within {TextRunDocument.MaxTracking} em.");
+                }
+                if ((text.LineSpacing is { } lineSpacing) && !((lineSpacing >= TextRunDocument.MinLineSpacing) && (lineSpacing <= TextRunDocument.MaxLineSpacing))) {
+                    Refuse(field: "text.lineSpacing", message: $"lineSpacing must be within [{TextRunDocument.MinLineSpacing}, {TextRunDocument.MaxLineSpacing}].");
+                }
+                if ((text.EffectUnit is { } unit) && (!float.IsFinite(f: unit) || (unit < 0f))) {
+                    Refuse(field: "text.effectUnit", message: "effectUnit must be finite and non-negative.");
+                }
+                if (paint.Stroke is > 0f) {
+                    Refuse(field: "stroke", message: "a text paint carries no stroke: its glyphs are its coverage.");
+                }
+                if (SdfSolidGeometry.GetLocalBounds(type: paint.Type).IsUnbounded) {
+                    Refuse(field: "type", message: $"a text paint needs a bounded primitive to lay its text out in, not {paint.Type}.");
+                }
+            }
             if (refused) {
                 return null;
             }

@@ -67,6 +67,20 @@ public sealed partial class WorldDocument {
     /// <summary>Gets the journal length — the number of entries over the base, undone ones included.</summary>
     internal int JournalLength => m_journal.Count;
 
+    // How many of a principal's own edits the journal holds for world.undo to reach, and how many of its undone edits
+    // for world.redo: the entries it authored (WorldJournalEntry.Authored and Author), split by their Undone mark.
+    internal (int Undoable, int Redoable) JournalDepths(Puck.Commands.Principal principal) {
+        var undoable = 0;
+        var redoable = 0;
+
+        foreach (var entry in m_journal) {
+            if (!entry.Authored || (entry.Author != principal)) { continue; }
+            if (entry.Undone) { redoable++; } else { undoable++; }
+        }
+
+        return (undoable, redoable);
+    }
+
     /// <summary>Replaces the edit journal.</summary>
     /// <param name="journal">The journal the base now carries.</param>
     internal void SetJournal(ImmutableList<WorldJournalEntry> journal) => m_journal = journal;

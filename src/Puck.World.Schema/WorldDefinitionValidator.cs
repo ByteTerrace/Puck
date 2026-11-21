@@ -1689,6 +1689,11 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             programs: cameraPrograms
         );
+        ValidateSeatFramings(
+            definition: definition,
+            errors: errors,
+            programs: cameraPrograms
+        );
 
         ValidateSeatModes(
             definition: definition,

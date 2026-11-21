@@ -59,6 +59,7 @@ public sealed partial class WorldFramePresenter {
             }
         }
         m_elapsedSeconds += deltaSeconds;
+        m_surfaceTexts.Advance(seconds: m_elapsedSeconds);
         m_frameRate.Sample(deltaSeconds: deltaSeconds);
 
         if (m_displayExtentSupplied) {

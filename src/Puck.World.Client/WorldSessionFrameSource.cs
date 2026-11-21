@@ -30,6 +30,8 @@ public sealed class WorldSessionFrameSource(SdfCompositionFrameSource inner, Act
     /// <inheritdoc/>
     public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => ((ISdfFrameSource)inner).ScreenDecals;
     /// <inheritdoc/>
+    public Func<int, SdfSurfaceTextFrame?>? SurfaceTexts => ((ISdfFrameSource)inner).SurfaceTexts;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => ((ISdfFrameSource)inner).ScreenSurfaceTransforms;
 
     /// <inheritdoc/>

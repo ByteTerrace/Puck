@@ -234,6 +234,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // away from text clears its decal the same frame and a slot whose live source becomes text (a magazine selection, a
     // live source verb) lights it without a definition revision.
     private readonly WorldScreenDecals m_decals;
+    // The glyphs the boot world's text paints draw, read from its state mirror each frame.
+    private readonly WorldSurfaceTexts m_surfaceTexts;
     // Every engine screen slot's surface transform, which moves a carried screen's picture with its carrier.
     private readonly IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenTransforms;
 
@@ -626,6 +628,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         // Every decal rebakes on delivery, which may have changed its text.
         m_decals.Invalidate();
+        m_surfaceTexts.Invalidate();
         // The SAME facets.Faces the binder just reconciled its sources against, threaded to the emitter so the
         // ScreenSlab geometry it composes and the binder's bound sources never disagree about which face maps to
         // which placement — one WorldPrototypeFacets.Derive call per delivery, never two.
@@ -907,6 +910,26 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             target: ref target
         );
 
+        // A seat whose state holds one of its world's framing rows (views.framings) eases onto that row's camera program.
+        var seatReads = m_seatReads[slot];
+
+        seatReads.Bind(bodyIndex: perceivedBody, mirror: state);
+
+        var framingNear = view.Framings.Apply(
+            anchor: in anchor,
+            chase: chase.Dynamics,
+            clock: in clock,
+            definition: definition,
+            deltaSeconds: deltaSeconds,
+            domains: m_domains,
+            enabled: (presentedHere && ReferenceEquals(objA: rig, objB: chase)),
+            eye: ref eye,
+            fieldOfView: ref fieldOfView,
+            mirror: state,
+            reads: seatReads,
+            target: ref target
+        );
+
         view.NoteFieldOfView(radians: fieldOfView);
 
         return CameraSnapshot.LookAt(
@@ -918,8 +941,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         ) with {
             Near = MathF.Max(
                 x: MathF.Max(
-                    x: near,
-                    y: tabletopNear
+                    x: MathF.Max(x: near, y: tabletopNear),
+                    y: framingNear
                 ),
                 // The clearance's cutaway holds only for the eye and target it was measured on; a door or a framing that
                 // moved them since owns the near plane.
@@ -2341,6 +2364,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             colors: new WorldBakedColors(mirror: client.StateMirror),
             textAt: binder.TextSourceAt
         );
+        m_surfaceTexts = new WorldSurfaceTexts(catalog: () => m_text.Catalog, mirror: client.StateMirror);
         m_screenTransforms = animator.ScreenSurfaceTransforms(client: client);
         m_anchor = anchor;
         m_speech = speech;
@@ -2480,6 +2504,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     public int ProgramWordCapacity { get; }
     /// <inheritdoc/>
     public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_decals.Providers;
+    /// <inheritdoc/>
+    /// <remarks>The boot world's text paints', laid out through its own font catalog (<see cref="WorldSurfaceTexts"/>).</remarks>
+    public Func<int, SdfSurfaceTextFrame?>? SurfaceTexts => m_surfaceTexts.Provider;
     /// <inheritdoc/>
     /// <remarks>A carried screen's (<see cref="WorldScreen.Carry"/>) answers the frame its carrier holds it at this frame
     /// (<see cref="WorldCreationInstances.ScreenSurfaceTransforms"/>).</remarks>

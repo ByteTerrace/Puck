@@ -58,4 +58,10 @@ public interface ISdfFrameSource {
     /// not override it. Mirrors <see cref="ScreenSurfaceTransforms"/>/<see cref="GlyphAtlas"/>: read straight off the
     /// frame source so a host node's type coupling doesn't grow to thread it.</summary>
     IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => null;
+    /// <summary>Gets what supplies each surface text slot's glyphs each frame: handed a slot
+    /// (0..<see cref="Puck.SignedDistance.SdfSurfaceTextLayout.MaxTexts"/>-1) a program's text paints may name
+    /// (<see cref="Puck.SignedDistance.SdfPaint.Text"/>), it returns the glyph quads the slot draws this frame
+    /// (<see cref="SdfWorldTables.SetSurfaceText"/>), or <see langword="null"/> for a slot that draws nothing.
+    /// <see langword="null"/>, the default, for a source whose programs carry no text paint.</summary>
+    Func<int, SdfSurfaceTextFrame?>? SurfaceTexts => null;
 }

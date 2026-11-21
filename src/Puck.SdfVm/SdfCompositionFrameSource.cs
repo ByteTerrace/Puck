@@ -43,6 +43,10 @@ public interface ISdfFrameDresser {
     /// <summary>Gets the glyph decals the dressed world's text screens draw, which the composed frame source hands its
     /// host as its <see cref="ISdfFrameSource.ScreenDecals"/>; <see langword="null"/>, the default, for none.</summary>
     IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => null;
+    /// <summary>Gets what supplies the glyphs of the dressed world's surface text slots, which the composed frame source
+    /// hands its host as its <see cref="ISdfFrameSource.SurfaceTexts"/>; <see langword="null"/>, the default, for
+    /// none.</summary>
+    Func<int, SdfSurfaceTextFrame?>? SurfaceTexts => null;
     /// <summary>Gets the screen-surface transforms of the dressed world's screens that move, which the composed frame
     /// source hands its host as its <see cref="ISdfFrameSource.ScreenSurfaceTransforms"/>; <see langword="null"/>, the
     /// default, for none.</summary>
@@ -195,6 +199,9 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// <inheritdoc/>
     /// <remarks>The dresser's (<see cref="ISdfFrameDresser.ScreenDecals"/>).</remarks>
     public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_dresser.ScreenDecals;
+    /// <inheritdoc/>
+    /// <remarks>The dresser's (<see cref="ISdfFrameDresser.SurfaceTexts"/>).</remarks>
+    public Func<int, SdfSurfaceTextFrame?>? SurfaceTexts => m_dresser.SurfaceTexts;
     /// <inheritdoc/>
     /// <remarks>The dresser's (<see cref="ISdfFrameDresser.ScreenSurfaceTransforms"/>).</remarks>
     public IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => m_dresser.ScreenSurfaceTransforms;

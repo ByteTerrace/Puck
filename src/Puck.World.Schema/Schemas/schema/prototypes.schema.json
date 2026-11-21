@@ -544,6 +544,11 @@
                         "$ref": "./common.schema.json#/$defs/ShapeCurveDocument",
                         "description": "Sweep only: the curve, in the frame\u0027s units.",
                         "default": null
+                      },
+                      "text": {
+                        "$ref": "./common.schema.json#/$defs/PalettePaintTextDocument",
+                        "description": "The lettering the paint draws in place of filling its primitive, or null for a paint that covers its primitive: the surface takes Color only inside both the primitive and a glyph, the text laid out in the primitive\u0027s box. A text paint\u0027s primitive is bounded (a Box is the plain choice: its Scale is the box\u0027s half-extents, and its z half-extent bounds which side of the part the lettering reaches) and carries no Stroke.",
+                        "default": null
                       }
                     },
                     "required": [

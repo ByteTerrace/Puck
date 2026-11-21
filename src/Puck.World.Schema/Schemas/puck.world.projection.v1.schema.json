@@ -30267,6 +30267,95 @@
           "default": null,
           "title": "WorldViewTransition"
         },
+        "framings": {
+          "description": "The framings a seat\u0027s camera eases to while their conditions hold (WorldSeatFraming), or null for none.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One row of views.framings: a framing a seat\u0027s camera eases to, in place of its chase framing, while a condition holds, such as a seat at a bench, an instrument or a desk. Each frame a seat holds the first row, in document order, whose When reads positive for it; its camera eases onto Program, resolved against the seat\u0027s own body pose, and back once no row holds. The ease is timed by the program\u0027s own dynamics op, or by the seat rig\u0027s where it authors none. Presentation only: the rules that seat a player and the state they write stay the document\u0027s.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "description": "The row\u0027s stable id, unique within the section; the camera read-back names the held row by it.",
+                "type": "string"
+              },
+              "program": {
+                "description": "The camera program the seat\u0027s camera eases to: a name in the document\u0027s program table (views.programs, a cameras[].rig). Its anchor\u0027s reference subject is the seat\u0027s body.",
+                "type": "string"
+              },
+              "when": {
+                "description": "The row holds while this is positive. A binding keyed $body reads the cell of the seat\u0027s own body, so the row frames only the seats that satisfy it.",
+                "title": "BindableScalar",
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "clock": {
+                        "type": "string"
+                      },
+                      "keys": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "at": {
+                              "type": "number"
+                            },
+                            "value": {
+                              "type": "number"
+                            },
+                            "ease": {
+                              "type": "string",
+                              "enum": [
+                                "Linear",
+                                "Smooth",
+                                "Step"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "at",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "clock",
+                      "keys"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "near": {
+                "description": "The framing\u0027s near-plane distance from its eye, in world units, so nothing nearer draws (a seated avatar between the eye and what it frames); zero keeps the camera\u0027s own. Non-negative.",
+                "type": "number",
+                "default": 0
+              }
+            },
+            "required": [
+              "id",
+              "program",
+              "when"
+            ],
+            "additionalProperties": false,
+            "title": "WorldSeatFraming"
+          },
+          "default": null
+        },
         "layouts": {
           "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
           "type": [
@@ -34511,6 +34600,85 @@
                             "additionalProperties": false,
                             "default": null,
                             "title": "ShapeCurveDocument"
+                          },
+                          "text": {
+                            "description": "The lettering the paint draws in place of filling its primitive, or null for a paint that covers its primitive: the surface takes Color only inside both the primitive and a glyph, the text laid out in the primitive\u0027s box. A text paint\u0027s primitive is bounded (a Box is the plain choice: its Scale is the box\u0027s half-extents, and its z half-extent bounds which side of the part the lettering reaches) and carries no Stroke.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "template": {
+                                "description": "The text: literal characters and {state.\u003Crow\u003E[.\u003Ckey\u003E]} placeholders, each replaced by its cell\u0027s value (an Int, Fixed, Bool or Text row; an absent cell reads empty). A line feed breaks a line. With Markup, the substituted text is read as BBCode-style effect tags ([color=#C0392B]\u2026[/color], [caret at=3]\u2026[/caret], [shake]\u2026[/shake]), so a cell can supply a tag\u0027s name or a parameter\u0027s value.",
+                                "type": "string"
+                              },
+                              "emHeight": {
+                                "description": "The height of one em, in the paint frame\u0027s units; finite and positive.",
+                                "type": "number"
+                              },
+                              "font": {
+                                "description": "The world text catalog font name; null selects that catalog\u0027s default font.",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "align": {
+                                "description": "left, center or right: where the block sits across the box, and how its lines sit against its widest (null = center).",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "tracking": {
+                                "description": "Extra advance after every glyph, in em units (null = 0; negative tightens).",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "lineSpacing": {
+                                "description": "A multiplier on the font\u0027s line height for the baseline step between lines (null = 1).",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "wrap": {
+                                "description": "Whether lines wrap at the box\u0027s width, greedily at word boundaries; otherwise only a line feed breaks a line.",
+                                "type": "boolean",
+                                "default": false
+                              },
+                              "fit": {
+                                "description": "Whether a block wider or taller than the box shrinks, uniformly, to fit it; otherwise the box clips it.",
+                                "type": "boolean",
+                                "default": false
+                              },
+                              "markup": {
+                                "description": "Whether the substituted text is read as effect markup.",
+                                "type": "boolean",
+                                "default": false
+                              },
+                              "effectUnit": {
+                                "description": "The length, in the paint frame\u0027s units, of one unit of a markup effect\u0027s amplitude (a shake\u0027s or wave\u0027s travel, a caret\u0027s lift); null = a thirty-second of EmHeight.",
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "required": [
+                              "template",
+                              "emHeight"
+                            ],
+                            "additionalProperties": false,
+                            "default": null,
+                            "title": "PalettePaintTextDocument"
                           }
                         },
                         "required": [

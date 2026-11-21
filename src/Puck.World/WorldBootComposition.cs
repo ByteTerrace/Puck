@@ -266,6 +266,11 @@ public static class WorldBootComposition {
         // The music read-backs read the director's delivered score and the authority's clock, neither of which needs a
         // device, so a headless script reads music.state as a windowed one does.
         services.AddSingleton<ICommandModule, WorldMusicCommandModule>();
+        services.AddSingleton(implementationFactory: static sp => new WorldSeatBodies(
+            perception: sp.GetRequiredService<WorldPerceptionAnchor>(),
+            seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
+            seatRouter: sp.GetRequiredService<WorldSeatAuthorityRouter>()
+        ));
         services.AddSingleton(implementationFactory: static sp => {
             var gamepads = sp.GetService<GamepadManager>();
 
@@ -279,16 +284,16 @@ public static class WorldBootComposition {
                         ? output
                         : null)
                     : null),
-                perception: sp.GetRequiredService<WorldPerceptionAnchor>(),
+                bodies: sp.GetRequiredService<WorldSeatBodies>(),
                 roster: sp.GetRequiredService<PlayerRoster>(),
-                seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
-                seatRouter: sp.GetRequiredService<WorldSeatAuthorityRouter>()
+                seatBindings: sp.GetRequiredService<WorldSeatBindings>()
             );
         });
         services.AddSingleton<ICommandModule, WorldHapticsCommandModule>();
         // The keyboard lamps: every boot shape paints each seat's legend from its world's keyLights section, and only a
         // boot that opens physical devices registers the loop that writes it to the platform's lamp arrays.
         services.AddSingleton(implementationFactory: static sp => new WorldKeyLightDirector(
+            bodies: sp.GetRequiredService<WorldSeatBodies>(),
             driver: sp.GetService<Puck.Input.Lighting.LampLegendDriver>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>()

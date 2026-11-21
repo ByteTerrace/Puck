@@ -68,8 +68,10 @@ public sealed class WorldPresentationManifest {
     private readonly WorldClock[] m_clocks;
     private readonly Lazy<HashSet<(string Path, StateBinding Binding)>> m_authored;
     private readonly Dictionary<object, WorldPresentationBinding[]> m_templates;
+    private readonly PalettePaintDocument[] m_surfaceTexts;
 
-    private WorldPresentationManifest(WorldPresentationBinding[] bindings, WorldPresentationBinding[] bodyBindings, WorldClock[] clocks, Dictionary<object, WorldPresentationBinding[]> templates, WorldDefinition? definition = null) {
+    private WorldPresentationManifest(WorldPresentationBinding[] bindings, WorldPresentationBinding[] bodyBindings, WorldClock[] clocks, Dictionary<object, WorldPresentationBinding[]> templates, PalettePaintDocument[]? surfaceTexts = null, WorldDefinition? definition = null) {
+        m_surfaceTexts = (surfaceTexts ?? []);
         m_authored = new Lazy<HashSet<(string Path, StateBinding Binding)>>(valueFactory: () => ((definition is null)
             ? []
             : [.. WorldKeyedValues.BoundOf(definition: definition).Where(predicate: static bound => (bound.Field is not null)).Select(selector: static bound => (bound.Path, bound.Binding))]));
@@ -95,6 +97,25 @@ public sealed class WorldPresentationManifest {
         return m_authored.Value.Contains(item: (path, binding));
     }
 
+    /// <summary>Gets the document's text paints (a creation palette paint that authors
+    /// <see cref="PalettePaintDocument.Text"/>), each distinct paint once, in document order: a paint's position here
+    /// is the surface text slot (<see cref="Puck.SignedDistance.SdfPaint.Text"/>) its program names and its glyphs are
+    /// supplied under, so the two agree by reading one list. Paints equal in every field share a slot, since they draw
+    /// the same lettering.</summary>
+    public ReadOnlySpan<PalettePaintDocument> SurfaceTexts => m_surfaceTexts;
+    /// <summary>Returns the surface text slot a text paint draws through.</summary>
+    /// <param name="paint">The paint.</param>
+    /// <returns>The slot, or <see cref="Puck.SignedDistance.SdfPaint.NoText"/> for a paint that authors no text, one
+    /// the document does not hold, or one past the renderer's
+    /// <see cref="Puck.SignedDistance.SdfSurfaceTextLayout.MaxTexts"/> slots, which draws nothing.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="paint"/> is <see langword="null"/>.</exception>
+    public int SurfaceTextSlot(PalettePaintDocument paint) {
+        ArgumentNullException.ThrowIfNull(argument: paint);
+
+        var slot = ((paint.Text is null) ? -1 : Array.IndexOf(array: m_surfaceTexts, value: paint));
+
+        return (((slot >= 0) && (slot < Puck.SignedDistance.SdfSurfaceTextLayout.MaxTexts)) ? slot : Puck.SignedDistance.SdfPaint.NoText);
+    }
     /// <summary>Gets the reads that last as long as the document, each once, in document order.</summary>
     public ReadOnlySpan<WorldPresentationBinding> Bindings => m_bindings;
     /// <summary>Gets the templates a body reads through its lease, each once, in document order; a template's key may
@@ -209,12 +230,13 @@ public sealed class WorldPresentationManifest {
             }
         }
 
-        return (((builder.Bindings.Count == 0) && (builder.BodyBindings.Count == 0) && (clocks.Length == 0))
+        return (((builder.Bindings.Count == 0) && (builder.BodyBindings.Count == 0) && (clocks.Length == 0) && (builder.SurfaceTexts.Count == 0))
             ? Empty
             : new WorldPresentationManifest(
                 bindings: [.. builder.Bindings],
                 bodyBindings: [.. builder.BodyBindings],
                 clocks: clocks,
+                surfaceTexts: [.. builder.SurfaceTexts],
                 templates: builder.Templates.ToDictionary(
                     comparer: ReferenceEqualityComparer.Instance,
                     elementSelector: static pair => pair.Value.ToArray(),
@@ -356,6 +378,9 @@ public sealed class WorldPresentationManifest {
         public WorldDefinition? Definition { get; init; }
 
         public List<WorldPresentationBinding> BodyBindings { get; } = [];
+
+        // The document's distinct text paints, in walk order: a paint's index is its surface text slot.
+        public List<PalettePaintDocument> SurfaceTexts { get; } = [];
 
         // The look or creation whose members the walk is inside, which each template is recorded under.
         public object? Owner { get; set; }
@@ -548,6 +573,25 @@ public sealed class WorldPresentationManifest {
                             binding: StateBinding.Parse(token: select.State),
                             conversion: WorldStateConversion.Number
                         );
+                    }
+                    foreach (var paint in (entry.Paints ?? [])) {
+                        if (paint is null) {
+                            continue;
+                        }
+
+                        AddColor(token: paint.Color);
+                        if (paint.Text is not { } paintText) {
+                            continue;
+                        }
+                        if (!SurfaceTexts.Contains(item: paint)) {
+                            SurfaceTexts.Add(item: paint);
+                        }
+                        foreach (var (_, placeholder) in WorldScreenText.Placeholders(line: paintText.Template)) {
+                            Add(
+                                binding: placeholder,
+                                conversion: WorldStateConversion.Number
+                            );
+                        }
                     }
 
                     return true;

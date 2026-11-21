@@ -31,6 +31,16 @@ public static class WorldScreenTextDecal {
         y: v
     ));
 
+    /// <summary>Packs a glyph's atlas cell as the two words a shade-time text tier samples it by: its top-left and its
+    /// bottom-right corner, each a unorm2x16 UV of the atlas image, whose rows run down.</summary>
+    /// <param name="atlas">The atlas the cell belongs to.</param>
+    /// <param name="bounds">The glyph's cell in the atlas image, in texels.</param>
+    /// <returns>The packed corners.</returns>
+    internal static (uint TopLeft, uint BottomRight) PackCell(FontAtlas atlas, FontAtlasBounds bounds) => (
+        PackUv(u: (bounds.Left / atlas.Width), v: (bounds.Top / atlas.Height)),
+        PackUv(u: (bounds.Right / atlas.Width), v: (bounds.Bottom / atlas.Height))
+    );
+
     /// <summary>Bakes the authored lines into a decal frame against the resolved catalog font.</summary>
     /// <param name="colors">The colors the bake resolves a state-bound foreground or background through.</param>
     /// <param name="text">The authored decal-text source (validated: the grid fits the engine budget).</param>
@@ -82,8 +92,6 @@ public static class WorldScreenTextDecal {
             fallback: DefaultBackground,
             value: text.Background
         ));
-        var atlasWidth = ((float)atlas.Width);
-        var atlasHeight = ((float)atlas.Height);
         var cells = new uint[((columns * rows) * 4)];
 
         for (var cell = 0; (cell < (columns * rows)); cell++) {
@@ -114,14 +122,7 @@ public static class WorldScreenTextDecal {
                     continue;
                 }
 
-                cells[(index + 0)] = PackUv(
-                    u: (bounds.Left / atlasWidth),
-                    v: (bounds.Top / atlasHeight)
-                );
-                cells[(index + 1)] = PackUv(
-                    u: (bounds.Right / atlasWidth),
-                    v: (bounds.Bottom / atlasHeight)
-                );
+                (cells[(index + 0)], cells[(index + 1)]) = PackCell(atlas: atlas, bounds: bounds);
             }
         }
 

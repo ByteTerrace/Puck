@@ -12,25 +12,104 @@ public sealed partial class SdfWorldTables {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
     public void ClearScreenDecal(int screenIndex) {
         RequireScreenIndex(screenIndex: screenIndex);
+        ClearDecal(descriptor: screenIndex);
+    }
+    /// <summary>Supplies the glyphs surface text slot <paramref name="slot"/> draws for the next produced frame: the
+    /// quads a text paint naming the slot (<see cref="SdfPaint.Text"/>) covers its material's surface with, sampled
+    /// from the glyph atlas (<see cref="SetGlyphAtlas"/>). A call that reproduces the glyphs the slot already holds
+    /// changes nothing.</summary>
+    /// <param name="slot">The surface text slot (0..<see cref="SdfSurfaceTextLayout.MaxTexts"/>-1).</param>
+    /// <param name="distanceRange">The atlas's distance range in texels (the antialiasing source; 0 = a raw coverage
+    /// atlas).</param>
+    /// <param name="glyphWords">The packed glyphs, <see cref="SdfSurfaceTextLayout.WordsPerGlyph"/> words each
+    /// (<see cref="SdfSurfaceTextLayout"/> states the packing), at most <see cref="SdfSurfaceTextLayout.MaxGlyphs"/>
+    /// glyphs; none clears the slot.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is out of range, or more than
+    /// <see cref="SdfSurfaceTextLayout.MaxGlyphs"/> glyphs are supplied.</exception>
+    /// <exception cref="ArgumentException"><paramref name="glyphWords"/> is not a whole number of glyphs.</exception>
+    public void SetSurfaceText(int slot, float distanceRange, ReadOnlySpan<uint> glyphWords) {
+        RequireSurfaceTextSlot(slot: slot);
 
-        var descriptorBase = (screenIndex * DecalWordsPerCell);
+        var glyphs = (glyphWords.Length / SdfSurfaceTextLayout.WordsPerGlyph);
 
-        // CADENCE GATE: same producer-level fix as SetScreenDecal — a slot that is ALREADY clear (gridCols already 0)
-        // must not look like a change; a caller that clears every frame (mirroring SetScreenDecal's every-frame poll)
-        // would otherwise defeat the gate exactly as the unconditional bump did.
-        if (DecalWords[(descriptorBase + 0)] == 0u) {
+        if ((glyphs * SdfSurfaceTextLayout.WordsPerGlyph) != glyphWords.Length) {
+            throw new ArgumentException(message: $"A surface text packs {SdfSurfaceTextLayout.WordsPerGlyph} words a glyph; got {glyphWords.Length} words.", paramName: nameof(glyphWords));
+        }
+        if (glyphs > SdfSurfaceTextLayout.MaxGlyphs) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(glyphWords), message: $"A surface text of {glyphs} glyphs exceeds the per-slot budget {SdfSurfaceTextLayout.MaxGlyphs}.");
+        }
+        if (glyphs == 0) {
+            ClearDecal(descriptor: (MaxScreenSurfaces + slot));
+
             return;
         }
 
-        // gridCols 0 => inert (the image or unbound-glass path applies).
+        var first = (SurfaceTextBase + ((slot * SdfSurfaceTextLayout.MaxGlyphs) * SdfSurfaceTextLayout.EntriesPerGlyph));
+
+        WriteDecal(
+            descriptor: (MaxScreenSurfaces + slot),
+            descriptorWords: [((uint)glyphs), ((uint)first), BitConverter.SingleToUInt32Bits(value: distanceRange), 0u],
+            first: first,
+            run: glyphWords
+        );
+    }
+    /// <summary>Clears surface text slot <paramref name="slot"/>: a paint naming it draws nothing. A no-op if the slot
+    /// held no glyphs.</summary>
+    /// <param name="slot">The surface text slot (0..<see cref="SdfSurfaceTextLayout.MaxTexts"/>-1).</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is out of range.</exception>
+    public void ClearSurfaceText(int slot) {
+        RequireSurfaceTextSlot(slot: slot);
+        ClearDecal(descriptor: (MaxScreenSurfaces + slot));
+    }
+
+    // Zeroes one descriptor of the decal buffer, whose first word (a screen's grid columns, a surface text's glyph count)
+    // is what the kernels gate on. A descriptor that is already clear is no change: a caller clears every frame, and the
+    // decal revision moves only with the stored bytes.
+    private void ClearDecal(int descriptor) {
+        var descriptorBase = (descriptor * DecalWordsPerCell);
+
+        if (DecalWords[descriptorBase] == 0u) {
+            return;
+        }
+
         ReadOnlySpan<uint> cleared = [0u, 0u, 0u, 0u];
 
         _ = m_decalRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: cleared),
             offset: (descriptorBase * sizeof(uint))
         );
-        // CADENCE GATE: revision-track the REAL decal change (see SetScreenDecal).
         m_decalRevision++;
+    }
+    // Writes one descriptor of the decal buffer and the run it names (a screen's cells, a surface text's glyphs), from
+    // entry `first`. A provider that supplies the same content every produced frame must not look like new content, so a
+    // call that reproduces the stored words writes nothing: the buffer is revision-tracked rather than hashed each frame,
+    // and the decal revision is what re-renders the shading passes.
+    private void WriteDecal(int descriptor, ReadOnlySpan<uint> descriptorWords, int first, ReadOnlySpan<uint> run) {
+        var descriptorBase = (descriptor * DecalWordsPerCell);
+        var runStart = (first * DecalWordsPerCell);
+        var stored = DecalWords;
+
+        if (
+            descriptorWords.SequenceEqual(other: stored.Slice(length: DecalWordsPerCell, start: descriptorBase)) &&
+            run.SequenceEqual(other: stored.Slice(length: run.Length, start: runStart))
+        ) {
+            return;
+        }
+
+        _ = m_decalRegion.Write(
+            bytes: MemoryMarshal.AsBytes(span: descriptorWords),
+            offset: (descriptorBase * sizeof(uint))
+        );
+        _ = m_decalRegion.Write(
+            bytes: MemoryMarshal.AsBytes(span: run),
+            offset: (runStart * sizeof(uint))
+        );
+        m_decalRevision++;
+    }
+    private static void RequireSurfaceTextSlot(int slot) {
+        if ((slot < 0) || (slot >= SdfSurfaceTextLayout.MaxTexts)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(slot), message: $"A surface text slot must be 0..{(SdfSurfaceTextLayout.MaxTexts - 1)}.");
+        }
     }
     /// <summary>Uploads the single font atlas the <see cref="SdfShapeType.Glyph"/> primitive samples as a
     /// distance-level field, replacing any previously set atlas. Static: unlike a screen source (an external per-frame
@@ -134,42 +213,14 @@ public sealed partial class SdfWorldTables {
             );
         }
 
-        var cellBase = ((uint)(DecalDescriptorCount + (screenIndex * MaxScreenDecalCells)));
-        var descriptorBase = (screenIndex * DecalWordsPerCell);
-        var distanceRangeBits = BitConverter.SingleToUInt32Bits(value: distanceRange);
-        var decalWords = DecalWords;
-        var cellWordStart = (((int)cellBase) * DecalWordsPerCell);
-        var cellDestination = decalWords.Slice(
-            length: cellWords.Length,
-            start: cellWordStart
-        );
+        var cellBase = (DecalDescriptorCount + (screenIndex * MaxScreenDecalCells));
 
-        // A provider that re-supplies the same decal every produced frame (e.g. the diegetic terminal mirroring an
-        // untouched console — DiegeticUiDirector.ComposeTerminalDecal returns a fresh SdfScreenDecalFrame wrapper every
-        // call even when its cell bytes are unchanged) must not look like new content. Change-detect before writing:
-        // a call that reproduces the bytes already stored is a no-op, not a revision bump.
-        if (
-            (decalWords[(descriptorBase + 0)] == ((uint)columns)) &&
-            (decalWords[(descriptorBase + 1)] == ((uint)rows)) &&
-            (decalWords[(descriptorBase + 3)] == distanceRangeBits) &&
-            cellWords.SequenceEqual(other: cellDestination)
-        ) {
-            return;
-        }
-
-        ReadOnlySpan<uint> descriptor = [((uint)columns), ((uint)rows), cellBase, distanceRangeBits];
-
-        _ = m_decalRegion.Write(
-            bytes: MemoryMarshal.AsBytes(span: descriptor),
-            offset: (descriptorBase * sizeof(uint))
+        WriteDecal(
+            descriptor: screenIndex,
+            descriptorWords: [((uint)columns), ((uint)rows), ((uint)cellBase), BitConverter.SingleToUInt32Bits(value: distanceRange)],
+            first: cellBase,
+            run: cellWords
         );
-        _ = m_decalRegion.Write(
-            bytes: MemoryMarshal.AsBytes(span: cellWords),
-            offset: (cellWordStart * sizeof(uint))
-        );
-        // CADENCE GATE: the decal buffer is revision-tracked (not re-hashed each frame — it is 820 KB), so a REAL decal
-        // change invalidates the signature.
-        m_decalRevision++;
     }
     /// <summary>Sets the luminance a screen's picture shows at: a picture value of one is a display's peak luminance, in
     /// nits, which scales both its face and the light its GPU reduction casts into the room. A screen whose face is an
