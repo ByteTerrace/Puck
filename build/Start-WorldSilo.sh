@@ -114,6 +114,12 @@ if [ '__MCP_ENABLED__' = 1 ]; then
     chgrp 1655 /etc/puck/tls.json
     chmod 640 /etc/puck/tls.json
     install -d -m 700 -o 1655 -g 1655 /var/lib/puck-tls
+    # The keeper holds the TLS state (certificate, key, ACME account) in the owner's private store, so a fresh worker
+    # restores it instead of issuing again (build/Keep-WorldTls.py). It runs as Caddy's user, which /etc/puck excludes.
+    install -d -m 750 -o 0 -g 1655 /etc/puck-tls
+    printf '%s' '__TLS_KEEPER__' | base64 -d >/etc/puck-tls/keeper.py
+    chgrp 1655 /etc/puck-tls/keeper.py
+    chmod 640 /etc/puck-tls/keeper.py
 fi
 cat >/etc/puck/firewall.sh <<'FIREWALL'
 #!/bin/bash
@@ -148,11 +154,34 @@ UNIT
 systemctl daemon-reload
 systemctl enable --now puck-world.service
 if [ '__MCP_ENABLED__' = 1 ]; then
+    # Caddy starts only once the keeper reports ready: the stored or local certificate is fresh, or this worker holds
+    # the store's issuance lease. Its start may wait on another worker's issuance, so nothing here blocks on it.
+    cat >/etc/systemd/system/puck-tls-keeper.service <<'KEEPERUNIT'
+[Unit]
+Description=Puck TLS state keeper
+Wants=network-online.target
+After=network-online.target
+[Service]
+Type=notify
+User=1655
+Group=1655
+ExecStart=/usr/bin/python3 /etc/puck-tls/keeper.py
+Restart=always
+RestartSec=10
+TimeoutStartSec=infinity
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/puck-tls
+[Install]
+WantedBy=multi-user.target
+KEEPERUNIT
     cat >/etc/systemd/system/puck-tls.service <<'TLSUNIT'
 [Unit]
 Description=Puck automatic HTTPS
-Requires=docker.service
-After=docker.service network-online.target puck-world.service
+Requires=docker.service puck-tls-keeper.service
+After=docker.service network-online.target puck-world.service puck-tls-keeper.service
 [Service]
 Restart=on-failure
 RestartSec=5
@@ -164,10 +193,10 @@ ExecStop=/usr/bin/docker stop --time 20 puck-tls
 WantedBy=multi-user.target
 TLSUNIT
     systemctl daemon-reload
-    systemctl enable puck-tls.service
-    systemctl restart puck-tls.service
+    systemctl enable puck-tls-keeper.service puck-tls.service
+    systemctl restart --no-block puck-tls-keeper.service puck-tls.service
 else
-    systemctl disable --now puck-tls.service 2>/dev/null || true
+    systemctl disable --now puck-tls.service puck-tls-keeper.service 2>/dev/null || true
 fi
 # Wait only for what a candidate reaches before its release commits: private health (the pinned rows activated and
 # checkpointed) and, with MCP, the TLS front. Public /healthz answers 503 until the coordinator commits and opens
@@ -198,7 +227,10 @@ fi
 {
     printf 'World worker readiness timed out after __READY_SECONDS__ s.\n'
     printf 'private health (what this wait needs): %s\n' "$private_state"
-    if [ '__MCP_ENABLED__' = 1 ]; then printf 'MCP TLS front (what this wait needs): %s\n' "$mcp_state"; fi
+    if [ '__MCP_ENABLED__' = 1 ]; then
+        printf 'MCP TLS front (what this wait needs): %s\n' "$mcp_state"
+        printf 'TLS state keeper (starts the front): %s\n' "$(journalctl -u puck-tls-keeper.service --no-pager -o cat -n 1 2>&1)"
+    fi
     printf 'public health (opens only after the release commits): %s\n' "$(curl --silent --show-error --max-time 10 --write-out ' (HTTP %{http_code})' http://127.0.0.1:__HEALTH_PORT__/healthz 2>&1)"
     printf 'container: %s\n' "$(docker inspect -f '{{.State.Status}} restarts={{.RestartCount}} exit={{.State.ExitCode}}' puck-world 2>&1)"
 } >&2
