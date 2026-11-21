@@ -1578,6 +1578,15 @@ and not a spiral:
   card table and a corrected influence price did.
 - A Codex run that ends `Selected model is at capacity` is retried once on the
   other Codex model (Sol to Astra or back), not on the same one.
+- An Antigravity run that ends `RESOURCE_EXHAUSTED` ("Individual quota
+  reached … Resets in …") stops every Antigravity lane on that account within
+  minutes, mid-edit and uncommitted, however much usage the plan otherwise has.
+  The lead commits each stopped tree as a WIP commit on its lane branch,
+  copies out any findings file the lane wrote, and hands the work to another
+  family with the WIP commit and the original brief. A review whose findings
+  file has every section is complete and is used as it stands. Relaunch
+  nothing on Antigravity before the reset it names, and spread a wave across
+  families, so one quota does not stop the whole wave.
 - A read-only lane makes no commit, so its findings must outlive it. A lane
   the lead can copy from (a `reviewer` in the lead's checkout, a Codex lane
   with write access or an Antigravity lane in a worktree the lead creates)

@@ -6,7 +6,9 @@ using Puck.World.Server;
 namespace Puck.World.Silo;
 
 /// <summary>Admits a host-validated OAuth identity into an explicitly authorized World row. Every command retains that peer generation.</summary>
-internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRouting routing) : IControlSessionHost {
+/// <param name="silo">The silo whose admitted world instances are addressed.</param>
+/// <param name="routing">The per-row console routing table.</param>
+public sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRouting routing) : IControlSessionHost {
     private async Task DisconnectAsync(string target, WorldServer server, WorldPeerEventEntry peer) {
         try {
             await routing.InvokeAsync(
@@ -53,7 +55,22 @@ internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRout
                     verdict: verdict
                 )) { throw new UnauthorizedAccessException(message: refusal); }
                 IControlSession? session = null;
-                void Close(Principal principal) { if (principal == peer.Identity) { session?.Dispose(); } }
+                // Both run on the world's tick thread, which must not run the session's cancellation callbacks inline.
+                void CloseOffTickThread() { if (session is { } closing) { _ = Task.Run(closing.Dispose); } }
+                void Close(Principal principal) { if (principal == peer.Identity) { CloseOffTickThread(); } }
+                void RevalidateAdmission() {
+                    if (
+                        !WorldAdmissionDoor.TryMatchOAuthEntry(
+                        entries: server.Definition.Admission,
+                        issuer: identity.Issuer,
+                        subject: identity.Subject,
+                        verdict: out var current
+                    ) ||
+                        (current.Tier != WorldDisclosureTier.Replica)
+                    ) {
+                        CloseOffTickThread();
+                    }
+                }
                 try {
                     session = routing.CreateControlSession(
                         target,
@@ -67,15 +84,25 @@ internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRout
                             peer: peer,
                             server: server
                         ),
-                        () => { server.PeerDisconnected -= Close; _ = DisconnectAsync(
-                            peer: peer,
-                            server: server,
-                            target: target
-                        ); }
+                        () => {
+                            server.AdmissionChanged -= RevalidateAdmission;
+                            server.PeerDisconnected -= Close;
+                            _ = DisconnectAsync(
+                                peer: peer,
+                                server: server,
+                                target: target
+                            );
+                        }
                     );
                     server.PeerDisconnected += Close;
+                    server.AdmissionChanged += RevalidateAdmission;
                     return session;
-                } catch { server.DisconnectPeerConnection(peer: peer); throw; }
+                } catch {
+                    server.AdmissionChanged -= RevalidateAdmission;
+                    server.PeerDisconnected -= Close;
+                    server.DisconnectPeerConnection(peer: peer);
+                    throw;
+                }
             },
             cancellationToken
         );

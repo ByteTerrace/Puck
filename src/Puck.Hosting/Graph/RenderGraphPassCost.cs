@@ -13,4 +13,16 @@ public interface IRenderGraphPassCosts {
     /// <param name="height">The output height in pixels.</param>
     /// <returns>The current price, or null to use the declared uniform-extent price.</returns>
     RenderGraphPassCost? CostOf(string instance, int width, int height);
+    /// <summary>Resolves an instance's current price at its demanded output extent by set ordinal, avoiding name
+    /// lookups when the pricer holds ordinal side tables.</summary>
+    /// <param name="index">The instance's ordinal in its <see cref="RenderGraphInstanceSet"/>.</param>
+    /// <param name="instance">The instance name.</param>
+    /// <param name="width">The output width in pixels.</param>
+    /// <param name="height">The output height in pixels.</param>
+    /// <returns>The current price, or null to use the declared uniform-extent price.</returns>
+    RenderGraphPassCost? CostAt(int index, string instance, int width, int height) => CostOf(
+        height: height,
+        instance: instance,
+        width: width
+    );
 }

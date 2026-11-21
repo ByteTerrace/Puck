@@ -35,8 +35,11 @@ public sealed class JobPool : IDisposable {
     // One fork slot per class, indexed by the class's value, which is also its rank: a lower value is taken first.
     private readonly ForkSlot[] m_slots;
 
-    // Wake signals released to the semaphore that no worker has taken yet; never more than the worker count.
+    // Wake signals released to the semaphore that no worker has taken yet, and the workers counted idle: a worker
+    // counts itself idle before its last look for partitions and stops counting once it wakes. A wake signals at most
+    // the idle workers no pending signal already serves, so the pending signals never exceed the worker count.
     private int m_pendingWakes;
+    private int m_idleWorkers;
     private volatile bool m_stopping;
 
     /// <summary>Initializes a new instance of the <see cref="JobPool"/> class with one thread less than the host's
@@ -223,18 +226,19 @@ public sealed class JobPool : IDisposable {
         }
     }
 
-    // Tops the untaken wake signals up to the workers this fork can use, never past the worker count: a signal still
-    // pending from an earlier fork serves this one, so signals never pile up behind forks that already finished.
+    // Signals as many idle workers as this fork can use beyond its own thread, counting only the idle workers no pending
+    // signal already serves. Each fork adds its own wake on top of any other fork's, so a fork opened while another
+    // class's wake is still pending wakes the workers it needs; and signals never exceed the idle workers, so they never
+    // pile up behind forks that already finished.
     private void Wake(int wanted) {
-        wanted = Math.Min(val1: m_threads.Length, val2: wanted);
         while (true) {
             var pending = Volatile.Read(location: ref m_pendingWakes);
-            var add = (wanted - pending);
+            var add = Math.Min(val1: wanted, val2: (Volatile.Read(location: ref m_idleWorkers) - pending));
 
             if (add <= 0) {
                 return;
             }
-            if (Interlocked.CompareExchange(location1: ref m_pendingWakes, value: wanted, comparand: pending) == pending) {
+            if (Interlocked.CompareExchange(location1: ref m_pendingWakes, value: (pending + add), comparand: pending) == pending) {
                 _ = m_wake.Release(releaseCount: add);
                 return;
             }
@@ -266,16 +270,32 @@ public sealed class JobPool : IDisposable {
             }
         }
     }
+    // A worker counts itself idle and only then looks for partitions once more before it waits. A fork publishes its
+    // partitions and only then reads the idle count (both through interlocked operations, which order them), so either
+    // the fork counts this worker and signals it or this look finds the fork's partitions: no fork's wake is lost. A
+    // signal sent to a worker that found work anyway stays pending and wakes it, or another idle worker, once more.
     private void Work(int workerIndex) {
         var consumer = HostWaits.ClaimConsumer(IdleWait);
         while (true) {
-            HostWaits.Idle(m_wake, consumer);
-            _ = Interlocked.Decrement(location: ref m_pendingWakes);
+            _ = Interlocked.Increment(location: ref m_idleWorkers);
+            if (!m_stopping && !HasUntaken()) {
+                HostWaits.Idle(m_wake, consumer);
+                _ = Interlocked.Decrement(location: ref m_pendingWakes);
+            }
+            _ = Interlocked.Decrement(location: ref m_idleWorkers);
             if (m_stopping) {
                 return;
             }
             Drain(workerIndex);
         }
+    }
+    private bool HasUntaken() {
+        foreach (var slot in m_slots) {
+            if (slot.HasUntaken) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // One class's fork: its partitions' counter, the partitions still running, its owner's event and its error.
@@ -288,6 +308,16 @@ public sealed class JobPool : IDisposable {
         public PartitionFault Fault;
         public readonly AutoResetEvent Done = new(initialState: false);
         private readonly Lock m_faultGate = new();
+
+        // Reads the state first: a fork writes its body and count before the exchange that opens its state, so an open
+        // state read here sees them.
+        public bool HasUntaken {
+            get {
+                var next = PackedIntPair.Low(value: ((ulong)Volatile.Read(location: ref State)));
+
+                return ((Volatile.Read(location: ref Body) is not null) && (next < (uint)Volatile.Read(location: ref Count)));
+            }
+        }
 
         public bool TryTake(out IJobPartitions body, out int partition) {
             while (true) {

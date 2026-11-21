@@ -9,6 +9,10 @@ namespace Puck.Shaders;
 public interface IRenderGraphInstances {
     /// <summary>Gets the instance set the runtime schedules, which a hit walk continues through.</summary>
     RenderGraphInstanceSet Instances { get; }
+    /// <summary>Gets each instance's render node in <see cref="Instances"/> order, or <see langword="null"/> at the
+    /// ordinal of an external producer's instance. Always reflects the runtime's live nodes, including when a drifted
+    /// source replaces a node on the same instance set.</summary>
+    ReadOnlySpan<ShaderPipelineRenderNode?> Nodes { get; }
     /// <summary>Gets the latest frame's schedule, whose rows state the extent each instance renders at, or
     /// <see langword="null"/> before the first frame the current set scheduled.</summary>
     RenderGraphSchedule? Latest { get; }

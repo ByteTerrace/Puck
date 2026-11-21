@@ -101,6 +101,7 @@ internal static class AdmissionWireFixture {
 
             await WriteIdentityResponseAsync(
                 challenge: challenge,
+                clientKeyHash: client.KeyHash,
                 ct: ct,
                 identity: identity,
                 stream: stream,
@@ -301,9 +302,14 @@ internal static class AdmissionWireFixture {
             return true;
         }
     }
-    public static Task WriteIdentityResponseAsync(Stream stream, TestIdentity identity, ReadOnlyMemory<byte> challenge, CancellationToken ct, TimeSpan? validity = null) {
+    public static Task WriteIdentityResponseAsync(PeerStream stream, string clientKeyHash, TestIdentity identity, ReadOnlyMemory<byte> challenge, CancellationToken ct, TimeSpan? validity = null, string? serverKeyHash = null) {
         var codec = new CborAttestationCodec();
         var now = ClaimInstant.ToUnixTimeSeconds();
+        var bound = WorldAdmissionDoor.BindChallenge(
+            challenge: challenge.Span,
+            clientKeyHash: clientKeyHash,
+            serverKeyHash: (serverKeyHash ?? stream.Link.RemoteId.KeyHash)
+        );
         var claim = AttestationSigner.SignClaim(
             codec: codec,
             domain: identity.Domain,
@@ -315,7 +321,7 @@ internal static class AdmissionWireFixture {
             notAfter: (now + checked((long)(validity?.TotalSeconds ?? 1))),
             audience: WorldAdmissionDoor.Audience,
             sequence: null,
-            claimBytes: challenge
+            claimBytes: bound
         );
 
         return HandshakeWireFormat.WriteHelloIdentityAsync(

@@ -48,6 +48,8 @@ public sealed class SdfAppearance {
     private readonly SdfMaterial[] m_materials;
     private readonly SdfScreenSurface[] m_screenSurfaces;
     private readonly uint[] m_screenSurfaceWords;
+    private readonly SdfShadeProgram[] m_shadingPrograms;
+    private readonly SdfShadeReads m_shadeReadsAll;
 
     private (SdfShadeReads Layers, SdfShadeReads Authored, SdfShadeReads Unshaded, SdfShadeReads Emission, bool Inherits)? m_shadeReads;
 
@@ -117,13 +119,35 @@ public sealed class SdfAppearance {
 
         var screens = RequireScreenSurfaces(paramName: nameof(screenSurfaces));
         var glass = new bool[m_materials.Length];
+        var shadeCount = 0;
+        var shadeReads = SdfShadeReads.None;
 
         for (var index = 0; (index < glass.Length); index++) {
-            glass[index] = m_materials[index].IsGlass;
+            var material = m_materials[index];
+
+            glass[index] = material.IsGlass;
+            if (material.Shade is { } shade) {
+                shadeCount++;
+                shadeReads |= shade.Reads;
+            }
         }
+        if (shadeCount == 0) {
+            m_shadingPrograms = [];
+        } else {
+            m_shadingPrograms = new SdfShadeProgram[shadeCount];
+            var write = 0;
+
+            for (var index = 0; (index < m_materials.Length); index++) {
+                if (m_materials[index].Shade is { } shade) {
+                    m_shadingPrograms[write++] = shade;
+                }
+            }
+        }
+        m_shadeReadsAll = shadeReads;
 
         Materials = Array.AsReadOnly(array: m_materials);
         ScreenSurfaces = Array.AsReadOnly(array: m_screenSurfaces);
+        ShadingPrograms = Array.AsReadOnly(array: m_shadingPrograms);
         Outline = new SdfAppearanceOutline(glass: glass, screens: screens, vectors: VectorsOf(materials: m_materials));
         m_screenSurfaceWords = PackScreenSurfaces();
     }
@@ -142,9 +166,9 @@ public sealed class SdfAppearance {
     /// <summary>Gets what a field may know of this appearance (<see cref="SdfAppearanceOutline"/>).</summary>
     public SdfAppearanceOutline Outline { get; }
     /// <summary>Gets the aggregate authored-input reads, derived from admitted programs.</summary>
-    public SdfShadeReads ShadeReads => m_materials.Aggregate(SdfShadeReads.None, static (reads, material) => reads | (material.Shade?.Reads ?? SdfShadeReads.None));
+    public SdfShadeReads ShadeReads => m_shadeReadsAll;
     /// <summary>Gets the authored programs carried by this appearance, including different runtime data for one identity.</summary>
-    public IEnumerable<SdfShadeProgram> ShadingPrograms => m_materials.Where(predicate: static m => (m.Shade is not null)).Select(selector: static m => m.Shade!);
+    public IReadOnlyList<SdfShadeProgram> ShadingPrograms { get; }
 
     /// <summary>Returns the vectors a palette's packed tables span: each material's <see cref="MaterialVectorsPerEntry"/>,
     /// then each paint's <see cref="PaintVectorsPerEntry"/> and its variable side table. The one statement of the appearance section's size, which a

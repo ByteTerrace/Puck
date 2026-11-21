@@ -1,3 +1,4 @@
+using System.Text;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -96,15 +97,56 @@ internal static class WorldTravelerProjection {
             (sink is null) ||
             (lease is null)
         ) {
-            return ((server.TransferForwarder is { } forwarder)
-                ? await forwarder.StreamForwardedProjectionAsync(
-                    ct: ct,
-                    output: output,
-                    request: request,
-                    source: server
-                ).ConfigureAwait(continueOnCapturedContext: false)
-                : "the traveler has no committed onward projection route"
+            if (server.TransferForwarder is not { } forwarder) {
+                return "the traveler has no committed onward projection route";
+            }
+
+            using var forwardLifetime = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
+            // The live policy at this instant, whatever replaced the admission section. The guarded output asks it
+            // before every frame, so the cut never depends on an AdmissionChanged notification having arrived.
+            bool StillAdmitted() => (
+                (WorldAdmissionDoor.TryAdmitArrival(server.Definition.Admission, request.SourceAuthority, out var liveAdmission) is null) &&
+                (liveAdmission!.Tier >= request.Ceiling)
             );
+            var guardedOutput = new PolicyGuardedProjectionOutput(inner: output, outerToken: ct, forwardToken: forwardLifetime.Token, stillAdmitted: StillAdmitted);
+            // Wakes a relay stalled between frames; the per-frame check is what enforces the policy.
+            void CheckForwardPolicy() {
+                if (!StillAdmitted()) {
+                    guardedOutput.Invalidate();
+                    try { _ = forwardLifetime.CancelAsync(); } catch (ObjectDisposedException) { }
+                }
+            }
+
+            server.AdmissionChanged += CheckForwardPolicy;
+            try {
+                var preflightInvalidated = await server.RunOnTickThreadAsync(work: () => {
+                    CheckForwardPolicy();
+                    return guardedOutput.IsInvalidated;
+                }, ct).ConfigureAwait(false);
+
+                if (!preflightInvalidated) {
+                    try {
+                        return await forwarder.StreamForwardedProjectionAsync(
+                            ct: forwardLifetime.Token,
+                            output: guardedOutput,
+                            request: request,
+                            source: server
+                        ).ConfigureAwait(continueOnCapturedContext: false);
+                    } catch (OperationCanceledException) when (!ct.IsCancellationRequested && guardedOutput.IsInvalidated) {
+                        // A live policy downgrade or removal cuts the forwarded stream cleanly at a frame boundary.
+                    }
+                }
+            } finally {
+                server.AdmissionChanged -= CheckForwardPolicy;
+            }
+
+            await WorldFederationCodec.WriteResponseAsync(
+                body: Encoding.UTF8.GetBytes(s: WorldFederationProjectionSink.InvalidatedDetachReason),
+                ct: ct,
+                kind: WorldFederationResponse.ProjectionInvalidated,
+                stream: output
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            return null;
         }
         try {
             await sink.StreamAsync(
@@ -119,5 +161,49 @@ internal static class WorldTravelerProjection {
             });
         }
         return null;
+    }
+
+    // Completes any already-started downstream frame write on outerToken before observing forwardToken cancellation,
+    // so ProjectionInvalidated never lands after a partial frame. A frame's first write asks stillAdmitted, so the
+    // relay holds the live policy at every frame boundary.
+    private sealed class PolicyGuardedProjectionOutput(Stream inner, CancellationToken outerToken, CancellationToken forwardToken, Func<bool> stillAdmitted) : Stream {
+        private int m_invalidated;
+        private bool m_midFrame;
+
+        public bool IsInvalidated => (Volatile.Read(location: ref m_invalidated) != 0);
+        public override bool CanRead => inner.CanRead;
+        public override bool CanSeek => false;
+        public override bool CanWrite => inner.CanWrite;
+        public override long Length => throw new NotSupportedException();
+        public override long Position {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public void Invalidate() => _ = Interlocked.Exchange(location1: ref m_invalidated, value: 1);
+        public override void Flush() => inner.Flush();
+        public override async Task FlushAsync(CancellationToken cancellationToken) {
+            await inner.FlushAsync(cancellationToken: outerToken).ConfigureAwait(continueOnCapturedContext: false);
+            m_midFrame = false;
+            if (IsInvalidated) {
+                throw new OperationCanceledException(token: forwardToken);
+            }
+        }
+        public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer: buffer, offset: offset, count: count);
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            inner.ReadAsync(buffer: buffer, cancellationToken: cancellationToken);
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer: buffer, offset: offset, count: count);
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            WriteAsync(buffer: buffer.AsMemory(start: offset, length: count), cancellationToken: cancellationToken).AsTask();
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) {
+            if (!m_midFrame) {
+                if (!IsInvalidated && !stillAdmitted()) { Invalidate(); }
+                if (IsInvalidated) { throw new OperationCanceledException(token: forwardToken); }
+            }
+            m_midFrame = true;
+            await inner.WriteAsync(buffer: buffer, cancellationToken: outerToken).ConfigureAwait(continueOnCapturedContext: false);
+        }
     }
 }

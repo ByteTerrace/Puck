@@ -87,7 +87,8 @@ public sealed class WorldSpeakerGainLawTests {
             TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock("level", State: "phase")]),
             SpeakersRaw = [new WorldSpeaker.Fixed("signal", new DocumentVector3(x: 0, y: 0, z: 0),
                 new WorldSpeakerFeed(new WorldSpeakerSource.None(), "mix", new BindableScalar(keys: new WorldKeyTrack<float>(
-                    clock: "level", keys: [new WorldKey<float>(At: 0, Ease: WorldEase.Linear, Value: 0), new WorldKey<float>(At: 0.5, Ease: WorldEase.Linear, Value: 1)]))))],
+                    clock: "level", keys: [new WorldKey<float>(At: 0, Ease: WorldEase.Linear, Value: 0), new WorldKey<float>(At: 0.5, Ease: WorldEase.Linear, Value: 1)]))),
+                new WorldSpeakerAttenuation(Radius: 8f, Curve: null))],
         }).WithWorldState(rows: [StateFixtures.FixedSlot(name: "phase", rawBits: 16384)]);
 
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason), userMessage: reason);
@@ -97,5 +98,58 @@ public sealed class WorldSpeakerGainLawTests {
         var snapshot = director.Publish([], []);
 
         Assert.Equal(32768, Assert.Single(collection: snapshot.Emitters.ToArray()).GainQ16);
+    }
+
+    [Fact]
+    public void PublishCullsOutsideSupportAndBindsMachinesOnEvent() {
+        var near = new WorldSpeaker.Fixed(
+            Name: "near",
+            Position: new DocumentVector3(x: 1, y: 0, z: 0),
+            Feed: new WorldSpeakerFeed(new WorldSpeakerSource.Machine(Instance: "cab", Output: "audio"), "mix", 1f),
+            Attenuation: new WorldSpeakerAttenuation(Radius: 8f, Curve: "linear")
+        );
+        var far = new WorldSpeaker.Fixed(
+            Name: "far",
+            Position: new DocumentVector3(x: 50, y: 0, z: 0),
+            Feed: new WorldSpeakerFeed(new WorldSpeakerSource.None(), "mix", 1f),
+            Attenuation: new WorldSpeakerAttenuation(Radius: 8f, Curve: "linear")
+        );
+        var definition = Fixtures.BuildDocument() with {
+            SpeakersRaw = [near, far],
+            AudioRaw = new WorldAudioDefaults(Cues: [], DefaultBedFadeSeconds: 0, DefaultCurve: "linear", DefaultSpeakerRadius: 8, Listener: "focus", MasterGain: 1),
+        };
+        var resolverCalls = 0;
+        var director = new WorldAudioDirector(client: null, animator: null) {
+            MachineSourceResolver = (_, _) => {
+                resolverCalls++;
+
+                return null;
+            },
+        };
+
+        director.ReconcileSpeakers(definition: definition);
+        director.AttachMixer(mixer: new AudioMixer());
+
+        var first = director.Publish([], []);
+
+        // Only the in-support speaker enters the slab; far speaker is culled before building an emitter.
+        var emitter = Assert.Single(collection: first.Emitters.ToArray());
+        Assert.True(first.ContainsEmitter(emitter.Id));
+        Assert.True(first.TryFindEmitterIndex(emitter.Id, out var foundIndex));
+        Assert.Equal(0, foundIndex);
+        Assert.False(first.ContainsEmitter(emitter.Id + 999));
+        Assert.Equal(1, resolverCalls);
+
+        // Steady frames do not poll the machine source resolver.
+        for (var frame = 0; (frame < 16); frame++) {
+            _ = director.Publish([], []);
+        }
+        Assert.Equal(1, resolverCalls);
+
+        // An invalidation event re-syncs machine bindings once on the next publish.
+        director.InvalidateMachineBindings();
+        _ = director.Publish([], []);
+        _ = director.Publish([], []);
+        Assert.Equal(2, resolverCalls);
     }
 }

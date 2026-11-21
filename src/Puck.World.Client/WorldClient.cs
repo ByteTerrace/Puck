@@ -179,6 +179,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     }
 
     private int m_activePeerCount;
+    private long m_activeRevision;
+    private long m_renderPoseRevision;
+    private readonly bool[] m_lastActiveFlags = new bool[EntityCapacity];
     private WorldChannelTable m_channels;
     // The server's live world definition — the boot definition at construction, replaced by DeliverDefinition after an
     // applied mutation batch or a swap. The frame source re-reads scene/screens from this behind the revision check.
@@ -218,6 +221,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <summary>The monotonic definition-delivery counter — bumped each time the server delivers a new definition. The
     /// frame source watches it to know a scene/screen change landed (distinct from a population/roster change).</summary>
     public int DefinitionRevision => m_definitionRevision;
+    /// <summary>Monotonic counter bumped whenever any entity's active status changes across a snapshot delivery.</summary>
+    public long ActiveRevision => m_activeRevision;
+    /// <summary>Monotonic counter bumped whenever any active entity's render pose or active status changes.</summary>
+    public long RenderPoseRevision => m_renderPoseRevision;
     /// <summary>Gets the monotonic solid-response counter: bumped with the response revision only when a solid
     /// placement is among the rows the delivery moved, so a consumer of solid geometry alone (the static query field)
     /// holds across a lamp or a display swapping its creation.</summary>
@@ -1143,6 +1150,19 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         var stepSeconds = ((float)FixedTickConversion.ToSeconds(ticks: snapshot.StepTicks));
 
         m_poses.Complete();
+        var activeChanged = false;
+        for (var index = 0; (index < EntityCapacity); index++) {
+            var active = m_poses.IsActive(index: index);
+
+            if (active != m_lastActiveFlags[index]) {
+                m_lastActiveFlags[index] = active;
+                activeChanged = true;
+            }
+        }
+        if (activeChanged) {
+            m_activeRevision++;
+        }
+        m_renderPoseRevision++;
         foreach (var index in m_poses.Seen) {
             if (index >= PlayerRoster.MaxSlots) {
                 peers++;
@@ -1462,6 +1482,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <param name="alpha">How far this frame sits between the last and next fixed sim step, in <c>[0, 1)</c>.</param>
     public void UpdateRenderPoses(float alpha) {
         m_solidScaleAlpha = alpha;
+        var moved = false;
+
         for (var index = 0; (index < EntityCapacity); index++) {
             if (!m_poses.IsActive(index: index)) {
                 continue;
@@ -1483,8 +1505,14 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 orientation: ref orientation,
                 position: ref position
             );
-            m_renderPosition[index] = position;
-            m_renderOrientation[index] = orientation;
+            if ((m_renderPosition[index] != position) || (m_renderOrientation[index] != orientation)) {
+                m_renderPosition[index] = position;
+                m_renderOrientation[index] = orientation;
+                moved = true;
+            }
+        }
+        if (moved) {
+            m_renderPoseRevision++;
         }
     }
     /// <summary>Writes this client's program-rebuild watch counters side by side, never added together: the seat-metadata

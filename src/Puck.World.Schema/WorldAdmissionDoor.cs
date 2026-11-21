@@ -106,12 +106,32 @@ public static class WorldAdmissionDoor {
         codec: Codec,
         wire: wire
     );
+    /// <summary>Binds an admission challenge nonce to both authenticated transport endpoints so a valid proof
+    /// elicited on one peer link cannot be relayed onto another connection.</summary>
+    /// <param name="challenge">The exact nonce <see cref="NewChallenge"/> minted for this connection attempt.</param>
+    /// <param name="clientKeyHash">The authenticated connecting peer's key fingerprint.</param>
+    /// <param name="serverKeyHash">The authenticated accepting peer's key fingerprint.</param>
+    /// <returns>The endpoint-bound challenge bytes carried in the signed claim.</returns>
+    /// <exception cref="ArgumentException">The challenge length or either transport key fingerprint is invalid.</exception>
+    public static byte[] BindChallenge(ReadOnlySpan<byte> challenge, string clientKeyHash, string serverKeyHash) {
+        if ((challenge.Length != ChallengeBytes) || string.IsNullOrWhiteSpace(value: clientKeyHash) || string.IsNullOrWhiteSpace(value: serverKeyHash)) {
+            throw new ArgumentException(message: "admission challenges require a 32-byte nonce and both authenticated transport key hashes");
+        }
+        return ChannelBinding.Bind(
+            clientKeyHash: clientKeyHash,
+            label: "puck.world.tcp-admission.v1",
+            nonce: challenge,
+            serverKeyHash: serverKeyHash
+        );
+    }
     /// <summary>Mints a fresh, cryptographically random challenge nonce.</summary>
     public static byte[] NewChallenge() => RandomNumberGenerator.GetBytes(count: ChallengeBytes);
     /// <summary>Verifies one connecting peer's presented identity against this world's authored admission entries.</summary>
     /// <param name="entries">The document's current <c>admission</c> rows (a snapshot; see this class's remarks).</param>
     /// <param name="challenge">The exact nonce <see cref="NewChallenge"/> minted for this connection attempt.</param>
-    /// <param name="claim">The peer's signed attestation carrying the claim.</param>
+    /// <param name="clientKeyHash">The authenticated connecting peer's transport key fingerprint.</param>
+    /// <param name="serverKeyHash">The authenticated accepting peer's transport key fingerprint.</param>
+    /// <param name="claim">The peer's signed attestation carrying the endpoint-bound challenge.</param>
     /// <param name="chain">The peer's presented chain (0, 1, or 2 bindings — attestation's own depth rule governs which
     /// counts are even reachable for a given trust entry).</param>
     /// <param name="now">The verification instant — an admission-boundary read, never a mid-tick one; see
@@ -119,6 +139,8 @@ public static class WorldAdmissionDoor {
     public static AdmissionOutcome TryAdmit(
         IReadOnlyList<WorldAdmissionEntry>? entries,
         ReadOnlySpan<byte> challenge,
+        string clientKeyHash,
+        string serverKeyHash,
         SignedAttestation claim,
         IReadOnlyList<SignedAttestation> chain,
         DateTimeOffset now
@@ -133,6 +155,13 @@ public static class WorldAdmissionDoor {
             return AdmissionOutcome.Refuse(
                 detail: "this world authors no key-bearing admission entries; no remote peer can ever verify",
                 refusal: WorldAdmissionRefusal.NoAdmissionEntries
+            );
+        }
+
+        if ((challenge.Length != ChallengeBytes) || string.IsNullOrWhiteSpace(value: clientKeyHash) || string.IsNullOrWhiteSpace(value: serverKeyHash)) {
+            return AdmissionOutcome.Refuse(
+                detail: "the connection challenge or transport endpoint identity is invalid",
+                refusal: WorldAdmissionRefusal.ChallengeMismatch
             );
         }
 
@@ -170,12 +199,21 @@ public static class WorldAdmissionDoor {
             );
         }
 
+        var expectedChallenge = BindChallenge(
+            challenge: challenge,
+            clientKeyHash: clientKeyHash,
+            serverKeyHash: serverKeyHash
+        );
+
         if (
             (claim.PayloadKind != AttestationPayloadKind.Opaque) ||
-            !challenge.SequenceEqual(other: claim.PayloadBytes.Span)
+            !CryptographicOperations.FixedTimeEquals(
+                left: expectedChallenge,
+                right: claim.PayloadBytes.Span
+            )
         ) {
             return AdmissionOutcome.Refuse(
-                detail: "the signed claim does not carry the exact challenge this connection was issued",
+                detail: "the signed claim does not carry the exact endpoint-bound challenge this connection was issued",
                 refusal: WorldAdmissionRefusal.ChallengeMismatch
             );
         }
