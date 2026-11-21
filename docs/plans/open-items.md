@@ -300,12 +300,12 @@ What this session met on the lead machine; each is true until the named fix.
   ([contributing](../development/contributing.md#setting-up-a-machine)).
 - **The Azure verbs are an extension.** Install it after a change to it:
   `dotnet publish src/Puck.Cli.Azure -c Release -o extensions/Puck.Cli.Azure`.
-- **One windowed World at a time.** Windowed admission now expects about 22 GB
-  of headroom, learned from the largest windowed starts, which blocks a
-  second World beside it, and the GPU lease is exclusive. Lanes waited up to two hours for
-  a window this session and handed back unverified. Grant no lane a window
-  unless seeing is its work, and run the rest in the bulk window
-  ([the admission defect](#cli-and-lease-machinery)).
+- **Windowed Worlds share the machine by their own measured need.** The admission
+  profile (kind, backend, warm or cold mesh store) and the shared GPU lease are
+  in, and two warm windowed Worlds beside each other are awaiting the lead's
+  windowed check ([the admission check](#cli-and-lease-machinery)). Until it
+  passes, grant no lane a window unless seeing is its work, and run the rest in
+  the bulk window.
 - **Local Bicep is older than CI's.** A Bicep build that passes locally can
   differ from CI's; CI's result decides.
 
@@ -3858,20 +3858,17 @@ cost lanes hours · Next: windowed admission and the GPU lease, then one built
 CLI; then the `puck integrate` verb and the launch and process lifecycles,
 each as one change that gives its lifecycle an explicit state.
 
-- [high] One windowed World blocks every other. Admission learns one peak for
-  each kind of start (`HostStartTracker`, `HostStartKind`), so the largest
-  windowed Worlds, the cold bakes, set what every windowed start must find
-  free, and that figure passed what the lead machine has beside a second
-  World. The GPU lease admits one holder whatever it needs. Lanes waited up
-  to two hours and handed back unverified. The replacement: admission judges
-  a start by its own measured need (its device profile, warm or cold store,
-  as well as its kind), and the GPU lease admits
-  holders by measured device and host headroom, as the heavy lease's shared
-  slots do (`CliLease.SharedSlots`), keeping an exclusive hold for a timing
-  leg. A holder that sits idle gives its place back, which a start already
-  does (`StartIdleness`) and a GPU holder does not. Check: two warm windowed
-  Worlds run side by side on the lead machine, and a third waits its turn
-  rather than being refused.
+- [high] Check the shared GPU lease: admission judges a windowed start by its
+  own profile (`HostStartProfile`: kind, backend, warm or cold mesh store) and
+  the gpu lease shares slots between holders by measured host and device
+  headroom, with an exclusive hold for a timing leg and the place of an idle
+  holder given back. What remains is the windowed check on the lead machine:
+  two warm windowed Worlds run side by side and a third waits its turn rather
+  than being refused. The device gate reads video memory in use against the
+  adapter's size (`HostGpuMeter`) and does not predict what a further World
+  will take, so a verification that finds two Worlds crowding the device sets
+  `HostLoadThresholds.DeviceFullPercent` or measures a per-profile device
+  peak.
 - [high] The CLI is built and installed in several places that drift: the
   global tool, each lane's private copy, the MCP hook's build and the Azure
   extension. A lease protocol bump strands every stale copy.

@@ -74,32 +74,69 @@ public sealed class LeasedAdmissionLawTests : IDisposable {
         using var next = await CliLease.AcquireAsync(m_root, "heavy", "b", TimeSpan.Zero, TimeProvider.System, m_root, Token);
     }
 
-    // Admitted heavy holds share the lease's slots, each recording its kind and device for other processes' admission; an
-    // exclusive hold and a quiet window wait for every slot to drain, and a shared hold waits while an exclusive one runs.
-    [Fact]
-    public async Task AdmittedHeavyHoldsShareTheLeaseWhileExclusiveAndQuietHoldsWaitForAllToDrain() {
+    // Admitted heavy and gpu holds share their lease's slots, each recording its profile and device for other processes'
+    // admission; an exclusive hold (a timing leg) and a quiet window wait for every slot to drain, and a shared hold waits
+    // while an exclusive one runs.
+    [InlineData("heavy")]
+    [InlineData("gpu")]
+    [Theory]
+    public async Task AdmittedHoldsShareTheLeaseWhileExclusiveAndQuietHoldsWaitForAllToDrain(string resource) {
+        var gpu = (resource == "gpu");
         HostAdmit admit = (_, _, _, _, _, _, _, _, _, _) => Task.FromResult(true);
-        Task<CliLease> Take(string lane, TimeSpan wait, bool exclusive = false, bool device = false) => LeasedAdmission.AcquireAsync(m_root, "heavy", lane + " run", lane, admit,
-            m_root, lane, device, true, HostStartKind.ReproduceReplica, TimeProvider.System, wait, TextWriter.Null, null, Token, exclusive);
+        Task<CliLease> Take(string lane, TimeSpan wait, bool exclusive = false, bool device = false) => LeasedAdmission.AcquireAsync(m_root, resource, lane + " run", lane, admit,
+            m_root, lane, (gpu || device), !gpu, new HostStartProfile(HostStartKind.ReproduceReplica, Device: "vulkan", Store: StoreWarmth.Cold), TimeProvider.System, wait, TextWriter.Null, null, Token, exclusive);
 
         using (var a = await Take("a", TimeSpan.Zero))
         using (var b = await Take("b", TimeSpan.Zero, device: true)) {
-            Assert.Equal(["a run", "b run"], CliLease.Inspect(m_root, "heavy", DateTimeOffset.UtcNow).Holders.Select(held => held.Holder));
-            Assert.Equal([("heavy", "a run", HostStartKind.ReproduceReplica, false), ("heavy", "b run", HostStartKind.ReproduceReplica, true)],
+            Assert.Equal(["a run", "b run"], CliLease.Inspect(m_root, resource, DateTimeOffset.UtcNow).Holders.Select(held => held.Holder));
+            Assert.Equal([(resource, "a run", HostStartKind.ReproduceReplica, gpu), (resource, "b run", HostStartKind.ReproduceReplica, true)],
                 CliLease.AdmittedHolds(m_root, DateTimeOffset.UtcNow).Select(hold => (hold.Lease, hold.Holder, hold.Kind, hold.Device)));
             await Assert.ThrowsAsync<TimeoutException>(() => Take("c", TimeSpan.Zero, exclusive: true));
             await Assert.ThrowsAsync<TimeoutException>(() => CliLease.AcquireQuietAsync(m_root, "measurement", TimeSpan.Zero, TimeProvider.System, m_root, Token));
         }
         using (var alone = await Take("c", TimeSpan.Zero, exclusive: true)) {
-            Assert.True(Assert.Single(CliLease.Inspect(m_root, "heavy", DateTimeOffset.UtcNow).Holders).Exclusive);
+            Assert.True(Assert.Single(CliLease.Inspect(m_root, resource, DateTimeOffset.UtcNow).Holders).Exclusive);
             await Assert.ThrowsAsync<TimeoutException>(() => Take("d", TimeSpan.Zero));
         }
-        // A heavy hold without an admission has nothing measuring whether a second fits, so it runs alone.
-        using (var unmeasured = await CliLease.AcquireAsync(m_root, "heavy", "e run", TimeSpan.Zero, TimeProvider.System, m_root, Token)) {
+        // A hold without an admission has nothing measuring whether a second fits, so it runs alone.
+        using (var unmeasured = await CliLease.AcquireAsync(m_root, resource, "e run", TimeSpan.Zero, TimeProvider.System, m_root, Token)) {
             await Assert.ThrowsAsync<TimeoutException>(() => Take("d", TimeSpan.Zero));
         }
         using var d = await Take("d", TimeSpan.Zero);
     }
+    // A hold records its whole profile (kind, backend and mesh store) beside its holder, so another process's admission
+    // judges the work it covers by what that profile has measured.
+    [Fact]
+    public async Task AHoldRecordsItsProfileForOtherProcessesAdmission() {
+        HostAdmit admit = (_, _, _, _, _, _, _, _, _, _) => Task.FromResult(true);
+        var cold = new HostStartProfile(HostStartKind.WindowedWorld, Device: "directx", Store: StoreWarmth.Cold);
+
+        using var hold = await LeasedAdmission.AcquireAsync(m_root, "gpu", "a run", "a", admit, m_root, "a", true, false, cold, TimeProvider.System, TimeSpan.Zero, TextWriter.Null, null, Token);
+
+        Assert.Equal(cold, Assert.Single(CliLease.AdmittedHolds(m_root, DateTimeOffset.UtcNow)).Profile);
+        Assert.Equal("WindowedWorld.directx.cold", cold.Name);
+    }
+    [InlineData("WindowedWorld", HostStartKind.WindowedWorld, null, StoreWarmth.Warm)]
+    [InlineData("WindowedWorld.vulkan", HostStartKind.WindowedWorld, "vulkan", StoreWarmth.Warm)]
+    [InlineData("WindowedWorld.cold", HostStartKind.WindowedWorld, null, StoreWarmth.Cold)]
+    [InlineData("WindowedWorld.directx.cold", HostStartKind.WindowedWorld, "directx", StoreWarmth.Cold)]
+    [InlineData("HeavySuite", HostStartKind.HeavySuite, null, StoreWarmth.Warm)]
+    [Theory]
+    public void AProfileNameRoundTripsAndOnlyAWindowedWorldKeepsItsDeviceAndStore(string name, HostStartKind kind, string? device, StoreWarmth store) {
+        Assert.True(HostStartProfile.TryParse(name, out var parsed));
+        Assert.Equal(new HostStartProfile(kind, device, store), parsed);
+        Assert.Equal(name, parsed.Name);
+        // The other kinds measure neither dimension, so a start that names them is the same profile.
+        Assert.Equal(new HostStartProfile(HostStartKind.HeavySuite).Name, new HostStartProfile(HostStartKind.HeavySuite, "vulkan", StoreWarmth.Cold).Name);
+    }
+    [InlineData("")]
+    [InlineData("Nonsense")]
+    [InlineData("99")]
+    [InlineData("WindowedWorld.cold.vulkan")]
+    [InlineData("WindowedWorld.a.b")]
+    [InlineData("WindowedWorld.VULKAN")]
+    [Theory]
+    public void AnUnrecognizedProfileNameIsRefused(string name) => Assert.False(HostStartProfile.TryParse(name, out _));
 
     public void Dispose() => ConfinedDirectory.RemoveTree(m_root);
 }

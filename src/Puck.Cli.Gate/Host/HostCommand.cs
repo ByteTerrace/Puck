@@ -8,6 +8,10 @@ public static class HostCommand {
     private const string HeapVerb = "host heap";
     private const string LoadVerb = "host load";
 
+    // What a reading reports a start's demand for: each kind, and the windowed World whose mesh store is cold, whose peak is
+    // measured apart from the warm one's.
+    private static readonly HostStartProfile[] Profiles = [.. Enum.GetValues<HostStartKind>().Select(static kind => new HostStartProfile(Kind: kind)), new HostStartProfile(Kind: HostStartKind.WindowedWorld).Cold];
+
     private static int Load(bool watch, int interval, int window, HostLoadThresholds thresholds, bool json, CancellationToken cancellationToken) {
         using var records = CliJsonLines.Open(json: json);
         var probe = new HostProbe(checkoutRoot: Environment.CurrentDirectory);
@@ -19,8 +23,8 @@ public static class HostCommand {
         do {
             var sample = probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1));
             var lines = monitor.Observe(sample: sample);
-            var demands = Enum.GetValues<HostStartKind>().Select(kind => HostStartTracker.Session.Judge(
-                sample, kind, thresholds, TimeProvider.System, reserve: false)).ToArray();
+            var demands = Profiles.Select(profile => HostStartTracker.Session.Judge(
+                sample, profile, thresholds, TimeProvider.System, reserve: false)).ToArray();
 
             if (records is null) {
                 foreach (var line in lines) {
@@ -28,10 +32,10 @@ public static class HostCommand {
                 }
                 if (lines.Count > 0) {
                     foreach (var demand in demands) {
-                        Console.Out.WriteLine(FormattableString.Invariant($"admission {demand.Kind}: headroom={demand.HeadroomGb:0.0}GB peak={demand.OwnGb:0.0}GB growth={demand.GrowthGb:0.0}GB need={demand.NeedGb:0.0}GB commit-covered={demand.CommitCovered} freeRAM={demand.FreeRamGb:0.0}GB privateResident={demand.ResidentOwnGb:0.0}GB privateResidentGrowth={demand.ResidentGrowthGb:0.0}GB privateResidentNeed={demand.ResidentNeedGb:0.0}GB workingSet={Measured(demand.WorkingSetOwnGb)} ram-covered={demand.PhysicalCovered} admitted={demand.Covered}"));
+                        Console.Out.WriteLine(FormattableString.Invariant($"admission {(demand.Profile ?? demand.Kind).Name}: headroom={demand.HeadroomGb:0.0}GB peak={demand.OwnGb:0.0}GB growth={demand.GrowthGb:0.0}GB need={demand.NeedGb:0.0}GB commit-covered={demand.CommitCovered} freeRAM={demand.FreeRamGb:0.0}GB privateResident={demand.ResidentOwnGb:0.0}GB privateResidentGrowth={demand.ResidentGrowthGb:0.0}GB privateResidentNeed={demand.ResidentNeedGb:0.0}GB workingSet={Measured(demand.WorkingSetOwnGb)} ram-covered={demand.PhysicalCovered} admitted={demand.Covered}"));
                     }
                     foreach (var start in sample.Starts ?? []) {
-                        Console.Out.WriteLine(FormattableString.Invariant($"start {start.Kind} {start.Id}: private={start.PrivateGb:0.0}GB privateResident={Measured(start.PrivateResidentGb)} workingSet={Measured(start.WorkingSetGb)} judged={start.ResidentGb:0.0}GB ready={start.Ready}{start.IdleNote}"));
+                        Console.Out.WriteLine(FormattableString.Invariant($"start {start.Profile.Name} {start.Id}: private={start.PrivateGb:0.0}GB privateResident={Measured(start.PrivateResidentGb)} workingSet={Measured(start.WorkingSetGb)} judged={start.ResidentGb:0.0}GB ready={start.Ready}{start.IdleNote}"));
                     }
                 }
             } else if (lines.Count > 0) {
@@ -46,6 +50,7 @@ public static class HostCommand {
                     ["starts"] = new System.Text.Json.Nodes.JsonArray([.. (sample.Starts ?? []).Select(static start => new System.Text.Json.Nodes.JsonObject {
                         ["id"] = start.Id,
                         ["kind"] = start.Kind.ToString(),
+                        ["profile"] = start.Profile.Name,
                         ["privateGb"] = Finite(start.PrivateGb),
                         ["privateResidentGb"] = Finite(start.PrivateResidentGb),
                         ["workingSetGb"] = Finite(start.WorkingSetGb),
@@ -55,6 +60,7 @@ public static class HostCommand {
                     })]),
                     ["demands"] = new System.Text.Json.Nodes.JsonArray([.. demands.Select(static demand => new System.Text.Json.Nodes.JsonObject {
                         ["kind"] = demand.Kind.ToString(),
+                        ["profile"] = (demand.Profile ?? demand.Kind).Name,
                         ["headroomGb"] = Finite(demand.HeadroomGb),
                         ["peakGb"] = Finite(demand.OwnGb),
                         ["growthGb"] = Finite(demand.GrowthGb),
@@ -70,6 +76,8 @@ public static class HostCommand {
                     })]),
                     ["reuseNodes"] = sample.ReuseNodes,
                     ["gpuHolder"] = sample.GpuHolder,
+                    ["deviceTotalGb"] = Finite(sample.DeviceTotalGb),
+                    ["deviceUsedGb"] = Finite(sample.DeviceUsedGb),
                     ["heavyTestHolder"] = sample.HeavyTestHolder,
                     ["admission"] = monitor.Admission,
                 });
@@ -96,6 +104,7 @@ public static class HostCommand {
         var intervalOption = CliOptions.Count(defaultValue: 10, description: "Seconds between readings with --watch.", minimum: 1, name: "--interval");
         var windowOption = CliOptions.Count(defaultValue: 6, description: "Readings the CPU mean covers with --watch; CAPACITY waits until that many exist.", minimum: 1, name: "--window");
         var capacityCpuOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.CapacityCpuPercent, description: "CAPACITY needs the CPU mean below this percentage (with --commit-reserve).", maximum: 100, minimum: 0, name: "--capacity-cpu");
+        var deviceFullOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.DeviceFullPercent, description: "A further device start finds no GPU headroom beside a working device holder while the dedicated video memory in use is at or over this percentage of the device's.", maximum: 100, minimum: 0, name: "--device-full");
         var commitReserveOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.CommitReservePercent, description: "The percentage of the commit limit that must stay unclaimed after a start's commit need, when the platform reports a limit; CAPACITY needs the headroom to hold it.", maximum: 100, minimum: 0, name: "--commit-reserve");
         var pressureRamOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.PressureRamGb, description: "PRESSURE when free memory is below this many gigabytes; a start must also leave this much free once its expected working set is taken.", minimum: 0, name: "--pressure-ram");
         var pressureDiskOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.PressureDiskGb, description: "PRESSURE when free disk on the working directory's drive is below this many gigabytes.", minimum: 0, name: "--pressure-disk");
@@ -104,7 +113,7 @@ public static class HostCommand {
         var command = new Command(
             description: "Report CPU, memory, disk and GPU busyness as admission lines: GPU busy|idle, PRESSURE, CAPACITY, LOADED.",
             name: "load"
-        ) { watchOption, intervalOption, windowOption, capacityCpuOption, commitReserveOption, pressureRamOption, pressureDiskOption, jsonOption };
+        ) { watchOption, intervalOption, windowOption, capacityCpuOption, commitReserveOption, deviceFullOption, pressureRamOption, pressureDiskOption, jsonOption };
 
         command.Detail(detail: $"""
               Lines (each carries cpu=, freeRAM=, freeDisk=, commit= where the platform reports a commit limit, and reuseNodes=):
@@ -116,7 +125,8 @@ public static class HostCommand {
                                                        commit limit, once --window readings exist
                 LOADED                                 otherwise, once --window readings exist: capacity ended
               One line per transition: a state that holds prints nothing more.
-              Each transition also reports, per start kind, what a start of that kind needs in two quantities: its
+              Each transition also reports, per start profile (each kind, and a windowed World with a cold mesh store,
+              whose bake reaches a far larger peak), what a start of that profile needs in two quantities: its
               private bytes (expected peak plus the growth running starts have left) against the commit headroom less
               the reserve (commit-covered), and its private working set (the same sum in privately resident memory,
               privateResidentNeed) against free RAM above the pressure floor (ram-covered). Private bytes are commit
@@ -129,7 +139,8 @@ public static class HostCommand {
               (a hung test run): admission then counts only what it holds now, expects no growth from it, and a
               heavy suite no longer waits for it to exit. The mark is shared (puck lease list names it too); the
               verb never stops the process, which its owner decides.
-              A kind's expected peak is the high percentile of its last ten observed starts, kept per machine in the
+              A profile's expected peak (a start's kind, and for a windowed World its backend and whether its mesh
+              store is warm) is the high percentile of its last ten observed starts, kept per machine in the
               lease root, so one unusual session moves it only briefly; unused growth tapers away over
               HostStartTracker.Plateau and returns on renewed allocation, and goes at once for an idle start. An expectation the machine could not
               hold even with every admitted start gone is judged as the lesser of itself and the figure an
@@ -139,7 +150,11 @@ public static class HostCommand {
               logical processors idle, but never fewer than 40% of them nor more than half; PRESSURE is free RAM
               below 1/8 of the installed memory (rounded up to whole gigabytes) or free disk below
               {HostLoadThresholds.DiskPressureGb}GB. No fixed amount of free RAM or commit gates a start: it needs its own private
-              working set free above the pressure floor and its own private bytes plus the reserve in the commit headroom. Here:
+              working set free above the pressure floor and its own private bytes plus the reserve in the commit headroom. A
+              device start beside a working device holder also needs the GPU's dedicated video memory in use (read from
+              the system's GPU Process Memory counters and the adapter's recorded size; deviceTotalGb and deviceUsedGb in
+              --json) under {HostLoadThresholds.ThisMachine.DeviceFullPercent:0.##}% of the device's (--device-full): devices share the GPU by measured
+              headroom, an idle holder gives its place back, and a GPU the platform cannot measure reads as full. Here:
               CPU below {HostLoadThresholds.ThisMachine.CapacityCpuPercent:0.#}%, {HostLoadThresholds.ThisMachine.CommitReservePercent:0.##}% of the commit limit kept unclaimed (allocation fails at the limit with RAM still free); pressure below {HostLoadThresholds.ThisMachine.PressureRamGb:0.##}GB RAM. Options override these defaults; gate, lease and the MCP World start admit by them unchanged.
 
               GPU work is a World that opens a device (Puck.World or Puck.World.dll), or a test host for {string.Join(separator: ", ", values: HostProcesses.DeviceTestAssemblies)}
@@ -162,6 +177,7 @@ public static class HostCommand {
             thresholds: new HostLoadThresholds(
                 CapacityCpuPercent: parseResult.GetValue(option: capacityCpuOption),
                 CommitReservePercent: parseResult.GetValue(option: commitReserveOption),
+                DeviceFullPercent: parseResult.GetValue(option: deviceFullOption),
                 InstalledRamGb: HostLoadThresholds.ThisMachine.InstalledRamGb,
                 PressureDiskGb: parseResult.GetValue(option: pressureDiskOption),
                 PressureRamGb: parseResult.GetValue(option: pressureRamOption)

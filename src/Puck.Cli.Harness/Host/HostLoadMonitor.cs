@@ -19,7 +19,11 @@ namespace Puck.Cli.Host;
 /// <param name="Holds">The gpu and heavy holds other processes were admitted to (<see cref="CliLease.AdmittedHolds"/>), each with
 /// its holder's process tree measured, or <see langword="null"/> when the reading lists none. The reading process's own holds
 /// and its ancestors' are left out: its own reservations and starts cover the first, and its work spends the second.</param>
-public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, double FreeRamGb, double FreeDiskGb, string? GpuHolder, int ReuseNodes, string? HeavyTestHolder = null, double CommitChargeGb = double.NaN, double CommitLimitGb = double.NaN, IReadOnlyList<HostRunningStart>? Starts = null, IReadOnlyList<HostLeaseHold>? Holds = null) {
+/// <param name="DeviceTotalGb">The dedicated video memory the GPU has, in gigabytes; NaN when the platform reports none
+/// (<see cref="HostLoadThresholds.DeviceHasHeadroom"/>).</param>
+/// <param name="DeviceUsedGb">The dedicated video memory every process holds on the busiest adapter, in gigabytes; NaN when
+/// the platform reports none.</param>
+public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, double FreeRamGb, double FreeDiskGb, string? GpuHolder, int ReuseNodes, string? HeavyTestHolder = null, double CommitChargeGb = double.NaN, double CommitLimitGb = double.NaN, IReadOnlyList<HostRunningStart>? Starts = null, IReadOnlyList<HostLeaseHold>? Holds = null, double DeviceTotalGb = double.NaN, double DeviceUsedGb = double.NaN) {
     /// <summary>Gets the commit charge as a percentage of the commit limit: allocations fail at 100 whatever physical memory
     /// is free. NaN when the charge or the limit is unknown.</summary>
     public double CommitPercent => ((double.IsFinite(d: CommitChargeGb) && double.IsFinite(d: CommitLimitGb) && (CommitLimitGb > 0)) ? (100.0 * CommitChargeGb / CommitLimitGb) : double.NaN);
@@ -42,7 +46,11 @@ public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, d
 /// which never counts the process as idle.</param>
 /// <param name="IdleSince">When the process was last seen using CPU, from the idle mark another observer recorded
 /// (<see cref="StartIdleness"/>), or <see langword="null"/> when none marks it idle.</param>
-public readonly record struct HostRunningStart(int Id, HostStartKind Kind, double PrivateGb, bool Ready = false, long StartTicks = 0, double WorkingSetGb = double.NaN, double PrivateResidentGb = double.NaN, double CpuSeconds = double.NaN, DateTimeOffset? IdleSince = null) {
+/// <param name="Marked">The process's profile as its launch recorded it (<see cref="StartProfiles"/>), or
+/// <see langword="null"/> for a process no launch marked, which is judged by <paramref name="Kind"/> alone.</param>
+public readonly record struct HostRunningStart(int Id, HostStartKind Kind, double PrivateGb, bool Ready = false, long StartTicks = 0, double WorkingSetGb = double.NaN, double PrivateResidentGb = double.NaN, double CpuSeconds = double.NaN, DateTimeOffset? IdleSince = null, HostStartProfile? Marked = null) {
+    /// <summary>Gets the profile the process is judged by: its launch's mark, else its kind alone.</summary>
+    public HostStartProfile Profile => (Marked ?? Kind);
     /// <summary>Gets a phrase for a reading to append when the process is idle, such as <c> idle since 12:03:00Z</c>; empty
     /// when none marks it idle.</summary>
     public string IdleNote => ((IdleSince is { } since) ? string.Create(provider: CultureInfo.InvariantCulture, handler: $" idle since {since.UtcDateTime:HH:mm:ss}Z") : string.Empty);
@@ -75,7 +83,14 @@ public readonly record struct HostRunningStart(int Id, HostStartKind Kind, doubl
 /// <param name="CpuSeconds">The CPU time the holder and its live descendants have used, in seconds; NaN when none of them
 /// reports it.</param>
 /// <param name="Members">The ids of the holder and every descendant process.</param>
-public readonly record struct HostLeaseHold(string Lease, string Holder, int Id, long StartTicks, HostStartKind Kind, bool Device, double PrivateGb, double ResidentGb, double CpuSeconds, IReadOnlyList<int> Members);
+/// <param name="Marked">The profile of the work the hold covers, or <see langword="null"/> to judge it by
+/// <paramref name="Kind"/> alone.</param>
+/// <param name="IdleSince">When the holder's tree was last seen using CPU, from the idle mark an observer recorded
+/// (<see cref="StartIdleness"/>), or <see langword="null"/> when none marks it idle; an idle hold gives its device back.</param>
+public readonly record struct HostLeaseHold(string Lease, string Holder, int Id, long StartTicks, HostStartKind Kind, bool Device, double PrivateGb, double ResidentGb, double CpuSeconds, IReadOnlyList<int> Members, HostStartProfile? Marked = null, DateTimeOffset? IdleSince = null) {
+    /// <summary>Gets the profile the hold is judged by: the one recorded at its grant, else its kind alone.</summary>
+    public HostStartProfile Profile => (Marked ?? Kind);
+}
 /// <summary>The thresholds that turn readings into admission lines. A threshold left out is never judged, so with
 /// none the monitor reports only GPU transitions. A start's need is its own expected peak (<see cref="HostStartTracker"/>),
 /// judged in two quantities that are not the same: its private bytes (commit) against the commit headroom less a reserve
@@ -91,7 +106,16 @@ public readonly record struct HostLeaseHold(string Lease, string Holder, int Id,
 /// below this share is commit pressure and holds every start back. Not judged when the platform reports no commit limit.</param>
 /// <param name="InstalledRamGb">The machine's installed physical memory, in gigabytes, which no start's private working set
 /// plus the pressure floor can exceed (<see cref="NeverFits"/>); not judged when null.</param>
-public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? PressureRamGb, double? PressureDiskGb, double? CommitReservePercent = null, double? InstalledRamGb = null) {
+/// <param name="DeviceFullPercent">The share of the GPU's dedicated video memory, in percent, at or over which the device
+/// has no headroom for a further device start while another device holder is working (<see cref="DeviceHasHeadroom"/>); not
+/// judged when null.</param>
+public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? PressureRamGb, double? PressureDiskGb, double? CommitReservePercent = null, double? InstalledRamGb = null, double? DeviceFullPercent = null) {
+    /// <summary>The share of the GPU's dedicated video memory, in percent, at or over which a further device start finds the
+    /// device full: what is left is the desktop's margin, and the driver is evicting video memory to system memory, so
+    /// another World would slow every World on the device. Under it a World runs beside another: a device shares its time
+    /// between Worlds without failing, and a World sizes its device pool from the budget the driver reports it, so it takes
+    /// what the others leave.</summary>
+    public const double DefaultDeviceFullPercent = 95;
     /// <summary>The commit reserve, in percent of the commit limit: a start is admitted only if the headroom still holds
     /// this much after its need. Allocation fails at the limit with physical memory still free; builds, compilers and
     /// hand-started suites charge commit that admission does not predict, and a tenth of the limit (6.4 GB of a 64 GB
@@ -113,9 +137,19 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Pres
     /// <param name="reading">The reading.</param>
     /// <returns><see langword="true"/> when the headroom holds the reserve or is not judged.</returns>
     public bool CommitHasHeadroom(HostSample reading) => ((CommitReservePercent is null) || !double.IsFinite(d: reading.CommitLimitGb) || !double.IsFinite(d: reading.CommitChargeGb) || ((reading.CommitLimitGb - reading.CommitChargeGb) >= CommitReserveGb(reading: reading)));
-    /// <summary>The commit, in gigabytes, a windowed World is expected to reach in a session of minutes (readings of 12 to
-    /// 18 GB private on the debug world).</summary>
+    /// <summary>Gets whether the device has room for a further device start beside the one that is working: the dedicated
+    /// video memory in use is under <see cref="DeviceFullPercent"/> of the device's. A device the platform cannot measure
+    /// has none to show, so it reads as full (a further device start waits for the working holder, as one waits for any
+    /// resource it cannot size); a threshold left out never holds a reading back.</summary>
+    /// <param name="reading">The reading.</param>
+    /// <returns><see langword="true"/> when the device has room or is not judged.</returns>
+    public bool DeviceHasHeadroom(HostSample reading) => ((DeviceFullPercent is not { } percent) || (double.IsFinite(d: reading.DeviceTotalGb) && double.IsFinite(d: reading.DeviceUsedGb) && (reading.DeviceUsedGb < (reading.DeviceTotalGb * percent / 100.0))));
+    /// <summary>The commit, in gigabytes, a windowed World with a warm mesh store is expected to reach in a session of minutes
+    /// (readings of 12 to 18 GB private on the debug world).</summary>
     public const double WindowedWorldPeakGb = 18;
+    /// <summary>The commit, in gigabytes, a windowed World booting with an empty mesh store is expected to reach: the cold bake
+    /// holds every mesh's bake in flight (readings near 22 GB private on the debug world).</summary>
+    public const double ColdWindowedWorldPeakGb = 22;
     /// <summary>The commit, in gigabytes, a headless World is expected to reach (readings of 4 to 6 GB).</summary>
     public const double HeadlessWorldPeakGb = 6;
     /// <summary>The commit, in gigabytes, a heavy test suite is expected to reach (the mesh-irradiance laws reached 9 GB).</summary>
@@ -126,21 +160,22 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Pres
     /// <summary>The commit, in gigabytes, an ordinary step (a build, a verb that boots no World) is expected to reach.</summary>
     public const double StepPeakGb = 2;
 
-    /// <summary>Returns the fallback peak before this machine has measured a plateaued or finished start of the kind: the
-    /// kind's reading on a large machine, held to the host budget a Puck process's account derives on a machine of
+    /// <summary>Returns the fallback peak before this machine has measured a plateaued or finished start of the profile: the
+    /// profile's reading on a large machine, held to the host budget a Puck process's account derives on a machine of
     /// <paramref name="installedRamGb"/> (<see cref="Puck.Hosting.Jobs.MemoryAccount.DefaultBudgetOf"/>). A World sizes its
     /// caches and pools from that budget, so on a 16 GB machine it plans for 12 GB and ran at 8 to 10 GB private where a
     /// 64 GB machine reads 12 to 18 GB; judging the small machine by the large one's figure refuses a start that fits.</summary>
-    /// <param name="kind">The start's kind.</param>
+    /// <param name="kind">The start's profile: its kind, and for a windowed World whether its mesh store is cold.</param>
     /// <param name="installedRamGb">The machine's installed memory, in gigabytes, or <see langword="null"/> to judge by the
-    /// kind's figure alone.</param>
+    /// profile's figure alone.</param>
     /// <returns>The default expected peak, in gigabytes.</returns>
-    public static double DefaultPeakGb(HostStartKind kind, double? installedRamGb) {
-        var peak = kind switch {
-            HostStartKind.WindowedWorld => WindowedWorldPeakGb,
-            HostStartKind.HeadlessWorld => HeadlessWorldPeakGb,
-            HostStartKind.HeavySuite => HeavySuitePeakGb,
-            HostStartKind.ReproduceReplica => ReproduceReplicaPeakGb,
+    public static double DefaultPeakGb(HostStartProfile kind, double? installedRamGb) {
+        var peak = kind.Class switch {
+            { Kind: HostStartKind.WindowedWorld, Store: StoreWarmth.Cold } => ColdWindowedWorldPeakGb,
+            { Kind: HostStartKind.WindowedWorld } => WindowedWorldPeakGb,
+            { Kind: HostStartKind.HeadlessWorld } => HeadlessWorldPeakGb,
+            { Kind: HostStartKind.HeavySuite } => HeavySuitePeakGb,
+            { Kind: HostStartKind.ReproduceReplica } => ReproduceReplicaPeakGb,
             _ => StepPeakGb,
         };
 
@@ -231,6 +266,7 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Pres
         return new HostLoadThresholds(
             CapacityCpuPercent: Math.Round(digits: 1, value: (100.0 * (1.0 - (idle / logicalProcessors)))),
             CommitReservePercent: DefaultCommitReservePercent,
+            DeviceFullPercent: DefaultDeviceFullPercent,
             InstalledRamGb: installed,
             PressureDiskGb: DiskPressureGb,
             PressureRamGb: (installed / 8.0)
