@@ -12,8 +12,6 @@ public sealed record class HealthCheckResponse(
     string Status
 );
 public sealed class HealthCheck(HealthCheckService healthCheckService, ILogger<HealthCheck> logger) {
-    private const string UnhandledExceptionMessage = "Unhandled exception while executing health check.";
-
     [FeatureGate(features: nameof(HealthCheck))]
     [Function(name: nameof(HealthCheck))]
     public async Task<IActionResult> Run(
@@ -27,20 +25,27 @@ public sealed class HealthCheck(HealthCheckService healthCheckService, ILogger<H
         var cancellationToken = (functionContext?.CancellationToken ?? request.HttpContext.RequestAborted);
         var healthReport = await healthCheckService.CheckHealthAsync(cancellationToken: cancellationToken);
 
-        if (logger.IsEnabled(logLevel: LogLevel.Error)) {
-            foreach (var entry in healthReport.Entries) {
-                if (entry.Value.Exception is not null) {
-                    logger.LogError(
-                        exception: entry.Value.Exception,
-                        message: UnhandledExceptionMessage
-                    );
-                }
+        // The diagnosis stays server-side: every entry that is not healthy is logged with its name, status, description
+        // and exception, while the anonymous body carries only the aggregate status.
+        if (logger.IsEnabled(logLevel: LogLevel.Warning)) {
+            foreach (var (name, entry) in healthReport.Entries) {
+                if (entry.Status == HealthStatus.Healthy) { continue; }
+                logger.Log(
+                    logLevel: ((entry.Status == HealthStatus.Unhealthy) ? LogLevel.Error : LogLevel.Warning),
+                    exception: entry.Exception,
+                    message: "Health check entry {Entry} is {Status}: {Description}",
+                    args: [name, entry.Status, entry.Description]
+                );
             }
         }
 
-        return new OkObjectResult(value: new HealthCheckResponse(
-            Status: healthReport.Status.ToString()
-        ));
+        var response = new HealthCheckResponse(Status: healthReport.Status.ToString());
+
+        // An origin probe reads the status code, so an unhealthy report must not answer 200.
+        return ((healthReport.Status == HealthStatus.Unhealthy)
+            ? new ObjectResult(value: response) { StatusCode = StatusCodes.Status503ServiceUnavailable }
+            : new OkObjectResult(value: response)
+        );
     }
 }
 

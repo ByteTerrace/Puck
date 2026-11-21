@@ -1,6 +1,4 @@
-using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Text;
 using Puck.Attestation;
 
 namespace Puck.World.Protocol;
@@ -119,30 +117,12 @@ public static class WorldAdmissionDoor {
         if ((challenge.Length != ChallengeBytes) || string.IsNullOrWhiteSpace(value: clientKeyHash) || string.IsNullOrWhiteSpace(value: serverKeyHash)) {
             throw new ArgumentException(message: "admission challenges require a 32-byte nonce and both authenticated transport key hashes");
         }
-        var label = "puck.world.tcp-admission.v1"u8;
-        var clientByteCount = Encoding.UTF8.GetByteCount(s: clientKeyHash);
-        var serverByteCount = Encoding.UTF8.GetByteCount(s: serverKeyHash);
-        var info = new byte[(label.Length + (sizeof(int) * 2) + clientByteCount + serverByteCount)];
-
-        label.CopyTo(destination: info);
-        var offset = label.Length;
-
-        BinaryPrimitives.WriteInt32LittleEndian(destination: info.AsSpan(start: offset), value: clientByteCount);
-        offset += sizeof(int);
-        offset += Encoding.UTF8.GetBytes(chars: clientKeyHash, bytes: info.AsSpan(start: offset));
-        BinaryPrimitives.WriteInt32LittleEndian(destination: info.AsSpan(start: offset), value: serverByteCount);
-        offset += sizeof(int);
-        _ = Encoding.UTF8.GetBytes(chars: serverKeyHash, bytes: info.AsSpan(start: offset));
-        var bound = new byte[ChallengeBytes];
-
-        HKDF.DeriveKey(
-            hashAlgorithmName: HashAlgorithmName.SHA256,
-            ikm: challenge,
-            output: bound,
-            salt: default,
-            info: info
+        return ChannelBinding.Bind(
+            clientKeyHash: clientKeyHash,
+            label: "puck.world.tcp-admission.v1",
+            nonce: challenge,
+            serverKeyHash: serverKeyHash
         );
-        return bound;
     }
     /// <summary>Mints a fresh, cryptographically random challenge nonce.</summary>
     public static byte[] NewChallenge() => RandomNumberGenerator.GetBytes(count: ChallengeBytes);

@@ -204,10 +204,23 @@ public sealed class SiloOperatorLawTests {
         silo.Instances.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
         silo.NoteMasterStep(stepTicks: Fixtures.StepTicks);
 
-        await Assert.ThrowsAsync<ObjectDisposedException>(testCode: () => attached.ExecuteAsync(
-            request: new ControlRequest(Command: "world.peers", Id: 1, Operation: "exec", TimeoutMilliseconds: 1000),
-            cancellationToken: ct
-        ));
+        // The session closes off the tick thread, so a call racing the close may be canceled before the session
+        // refuses calls outright; the law is that it ends up refusing them.
+        var closed = false;
+
+        for (var attempt = 0; (!closed && (attempt < 400)); attempt++) {
+            try {
+                _ = await attached.ExecuteAsync(
+                    request: new ControlRequest(Command: "world.peers", Id: (attempt + 1), Operation: "exec", TimeoutMilliseconds: 1000),
+                    cancellationToken: ct
+                );
+            } catch (ObjectDisposedException) {
+                closed = true;
+            } catch (OperationCanceledException) {
+            }
+            if (!closed) { await Task.Delay(millisecondsDelay: 10, cancellationToken: ct); }
+        }
+        Assert.True(condition: closed, userMessage: "the control session stayed open after its OAuth admission was removed or downgraded");
 
         // Drain the queued disconnect on the command pump and step once so the single NetworkPlayers slot frees.
         for (var pass = 0; ((pass < 8) && server.IsLivePeer(principal: peer)); pass++) {

@@ -23,7 +23,7 @@ public sealed partial class RenderGraphRuntime {
     // repeats a refusal that still holds nor hides its clearing. Reconfiguration forgets the instances it removes. A reader
     // of a refused or waiting instance takes on that instance's reason word for word (MarkReadStale), so a reason is told
     // once while any instance holds it, and cleared once no instance does.
-    private readonly Dictionary<string, string> m_narrated = new(comparer: StringComparer.Ordinal);
+    private readonly Puck.Abstractions.ReasonLatch<string> m_narrated = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Gets or sets where the runtime narrates an instance's refusal, a wait that outlasts
     /// <see cref="StallFrames"/>, their clearing and a failed capture, one line each; <see langword="null"/>, the
@@ -147,24 +147,17 @@ public sealed partial class RenderGraphRuntime {
         m_staleFrames[index] = 0;
 
         if (
-            (m_narrated.Count != 0) &&
-            m_narrated.Remove(
-                key: m_set.Instances[index].Name,
-                value: out var cleared
+            m_narrated.Clear(
+                cleared: out var cleared,
+                key: m_set.Instances[index].Name
             ) &&
-            !m_narrated.ContainsValue(value: cleared)
+            !m_narrated.Holds(reason: cleared)
         ) {
             Narrate(line: $"[render-graph] cleared: {cleared}");
         }
     }
     // Drops the narrations of instances the set no longer holds; nothing renders them, so nothing would clear them.
-    private void ForgetRemovedNarrations() {
-        if (m_narrated.Count == 0) { return; }
-
-        foreach (var name in m_narrated.Keys.ToArray()) {
-            if (m_set.IndexOf(name: name) < 0) { _ = m_narrated.Remove(key: name); }
-        }
-    }
+    private void ForgetRemovedNarrations() => m_narrated.ClearWhere(gone: name => (m_set.IndexOf(name: name) < 0));
     private void MarkStale(int index, string reason, bool refused = false) {
         if (m_staleSlot[index] < 0) {
             m_staleSlot[index] = m_staleIndices.Count;
@@ -178,12 +171,10 @@ public sealed partial class RenderGraphRuntime {
 
         if (
             (refused || (++m_staleFrames[index] > StallFrames)) &&
-            !(m_narrated.TryGetValue(key: name, value: out var narrated) && string.Equals(a: reason, b: narrated, comparisonType: StringComparison.Ordinal))
+            m_narrated.Set(key: name, reason: reason, sharedBefore: out var told) &&
+            !told
         ) {
-            var told = m_narrated.ContainsValue(value: reason);
-
-            m_narrated[name] = reason;
-            if (!told) { Narrate(line: $"[render-graph] {(refused ? "refused" : $"not rendered for {m_staleFrames[index]} attempts")}: {reason}"); }
+            Narrate(line: $"[render-graph] {(refused ? "refused" : $"not rendered for {m_staleFrames[index]} attempts")}: {reason}");
         }
     }
     // A paused node presents its exact previous image on purpose. Its readers consume that standing publication, not
