@@ -1942,10 +1942,11 @@ public static partial class DocumentLowering {
     /// argument bindings are live in, for a section whose rows a dedicated dispatcher reads.</summary>
     /// <param name="call">The invocation as written.</param>
     /// <param name="scope">The invoking scope.</param>
+    /// <param name="initializeInvocation">The vocabulary's initializer, run as <see cref="ExpandTemplate"/> runs it.</param>
     /// <returns>Each produced statement and the scope to lower it under; nothing when no template bears the name. While
     /// the caller lowers a produced statement, the source map registers under the template's defining source, as it
     /// does inside <see cref="ExpandTemplate"/>, so a row an imported template produced reads against that file.</returns>
-    public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandTemplateStatements(CallExpressionNode call, DocumentScope scope) {
+    public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandTemplateStatements(CallExpressionNode call, DocumentScope scope, Action<DocumentScope, IReadOnlyList<StatementNode>>? initializeInvocation) {
         ArgumentNullException.ThrowIfNull(call);
         ArgumentNullException.ThrowIfNull(scope);
 
@@ -1953,6 +1954,7 @@ public static partial class DocumentLowering {
 
         ExpandTemplate(
             call: call,
+            initializeInvocation: initializeInvocation,
             target: new JsonObject(),
             scope: scope,
             sink: (statement, _, invocationScope) => captured.Add(item: (statement, invocationScope))

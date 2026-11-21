@@ -1,0 +1,18 @@
+// A compile-time choice between two gates is the gate it chooses: `and` and `or` short-circuit, so a constant test
+// leaves only the gate it selects. A choice (`?:`) evaluates both arms and keeps them.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let strict = 1
+
+state {
+  world {
+    slot level = 0
+    slot moves = 0
+  }
+}
+
+rule "climb" {
+  when (strict == 1 and level < 3) or (strict != 1 and level <= 3)
+  moves += 1
+}

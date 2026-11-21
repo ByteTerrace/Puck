@@ -844,9 +844,8 @@ public static class WorldSearchCompilation {
         }
         return stack[0] != false;
 
-        static bool IsPly(Puck.State.Rules.CompiledValueSource source) =>
-            source.Operand is Puck.State.Rules.SearchPlyOperand ||
-            source.Expression is [{ Operation: ExpressionOp.Operand, Operand: Puck.State.Rules.SearchPlyOperand }];
+        // A lone read compiles to the operand itself (CompiledValueSource.FromExpression), whichever spelling it had.
+        static bool IsPly(Puck.State.Rules.CompiledValueSource source) => (source.Operand is Puck.State.Rules.SearchPlyOperand);
     }
     /// <summary>Returns the rules one job's judge evaluates: of the rules a frame could evaluate, those that can
     /// reach a row the job reads, in their authored order.</summary>

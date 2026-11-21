@@ -682,7 +682,7 @@ public static partial class RuleCompiler {
             if (value is not null) {
                 staticSource = CompiledValueSource.Constant(rawValue: LiteralToRaw(kind: staticField.Kind, literal: value.Value, ruleName: ruleName, verb: verb));
             } else if (expression is not null) {
-                staticSource = CompiledValueSource.FromExpression(expression: CompileExpression(context: context, expression: expression, kind: ((staticField.Kind == CellKind.Bool) ? CellKind.Int : staticField.Kind), ruleName: ruleName, verb: verb));
+                staticSource = CompiledValueSource.FromExpression(expression: CompileExpression(context: context, expression: expression, kind: ((staticField.Kind == CellKind.Bool) ? CellKind.Int : staticField.Kind), ruleName: ruleName, verb: verb), kind: staticField.Kind);
             } else if (fromState is not null) {
                 var sourceOperand = ResolveOperand(context: context, cell: fromKey, operand: fromState, site: new OperandSite(AllowText: (staticField.Kind == CellKind.Text), FieldLabel: "fromState", KeyFieldLabel: "fromKey", RuleName: ruleName, Verb: verb));
 
@@ -927,7 +927,7 @@ public static partial class RuleCompiler {
                 keyFrom: destination.KeyFrom,
                 rowFrom: liveRow,
                 rowOrdinal: rowOrdinal,
-                source: CompiledValueSource.FromExpression(expression: program),
+                source: CompiledValueSource.FromExpression(expression: program, kind: row.Kind),
                 text: null,
                 write: write
             );
@@ -1015,7 +1015,7 @@ public static partial class RuleCompiler {
         if (value is not null) {
             source = CompiledValueSource.Constant(rawValue: LiteralToRaw(kind: field.Kind, literal: value.Value, ruleName: ruleName, verb: verb));
         } else if (expression is not null) {
-            source = CompiledValueSource.FromExpression(expression: CompileExpression(context: context, expression: expression, kind: ((field.Kind == CellKind.Bool) ? CellKind.Int : field.Kind), ruleName: ruleName, verb: verb));
+            source = CompiledValueSource.FromExpression(expression: CompileExpression(context: context, expression: expression, kind: ((field.Kind == CellKind.Bool) ? CellKind.Int : field.Kind), ruleName: ruleName, verb: verb), kind: field.Kind);
         } else if (fromState is not null) {
             var operand = ResolveOperand(context: context, cell: fromKey, operand: fromState, site: new OperandSite(AllowText: (field.Kind == CellKind.Text), FieldLabel: "fromState", KeyFieldLabel: "fromKey", RuleName: ruleName, Verb: verb));
 

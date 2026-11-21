@@ -161,11 +161,14 @@ public static partial class WorldDocumentEmitter {
         }
         internal ExpressionNode CompileTime(OperandExpressionNode operand) => ((operand.Syntax is { } syntax)
             ? ToCompileTime(node: syntax, operand: operand) : RefuseCompileTime(operand: operand));
-        // Folds what compile-time constants decide, so a spelling's program and price never depend on whether the
-        // author wrote a constant or an expression of constants: a name bound to a number becomes that number, a
-        // choice on a constant condition becomes its arm, and an operator over constants becomes its result where
-        // the result is exact in the runtime's Q48.16 arithmetic. Calls, indexes and accesses keep their spelling,
-        // since a name inside one may be a row or a key rather than a value.
+        // Folds what compile-time constants decide whatever kind the destination reads, so a spelling's document and
+        // price never depend on whether the author wrote a constant or an expression of constants: a name bound to a
+        // number becomes that number, a sign on a literal becomes the negated literal, and an operator over whole
+        // literals becomes the value the rule compiler's own folder leaves in every numeric kind
+        // (RuleCompiler.FoldKindFree). What a kind decides (a fractional operand, an Int quotient) and what faults,
+        // including either arm of a choice, stay as written for the rule compiler, which folds them at the
+        // destination's kind and keeps a refusal in the program. Calls, indexes and accesses keep their spelling, since
+        // a name inside one may be a row or a key rather than a value.
         internal Syntax.SyntaxNode Fold(Syntax.SyntaxNode node, OperandExpressionNode operand) {
             switch (node) {
                 case Syntax.SourceGroup group: {
@@ -183,13 +186,13 @@ public static partial class WorldDocumentEmitter {
                 case Syntax.Unary unary: {
                         var value = Fold(node: unary.Operand, operand: operand);
 
-                        if ((value is Syntax.Literal { Value: var number }) && IsExact(value: number)) {
-                            switch (unary.Operator) {
-                                case "-": return new Syntax.Literal(Value: -number);
-                                case "not": return Truth(value: (number == 0m));
-                            }
+                        // Rounding to even is symmetric, so a negated literal reads the same in every kind.
+                        if ((unary.Operator == "-") && (value is Syntax.Literal { Value: var number })) {
+                            return new Syntax.Literal(Value: -number);
                         }
-                        return (ReferenceEquals(objA: value, objB: unary.Operand) ? unary : unary with { Operand = value });
+                        var folded = (ReferenceEquals(objA: value, objB: unary.Operand) ? unary : unary with { Operand = value });
+
+                        return (((value is Syntax.Literal) && (FoldKindFree(node: folded) is { } whole)) ? whole : folded);
                     }
                 case Syntax.Binary binary: {
                         var left = Fold(node: binary.Left, operand: operand);
@@ -200,16 +203,22 @@ public static partial class WorldDocumentEmitter {
                     }
                 case Syntax.Ternary ternary: {
                         var condition = Fold(node: ternary.Condition, operand: operand);
-
-                        if ((condition is Syntax.Literal { Value: var number }) && IsExact(value: number)) {
-                            return Fold(node: ((number != 0m) ? ternary.WhenTrue : ternary.WhenFalse), operand: operand);
-                        }
                         var whenTrue = Fold(node: ternary.WhenTrue, operand: operand);
                         var whenFalse = Fold(node: ternary.WhenFalse, operand: operand);
-
-                        return ((ReferenceEquals(objA: condition, objB: ternary.Condition) && ReferenceEquals(objA: whenTrue, objB: ternary.WhenTrue) && ReferenceEquals(objA: whenFalse, objB: ternary.WhenFalse))
+                        var folded = ((ReferenceEquals(objA: condition, objB: ternary.Condition) && ReferenceEquals(objA: whenTrue, objB: ternary.WhenTrue) && ReferenceEquals(objA: whenFalse, objB: ternary.WhenFalse))
                             ? ternary
                             : new Syntax.Ternary(Condition: condition, WhenFalse: whenFalse, WhenTrue: whenTrue));
+
+                        // A choice evaluates both arms, so a whole constant condition chooses its arm only when the other
+                        // arm is a number every kind holds, which can neither fault nor be absent, and the chosen arm is
+                        // not a literal, whose kind a literal beside it would decide; otherwise it folds only when all
+                        // three parts do.
+                        if ((condition is Syntax.Literal { Value: { Scale: 0 } test }) &&
+                            (((test != 0m) ? whenTrue : whenFalse) is not (Syntax.Literal or Syntax.SourceString) and var arm) &&
+                            (((test != 0m) ? whenFalse : whenTrue) is Syntax.Literal { Value: var other }) && Puck.State.NumericLiteral.TryToFixed(result: out _, value: other)) {
+                            return arm;
+                        }
+                        return ((((condition, whenTrue, whenFalse) is (Syntax.Literal, Syntax.Literal, Syntax.Literal)) && (FoldKindFree(node: folded) is { } chosen)) ? chosen : folded);
                     }
                 default:
                     return node;
@@ -249,45 +258,25 @@ public static partial class WorldDocumentEmitter {
             }
             // The number WriteValue would write for the binding, read back from the same text.
             var text = (scalar.TryGetValue<string>(value: out var written) ? written : scalar.ToJsonString());
-            decimal? number = (scalar.TryGetValue<bool>(value: out var flag) ? (flag ? 1m : 0m)
+            return (scalar.TryGetValue<bool>(value: out var flag) ? (flag ? 1m : 0m)
                 : (decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ? parsed : null));
-
-            return (((number is { } exact) && IsExact(value: exact)) ? exact : null);
         }
 
         internal static Syntax.Literal? FoldBinary(Syntax.SyntaxNode left, string operation, Syntax.SyntaxNode right) {
-            if ((left is Syntax.Literal { Value: var a }) && IsExact(value: a)) {
-                // A constant decides a short-circuit whatever the other side reads.
-                if ((operation == "and") && (a == 0m)) { return Truth(value: false); }
-                if ((operation == "or") && (a != 0m)) { return Truth(value: true); }
+            // A whole constant decides a short-circuit whatever the other side reads, since the right side of a
+            // decided `and` or `or` never runs; a fractional one's truth depends on the kind that rounds it.
+            if ((left is Syntax.Literal { Value: { Scale: 0 } decides }) && (((operation == "and") && (decides == 0m)) || ((operation == "or") && (decides != 0m)))) {
+                return new Syntax.Literal(Value: ((operation == "or") ? 1m : 0m));
             }
-            if ((left is not Syntax.Literal { Value: var x }) || (right is not Syntax.Literal { Value: var y }) || !IsExact(value: x) || !IsExact(value: y)) {
-                return null;
-            }
-            decimal? result = operation switch {
-                "==" => Bool(value: (x == y)),
-                "!=" => Bool(value: (x != y)),
-                "<" => Bool(value: (x < y)),
-                "<=" => Bool(value: (x <= y)),
-                ">" => Bool(value: (x > y)),
-                ">=" => Bool(value: (x >= y)),
-                "and" => Bool(value: ((x != 0m) && (y != 0m))),
-                "or" => Bool(value: ((x != 0m) || (y != 0m))),
-                "+" => (x + y),
-                "-" => (x - y),
-                // A product is exact in Q48.16 when one factor is whole.
-                "*" when ((decimal.Truncate(d: x) == x) || (decimal.Truncate(d: y) == y)) => (x * y),
-                _ => null,
-            };
-
-            return (((result is { } value) && IsExact(value: value)) ? new Syntax.Literal(Value: value) : null);
-
-            static decimal Bool(bool value) => (value ? 1m : 0m);
+            return (((left, right) is (Syntax.Literal, Syntax.Literal)) ? FoldKindFree(node: new Syntax.Binary(Left: left, Operator: operation, Right: right)) : null);
         }
-
-        private static Syntax.Literal Truth(bool value) => new(Value: (value ? 1m : 0m));
-        // A decimal is exact in the runtime's arithmetic when it is a whole number of 2^-16 steps inside Q48.16's range.
-        private static bool IsExact(decimal value) => ((Math.Abs(value: value) < 140_737_488_355_328m) && (decimal.Truncate(d: (value * 65_536m)) == (value * 65_536m)));
+        // The literal an operator over literals folds to in every numeric kind, or null where a kind decides it.
+        private static Syntax.Literal? FoldKindFree(Syntax.SyntaxNode node) => ((
+            Syntax.TryParse(error: out _, program: out var program, text: Syntax.PrintSyntax(atom: static _ => "0", syntax: node)) &&
+            (Puck.State.Rules.RuleCompiler.FoldKindFree(expression: program) is { } whole)
+        )
+            ? new Syntax.Literal(Value: whole)
+            : null);
         private void Refuse(string message, SourceSpan span) => scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.OperandParse, message: message, span: span);
         private void WriteOperand(OperandExpressionNode operand) {

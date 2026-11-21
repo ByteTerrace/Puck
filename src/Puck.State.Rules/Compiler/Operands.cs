@@ -103,6 +103,23 @@ public sealed class LocalOperand : RuleOperand {
     /// whole chain it rests on.</summary>
     public CompiledRuleLocal? Source { get; }
 
+    /// <summary>Returns whether the binding is a compile-time constant: the constant folder reduced its program to
+    /// one constant, so every evaluation binds that value and a read of it is that literal.</summary>
+    /// <param name="raw">The constant, in this operand's <see cref="RuleOperand.ValueKind"/> encoding.</param>
+    /// <returns><see langword="true"/> for a numeric binding whose program is one constant. A Bool binding never
+    /// answers one, since its raw value is read through a conversion a literal skips.</returns>
+    public bool TryConstant(out long raw) {
+        if ((ValueKind is CellKind.Int or CellKind.Fixed) && (Source?.Expression is [{ Operation: ExpressionOp.Constant } constant])) {
+            raw = constant.Constant;
+
+            return true;
+        }
+
+        raw = 0L;
+
+        return false;
+    }
+
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) {
         if (Source is { } source) {

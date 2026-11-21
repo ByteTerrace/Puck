@@ -171,9 +171,22 @@ A document's `schema:` field selects its vocabulary, never the filename.
   new spelling lands with its pair, and a pair that fails is a compiler defect.
   Known and closed walls live in the
   [author walls log](../../../docs/authoring/author-walls.md).
-  Constants fold before lowering: a name bound to a number, an enum member, an
-  exact operator over constants and a ternary on a constant condition become
-  their value, in gates and values alike.
+  Constant folding has one home, the rule compiler
+  ([constant folding](../../../docs/reference/state/expressions.md#constant-folding-and-faults)).
+  Before lowering, the transpiler substitutes only what every numeric kind
+  agrees on: a name bound to a number, an enum member, a negated literal, an
+  operator over whole literals (`RuleCompiler.FoldKindFree` folds it in an Int
+  and a Fixed carrier and keeps it only when both agree), and a choice on a
+  whole constant condition whose other arm is a number. A fraction (`0.5 + 0.5`
+  is 0 in an Int row), an Int quotient and anything that faults stay as
+  written, and the rule compiler folds them at the destination's kind,
+  keeping a refusal even in a choice's unselected arm (a choice evaluates both
+  arms; `and`, `or` and `if` short-circuit). An `if` or `when` constants decide
+  is the branch it chooses, and a template's family registers as a document's
+  does. `CompiledValueSource.FromExpression` turns a program that folded to one
+  constant into that literal and a lone read into that read, so `.puck` and
+  JSON spellings, and `compareValue` and `compareState`, compile and price
+  alike.
 - Gates (`when`, `if`, `expect`) accept ordinary expressions. Zero and absence
   are false; nonzero numeric values are true. `and` and `or` short-circuit;
   `not` negates truth. They yield Int 0/1 and bind below comparisons. Bitwise

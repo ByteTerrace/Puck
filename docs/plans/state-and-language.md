@@ -438,7 +438,7 @@ that name (`climb(limit: 3)` inside a rule is PUCK030, "unknown member
 `when (strict == 1) ? (level < 3) : (level <= 3)` with `let strict = 1` lowers to
 a `compareValue` over an expression evaluating both arms, where `when level < 3`
 lowers to `compareState`, so the rule program and its price change with the
-spelling (the `ternary-fold` pair fails). Together they block one shared
+spelling. Together they block one shared
 seat-input template across Go, Alchemy, Reversi, the card table, the granaries
 and chess (`worlds/debug/go.puck` around `:1153` and its siblings).
 
@@ -454,8 +454,12 @@ and chess (`worlds/debug/go.puck` around `:1153` and its siblings).
   per-game differences as parameters.
 
 Decided: fold constants now; then (a), since the shared part of the
-seat-input rules is effects and locals as well as gates. The fold landed (see
-above); the `ternary-fold` and `constant-fold` pairs hold. The rule template
+seat-input rules is effects and locals as well as gates. The fold landed, and
+later moved into one home, the rule compiler: a choice evaluates both arms, so
+a constant one keeps its unselected arm (and any refusal in it) unless that arm
+is a number, and a compile-time choice between two gates is spelled with `and`
+and `or`, which short-circuit (`worlds/standard/seat.puck`'s `seatPast`). The
+`gate-choice-fold` and `constant-fold` pairs hold. The rule template
 landed as `rule template name(p, q = d) { … }`, its body parsed as rule-body
 statements and spliced by `DocumentLowering.ExpandBody` where a rule body calls
 it, under its bound arguments, as a rule-body `for` splices; a document template

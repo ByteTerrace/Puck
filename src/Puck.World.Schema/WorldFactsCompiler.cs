@@ -421,7 +421,7 @@ public static partial class WorldFactsCompiler {
             key: address.Key,
             keyFrom: address.KeyFrom,
             laneOrdinal: laneOrdinal,
-            source: CompiledValueSource.FromExpression(expression: program)
+            source: CompiledValueSource.FromExpression(expression: program, kind: CellKind.Int)
         );
     }
     internal static IRuleEffect ResolveBodyState(WorldEffect.SetBodyState effect, string ruleName, WorldFactsCompileContext context) {
@@ -492,7 +492,7 @@ public static partial class WorldFactsCompiler {
             key: address.Key,
             keyFrom: address.KeyFrom,
             slot: slot,
-            source: CompiledValueSource.FromExpression(expression: program)
+            source: CompiledValueSource.FromExpression(expression: program, kind: CellKind.Fixed)
         );
     }
     internal static IRuleEffect ResolvePoseCell(WorldEffect.PoseCell effect, string ruleName, WorldFactsCompileContext context) {

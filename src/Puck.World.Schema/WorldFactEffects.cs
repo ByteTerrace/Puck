@@ -67,6 +67,13 @@ public abstract class WorldFactEffect : EffectFact<IWorldFacts>, IRuleEffect, IW
     /// <inheritdoc/>
     public virtual EffectSource[] Sources => [];
 
+    // The sources of an arm that writes a value to an addressed body: the body's index, then the value unless it is a
+    // literal, which the arm reads as the source's raw value (see the ValueSource positions of its subclasses).
+    private protected static EffectSource[] BodyValueSources(CellKey key, CompiledCellRef? keyFrom, in CompiledValueSource source, CellKind kind) =>
+        ((source.AsEffectSource(kind: kind) is { } value)
+            ? [EffectSource.Key(keyFrom: keyFrom, literal: key), value]
+            : [EffectSource.Key(keyFrom: keyFrom, literal: key)]);
+
     /// <inheritdoc/>
     public override bool TryFire(IEffectHost host, IWorldFacts facet, in EffectFiring firing, out EffectRefusal refusal) {
         ArgumentNullException.ThrowIfNull(argument: host);
@@ -360,16 +367,14 @@ public sealed class WorldBodyStateEffect : WorldFactEffect, IValueSourcedEffect 
         KeyFrom = keyFrom;
         Slot = slot;
         Source = source;
-        m_sources = ((source.Expression is { } program)
-            ? [EffectSource.Key(keyFrom: keyFrom, literal: key), EffectSource.Expression(kind: CellKind.Fixed, program: program)]
-            : [EffectSource.Key(keyFrom: keyFrom, literal: key)]);
+        m_sources = BodyValueSources(key: key, keyFrom: keyFrom, kind: CellKind.Fixed, source: in source);
     }
 
     private readonly EffectSource[] m_sources;
 
     /// <summary>The position of the addressed body's index among the sources.</summary>
     public const int BodySource = 0;
-    /// <summary>The position of the value expression among the sources, present only for a computed value.</summary>
+    /// <summary>The position of the value among the sources, present only for a value that is not a literal.</summary>
     public const int ValueSource = 1;
 
     /// <inheritdoc/>
@@ -440,22 +445,18 @@ public sealed class WorldIdentityFactEffect : WorldFactEffect, IValueSourcedEffe
         KeyFrom = keyFrom;
         LaneOrdinal = laneOrdinal;
         Source = source;
-        m_sources = ((source.Expression is { } program)
-            ? [EffectSource.Key(keyFrom: keyFrom, literal: key), EffectSource.Expression(kind: CellKind.Int, program: program)]
-            : [EffectSource.Key(keyFrom: keyFrom, literal: key)]);
+        m_sources = BodyValueSources(key: key, keyFrom: keyFrom, kind: CellKind.Int, source: in source);
     }
 
     private readonly EffectSource[] m_sources;
 
     /// <summary>The position of the addressed body's index among the sources.</summary>
     public const int BodySource = 0;
-    /// <summary>The position of the value expression among the sources, present only for a computed value.</summary>
+    /// <summary>The position of the value among the sources, present only for a value that is not a literal.</summary>
     public const int ValueSource = 1;
 
     /// <inheritdoc/>
     public override EffectSource[] Sources => m_sources;
-    /// <summary>Gets the compiled numeric expression, or <see langword="null"/>.</summary>
-    public CompiledExpressionToken[]? Expression => Source.Expression;
     /// <summary>Gets the fact key on the identity's row.</summary>
     public CellName Fact { get; }
     /// <summary>Gets the addressed body's literal key, or the invalid default.</summary>

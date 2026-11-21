@@ -126,7 +126,7 @@ public class ParserSugarTests {
 
         Assert.Equal(
             2m,
-            schedule.DelaySeconds
+            Assert.IsType<LiteralExpressionNode>(@object: schedule.Delay).Value
         );
     }
     [InlineData(": Int")]
@@ -484,7 +484,7 @@ public class ParserSugarTests {
         );
         Assert.Equal(
             2m,
-            schedule.DelaySeconds
+            Assert.IsType<LiteralExpressionNode>(@object: schedule.Delay).Value
         );
     }
     // §2 — effect statements
