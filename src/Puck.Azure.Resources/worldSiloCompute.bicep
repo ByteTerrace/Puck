@@ -178,7 +178,7 @@ resource balancer 'Microsoft.Network/loadBalancers@2025-01-01' = {
     ]
   }
 }
-// Declared directly: the AVM scale-set module exposes neither Delete eviction nor Try & Restore.
+// Declared directly: the AVM scale-set module does not expose Delete eviction.
 // Azure refuses to change priority in place; the world rollout recreates the scale set after its drain.
 resource workers 'Microsoft.Compute/virtualMachineScaleSets@2025-04-01' = {
   dependsOn: [balancer]
@@ -197,10 +197,9 @@ resource workers 'Microsoft.Compute/virtualMachineScaleSets@2025-04-01' = {
       enabled: configuration.compute.automaticRepairs
       gracePeriod: configuration.compute.repairGracePeriod
     }
-    // Checkpoints and journals live in blob storage, so an evicted worker's disk holds nothing to keep.
-    spotRestorePolicy: (spot == null) ? null : { enabled: true, restoreTimeout: spot!.restoreTimeout }
     virtualMachineProfile: {
       priority: (spot == null) ? 'Regular' : 'Spot'
+      // Checkpoints and journals live in blob storage, so an evicted worker's disk holds nothing to keep.
       evictionPolicy: (spot == null) ? null : 'Delete'
       // -1 evicts only when Azure reclaims capacity, never on price, and never bills above the regular rate.
       billingProfile: (spot == null) ? null : { maxPrice: -1 }
@@ -295,6 +294,28 @@ resource workers 'Microsoft.Compute/virtualMachineScaleSets@2025-04-01' = {
       // Terminate covers scale-in and deletion; a Spot Preempt always gives 30 seconds regardless.
       scheduledEventsProfile: { terminateNotificationProfile: { enable: true, notBeforeTimeout: 'PT5M' } }
     }
+  }
+}
+// Spot Try & Restore (spotRestorePolicy) is refused for a Flexible scale set, so a fixed-count autoscale profile restores
+// an evicted Spot worker instead: autoscale returns a set below its minimum to the minimum on its next run.
+resource spotCapacity 'Microsoft.Insights/autoscalesettings@2022-10-01' = if (spot != null) {
+  name: '${configuration.name}-capacity'
+  location: location
+  tags: union(tags, configuration.?tags ?? {})
+  properties: {
+    enabled: true
+    targetResourceUri: workers.id
+    profiles: [
+      {
+        name: 'fixed'
+        capacity: {
+          minimum: string(configuration.compute.capacity)
+          maximum: string(configuration.compute.capacity)
+          default: string(configuration.compute.capacity)
+        }
+        rules: []
+      }
+    ]
   }
 }
 resource readinessAlert 'Microsoft.Insights/metricAlerts@2026-01-01' = {

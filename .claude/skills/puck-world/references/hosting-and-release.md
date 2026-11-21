@@ -339,7 +339,12 @@ startup, both machine types, Azure health, MCP discovery and failed-listener shu
 Read retained package definitions with the composed-document parser, allowing
 unfilled boot draws; checkpoint live and undo documents keep strict rehydration.
 Bootstrap retries compare `LoadPublishedDefinitionBytesAsync` with the archived
-bytes, never `LoadDefinitionAsync`'s initialized result. `world prepare` relocates
+bytes, never `LoadDefinitionAsync`'s initialized result. A different published
+definition is replaced only when an earlier bootstrap of the same group captured
+it in a recovery root (`PublishedByRecoveredBootstrapAsync` reads the group's
+history), so a fixed release can bootstrap again after a failed first deploy.
+Every pre-commit recovery outcome names its cause: `RecoverPreCommitAsync` is
+the one door, and it appends the failure that began recovery to every result. `world prepare` relocates
 provider-declared machine asset paths from nested origins to the common worlds
 directory, preserving the image's asset layout; the silo resolves those paths beside its document's
 `documentDirectory` (the image's `/app/worlds`), which becomes every hosted definition's `DocumentDirectory`,

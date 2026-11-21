@@ -936,9 +936,12 @@ The worker runs at Spot priority when `compute.spot` is present in
 `main.bicepparam`, which is the default; omit it for a regular worker. Spot
 bills at most the regular rate and is evicted only when Azure reclaims capacity.
 Eviction deletes the VM and its disk; checkpoints and journals stay in blob
-storage. Azure's Try & Restore recreates the worker for up to
-`spot.restoreTimeout`, and the world is offline until it does. After that
-timeout, a World rollout redeploys the worker. Spot draws on the region's
+storage. Azure refuses Spot Try & Restore (`spotRestorePolicy`) on a Flexible
+scale set, so `worldSiloCompute.bicep` holds the worker count with a
+fixed-count autoscale setting: autoscale returns a set below its minimum to the
+minimum, recreating an evicted worker once Spot capacity allows, and the world
+is offline until it does. `spot.restoreTimeout` is read by nothing; the
+published world-silo type still requires it. Spot draws on the region's
 separate low-priority vCPU quota. Azure cannot change a scale set's priority in
 place, so a rollout that changes it deletes and recreates the scale set once the
 source has drained.
@@ -1190,8 +1193,8 @@ A Spot eviction emits a `Preempt` event with a
 which becomes the drain deadline; `terminateNotificationProfile` does not
 lengthen it. The notice is best effort, so abrupt termination must also recover
 from the last checkpoint and journal. Qualify a Spot worker with
-`az vm simulate-eviction`: the drain finishes inside the notice, Try & Restore
-recreates the worker, and the restored worker recovers the same state and
+`az vm simulate-eviction`: the drain finishes inside the notice, the
+fixed-count autoscale setting recreates the worker, and the new worker recovers the same state and
 reports healthy. Measure checkpoint latency and journal durability under
 representative player traffic. Before adding workers, implement and exercise
 exclusive world ownership, eligible placement, and replacement capacity.
