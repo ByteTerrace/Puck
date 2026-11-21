@@ -44,6 +44,11 @@ public sealed partial class WorldRigidAssets {
 
     private readonly List<SdfVolume> m_volumes = [];
     private readonly List<(int Copy, SdfVolume Volume)> m_rootVolumes = [];
+    private int[] m_rootVolumeSlots = [];
+    private bool m_volumesDirty = true;
+    private bool m_hasBodyVolumes;
+    private long m_volumesRevision;
+    private long m_poseRevision;
     private readonly List<SdfMeshInstance> m_copies = [];
     private readonly Dictionary<int, WorldPickTarget> m_targets = [];
     private readonly List<WorldCreationInstances.BodyStamp> m_bodies = [];
@@ -70,14 +75,59 @@ public sealed partial class WorldRigidAssets {
     public IReadOnlyList<SdfMeshInstance> Copies => m_copies;
     /// <summary>Gets the number of template slots held by this world's definitions.</summary>
     public int SlotCount => m_slotCount;
+    /// <summary>Gets a monotonic revision bumped whenever any rigid copy pose updates or reconciles.</summary>
+    public long PoseRevision => m_poseRevision;
+    /// <summary>Gets a monotonic revision bumped whenever <see cref="Volumes"/> changes.</summary>
+    public long VolumesRevision {
+        get {
+            EnsureVolumes();
+
+            return m_volumesRevision;
+        }
+    }
     /// <summary>Gets the live copies' bounded volumes in world space.</summary>
     public IReadOnlyList<SdfVolume> Volumes {
         get {
-            m_volumes.Clear();
-            m_volumes.AddRange(collection: m_staticVolumes);
-            foreach (var entry in m_rootVolumes) { m_volumes.Add(item: entry.Volume with { DynamicSlot = m_copies[entry.Copy].FrameSlot }); }
+            EnsureVolumes();
+
             return m_volumes;
         }
+    }
+
+    private void EnsureVolumes() {
+        var dirty = m_volumesDirty;
+
+        if (!dirty && (m_rootVolumes.Count > 0)) {
+            if (m_rootVolumeSlots.Length != m_rootVolumes.Count) {
+                dirty = true;
+            } else {
+                for (var index = 0; (index < m_rootVolumes.Count); index++) {
+                    if (m_copies[m_rootVolumes[index].Copy].FrameSlot != m_rootVolumeSlots[index]) {
+                        dirty = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!dirty) {
+            return;
+        }
+
+        m_volumes.Clear();
+        m_volumes.AddRange(collection: m_staticVolumes);
+        if (m_rootVolumeSlots.Length != m_rootVolumes.Count) {
+            m_rootVolumeSlots = ((m_rootVolumes.Count == 0) ? [] : new int[m_rootVolumes.Count]);
+        }
+        for (var index = 0; (index < m_rootVolumes.Count); index++) {
+            var entry = m_rootVolumes[index];
+            var slot = m_copies[entry.Copy].FrameSlot;
+
+            m_rootVolumeSlots[index] = slot;
+            m_volumes.Add(item: entry.Volume with { DynamicSlot = slot });
+        }
+        m_volumesDirty = false;
+        m_volumesRevision++;
     }
 
     /// <summary>Returns whether geometry has no independently changing fields or parts: no shape of the rig a look plays
@@ -129,9 +179,19 @@ public sealed partial class WorldRigidAssets {
         }
         m_bodies.Clear();
         m_liveBodies.Clear();
+        var hasBodyVolumes = false;
         foreach (var body in bodies) {
-            if (IsRigid(creation: body.Creation, look: body.Look)) { m_bodies.Add(item: body); m_liveBodies.Add(item: body.BodyIndex); }
+            if (IsRigid(creation: body.Creation, look: body.Look)) {
+                m_bodies.Add(item: body);
+                m_liveBodies.Add(item: body.BodyIndex);
+                if (body.Creation.EngineDocument.Volumes is { Count: > 0 }) {
+                    hasBodyVolumes = true;
+                }
+            }
         }
+        m_hasBodyVolumes = hasBodyVolumes;
+        m_volumesDirty = true;
+        m_poseRevision++;
         foreach (var retired in m_motion.Keys.Where(predicate: body => !ContainsBody(body: body)).ToArray()) { m_motion[retired].Reads.Release(); m_motion.Remove(key: retired); m_targets.Remove(key: retired); }
         // PrepareFrame reads this count before the first pack sizes the root table.
         m_bodySlotCount = m_slotCount;
@@ -212,8 +272,12 @@ public sealed partial class WorldRigidAssets {
     /// <summary>Writes identity template poses and supplies current per-copy roots without touching the program.</summary>
     public void Pack(Span<DynamicTransform> transforms, IWorldStampSource source, int slotBase, float deltaSeconds = 0) {
         var doors = WorldPortalStraddle.Doors(definition: source.Definition);
+        var anyMoved = false;
 
-        m_rootVolumes.Clear();
+        if (m_hasBodyVolumes || (m_rootVolumes.Count > 0)) {
+            m_rootVolumes.Clear();
+            m_volumesDirty = true;
+        }
         PackTemplates(transforms: transforms, slotBase: slotBase);
         for (var index = 0; (index < m_bodies.Count); index++) {
             var body = m_bodies[index];
@@ -262,16 +326,24 @@ public sealed partial class WorldRigidAssets {
             var clip = WorldPortalStraddle.Clip(doors: doors, center: position, radius: (m_reaches[asset] * body.Scale), firstSlot: 0, slotCount: 1);
 
             // The body's row is rewritten in place: a moving body allocates nothing, and its revision tells consumers it moved.
+            var previousRevision = previous.Revision;
+
             _ = previous.Update(firstSlot, target, motionIdentity, transform, body.Scale, true, clip, mesh, material, otherSlots);
-            var volumeCount = (body.Creation.EngineDocument.Volumes?.Count ?? 0);
+            if (previous.Revision != previousRevision) { anyMoved = true; }
+            if (m_hasBodyVolumes) {
+                var volumeCount = (body.Creation.EngineDocument.Volumes?.Count ?? 0);
 
-            for (var volumeIndex = 0; (volumeIndex < volumeCount); volumeIndex++) {
-                if (!WorldShapeIsolation.TryAdmitVolume(creation: body.Creation.EngineDocument, emitted: m_rootVolumes.Count, hidden: hidden, parentIndex: out var parentIndex, position: volumeIndex, volume: out var volume)) { continue; }
+                for (var volumeIndex = 0; (volumeIndex < volumeCount); volumeIndex++) {
+                    if (!WorldShapeIsolation.TryAdmitVolume(creation: body.Creation.EngineDocument, emitted: m_rootVolumes.Count, hidden: hidden, parentIndex: out var parentIndex, position: volumeIndex, volume: out var volume)) { continue; }
 
-                var parent = ((parentIndex >= 0) ? body.Creation.EngineDocument.Shapes![parentIndex] : null);
+                    var parent = ((parentIndex >= 0) ? body.Creation.EngineDocument.Shapes![parentIndex] : null);
 
-                m_rootVolumes.Add(item: (index, volume.ToVolume(dynamicSlot: 0, origin: ((parent?.Position.Value ?? Vector3.Zero) * body.Scale), rotation: (parent?.Rotation.Value ?? Quaternion.Identity), scale: body.Scale)));
+                    m_rootVolumes.Add(item: (index, volume.ToVolume(dynamicSlot: 0, origin: ((parent?.Position.Value ?? Vector3.Zero) * body.Scale), rotation: (parent?.Rotation.Value ?? Quaternion.Identity), scale: body.Scale)));
+                }
             }
+        }
+        if (anyMoved) {
+            m_poseRevision++;
         }
     }
     /// <summary>Returns whether this live body is represented by a rigid copy.</summary>

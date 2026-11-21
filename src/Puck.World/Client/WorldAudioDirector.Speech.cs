@@ -23,7 +23,10 @@ public sealed partial class WorldAudioDirector {
             var playback = new SpeechPlayback(Id: m_nextEmitterId++, Key: AudioSourceKey.Speech(id: key), Source: source!);
 
             m_textSpeech.Add(key: key, value: playback);
-            m_mixer?.SetSource(key: playback.Key, source: source!);
+            Volatile.Write(location: ref m_hasControlWork, value: true);
+            lock (m_mixerGate) {
+                m_mixer?.SetSource(key: playback.Key, source: source!);
+            }
             m_textSpeechStarted++;
         }
     }
@@ -31,7 +34,9 @@ public sealed partial class WorldAudioDirector {
     public void StopText(string key) {
         lock (m_gate) {
             if (m_textSpeech.Remove(key: key, value: out var playback)) {
-                m_mixer?.RemoveSource(key: playback.Key);
+                lock (m_mixerGate) {
+                    m_mixer?.RemoveSource(key: playback.Key);
+                }
             }
         }
     }

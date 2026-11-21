@@ -43,16 +43,19 @@ namespace Puck.World.Client;
 /// <para><b>Source hosting:</b> patch registration and headless tune hosting (acquire while referenced, release when
 /// orphaned, the tune hash as the restart discriminator) activate when a mixer is attached
 /// (<see cref="AttachMixer"/> — the offline proof and the device pump); unattached, the director only derives and
-/// publishes. Machine sources bind through <see cref="MachineSourceResolver"/>: each <see cref="Publish"/> diffs the
-/// binder's live machines by reference for every machine-fed plan row, so a boot/eject/live-swap rebinds the mixer
-/// source and a machine booting late into a referenced slot self-heals — the keys
-/// (<see cref="AudioSourceKey.Machine(string, string)"/>) stay stable across swaps.</para>
+/// publishes. Machine sources bind through <see cref="MachineSourceResolver"/> on demand: <see cref="InvalidateMachineBindings"/>
+/// (wired to the binder's <c>MachinesChanged</c> event, plus attach and reconcile) marks bindings dirty and the next
+/// <see cref="Publish"/> diffs the binder's live machines by reference — zero per-frame polling when no machine changed —
+/// keeping the keys (<see cref="AudioSourceKey.Machine(string, string)"/>) stable across swaps.</para>
 /// <para><b>Threading:</b> derivation and publishing stay on the window-pump thread, and the resolver is only
 /// ever invoked there (it reads the binder's pump-owned slot table). The device pump adds two cross-thread callers —
 /// <see cref="AttachMixer"/>/<see cref="DetachMixer"/> from the render service's governor and
-/// <see cref="TryMixBlock"/> from the endpoint's fill thread — so every member that touches the mixer or the derived
-/// plan serializes on one reentrant gate. The gate is uncontended in steady state (reconciles are rare, a mix block
-/// is microseconds), which is the deliberate trade: one honest lock instead of a lock-free mixer-mutation protocol.</para>
+/// <see cref="TryMixBlock"/> from the endpoint's fill thread. Snapshots cross to the audio thread through a
+/// factory-backed <see cref="PublishBuffer{T}"/> (<c>AudioSnapshot</c> images filled in place and reference-counted
+/// while read), so the audio thread can never see a torn slab and never contends on <c>m_gate</c>. A separate
+/// <c>m_mixerGate</c> serializes mixer attachment, source binding, and <see cref="TryMixBlock"/>; strict lock order
+/// is always <c>m_gate</c> then <c>m_mixerGate</c>. On steady frames <see cref="Publish"/> takes neither lock for the
+/// plan walk and publishes directly into a reserved unread slab.</para>
 /// </remarks>
 public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFeed {
     /// <summary>The <c>speaker:</c>/<c>placement:</c> derived-plan key prefixes' sibling for a music-layer bed —
@@ -72,9 +75,6 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// always inside the full-presence band, an approximation of "no envelope" rather than an authorable value
     /// (every genre wants layered music equally global).</summary>
     public const long MusicLayerBedRadius = 1_000_000L;
-    /// <summary>The slab-rotation depth: the consumer holds one snapshot for one ~5.33 ms block; the
-    /// producer needs ≥33 ms to lap four slabs — safe by an order of magnitude.</summary>
-    public const int SnapshotRotation = 4;
     /// <summary>The transient cue-emitter pool size — capacity structure like the snapshot's emitter cap, an
     /// engine invariant rather than world data: these slots are reserved off <see cref="AudioSnapshot.DefaultMaxEmitters"/>
     /// (the reconcile overflow warning charges them), so a full derived plan can never starve a cue. A cue arriving
@@ -87,7 +87,6 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     private readonly WorldClient? m_client;
     private readonly IOverlayPredicateEvaluator? m_evaluator;
     private readonly WorldPerceptionAnchor? m_perception;
-    private readonly AudioSnapshot[] m_slabs;
     private readonly WorldSpeechClock? m_speech;
     private readonly WorldStateMirror m_gainMirror;
 
@@ -99,17 +98,36 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     private ulong m_babbleFiredTotal;
     private ulong m_cueOrdinal;
     private WorldDefinition? m_definition;
-    // Set on attach: the next pump-thread sync re-applies every cached binding into the (new) mixer.
+    // Set on attach, reconcile with machines, resolver change, or machine-host event; cleared before syncing.
     private bool m_machineBindingsDirty;
+    private bool m_hasControlWork;
+    private volatile bool m_hasPublished;
+    private AudioSnapshot? m_lastPublishedSlab;
+    private Func<string, string, IAudioMachine?>? m_machineSourceResolver;
     private AudioMixer? m_mixer;
     private ulong m_nextTriggerSequence;
     // The world.volume session lever (the render-levers asymmetry): null until touched — the document's
     // MasterGain then owns the live gain (reconcile follows it; the offline drivers stay purely document-driven);
     // once set, the lever owns "now" for the session and world.save folds it back into an authored audio section.
     private float? m_sessionMasterVolume;
-    private int m_slabIndex;
 
-    private readonly PublishBuffer<AudioSnapshot> m_buffer = new();
+    // Revision gates for gain and pose resolution on steady frames.
+    private bool m_gainsInitialized;
+    private int m_lastGainRevision;
+    private int m_lastGainInstalls;
+    private int m_lastGainLifetime;
+    private ulong m_lastGainEngineTick;
+    private ulong m_lastGainPreviousEngineTick;
+    private float m_lastGainFraction;
+    private bool m_posesInitialized;
+    private long m_lastClientPoseRevision;
+    private long m_lastAnimatorPoseRevision;
+
+    private readonly PublishBuffer<AudioSnapshot> m_buffer = new(create: static () => new AudioSnapshot());
+    private readonly AudioEmitter[] m_stagedEmitters = new AudioEmitter[AudioSnapshot.DefaultMaxEmitters];
+    private readonly int[] m_stagedTriggerPlans = new int[AudioSnapshot.DefaultMaxEmitters];
+    // Looping synth emitter ids that were culled outside support (so a reconcile while culled re-arms arrival trigger).
+    private readonly HashSet<int> m_culledLoopingIds = [];
     private readonly List<EmitterPlan> m_plan = new();
     // The stable-id registry: emitter key → (id, identity signature). Survives reconciles so property edits keep
     // their mixer ramp state; an identity change re-keys (a fresh id ramps in from silence).
@@ -124,11 +142,13 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     // The headless tune hosts, by tune id (live only while a mixer is attached).
     private readonly Dictionary<string, TuneHost> m_tuneHosts = new(comparer: StringComparer.Ordinal);
     // The live machine bindings by named output: each distinct key drains once per mix block.
-    // Gate-guarded (Publish syncs it, DetachMixer clears it); the RESOLVER is only invoked from Publish.
+    // Guarded by m_mixerGate (SyncMachineSources syncs it under m_gate -> m_mixerGate, DetachMixer clears it).
     private readonly Dictionary<AudioSourceKey, MachineBinding> m_machineBindings = new();
     private readonly List<AudioSourceKey> m_machineBindingScratch = new();
-    // THE serialization gate (see the type remarks): reentrant, so Admit's SubmitTrigger nests under ReconcileSpeakers.
+    // Director control/cue/plan gate. Strict lock order: ALWAYS m_gate before m_mixerGate; TryMixBlock never takes m_gate.
     private readonly Lock m_gate = new();
+    // Mixer mutation & TryMixBlock gate: taken on attach/detach/reconcile/speech/machine-rebind and by TryMixBlock.
+    private readonly Lock m_mixerGate = new();
     // THE CUE TABLE, derived at reconcile: event token → its cue rows (gain in Q16, placement resolved to a
     // kind + optional speaker name). Cue patches are world patch rows, so the ordinary patch-set registration covers them.
     private readonly Dictionary<string, List<CueRow>> m_cueRows = new(comparer: StringComparer.Ordinal);
@@ -170,11 +190,6 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         m_speech = speech;
         m_evaluator = evaluator;
         m_gainMirror = (client?.StateMirror ?? new WorldStateMirror(view: new WorldDocumentStateView(definition: () => m_definition!)));
-        m_slabs = new AudioSnapshot[SnapshotRotation];
-
-        for (var index = 0; (index < SnapshotRotation); index++) {
-            m_slabs[index] = new AudioSnapshot();
-        }
     }
 
     /// <summary>The live master volume — the session lever when engaged, else the document master gain, which the
@@ -198,11 +213,21 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     }
     /// <summary>The machine-source resolver: screen slot → the live <see cref="IAudioMachine"/>, or
     /// <see langword="null"/> for an empty (or capability-less) slot. Wired once by the frame source to
-    /// <see cref="WorldScreenBinder.AudioMachine"/>; invoked only from <see cref="Publish"/> (the pump thread) —
-    /// it reads pump-owned binder state. Null headless: machine-fed emitters then render honest silence.</summary>
-    public Func<string, string, IAudioMachine?>? MachineSourceResolver { get; set; }
+    /// <see cref="WorldScreenBinder.AudioOutput"/>; invoked only from <see cref="Publish"/> (the pump thread) when
+    /// bindings are dirty — it reads pump-owned binder state. Null headless: machine-fed emitters then render honest silence.</summary>
+    public Func<string, string, IAudioMachine?>? MachineSourceResolver {
+        get => m_machineSourceResolver;
+        set {
+            if (!ReferenceEquals(objA: m_machineSourceResolver, objB: value)) {
+                m_machineSourceResolver = value;
+                InvalidateMachineBindings();
+            }
+        }
+    }
+    /// <inheritdoc/>
+    public void InvalidateMachineBindings() => Volatile.Write(location: ref m_machineBindingsDirty, value: true);
     /// <summary>Whether a mixer is currently attached (the device pump's live/silent echo).</summary>
-    public bool MixerAttached => (m_mixer is not null);
+    public bool MixerAttached => (Volatile.Read(location: ref m_mixer) is not null);
     /// <inheritdoc/>
     public float? SessionMasterVolume {
         get {
@@ -213,8 +238,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     }
 
     // Admit one plan row: resolve its stable id against the registry (keep on identical signature; retire + reissue
-    // on an identity change — the fresh id re-enters the mixer from silence) and fire the arrival trigger for
-    // synth-fed rows (the v1 trigger policy in the type remarks).
+    // on an identity change — the fresh id re-enters the mixer from silence), classify its pose and gain revision
+    // requirements, pre-resolve static placements and literal gains, and arm the arrival trigger for synth-fed rows
+    // (staged when the emitter enters support so culled rows do not drop their arrival trigger).
     private void Admit(EmitterPlan plan, string signatureToken) {
         var signature = Fnv1aHash.Compute(values: signatureToken);
         var arrived = true;
@@ -227,6 +253,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                 plan.Id = existing.Id;
                 arrived = false;
             } else {
+                _ = m_culledLoopingIds.Remove(item: existing.Id);
                 plan.Id = m_nextEmitterId++;
                 m_registry[plan.Key] = new EmitterIdentity(
                     Id: plan.Id,
@@ -241,23 +268,126 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             );
         }
 
+        var maxRadius = (plan.MaxRadius.Value / 65536f);
+
+        plan.MaxRadiusSquared = (maxRadius * maxRadius);
+        ClassifyPose(plan: ref plan);
+        ClassifyGain(plan: ref plan);
+
         if (
-            arrived &&
             (plan.Source.Kind == AudioSourceKind.Synth) &&
             (plan.Source.Id is { } patchId)
         ) {
             // The seed folds the key and the identity signature: the same authored content reproduces the voice bit
-            // for bit; a content change re-seeds with the new identity. Gain stays unity — the emitter's own gain
-            // spatializes; a voice gain here would double-scale.
-            SubmitTrigger(
-                patchId: patchId,
-                seed: Fnv1aHash.Compute(values: plan.Key) ^ signature,
-                gainQ16: 65536,
-                emitterId: plan.Id
-            );
+            // for bit; a content change re-seeds with the new identity.
+            plan.SynthSeed = (Fnv1aHash.Compute(values: plan.Key) ^ signature);
+            plan.IsLoopingSynth = (TryFindPatch(patchId: patchId, patch: out var patch) && (patch.DurationFrames == 0));
+            plan.NeedsArrivalTrigger = (arrived || (plan.IsLoopingSynth && m_culledLoopingIds.Contains(item: plan.Id)));
         }
 
         m_plan.Add(item: plan);
+    }
+    private void ClassifyPose(ref EmitterPlan plan) {
+        if (plan.Anchor.Kind == EmitterAnchorKind.Fixed) {
+            plan.PoseKind = EmitterPoseKind.Static;
+            plan.LastPosition = plan.Anchor.Position;
+            plan.LastResolved = true;
+
+            return;
+        }
+
+        switch (plan.Anchor.Anchor) {
+            case null:
+                plan.PoseKind = EmitterPoseKind.Static;
+                plan.LastPosition = plan.Anchor.Offset;
+                plan.LastResolved = true;
+
+                break;
+            case WorldAnchor.Placement placementAnchor when (m_definition is { } definition): {
+                    var row = WorldDefinitionRows.FindPlacement(
+                        id: placementAnchor.PlacementId,
+                        placements: definition.Placements
+                    );
+
+                    if ((row is null) || (row.Deal is not null)) {
+                        plan.PoseKind = EmitterPoseKind.Static;
+                        plan.LastResolved = false;
+                    } else if (
+                        (row.Attach is null) &&
+                        (row.Inhabit is null) &&
+                        !(m_animator?.HasPlacementRegistration(placementId: placementAnchor.PlacementId) ?? false)
+                    ) {
+                        plan.PoseKind = EmitterPoseKind.Static;
+                        if (WorldAnchorPoses.TryRestPlacement(
+                            definition: definition,
+                            placementId: placementAnchor.PlacementId,
+                            pose: out var restPose,
+                            shapeId: placementAnchor.ShapeId
+                        )) {
+                            plan.LastPosition = (restPose.Position + Vector3.Transform(value: plan.Anchor.Offset, rotation: restPose.Orientation));
+                            plan.LastResolved = true;
+                        } else {
+                            plan.LastResolved = false;
+                        }
+                    } else {
+                        plan.PoseKind = EmitterPoseKind.Tracked;
+                    }
+
+                    break;
+                }
+            case WorldAnchor.Entity or WorldAnchor.Group:
+                plan.PoseKind = EmitterPoseKind.Tracked;
+
+                break;
+            default:
+                plan.PoseKind = EmitterPoseKind.Always;
+
+                break;
+        }
+    }
+    private void ClassifyGain(ref EmitterPlan plan) {
+        if (plan.Gain is not { } gain) {
+            plan.GainKind = EmitterGainKind.Literal;
+            plan.GainInitialized = true;
+
+            return;
+        }
+
+        if (gain.Keys is not null) {
+            plan.GainKind = EmitterGainKind.Keyed;
+            plan.GainInitialized = false;
+        } else if (gain.Binding is not null) {
+            plan.GainKind = EmitterGainKind.Bound;
+            plan.GainInitialized = false;
+        } else {
+            plan.GainQ16 = GainQ16(gain: m_gainDomains.Resolve(
+                mirror: m_gainMirror,
+                field: WorldValueFields.SpeakerGain,
+                scalar: in gain,
+                value: m_gainMirror.Scalar(scalar: in gain, fallback: 1f),
+                fallback: 1f,
+                site: in plan.GainSite
+            ));
+            plan.GainKind = EmitterGainKind.Literal;
+            plan.GainInitialized = true;
+        }
+    }
+    private bool TryFindPatch(string patchId, out VoicePatch patch) {
+        foreach (var (id, candidate) in m_patchSet) {
+            if (string.Equals(
+                a: id,
+                b: patchId,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                patch = candidate;
+
+                return true;
+            }
+        }
+
+        patch = default;
+
+        return false;
     }
     private void AdmitEmission(string key, EmitterAnchor anchor, WorldEmission emission, WorldAudioDefaults audio, WorldDefinition definition) {
         Admit(
@@ -323,8 +453,8 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     // ---- source hosting --------------------------------------------------------------------------------------------
 
     // Apply the derived bindings to the attached mixer: master gain, the patch set, and tune acquire/release with
-    // the tune HASH as the restart discriminator. No mixer attached = derivation only.
-    private void ApplyMixerBindings() {
+    // the tune HASH as the restart discriminator. No mixer attached = derivation only. Caller holds m_gate and m_mixerGate.
+    private void ApplyMixerBindingsLocked() {
         if (
             (m_mixer is not { } mixer) ||
             (m_definition is not { } definition)
@@ -462,22 +592,11 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     // A cue's life derives from its own patch envelope (data): a finite patch lives its duration + release plus one
     // sim step of slack; a looping patch takes the invariant cap (a cue is a transient by definition). A patch the
     // table no longer carries gets one step (its trigger would drop in the mixer anyway).
-    private long CueLifeFrames(string patchId) {
-        foreach (var (id, patch) in m_patchSet) {
-            if (string.Equals(
-                a: id,
-                b: patchId,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return ((patch.DurationFrames > 0)
-                    ? ((((long)patch.DurationFrames) + patch.ReleaseFrames) + AudioMixer.FramesPerSimStep)
-                    : LoopingCueLifeFrames
-                );
-            }
-        }
-
-        return AudioMixer.FramesPerSimStep;
-    }
+    private long CueLifeFrames(string patchId) => (TryFindPatch(patchId: patchId, patch: out var patch)
+        ? ((patch.DurationFrames > 0)
+            ? ((((long)patch.DurationFrames) + patch.ReleaseFrames) + AudioMixer.FramesPerSimStep)
+            : LoopingCueLifeFrames)
+        : AudioMixer.FramesPerSimStep);
     private static AudioAttenuationCurve CurveOf(string token) =>
         (string.Equals(
             a: token,
@@ -750,19 +869,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         m_babbleFiredTotal++;
     }
     private static int GainQ16(float gain) => ((int)FixedQ4816.FromDouble(value: gain).Value);
-    private bool HasPatch(string patchId) {
-        foreach (var (id, _) in m_patchSet) {
-            if (string.Equals(
-                a: id,
-                b: patchId,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private bool HasPatch(string patchId) => TryFindPatch(patchId: patchId, patch: out _);
     private static string PatchHash(WorldDefinition definition, string patchId) {
         foreach (var patch in definition.Patches) {
             if (string.Equals(
@@ -1015,7 +1122,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         }
 
         foreach (var key in (departed ?? [])) {
-            _ = m_registry.Remove(key: key);
+            if (m_registry.Remove(key: key, value: out var removed)) {
+                _ = m_culledLoopingIds.Remove(item: removed.Id);
+            }
         }
     }
     private static AudioSourceKey SourceKey(WorldSpeakerSource source) => source switch {
@@ -1062,97 +1171,103 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         AudioSourceKind.Synth => $"synth:{source.Id}",
         _ => "none",
     };
-    // Diff the binder's live machines against the cached bindings for every machine-fed plan row — the per-frame
-    // reconcile/self-heal (called under the gate from Publish, the only resolver call site). Reference compares only
-    // in steady state; a change rebinds the STABLE Machine(slot) key so the mixer's emitter ramps never notice a
-    // swap. An attach marks the set dirty and this re-applies every cached binding into the new mixer.
+    // Diff the binder's live machines against the cached bindings for every machine-fed plan row — invoked from
+    // Publish ONLY when m_machineBindingsDirty is set (by attach, reconcile, resolver change, or the binder's
+    // MachinesChanged event). Zero work on steady frames.
     private void SyncMachineSources() {
-        if (
-            (MachineSourceResolver is not { } resolver) ||
-            (m_mixer is not { } mixer)
-        ) {
+        Volatile.Write(location: ref m_machineBindingsDirty, value: false);
+
+        var resolver = m_machineSourceResolver;
+
+        if ((resolver is null) || (Volatile.Read(location: ref m_mixer) is null)) {
             return;
         }
 
-        foreach (var plan in m_plan) {
-            if (plan.Source.Kind != AudioSourceKind.Machine) {
-                continue;
-            }
-
-            if (
-                (plan.Source.MachineInstance is not { } instance) ||
-                (plan.Source.MachineOutput is not { } output)
-            ) {
-                continue;
-            }
-
-            var live = resolver(
-                instance,
-                output
-            );
-            var bound = m_machineBindings.TryGetValue(
-                key: plan.Source,
-                value: out var binding
-            );
-
-            if (live is null) {
-                if (bound) {
-                    mixer.RemoveSource(key: plan.Source);
-                    _ = m_machineBindings.Remove(key: plan.Source);
+        lock (m_gate) {
+            lock (m_mixerGate) {
+                if (m_mixer is not { } mixer) {
+                    return;
                 }
-            } else if (
-                !bound ||
-                !ReferenceEquals(
-                objA: binding.Machine,
-                objB: live
-            )
-            ) {
-                var source = new MachineBlockSource(machine: live);
 
-                m_machineBindings[plan.Source] = new MachineBinding(
-                    Machine: live,
-                    Source: source
-                );
-                mixer.SetSource(
-                    key: plan.Source,
-                    source: source
-                );
-            } else if (m_machineBindingsDirty) {
-                mixer.SetSource(
-                    key: plan.Source,
-                    source: binding.Source
-                );
-            }
-        }
+                foreach (var plan in m_plan) {
+                    if (plan.Source.Kind != AudioSourceKind.Machine) {
+                        continue;
+                    }
 
-        m_machineBindingsDirty = false;
+                    if (
+                        (plan.Source.MachineInstance is not { } instance) ||
+                        (plan.Source.MachineOutput is not { } output)
+                    ) {
+                        continue;
+                    }
 
-        // Retire bindings whose slot no longer feeds any plan row (an eject, or the speaker rows departed).
-        foreach (var slot in m_machineBindings.Keys) {
-            var referenced = false;
+                    var live = resolver(
+                        instance,
+                        output
+                    );
+                    var bound = m_machineBindings.TryGetValue(
+                        key: plan.Source,
+                        value: out var binding
+                    );
 
-            foreach (var plan in m_plan) {
-                if (
-                    (plan.Source.Kind == AudioSourceKind.Machine) &&
-                    (plan.Source == slot)
-                ) {
-                    referenced = true;
+                    if (live is null) {
+                        if (bound) {
+                            mixer.RemoveSource(key: plan.Source);
+                            _ = m_machineBindings.Remove(key: plan.Source);
+                        }
+                    } else if (
+                        !bound ||
+                        !ReferenceEquals(
+                        objA: binding.Machine,
+                        objB: live
+                    )
+                    ) {
+                        var source = new MachineBlockSource(machine: live);
 
-                    break;
+                        m_machineBindings[plan.Source] = new MachineBinding(
+                            Machine: live,
+                            Source: source
+                        );
+                        mixer.SetSource(
+                            key: plan.Source,
+                            source: source
+                        );
+                    } else {
+                        mixer.SetSource(
+                            key: plan.Source,
+                            source: binding.Source
+                        );
+                    }
                 }
-            }
 
-            if (!referenced) {
-                m_machineBindingScratch.Add(item: slot);
+                // Retire bindings whose slot no longer feeds any plan row (an eject, or the speaker rows departed).
+                foreach (var slot in m_machineBindings.Keys) {
+                    var referenced = false;
+
+                    foreach (var plan in m_plan) {
+                        if (
+                            (plan.Source.Kind == AudioSourceKind.Machine) &&
+                            (plan.Source == slot)
+                        ) {
+                            referenced = true;
+
+                            break;
+                        }
+                    }
+
+                    if (!referenced) {
+                        m_machineBindingScratch.Add(item: slot);
+                    }
+                }
+
+                foreach (var slot in m_machineBindingScratch) {
+                    mixer.RemoveSource(key: slot);
+                    _ = m_machineBindings.Remove(key: slot);
+                }
+
+                m_machineBindingScratch.Clear();
             }
         }
-
-        foreach (var slot in m_machineBindingScratch) {
-            mixer.RemoveSource(key: slot);
-            _ = m_machineBindings.Remove(key: slot);
-        }
-
-        m_machineBindingScratch.Clear();
     }
     private bool TryFindSpeakerPlan(string? name, out EmitterPlan plan) {
         if (name is not null) {
@@ -1243,11 +1358,13 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         ArgumentNullException.ThrowIfNull(argument: mixer);
 
         lock (m_gate) {
-            m_mixer = mixer;
-            m_machineBindingsDirty = true;
-            ApplyMixerBindings();
-            foreach (var playback in m_textSpeech.Values) {
-                mixer.SetSource(key: playback.Key, source: playback.Source);
+            lock (m_mixerGate) {
+                Volatile.Write(location: ref m_mixer, value: mixer);
+                Volatile.Write(location: ref m_machineBindingsDirty, value: true);
+                ApplyMixerBindingsLocked();
+                foreach (var playback in m_textSpeech.Values) {
+                    mixer.SetSource(key: playback.Key, source: playback.Source);
+                }
             }
         }
     }
@@ -1290,80 +1407,82 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// frame — a proof asserts presence/shape, never exact poses.</summary>
     public string DescribeSpeakerState() {
         lock (m_gate) {
-            var builder = new StringBuilder(value: "[speaker.state:");
-            var wrote = false;
+            lock (m_mixerGate) {
+                var builder = new StringBuilder(value: "[speaker.state:");
+                var wrote = false;
 
-            foreach (var plan in m_plan) {
-                var isSpeaker = plan.Key.StartsWith(
-                    comparisonType: StringComparison.Ordinal,
-                    value: "speaker:"
-                );
-                var isEmission = plan.Key.StartsWith(
-                    comparisonType: StringComparison.Ordinal,
-                    value: "placement:"
-                );
-                var isMusicLayer = plan.Key.StartsWith(
-                    comparisonType: StringComparison.Ordinal,
-                    value: MusicLayerKeyPrefix
-                );
+                foreach (var plan in m_plan) {
+                    var isSpeaker = plan.Key.StartsWith(
+                        comparisonType: StringComparison.Ordinal,
+                        value: "speaker:"
+                    );
+                    var isEmission = plan.Key.StartsWith(
+                        comparisonType: StringComparison.Ordinal,
+                        value: "placement:"
+                    );
+                    var isMusicLayer = plan.Key.StartsWith(
+                        comparisonType: StringComparison.Ordinal,
+                        value: MusicLayerKeyPrefix
+                    );
 
-                if (
-                    !isSpeaker &&
-                    !isEmission &&
-                    !isMusicLayer
-                ) {
-                    continue;
+                    if (
+                        !isSpeaker &&
+                        !isEmission &&
+                        !isMusicLayer
+                    ) {
+                        continue;
+                    }
+
+                    var name = (isSpeaker
+                        ? plan.Key["speaker:".Length..]
+                        : plan.Key
+                    );
+                    var position = (plan.LastResolved
+                        ? string.Create(
+                            provider: CultureInfo.InvariantCulture,
+                            handler: $"({plan.LastPosition.X:0.0},{plan.LastPosition.Y:0.0},{plan.LastPosition.Z:0.0})"
+                        )
+                        : "unresolved"
+                    );
+
+                    _ = builder.Append(
+                        provider: CultureInfo.InvariantCulture,
+                        handler: $"{(wrote
+                        ? " | "
+                        : " ")}{name} {((plan.Kind == AudioEmitterKind.Bed)
+                        ? "bed"
+                        : "point")} {SourceToken(source: plan.Source)} {SourceStatus(source: plan.Source)} pos={position} inMix={((plan.LastResolved && plan.LastInSupport)
+                        ? "y"
+                        : "n")}"
+                    );
+                    wrote = true;
                 }
 
-                var name = (isSpeaker
-                    ? plan.Key["speaker:".Length..]
-                    : plan.Key
+                if (!wrote) {
+                    _ = builder.Append(value: " none declared");
+                }
+
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $" | cues {m_transients.Count}"
                 );
-                var position = (plan.LastResolved
-                    ? string.Create(
+
+                foreach (var transient in m_transients) {
+                    _ = builder.Append(
                         provider: CultureInfo.InvariantCulture,
-                        handler: $"({plan.LastPosition.X:0.0},{plan.LastPosition.Y:0.0},{plan.LastPosition.Z:0.0})"
-                    )
-                    : "unresolved"
-                );
+                        handler: $" cue:{transient.Token}={transient.PatchId}"
+                    );
+                }
 
-                _ = builder.Append(
-                    provider: CultureInfo.InvariantCulture,
-                    handler: $"{(wrote
-                    ? " | "
-                    : " ")}{name} {((plan.Kind == AudioEmitterKind.Bed)
-                    ? "bed"
-                    : "point")} {SourceToken(source: plan.Source)} {SourceStatus(source: plan.Source)} pos={position} inMix={((plan.LastResolved && plan.LastInSupport)
-                    ? "y"
-                    : "n")}"
-                );
-                wrote = true;
+                foreach (var lastCue in m_lastCueByToken) {
+                    _ = builder.Append(
+                        provider: CultureInfo.InvariantCulture,
+                        handler: $" lastCue:{lastCue.Key}={lastCue.Value}"
+                    );
+                }
+
+                return builder.Append(value: ']').ToString();
             }
-
-            if (!wrote) {
-                _ = builder.Append(value: " none declared");
-            }
-
-            _ = builder.Append(
-                provider: CultureInfo.InvariantCulture,
-                handler: $" | cues {m_transients.Count}"
-            );
-
-            foreach (var transient in m_transients) {
-                _ = builder.Append(
-                    provider: CultureInfo.InvariantCulture,
-                    handler: $" cue:{transient.Token}={transient.PatchId}"
-                );
-            }
-
-            foreach (var lastCue in m_lastCueByToken) {
-                _ = builder.Append(
-                    provider: CultureInfo.InvariantCulture,
-                    handler: $" lastCue:{lastCue.Key}={lastCue.Value}"
-                );
-            }
-
-            return builder.Append(value: ']').ToString();
         }
     }
     /// <summary>The <c>voice.state</c> echo — the live voice-babble status beside <c>audio.state</c>'s device facts
@@ -1401,22 +1520,24 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// <summary>Releases every hosted tune source, unbinds every machine source, and detaches the mixer.</summary>
     public void DetachMixer() {
         lock (m_gate) {
-            foreach (var host in m_tuneHosts.Values) {
-                m_mixer?.RemoveSource(key: AudioSourceKey.Tune(id: host.TuneId));
-                host.Source.Dispose();
-            }
+            lock (m_mixerGate) {
+                foreach (var host in m_tuneHosts.Values) {
+                    m_mixer?.RemoveSource(key: AudioSourceKey.Tune(id: host.TuneId));
+                    host.Source.Dispose();
+                }
 
-            m_tuneHosts.Clear();
+                m_tuneHosts.Clear();
 
-            foreach (var slot in m_machineBindings.Keys) {
-                m_mixer?.RemoveSource(key: slot);
-            }
+                foreach (var slot in m_machineBindings.Keys) {
+                    m_mixer?.RemoveSource(key: slot);
+                }
 
-            m_machineBindings.Clear();
-            foreach (var playback in m_textSpeech.Values) {
-                m_mixer?.RemoveSource(key: playback.Key);
+                m_machineBindings.Clear();
+                foreach (var playback in m_textSpeech.Values) {
+                    m_mixer?.RemoveSource(key: playback.Key);
+                }
+                Volatile.Write(location: ref m_mixer, value: null);
             }
-            m_mixer = null;
         }
     }
     /// <summary>The at-site position a mutation's cue can derive, or <see langword="null"/>: upserts carry their
@@ -1447,72 +1568,210 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// default is one sim step (the offline drivers publish once per mixed block); the live frame source passes its
     /// clamped presentation delta.</param>
     public AudioSnapshot Publish(ReadOnlySpan<DynamicTransform> transforms, ReadOnlySpan<WorldSeatCameraPose> seats, float deltaSeconds = DefaultPublishDeltaSeconds) {
-        lock (m_gate) {
+        if (Volatile.Read(location: ref m_machineBindingsDirty)) {
             SyncMachineSources();
+        }
 
-            var slab = m_slabs[m_slabIndex];
+        var listener = ResolveListener(
+            seats: seats,
+            transforms: transforms
+        );
+        var listenerEye = new Vector3(
+            x: (listener.Position.X.Value / 65536f),
+            y: (listener.Position.Y.Value / 65536f),
+            z: (listener.Position.Z.Value / 65536f)
+        );
+        var elapsedFrames = ElapsedFrames(deltaSeconds: deltaSeconds);
 
-            m_slabIndex = ((m_slabIndex + 1) % SnapshotRotation);
-            slab.Reset(listener: ResolveListener(
-                seats: seats,
-                transforms: transforms
-            ));
-            PublishTextSpeech(slab: slab);
-            // Babble firings BEFORE transients — a syllable due this publish must already be in the pool by the
-            // time transients emit.
-            AdvanceBabbleSchedule(deltaSeconds: deltaSeconds);
-            // Transients FIRST — the reserved pool must land even when the derived plan overfills the table.
-            PublishTransients(
-                deltaSeconds: deltaSeconds,
-                slab: slab,
-                transforms: transforms
-            );
+        // Gain revision gate: literal gains never re-resolve; bound gains re-resolve only when mirror revision/installs/
+        // lifetime move (or while moving slots interpolate across a new fraction); keyed gains also follow clock motion.
+        var gainRevision = m_gainMirror.Revision;
+        var gainInstalls = m_gainMirror.Installs;
+        var gainLifetime = m_gainMirror.Lifetime;
+        var gainEngineTick = m_gainMirror.EngineTick;
+        var gainPrevEngineTick = m_gainMirror.PreviousEngineTick;
+        var gainFraction = m_gainMirror.PresentationFraction;
+        var gainStateMoved = (
+            !m_gainsInitialized ||
+            (gainRevision != m_lastGainRevision) ||
+            (gainInstalls != m_lastGainInstalls) ||
+            (gainLifetime != m_lastGainLifetime)
+        );
+        var gainFractionMoved = (gainFraction != m_lastGainFraction);
+        var gainClockMoved = (
+            gainFractionMoved ||
+            (gainEngineTick != m_lastGainEngineTick) ||
+            (gainPrevEngineTick != m_lastGainPreviousEngineTick)
+        );
+        var boundGainDirty = (gainStateMoved || (m_gainMirror.HasMovingSlots && gainFractionMoved));
+        var keyedGainDirty = (gainStateMoved || gainClockMoved);
 
-            // The listener eye as float, for the per-row support check (a presentation ECHO fact, never mix math).
-            var listenerEye = new Vector3(
-                x: (slab.Listener.Position.X.Value / 65536f),
-                y: (slab.Listener.Position.Y.Value / 65536f),
-                z: (slab.Listener.Position.Z.Value / 65536f)
-            );
+        m_gainsInitialized = true;
+        m_lastGainRevision = gainRevision;
+        m_lastGainInstalls = gainInstalls;
+        m_lastGainLifetime = gainLifetime;
+        m_lastGainEngineTick = gainEngineTick;
+        m_lastGainPreviousEngineTick = gainPrevEngineTick;
+        m_lastGainFraction = gainFraction;
 
-            for (var index = 0; (index < m_plan.Count); index++) {
-                var plan = m_plan[index];
+        // Pose revision gate: static placements and fixed points never re-resolve; entity/group/animated-placement
+        // anchors re-resolve only when the client's render-pose revision or the animator's pose revision moves.
+        var clientPoseRev = (m_client?.RenderPoseRevision ?? 0L);
+        var animatorPoseRev = (m_animator?.PoseRevision ?? 0L);
+        var trackedPosesDirty = (
+            !m_posesInitialized ||
+            (clientPoseRev != m_lastClientPoseRevision) ||
+            (animatorPoseRev != m_lastAnimatorPoseRevision)
+        );
 
-                if (plan.Gain is { } gain) {
-                    plan.GainQ16 = GainQ16(gain: m_gainDomains.Resolve(
-                        mirror: m_gainMirror,
-                        field: WorldValueFields.SpeakerGain,
-                        scalar: in gain,
-                        value: m_gainMirror.Scalar(scalar: in gain, fallback: 1f),
-                        fallback: 1f,
-                        site: in plan.GainSite
-                    ));
-                }
+        m_posesInitialized = true;
+        m_lastClientPoseRevision = clientPoseRev;
+        m_lastAnimatorPoseRevision = animatorPoseRev;
 
-                if (!TryResolvePosition(
-                    plan: plan,
-                    position: out var position,
+        var stagedCount = 0;
+        var stagedTriggerCount = 0;
+
+        for (var index = 0; (index < m_plan.Count); index++) {
+            var plan = m_plan[index];
+            var planChanged = false;
+
+            if (
+                (plan.PoseKind == EmitterPoseKind.Always) ||
+                ((plan.PoseKind == EmitterPoseKind.Tracked) && trackedPosesDirty)
+            ) {
+                if (TryResolvePosition(
+                    plan: in plan,
+                    position: out var resolvedPosition,
                     transforms: transforms
                 )) {
-                    // An unresolvable anchor is an absent emitter — honest silence, zero special cases.
-                    plan.LastResolved = false;
-                    plan.LastInSupport = false;
-                    m_plan[index] = plan;
+                    if (!plan.LastResolved || (plan.LastPosition != resolvedPosition)) {
+                        plan.LastResolved = true;
+                        plan.LastPosition = resolvedPosition;
+                        planChanged = true;
+                    }
+                } else {
+                    if (plan.LastResolved || plan.LastInSupport) {
+                        plan.LastResolved = false;
+                        plan.LastInSupport = false;
+                        planChanged = true;
+                    }
+
+                    if (plan.FadeOutRemainingFrames > 0) {
+                        plan.FadeOutRemainingFrames = 0;
+                        planChanged = true;
+                    }
+                    if (plan.WasInSlab) {
+                        plan.WasInSlab = false;
+                        if (plan.IsLoopingSynth) {
+                            plan.NeedsArrivalTrigger = true;
+                            _ = m_culledLoopingIds.Add(item: plan.Id);
+                        }
+                        planChanged = true;
+                    }
+
+                    if (planChanged) {
+                        m_plan[index] = plan;
+                    }
 
                     continue;
                 }
+            } else if (!plan.LastResolved) {
+                continue;
+            }
 
-                plan.LastResolved = true;
-                plan.LastPosition = position;
+            var position = plan.LastPosition;
+            var inSupport = (Vector3.DistanceSquared(
+                value1: position,
+                value2: listenerEye
+            ) < plan.MaxRadiusSquared);
 
-                var maxRadius = (plan.MaxRadius.Value / 65536f);
+            if (plan.LastInSupport != inSupport) {
+                plan.LastInSupport = inSupport;
+                planChanged = true;
+            }
 
-                plan.LastInSupport = (Vector3.DistanceSquared(
-                    value1: position,
-                    value2: listenerEye
-                ) < (maxRadius * maxRadius));
+            // Cull outside support before resolving dynamic gains or building an emitter. A previously active emitter
+            // keeps a brief fade-out grace (FadeFrames for beds, plus one sim step of ramp slack) so its mixer channel
+            // ramps smoothly to silence before leaving the slab.
+            var emitToSlab = inSupport;
+
+            if (inSupport) {
+                var grace = ((plan.Kind == AudioEmitterKind.Bed)
+                    ? (plan.FadeFrames + AudioMixer.FramesPerSimStep)
+                    : AudioMixer.FramesPerSimStep);
+
+                if (plan.FadeOutRemainingFrames != grace) {
+                    plan.FadeOutRemainingFrames = grace;
+                    planChanged = true;
+                }
+            } else if (plan.FadeOutRemainingFrames > 0) {
+                emitToSlab = true;
+                plan.FadeOutRemainingFrames = Math.Max(val1: 0L, val2: (plan.FadeOutRemainingFrames - elapsedFrames));
+                planChanged = true;
+            }
+
+            if (!emitToSlab) {
+                if (plan.GainKind != EmitterGainKind.Literal && plan.GainInitialized) {
+                    plan.GainInitialized = false;
+                    planChanged = true;
+                }
+                if (plan.WasInSlab) {
+                    plan.WasInSlab = false;
+                    if (plan.IsLoopingSynth) {
+                        plan.NeedsArrivalTrigger = true;
+                        _ = m_culledLoopingIds.Add(item: plan.Id);
+                    }
+                    planChanged = true;
+                }
+
+                if (planChanged) {
+                    m_plan[index] = plan;
+                }
+
+                continue;
+            }
+
+            if (
+                (plan.GainKind != EmitterGainKind.Literal) &&
+                (plan.Gain is { } gain) &&
+                (!plan.GainInitialized || ((plan.GainKind == EmitterGainKind.Keyed) ? keyedGainDirty : boundGainDirty))
+            ) {
+                var resolvedGainQ16 = GainQ16(gain: m_gainDomains.Resolve(
+                    mirror: m_gainMirror,
+                    field: WorldValueFields.SpeakerGain,
+                    scalar: in gain,
+                    value: m_gainMirror.Scalar(scalar: in gain, fallback: 1f),
+                    fallback: 1f,
+                    site: in plan.GainSite
+                ));
+
+                if ((plan.GainQ16 != resolvedGainQ16) || !plan.GainInitialized) {
+                    plan.GainQ16 = resolvedGainQ16;
+                    plan.GainInitialized = true;
+                    planChanged = true;
+                }
+            }
+
+            if (!plan.WasInSlab) {
+                plan.WasInSlab = true;
+                planChanged = true;
+            }
+
+            if (plan.NeedsArrivalTrigger) {
+                plan.NeedsArrivalTrigger = false;
+                _ = m_culledLoopingIds.Remove(item: plan.Id);
+                if (stagedTriggerCount < m_stagedTriggerPlans.Length) {
+                    m_stagedTriggerPlans[stagedTriggerCount++] = index;
+                }
+                planChanged = true;
+            }
+
+            if (planChanged) {
                 m_plan[index] = plan;
-                _ = slab.TryAddEmitter(emitter: new AudioEmitter(
+            }
+
+            if (stagedCount < m_stagedEmitters.Length) {
+                m_stagedEmitters[stagedCount++] = new AudioEmitter(
                     Id: plan.Id,
                     Kind: plan.Kind,
                     Position: FixedVector3.FromVector3(value: position),
@@ -1523,36 +1782,99 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                     GainQ16: plan.GainQ16,
                     Channel: plan.Channel,
                     Source: plan.Source
-                ));
+                );
             }
-
-            // Pending triggers ride ASCENDING-sequence order — the mixer's once-only high-water mark walks the snapshot
-            // array in order, so a descending append would fire only the newest event and skip the rest.
-            var write = 0;
-
-            for (var index = 0; (index < m_pendingTriggers.Count); index++) {
-                var pending = m_pendingTriggers[index];
-                if (pending.Trigger.EmitterId >= 0 && !slab.ContainsEmitter(pending.Trigger.EmitterId)) { continue; }
-
-                if (slab.TryAddTrigger(trigger: pending.Trigger)) {
-                    pending.RemainingPublishes--;
-                }
-
-                // A capacity refusal keeps the event pending (untouched) for the next publish.
-                if (pending.RemainingPublishes > 0) {
-                    m_pendingTriggers[write++] = pending;
-                }
-            }
-
-            m_pendingTriggers.RemoveRange(
-                index: write,
-                count: (m_pendingTriggers.Count - write)
-            );
-
-            m_buffer.Publish(value: slab);
-
-            return slab;
         }
+
+        m_buffer.Publish(
+            state: new PublishState(
+                Director: this,
+                Listener: listener,
+                Transforms: transforms,
+                DeltaSeconds: deltaSeconds,
+                StagedCount: stagedCount,
+                StagedTriggerCount: stagedTriggerCount
+            ),
+            fill: static (ref AudioSnapshot slab, scoped PublishState state) => state.Director.FillSlab(
+                slab: slab,
+                state: in state
+            )
+        );
+        m_hasPublished = true;
+
+        return m_lastPublishedSlab!;
+    }
+    private void FillSlab(AudioSnapshot slab, in PublishState state) {
+        slab.Reset(listener: state.Listener);
+
+        if (Volatile.Read(location: ref m_hasControlWork) || (state.StagedTriggerCount > 0)) {
+            lock (m_gate) {
+                PublishTextSpeech(slab: slab);
+                // Babble firings BEFORE transients — a syllable due this publish must already be in the pool by the
+                // time transients emit.
+                AdvanceBabbleSchedule(deltaSeconds: state.DeltaSeconds);
+                // Transients FIRST — the reserved pool must land even when the derived plan overfills the table.
+                PublishTransients(
+                    deltaSeconds: state.DeltaSeconds,
+                    slab: slab,
+                    transforms: state.Transforms
+                );
+
+                for (var index = 0; (index < state.StagedCount); index++) {
+                    _ = slab.TryAddEmitter(emitter: in m_stagedEmitters[index]);
+                }
+
+                for (var index = 0; (index < state.StagedTriggerCount); index++) {
+                    var plan = m_plan[m_stagedTriggerPlans[index]];
+
+                    if (plan.Source.Id is { } patchId) {
+                        // Gain stays unity — the emitter's own gain spatializes; a voice gain here would double-scale.
+                        EnqueueTriggerLocked(
+                            patchId: patchId,
+                            seed: plan.SynthSeed,
+                            gainQ16: 65536,
+                            emitterId: plan.Id
+                        );
+                    }
+                }
+
+                // Pending triggers ride ASCENDING-sequence order — the mixer's once-only high-water mark walks the snapshot
+                // array in order, so a descending append would fire only the newest event and skip the rest.
+                var write = 0;
+
+                for (var index = 0; (index < m_pendingTriggers.Count); index++) {
+                    var pending = m_pendingTriggers[index];
+                    if ((pending.Trigger.EmitterId >= 0) && !slab.ContainsEmitter(id: pending.Trigger.EmitterId)) {
+                        continue;
+                    }
+
+                    if (slab.TryAddTrigger(trigger: pending.Trigger)) {
+                        pending.RemainingPublishes--;
+                    }
+
+                    // A capacity refusal keeps the event pending (untouched) for the next publish.
+                    if (pending.RemainingPublishes > 0) {
+                        m_pendingTriggers[write++] = pending;
+                    }
+                }
+
+                m_pendingTriggers.RemoveRange(
+                    index: write,
+                    count: (m_pendingTriggers.Count - write)
+                );
+
+                Volatile.Write(
+                    location: ref m_hasControlWork,
+                    value: ((m_textSpeech.Count > 0) || (m_scheduledBabble.Count > 0) || (m_transients.Count > 0) || (m_pendingTriggers.Count > 0))
+                );
+            }
+        } else {
+            for (var index = 0; (index < state.StagedCount); index++) {
+                _ = slab.TryAddEmitter(emitter: in m_stagedEmitters[index]);
+            }
+        }
+
+        m_lastPublishedSlab = slab;
     }
     /// <summary>Reconciles the derived emitter table against a delivered definition — call at the delivery boundary
     /// after <see cref="WorldScreenBinder.ReconcileScreens"/> (the chiasmus ordering: speakers consume screen slots)
@@ -1639,7 +1961,24 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                 Console.Error.WriteLine(value: $"[world.audio: {distinctSources} derived machine/tune sources exceed the {AudioMixer.MaxSources}-slot mixer source table — the overflow renders silent]");
             }
 
-            ApplyMixerBindings();
+            m_gainsInitialized = false;
+            m_posesInitialized = false;
+
+            var hasMachines = false;
+            foreach (var plan in m_plan) {
+                if (plan.Source.Kind == AudioSourceKind.Machine) {
+                    hasMachines = true;
+                    break;
+                }
+            }
+
+            lock (m_mixerGate) {
+                if (hasMachines || (m_machineBindings.Count > 0)) {
+                    Volatile.Write(location: ref m_machineBindingsDirty, value: true);
+                }
+
+                ApplyMixerBindingsLocked();
+            }
         }
     }
     /// <summary>Applies the delivered score's active conditional layers — layers are level-triggered, so this is
@@ -1666,8 +2005,10 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             m_sessionMasterVolume = value;
             MasterGainQ16 = GainQ16(gain: value);
 
-            if (m_mixer is { } mixer) {
-                mixer.MasterGainQ16 = MasterGainQ16;
+            lock (m_mixerGate) {
+                if (m_mixer is { } mixer) {
+                    mixer.MasterGainQ16 = MasterGainQ16;
+                }
             }
         }
     }
@@ -1779,8 +2120,19 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// <param name="stealGainQ16">The authored gain used for stealing when the emitter carries the gain.</param>
     public void SubmitTrigger(string patchId, ulong seed, int gainQ16, int emitterId, long? cueArgument = null, int? stealGainQ16 = null) {
         lock (m_gate) {
-            m_pendingTriggers.Add(item: new PendingTrigger {
-                Trigger = new SynthTrigger(
+            EnqueueTriggerLocked(
+                patchId: patchId,
+                seed: seed,
+                gainQ16: gainQ16,
+                emitterId: emitterId,
+                cueArgument: cueArgument,
+                stealGainQ16: stealGainQ16
+            );
+        }
+    }
+    private void EnqueueTriggerLocked(string patchId, ulong seed, int gainQ16, int emitterId, long? cueArgument = null, int? stealGainQ16 = null) {
+        m_pendingTriggers.Add(item: new PendingTrigger {
+            Trigger = new SynthTrigger(
                 Sequence: ++m_nextTriggerSequence,
                 PatchId: patchId,
                 Seed: seed,
@@ -1789,9 +2141,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                 CueArgument: cueArgument,
                 StealGainQ16: stealGainQ16
             ),
-                RemainingPublishes = TriggerPublishRetention,
-            });
-        }
+            RemainingPublishes = TriggerPublishRetention,
+        });
+        Volatile.Write(location: ref m_hasControlWork, value: true);
     }
     /// <summary>Schedules one babbled utterance's syllable triggers: resolves the world's single authored
     /// <see cref="WorldIdentityDefinition.Voice"/> selectors off the delivered definition, drives
@@ -1861,27 +2213,40 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                     RemainingFrames = (((long)ticks[syllableIndex]) * AudioMixer.FramesPerSimStep),
                 });
             }
+
+            Volatile.Write(location: ref m_hasControlWork, value: true);
         }
     }
     /// <summary>Mixes one block from the latest published snapshot into the attached mixer — the device pump's
     /// per-quantum entry, callable from any thread. Returns <see langword="false"/> (leaving the span untouched —
-    /// the caller writes silence) while no mixer is attached or nothing has been published yet.</summary>
+    /// the caller writes silence) while no mixer is attached or nothing has been published yet. Reads the published
+    /// slab through <see cref="PublishBuffer{T}.Read{TState, TResult}"/> under <c>m_mixerGate</c> only (never
+    /// contending on <c>m_gate</c>), so the audio thread can never see a torn slab.</summary>
     /// <param name="stereoInterleaved">The output block; fully overwritten on <see langword="true"/>.</param>
     public bool TryMixBlock(Span<short> stereoInterleaved) {
-        lock (m_gate) {
-            if (
-                (m_mixer is not { } mixer) ||
-                !m_buffer.TrySnapshot(value: out var snapshot)
-            ) {
+        if (!m_hasPublished) {
+            return false;
+        }
+
+        lock (m_mixerGate) {
+            if (m_mixer is not { } mixer) {
                 return false;
             }
 
-            mixer.MixBlock(
-                snapshot: snapshot,
-                stereoInterleaved: stereoInterleaved
-            );
+            return m_buffer.Read(
+                state: new MixReadState(
+                    Mixer: mixer,
+                    StereoInterleaved: stereoInterleaved
+                ),
+                read: static (scoped in AudioSnapshot snapshot, long _, scoped MixReadState state) => {
+                    state.Mixer.MixBlock(
+                        snapshot: snapshot,
+                        stereoInterleaved: state.StereoInterleaved
+                    );
 
-            return true;
+                    return true;
+                }
+            );
         }
     }
     /// <summary>Resolves a speaker row's live gizmo pose — Fixed/Bed directly, an anchored row through the same
@@ -1924,10 +2289,40 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         }
     }
     /// <summary>Copies the latest published snapshot, when one exists (the raw consumer seam; the device pump uses
-    /// <see cref="TryMixBlock"/>, which folds the snapshot read and the mix under the gate).</summary>
+    /// <see cref="TryMixBlock"/>, which holds the slab through <see cref="PublishBuffer{T}.Read{TState, TResult}"/>).</summary>
     /// <param name="snapshot">The latest snapshot.</param>
-    public bool TrySnapshot(out AudioSnapshot snapshot) => m_buffer.TrySnapshot(value: out snapshot);
+    public bool TrySnapshot(out AudioSnapshot snapshot) {
+        if (!m_hasPublished) {
+            snapshot = null!;
 
+            return false;
+        }
+
+        return m_buffer.TrySnapshot(value: out snapshot);
+    }
+
+    private readonly ref struct MixReadState(AudioMixer Mixer, Span<short> StereoInterleaved) {
+        public AudioMixer Mixer { get; } = Mixer;
+        public Span<short> StereoInterleaved { get; } = StereoInterleaved;
+    }
+    private readonly ref struct PublishState(WorldAudioDirector Director, AudioListener Listener, ReadOnlySpan<DynamicTransform> Transforms, float DeltaSeconds, int StagedCount, int StagedTriggerCount) {
+        public WorldAudioDirector Director { get; } = Director;
+        public AudioListener Listener { get; } = Listener;
+        public ReadOnlySpan<DynamicTransform> Transforms { get; } = Transforms;
+        public float DeltaSeconds { get; } = DeltaSeconds;
+        public int StagedCount { get; } = StagedCount;
+        public int StagedTriggerCount { get; } = StagedTriggerCount;
+    }
+    private enum EmitterPoseKind : byte {
+        Static,
+        Tracked,
+        Always,
+    }
+    private enum EmitterGainKind : byte {
+        Literal,
+        Bound,
+        Keyed,
+    }
     private enum EmitterAnchorKind : byte {
         Fixed,
         Anchored,
@@ -1943,23 +2338,32 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         public static EmitterAnchor Anchored(WorldAnchor? anchor, Vector3 offset) => new() { Anchor = anchor, Kind = EmitterAnchorKind.Anchored, Offset = offset };
         public static EmitterAnchor FixedPoint(Vector3 position) => new() { Kind = EmitterAnchorKind.Fixed, Position = position };
     }
-    // One derived emitter row — the document-derived stable facts Publish resolves a pose for each frame, plus the
-    // last publish's LIVE status (the speaker.state echo: where the row resolved and whether the listener sits
-    // inside its finite support).
+    // One derived emitter row — the document-derived stable facts Publish resolves a pose for when revisions move, plus
+    // the last publish's LIVE status (the speaker.state echo: where the row resolved and whether the listener sits
+    // inside its finite support) and support-cull / arrival-trigger state.
     private struct EmitterPlan {
         public string Key;
         public int Id;
         public AudioEmitterKind Kind;
         public EmitterAnchor Anchor;
+        public EmitterPoseKind PoseKind;
+        public EmitterGainKind GainKind;
         public FixedQ4816 MinRadius;
         public FixedQ4816 MaxRadius;
+        public float MaxRadiusSquared;
         public AudioAttenuationCurve Curve;
         public int FadeFrames;
+        public long FadeOutRemainingFrames;
         public int GainQ16;
         public BindableScalar? Gain;
         public WorldValueSite GainSite;
+        public bool GainInitialized;
         public AudioChannel Channel;
         public AudioSourceKey Source;
+        public ulong SynthSeed;
+        public bool IsLoopingSynth;
+        public bool NeedsArrivalTrigger;
+        public bool WasInSlab;
         public Vector3 LastPosition;
         public bool LastResolved;
         public bool LastInSupport;

@@ -143,7 +143,14 @@ public sealed partial class WorldCreationInstances {
         ArgumentNullException.ThrowIfNull(argument: moved);
 
         m_packedSlotBase = slotBase;
-        m_volumes.Clear();
+        var volumesNeedRebuild = (m_volumesDirty || (slotBase != m_volumesSlotBase));
+        if (m_hasAnyVolumes && (m_volumeActive.Length < m_poolCount)) {
+            m_volumeActive = new bool[m_poolCount];
+            m_volumeScale = new float[m_poolCount];
+            m_volumeHidden = new bool[]?[m_poolCount];
+            volumesNeedRebuild = true;
+        }
+        var anyPoseMoved = false;
         m_slotClipRun.Clear();
         m_slotClipBodies.Clear();
         m_packCount++;
@@ -176,6 +183,10 @@ public sealed partial class WorldCreationInstances {
             }
 
             if (live is null) {
+                if (m_hasAnyVolumes && m_volumeActive[index]) {
+                    m_volumeActive[index] = false;
+                    volumesNeedRebuild = true;
+                }
                 m_packedRegistrations[index] = null;
                 SetMeshDraw(
                     draw: null,
@@ -186,6 +197,7 @@ public sealed partial class WorldCreationInstances {
                     moved: moved,
                     owner: index
                 )) {
+                    anyPoseMoved = true;
                     WorldTransformOwners.Park(
                         count: slots,
                         moved: moved,
@@ -328,6 +340,7 @@ public sealed partial class WorldCreationInstances {
                     live.RateSeconds = 0f;
                     live.RateOwed = false;
                 }
+                if (slotsMoved) { anyPoseMoved = true; }
                 m_owners.Settle(
                     deltaSeconds: deltaSeconds,
                     moved: (!still && moved.Commit(
@@ -346,13 +359,14 @@ public sealed partial class WorldCreationInstances {
             NoteRate(center: rootPosition, live: live, packedSlots: packedSlots, placementScale: placementScale, posed: posed, radius: RateReach(live: live, placementScale: placementScale), rootSlot: rootSlot);
             live.PackedRoot = transforms[rootSlot];
             placementScale = transforms[rootSlot].Scale;
-            AppendVolumes(
-                document: document,
-                hidden: live.Hidden,
-                live: live,
-                placementScale: placementScale,
-                rootSlot: rootSlot
-            );
+            if (m_hasAnyVolumes && (document.Volumes is { Count: > 0 })) {
+                if (!m_volumeActive[index] || (m_volumeScale[index] != placementScale) || !ReferenceEquals(objA: m_volumeHidden[index], objB: live.Hidden)) {
+                    m_volumeActive[index] = true;
+                    m_volumeScale[index] = placementScale;
+                    m_volumeHidden[index] = live.Hidden;
+                    volumesNeedRebuild = true;
+                }
+            }
 
             // A body straddling a portal whose counterpart stands in this world is drawn on both sides of it. The rest
             // bound screens out the bodies nowhere near a door; the posed parts decide.
@@ -394,7 +408,38 @@ public sealed partial class WorldCreationInstances {
             );
         }
 
+        if (volumesNeedRebuild) {
+            if (m_hasAnyVolumes || (m_volumes.Count > 0)) {
+                m_volumes.Clear();
+                if (m_hasAnyVolumes) {
+                    for (var index = 0; (index < m_poolCount); index++) {
+                        if (!m_volumeActive[index] || (m_pool[index] is not { } live) || (live.PackedRoot is null)) {
+                            continue;
+                        }
+
+                        var rootSlot = (slotBase + RootSlotOffset(index: index));
+
+                        AppendVolumes(
+                            document: live.Creation.EngineDocument,
+                            hidden: live.Hidden,
+                            live: live,
+                            placementScale: m_volumeScale[index],
+                            rootSlot: rootSlot
+                        );
+                    }
+                }
+                VolumesRevision++;
+            }
+            m_volumesSlotBase = slotBase;
+            m_volumesDirty = false;
+        }
+
+        var rigidPoseBefore = Rigid.PoseRevision;
+
         Rigid.Pack(transforms, client, (slotBase + ArticulatedSlotCount), deltaSeconds);
+        if (anyPoseMoved || (Rigid.PoseRevision != rigidPoseBefore)) {
+            PoseRevision++;
+        }
         PackGuess(client: client, deltaSeconds: deltaSeconds, moved: moved, parkPosition: parkPosition, slotBase: slotBase, transforms: transforms);
         WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Packs);
         EndRateCodes();
@@ -633,7 +678,12 @@ public sealed partial class WorldCreationInstances {
         // (EmitOne), and the bake and the draws read the scale off the slot.
         var document = live.Creation.EngineDocument;
 
-        live.PoseFrame = SelectPose(live: live);
+        var nextPoseFrame = SelectPose(live: live);
+
+        if (nextPoseFrame != live.PoseFrame) {
+            live.PoseFrame = nextPoseFrame;
+            CarryRevision++;
+        }
         live.Kinematics.Resolve(
             drivers: live.Rig.Drivers,
             rows: client.Definition.Dynamics
