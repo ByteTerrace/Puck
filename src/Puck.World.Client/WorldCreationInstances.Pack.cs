@@ -192,6 +192,10 @@ public sealed partial class WorldCreationInstances {
         BeginRateCodes(slotBase: slotBase);
 
         var doors = WorldPortalStraddle.Doors(definition: client.Definition);
+
+        // Other doors clip other bodies.
+        everything |= !ReferenceEquals(objA: doors, objB: m_packedDoors);
+        m_packedDoors = doors;
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
@@ -201,7 +205,7 @@ public sealed partial class WorldCreationInstances {
         }
 
         (m_packHeldBodies, m_packHeldPlacements, m_packHeldSlots) = (0, 0, 0);
-        _ = CollectVisits(client: client, everything: everything);
+        everything = CollectVisits(client: client, everything: everything);
 
         var visits = m_visits.AsSpan(start: 0, length: m_visitCount);
         var poses = 0;
@@ -274,7 +278,7 @@ public sealed partial class WorldCreationInstances {
 
         var rigidPoseBefore = Rigid.PoseRevision;
 
-        Rigid.Pack(transforms, client, (slotBase + ArticulatedSlotCount), deltaSeconds);
+        Rigid.Pack(deltaSeconds: deltaSeconds, everything: moved.Everything, slotBase: (slotBase + ArticulatedSlotCount), source: client, transforms: transforms);
         if (m_packPoseMoved || (Rigid.PoseRevision != rigidPoseBefore)) {
             PoseRevision++;
         }

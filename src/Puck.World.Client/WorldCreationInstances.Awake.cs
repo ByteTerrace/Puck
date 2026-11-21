@@ -41,6 +41,7 @@ public sealed partial class WorldCreationInstances {
     // The seconds every Tick has advanced the pool by: the clock replay cursors, cues and held seconds are counted on.
     private double m_clockSeconds;
     private IWorldStampSource? m_packedSource;
+    private IReadOnlyList<WorldPortalStraddle.Door>? m_packedDoors;
 
     private readonly GpuRowCursor m_bodyCursor = new();
     private readonly GpuUploadRuns m_bodyRuns = new(capacity: GpuRegion.MaxCopyRuns);

@@ -851,6 +851,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     public IReadOnlyList<int> MeshAssetSlots => m_pool.Rigid.Slots;
     public IReadOnlyList<SdfMeshInstance> MeshInstances => m_pool.Rigid.Copies;
+    /// <inheritdoc/>
+    public IReadOnlyList<int> MeshInstanceChanges => m_pool.Rigid.ChangedCopies;
+    /// <inheritdoc/>
+    public long MeshInstancesRevision => m_pool.Rigid.CopiesRevision;
 
     /// <summary>Writes each rebuild revision independently so opposing moves cannot mask a change.</summary>
     public void WriteRevision(Span<int> destination) {

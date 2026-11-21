@@ -351,6 +351,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
     public IReadOnlyList<int> MeshAssetSlots => m_animator.Rigid.Slots;
     public IReadOnlyList<SdfMeshInstance> MeshInstances => m_animator.Rigid.Copies;
+    /// <inheritdoc/>
+    public IReadOnlyList<int> MeshInstanceChanges => m_animator.Rigid.ChangedCopies;
+    /// <inheritdoc/>
+    public long MeshInstancesRevision => m_animator.Rigid.CopiesRevision;
 
     /// <summary>Re-points this emitter's derived-face screen rows at the same set <see cref="WorldFramePresenter"/>
     /// just derived and handed the screen binder — never re-derived here (see <see cref="WorldPrototypeFacets.Derive"/>'s

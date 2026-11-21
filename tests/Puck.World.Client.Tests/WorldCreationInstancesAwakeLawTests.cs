@@ -23,23 +23,25 @@ public sealed class WorldCreationInstancesAwakeLawTests {
 
     private static readonly PresentationRate Paced60 = new(DisplayHertz: 60, GridHertz: 60d);
 
-    // Every body wears a creation whose head swings on a time driver, so each would pose every frame it is seen.
-    private static (WorldClient Client, WorldCreationInstances Pool, DynamicTransform[] Transforms) Stage() {
+    // Every body wears a creation whose head swings on a time driver, so each would pose every frame it is seen; or,
+    // rigid, one with no moving part, which the pool draws as a copy of one shared mesh.
+    private static (WorldClient Client, WorldCreationInstances Pool, DynamicTransform[] Transforms) Stage(bool rigid = false) {
+        var head = Box(id: 1, name: "head", position: new Vector3(x: 0f, y: 1f, z: 0f));
         var creation = CreationFixtures.Prototype(id: "walker", document: new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "walker",
             Palette: null,
             Shapes: [
                 Box(id: 0, name: "body", position: Vector3.Zero),
-                Box(id: 1, name: "head", position: new Vector3(x: 0f, y: 1f, z: 0f)) with { Swings = [new ShapeSwingDocument(Amplitude: 0.5f, Axis: Vector3.UnitY, Driver: "clock", Pivot: new Vector3(x: 0.5f, y: 1f, z: 0f))] },
+                (rigid ? head : (head with { Swings = [new ShapeSwingDocument(Amplitude: 0.5f, Axis: Vector3.UnitY, Driver: "clock", Pivot: new Vector3(x: 0.5f, y: 1f, z: 0f))] })),
             ],
             Frames: null,
-            Drivers: [new CreationDriverDocument(
+            Drivers: (rigid ? null : [new CreationDriverDocument(
                 Cadence: 1f,
                 Name: "clock",
                 Signal: CreationDriverDocument.SignalTime,
                 When: [CreationDriverDocument.WhenAlways]
-            )]
+            )])
         ));
         var definition = (Fixtures.BuildDocument() with {
             CreationsRaw = [creation],
@@ -143,6 +145,24 @@ public sealed class WorldCreationInstancesAwakeLawTests {
         pool.RateBy(counts: counts, height: 900U, intervals: null, views: View(position: new Vector3(x: 12f, y: 0.5f, z: -6f), target: new Vector3(x: 12f, y: 0.5f, z: 0f)));
         Assert.Equal(expected: Bodies, actual: Present(client: client, mover: 5, pool: pool, steps: 1, tick: 5UL, transforms: transforms));
         Assert.True(condition: (counts.Read(kind: SdfUpdateRateCounts.BodiesPosed) > Bodies));
+    }
+    // A rigid body's copy row is read only on a frame its body moved, and the pack names the copies it rewrote.
+    [Fact]
+    public void ARigidPackReadsOnlyTheBodiesThatMoved() {
+        var (client, pool, transforms) = Stage(rigid: true);
+
+        Assert.Equal(expected: Bodies, actual: pool.Rigid.Copies.Count);
+        _ = Present(client: client, pool: pool, tick: 1UL, transforms: transforms);
+        Assert.Equal(expected: Bodies, actual: pool.Rigid.VisitCount);
+
+        _ = Present(client: client, pool: pool, tick: 2UL, transforms: transforms);
+        Assert.Equal(expected: 0, actual: pool.Rigid.VisitCount);
+        Assert.Empty(collection: pool.Rigid.ChangedCopies);
+
+        _ = Present(client: client, mover: 7, pool: pool, steps: 1, tick: 3UL, transforms: transforms);
+        Assert.Equal(expected: 1, actual: pool.Rigid.VisitCount);
+        Assert.Equal(expected: [7], actual: pool.Rigid.ChangedCopies);
+        Assert.Equal(expected: new Vector3(x: 7f, y: 0f, z: 0.05f), actual: pool.Rigid.Copies[7].Transform.Position);
     }
     // Bodies in a cell a view may show are visited every frame; out of sight no pack visits them once they hold; seen
     // again, each resumes from where its drivers stood.
