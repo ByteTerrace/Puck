@@ -480,7 +480,7 @@ reaches outside the server is one of these.
 | The replay tape's taps, `WorldHistory`, the mutation journal | Inline; they are the authority's |
 | `WorldSeatAuthorityRouter` | Inline; its table is compare-and-swap and its change edge is delivered on the pump (`WorldSeatAuthorityRouter.RouteChanged`) |
 | Machines (`IWorldMachineHost`) | Inline; machines run on their own workers already |
-| Addon guests (`IWorldAddonHost`) | Inline; step 3 confirms on the headless boot that a guest mounted on the main thread ticks on the step thread |
+| Addon guests (`IWorldAddonHost`) | Inline; a guest mounted on the main thread ticks on the step thread, as the debug world's guests do |
 | `WorldServer.Profiles`, `WorldServer.Neighbours`, `WorldServer.RebuildDocuments`, `WorldServer.TransferForwarder` | Inline; the pump uses them only inside the window |
 | `WorldServer.Envelope` | Reads the published record |
 | `HostFrameWork` measurements | The step thread binds its own; collect folds its parts into the iteration (`HostFrameWork.Fold`) |
