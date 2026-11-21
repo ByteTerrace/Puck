@@ -128,15 +128,7 @@ public sealed class DoorAnalyzer : DiagnosticAnalyzer {
         });
     }
 
-    private static bool IsHolder(ITypeSymbol? type) {
-        for (var current = type; (current is not null); current = current.BaseType) {
-            if (Is(type: current, @namespace: StateNamespace, name: "VersionedHolder")) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private static bool IsHolder(ITypeSymbol? type) => Derives(type: type, @namespace: StateNamespace, name: "VersionedHolder");
     private static bool IsSection(ITypeSymbol? type) =>
         Implements(type: type, @namespace: StateNamespace, name: "IVersionedSection");
     private static bool IsSpan(ITypeSymbol? type, bool writable) =>

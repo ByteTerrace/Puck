@@ -16,7 +16,7 @@ namespace Puck.Analyzers;
 /// gets no members and fails to compile until it is one or writes them.</remarks>
 [Generator(LanguageNames.CSharp)]
 public sealed class SyntaxChildrenGenerator : IIncrementalGenerator {
-    private const string AnnotationAttribute = "SyntaxAnnotationAttribute";
+    private const string AnnotationAttribute = RootNamespace + ".SyntaxAnnotationAttribute";
     private const string ChildrenMember = "Children";
     private const string MapMember = "MapChildren";
     private const string RootName = "SyntaxNode";
@@ -32,6 +32,7 @@ public sealed class SyntaxChildrenGenerator : IIncrementalGenerator {
     );
 
     public void Initialize(IncrementalGeneratorInitializationContext context) {
+        // Only the part of a record that carries its base list is read, so a record written in parts is read once.
         var nodes = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => ((node is RecordDeclarationSyntax { BaseList: not null } record) && record.Modifiers.Any(SyntaxKind.PartialKeyword)),
             transform: static (syntax, cancellationToken) => Read(syntax, cancellationToken)
@@ -40,15 +41,7 @@ public sealed class SyntaxChildrenGenerator : IIncrementalGenerator {
         context.RegisterSourceOutput(nodes.Collect(), static (output, nodes) => Emit(output, nodes!));
     }
 
-    private static bool IsNode(ITypeSymbol? type) {
-        for (var current = type; (current is not null); current = current.BaseType) {
-            if ((current.Name == RootName) && (current.ContainingNamespace?.ToDisplayString() == RootNamespace)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    private static bool IsRoot(ITypeSymbol type) => ((type.Name == RootName) && (type.ContainingNamespace?.ToDisplayString() == RootNamespace));
+    private static bool IsNode(ITypeSymbol? type) => NamedTypes.Derives(type: type, @namespace: RootNamespace, name: RootName);
     private static Node? Read(GeneratorSyntaxContext context, CancellationToken cancellationToken) {
         if (context.SemanticModel.GetDeclaredSymbol(context.Node, cancellationToken) is not INamedTypeSymbol { IsAbstract: false, ContainingType: null } type) {
             return null;
@@ -56,16 +49,15 @@ public sealed class SyntaxChildrenGenerator : IIncrementalGenerator {
         if (!IsNode(type.BaseType) || (type.GetMembers(ChildrenMember).Length != 0) || (type.GetMembers(MapMember).Length != 0)) {
             return null;
         }
-        // A partial record's other parts would each be read; only the part that carries the base list is.
         var properties = new List<IPropertySymbol>();
 
-        for (ITypeSymbol current = type; !IsRoot(current); current = current.BaseType!) {
+        for (ITypeSymbol current = type; !NamedTypes.Is(type: current, @namespace: RootNamespace, name: RootName); current = current.BaseType!) {
             properties.AddRange(current.GetMembers().OfType<IPropertySymbol>().Where(static property => (
                 !property.IsStatic &&
                 !property.IsIndexer &&
                 (property.SetMethod is not null) &&
                 (property.DeclaredAccessibility == Accessibility.Public) &&
-                !property.GetAttributes().Any(static attribute => (attribute.AttributeClass?.Name == AnnotationAttribute))
+                !NamedTypes.Carries(attribute: AnnotationAttribute, symbol: property)
             )));
         }
         var children = new StringBuilder();
