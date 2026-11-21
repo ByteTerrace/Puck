@@ -27,10 +27,11 @@ public interface IWorldServerHost {
     /// <summary>Submits one envelope into the server's single ordered domain for every non-intent submission kind —
     /// command, grant, revoke, session, definition, mutation, undo, composition, lever, and query all drain through
     /// this one method, never a per-kind path (grant-then-warp must apply against the new table; a split queue could
-    /// not guarantee that). A local caller (<see cref="LoopbackTransport"/>) enqueues and drains inline, on the tick
-    /// thread, inside this same call — so <paramref name="completion"/> (when supplied) has already fired by the time
-    /// <see cref="Submit"/> returns, preserving today's synchronous submit-and-check semantics and stdin FIFO order
-    /// exactly. No submission returns a value directly; every envelope resolves to a typed
+    /// not guarantee that). A local caller (<see cref="LoopbackTransport"/>) enqueues and drains inline inside this
+    /// same call. The completion is the caller's: called on the host loop between ticks, a submission that applies
+    /// inline has fired <paramref name="completion"/> by the time <see cref="Submit"/> returns, keeping synchronous
+    /// submit-and-check semantics and stdin FIFO order; one a tick or another thread fires reaches the caller when the
+    /// server's outbox collects. No submission returns a value directly; every envelope resolves to a typed
     /// <see cref="WorldSubmissionResult"/> instead.</summary>
     /// <param name="envelope">The envelope to submit.</param>
     /// <param name="completion">Invoked once with the envelope's typed result, or <see langword="null"/> when the

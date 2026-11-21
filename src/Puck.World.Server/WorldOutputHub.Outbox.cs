@@ -1,6 +1,6 @@
-using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Memory;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -46,8 +46,8 @@ public sealed partial class WorldOutputHub {
         public Loan? Loan;
     }
 
-    // The arrays a recorded delivery's lent memory was copied into, rented from the shared pools and returned once the
-    // record is replayed. A lender (the server's snapshot arrays, a session sink's disclosure scratch, the fan-out's
+    // The arrays a recorded delivery's lent memory was copied into, rented from the shared workspace arrays and returned
+    // once the record is replayed. A lender (the server's snapshot arrays, a session sink's disclosure scratch, the fan-out's
     // projection) overwrites its memory when it composes its next delivery, which may come before the collect, so a
     // record never holds a loan.
     private sealed class Loan {
@@ -90,7 +90,7 @@ public sealed partial class WorldOutputHub {
             foreach (ref readonly var entry in source.Span) { registers += entry.State.Length; }
             if (registers == 0) { return held; }
 
-            var states = m_states = ArrayPool<long>.Shared.Rent(registers);
+            var states = m_states = RentedArrays.Rent<long>(registers);
             var entries = m_entries!;
             var offset = 0;
             Bytes += ((long)registers * sizeof(long));
@@ -105,14 +105,14 @@ public sealed partial class WorldOutputHub {
         }
         private ReadOnlyMemory<T> Hold<T>(ReadOnlyMemory<T> source, ref T[]? rented) {
             if (source.IsEmpty) { return source; }
-            var copy = rented = ArrayPool<T>.Shared.Rent(source.Length);
+            var copy = rented = RentedArrays.Rent<T>(source.Length);
             source.Span.CopyTo(copy);
             Bytes += ((long)source.Length * Unsafe.SizeOf<T>());
             return copy.AsMemory(0, source.Length);
         }
         private static void Return<T>(ref T[]? rented) {
             if (rented is not { } array) { return; }
-            ArrayPool<T>.Shared.Return(array, clearArray: RuntimeHelpers.IsReferenceOrContainsReferences<T>());
+            RentedArrays.Return(array);
             rented = null;
         }
     }
