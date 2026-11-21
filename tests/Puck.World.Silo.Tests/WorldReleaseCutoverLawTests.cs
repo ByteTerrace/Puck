@@ -940,6 +940,23 @@ public sealed partial class WorldReleaseCutoverLawTests {
             session: out _,
             worldId: "beta"
         ));
+        // The private candidate's private health is all a bootstrap can wait for before its commit: public health
+        // names the closed admission until the commit's publication opens it.
+        candidate.Ready = true;
+        Assert.Equal(
+            "",
+            await HealthAsync(
+                host: candidate,
+                @private: true
+            )
+        );
+        Assert.Equal(
+            "release admission is closed",
+            await HealthAsync(
+                host: candidate,
+                @private: false
+            )
+        );
 
         group = await scenario.AdvanceAsync(
             current: group,
@@ -953,6 +970,13 @@ public sealed partial class WorldReleaseCutoverLawTests {
         Assert.Equal(
             WorldReleaseAdmissionPublication.Opened,
             await PublishAsync(host: candidate)
+        );
+        Assert.Equal(
+            "",
+            await HealthAsync(
+                host: candidate,
+                @private: false
+            )
         );
         Assert.True(condition: candidateRouting.TryGetSession(
             session: out _,
@@ -1131,6 +1155,18 @@ public sealed partial class WorldReleaseCutoverLawTests {
             operation: publication
         );
         return await publication;
+    }
+    private static async Task<string> HealthAsync(WorldSiloHost host, bool @private) {
+        var health = (@private
+            ? host.CheckPrivateHealthAsync(cancellationToken: Token)
+            : host.CheckHealthAsync(cancellationToken: Token)
+        );
+
+        await PumpAsync(
+            host: host,
+            operation: health
+        );
+        return await health;
     }
     private static Task PumpAsync(WorldSiloHost host, Task operation) => PumpAllAsync(
         hosts: [host],

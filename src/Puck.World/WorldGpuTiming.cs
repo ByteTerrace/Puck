@@ -43,8 +43,7 @@ public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
         if (renew || was != Enabled) { m_demand++; }
     }
 
-    /// <summary>Copies the closing rolling GPU window, including the overlay pass, into a report. This is not a
-    /// whole-run distribution; the window and per-pass sample counts state its coverage.</summary>
+    /// <summary>Copies each node's closing submission window, including the overlay pass, into a report.</summary>
     /// <returns>A detached report with explicit availability.</returns>
     public JsonObject Capture() {
         var nodes = new JsonArray();
@@ -54,13 +53,23 @@ public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
                 if (runtime.Producer(instance: index) is not null) { continue; }
                 var node = runtime.Node(instance: index);
                 var passes = new JsonArray();
-                foreach (var timing in node.Timings) {
-                    measured = true;
-                    passes.Add(new JsonObject { ["pass"] = timing.Pass, ["milliseconds"] = timing.Milliseconds, ["samples"] = timing.Samples });
+                var timings = node.Timings;
+                foreach (var timing in timings) {
+                    measured |= (timing.Samples > 0);
+                    passes.Add(new JsonObject {
+                        ["pass"] = timing.Pass,
+                        ["milliseconds"] = timing.Milliseconds,
+                        ["perFrameMs"] = timing.PerFrameMs,
+                        ["samples"] = timing.Samples,
+                        ["lastSubmission"] = timing.LastSubmission,
+                        ["stale"] = timing.Stale,
+                    });
                 }
                 nodes.Add(new JsonObject {
                     ["node"] = runtime.Instances.Instances[index].Name,
-                    ["state"] = node.Timings.IsEmpty ? "unmeasured" : "present",
+                    ["state"] = timings.IsEmpty ? "unmeasured" : "present",
+                    ["submission"] = node.LatestTimingSubmission,
+                    ["frames"] = node.TimingWindowFrames,
                     ["refusal"] = node.TimingRefusal,
                     ["passes"] = passes,
                 });
@@ -68,7 +77,7 @@ public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
         }
         return new JsonObject {
             ["state"] = !Available ? "absent" : measured ? "present" : "unmeasured",
-            ["coverage"] = "closing rolling window",
+            ["coverage"] = "closing node submission windows",
             ["window"] = Puck.Shaders.ShaderPipelineRenderNode.TimingWindow,
             ["nodes"] = nodes,
         };
@@ -167,9 +176,11 @@ public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
                     text.Append(value: $"\n{name}: refused {refusal}");
                     continue;
                 }
-                if (node.Timings.IsEmpty) { text.Append(value: $"\n{name}: awaiting completed timestamps"); }
-                foreach (var timing in node.Timings) {
-                    text.Append(provider: CultureInfo.InvariantCulture, handler: $"\n{name}/{timing.Pass}: {timing.Milliseconds:0.000} ms samples={timing.Samples}");
+                var timings = node.Timings;
+                if (timings.IsEmpty) { text.Append(value: $"\n{name}: awaiting completed timestamps"); }
+                foreach (var timing in timings) {
+                    var state = timing.Stale ? "stale" : timing.Samples == 0 ? "unmeasured" : "present";
+                    text.Append(provider: CultureInfo.InvariantCulture, handler: $"\n{name}/{timing.Pass}: {timing.Milliseconds:0.000} ms perFrameMs={timing.PerFrameMs:0.000} samples={timing.Samples} frames={node.TimingWindowFrames} submission={node.LatestTimingSubmission} lastSubmission={timing.LastSubmission} {state}");
                 }
             }
         }

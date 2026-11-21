@@ -38,7 +38,7 @@ public sealed class GpuPassPipelineKey : IEquatable<GpuPassPipelineKey> {
     /// <summary>Gets the render pass a graphics pipeline is created for, or <see langword="null"/> for a compute
     /// pipeline.</summary>
     public GpuRenderPassDescription? RenderPass { get; }
-    /// <summary>Gets the fragment stage's bytecode of a graphics pipeline; empty for a compute pipeline.</summary>
+    /// <summary>Gets the fragment stage's bytecode of a graphics pipeline; empty for a compute or depth-only pipeline.</summary>
     public ReadOnlyMemory<byte> Secondary { get; }
 
     /// <summary>Returns the key of a compute pipeline.</summary>
@@ -74,7 +74,7 @@ public sealed class GpuPassPipelineKey : IEquatable<GpuPassPipelineKey> {
     }
     /// <summary>Returns the key of a graphics pipeline.</summary>
     /// <param name="vertex">The vertex stage's bytecode for the device's backend; not empty.</param>
-    /// <param name="fragment">The fragment stage's bytecode for the device's backend; not empty.</param>
+    /// <param name="fragment">The fragment stage's bytecode for the device's backend. Empty for a depth-only pass.</param>
     /// <param name="renderPass">The render pass the pipeline draws in, which the entry creates beside it; when the
     /// pipeline's layout lets its shaders write (<see cref="GpuPipelineLayoutDescription.ShaderWrites"/>) the entry's pass
     /// allows shader writes (<see cref="GpuRenderPassDescription.ShaderWrites"/>) whatever this one says.</param>
@@ -82,7 +82,7 @@ public sealed class GpuPassPipelineKey : IEquatable<GpuPassPipelineKey> {
     /// <returns>The key.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="renderPass"/> or <paramref name="description"/> is
     /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="vertex"/> or <paramref name="fragment"/> is empty.</exception>
+    /// <exception cref="ArgumentException"><paramref name="vertex"/> is empty, or a pass with color attachments has no fragment stage.</exception>
     public static GpuPassPipelineKey OfGraphics(ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment, GpuRenderPassDescription renderPass, GpuGraphicsPipelineDescription description) {
         ArgumentNullException.ThrowIfNull(argument: renderPass);
         ArgumentNullException.ThrowIfNull(argument: description);
@@ -91,11 +91,9 @@ public sealed class GpuPassPipelineKey : IEquatable<GpuPassPipelineKey> {
             name: description.Name,
             paramName: nameof(vertex)
         );
-        RequireBytecode(
-            bytecode: fragment,
-            name: description.Name,
-            paramName: nameof(fragment)
-        );
+        if ((renderPass.Colors.Count != 0) || (renderPass.Depth is null)) {
+            RequireBytecode(bytecode: fragment, name: description.Name, paramName: nameof(fragment));
+        }
 
         var state = new ArrayBufferWriter<byte>();
 

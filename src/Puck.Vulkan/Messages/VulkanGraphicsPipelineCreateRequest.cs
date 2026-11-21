@@ -10,7 +10,7 @@ namespace Puck.Vulkan.Messages;
 /// <param name="Device">The command table of the logical device.</param>
 /// <param name="RenderPassHandle">The native <c>VkRenderPass</c> handle the pipeline is used with.</param>
 /// <param name="VertexShaderModuleHandle">The native <c>VkShaderModule</c> handle of the vertex shader.</param>
-/// <param name="FragmentShaderModuleHandle">The native <c>VkShaderModule</c> handle of the fragment shader.</param>
+/// <param name="FragmentShaderModuleHandle">The native <c>VkShaderModule</c> handle of the fragment shader, or zero for depth-only drawing.</param>
 /// <param name="PipelineLayoutHandle">The native <c>VkPipelineLayout</c> the pipeline is created with, which the caller
 /// created from the pipeline's groups and owns.</param>
 /// <param name="Topology">The primitive topology, as a <c>VkPrimitiveTopology</c> value.</param>

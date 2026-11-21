@@ -173,10 +173,14 @@
 #define SDF_OCCLUSION_SIGHT_STEP          3u
 #define SDF_RECEIVER_STEP                 4u
 #define SDF_RECEIVER_REDUCE_STEP          5u
+#define SDF_SHADOW_OPTICAL_CLEAR_STEP     6u
+#define SDF_SHADOW_OPTICAL_TILE_EDGE      16u
+#define SDF_SHADOW_OPTICAL_TEXEL_WORDS    3u
 #define SDF_RECEIVER_SHIFT                4u
 #define SDF_RECEIVER_ROW                  14u
 #define SDF_SIGHT_ROW                     15u
-#define SDF_SIGHT_COUNT_BASE              5u
+#define SDF_SHADOW_CULLED_ENTRY_PHASE     5u
+#define SDF_SIGHT_COUNT_BASE              7u
 #define SDF_MESH_MARK_BASE                64u
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).

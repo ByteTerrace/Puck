@@ -53,12 +53,6 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
         );
 
         VulkanArgument.RequireHandle(
-            handle: request.FragmentShaderModuleHandle,
-            handleDescription: "fragment shader-module",
-            paramName: nameof(request)
-        );
-
-        VulkanArgument.RequireHandle(
             handle: request.PipelineLayoutHandle,
             handleDescription: "pipeline-layout",
             paramName: nameof(request)
@@ -180,7 +174,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                 PViewportState = ((nint)(&viewportState)),
                 RenderPass = request.RenderPassHandle,
                 SType = StructureTypeGraphicsPipelineCreateInfo,
-                StageCount = 2,
+                StageCount = (request.FragmentShaderModuleHandle == 0 ? 1u : 2u),
                 Subpass = 0,
             };
 

@@ -12,8 +12,9 @@ namespace Puck.World;
 /// <remarks>Host presentation state only. The host supplies the authenticated text ingress; this watch never mutates a world.
 /// A poll asks <see cref="CompileInputs.Current"/> for each input, which stats it (existence, length and last write) and
 /// re-reads only an input whose stamp moved or was too recent to vouch for its last answer
-/// (<see cref="CompileInputs.RacyStampWindow"/>), so the polling thread's cost over an unchanged tree is one stat per
-/// input and no content read.</remarks>
+/// (<see cref="CompileInputs.RacyStampWindow"/>), so a poll's cost over an unchanged tree is one stat per input and no
+/// content read. The stats run on a pool thread (<see cref="DependencyWatch{TKey, TStamp}"/>), so the host pump that
+/// calls <see cref="Poll"/> only adopts their answers.</remarks>
 public sealed class WorldSourceWatch {
     private readonly Func<string> m_sourcePath;
     private readonly string m_catalogFingerprint;
@@ -24,6 +25,8 @@ public sealed class WorldSourceWatch {
     private string? m_source;
     private string? m_path;
     private bool m_pending;
+    private long m_stampReads;
+    private long m_contentReads;
 
     /// <summary>Creates a watch over the source a function names.</summary>
     /// <param name="sourcePath">Returns the path of the source the running world was loaded from.</param>
@@ -43,10 +46,10 @@ public sealed class WorldSourceWatch {
     public int ReloadCount { get; private set; }
     /// <summary>Gets the number of input stamps (existence, length, last write) polls have read during this watch's
     /// lifetime: one per watched input per poll.</summary>
-    public long StampReads { get; private set; }
+    public long StampReads => Interlocked.Read(location: ref m_stampReads);
     /// <summary>Gets the number of file contents hashed and directories listed during this watch's lifetime, which a
     /// poll does only for an input whose stamp moved or is too recent to trust.</summary>
-    public long ContentReads { get; private set; }
+    public long ContentReads => Interlocked.Read(location: ref m_contentReads);
     /// <summary>Gets the most recent reload refusal, or null after a successful reload.</summary>
     public string? LastError { get; private set; }
     /// <summary>Gets or sets the host's inspector and toast report fan-out.</summary>
@@ -64,7 +67,7 @@ public sealed class WorldSourceWatch {
         try { return input.ReadCurrent(); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { return null; }
     }
     private CompileInput? Read(CompileInput input) {
-        StampReads++;
+        _ = Interlocked.Increment(location: ref m_stampReads);
         WorldBootWork.Count(WorldBootWork.WatchStampReads);
         try {
             var fact = CompileInputs.Current(query: input, read: out var read);
@@ -77,7 +80,7 @@ public sealed class WorldSourceWatch {
         }
     }
     private void CountContentRead() {
-        ContentReads++;
+        _ = Interlocked.Increment(location: ref m_contentReads);
         WorldBootWork.Count(WorldBootWork.WatchContentReads);
     }
     private void Refresh(CompileInputLog reads) {
@@ -187,6 +190,8 @@ public sealed class WorldSourceWatch {
         ReloadCount++;
         reload();
     }
+    /// <summary>Blocks until the stamp read a poll started finishes, so the next <see cref="Poll"/> adopts it.</summary>
+    public void WaitForRead() => m_watch.WaitForRead();
     /// <summary>Releases the pending request after its ordinary command and server verdict have settled.</summary>
     /// <param name="result">The settled command result.</param>
     public void Complete(CommandResult result) {

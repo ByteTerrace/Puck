@@ -114,6 +114,12 @@ if [ '__MCP_ENABLED__' = 1 ]; then
     chgrp 1655 /etc/puck/tls.json
     chmod 640 /etc/puck/tls.json
     install -d -m 700 -o 1655 -g 1655 /var/lib/puck-tls
+    # The keeper holds the TLS state (certificate, key, ACME account) in the owner's private store, so a fresh worker
+    # restores it instead of issuing again (build/Keep-WorldTls.py). It runs as Caddy's user, which /etc/puck excludes.
+    install -d -m 750 -o 0 -g 1655 /etc/puck-tls
+    printf '%s' '__TLS_KEEPER__' | base64 -d >/etc/puck-tls/keeper.py
+    chgrp 1655 /etc/puck-tls/keeper.py
+    chmod 640 /etc/puck-tls/keeper.py
 fi
 cat >/etc/puck/firewall.sh <<'FIREWALL'
 #!/bin/bash
@@ -148,11 +154,34 @@ UNIT
 systemctl daemon-reload
 systemctl enable --now puck-world.service
 if [ '__MCP_ENABLED__' = 1 ]; then
+    # Caddy starts only once the keeper reports ready: the stored or local certificate is fresh, or this worker holds
+    # the store's issuance lease. Its start may wait on another worker's issuance, so nothing here blocks on it.
+    cat >/etc/systemd/system/puck-tls-keeper.service <<'KEEPERUNIT'
+[Unit]
+Description=Puck TLS state keeper
+Wants=network-online.target
+After=network-online.target
+[Service]
+Type=notify
+User=1655
+Group=1655
+ExecStart=/usr/bin/python3 /etc/puck-tls/keeper.py
+Restart=always
+RestartSec=10
+TimeoutStartSec=infinity
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/puck-tls
+[Install]
+WantedBy=multi-user.target
+KEEPERUNIT
     cat >/etc/systemd/system/puck-tls.service <<'TLSUNIT'
 [Unit]
 Description=Puck automatic HTTPS
-Requires=docker.service
-After=docker.service network-online.target puck-world.service
+Requires=docker.service puck-tls-keeper.service
+After=docker.service network-online.target puck-world.service puck-tls-keeper.service
 [Service]
 Restart=on-failure
 RestartSec=5
@@ -164,16 +193,21 @@ ExecStop=/usr/bin/docker stop --time 20 puck-tls
 WantedBy=multi-user.target
 TLSUNIT
     systemctl daemon-reload
-    systemctl enable puck-tls.service
-    systemctl restart puck-tls.service
+    systemctl enable puck-tls-keeper.service puck-tls.service
+    systemctl restart --no-block puck-tls-keeper.service puck-tls.service
 else
-    systemctl disable --now puck-tls.service 2>/dev/null || true
+    systemctl disable --now puck-tls.service puck-tls-keeper.service 2>/dev/null || true
 fi
+# Wait only for what a candidate reaches before its release commits: private health (the pinned rows activated and
+# checkpointed) and, with MCP, the TLS front. Public /healthz answers 503 until the coordinator commits and opens
+# admission, which happens only after this script succeeds, so waiting on it here would deadlock the bootstrap.
 # The silo activates its rows one after another, so the deadline grows with the row count (rendered by the deploy).
 ready_deadline=$(( $(date +%s) + __READY_SECONDS__ ))
+private_state='private health has not answered'
+mcp_state='not reached: private health is not ready'
 while [ "$(date +%s)" -lt "$ready_deadline" ]; do
-    if curl --fail --silent --max-time 30 http://127.0.0.1:__HEALTH_PORT__/private-healthz; then
-        if [ '__MCP_ENABLED__' = 1 ] && ! curl --fail --silent --max-time 10 --connect-to '__MCP_HOST__:443:127.0.0.1:8443' 'https://__MCP_HOST__/.well-known/oauth-protected-resource/mcp' >/dev/null; then
+    if private_state="$(curl --fail-with-body --silent --show-error --max-time 30 http://127.0.0.1:__HEALTH_PORT__/private-healthz 2>&1)"; then
+        if [ '__MCP_ENABLED__' = 1 ] && ! mcp_state="$(curl --fail --silent --show-error --max-time 10 --connect-to '__MCP_HOST__:443:127.0.0.1:8443' 'https://__MCP_HOST__/.well-known/oauth-protected-resource/mcp' 2>&1 >/dev/null)"; then
             sleep 2
             continue
         fi
@@ -184,5 +218,20 @@ while [ "$(date +%s)" -lt "$ready_deadline" ]; do
     fi
     sleep 2
 done
-journalctl -u puck-world.service --no-pager -n 50
+# Only the tail of the extension's output survives in Azure's error, so the silo's own lines (the health listener logs
+# no access lines) and the TLS front's errors go to stdout, and the verdict of each wait goes last, to stderr.
+journalctl -u puck-world.service --no-pager -o cat -n 40 || true
+if [ '__MCP_ENABLED__' = 1 ]; then
+    { journalctl -u puck-tls.service --no-pager -o cat -n 400 | grep -e error -e fail | tail -n 6; } || true
+fi
+{
+    printf 'World worker readiness timed out after __READY_SECONDS__ s.\n'
+    printf 'private health (what this wait needs): %s\n' "$private_state"
+    if [ '__MCP_ENABLED__' = 1 ]; then
+        printf 'MCP TLS front (what this wait needs): %s\n' "$mcp_state"
+        printf 'TLS state keeper (starts the front): %s\n' "$(journalctl -u puck-tls-keeper.service --no-pager -o cat -n 1 2>&1)"
+    fi
+    printf 'public health (opens only after the release commits): %s\n' "$(curl --silent --show-error --max-time 10 --write-out ' (HTTP %{http_code})' http://127.0.0.1:__HEALTH_PORT__/healthz 2>&1)"
+    printf 'container: %s\n' "$(docker inspect -f '{{.State.Status}} restarts={{.RestartCount}} exit={{.State.ExitCode}}' puck-world 2>&1)"
+} >&2
 exit 1

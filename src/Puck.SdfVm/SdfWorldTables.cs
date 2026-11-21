@@ -185,8 +185,9 @@ public sealed partial class SdfWorldTables : IDisposable {
     /// <param name="shadowRaster">The device's shadow cascade pipeline, built on <paramref name="device"/> with the mesh
     /// pass's layout and the depth-only render pass a view's cascades draw in. The caller keeps ownership and disposes it
     /// after the tables.</param>
+    /// <param name="shadowEntryRaster">The depth pipeline for casters whose back faces can be culled.</param>
     /// <param name="shadowExitRaster">The device's shadow cascade exit-layer pipeline
-    /// (<see cref="SdfMeshRasterPass.ShadowExitDescription"/>), built on <paramref name="device"/> with the shadow
+    /// (<see cref="SdfMeshRasterPass.ShadowExitKey"/>), built on <paramref name="device"/> with the shadow
     /// pipeline's layout and render pass. The caller keeps ownership and disposes it after the tables.</param>
     /// <param name="glassRaster">The device's glass raster pipeline, built on <paramref name="device"/> with the mesh
     /// pass's layout and render pass, which a view's glass pass draws the glass draws with. The caller keeps ownership
@@ -201,11 +202,12 @@ public sealed partial class SdfWorldTables : IDisposable {
     /// <exception cref="InvalidOperationException">The device's descriptor heap cannot admit the tables' pools
     /// (<see cref="CheckAdmission"/>, checked before anything is allocated).</exception>
     /// <param name="shadowGlassRaster">The cascade glass extinction pipeline.</param>
-    public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline shadowRaster, GpuPassPipeline shadowExitRaster, GpuPassPipeline shadowGlassRaster, GpuPassPipeline glassRaster, GpuPassPipeline occlusion, SdfWorldTablesOptions options)
+    public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline shadowRaster, GpuPassPipeline shadowEntryRaster, GpuPassPipeline shadowExitRaster, GpuPassPipeline shadowGlassRaster, GpuPassPipeline glassRaster, GpuPassPipeline occlusion, SdfWorldTablesOptions options)
         : this(device: device, options: options, passes: new SdfWorldPassPipelines(
             RegionCopy: regionCopy,
             MeshRaster: BuiltSlot(name: nameof(meshRaster), pipeline: meshRaster, graphics: true),
             ShadowRaster: BuiltSlot(name: nameof(shadowRaster), pipeline: shadowRaster, graphics: true),
+            ShadowEntryRaster: BuiltSlot(name: nameof(shadowEntryRaster), pipeline: shadowEntryRaster, graphics: true),
             ShadowExitRaster: BuiltSlot(name: nameof(shadowExitRaster), pipeline: shadowExitRaster, graphics: true),
             ShadowGlassRaster: BuiltSlot(name: nameof(shadowGlassRaster), pipeline: shadowGlassRaster, graphics: true),
             GlassRaster: BuiltSlot(name: nameof(glassRaster), pipeline: glassRaster, graphics: true),
@@ -276,6 +278,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_pipelines = pipelines;
         m_meshRaster = passes.MeshRaster;
         m_shadowRaster = passes.ShadowRaster;
+        m_shadowEntryRaster = passes.ShadowEntryRaster;
         m_shadowExitRaster = passes.ShadowExitRaster;
         m_shadowGlassRaster = passes.ShadowGlassRaster;
         m_glassRaster = passes.GlassRaster;

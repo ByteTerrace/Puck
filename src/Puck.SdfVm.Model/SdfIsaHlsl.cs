@@ -435,9 +435,13 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_OCCLUSION_SIGHT_STEP", value: SdfKernelInterfaces.MeshOcclusionSightStep);
         declarations.Count(name: "SDF_RECEIVER_STEP", value: SdfKernelInterfaces.MeshReceiverStep);
         declarations.Count(name: "SDF_RECEIVER_REDUCE_STEP", value: SdfKernelInterfaces.MeshReceiverReduceStep);
+        declarations.Count(name: "SDF_SHADOW_OPTICAL_CLEAR_STEP", value: SdfKernelInterfaces.MeshShadowOpticalClearStep);
+        declarations.Count(name: "SDF_SHADOW_OPTICAL_TILE_EDGE", value: SdfWorldPackage.ShadowOpticalTileEdge);
+        declarations.Count(name: "SDF_SHADOW_OPTICAL_TEXEL_WORDS", value: SdfWorldPackage.ShadowOpticalTexelWords);
         declarations.Count(name: "SDF_RECEIVER_SHIFT", value: SdfKernelInterfaces.MeshReceiverShift);
         declarations.Count(name: "SDF_RECEIVER_ROW", value: SdfKernelInterfaces.MeshReceiverRow);
         declarations.Count(name: "SDF_SIGHT_ROW", value: SdfKernelInterfaces.MeshSightRow);
+        declarations.Count(name: "SDF_SHADOW_CULLED_ENTRY_PHASE", value: SdfKernelInterfaces.MeshShadowCulledEntryPhase);
         declarations.Count(name: "SDF_SIGHT_COUNT_BASE", value: SdfKernelInterfaces.MeshSightCountBase);
         declarations.Count(name: "SDF_MESH_MARK_BASE", value: SdfKernelInterfaces.MeshMarkBase);
         declarations.Section(title: "The irradiance volume's probe record and read (SdfMeshIrradianceProbe).");
