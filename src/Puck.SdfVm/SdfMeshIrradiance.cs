@@ -428,7 +428,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // and the slot words composed for those.
     private readonly List<(int Level, (int X, int Y, int Z) Cell)> m_landed = [];
     private readonly List<(int Level, (int X, int Y, int Z) Cell)> m_restoreCells = [];
-    private uint[] m_restoreWords = [];
     private uint[] m_volume = [];
     private readonly List<int> m_changedSlots = [];
     private readonly Stopwatch m_clock = new();
@@ -605,7 +604,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private Task? m_refill;
 
     private readonly List<(int Level, (int X, int Y, int Z) Cell)> m_refillCells = [];
-    private uint[] m_refillWords = [];
     private CameraSample?[] m_cameraSamples = [];
 
     private int m_nextCameraSample;
@@ -2037,20 +2035,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
 
             var cells = m_refillCells.Count;
-
-            if (m_refillWords.Length < (cells * SdfMeshIrradianceProbe.ProbeWords)) {
-                m_refillWords = new uint[(cells * SdfMeshIrradianceProbe.ProbeWords)];
-            }
-
-            var composed = 0;
-
-            for (var index = 0; (index < cells); index++) {
-                var entry = m_refillCells[index];
-
-                if (Compose(cell: entry.Cell, level: entry.Level, words: m_refillWords.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (composed * SdfMeshIrradianceProbe.ProbeWords)))) {
-                    m_refillCells[composed++] = entry;
-                }
-            }
+            // Rented for this round alone: a window that jumps far composes every slot, and the words are written before
+            // the round ends, so none of a volume's size stays held between refills.
+            using var lease = RentedArrays.Rent<uint>(array: out var words, minimumLength: (cells * SdfMeshIrradianceProbe.ProbeWords));
+            var composed = ComposeCells(cells: m_refillCells, words: words);
 
             lock (m_gate) {
                 if (version != m_windowVersion) { continue; }
@@ -2059,7 +2047,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     var (level, cell) = m_refillCells[index];
 
                     if (Holds(cell: cell, level: level)) { continue; }
-                    m_refillWords.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (index * SdfMeshIrradianceProbe.ProbeWords))
+                    words.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (index * SdfMeshIrradianceProbe.ProbeWords))
                         .CopyTo(destination: SlotWords(cell: cell, level: level));
                     m_levels[level].Unwritten--;
                 }
@@ -2070,6 +2058,21 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 return;
             }
         }
+    }
+    // Composes each listed cell's slot words from the cache, outside the gate, into consecutive rows of the words, and
+    // keeps the cells that composed at the front of the list in the same order: the count of them. A refill and a landed
+    // batch's store both write those rows under the gate once a window has not moved meanwhile.
+    private int ComposeCells(List<(int Level, (int X, int Y, int Z) Cell)> cells, uint[] words) {
+        var composed = 0;
+
+        for (var index = 0; (index < cells.Count); index++) {
+            var entry = cells[index];
+
+            if (Compose(cell: entry.Cell, level: entry.Level, words: words.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (composed * SdfMeshIrradianceProbe.ProbeWords)))) {
+                cells[composed++] = entry;
+            }
+        }
+        return composed;
     }
     // The slot a level's cell takes in the volume: its level's first slot plus its slot in the level's window.
     private int VolumeSlot(int level, (int X, int Y, int Z) cell) =>
@@ -2614,20 +2617,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
 
             var cells = m_restoreCells.Count;
-
-            if (m_restoreWords.Length < (cells * SdfMeshIrradianceProbe.ProbeWords)) {
-                m_restoreWords = new uint[(cells * SdfMeshIrradianceProbe.ProbeWords)];
-            }
-
-            var composed = 0;
-
-            for (var index = 0; (index < cells); index++) {
-                var entry = m_restoreCells[index];
-
-                if (Compose(cell: entry.Cell, level: entry.Level, words: m_restoreWords.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (composed * SdfMeshIrradianceProbe.ProbeWords)))) {
-                    m_restoreCells[composed++] = entry;
-                }
-            }
+            // Rented for this round alone, as the refill's words are.
+            using var lease = RentedArrays.Rent<uint>(array: out var words, minimumLength: (cells * SdfMeshIrradianceProbe.ProbeWords));
+            var composed = ComposeCells(cells: m_restoreCells, words: words);
 
             lock (m_gate) {
                 if (version != m_windowVersion) { continue; }
@@ -2636,7 +2628,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     var (level, cell) = m_restoreCells[index];
 
                     if (!Holds(cell: cell, level: level)) { m_levels[level].Unwritten--; }
-                    m_restoreWords.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (index * SdfMeshIrradianceProbe.ProbeWords)).CopyTo(destination: SlotWords(cell: cell, level: level, gpuWritten: (GpuTrace is not null)));
+                    words.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (index * SdfMeshIrradianceProbe.ProbeWords)).CopyTo(destination: SlotWords(cell: cell, level: level, gpuWritten: (GpuTrace is not null)));
                 }
                 m_landed.Clear();
 

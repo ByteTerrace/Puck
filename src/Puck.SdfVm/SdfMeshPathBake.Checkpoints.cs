@@ -52,11 +52,13 @@ public sealed partial class SdfMeshPathBake {
     internal sealed record SampleKeys(SdfMeshStore Store, UInt128 Sampling, UInt128 Geometry, int PoseFirst, int PoseRowCount);
 
     /// <summary>Everything a group's checkpoints are kept and found under, taken from one program: the bake identity whose
-    /// stage keys name its contour and simplified meshes, the program the keys hash (<c>GroupInput</c> reads its packed
-    /// field), the geometry key those meshes are kept under and the keys its sample sets are kept under. Immutable and
-    /// replaced whole (<c>KeyCheckpoints</c>), so a worker reading a group's keys off the gate reads one consistent set,
-    /// never a program from one and a geometry key from another.</summary>
-    internal sealed record CheckpointKeys(SdfMeshBakeIdentity Identity, SdfProgram Program, SdfMeshGeometry Geometry, SampleKeys Samples);
+    /// stage keys name its contour and simplified meshes, the count of the field the keys hash (<c>m_field</c>;
+    /// <c>GroupInput</c> reads the program's packed field), the geometry key those meshes are kept under and the keys its
+    /// sample sets are kept under. Immutable and replaced whole (<c>KeyCheckpoints</c>), so a worker reading a group's keys
+    /// off the gate reads one consistent set, never a field from one and a geometry key from another. It names the field by
+    /// its count rather than holding the program, since every group of a bake holds a set and a program's tables run to
+    /// tens of megabytes.</summary>
+    internal sealed record CheckpointKeys(SdfMeshBakeIdentity Identity, long Field, SdfMeshGeometry Geometry, SampleKeys Samples);
 
     // Under the gate: keys a group's checkpoints under the bake's identity and the program it meshes, kept in a store. Begin
     // keys a group as it begins; a group a new program keeps mid-bake (Place) is keyed again under that program, so its
@@ -66,8 +68,8 @@ public sealed partial class SdfMeshPathBake {
 
         group.Checkpoints = new CheckpointKeys(
             Geometry: CheckpointInput(group, program),
+            Field: m_field,
             Identity: Identity,
-            Program: program,
             Samples: new SampleKeys(Store: store, Sampling: Identity.Sampling, Geometry: SampleFieldInput(group, program).Hash, PoseFirst: group.PoseFirst, PoseRowCount: group.PoseRows.Length)
         );
     }
@@ -95,10 +97,10 @@ public sealed partial class SdfMeshPathBake {
     private SampleKeys? SampleKeysOf(Group group) => CurrentCheckpoints(group)?.Samples;
 
     // A group's checkpoint keys while they key what the bake now meshes: taken under the bake's current code and identity,
-    // from the program it meshes; null otherwise, and for a group that keeps none. Read once by each caller, off the gate
+    // from the field it meshes; null otherwise, and for a group that keeps none. Read once by each caller, off the gate
     // or under it: the keys are one immutable set (CheckpointKeys).
     private CheckpointKeys? CurrentCheckpoints(Group group) =>
-        ((group.Checkpoints is { } keys) && CodeCurrent(keys.Identity) && ReferenceEquals(keys.Program, m_program) ? keys : null);
+        ((group.Checkpoints is { } keys) && CodeCurrent(keys.Identity) && (keys.Field == Volatile.Read(location: ref m_field)) ? keys : null);
 
     private bool StageCodeCurrent(Group group) => (group.Checkpoints is not { } keys) || CodeCurrent(keys.Identity);
 

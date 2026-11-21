@@ -358,18 +358,21 @@ holds the driver's commit for its views of device memory and the collector's
 and allocator's committed reserve, which occupy no host memory and grow with
 the device's resources. The part beyond what the host pool holds (its
 owners' charges and its device blocks, whose write-combined views are resident
-private pages) reduces the space that can be promised. Read
-`private-beyond-held` as a deduction from the machine's budget and
-`play-beyond-held` as play's part of it, the deduction from the bar, and use
-the disjoint physical rows to attribute actual storage. Storage that gives way
-(workspace, elastic and cached storage, a reservation past its floor) counts
-play's part of the bytes beyond the owners against the bar. Fixed allocations, region
-floors, the forced job and an owner's progress floor
-(`MemoryAccount.Owner.TryReserveProgress`, a mesh bake's readback) fit the bar
-on what the owners hold and are promised alone, since the bytes beyond them
-are a reading no admission can shrink: a World that stands over its bar for
-storage no owner names keeps its tables, and its work still settles, one job
-at a time, while every byte an owner names stays under the bar. A refusal reports its
+private pages) reduces the machine's room. Read `private-beyond-held` as a
+deduction from the machine's budget and `play-beyond-held` as play's part of
+it, and use the disjoint physical rows to attribute actual storage. The bar's
+room is never narrowed by the bytes beyond the owners: play's owners fit the
+bar less the headroom on what they hold and have promised, and fixed
+allocations, region floors, the forced job and an owner's progress floor
+(`MemoryAccount.Owner.TryReserveProgress`, a mesh bake's readback) may spend
+the headroom. No admission can shrink the bytes beyond the owners, so a limit
+taken from the bar less those bytes refused the owners exactly while unclaimed
+memory grew, and a refused mesh store read baked again, which made more
+unclaimed memory. Play's part of those bytes past the bar with what play holds marks
+pressure instead, and the caches give back what they keep
+(`MemoryAccount.TrimCaches`); the bytes themselves are driven down where they
+are made, each tenant [the heap walk](../reference/cli.md#puck-host-heapthe-large-object-heap-of-another-process)
+names. A refusal reports its
 owner in `host.memory`; a mesh entry refused during decode stays in the store,
 and the bake defers what the account refuses rather than failing it.
 
@@ -511,8 +514,8 @@ what the envelope still holds.
 that device, and work a player never does draws on the machine's measured
 headroom, as an engine cooks offline on a workstation and a player never pays
 the cook. Each host owner is created with one `MemoryAllowance`. Play storage
-fits the bar on what play holds and has promised with the private bytes beyond
-every owner, and fits the machine's room; authoring storage fits the machine's
+fits the bar on what play holds and has promised, and fits the machine's room,
+which counts the private bytes beyond every owner; authoring storage fits the machine's
 room alone (the free memory or commit room `HostMemory.AdmissibleBytes`
 reads, with what the pool held at that reading, under three quarters of
 installed memory), counting play and authoring together. The account's room
@@ -539,7 +542,7 @@ held, promised and room.
 | The composed-document store | Play | Released after boot where nothing reads it | 6 |
 | Speculative work: bakes, loads and decodes for a predicted demand | As the work it speculates | A share of the workspace class, cancelled when the demand leaves or pressure asks | 3, 10 |
 | Rented arrays the shared pool keeps | Play | `RentedArrays` limits shared buckets by payload size. All element types share one retention limit for larger reference-free arrays. The cache admits each returned array against host room and releases its charge on reuse or trim. | 2, 11 |
-| Native allocator slack | Beyond the owners | Collected when an arrival settles and on pressure (`IAllocatorStatistics`); named | 2 |
+| Native allocator slack | Beyond the owners | Named; collected only by `host.memory collect` (`IAllocatorStatistics.Collect`), and [decision 6](#decision-6-what-a-landed-mesh-keeps-on-the-cpu) collects it when an arrival settles | 2 |
 | The managed heap's other tenants | Beyond the owners | Named by a heap walk; each one past a stated size becomes an owner with a capacity. No hard limit on the heap: it would turn pressure into an exception where everything else turns it into a coarser picture | 2, then per tenant |
 | Runtime code and loader heaps | Beyond the owners | Named; not controllable at run time | 2 |
 | Driver memory and swapchain images | Beyond the owners | Named, as the API's usage less the ledger | 1 |
@@ -551,15 +554,16 @@ crowds play out of its budget, and on a busy machine the bake is what waits.
 
 The private bytes beyond the owners have no owner to say whose they are. In a
 process that has never run authoring work, which every player's process is,
-all of them count against play. Once authoring has run, play's part is held at
-the last reading taken before it (`play-beyond-held`), and the rest counts
-against the machine alone: the garbage and slack a bake leaves outlive it (the
-collector keeps its committed heap, the allocator its slack), and charging them
-to play starves a developer's play during and after a bake, below what a
-player's process would show. The guarantee
-stops there: in a developer's process that has baked, play's own growth in
-unnamed bytes is held by the machine's limit, not the bar, so the bar's verdict
-on a device comes from a prewarmed boot, where nothing bakes.
+all of them are play's, and past the bar with what play holds they mark
+pressure. Once authoring has run, play's part is held at the last reading
+taken before it (`play-beyond-held`), and the rest counts against the machine
+alone: the garbage and slack a bake leaves outlive it (the collector keeps its
+committed heap, the allocator its slack), and charging them to play would
+trim a developer's play during and after a bake, below what a player's
+process would show. The guarantee stops there: the bar bounds what the owners
+hold, and the process meets it only while the unnamed bytes are driven down,
+so the bar's verdict on a device comes from a prewarmed boot, where nothing
+bakes, read on its resident private bytes and its physical rows.
 
 ## The decisions
 

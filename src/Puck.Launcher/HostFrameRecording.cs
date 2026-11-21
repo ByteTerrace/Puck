@@ -115,28 +115,36 @@ public readonly record struct HostFrameDistribution(double Mean, double P50, dou
 }
 /// <summary>
 /// A bounded recording of every host iteration over a run: a second sink for the samples <see cref="HostFrameTimeline"/>
-/// takes for its ring, kept past the ring's <see cref="HostFrameTimeline.Capacity"/>. Iteration storage is allocated
-/// up front. World details are appended for the recorded iterations. An iteration past capacity is counted in <see cref="Dropped"/>,
-/// never stored and never hidden.
+/// takes for its ring, kept past the ring's <see cref="HostFrameTimeline.Capacity"/>. Iteration storage doubles as
+/// iterations arrive, from <see cref="InitialStorage"/> up to the capacity, so a recording holds what its run recorded
+/// rather than the most it could have: a capacity is an upper bound sized for any frame rate, many times what a run
+/// usually records. World details are appended for the recorded iterations. An iteration past capacity is counted in
+/// <see cref="Dropped"/>, never stored and never hidden.
 /// </summary>
 /// <remarks>The timeline writes on the host pump; a reader on that thread sees every completed iteration.</remarks>
 public sealed class HostFrameRecording {
     /// <summary>The most iterations one recording holds.</summary>
     public const int MaxCapacity = (1 << 20);
 
-    private readonly HostFrameSample[] m_samples;
+    /// <summary>The iterations a recording's storage holds before it first grows.</summary>
+    public const int InitialStorage = 4096;
+
+    private HostFrameSample[] m_samples;
     private readonly List<HostWorldWork> m_worlds = [];
     private long m_origin;
 
     /// <summary>Creates a recording.</summary>
-    /// <param name="capacity">The iterations to hold, at most <see cref="MaxCapacity"/>.</param>
+    /// <param name="capacity">The most iterations to hold, at most <see cref="MaxCapacity"/>.</param>
     public HostFrameRecording(int capacity) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: capacity, other: 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: capacity, other: MaxCapacity);
 
-        m_samples = new HostFrameSample[capacity];
+        Capacity = capacity;
+        m_samples = new HostFrameSample[Math.Min(val1: capacity, val2: InitialStorage)];
     }
 
+    /// <summary>Gets the most iterations the recording holds.</summary>
+    public int Capacity { get; }
     /// <summary>Gets the iterations held.</summary>
     public int Count { get; private set; }
     /// <summary>Gets the iterations that closed after the recording was full.</summary>
@@ -157,11 +165,12 @@ public sealed class HostFrameRecording {
         if (Count == 0) {
             m_origin = start;
         }
-        if (Count == m_samples.Length) {
+        if (Count == Capacity) {
             Dropped++;
 
             return;
         }
+        if (Count == m_samples.Length) { Array.Resize(array: ref m_samples, newSize: (int)Math.Min(val1: Capacity, val2: (2L * m_samples.Length))); }
 
         sample.Start = (start - m_origin);
         sample.Flags = (Flags?.Invoke() ?? 0);

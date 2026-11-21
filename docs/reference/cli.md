@@ -1250,7 +1250,7 @@ Exit codes: 0 done, 2 refused (invalid thresholds or an interval or window below
 
 ## `puck host heap`—the large object heap of another process
 
-`puck host heap --pid <pid> [--min-mib <n>]` names the large object heap's
+`puck host heap --pid <pid> [--min-mib <n>] [--depth <n>]` names the large object heap's
 tenants of another .NET process from the runtime's own heap dump, the technique
 `dotnet-gcdump` uses. The CLI opens an EventPipe session on the target's
 diagnostics port with the runtime provider's heap-collect and heap-dump
@@ -1260,8 +1260,10 @@ CLI reads. The target pays the collection's pause and nothing else, so no World
 carries the trace-parsing package. The report starts with the large objects'
 totals (objects of at least 85,000 bytes), then one `tenant` line per type and
 first holder, largest first, for every tenant of at least `--min-mib` MiB
-(default 4); the holder is the type of the first referrer found, or the kind of
-root that keeps it. Reading the stream takes seconds on a heap of a few
+(default 4), with its bytes and its largest object's; the holder is the type of
+the first referrer found, or the kind of root that keeps it. `--depth` (default
+1) names that referrer's own first referrers too, as a chain `A <- B <- C`, so
+an array a list or a record holds is traced to the type that keeps it. Reading the stream takes seconds on a heap of a few
 gigabytes, and the pause shows as one long frame in the target's `host.frames`,
 so the verb never runs during a frame-time reading. A World's process id comes
 from `puck_world_start`.

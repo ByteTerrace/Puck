@@ -30,10 +30,13 @@ public static class ManagedHeapWalk {
     /// process) to this user.</param>
     /// <param name="minimumBytes">The smallest object whose tenant is named; smaller large objects count only in the
     /// totals.</param>
+    /// <param name="depth">How many first referrers to name above each tenant's objects, at least one: the holder, the
+    /// holder's holder, and so on.</param>
     /// <returns>The walk.</returns>
     /// <exception cref="InvalidOperationException">The runtime wrote no heap dump.</exception>
     /// <exception cref="ServerNotAvailableException">The process exposes no diagnostics port.</exception>
-    public static HeapWalk Run(int processId, long minimumBytes) {
+    public static HeapWalk Run(int processId, long minimumBytes, int depth = 1) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(value: depth, other: 1);
         var keywords = (long)(ClrTraceEventParser.Keywords.GC | ClrTraceEventParser.Keywords.GCHeapCollect | ClrTraceEventParser.Keywords.GCHeapDump | ClrTraceEventParser.Keywords.GCHeapAndTypeNames | ClrTraceEventParser.Keywords.Type);
         var client = new DiagnosticsClient(processId: processId);
         using var session = client.StartEventPipeSession(providers: [new EventPipeProvider(eventLevel: EventLevel.Verbose, keywords: keywords, name: RuntimeProvider)], requestRundown: false, circularBufferMB: 1024);
@@ -96,23 +99,48 @@ public static class ManagedHeapWalk {
             if (((long)node.Size) >= minimumBytes) { large[node.Address] = ((types.TryGetValue(key: node.Type, value: out var name) ? name : "?"), node.Size); }
         }
 
-        var holders = new Dictionary<ulong, string>();
+        // Each named object's chain of first referrers, one level per pass over the edges: the object holding it, the
+        // object holding that, and so on to the depth asked, ending early at a root or an object nothing refers to.
+        var chains = large.Keys.ToDictionary(keySelector: static address => address, elementSelector: static _ => new List<string>());
+        var reached = large.Keys.ToDictionary(keySelector: static address => address, elementSelector: static address => address);
 
-        if (large.Count != 0) {
+        for (var level = 0; ((level < depth) && (reached.Count != 0)); level++) {
+            var wanted = new Dictionary<ulong, List<ulong>>();
+
+            foreach (var (named, address) in reached) {
+                if (!wanted.TryGetValue(key: address, value: out var list)) { wanted[address] = list = []; }
+                list.Add(item: named);
+            }
+
+            var referrers = new Dictionary<ulong, (ulong Address, string Type)>();
+
             foreach (var node in nodes) {
                 for (var edge = node.FirstEdge; (edge < Math.Min(val1: (node.FirstEdge + node.Edges), val2: edges.Count)); edge++) {
                     var target = edges[edge];
 
-                    if (large.ContainsKey(key: target) && !holders.ContainsKey(key: target)) {
-                        holders[target] = (types.TryGetValue(key: node.Type, value: out var name) ? name : "?");
+                    if (wanted.ContainsKey(key: target) && !referrers.ContainsKey(key: target)) {
+                        referrers[target] = (node.Address, (types.TryGetValue(key: node.Type, value: out var name) ? name : "?"));
                     }
                 }
             }
+
+            var next = new Dictionary<ulong, ulong>();
+
+            foreach (var (address, named) in wanted) {
+                var found = referrers.TryGetValue(key: address, value: out var referrer);
+                var text = (found ? referrer.Type : (roots.TryGetValue(key: address, value: out var root) ? root : "unreached"));
+
+                foreach (var key in named) {
+                    chains[key].Add(item: text);
+                    if (found) { next[key] = referrer.Address; }
+                }
+            }
+            reached = next;
         }
 
         var tenants = large
-            .GroupBy(keySelector: entry => (entry.Value.Type, Holder: (holders.TryGetValue(key: entry.Key, value: out var holder) ? holder : (roots.TryGetValue(key: entry.Key, value: out var root) ? root : "unreached"))))
-            .Select(selector: static group => new HeapTenant(Bytes: group.Sum(selector: static entry => ((long)entry.Value.Size)), Holder: group.Key.Holder, Objects: group.Count(), Type: group.Key.Type))
+            .GroupBy(keySelector: entry => (entry.Value.Type, Holder: string.Join(separator: " <- ", values: chains[entry.Key])))
+            .Select(selector: static group => new HeapTenant(Bytes: group.Sum(selector: static entry => ((long)entry.Value.Size)), Holder: group.Key.Holder, Objects: group.Count(), Type: group.Key.Type) { Largest = group.Max(selector: static entry => ((long)entry.Value.Size)) })
             .OrderByDescending(keySelector: static tenant => tenant.Bytes)
             .ThenBy(keySelector: static tenant => tenant.Type, comparer: StringComparer.Ordinal)
             .ThenBy(keySelector: static tenant => tenant.Holder, comparer: StringComparer.Ordinal)
@@ -134,4 +162,7 @@ public sealed record HeapWalk(long Objects, long Bytes, int Nodes, int Collectio
 /// or <c>unreached</c>.</param>
 /// <param name="Objects">The objects.</param>
 /// <param name="Bytes">Their bytes.</param>
-public sealed record HeapTenant(string Type, string Holder, int Objects, long Bytes);
+public sealed record HeapTenant(string Type, string Holder, int Objects, long Bytes) {
+    /// <summary>Gets the largest object's bytes.</summary>
+    public long Largest { get; init; }
+}

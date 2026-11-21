@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Puck.Abstractions.Memory;
+
 namespace Puck.SdfVm;
 
 /// <summary>
@@ -29,34 +31,40 @@ internal static class SdfMeshTraceJudge {
     /// <param name="finer">A mesh of the same geometry at a finer tier, in the same frame.</param>
     /// <returns>Whether the floor is admitted; <see langword="false"/> also for a pair past <see cref="MostWitnesses"/>.</returns>
     public static bool Admits(SdfMesh floor, SdfMesh finer) {
-        var (floorPositions, floorIndices) = Joined(mesh: floor);
-        var (finerPositions, finerIndices) = Joined(mesh: finer);
+        using var floorJoined = new Joined(mesh: floor);
+        using var finerJoined = new Joined(mesh: finer);
+        var floorMesh = (floorJoined.Positions, floorJoined.Indices);
+        var finerMesh = (finerJoined.Positions, finerJoined.Indices);
 
-        if ((floorIndices.Length == 0) != (finerIndices.Length == 0)) { return false; }
-        if (floorIndices.Length == 0) { return true; }
-        if ((Witnesses(indices: floorIndices, positions: floorPositions) + Witnesses(indices: finerIndices, positions: finerPositions)) > MostWitnesses) { return false; }
+        if ((floorMesh.Indices.Length == 0) != (finerMesh.Indices.Length == 0)) { return false; }
+        if (floorMesh.Indices.Length == 0) { return true; }
+        if ((Witnesses(indices: floorMesh.Indices.Span, positions: floorMesh.Positions.Span) + Witnesses(indices: finerMesh.Indices.Span, positions: finerMesh.Positions.Span)) > MostWitnesses) { return false; }
 
-        return Within(from: (floorPositions, floorIndices), to: (finerPositions, finerIndices)) && Within(from: (finerPositions, finerIndices), to: (floorPositions, floorIndices));
+        return Within(from: floorMesh, to: finerMesh) && Within(from: finerMesh, to: floorMesh);
     }
     // Whether every witness of one mesh lies within the tolerance of a triangle of another.
-    private static bool Within((Vector3[] Positions, uint[] Indices) from, (Vector3[] Positions, uint[] Indices) to) {
-        var grid = new SdfMeshTriangleGrid(cellSize: Tolerance, indices: to.Indices, positions: to.Positions);
+    private static bool Within((ReadOnlyMemory<Vector3> Positions, ReadOnlyMemory<uint> Indices) from, (ReadOnlyMemory<Vector3> Positions, ReadOnlyMemory<uint> Indices) to) {
+        var toPositions = to.Positions.Span;
+        var toIndices = to.Indices.Span;
+        var fromPositions = from.Positions.Span;
+        var fromIndices = from.Indices.Span;
+        var grid = new SdfMeshTriangleGrid(cellSize: Tolerance, indices: toIndices, positions: toPositions);
 
-        for (var triangle = 0; (triangle < (from.Indices.Length / 3)); triangle++) {
-            var (a, b, c) = SdfMeshTriangle.Corners(indices: from.Indices, positions: from.Positions, triangle: triangle);
+        for (var triangle = 0; (triangle < (fromIndices.Length / 3)); triangle++) {
+            var (a, b, c) = SdfMeshTriangle.Corners(indices: fromIndices, positions: fromPositions, triangle: triangle);
             var steps = StepsOf(a: a, b: b, c: c);
 
             // A triangle no wider than the tolerance is witnessed by its centroid, which every point of it lies within
             // the tolerance of; a wider one by a grid of the tolerance over it, corners included.
             if (steps == 0) {
-                if (grid.Nearest(indices: to.Indices, point: ((a + b + c) / 3f), positions: to.Positions, reach: Tolerance) >= Tolerance) { return false; }
+                if (grid.Nearest(indices: toIndices, point: ((a + b + c) / 3f), positions: toPositions, reach: Tolerance) >= Tolerance) { return false; }
                 continue;
             }
             for (var i = 0; (i <= steps); i++) {
                 for (var j = 0; (j <= (steps - i)); j++) {
                     var witness = ((a + ((b - a) * (i / (float)steps))) + ((c - a) * (j / (float)steps)));
 
-                    if (grid.Nearest(indices: to.Indices, point: witness, positions: to.Positions, reach: Tolerance) >= Tolerance) { return false; }
+                    if (grid.Nearest(indices: toIndices, point: witness, positions: toPositions, reach: Tolerance) >= Tolerance) { return false; }
                 }
             }
         }
@@ -81,29 +89,51 @@ internal static class SdfMeshTraceJudge {
         }
         return total;
     }
-    // A mesh's pieces as one triangle list: a published chunked mesh keeps no joined indices.
-    private static (Vector3[] Positions, uint[] Indices) Joined(SdfMesh mesh) {
-        if (mesh.PieceCount == 1) { return (mesh.Positions.ToArray(), mesh.Indices.ToArray()); }
+    // A mesh's pieces as one triangle list: a published chunked mesh keeps no joined indices. A one-piece mesh is read
+    // where it lies; a chunked one is joined into rented arrays the check returns when it ends, since a pair of tiers
+    // runs to tens of megabytes and a bake checks one pair per admitted floor.
+    private readonly struct Joined : IDisposable {
+        private readonly Vector3[]? m_positions;
+        private readonly uint[]? m_indices;
 
-        var vertices = 0;
-        var corners = 0;
+        public ReadOnlyMemory<Vector3> Positions { get; }
+        public ReadOnlyMemory<uint> Indices { get; }
 
-        for (var piece = 0; (piece < mesh.PieceCount); piece++) {
-            vertices += mesh.Piece(index: piece).Positions.Length;
-            corners += mesh.Piece(index: piece).Indices.Length;
+        public Joined(SdfMesh mesh) {
+            if (mesh.PieceCount == 1) {
+                Positions = mesh.Positions;
+                Indices = mesh.Indices;
+                return;
+            }
+
+            var vertices = 0;
+            var corners = 0;
+
+            for (var piece = 0; (piece < mesh.PieceCount); piece++) {
+                vertices += mesh.Piece(index: piece).Positions.Length;
+                corners += mesh.Piece(index: piece).Indices.Length;
+            }
+
+            m_positions = RentedArrays.Rent<Vector3>(minimumLength: vertices);
+            m_indices = RentedArrays.Rent<uint>(minimumLength: corners);
+
+            var vertexAt = 0;
+            var cornerAt = 0;
+
+            for (var piece = 0; (piece < mesh.PieceCount); piece++) {
+                var part = mesh.Piece(index: piece);
+
+                part.Positions.Span.CopyTo(destination: m_positions.AsSpan(start: vertexAt));
+                foreach (var index in part.Indices.Span) { m_indices[cornerAt++] = (index + (uint)vertexAt); }
+                vertexAt += part.Positions.Length;
+            }
+            Positions = m_positions.AsMemory(start: 0, length: vertices);
+            Indices = m_indices.AsMemory(start: 0, length: corners);
         }
 
-        var positions = new Vector3[vertices];
-        var indices = new uint[corners];
-        var vertexAt = 0;
-        var cornerAt = 0;
-
-        for (var piece = 0; (piece < mesh.PieceCount); piece++) {
-            var part = mesh.Piece(index: piece);
-
-            part.Positions.Span.CopyTo(destination: positions.AsSpan(start: vertexAt));
-            foreach (var index in part.Indices.Span) { indices[cornerAt++] = (index + (uint)vertexAt); }
-            vertexAt += part.Positions.Length;
+        public void Dispose() {
+            if (m_positions is not null) { RentedArrays.Return(array: m_positions); }
+            if (m_indices is not null) { RentedArrays.Return(array: m_indices); }
         }
-        return (positions, indices);
-    }}
+    }
+}

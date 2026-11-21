@@ -94,7 +94,8 @@ public sealed record MemoryAdmissionReading(PhysicalMemory Pool, long? Limit, lo
     /// <summary>Gets the sampled private bytes beyond what the host pool holds (its owners and its device blocks), which
     /// reduce the machine's room; zero without a host bar and outside host memory.</summary>
     public long PrivateBeyondHeld { get; init; }
-    /// <summary>Gets play's part of <see cref="PrivateBeyondHeld"/>, which reduces the play bar's room: the whole until
+    /// <summary>Gets play's part of <see cref="PrivateBeyondHeld"/>, which marks pressure when it stands past the play bar
+    /// with what play holds, and never narrows the bar's room: the whole until
     /// authoring work first holds or promises anything in the process (always, in a player's build), and from then on
     /// no more than the reading last taken before it.</summary>
     public long PlayBeyondHeld { get; init; }
