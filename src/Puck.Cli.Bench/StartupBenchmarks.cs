@@ -90,6 +90,7 @@ public static class StartupBenchmarks {
                     ExitAfterSeconds = 0,
                     Shape = (headless ? WorldShape.Headless : WorldShape.Windowed),
                     StateDirectory = $"{directory}/state",
+                    Timing = true,
                     World = worlds[index],
                 };
                 var input = "world.status\n" + (bake

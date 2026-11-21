@@ -30,4 +30,27 @@ public sealed class WorldReadinessLawTests {
         Assert.True(condition: readiness.Ready);
         Assert.True(condition: File.Exists(path: mark));
     }
+
+    // The launch records the profile it expects of a World, and the World's own report of baking meshes makes its store cold,
+    // so the peak the bake reaches is learned under the cold profile whatever the launch predicted.
+    [Fact]
+    public void AWorldThatReportsBakingMarksItsProfileCold() {
+        using var checkout = new TemporaryDirectory();
+
+        GitScratchCheckout.Initialize(repository: checkout.RootPath);
+        using var process = Process.GetCurrentProcess();
+        var root = Path.Combine(path1: checkout.RootPath, path2: ".claude/leases");
+        var running = new Dictionary<int, long> { [process.Id] = process.StartTime.ToUniversalTime().Ticks };
+        var warm = new HostStartProfile(Kind: HostStartKind.WindowedWorld, Device: "vulkan");
+        var readiness = WorldReadiness.For(process: process, opensDevice: true, checkout: checkout.RootPath, profile: warm);
+
+        Assert.Equal(expected: warm, actual: StartProfiles.Among(root: root, running: running)[(process.Id, running[process.Id])]);
+
+        // A boot that loads every mesh it needs bakes none.
+        readiness.Observe(line: "[sdf.mesh-bake] start residency=a groups=4 baking=0 loading=4 shared=0", stdout: false);
+        Assert.Equal(expected: warm, actual: StartProfiles.Among(root: root, running: running)[(process.Id, running[process.Id])]);
+
+        readiness.Observe(line: "[sdf.mesh-bake] start residency=a groups=4 baking=3 loading=1 shared=0", stdout: false);
+        Assert.Equal(expected: warm.Cold, actual: StartProfiles.Among(root: root, running: running)[(process.Id, running[process.Id])]);
+    }
 }
