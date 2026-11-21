@@ -90,7 +90,8 @@ The fourth is built. A host runs each segment in parts that end where a seat's
 image changes and where the machine completes a frame (`MachineSegment.Run`),
 stages each completed frame in a short queue stamped with the host clock
 position it completed at, and a display takes the frame due at the position it
-presents (`IMachineVideoOutput.FrameDue`). The authority builds a pad's image
+presents, kept in sequence while it is within half a frame of the machine
+(`IMachineVideoOutput.FrameDue`). The authority builds a pad's image
 over the tick from the timed events its input owner admitted
 (`WorldEngagement.FoldTick`, [sub-tick time](input-channels.md#sub-tick-time-and-clocks)),
 which are already taped and checkpointed, so replay reproduces it.

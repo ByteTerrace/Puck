@@ -90,7 +90,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "machine.state",
-            description: $"Reports named machine execution: {MachineStateForms.Spelling}. Includes generation, running state, hardware status, completed segments, backlog, completed native frames, the frames put in the video output and the frames a display took (shownFrames beside nativeFrames tells a screen that shows every native frame from one that shows every other), backpressure waits, the worker's busy milliseconds on this host (busyMs over the wall time between two reads is the share of real time the machine needs), and fault. Author declarations through world.row.set machines <json>.",
+            description: $"Reports named machine execution: {MachineStateForms.Spelling}. Includes generation, running state, hardware status, completed segments, backlog, completed native frames, the frames put in the video output and the frames a display took (shownFrames beside nativeFrames tells a screen that shows every native frame from one that shows every other), the controller changes it took inside segments (timedInputs), backpressure waits, the worker's busy milliseconds on this host (busyMs over the wall time between two reads is the share of real time the machine needs), and fault. Author declarations through world.row.set machines <json>.",
             forms: MachineStateForms,
             handler: (context, args) => {
                 if (args.Count > 1) {
@@ -156,6 +156,9 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
                     ).Field(
                         key: "busyMs",
                         value: ((long)(pace?.StepBusyTime.TotalMilliseconds ?? 0.0))
+                    ).Field(
+                        key: "timedInputs",
+                        value: (pace?.TimedInputChanges ?? 0L)
                     )
                         .Field(
                         key: "fault",

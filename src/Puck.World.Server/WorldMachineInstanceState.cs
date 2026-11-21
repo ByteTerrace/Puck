@@ -26,4 +26,6 @@ public readonly record struct WorldMachineInstanceState(string Name, ulong Gener
 /// loaded; zero for a synchronous machine.</param>
 /// <param name="StepBusyTime">The host time the worker spent running segments since the content was loaded; zero for a
 /// synchronous machine.</param>
-public readonly record struct WorldMachinePace(long NativeFrames, long StagedFrames, long ShownFrames, long BackpressureEvents, TimeSpan StepBusyTime);
+/// <param name="TimedInputChanges">The controller changes the machine took inside its segments, each at the offset it
+/// was captured at rather than at a segment's start; zero for a synchronous machine.</param>
+public readonly record struct WorldMachinePace(long NativeFrames, long StagedFrames, long ShownFrames, long BackpressureEvents, TimeSpan StepBusyTime, long TimedInputChanges = 0L);

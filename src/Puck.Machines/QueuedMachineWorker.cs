@@ -20,7 +20,7 @@ namespace Puck.Machines;
 /// has capacity. A full window blocks the producer until one exact segment completes rather than dropping or coalescing
 /// authoritative history. A consumer copies a complete frame under the frame lock, the newest
 /// (<see cref="WriteFrame(Span{byte})"/>) or the one due at the position its display presents
-/// (<see cref="WriteFrame(Span{byte}, ulong)"/>); the worker holds that lock only to publish a frame it has finished
+/// (<see cref="WriteFrame(Span{byte}, ulong, long)"/>); the worker holds that lock only to publish a frame it has finished
 /// writing. Which frame a consumer takes, and whether any does, never reaches the machine. The save-flush debounce keys
 /// on native-frame transitions, so the interval means native ~59.73 Hz frames regardless of submission cadence.
 /// </para>
@@ -75,6 +75,8 @@ public sealed class QueuedMachineWorker : IDisposable {
     private long m_frameVersion;
     private long m_shownFrame;
     private long m_shownFrames;
+    // Half the attached core's native frame period, in engine ticks: how far a display is kept in sequence.
+    private ulong m_frameSlackTicks = (FixedTickConversion.TicksPerSecond / 120UL);
     // The host clock position the last accepted segment ended at, in engine ticks. Producer thread only.
     private ulong m_clock;
     // Reference execution: whole segments, the image held at a segment's end held from its start.
@@ -516,19 +518,53 @@ public sealed class QueuedMachineWorker : IDisposable {
         }
     }
     // The frame due at a clock position: the newest stamped at or before it, or the oldest held when every one is
-    // later. Call under m_frameLock; the queue always holds a frame.
-    private FrameSlot FrameDueLocked(ulong dueTicks) {
-        var slot = m_frames[m_frameHead];
+    // later. A display that names the frame it shows is kept in sequence instead: it gets the next frame while that one
+    // is due within half a frame period either way (m_frameSlackTicks), early when nothing newer is due and late when
+    // the frame after it has only just come due, so a display at the machine's rate never repeats one frame and skips
+    // the next where its clock and the machine's beat. Call under m_frameLock; the queue always holds a frame.
+    private FrameSlot FrameDueLocked(ulong dueTicks, long held) {
+        var due = m_frames[m_frameHead];
+        FrameSlot? next = null;
+        FrameSlot? second = null;
+        FrameSlot? shown = null;
 
-        for (var age = 0; (age < m_frameCount); ++age) {
-            slot = m_frames[(((m_frameHead - age) + m_frames.Length) % m_frames.Length)];
+        for (var age = (m_frameCount - 1); (age >= 0); --age) {
+            var slot = m_frames[(((m_frameHead - age) + m_frames.Length) % m_frames.Length)];
 
-            if (slot.Stamp <= dueTicks) {
-                break;
+            if (
+                (age == (m_frameCount - 1)) ||
+                (slot.Stamp <= dueTicks)
+            ) {
+                due = slot;
+            }
+            if (slot.Sequence == held) {
+                shown = slot;
+            } else if (slot.Sequence == (held + 1L)) {
+                next = slot;
+            } else if (slot.Sequence == (held + 2L)) {
+                second = slot;
             }
         }
 
-        return slot;
+        if (
+            (held <= 0L) ||
+            (next is null)
+        ) {
+            return due;
+        }
+        if (due.Sequence <= held) {
+            // Nothing newer is due: the next frame early when it is nearly due, otherwise the one shown again.
+            return (((next.Stamp - dueTicks) <= m_frameSlackTicks)
+                ? next
+                : (shown ?? due)
+            );
+        }
+
+        // The next frame is due. Skip it only when the one after it has been due a while.
+        return (((second is null) || (second.Sequence > due.Sequence) || ((dueTicks - second.Stamp) < m_frameSlackTicks))
+            ? next
+            : due
+        );
     }
     // Repack the framebuffer's 0x00RRGGBB pixels as opaque R,G,B,A bytes into the reused staging array and compute the
     // average color (the emitted light). One integer Vector128 shuffle+widen pass serves both hosts, bit-exact against the
@@ -1062,6 +1098,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             core.ConfigureAudio(sampleRate: m_audioSampleRate);
             ResetAudioRing();
             FrameRateHz = NativeFrameRate(core: core);
+            m_frameSlackTicks = (FixedTickConversion.TicksPerSecond / (2UL * FrameRateHz));
             RestageMachineFrame(core: core);
             StartWorker(core: core);
         }
@@ -1332,13 +1369,19 @@ public sealed class QueuedMachineWorker : IDisposable {
     public QueuedMachineSubmission StepSegment(ulong deltaTicks, in MachinePads input, bool drain, ref ulong generation, WaitDeadline deadline, MachineSeatChange[]? changes = null, ulong? endTicks = null) =>
         EnqueueStep(changes: changes, deltaTicks: deltaTicks, endTicks: endTicks, input: in input, forceStage: drain, generation: ref generation, deadline: deadline);
     /// <summary>Returns the sequence number of the frame due at a host clock position, without writing it: the newest
-    /// complete frame stamped at or before <paramref name="dueTicks"/>, or the oldest queued when every one is later.</summary>
+    /// complete frame stamped at or before <paramref name="dueTicks"/>, or the oldest queued when every one is later.
+    /// A display that names the frame it shows now is kept in sequence
+    /// (<see cref="IMachineVideoOutput.FrameDue"/>).</summary>
     /// <param name="dueTicks">The host clock position a display presents, in engine ticks on the clock the segments
     /// were stamped with.</param>
+    /// <param name="held">The sequence number of the frame the display shows now, or zero for none.</param>
     /// <returns>The due frame's sequence number; positive.</returns>
-    public long FrameDue(ulong dueTicks) {
+    public long FrameDue(ulong dueTicks, long held = 0L) {
         lock (m_frameLock) {
-            return FrameDueLocked(dueTicks: dueTicks).Sequence;
+            return FrameDueLocked(
+                dueTicks: dueTicks,
+                held: held
+            ).Sequence;
         }
     }
     /// <summary>Writes the newest complete frame into an uploaded source's region: its one plane of tightly packed RGBA8
@@ -1359,9 +1402,10 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// <param name="region">The region; at least <see cref="ImageSourceUploadLayout.ByteCount"/> bytes of the RGBA8
     /// layout of <see cref="Width"/> by <see cref="Height"/>.</param>
     /// <param name="dueTicks">The host clock position a display presents, in engine ticks.</param>
+    /// <param name="held">The sequence number of the frame the display shows now, or zero for none.</param>
     /// <returns>The written frame's sequence number; positive.</returns>
     /// <exception cref="ArgumentException"><paramref name="region"/> is shorter than the layout.</exception>
-    public long WriteFrame(Span<byte> region, ulong dueTicks) {
+    public long WriteFrame(Span<byte> region, ulong dueTicks, long held = 0L) {
         var plane = ImageSourceUploadLayout.PlaneOf(
             header: in m_header,
             plane: 0,
@@ -1369,7 +1413,10 @@ public sealed class QueuedMachineWorker : IDisposable {
         );
 
         lock (m_frameLock) {
-            var slot = FrameDueLocked(dueTicks: dueTicks);
+            var slot = FrameDueLocked(
+                dueTicks: dueTicks,
+                held: held
+            );
 
             slot.Pixels.CopyTo(destination: plane);
 

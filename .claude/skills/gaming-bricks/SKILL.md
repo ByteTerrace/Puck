@@ -184,7 +184,9 @@ screen shows both (the worker queues every native frame and the screen takes the
 due when it presents), and a press reaches the machine at the offset inside the tick it
 was captured at. `machine.state` reports each machine's `nativeFrames`, `stagedFrames`
 and `shownFrames` (shown beside native is about one to one on a display at or above the
-machine's rate), `backpressure` and worker `busyMs` (host time, never state):
+machine's rate, for a screen large enough that the screens' rate lever asks for it every
+frame), `timedInputs` (controller changes taken inside segments), `backpressure` and
+worker `busyMs` (host time, never state):
 `busyMs` over the wall time between two reads is the share of real time it needs. It is
 a timing reading, so it is taken only on a quiet machine; `nativeFrames` per segment
 is a count any machine can read. Hash/probe reads drain workers; checkpoints preserve their rational cycle phase,

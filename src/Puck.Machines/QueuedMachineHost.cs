@@ -21,6 +21,7 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     private MachinePads m_inputs = MachinePads.Neutral;
     private string? m_savePath;
     private ulong? m_segmentClock;
+    private long m_timedInputChanges;
 
     /// <summary>Initializes a queued screen-machine host.</summary>
     /// <param name="width">The native framebuffer width.</param>
@@ -94,6 +95,8 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     public long ShownFrames => m_worker.ShownFrames;
     /// <inheritdoc/>
     public uint FrameRateHz => m_worker.FrameRateHz;
+    /// <inheritdoc/>
+    public long TimedInputChanges => m_timedInputChanges;
     /// <inheritdoc/>
     public TimeSpan StepBusyTime => m_worker.StepBusyTime;
     /// <inheritdoc/>
@@ -303,6 +306,7 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
                 m_inputs[change.Seat] = change.Pad;
             }
 
+            m_timedInputChanges += m_changes.Count;
             m_changes.Clear();
             m_segmentClock = null;
         }
@@ -325,14 +329,18 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     public long WriteFrame(Span<byte> region) =>
         m_worker.WriteFrame(region: region);
     /// <inheritdoc/>
-    public long WriteFrame(Span<byte> region, ulong dueTicks) =>
+    public long WriteFrame(Span<byte> region, ulong dueTicks, long held = 0L) =>
         m_worker.WriteFrame(
             dueTicks: dueTicks,
+            held: held,
             region: region
         );
     /// <inheritdoc/>
-    public long FrameDue(ulong dueTicks) =>
-        m_worker.FrameDue(dueTicks: dueTicks);
+    public long FrameDue(ulong dueTicks, long held = 0L) =>
+        m_worker.FrameDue(
+            dueTicks: dueTicks,
+            held: held
+        );
 
     // Withdraws the changes a seat scheduled inside the next segment.
     private void WithdrawChanges(int seat) =>

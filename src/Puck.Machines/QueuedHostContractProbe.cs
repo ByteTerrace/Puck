@@ -1071,10 +1071,57 @@ public static class QueuedHostContractProbe {
             }
         }
 
-        return (first.CaptureCheckpoint().AsSpan().SequenceEqual(other: second.CaptureCheckpoint())
-            ? QueuedHostProbeResult.Pass(detail: $"{SegmentPartsSteps} segments run in parts and whole left byte-identical checkpoints; the parts staged {staged} frames for {native} native frames (the whole segments {wholeStaged}); two hosts given the same controller changes inside each segment agreed")
-            : QueuedHostProbeResult.Fail(detail: "two hosts given the same controller changes inside each segment diverged")
-        );
+        if (!first.CaptureCheckpoint().AsSpan().SequenceEqual(other: second.CaptureCheckpoint())) {
+            return QueuedHostProbeResult.Fail(detail: "two hosts given the same controller changes inside each segment diverged");
+        }
+
+        // A display at twice the segment rate, 60 Hz here, reading each segment's frames at the two positions it
+        // presents inside it: it must take the machine's frames in order, one per presented frame, and skip one only
+        // where the machine's rate is above its own.
+        using var displayed = withContent();
+
+        var (region, _) = FrameRegion(host: displayed);
+        var displayedNative = displayed.Worker.NativeFrameIndex;
+        var held = displayed.WriteFrame(region: region);
+        var taken = 0L;
+        var skipped = 0L;
+
+        for (var step = 0; (step < SegmentPartsSteps); step++) {
+            _ = displayed.Submit(deltaTicks: budget);
+            // A memory read joins the queue behind the segment, so its frames are queued before the display reads.
+            _ = displayed.PeekByte(address: 0);
+
+            for (var present = 0UL; (present < 2UL); present++) {
+                var frame = displayed.WriteFrame(
+                    dueTicks: ((((ulong)step) * budget) + (((1UL + (2UL * present)) * budget) / 4UL)),
+                    held: held,
+                    region: region
+                );
+
+                if (frame < held) {
+                    return QueuedHostProbeResult.Fail(detail: $"a display holding frame {held} was handed the older frame {frame}");
+                }
+                if (frame > held) {
+                    taken++;
+                    skipped += ((frame - held) - 1L);
+                }
+
+                held = frame;
+            }
+        }
+
+        displayedNative = (displayed.Worker.NativeFrameIndex - displayedNative);
+
+        // The display runs at 60 Hz exactly and no machine runs more than a quarter of a percent above it, so it may
+        // skip one frame over this span and, with the last frames not yet due, end at most a few behind.
+        if (
+            (skipped > 1L) ||
+            (taken < (displayedNative - 4L))
+        ) {
+            return QueuedHostProbeResult.Fail(detail: $"a 60 Hz display took {taken} of {displayedNative} native frames and skipped {skipped}: it shows every frame the machine completes");
+        }
+
+        return QueuedHostProbeResult.Pass(detail: $"{SegmentPartsSteps} segments run in parts and whole left byte-identical checkpoints; the parts staged {staged} frames for {native} native frames (the whole segments {wholeStaged}); two hosts given the same controller changes inside each segment agreed; a 60 Hz display took {taken} of {displayedNative} native frames, skipping {skipped}");
     }
     /// <summary>Verifies the debug memory window (<see cref="IMachineMemoryPeek"/>) is marshaled through the worker
     /// rather than racing the running core: the marshaled poke path is deterministic (the serial reference — two

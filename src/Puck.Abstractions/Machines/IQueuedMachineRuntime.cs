@@ -55,6 +55,9 @@ public interface IQueuedMachineRuntime {
     TimeSpan StepBusyTime { get; }
     /// <summary>Gets a worker fault description, or <see langword="null"/> while the queue is healthy.</summary>
     string? QueueFault { get; }
+    /// <summary>Gets how many controller changes accepted segments carried inside them, each at its own offset rather
+    /// than at the segment's start, since the runtime was created. Host diagnostics, never machine state.</summary>
+    long TimedInputChanges => 0L;
 
     /// <summary>Accepts one exact tick/input segment for ordered execution, waiting for finite queue capacity when
     /// necessary. A non-rejected result guarantees that the segment will execute exactly once unless a later worker

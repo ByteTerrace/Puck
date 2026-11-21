@@ -204,10 +204,19 @@ part that completes a frame stages it, stamped with the host clock position the
 part ended at: the clock is whatever the host states for the segment
 (`IQueuedMachineRuntime.SetSegmentClock`), or the machine's own running sum of
 accepted ticks. A display asks for the frame due at the position it presents
-(`IMachineVideoOutput.FrameDue`, `WriteFrame(region, dueTicks)`): the newest
+(`IMachineVideoOutput.FrameDue` and `WriteFrame` with `dueTicks`): the newest
 frame stamped at or before it. A 60 Hz machine in a 30 Hz world therefore shows
 both frames of each segment, one display frame apart, and a display faster or
 slower than the machine repeats or skips frames as any display must.
+
+A display that names the frame it holds is kept in sequence: it gets the next
+frame while that one is due within half a frame period either way. Without
+that, a display whose rate is close to the machine's (60 Hz against 59.73)
+would repeat one frame and skip the next for many frames in a row each time the
+two clocks beat, because the frame boundary and the display's sampling instant
+then sit within each other's jitter. In sequence, it repeats one frame each
+time it has run a whole frame ahead and skips none. A display that has fallen
+more than that behind gets the newest frame due.
 
 In a World, `WorldMachineHost` stamps every machine's segments with one clock,
 the sum of the steps it advanced, and answers `PresentedTicks`: a position that
@@ -222,7 +231,12 @@ step's end, so every presented frame shows the completed tick.
 `machine.state` counts it: `stagedFrames` rises once per native frame the
 machine completes, and `shownFrames` once each time a display takes a frame
 other than the one before it. `shownFrames` beside `nativeFrames` is about one
-to one on a display at or above the machine's rate.
+to one on a display at or above the machine's rate, when the screen is large
+enough on the display that the screens' rate lever asks for it every frame.
+`timedInputs` counts the controller changes the machine took inside its
+segments. The `queued-host-segment-parts` stage drives the same path with no
+display: a reader at 60 Hz positions takes every native frame of 96 segments
+once.
 
 While a runahead lookahead supplies the picture, the worker stages it once per
 segment, since the lookahead advances once per segment.
@@ -299,8 +313,8 @@ The worker applies these policies:
 - The lifecycle charges the host time from `TakeWork` returning a step to its
   `CompleteStep` to `StepBusyTime` (on `IQueuedMachineRuntime`); a lent core's
   step is charged to the link thread's lifecycle instead. `machine.state`
-  echoes it as `busyMs`, beside `nativeFrames`, `stagedFrames`, `shownFrames`
-  and `backpressure`: `busyMs`
+  echoes it as `busyMs`, beside `nativeFrames`, `stagedFrames`, `shownFrames`,
+  `timedInputs` and `backpressure`: `busyMs`
   over the wall time between two reads is the share of real time the machine
   needs to keep pace. It is host diagnostics, never machine state.
 - A consumer copies a frame under the frame lock, which the worker holds only

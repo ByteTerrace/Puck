@@ -10,8 +10,9 @@ namespace Puck.Hosting;
 /// converts it through the conversion that format names, once however many screens show it. An output that completes
 /// frames on its own clock (<see cref="IMachineVideoOutput.FrameRateHz"/> above zero) is shown at that rate: the source
 /// declares the rate, is due on exactly the presented frames whose clock position brings a frame the region does not
-/// hold (<see cref="HasNewImage"/>), and writes that frame, so a 60 Hz machine in a 30 Hz world shows every frame and
-/// an unchanged frame is never written or converted again. Any other output is due once per completed tick and writes
+/// hold (<see cref="HasNewImage"/>), and writes that frame, naming the one it holds so the output keeps it in sequence,
+/// so a 60 Hz machine in a 30 Hz world shows every frame once on a 60 Hz display and an unchanged frame is never
+/// written or converted again. Any other output is due once per completed tick and writes
 /// its latest frame. The source is deterministic, and it states the image it last wrote
 /// (<see cref="IImageSourceReference"/>): the CPU reference of that conversion over the bytes it wrote, with the
 /// descriptor and stamp of that write, which the exact verdict holds a capture of the converted image to. Its
@@ -104,7 +105,10 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
                 objA: output,
                 objB: m_writtenOutput
             ) ||
-            (output.FrameDue(dueTicks: Due) != m_writtenFrame)
+            (output.FrameDue(
+                dueTicks: Due,
+                held: m_writtenFrame
+            ) != m_writtenFrame)
         )
         : null
     );
@@ -215,6 +219,7 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
         }
         var frame = output.WriteFrame(
             dueTicks: Due,
+            held: (ReferenceEquals(objA: output, objB: m_writtenOutput) ? m_writtenFrame : 0L),
             region: m_region
         );
 

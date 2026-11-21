@@ -57,7 +57,8 @@ public sealed partial class WorldMachineHost {
             StagedFrames: (progress?.StagedFrames ?? 0L),
             ShownFrames: (progress?.ShownFrames ?? 0L),
             BackpressureEvents: (queued?.BackpressureEvents ?? 0L),
-            StepBusyTime: (queued?.StepBusyTime ?? TimeSpan.Zero)
+            StepBusyTime: (queued?.StepBusyTime ?? TimeSpan.Zero),
+            TimedInputChanges: (queued?.TimedInputChanges ?? 0L)
         );
     }
 
