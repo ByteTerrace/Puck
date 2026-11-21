@@ -68,6 +68,32 @@ public sealed class ReloadDeltaLawTests {
         Assert.Equal(target.ToJsonString(), merged!.ToJsonString());
     }
 
+    // A journal replay of a value edit reads the edited row alone: every other row stays the document's instance, and the
+    // patched document writes the same bytes as the revision the patch was cut to.
+    [Fact]
+    public void AReplayedValuePatchReadsOnlyTheRowItChanged() {
+        static WorldStateRow Row(int index, string value) => new(
+            Name: CellName.Parse(candidate: $"ink{index}"),
+            Kind: CellKind.Text,
+            Capacity: 4,
+            Cells: [new StateCell(Key: CellName.Parse(candidate: "recorded"), Value: CellValue.Text(value: value))]
+        );
+        var rows = Enumerable.Range(start: 0, count: 40).Select(selector: index => Row(index: index, value: "#000000")).ToArray();
+        var previous = Fixtures.BuildDocument().WithWorldState(rows: rows);
+        var next = previous.WithWorldState(rows: [.. rows.Select(selector: (row, index) => (index == 7) ? Row(index: 7, value: "#112233") : row)]);
+        var delta = WorldReloadDelta.Between(previous, next);
+        var work = new WorldBootWork();
+
+        using (WorldBootWork.Attribute(work: work)) {
+            Assert.True(WorldReloadDelta.TryApplyPatch(previous, delta.Patch, next.DocumentDirectory, out var patched, out var reason), reason);
+            Assert.Equal(1L, work.Read(WorldBootWork.PatchRowsRead));
+            Assert.Equal(WorldDefinitionSerialization.Serialize(next), WorldDefinitionSerialization.Serialize(patched!));
+            for (var index = 0; (index < rows.Length); index++) {
+                Assert.Equal(expected: (index != 7), actual: ReferenceEquals(previous.StateRaw!.World![index], patched!.StateRaw!.World![index]));
+            }
+        }
+    }
+
     [Theory]
     [InlineData("base", WorldReloadDelta.StaleBaseCode)]
     [InlineData("target", WorldReloadDelta.TargetMismatchCode)]

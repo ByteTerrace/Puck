@@ -238,6 +238,68 @@ public sealed class WorldDefinitionMembers {
             ? WorldDocumentWalker.Share(basis: basis, basisTree: basisTree, patch: patch, value: value, valueTree: valueTree)
             : value);
 
+    /// <summary>Applies an overlay patch of root members to a definition: each member the patch names merged from its
+    /// delta, every other member <paramref name="previous"/>'s own instance.</summary>
+    /// <remarks>A member's delta is applied row by row where its shape allows (<see cref="WorldDocumentWalker"/>'s keyed
+    /// replay): every keyed row the delta leaves alone stays <paramref name="previous"/>'s instance, and only the rows it
+    /// names are written, merged and read again, so the work follows the edit rather than the document. Any other delta
+    /// merges its member whole and shares unchanged rows through <see cref="Replace"/>. Rows read again are resolved
+    /// against the patched document. <see cref="WorldBootWork.PatchRowsRead"/> counts the rows read.</remarks>
+    /// <param name="previous">The definition the patch applies to.</param>
+    /// <param name="patch">Each root member's delta, or <see langword="null"/> to remove it.</param>
+    /// <param name="documentDirectory">The directory the result's relative paths resolve beside.</param>
+    /// <returns>The patched definition.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="previous"/> or <paramref name="patch"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException">A member's delta does not merge, its value does not read, or a state
+    /// reference in it does not resolve.</exception>
+    public static WorldDefinition ApplyPatch(WorldDefinition previous, JsonObject patch, string? documentDirectory) {
+        ArgumentNullException.ThrowIfNull(argument: previous);
+        ArgumentNullException.ThrowIfNull(argument: patch);
+
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var pending = new Dictionary<string, Func<WorldDefinition, object?>>(StringComparer.Ordinal);
+        var replacements = new List<(string Name, ReadOnlyMemory<byte>? Value)>();
+        var trees = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
+
+        foreach (var (name, delta) in patch) {
+            if (delta is null) { replacements.Add((name, null)); continue; }
+
+            var current = Value(previous, name);
+            if (IsModelMember(name) && ApplyRows(current, delta, name) is { } edit) {
+                WorldBootWork.Count(WorldBootWork.PatchRowsRead, edit.Rows);
+                if (ReferenceEquals(edit.Value, current)) { continue; }
+                values.Add(name, edit.Value);
+                if (edit.Resolve is { } resolve) { pending.Add(name, resolve); }
+                continue;
+            }
+
+            var tree = Write(name, current);
+            trees.Add(name, tree);
+            if (!WorldDocumentBasis.TryMerge(new JsonObject { [name] = tree }, new JsonObject { [name] = delta.DeepClone() }, out var merged, out var reason)) {
+                throw new InvalidDataException($"the member '{name}' does not merge: {reason}");
+            }
+            WorldBootWork.Count(WorldBootWork.PatchRowsRead, merged![name] switch {
+                JsonArray rows => rows.Count,
+                JsonObject members => members.Sum(static member => member.Value is JsonArray rows ? rows.Count : 0),
+                _ => 0,
+            });
+            replacements.Add((name, merged[name] is { } value ? CanonicalJsonDocument.SerializeCompact(value) : null));
+        }
+
+        var patched = Replace(With(previous, values, documentDirectory), replacements, documentDirectory, trees);
+        return (pending.Count == 0) ? patched : With(patched, pending.ToDictionary(pair => pair.Key, pair => pair.Value(patched), StringComparer.Ordinal), documentDirectory);
+    }
+    // A member's row-wise replay, or null where its delta needs the whole member: a shape the replay does not reproduce
+    // gives null, and so does a delta the replay cannot read, which the whole-member merge then refuses by name.
+    private static WorldDocumentWalker.ReloadEdit? ApplyRows(object? current, JsonNode delta, string name) {
+        try {
+            return WorldDocumentWalker.ApplyPatchRows(current, delta, $"$.{name}");
+        } catch (Exception exception) when (exception is JsonException or NotSupportedException or InvalidOperationException or ArgumentException) {
+            return null;
+        }
+    }
+
     /// <summary>Merges a reconstructed source delta over the live definition and records the change for undo.</summary>
     /// <remarks>Keyed merges retain live rows by identity and resolve only adopted rows. A value outside the keyed
     /// overlay vocabulary is merged as JSON and shares unchanged values through <see cref="Replace"/>.</remarks>

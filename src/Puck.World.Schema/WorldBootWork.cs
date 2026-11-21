@@ -151,6 +151,13 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     /// <summary>Gets the kind counting the installs of a live document that changed only what presentation reads,
     /// keeping the arena, every compiled product and the population.</summary>
     public static WorkKind PresentationInstalls { get; } = Registry.Declare(name: "world.boot.presentation-installs", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the undos that installed narrowly, as the value or presentation install a reload of
+    /// the same change takes (or nothing, when the undo moved nothing the session holds), keeping the arena and every
+    /// compiled product; an undo that installs the replayed document whole counts a full install instead.</summary>
+    public static WorkKind UndoNarrowInstalls { get; } = Registry.Declare("world.boot.undo-narrow-installs", "count", WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the keyed rows a journal patch's replay read into the document model: one per row
+    /// a changed member held when it was read whole, and one per row a keyed replay merged or added.</summary>
+    public static WorkKind PatchRowsRead { get; } = Registry.Declare("world.boot.patch-rows-read", "count", WorkClass.Deterministic);
     /// <summary>Gets the kind counting host pump calls with an enabled source watch.</summary>
     public static WorkKind WatchPumps { get; } = Registry.Declare("world.boot.watch-pumps", "count", WorkClass.Pacing);
     /// <summary>Gets the kind counting source input stamp queries on the host pump.</summary>

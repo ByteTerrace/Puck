@@ -305,7 +305,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return Simulation(
             audience: CommandAudience.Operator,
             name: "world.undo",
-            description: $"Undoes the last n applied mutations (default 1) by replaying the journal minus its tail through the same apply path: {WorldUndoForms.Spelling}. The journal IS the edit history; replay IS the undo engine. Refused by name, naming host.journalDepth, when n reaches past what a bounded journal has kept — entries beyond that horizon already compacted into the base and cannot be replayed.",
+            description: $"Undoes the last n edits a principal authored (default 1: source edits and submitted mutations) by replaying the journal without them through the same apply path: {WorldUndoForms.Spelling}. The World's own entries (sweeps, searches, field writes, rule effects, scoped replays) are replayed and never undone, and the verdict names what it dropped. Refused by name, naming host.journalDepth, when n reaches past what a bounded journal has kept — entries beyond that horizon already compacted into the base and cannot be replayed.",
             forms: WorldUndoForms,
             handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(

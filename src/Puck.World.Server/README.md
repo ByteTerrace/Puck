@@ -751,9 +751,14 @@ the same live status.
 candidate document, revalidating the WHOLE document through
 `WorldDefinitionValidator`, and only then swapping, journaling, and rebuilding
 the changed section's derived state; a failure rejects loudly and changes
-nothing. The journal is the undo engine: `world.undo` restores the loaded base
-definition and deterministically replays the journal minus its tail through
-the same apply path—no per-mutation inverse exists.
+nothing. The journal is the document's edit history over its base and the undo
+engine: `world.undo` drops the last entries a principal authored (source edits
+and mutations a session submitted, `WorldJournalEntry.Authored`), restores the
+loaded base definition and deterministically replays every other entry through
+the same apply path—no per-mutation inverse exists. An entry the World applied
+itself (`Principal.World`'s sweeps, searches, field writes and rule effects, or a
+scoped replay or addon guest acting in a principal's name) is replayed, never
+undone.
 `world.save` writes the authored document with the session's own changes folded
 in, and compacts the journal (the saved definition becomes the new base).
 `WorldSessionCapture` folds what the server owns: the peer-source default into
@@ -816,7 +821,8 @@ complete payload bytes.
 Replay records the source pin and rereads that source, not the patch: the drive
 reads the file as an edit and runs the same cut and merge against its own
 revision and live document. The undo journal records the accepted file edit
-as an overlay. Undo replays the retained entries over the journal base, and
+as an overlay. Undo replays the retained entries over the journal base, reading
+again only the rows each patch names (`WorldDefinitionMembers.ApplyPatch`), and
 the checkpoint retains the source revision separately from that base.
 `WorldPresentationRows` delivers the changed creations and shades to a
 primed client. Values cross in the changed rows of the next snapshot unless
@@ -903,7 +909,7 @@ to observe a live adjacency link dropping, which the document cannot reflect
 —and reads link liveness through `WorldServer.TryLinkLiveness`, which pairs
 `WorldEventFeed.LinkStalenessTicks` with the row's compiled
 `livenessGraceSeconds`; its retraction defers, rather than proceeding, while
-the slot's inhabitant is drive-possessed. Every recovery mutation remains undoable.
+the slot's inhabitant is drive-possessed. Every recovery mutation is journaled, so an undo of an author's edit replays it rather than losing it.
 
 **Steady-state performance contract.** The per-tick pipeline—intent fold,
 sim step, snapshot emission, binding resolution—allocates nothing; document
@@ -936,8 +942,8 @@ lattice's own `stepEveryTicks` cadence. `WorldServer` is the
 `IFieldLatticeHost`: `ReadScalar`/`AddScalar` resolve through
 `ReadScalarSlot`/`AddScalarSlot`, the SAME `WorldStateReader.TryRead` seam
 every other state read uses, and `AddScalarSlot`'s write lands through the
-ordinary `UpsertStateCell` mutation (`Principal.World`, journaled,
-undoable), never a bypass—a season row a rule writes and a reaction reads
+ordinary `UpsertStateCell` mutation (`Principal.World`, journaled and replayed by an undo),
+never a bypass—a season row a rule writes and a reaction reads
 can never disagree about the value. `WorldTick.Responses.cs`'s
 `WorldPlacementResponse` condition resolves its scalar the same way, by row
 name, since a response trait is authored outside the compiled reaction
