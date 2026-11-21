@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -29,6 +30,15 @@ public interface IRenderGraphInstances {
     /// <param name="instance">The instance's name.</param>
     /// <returns>The node.</returns>
     ShaderPipelineRenderNode? NodeOf(string instance);
+    /// <summary>Sets the route an instance renders under: the label every output it completes from then on carries, with
+    /// the labels of everything it bound. An output whose label names a span that has since ended is read by no reader,
+    /// capture or display. Outputs completed earlier keep the label they were made under.</summary>
+    /// <param name="instance">The instance's ordinal in <see cref="Instances"/>.</param>
+    /// <param name="route">The classified label of the route.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="instance"/> is not an ordinal of
+    /// <see cref="Instances"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="route"/> is unclassified.</exception>
+    void SetRoute(int instance, DeliveryLabel route);
     /// <summary>Withdraws every picture an instance published, from the next frame the runtime produces: the image its
     /// node publishes, the outputs the runtime records for it, and every output another instance rendered over them, so
     /// no reader, capture or display binds any of them again. Each instance withdrawn renders again before anything

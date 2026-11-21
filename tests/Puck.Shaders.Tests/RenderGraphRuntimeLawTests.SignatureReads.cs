@@ -55,7 +55,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
                     var index = reads.IndexOf(producer: ReadSource);
 
                     Assert.False(condition: reads.IsTaken(index: index));
-                    owner.Signatures.Add(item: reads[index].Publication);
+                    _ = reads[index].TryRead(latch: context.Latch, read: out var resolved);
+                    owner.Signatures.Add(item: resolved.Publication);
                 }
                 return null;
             }
@@ -63,7 +64,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 var reads = Assert.IsType<RenderGraphExternalReads>(@object: recording.Reads);
                 var index = reads.IndexOf(producer: ReadSource);
 
-                owner.Recorded.Add(item: reads[index].Publication);
+                _ = reads[index].TryRead(latch: recording.Latch, read: out var resolved);
+                owner.Recorded.Add(item: resolved.Publication);
                 return RenderGraphPackageOutcome.Drew;
             }
         }

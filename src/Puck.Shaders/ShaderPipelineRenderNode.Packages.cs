@@ -58,15 +58,27 @@ public sealed partial class ShaderPipelineRenderNode {
                 }
             }
             var image = default(ShaderPipelineExternalImage);
+            var ownedImageHandle = ((nint)0);
 
             if (resource.Spec.Kind == ShaderPipelineResourceKind.Image) {
                 var (published, publishedName, instance) = PublicationOf(selected: resource, slot: slot);
-                image = ResolveImage(index: instance, name: publishedName, resource: published) with {
-                    Layout = (published.Spec.IsExternal ? m_externalImages[publishedName].Layout : m_outputLayout),
-                };
+                var resolved = ResolveImage(index: instance, label: out var imageLabel, name: publishedName, resource: published);
+                var layout = (published.Spec.IsExternal ? ResolveExternalLayout(name: publishedName) : m_outputLayout);
+
+                ownedImageHandle = (published.Spec.IsExternal ? 0 : resolved.ImageHandle);
+                image = new ShaderPipelineExternalImage(
+                    Format: resolved.Format,
+                    Height: resolved.Height,
+                    ImageHandle: resolved.ImageHandle,
+                    ImageViewHandle: resolved.ImageViewHandle,
+                    Label: imageLabel,
+                    Layout: layout,
+                    Publication: resolved.Publication,
+                    Width: resolved.Width
+                );
                 publication = new ReferenceRevision(Owner: this, Revision: m_submissions);
             }
-            next[index] = new BufferOutput(Buffer: buffer, Image: image, Name: name, Publication: publication);
+            next[index] = new BufferOutput(Buffer: buffer, Image: image, Name: name, OwnedImageHandle: ownedImageHandle, Publication: publication);
         }
         m_previousBuffers = m_publishedBuffers;
         m_publishedBuffers = next;
@@ -96,7 +108,7 @@ public sealed partial class ShaderPipelineRenderNode {
         return result;
     }
 
-    internal readonly record struct BufferOutput(string Name, IGpuBuffer? Buffer, ReferenceRevision Publication, ShaderPipelineExternalImage Image = default);
+    internal readonly record struct BufferOutput(string Name, IGpuBuffer? Buffer, ReferenceRevision Publication, ShaderPipelineExternalImage Image = default, nint OwnedImageHandle = 0);
 
     // What a package pass's factory builds and creates its recorder for, captured on the frame thread's request and read
     // on the pool.
@@ -292,9 +304,10 @@ public sealed partial class ShaderPipelineRenderNode {
 
             if (
                 resource.Spec.IsExternal &&
-                m_externalImages.TryGetValue(
-                    key: name,
-                    value: out var image
+                TryResolveExternalImage(
+                    label: out _,
+                    name: name,
+                    resolved: out var image
                 ) &&
                 (image.Layout != m_outputLayout)
             ) {
@@ -322,9 +335,10 @@ public sealed partial class ShaderPipelineRenderNode {
 
             if (
                 resource.Spec.IsExternal &&
-                m_externalImages.TryGetValue(
-                    key: name,
-                    value: out var image
+                TryResolveExternalImage(
+                    label: out _,
+                    name: name,
+                    resolved: out var image
                 ) &&
                 OwnsImage(imageHandle: image.ImageHandle)
             ) {
@@ -384,7 +398,7 @@ public sealed partial class ShaderPipelineRenderNode {
             if (HostInputInAnotherLayout(pass: pass, slot: slot) is var host and >= 0) {
                 var name = StandingOf(input: pass.Inputs[host], slot: slot).Name;
 
-                throw new InvalidOperationException(message: $"Package pass '{pass.Name}' drew nothing, but its input '{name}' is a host's image in {m_externalImages[name].Layout} layout and the instance publishes in {m_outputLayout}, so its output cannot stand for it.");
+                throw new InvalidOperationException(message: $"Package pass '{pass.Name}' drew nothing, but its input '{name}' is a host's image in {ResolveExternalLayout(name: name)} layout and the instance publishes in {m_outputLayout}, so its output cannot stand for it.");
             }
         }
 
@@ -567,27 +581,40 @@ public sealed partial class ShaderPipelineRenderNode {
 
         return layouts;
     }
-    private RenderGraphPackageResource Resolve(RuntimeResource resource, string name, int index, GpuImageLayout layout) => ((resource.Spec.Kind == ShaderPipelineResourceKind.Buffer)
-        ? new RenderGraphPackageResource(
-            Buffer: ResolveBuffer(
-                index: index,
-                name: name,
-                resource: resource
-            ),
-            Image: default,
-            Kind: ShaderPipelineResourceKind.Buffer,
-            Owned: null,
-            Version: name
-        )
-        : new RenderGraphPackageResource(
+    private RenderGraphPackageResource Resolve(RuntimeResource resource, string name, int index, GpuImageLayout layout) {
+        if (resource.Spec.Kind == ShaderPipelineResourceKind.Buffer) {
+            return new RenderGraphPackageResource(
+                Buffer: ResolveBuffer(
+                    index: index,
+                    name: name,
+                    resource: resource
+                ),
+                Image: default,
+                Kind: ShaderPipelineResourceKind.Buffer,
+                Owned: null,
+                Version: name
+            );
+        }
+
+        var resolved = ResolveImage(
+            index: index,
+            label: out var label,
+            name: name,
+            resource: resource
+        );
+
+        return new RenderGraphPackageResource(
             Buffer: null,
-            Image: ResolveImage(
-                index: index,
-                name: name,
-                resource: resource
-            ) with {
-                Layout = layout,
-            },
+            Image: new ShaderPipelineExternalImage(
+                Format: resolved.Format,
+                Height: resolved.Height,
+                ImageHandle: resolved.ImageHandle,
+                ImageViewHandle: resolved.ImageViewHandle,
+                Label: label,
+                Layout: layout,
+                Publication: resolved.Publication,
+                Width: resolved.Width
+            ),
             Kind: resource.Spec.Kind,
             Owned: (resource.Spec.IsExternal
                 ? null
@@ -596,7 +623,8 @@ public sealed partial class ShaderPipelineRenderNode {
                     resource: resource
                 )]),
             Version: name
-        ));
+        );
+    }
     // A graph whose package pass nothing records is refused when it is swapped in, naming the pass and its package.
     private void ValidatePackages(ShaderPipelinePlan plan) {
         if (m_packages.TryFindUnserved(

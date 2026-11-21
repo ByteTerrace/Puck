@@ -200,7 +200,8 @@ public sealed class ShaderPipelineOutputExportLawTests {
         private sealed class Recorder(Painter owner) : IRenderGraphPackageRecorder {
             public void Dispose() { }
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-                owner.Written.Add(item: recording.Outputs[0].Image.ImageHandle);
+                _ = recording.Outputs[0].Image.TryRead(latch: recording.Latch, image: out var output);
+                owner.Written.Add(item: output.ImageHandle);
 
                 return RenderGraphPackageOutcome.Drew;
             }

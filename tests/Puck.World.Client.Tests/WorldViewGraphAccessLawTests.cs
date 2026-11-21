@@ -125,8 +125,8 @@ public sealed class WorldViewGraphAccessLawTests : IDisposable {
         var withdrawnOrdinal = fake.Instances.IndexOf(name: withdrawnName);
         var pausedOrdinal = fake.Instances.IndexOf(name: pausedName);
 
-        scenes.Set(index: withdrawnOrdinal, access: new WorldViewAccess(Available: true, Epoch: 2L));
-        scenes.Set(index: pausedOrdinal, access: new WorldViewAccess(Available: false, Epoch: 0L));
+        scenes.Set(index: withdrawnOrdinal, access: WorldViewAccess.Open with { Epoch = 2L });
+        scenes.Set(index: pausedOrdinal, access: WorldViewAccess.Open with { Available = false });
         host.BeginFrame(views: views);
 
         Assert.Equal(expected: [withdrawnName], actual: fake.Withdrawn);

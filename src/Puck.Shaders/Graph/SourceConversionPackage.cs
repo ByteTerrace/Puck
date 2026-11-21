@@ -213,11 +213,13 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
                 recording: recording
             );
             if (m_imported) {
+                var inputImage = recording.Inputs[0].ReadImage(latch: recording.Latch);
+
                 m_services.Bindings.WriteSampledImage(
                     arrayElement: 0,
                     binding: m_input,
                     descriptorSetHandle: set,
-                    imageViewHandle: recording.Inputs[0].Image.ImageViewHandle
+                    imageViewHandle: inputImage.ImageViewHandle
                 );
             } else {
                 var region = recording.Inputs[0].Buffer!;
@@ -231,11 +233,12 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
                     kind: GpuBindingKind.ReadOnlyBuffer
                 );
             }
+            var outputImage = recording.Outputs[0].ReadImage(latch: recording.Latch);
             m_services.Bindings.WriteStorageImage(
                 arrayElement: 0,
                 binding: m_image,
                 descriptorSetHandle: set,
-                imageViewHandle: recording.Outputs[0].Image.ImageViewHandle
+                imageViewHandle: outputImage.ImageViewHandle
             );
             recorder.BindPipeline(
                 bindPoint: GpuBindPoint.Compute,

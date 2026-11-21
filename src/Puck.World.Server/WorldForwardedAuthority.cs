@@ -273,10 +273,16 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
     // cannot be detached or replaced between authentication and publishing. An onward hop gets the stamped intent.
     internal static (IntentSubmission? Stamped, bool Applied) TryApplyIntent(WorldServer server, string sourceAuthority, in WorldMobilityIdentity mobility, long leaseId, in IntentSubmission intent) {
         System.Diagnostics.Debug.Assert(server.AuthorityGate.IsHeldByCurrentThread);
-        if (!server.TryTransferredPrincipal(sourceAuthority, in mobility, out var principal)) { return (null, false); }
+        if (!server.TryTransferredPrincipal(sourceAuthority, in mobility, out var principal)) {
+            server.NoteFederatedDrop(bodyIndex: -1, reason: $"traveler {mobility.Incarnation} from '{sourceAuthority}' has no committed credential here");
+            return (null, false);
+        }
 
         var stamped = intent with { EntityIndex = principal.Index, Principal = principal };
-        if (!IsLiveTransferredPrincipal(server, principal)) { return (stamped, false); }
+        if (!IsLiveTransferredPrincipal(server, principal)) {
+            server.NoteFederatedDrop(bodyIndex: principal.Index, reason: $"{principal.Describe()} no longer owns a live body here; the input follows its onward route");
+            return (stamped, false);
+        }
 
         server.PublishFederatedIntent(leaseId, in stamped);
         return (stamped, true);

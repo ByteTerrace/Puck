@@ -749,10 +749,13 @@ public sealed partial class SdfWorldPassesLawTests {
                 return false;
             }
             output = new RenderGraphExternalOutput(
-                Image: Surface.SameDeviceImage(format: Format, height: image.Height, imageHandle: image.ImageHandle, imageViewHandle: image.ImageViewHandle, width: image.Width),
-                Layout: GpuImageLayout.ShaderReadOnly,
-                Lease: image.ImageViewHandle,
-                Tainted: !Filling
+                image: Surface.SameDeviceImage(format: Format, height: image.Height, imageHandle: image.ImageHandle, imageViewHandle: image.ImageViewHandle, width: image.Width),
+                label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(
+                    external: !Filling,
+                    source: Puck.Abstractions.Presentation.DeliveryPublicSource.DeviceOrCapture
+                ),
+                layout: GpuImageLayout.ShaderReadOnly,
+                lease: image.ImageViewHandle
             );
             return true;
         }

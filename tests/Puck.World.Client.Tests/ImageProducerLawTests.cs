@@ -493,11 +493,14 @@ public sealed class ImageProducerLawTests {
             )
         );
 
+        var latch = DeliveryLatch.Capture();
+
         for (var frame = 0; (frame < 3); frame++) {
             Assert.True(condition: source.TryAcquireOutput(output: out var output));
-            Assert.Equal(fillImage, output.Image);
+            Assert.True(condition: output.TryRead(latch: in latch, acquired: out var acquired));
+            Assert.Equal(fillImage, acquired.Image);
             Assert.Equal(
-                actual: (output.Lease.ImageViewHandle, output.Lease.RequiresRetirement, output.Layout, output.Tainted),
+                actual: (acquired.Lease.ImageViewHandle, acquired.Lease.RequiresRetirement, acquired.Layout, output.Label.External),
                 expected: (((nint)0xF111), false, GpuImageLayout.ShaderReadOnly, false)
             );
         }
@@ -508,8 +511,9 @@ public sealed class ImageProducerLawTests {
         // Once the gate stops filling, each acquisition is the feed's own, tainted.
         filling = false;
         Assert.True(condition: source.TryAcquireOutput(output: out var shown));
+        Assert.True(condition: shown.TryRead(latch: in latch, acquired: out var shownAcquired));
         Assert.Equal(
-            actual: (shown.Lease.ImageViewHandle, desktop.Feed.Acquisitions, shown.Tainted),
+            actual: (shownAcquired.Lease.ImageViewHandle, desktop.Feed.Acquisitions, shown.Label.External),
             expected: (FakeFeed.DesktopHandle, 1, true)
         );
         Assert.Null(@object: source.Fault);
@@ -769,7 +773,9 @@ public sealed class ImageProducerLawTests {
         fillRender = FrameRender.Rendered;
         Assert.Equal(actual: Produce(), expected: FrameRender.Rendered);
         Assert.True(condition: source.TryAcquireOutput(output: out var stoodIn));
-        Assert.Equal(actual: (stoodIn.Lease.ImageViewHandle, stoodIn.Tainted), expected: (((nint)0xF111), false));
+        var stoodInLatch = DeliveryLatch.Capture();
+        Assert.True(condition: stoodIn.TryRead(latch: in stoodInLatch, acquired: out var stoodInAcquired));
+        Assert.Equal(actual: (stoodInAcquired.Lease.ImageViewHandle, stoodIn.Label.External), expected: (((nint)0xF111), false));
         Assert.Equal(expected: 4, actual: feed.Publications);
 
         fillHandle = 0;

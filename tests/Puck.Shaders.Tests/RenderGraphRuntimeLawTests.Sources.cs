@@ -651,11 +651,14 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Transport: ImageSourceTransport.Imported,
             Width: Extent
         );
+        const nint ImageHandle = 0x7100;
+        const nint ImageView = 0x7101;
         var image = new ShaderPipelineExternalImage(
             Format: GpuPixelFormat.R16G16B16A16Float,
             Height: Extent,
-            ImageHandle: 0x7100,
-            ImageViewHandle: 0x7101,
+            ImageHandle: ImageHandle,
+            ImageViewHandle: ImageView,
+            Label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(external: true, source: Puck.Abstractions.Presentation.DeliveryPublicSource.DeviceOrCapture),
             Layout: GpuImageLayout.External,
             Width: Extent
         );
@@ -666,7 +669,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             acquired++;
 
             return new GpuImageLease(
-                ImageViewHandle: image.ImageViewHandle,
+                ImageViewHandle: ImageView,
                 Release: _ => released++
             );
         }
@@ -691,12 +694,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
         // The conversion read the imported image at its input binding and dispatched once over its 8x8 extent.
         Assert.Contains(
             collection: gpu.DescriptorWrites,
-            filter: write => (write.Handle == image.ImageViewHandle)
+            filter: write => (write.Handle == ImageView)
         );
         Assert.Equal(expected: (1U, 1U, 1U), actual: gpu.Dispatches[^1]);
         // It moved the image from its producer's layout to a sampled read, and handed it back in that layout.
         var transitions = gpu.Barriers
-            .Where(predicate: barrier => (barrier.Handle == image.ImageHandle))
+            .Where(predicate: barrier => (barrier.Handle == ImageHandle))
             .Select(selector: static barrier => (barrier.Barrier.OldLayout, barrier.Barrier.NewLayout))
             .ToArray();
 
@@ -715,7 +718,15 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         Assert.False(condition: other.TryConvert(
             context: default,
-            image: (image with { Width = (Extent * 2U) }),
+            image: new ShaderPipelineExternalImage(
+                Format: GpuPixelFormat.R16G16B16A16Float,
+                Height: Extent,
+                ImageHandle: ImageHandle,
+                ImageViewHandle: ImageView,
+                Label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(external: true, source: Puck.Abstractions.Presentation.DeliveryPublicSource.DeviceOrCapture),
+                Layout: GpuImageLayout.External,
+                Width: (Extent * 2U)
+            ),
             lease: Acquire()
         ));
         Assert.Equal(actual: released, expected: acquired);

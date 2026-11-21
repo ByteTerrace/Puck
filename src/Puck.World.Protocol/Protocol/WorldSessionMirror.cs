@@ -353,6 +353,8 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>Gets the stream this mirror is bound to and the span it holds: what its ingress accepts records
     /// from.</summary>
     public WorldStreamSpan Span => m_ingress.Span;
+    /// <summary>Gets the mirror's current delivery span, ended whenever its ingress cuts or closes.</summary>
+    public Puck.Abstractions.Presentation.DeliverySpan DeliverySpan => m_ingress.DeliverySpan;
     /// <summary>Gets the number of records the mirror's ingress dropped: a record of another stream, of an earlier
     /// generation, or not ahead of the last record it took.</summary>
     public long IngressRefusals => m_ingress.Refusals;
