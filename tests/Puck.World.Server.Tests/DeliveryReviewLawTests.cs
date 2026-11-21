@@ -223,6 +223,56 @@ public sealed class DeliveryReviewLawTests {
     }
 
     [Fact]
+    public void AFrameMoveCompletesTheReplicaWithItsRowsAloneAndLeavesItAsAFreshPrimeWould() {
+        var accounts = new WorldStateRow(Name: CellName.Parse("accounts"), Kind: CellKind.Text, Capacity: 4, Cells: []);
+        var template = new WorldPlacement(Id: "stores", PrototypeId: "store", Position: new DocumentVector3(10, 0, 10), YawDegrees: 0f, Scale: 1f,
+            Distribution: new WorldDistribution(
+                Region: new WorldDistributionRegion.Lattice(StepA: new DocumentVector3(2, 0, 0), CountA: 4, StepB: new DocumentVector3(0, 0, 1), CountB: 1),
+                Fill: new WorldSequence(Name: WorldSequence.None, Offset: 0, Step: 0f)),
+            Deal: new WorldPlacementDeal(Row: "accounts"));
+        using var fixture = Fixtures.FreshServer(Document(Row(hidden: HiddenCells.Count)) with {
+            StateRaw = new WorldStateSection(World: [Row(hidden: HiddenCells.Count), accounts]),
+            CreationsRaw = [CreationFixtures.UnitSphere(id: "store")],
+            PlacementRowsRaw = [template],
+        });
+        var dealt = new Replica();
+        using var observation = Observe(fixture, dealt);
+        fixture.Step();
+        var states = dealt.States;
+        var snapshots = dealt.Snapshots;
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "accounts", "a", 0L, WorldDocumentWriteKind.Set, Text: "a"));
+        fixture.Step();
+        // The deal moved the observer's frame, so its document was replaced; only the tick's own snapshot followed it,
+        // carrying the restricted row's header the replaced arena dropped.
+        Assert.Equal(states + 1, dealt.States);
+        Assert.Equal(snapshots + 1, dealt.Snapshots);
+        Assert.Contains(dealt.Definition.Placements, placement => placement.Id == WorldPlacementDeal.ChildId(key: "a", template: "stores"));
+        Assert.NotNull(dealt.State.Observation(0));
+        var fresh = new Replica();
+        using var primed = Observe(fixture, fresh);
+        Assert.Equal(Describe(fresh), Describe(dealt));
+    }
+
+    // Every value, motion and observation header a replica's state view reads, in row order.
+    private static string Describe(Replica replica) {
+        var text = new System.Text.StringBuilder();
+        var definition = replica.Definition;
+        text.Append(Convert.ToHexString(WorldDefinitionSerialization.SerializeCompact(definition))).Append('\n');
+        var rows = definition.State;
+        for (var ordinal = 0; ordinal < rows.Count; ordinal++) {
+            foreach (var cell in rows[ordinal].Cells ?? []) {
+                foreach (var target in new[] { false, true }) {
+                    Assert.True(replica.State.TryRead(ordinal, cell.Key.Value, target, 40, 40 * 1680, out var sample));
+                    text.Append($"{rows[ordinal].Name}.{cell.Key}:{target}={sample}\n");
+                }
+            }
+            var header = replica.State.Observation(ordinal);
+            text.Append($"{rows[ordinal].Name}#{(header is null ? "-" : System.Text.Json.JsonSerializer.Serialize(header, WorldJsonContext.Default.For<WorldObservedRow>()))}\n");
+        }
+        return text.ToString();
+    }
+
+    [Fact]
     public void ReclaimingAnObsoleteImageCannotTurnAHiddenOnlyInstallIntoAPresentationDelivery() {
         using var fixture = Fixtures.FreshServer(Document(tier: WorldDisclosureTier.Presentation));
         var images = new WorldDisclosureImages();
@@ -257,6 +307,9 @@ public sealed class DeliveryReviewLawTests {
         public WorldDocumentStateView State { get; }
         public List<FieldCellDelta> Deltas { get; } = [];
         public List<long> Versions { get; } = [];
+        public int States { get; private set; }
+        public int Snapshots { get; private set; }
+        public WorldDefinition Definition => m_definition;
         public Replica() => State = new(() => m_definition);
         public long Read(string row, string key) {
             Assert.True(State.TryResolveRow(row, out var ordinal));
@@ -268,10 +321,14 @@ public sealed class DeliveryReviewLawTests {
             Versions.Add(version.Sequence);
             State.TryResolveRow("hand", out _);
         }
-        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) => DeliverDefinition(definition, version, stream: default);
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
+            States++;
+            DeliverDefinition(definition, version, stream: default);
+        }
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
         public void CloseSpan(ulong stream) { }
         public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
+            Snapshots++;
             Deltas.AddRange(snapshot.FieldCells.ToArray());
             Versions.Add(snapshot.Revision);
             State.ApplyFieldCells(snapshot.FieldCells.Span, new int[StateCapacity.MaxRows]);

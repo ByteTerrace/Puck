@@ -601,7 +601,7 @@ public sealed partial class WorldTick {
             (Host.Document.TryBuildTickSnapshot(tick, context.StepTicks, ref snapshot, deadline, out frame) == WaitOutcome.DeadlinePassed)) {
             return Puck.Hosting.Jobs.JobPool.JoinWait;
         }
-        Host.Document.DeliverPending();
+        Host.Document.DeliverPending(snapshotFollows: deliver);
         if (deliver) {
             m_deliveringCues = true;
             try { Host.Output.DeliverSnapshot(in frame); } finally { m_deliveringCues = false; }

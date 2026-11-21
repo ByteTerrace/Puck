@@ -121,6 +121,10 @@ public sealed class WorldDeliveryCursor {
         m_cutOwed = false;
         return cut;
     }
+    /// <summary>Gets whether the stream owes its reader the observation headers of restricted rows, which a delivered
+    /// document cannot carry. The next snapshot advanced through this cursor carries them, whatever cells it
+    /// holds.</summary>
+    public bool OwesRows => (m_metadataPrimers.Count != 0);
     /// <summary>Gets whether a cut was decided that <see cref="TakeCut"/> has not yet taken: the stream owes its reader
     /// the cut record and the new generation's primer now, whatever its cadence.</summary>
     public bool CutOwed => m_cutOwed;

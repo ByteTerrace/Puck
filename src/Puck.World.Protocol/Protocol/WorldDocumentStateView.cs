@@ -48,6 +48,29 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
         }
     }
 
+    /// <summary>Returns whether a view shaped for <paramref name="previous"/> keeps every field cell it holds when
+    /// <paramref name="next"/> replaces it: each field of <paramref name="next"/> is a field of
+    /// <paramref name="previous"/> in the same region over the same lattice, which is the rule a reshape keeps a
+    /// field's delivered cells by.</summary>
+    /// <param name="previous">The definition the view holds.</param>
+    /// <param name="next">The definition replacing it.</param>
+    /// <returns><see langword="true"/> when no field of <paramref name="next"/> starts from zero.</returns>
+    public static bool KeepsFieldCells(WorldDefinition previous, WorldDefinition next) {
+        ArgumentNullException.ThrowIfNull(argument: previous);
+        ArgumentNullException.ThrowIfNull(argument: next);
+        var held = previous.FieldRegions;
+        var regions = next.FieldRegions;
+        if (ReferenceEquals(held, regions)) { return true; }
+        foreach (var region in regions) {
+            var match = held.FirstOrDefault(candidate => string.Equals(candidate.Name, region.Name, StringComparison.Ordinal));
+            if ((match is null) || (match.Lattice != region.Lattice)) { return false; }
+            foreach (var field in region.Fields) {
+                if (!match.Fields.Any(candidate => string.Equals(candidate.Name, field.Name, StringComparison.Ordinal))) { return false; }
+            }
+        }
+        return true;
+    }
+
     /// <summary>The last delivered observable row metadata, including a hidden count or anonymous backs.</summary>
     public WorldObservedRow? Observation(int ordinal) => m_observations.GetValueOrDefault(ordinal);
 
