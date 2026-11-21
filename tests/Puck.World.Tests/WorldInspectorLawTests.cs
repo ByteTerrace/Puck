@@ -100,7 +100,7 @@ public sealed class WorldInspectorLawTests {
 
             text.Format(snapshot: in snapshot);
             for (var pass = 0; (pass < 40); pass++) {
-                text.Timing(node: "world", timing: new Puck.Abstractions.Gpu.GpuPassTiming(Milliseconds: 0.25, Pass: $"sdf.world$pass{pass}", Samples: 32));
+                text.Timing(node: "world", timing: new Puck.Abstractions.Gpu.GpuPassTiming(Milliseconds: 0.25, Pass: $"sdf.world$pass{pass}", Samples: 32, PerFrameMs: 0.25, LastSubmission: 32));
             }
             text.Finish();
             var result = new string(value: text.Text);

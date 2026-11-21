@@ -44,9 +44,16 @@ public static partial class AzureCommand {
         if (documentDirectory is not null) { result["documentDirectory"] = documentDirectory; }
         return result;
     }
+    /// <summary>The key prefix, inside the world owner's private container, under which the MCP front's TLS state for
+    /// one hostname sits: <c>state.json</c> (Caddy's certificate, key and ACME account) and <c>lock</c> (the blob whose
+    /// lease grants issuance). The worker's identity already owns that container; <c>build/Keep-WorldTls.py</c> reads
+    /// and writes both.</summary>
+    private static string McpTlsStatePrefix(string owner, string hostname) =>
+        $"{owner}/{WorldOwnedWorldSync.HostedPrivateNamespace}/tls/{hostname.ToLowerInvariant()}/";
     private static JsonNode McpTlsConfiguration(string hostname) {
-        // Stock Caddy terminates only the known host, renews over the LB's existing 443 -> 8443 rule,
-        // and keeps its account/certificate state outside the application and release documents.
+        // Stock Caddy terminates only the known host and renews over the LB's existing 443 -> 8443 rule. Its
+        // account/certificate state stays outside the application and release documents, and the TLS state keeper
+        // carries it between workers through the owner's private store.
         if (
             (Uri.CheckHostName(name: hostname) != UriHostNameType.Dns) ||
             hostname.Any(predicate: c => (!char.IsAsciiLetterOrDigit(c: c) && (c is not ('.' or '-'))))
@@ -209,7 +216,8 @@ public static partial class AzureCommand {
                     computeTemplate: CliFiles.ReadJson(path: templatePath).AsObject(),
                     bootstrapScript: File.ReadAllText(path: "build/Start-WorldSilo.sh"),
                     guardScript: File.ReadAllBytes(path: "build/Guard-WorldRelease.py"),
-                    launcherScript: File.ReadAllText(path: "build/Boot-WorldSilo.py")
+                    launcherScript: File.ReadAllText(path: "build/Boot-WorldSilo.py"),
+                    tlsKeeperScript: File.ReadAllText(path: "build/Keep-WorldTls.py")
                 ),
                 Inputs: "",
                 Keys: keys
@@ -230,11 +238,14 @@ public static partial class AzureCommand {
     /// <param name="bootstrapScript">The text of <c>build/Start-WorldSilo.sh</c>.</param>
     /// <param name="guardScript">The bytes of <c>build/Guard-WorldRelease.py</c>.</param>
     /// <param name="launcherScript">The text of <c>build/Boot-WorldSilo.py</c>.</param>
+    /// <param name="tlsKeeperScript">The text of <c>build/Keep-WorldTls.py</c>, which the bootstrap installs when MCP is
+    /// enabled.</param>
     /// <returns>The deployment inputs.</returns>
     /// <exception cref="InvalidDataException">The inventory does not belong to the configured owner or lacks its
     /// primary world, the image is not the manifest's immutable digest, or a bootstrap placeholder stays unresolved.</exception>
     public static WorldReleaseDeploymentConfiguration RenderWorldReleaseDeployment(JsonNode outputs, WorldReleaseManifest manifest, string image,
-        string publicKey, string sshPublicKey, JsonObject computeTemplate, string bootstrapScript, byte[] guardScript, string launcherScript) {
+        string publicKey, string sshPublicKey, JsonObject computeTemplate, string bootstrapScript, byte[] guardScript, string launcherScript,
+        string tlsKeeperScript) {
         var configuration = Value(
             key: "worldSiloConfiguration",
             outputs: outputs
@@ -332,6 +343,18 @@ public static partial class AzureCommand {
             script: guardScript
         );
         var mcpOptions = outputs["worldMcpConfiguration"]?["value"]?["options"];
+        var tlsState = $"{endpoint}/{McpTlsStatePrefix(owner: owner, hostname: host)}";
+        var tlsKeeper = ((mcpOptions is null)
+            ? ""
+            : Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: Resolve(
+                text: tlsKeeperScript,
+                replacements: new Dictionary<string, string> {
+                    ["__TLS_STATE_URL__"] = (tlsState + "state.json"),
+                    ["__TLS_LOCK_URL__"] = (tlsState + "lock"),
+                    ["__CLIENT_ID__"] = clientId,
+                    ["__MCP_HOST__"] = host,
+                }
+            ))));
         var bootstrap = Resolve(
             text: bootstrapScript,
             replacements: new Dictionary<string, string> {
@@ -347,6 +370,7 @@ public static partial class AzureCommand {
                 ? ""
                 : Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: McpTlsConfiguration(hostname: host).ToJsonString()))),
                 ["__MCP_HOST__"] = host,
+                ["__TLS_KEEPER__"] = tlsKeeper,
                 ["__MCP_ENTRYPOINT__"] = ((mcpOptions is null)
                 ? ""
                 : "--entrypoint dotnet"),

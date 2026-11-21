@@ -31,7 +31,6 @@ public sealed class SdfMeshRasterPassLawTests {
         );
         Assert.Equal(
             expected: SdfMeshRasterPass.ShadowKeyOf(
-                fragment: Stage(stage: "frag", stem: SdfMeshRasterPass.ShadowShaderStem),
                 vertex: Stage(stage: "vert", stem: SdfMeshRasterPass.ShadowShaderStem)
             ),
             actual: pass.ShadowKey

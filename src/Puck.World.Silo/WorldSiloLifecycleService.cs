@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Puck.Abstractions;
 using Puck.World.Server;
 
@@ -173,6 +174,12 @@ public sealed class WorldSiloLifecycleService(WorldSiloHost silo, IHostApplicati
         );
 
         builder.WebHost.UseKestrel(options: options => options.Listen(endPoint: endpoint));
+        // Load balancer, Docker and bootstrap probes reach this listener every few seconds. Two access lines per probe
+        // would push the silo's own row, activation and checkpoint lines out of every bounded log tail a failure shows.
+        builder.Logging.AddFilter(
+            category: "Microsoft.AspNetCore.Hosting.Diagnostics",
+            level: LogLevel.Warning
+        );
         builder.Services.AddSingleton<IHostLifetime, HealthLifetime>();
         await using var web = builder.Build();
 

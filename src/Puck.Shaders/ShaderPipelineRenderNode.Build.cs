@@ -71,6 +71,15 @@ public sealed partial class ShaderPipelineRenderNode {
     private long m_refusedFaultsRevision;
     private long m_refusedHeapRevision;
     private ulong? m_refusedPeak;
+    // A candidate the budget held but the account had no room for: the room its pool had and whether the installed graph
+    // gave way when it was refused, and the advance from which it is tried again whatever the room reads. A refusal for
+    // room is retried once the room grows, the graph stops giving way, or that backoff passes, which doubles with each
+    // such refusal up to MaxRoomBackoff and clears when a build installs; otherwise every frame would account the same
+    // candidate again and be refused again.
+    private long? m_refusedRoom;
+    private bool m_refusedGaveWay;
+    private long m_roomRetryAdvance;
+    private int m_roomBackoff;
     private CompiledShaderPipeline? m_refusedPending;
     private bool m_refusedResize;
     private BuildKey m_buildKey;
@@ -126,6 +135,8 @@ public sealed partial class ShaderPipelineRenderNode {
 
         BuildKey key;
         ulong? refusedPeak = null;
+        long? refusedRoom = null;
+        var gaveWay = false;
 
         try {
             key = KeyFor(
@@ -150,6 +161,10 @@ public sealed partial class ShaderPipelineRenderNode {
 
                 if ((account.PeakBytes > ReplacementBudget) || !TryReserveMore(bytes: more, least: !givesWay)) {
                     refusedPeak = account.PeakBytes;
+                    if (account.PeakBytes <= ReplacementBudget) {
+                        refusedRoom = Reservation.Room;
+                        gaveWay = givesWay;
+                    }
                     throw (account with { BudgetBytes = ReplacementBudget }).Refusal();
                 }
                 m_buildPromise = more;
@@ -160,6 +175,12 @@ public sealed partial class ShaderPipelineRenderNode {
                 error: error,
                 budgetPeak: refusedPeak
             );
+            if (candidate && (refusedRoom is not null)) {
+                m_refusedRoom = refusedRoom;
+                m_refusedGaveWay = gaveWay;
+                m_roomBackoff = ExponentialBackoff.Next(ceiling: MaxRoomBackoff, current: m_roomBackoff, first: 1);
+                m_roomRetryAdvance = (m_advances + m_roomBackoff);
+            }
 
             return;
         }
@@ -224,6 +245,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 built: built!,
                 key: key
             );
+            m_roomBackoff = 0;
         } finally {
             // Installed, its bytes are owned; refused while it allocated, they were released.
             EndBuildPromise();
@@ -265,6 +287,7 @@ public sealed partial class ShaderPipelineRenderNode {
             m_hasRefusal = ((m_pending is not null) || m_resizePending || m_rebindPending || m_recountPending);
             m_refusedByHeap = (error is GpuDescriptorHeapRefusalException);
             m_refusedPeak = budgetPeak;
+            m_refusedRoom = null;
             m_refusedFaultsRevision = FaultsRevision;
             m_refusedHeapRevision = m_device.Services.Bindings.HeapReleaseRevision;
             m_refusedPending = m_pending;
@@ -287,6 +310,7 @@ public sealed partial class ShaderPipelineRenderNode {
         m_refusedPending = null;
         m_refusedResize = false;
         m_refusedPeak = null;
+        m_refusedRoom = null;
     }
     // Whether a replacement can be done without: the installed graph renders the current data, so a candidate the budget
     // refuses leaves it presenting. A graph whose counts moved (CountsChanged) holds its last image instead.
@@ -296,7 +320,8 @@ public sealed partial class ShaderPipelineRenderNode {
     private ulong ReplacementBudget => (ReplacementGivesWay ? BudgetBytes : (m_budgetCapBytes ?? ulong.MaxValue));
     // Queues the refused candidate again once the faults or, for a heap refusal, the heap's release revision moves, for
     // a budget refusal once the budget holds its peak (another holder released memory, or the installed graph stopped
-    // rendering, which makes its replacement the instance's least), unless a newer request is queued.
+    // rendering, which makes its replacement the instance's least) and, for a refusal for room, once RoomMayHold, unless
+    // a newer request is queued.
     private void RetryRefusal() {
         if (
             !m_hasRefusal ||
@@ -310,7 +335,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     !m_refusedByHeap ||
                     (m_device.Services.Bindings.HeapReleaseRevision == m_refusedHeapRevision)
                 ) &&
-                !((m_refusedPeak is { } peak) && (ReplacementBudget >= peak))
+                !((m_refusedPeak is { } peak) && (ReplacementBudget >= peak) && RoomMayHold)
             )
         ) {
             return;
@@ -322,8 +347,19 @@ public sealed partial class ShaderPipelineRenderNode {
         ForgetRefusal();
     }
 
+    // Whether a candidate refused for room may now be admitted: the refusal was not for room, the pool's room grew, the
+    // installed graph stopped giving way (its replacement is then the instance's least), or the backoff passed.
+    private bool RoomMayHold => (
+        (m_refusedRoom is not { } room) ||
+        (m_advances >= m_roomRetryAdvance) ||
+        (ReplacementGivesWay != m_refusedGaveWay) ||
+        (Reservation.Room > room)
+    );
+
     // The most advances a resize waits after a discarded one before it builds again.
     private const int MaxResizeBackoff = 32;
+    // The most advances a candidate refused for room waits before it is accounted again while the room stands.
+    private const int MaxRoomBackoff = 32;
 
     // Whether the running build only resizes the installed graph, the advance the latest such build started in, and the
     // advances the next one waits after it. A resize build discarded because the requested extent moved again before it

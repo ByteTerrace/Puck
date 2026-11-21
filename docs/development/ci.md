@@ -1026,7 +1026,13 @@ must remain part of the operator's storage policy.
 
 Deployment enters the durable maintenance coordinator. The source freezes
 and saves protected roots before its service stops. The candidate starts with
-admission closed, and the VM extension waits for private health. The coordinator
+admission closed, and the VM extension waits only for what a candidate reaches
+before its commit: private health and, with MCP, Caddy's TLS front. Public
+`/healthz` answers 503 until the commit, so the extension never waits on it, and
+the load balancer's MCP rule probes Caddy's port rather than `/healthz` so that
+ACME can validate a fresh worker's certificate before the commit. A timed-out
+extension ends its output with each wait's last answer, the public health
+reason and the container state. The coordinator
 verifies its identity and ownership before committing and opening admission.
 Pre-commit recovery restores only that operation's protected source roots and
 then restarts the retained source. The removed blob-version rewind path is not
@@ -1181,7 +1187,8 @@ If a restart finds the rebuilt definition already in its checkpoint, it commits
 the missing marker while retaining the recovered simulation state.
 
 `/healthz` withdraws load-balancer readiness when simulation progress, checkpoint
-freshness, or journal persistence fails. `/livez` observes simulation progress
+freshness, or journal persistence fails, and a managed worker holds it withdrawn
+until its release commits and opens admission. `/livez` observes simulation progress
 independently, so a storage outage does not cause the scale set to replace a
 worker holding unsaved state. Azure's v2 Application Health extension probes
 `/livez/azure`, which serves the same liveness as an `ApplicationHealthState`

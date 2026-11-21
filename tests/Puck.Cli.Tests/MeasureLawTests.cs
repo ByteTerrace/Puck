@@ -136,7 +136,7 @@ public sealed class MeasureLawTests {
 
     [Fact]
     public void GpuMetricsRequireAFullCompletedWindowForEverySelectedPass() {
-        const string Pending = "[world.gpu-timing: on window=32\nworld/glass: 0.125 ms samples=31]";
+        const string Pending = "[world.gpu-timing: on window=32\nworld/glass: 0.500 ms perFrameMs=0.125 samples=8 frames=31 submission=42 lastSubmission=40 present]";
         Assert.Null(Puck.Cli.Bench.FrameBenchmarks.ReadGpu(Pending, ["world/glass"]));
         Assert.Null(Puck.Cli.Bench.FrameBenchmarks.ReadGpu(Pending.Replace("31", "32", StringComparison.Ordinal), ["world/missing"]));
         var measured = Puck.Cli.Bench.FrameBenchmarks.ReadGpu(Pending.Replace("31", "32", StringComparison.Ordinal), ["world/glass"]);

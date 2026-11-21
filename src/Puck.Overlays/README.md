@@ -16,6 +16,11 @@ generated into `overlay.interface.hlsli`). The project
 uses [Puck.Text](../Puck.Text/README.md) for the shared font atlas and layout
 data, with a local prepacked glyph artifact for overlay rendering.
 
+The builder intersects record bounds with their clip scopes and indexes the
+panel, mask and element records by 16-pixel tile rows and columns. The fragment
+shader intersects those masks to visit the records for its tile in submission
+order. `world.counters gpu` reports the record visits as overlay steps.
+
 The ASCII pack ships beside the atlas. On first use, an authored icon repertoire
 gets its own cache file, named by the hash of its ordered codepoints. Subsequent
 launches read packed cells instead of decoding the full font image. Source image

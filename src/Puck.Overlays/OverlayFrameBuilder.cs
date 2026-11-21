@@ -34,9 +34,9 @@ public enum OverlayPanelStyle : uint {
 /// drop rather than bleed past a seat boundary), and the scope's end unwinds that state, so an overflowed scope can
 /// never take the records that follow it down with it.</para>
 /// </remarks>
-public sealed class OverlayFrameBuilder {
-    /// <summary>Words per clip-table rect (normalized x, y, w, h).</summary>
-    public const int ClipWords = 4;
+public sealed partial class OverlayFrameBuilder {
+    /// <summary>Words per clip row, including the exclusive panel and element indices of the scope.</summary>
+    public const int ClipWords = 6;
     /// <summary>Words per element record.</summary>
     public const int ElementWords = 12;
     /// <summary>The clip-rect ceiling (index 0 is the unclipped sentinel; the table holds indices 1..MaxClips) — a
@@ -70,6 +70,7 @@ public sealed class OverlayFrameBuilder {
     private int m_activeClip;
     // Records written since the active scope opened: an EMPTY scope hands its table slot back at EndClip.
     private int m_activeClipRecords;
+    private bool m_clipHasUnscopedElement;
     private int m_clipCount;
     private int m_elementCount;
     private int m_panelCount;
@@ -126,7 +127,7 @@ public sealed class OverlayFrameBuilder {
         ElementBaseWords = (PanelBaseWords + (MaxPanels * PanelWords));
         TextBaseWords = (ElementBaseWords + (MaxElements * ElementWords));
         ClipBaseWords = (TextBaseWords + TextWordCapacity);
-        WordCount = WordCountOf(glyphs: glyphs, leases: leases);
+        WordCount = WordCountOf(glyphs: glyphs, leases: leases, width: width, height: height);
         m_scratch = new uint[WordCount];
 
         OverlayTokenBlock.Write(
@@ -261,6 +262,7 @@ public sealed class OverlayFrameBuilder {
         }
 
         m_activeClipRecords = 0;
+        m_clipHasUnscopedElement = false;
 
         ref var written = ref m_written[index];
 
@@ -378,6 +380,7 @@ public sealed class OverlayFrameBuilder {
     /// <param name="focus">True for the focus viewport; false for protected evidence including its moat.</param>
     public void WriteDiagnosticMask(System.Numerics.Vector4 rect, bool focus) {
         if (!TryTakeElement()) { return; }
+        m_clipHasUnscopedElement = true;
         var offset = ElementBaseWords + m_elementCount * ElementWords;
         m_scratch[offset] = Pack(rect.X);
         m_scratch[offset + 1] = Pack(rect.Y);
@@ -394,6 +397,7 @@ public sealed class OverlayFrameBuilder {
     /// <param name="role">Severity color.</param>
     public void WriteDiagnosticLine(System.Numerics.Vector2 from, System.Numerics.Vector2 to, OverlayColorRole role) {
         if (!TryTakeElement()) { return; }
+        m_clipHasUnscopedElement = true;
         var offset = ElementBaseWords + m_elementCount * ElementWords;
         m_scratch[offset] = Pack(from.X);
         m_scratch[offset + 1] = Pack(from.Y);
@@ -418,6 +422,10 @@ public sealed class OverlayFrameBuilder {
         ) {
             m_written[index].Clips--;
             m_clipCount--;
+        } else if (m_activeClip > 0) {
+            var offset = ClipBaseWords + ((m_activeClip - 1) * ClipWords);
+            m_scratch[offset + 4] = (uint)m_panelCount;
+            m_scratch[offset + 5] = m_clipHasUnscopedElement ? 0 : (uint)m_elementCount;
         }
 
         m_activeClip = 0;
@@ -904,17 +912,18 @@ public sealed class OverlayFrameBuilder {
 
     /// <summary>Returns the words a builder over <paramref name="glyphs"/> holds: the token slab, the glyph pack, then
     /// the panel, element, text and clip regions at their ceilings, padded to a multiple of 4, since the storage buffer
-    /// is read as <c>uint4</c> rows. It depends on the composition's writer reservations and no render extent, so a region can be sized before a builder
-    /// exists.</summary>
+    /// is read as <c>uint4</c> rows. The tile index follows the clip table.</summary>
     /// <param name="glyphs">The shared SDF glyph pack.</param>
     /// <param name="leases">The composition's writer reservations and derived text capacity.</param>
+    /// <param name="width">The render width in pixels.</param>
+    /// <param name="height">The render height in pixels.</param>
     /// <returns>The word count.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="glyphs"/> is <see langword="null"/>.</exception>
-    public static int WordCountOf(OverlayGlyphSdfPack glyphs, OverlayChannelLeases leases) {
+    public static int WordCountOf(OverlayGlyphSdfPack glyphs, OverlayChannelLeases leases, uint width, uint height) {
         ArgumentNullException.ThrowIfNull(argument: glyphs);
 
         var total = (((((OverlayTokenBlock.WordCount + glyphs.Words.Length) + (MaxPanels * PanelWords)) + (MaxElements * ElementWords)) + leases.TextWordCapacity) + (MaxClips * ClipWords));
 
-        return total.AlignUp(alignment: 4);
+        return (total + TileWords(width, height, ElementMaskWords(MaxElements))).AlignUp(alignment: 4);
     }
 }

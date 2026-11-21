@@ -129,8 +129,10 @@ capture and discloses only granted observation names. Downstream user-interactio
 bounded claims in an HTTP 401 bearer challenge; clients obtain fresh authorization before retrying.
 Revocation closes attachments and active requests. Optional Azure services reuse Function self-onboarding
 and observation providers through request-confined OBO with federated managed identity client assertions;
-never substitute host credentials. Deployment uses automatic Caddy TLS behind the existing load balancer,
-persistent certificate state outside World mounts, and Azure expiry/readiness alerts. Durable delegated
+never substitute host credentials. Deployment uses automatic Caddy TLS behind the existing load balancer
+(whose MCP rule probes Caddy's port, never the admission-gated `/healthz`, so a worker with no stored certificate certifies before its commit),
+certificate state outside World mounts that `build/Keep-WorldTls.py` keeps in the owner's private store under a blob
+lease (a fresh worker restores it; one hostname issues once), and Azure expiry/readiness alerts. Durable delegated
 cloud writes and richer participant tools remain uninstalled.
 Run `tests/Puck.Hosting.Tests`, `tests/Puck.Networking.Tests`, `tests/Puck.Mcp.Tests`, `tests/Puck.Cli.Tests` (the `puck mcp` process interop) and the real-host smoke described in
 [`Puck.Mcp`](../../../../src/Puck.Mcp/README.md) when changing this attachment seam.

@@ -8,6 +8,7 @@
 #ifdef SDF_SURFACE_PASS
 #include "../frame/sdf-mesh-pyramid.hlsli"
 #include "../frame/sdf-optical-depth.hlsli"
+#include "../frame/sdf-shadow-optical.hlsli"
 
 // The screen-space occlusion's world radius, taps and strength. A tap occludes only past the cosine bias and the lift (a
 // height above the tangent plane in pixel footprints), which keep a tessellated curve's facets and a baked surface's
@@ -195,7 +196,7 @@ float3 sdfMeshShadowGap(bool opticalPresent, uint cascade, SdfMeshCascade c, flo
     uint side = sdfComponent(passGroup.meshShadowTexels, cascade);
     int last = int(side) - 1;
     uint2 cell = uint2(clamp(int2(at), int2(0, 0), int2(last, last)));
-    uint word = 3u * (cell.y * side + cell.x);
+    uint word = sdfShadowOpticalWord(side, cell);
     uint low = cascade == 0u ? meshShadowNearOptical[word] : (cascade == 1u ? meshShadowFarOptical[word] : meshShadowSecondOptical[word]);
     uint high = cascade == 0u ? meshShadowNearOptical[word + 1u] : (cascade == 1u ? meshShadowFarOptical[word + 1u] : meshShadowSecondOptical[word + 1u]);
     uint entry = cascade == 0u ? meshShadowNearOptical[word + 2u] : (cascade == 1u ? meshShadowFarOptical[word + 2u] : meshShadowSecondOptical[word + 2u]);
@@ -284,7 +285,7 @@ float2 sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint role) {
         if (cascade == 0u) { meshShadowNearOptical.GetDimensions(opticalWords, opticalStride); }
         else if (cascade == 1u) { meshShadowFarOptical.GetDimensions(opticalWords, opticalStride); }
         else if (cascade == 2u) { meshShadowSecondOptical.GetDimensions(opticalWords, opticalStride); }
-        bool opticalPresent = (!heldExit && (opticalWords >= 3u * side * side));
+        bool opticalPresent = (!heldExit && (opticalWords >= sdfShadowOpticalBitmap(side)));
 
         float2 texel = (float2(((plane.x * 0.5) + 0.5), (0.5 - (plane.y * 0.5))) * texels);
         float receiver = (depth - parameters.x);
