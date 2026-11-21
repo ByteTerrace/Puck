@@ -54,7 +54,7 @@ Part of [`puck.world.definition.v1`](documents.md). See
   `Attach` — each reads the resolved DYNAMIC pose instead of
   the row's static transform (`WorldEventFeed.CollectRegions`,
   `WorldColliderSet.RefreshAttached`,
-  `WorldCreationInstances.TryShapePosition`/`RootPose`), so an equipped item's
+  `WorldAnchorPoses`), so an equipped item's
   aura/hitbox/voice tracks its carrier; an inactive carrier makes the facet
   contribute/sense/sound nothing, the same verdict the render stamp already
   had. `Distribution`/`Mirror` (static-stamp-only) and `Inhabit` (a row

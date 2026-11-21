@@ -685,7 +685,7 @@ live creation storage rather than as a static stamp (Client/WorldPlacementStampe
 analytic contact provider), and `Emission` all read the resolved DYNAMIC pose
 instead of refusing outright (`Server/WorldEventFeed.CollectRegions`,
 `Server/WorldColliderSet.RefreshAttached`,
-`Client/WorldCreationInstances.TryShapePosition`/`RootPose`)—an equipped item's
+`Client/WorldAnchorPoses`)—an equipped item's
 aura, hitbox, or voice tracks the carrier, and an inactive carrier makes the
 facet contribute/sense/sound nothing rather than at a stale point.
 `Distribution`/`Mirror` (static-stamp-only) and `Inhabit` (a row cannot both

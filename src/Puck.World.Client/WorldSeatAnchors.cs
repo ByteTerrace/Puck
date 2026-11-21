@@ -1,31 +1,10 @@
-using Puck.SdfVm;
-using Puck.SignedDistance;
-
 namespace Puck.World.Client;
 
-/// <summary>Resolves the seat-relative anchor kinds — <see cref="WorldAnchor.Seat"/> (through the seat's perceived
-/// body, so possession follows) and <see cref="WorldAnchor.RecentSpeaker"/> (through <see cref="WorldSpeechClock"/>)
-/// — and resolves the view registration a camera renders under for a seat. The one resolver the binder's
-/// offscreen views, the main-window presenter, and the audio director share.</summary>
+/// <summary>Selects a camera's anchor for a seat, names the body a seat-relative anchor kind rides —
+/// <see cref="WorldAnchor.Seat"/> (through the seat's perceived body, so possession follows) and
+/// <see cref="WorldAnchor.RecentSpeaker"/> (through <see cref="WorldSpeechClock"/>) — and names the view registration a
+/// camera renders under for a seat. <see cref="WorldAnchorPoses"/> resolves the pose.</summary>
 public static class WorldSeatAnchors {
-    private static SdfAnchor RootPose(int body, WorldClient client) => new(
-        Orientation: client.Orientation(index: body),
-        Position: client.Position(index: body)
-    );
-    private static bool TryResolveBody(WorldAnchor? anchor, int slot, WorldClient client, WorldPerceptionAnchor perception, WorldSpeechClock speech, out int body) {
-        body = BodyOf(
-            anchor: anchor,
-            perception: perception,
-            slot: slot,
-            speech: speech
-        );
-
-        return (
-            (((uint)body) < ((uint)WorldClient.EntityCapacity)) &&
-            client.IsActive(index: body)
-        );
-    }
-
     /// <summary>Returns the body a seat-relative anchor rides for <paramref name="slot"/>, or -1 when it resolves
     /// nothing (an unjoined explicit seat still resolves its perceived body; a recent speaker resolves only once
     /// something has spoken). A non-seat-relative anchor returns -1.</summary>
@@ -45,9 +24,6 @@ public static class WorldSeatAnchors {
             _ => -1,
         };
     }
-    /// <summary>Returns a value indicating whether <paramref name="anchor"/> is a seat-relative kind.</summary>
-    /// <param name="anchor">The anchor.</param>
-    public static bool IsSeatRelative(WorldAnchor? anchor) => (anchor is WorldAnchor.Seat or WorldAnchor.RecentSpeaker);
     /// <summary>Returns the part id a seat-relative anchor names, or <see langword="null"/> for its root.</summary>
     /// <param name="anchor">The anchor.</param>
     public static string? PartOf(WorldAnchor? anchor) => anchor switch {
@@ -99,50 +75,5 @@ public static class WorldSeatAnchors {
             ? candidates[candidateIndex].Anchor
             : null
         );
-    }
-    /// <summary>Resolves a seat-relative anchor's pose for <paramref name="slot"/> — the body's root pose, or its
-    /// named part from the packed transforms.</summary>
-    /// <param name="anchor">The anchor; a non-seat-relative kind resolves nothing.</param>
-    /// <param name="slot">The 0-based enclosing seat.</param>
-    /// <param name="client">The client supplying body poses.</param>
-    /// <param name="stamps">The stamp pool supplying part tables.</param>
-    /// <param name="perception">The per-seat perception anchor.</param>
-    /// <param name="speech">The speech clock.</param>
-    /// <param name="transforms">The current packed transforms (parts only).</param>
-    /// <param name="pose">The resolved pose, or default.</param>
-    public static bool TryResolve(WorldAnchor? anchor, int slot, WorldClient client, WorldCreationInstances stamps, WorldPerceptionAnchor perception, WorldSpeechClock speech, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
-        ArgumentNullException.ThrowIfNull(argument: client);
-        ArgumentNullException.ThrowIfNull(argument: stamps);
-
-        if (!TryResolveBody(
-            anchor: anchor,
-            body: out var body,
-            client: client,
-            perception: perception,
-            slot: slot,
-            speech: speech
-        )) {
-            pose = default;
-
-            return false;
-        }
-
-        if (PartOf(anchor: anchor) is { } partId) {
-            return WorldEntityPartResolver.TryPackedPose(
-                client: client,
-                entityIndex: body,
-                partId: partId,
-                pose: out pose,
-                stamps: stamps,
-                transforms: transforms
-            );
-        }
-
-        pose = RootPose(
-            body: body,
-            client: client
-        );
-
-        return true;
     }
 }

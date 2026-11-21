@@ -28,8 +28,9 @@ public sealed partial class WorldTick {
         m_dealTemplatesOf = placements;
         m_dealTemplatesCatalog = catalog;
         m_dealTemplates.Clear();
-        for (var index = 0; (index < placements.Count); index++) {
-            if (placements[index] is not { Deal: { } deal } template) { continue; }
+        foreach (var index in WorldPlacementIndex.Of(placements: placements).Dealers) {
+            var template = placements[index];
+            var deal = template.Deal!;
             if (!m_dealMemos.TryGetValue(key: template.Id, value: out var memo)) {
                 memo = new DealMemo();
                 m_dealMemos[template.Id] = memo;
@@ -373,7 +374,11 @@ public sealed partial class WorldTick {
 
         var firstMutation = m_dealChanges.Count;
 
-        foreach (var candidate in definition.Placements) {
+        var placements = definition.Placements;
+
+        foreach (var ordinal in WorldPlacementIndex.Of(placements: placements).ChildrenOf(parentId: template.Id)) {
+            var candidate = placements[ordinal];
+
             if (!WorldPlacementDeal.IsChild(
                 parent: template,
                 placement: candidate

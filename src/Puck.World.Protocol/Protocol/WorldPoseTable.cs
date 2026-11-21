@@ -52,6 +52,10 @@ public sealed class WorldPoseTable {
     private readonly Quaternion[] m_previousOrientation;
     private readonly Vector3[] m_currentPosition;
     private readonly Vector3[] m_previousPosition;
+    // Each inhabited placement's lowest active entity index, rebuilt by the writer whenever a slot's placement or its
+    // activity as an inhabitant moved, and published whole, so a reader on another thread reads one consistent map.
+    private Dictionary<string, int> m_inhabitants = new(comparer: StringComparer.Ordinal);
+    private bool m_inhabitantsMoved;
 
     /// <summary>Initializes an empty table.</summary>
     /// <param name="capacity">The number of entity indices tracked.</param>
@@ -104,6 +108,7 @@ public sealed class WorldPoseTable {
                     location: ref m_active[index],
                     value: false
                 );
+                m_inhabitantsMoved |= (m_placementId[index] is not null);
                 m_placementId[index] = null;
             }
         }
@@ -111,6 +116,29 @@ public sealed class WorldPoseTable {
         m_live.Clear();
         foreach (var index in m_seen.Members) { _ = m_live.Add(index: index); }
         if (preserved >= 0) { _ = m_live.Add(index: preserved); }
+        if (m_inhabitantsMoved) { PublishInhabitants(); }
+    }
+    // Every slot that may be active is in the live set or the admitted set (the type's invariant), so walking both
+    // finds each placement's lowest active inhabitant without visiting the whole capacity.
+    private void PublishInhabitants() {
+        var inhabitants = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+
+        Collect(members: m_live.Members);
+        Collect(members: m_seen.Members);
+        Volatile.Write(location: ref m_inhabitants, value: inhabitants);
+        m_inhabitantsMoved = false;
+
+        void Collect(ReadOnlySpan<int> members) {
+            foreach (var index in members) {
+                if (
+                    (m_placementId[index] is { } placementId) &&
+                    Volatile.Read(location: ref m_active[index]) &&
+                    (!inhabitants.TryGetValue(key: placementId, value: out var lowest) || (index < lowest))
+                ) {
+                    inhabitants[placementId] = index;
+                }
+            }
+        }
     }
     /// <summary>Records a discontinuity the consumer declared itself (an over-threshold correction it snapped), which
     /// a presentation-side follower reseeds across.</summary>
@@ -126,24 +154,25 @@ public sealed class WorldPoseTable {
     /// <see cref="Discontinue"/>.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public int PoseEpoch(int index) => m_poseEpoch[index];
-    /// <summary>Resolves the lowest active entity index that inhabits a placement.</summary>
+    /// <summary>Resolves the lowest active entity index that inhabits a placement, as of the last
+    /// <see cref="Complete"/> or <see cref="Seed"/>.</summary>
     /// <param name="placementId">The placement row id.</param>
     /// <param name="index">The entity index, or <c>-1</c> when none inhabits it.</param>
     /// <returns><see langword="true"/> when an active entity inhabits the placement.</returns>
+    /// <remarks>Reads the inhabitant map the writer last published, then confirms the slot still holds the placement
+    /// and is active, so a reader racing a delivery in progress answers none rather than a slot that delivery has
+    /// already moved.</remarks>
     public bool TryInhabitant(string placementId, out int index) {
-        for (var candidate = 0; (candidate < Capacity); candidate++) {
-            if (
-                IsActive(index: candidate) &&
-                string.Equals(
-                    a: m_placementId[candidate],
-                    b: placementId,
-                    comparisonType: StringComparison.Ordinal
-                )
-            ) {
-                index = candidate;
-
-                return true;
-            }
+        if (
+            Volatile.Read(location: ref m_inhabitants).TryGetValue(key: placementId, value: out index) &&
+            IsActive(index: index) &&
+            string.Equals(
+                a: m_placementId[index],
+                b: placementId,
+                comparisonType: StringComparison.Ordinal
+            )
+        ) {
+            return true;
         }
 
         index = -1;
@@ -171,6 +200,7 @@ public sealed class WorldPoseTable {
             location: ref m_active[index],
             value: true
         );
+        if (m_inhabitantsMoved || (m_placementId[index] is not null)) { PublishInhabitants(); }
     }
     /// <summary>Admits one snapshot entry: adds its slot to the admitted set and moves its endpoints, placement and
     /// active flag by its continuity hint. The active flag is written last, so the caller writes every other field it
@@ -195,6 +225,10 @@ public sealed class WorldPoseTable {
         var step = WorldPoseStep.Interpolated;
 
         _ = m_seen.Add(index: index);
+        m_inhabitantsMoved |= (
+            !string.Equals(a: m_placementId[index], b: entry.PlacementId, comparisonType: StringComparison.Ordinal) ||
+            ((entry.PlacementId is not null) && (Volatile.Read(location: ref m_active[index]) != entry.Active))
+        );
         m_placementId[index] = entry.PlacementId;
 
         if (

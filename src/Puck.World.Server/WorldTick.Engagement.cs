@@ -300,6 +300,8 @@ public sealed partial class WorldTick {
 
         var screenRows = Host.Document.Definition.Screens;
         var placementRows = Host.Document.Definition.Placements;
+        // Only the engageable tabletops, in list order, so the nearest still ties to the earlier row.
+        var tabletops = WorldPlacementIndex.Of(placements: placementRows).Tabletops;
 
         for (var slot = 0; (slot < Host.Population.LocalSeatCount); slot++) {
             if (Host.Body(index: slot) is not { } body) {
@@ -372,8 +374,8 @@ public sealed partial class WorldTick {
                 }
             }
 
-            for (var index = 0; (index < placementRows.Count); index++) {
-                var placement = placementRows[index];
+            foreach (var tabletop in tabletops) {
+                var placement = placementRows[tabletop];
 
                 if (
                     (placement.Board?.Engage is not { } engage) ||

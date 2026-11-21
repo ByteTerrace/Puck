@@ -116,7 +116,7 @@ named doors (`docs/plans/disclosure.md:797-811`) **[checked]**.
   (`docs/architecture/worlds.md:1281-1284`) versus the hazards register:
   `WorldSessionResolver.m_nextGenerationId` "mints the generation ids a
   transfer continuation's checkpoint carries, and nothing captures the counter"
-  (`docs/development/hazards.md:225-228`;
+  (`docs/development/hazards.md:286-289`;
   `src/Puck.World.Schema/WorldSessionResolver.cs:75`, `:577`, `:758`)
   **[checked]**. The hazards page marks the consequence unconfirmed.
 - **"Remote evidence carries issuer-qualified authority, document, user and
@@ -512,7 +512,7 @@ about, and what invariant 1 implies.
 - **Attacker:** none needed; a restart suffices, and a party that can force
   one (A12) can time it.
 - **Steps:** a host restarts; `m_nextGenerationId` restarts with it
-  (`docs/development/hazards.md:225-228`); a continuation checkpoint carries
+  (`docs/development/hazards.md:286-289`); a continuation checkpoint carries
   generation ids minted before the restart; a reservation addressed to one may
   land in a different ephemeral world than the display resolved.
 - **Gain:** "show dungeon A and enter dungeon B", the exact split the model

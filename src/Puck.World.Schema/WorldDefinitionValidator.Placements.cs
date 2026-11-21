@@ -1749,7 +1749,7 @@ public static partial class WorldDefinitionValidator {
             // BodyIndex uses the same 0-based entity indexing as WorldAnchor.Entity and the body:<n> grant subject —
             // never the 1-based player.* seat number. Region, Solid (analytic contact provider), and Emission all
             // read the resolved dynamic pose (WorldEventFeed.CollectRegions, WorldColliderSet.RefreshAttached,
-            // WorldCreationInstances.TryShapePosition/RootPose), so an equipped item's aura/hitbox/voice tracks the carrier.
+            // WorldAnchorPoses), so an equipped item's aura/hitbox/voice tracks the carrier.
             // Distribution/mirror and inhabit stay refused (a row cannot both spawn its own bodies and ride
             // another's); FaceSources stays permitted (a content selector, not a transform).
             if (placement.Attach is { } attach) {
