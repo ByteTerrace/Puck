@@ -37,6 +37,9 @@ public abstract record WorldPendingOp {
         public double ReconstructMilliseconds { get; init; }
         /// <summary>Gets how long the preparation took to admit the candidate, in milliseconds.</summary>
         public double AdmitMilliseconds { get; init; }
+        /// <summary>Gets the size, in bytes, of the request as the wire carries it without a document, which the
+        /// preparation measured off the tick; zero for a request with no delta.</summary>
+        public int RequestBytes { get; init; }
     }
     /// <summary>One buffered journal undo.</summary>
     /// <param name="Count">How many journal entries to drop from the tail.</param>

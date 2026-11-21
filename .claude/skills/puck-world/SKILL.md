@@ -503,7 +503,7 @@ merge and carried whole when its delta cannot be. The wire carries the patch, bo
 revision pins (digests over member digests), the directory and the source pin.
 
 **The authority merges the delta over the live document.** Its preparation
-(`WorldRebuildPreparation`, off the tick on a host with workers) reconstructs the next
+(`WorldRebuildPreparation`, on the thread pool when `WorldServer.PreparesRebuildsOffTick`, which the desktop's job pool and a silo row set) reconstructs the next
 revision (`WorldReloadDelta.TryReconstruct`; a sender in the same process hands over
 the revision it built, sharing every unchanged row with the last), then merges it over
 the live document (`TryMergeOver`): a member the live document still holds as the

@@ -12,6 +12,9 @@ public sealed partial class WorldSiloHost {
 
         try {
             server.Neighbours = neighbours;
+            // A row has no job pool, but a reload's reconstruction, merge and validation read only what its submission
+            // captured: they run on the thread pool, never on the row's step thread.
+            server.PreparesRebuildsOffTick = true;
 
             // A hosted world's definition arrives from cloud storage, never a local file, so it has no document
             // directory: an absolute source reads, and a relative one is refused by name (WorldDocumentPaths). Attached

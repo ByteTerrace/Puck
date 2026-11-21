@@ -1,3 +1,4 @@
+using Puck.Abstractions;
 using System.Text;
 
 namespace Puck.Mcp;
@@ -134,12 +135,7 @@ internal sealed class BoundedMcpInput(Stream input, Action ended) : Stream {
                 task1: pending,
                 task2: m_closed.Task
             ).ConfigureAwait(continueOnCapturedContext: false) != pending) {
-                _ = pending.ContinueWith(
-                    static task => { _ = task.Exception; },
-                    CancellationToken.None,
-                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                    TaskScheduler.Default
-                );
+                pending.Observe();
                 return 0;
             }
             var read = await pending.ConfigureAwait(continueOnCapturedContext: false);
