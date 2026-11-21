@@ -43,7 +43,8 @@ capability authentication.
 - *Presentation observability:* frame capture, latest-value publication, and
   emitted light remain outside the simulation trajectory.
 - *Source-watch debounce:* `DependencyWatch` polls comparable dependency facts
-  at a bounded interval and requests work after a quiet period. Refreshing the
+  at a bounded interval, reading them on the thread pool so the host pump only
+  adopts their answers, and requests work after a quiet period. Refreshing the
   dependency set preserves pending edits, including a dependency changed while
   compilation was running. The caller supplies presentation timestamps; a
   source watch never changes simulation state directly.

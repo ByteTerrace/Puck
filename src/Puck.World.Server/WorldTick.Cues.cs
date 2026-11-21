@@ -91,7 +91,7 @@ public sealed partial class WorldTick {
             if (reads.Placements.Length != 0) {
                 var placements = m_placements ??= view.Placements;
                 foreach (var id in reads.Placements) {
-                    if (!placements.Any(placement => placement.Id == id)) { return false; }
+                    if (!Shows(placements, id)) { return false; }
                 }
             }
             return true;
@@ -109,10 +109,17 @@ public sealed partial class WorldTick {
             var generation = Host.Population.Generation(body);
             if (!(bodies?.Contains(body, generation) ?? snapshot.TryFindEntity(body, generation, out _))) { continue; }
             if (edge.Family is WorldEventFamily.RegionEnter or WorldEventFamily.RegionExit &&
-                !(placements ??= view.Placements).Any(placement => placement.Id == edge.GateA.Id)) { continue; }
+                !Shows(placements ??= view.Placements, edge.GateA.Id)) { continue; }
             senses |= (byte)(1 << (int)sense);
         }
         return senses;
     }
 
+    // Whether a placement projection shows the placement id.
+    private static bool Shows(IReadOnlyList<WorldPlacement> placements, string? id) {
+        for (var index = 0; (index < placements.Count); index++) {
+            if (string.Equals(placements[index].Id, id, StringComparison.Ordinal)) { return true; }
+        }
+        return false;
+    }
 }
