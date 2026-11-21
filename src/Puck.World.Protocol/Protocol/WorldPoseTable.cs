@@ -84,6 +84,11 @@ public sealed class WorldPoseTable {
     /// <summary>Gets the slots the delivery in progress has admitted, in admission order; valid until the next
     /// <see cref="Begin"/> or <see cref="TryAdmit"/>.</summary>
     public ReadOnlySpan<int> Seen => m_seen.Members;
+    /// <summary>Gets every slot that can be active once a delivery has completed: the slots the last
+    /// <see cref="Complete"/> left live and those <see cref="Seed"/> published since. A consumer that resolves a pose
+    /// for each active entity walks these and never the whole <see cref="Capacity"/>; valid until the next
+    /// <see cref="Complete"/> or <see cref="Seed"/>.</summary>
+    public ReadOnlySpan<int> Live => m_live.Members;
 
     /// <summary>Returns whether the delivery in progress has admitted a slot.</summary>
     /// <param name="index">The 0-based entity index; one outside <see cref="Capacity"/> was never admitted.</param>

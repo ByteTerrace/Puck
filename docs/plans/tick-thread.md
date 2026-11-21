@@ -109,7 +109,7 @@ Each authority tick has three parts, and the design places each on a thread.
    join) is waited out on the step thread, under the stall deadline the tick
    already has.
 3. **Collect, on the pump.** The work that follows a completed tick: replay
-   what the tick delivered ([the outbox](#from-the-authority-to-the-client-the-hubs-outbox)),
+   what the tick delivered ([the outbox](#from-the-authority-to-the-client-the-outbox)),
    publish the tick to its hooks (`WorldConsoleWaitGate.PublishTick`,
    `WorldCaptureScheduler.PublishTick`, `WorldTickScript.PublishTick`,
    `WorldTestRun.PublishTick`), then the host acts that read the settled state
@@ -492,12 +492,21 @@ wave's collect has replayed the mirrors' deliveries. Prepare then publishes
 one immutable adjacency record for the tick. The tick reads that record, and
 so does the frame, which is the reader the table above already moves.
 
-The job pool is ready for a second forking thread: each `JobClass` holds its
-own fork, so the frame's fork and the tick's run side by side. The review
-found that a wake requested while another class's wake is still pending can
-release no worker, and that two forking threads beside the workers and the
-audio thread are one more active thread than the machine has processors. The
-lane that owns `JobPool` fixes both.
+The job pool expects the step thread. Each `JobClass` holds its own fork, so
+the frame's fork and the tick's run side by side and both are given workers,
+and the pool's worker count leaves a processor each for the frame thread, the
+step thread and the audio thread (`JobWorkers.MachineWorkers`).
+
+The frame's fork puts one condition on this design. Its partitions read
+`WorldStateMirror` without a lock, so the mirror's install, refresh and apply
+must not run while a frame fork is in flight. They do not move to the step
+thread: a delivery reaches the mirror only through the outbox's replay, which
+runs on the frame thread in a collect, and a collect runs in the step
+section, after produce or inside the pacing wait, never inside produce, where
+the frame's fork is opened and joined. The replay is the one place a delivery
+writes the mirror, so the rule is checked there: it refuses to run while the
+frame class has a fork open. A frame fork held open across iterations would
+therefore hold the collect until it joins, and needs no double buffer.
 
 ## Input, and the time from input to display
 
@@ -628,10 +637,11 @@ same waves on the same thread, and T4 serves both hosts.
   as the way a console verb reaches the step thread. Rejected: verbs read and
   write through dozens of server members synchronously, and running them on
   the pump inside the window needs none of them rewritten.
-- **`WorldOutputHub`.** Extended with the outbox. A copying mailbox sink
-  between the hub and `WorldClient` was considered and rejected: a snapshot
-  lends memory at three depths, and deferring the fan-out lends it for
-  longer instead of copying it.
+- **`WorldOutputHub`.** Kept as the place deliveries are composed, with the
+  outbox at its last hop. A mailbox sink that copies every delivery was
+  considered and rejected: a snapshot lends memory at three depths, and the
+  outbox holds the loan until the collect, copying only when one lender
+  delivers twice in a tick.
 - **`WorldSessionMirror` and `PublishBuffer<T>`.** The mirror tolerates a
   delivering thread. It is still deferred here, so that a camera reading a
   body through a mirror and a scene drawing it from `WorldClient` see one

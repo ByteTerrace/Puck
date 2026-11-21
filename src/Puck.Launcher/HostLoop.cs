@@ -102,6 +102,10 @@ public sealed class HostLoop(
     // control phase (HostIteration's constructor calls Mint).
     private long m_controlPhases;
     private long m_minted;
+    // The step rate the iteration resolved after its control phase, in steps a second: the iteration's step width and
+    // pacer period, and the next control phases' wait allowance. A rate a console drain or a step changes is read by
+    // the next iteration; the pump ends a burst on the change itself (FixedStepPump.Advance).
+    private uint m_ratePerSecond = LauncherHostLoop.DefaultUpdateRate;
 
     /// <summary>Whether a completed tick still owes a renderable frame.</summary>
     public static bool HoldsTick(bool hasSimulation, FrameCompletion completion) => (hasSimulation && (completion == FrameCompletion.NotYetRenderable));
@@ -111,7 +115,7 @@ public sealed class HostLoop(
     private void ControlPhase(bool atBoundary) {
         if (atBoundary) { HostConsoleDrain.Collect(output: output, source: textSource); }
         timeline.NoteControlPhase();
-        HostWaits.BeginPumpIteration(allowance: TimeSpan.FromSeconds(value: (1.0 / LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation))));
+        HostWaits.BeginPumpIteration(allowance: TimeSpan.FromSeconds(value: (1.0 / m_ratePerSecond)));
         m_controlPhases++;
     }
     internal void Mint() {
@@ -128,6 +132,7 @@ public sealed class HostLoop(
             throw new InvalidOperationException(message: "A fixed-step simulation and its InputRouter must be registered together. Use AddFixedStepSimulation<TSimulation>().");
         }
         registry.RouteSimulationTo(sink: m_router?.ConsoleTextSink);
+        m_ratePerSecond = LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation);
         var pump = FixedStepPump.CreateHosted(m_simulation, m_router, registry, inputClock, textSource, ControlPhase, terminal, backlog,
             holdsClock: (produce is not null), timeline: timeline);
         var clock = TickClock.Start(time: time);
@@ -165,7 +170,9 @@ public sealed class HostLoop(
                 // Read once: a lockstep switch inside this iteration's drain takes effect on the next one, so the step, the
                 // hold and the adapter's frame all agree on one mode.
                 var tickLocked = pacing.StepsOneTickPerFrame;
-                var stepTicks = FixedTickConversion.PerRate(ratePerSecond: LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation));
+                m_ratePerSecond = LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation);
+
+                var stepTicks = FixedTickConversion.PerRate(ratePerSecond: m_ratePerSecond);
                 var interval = clock.Sample();
                 var steps = 0;
 
@@ -207,7 +214,7 @@ public sealed class HostLoop(
                 if (wait is not null) {
                     wait();
                 } else if (!pacing.IsUnpaced || pump?.StepPending == true) {
-                    var period = (frequency / ((long)LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation)));
+                    var period = (frequency / ((long)m_ratePerSecond));
 
                     nextDeadline += period;
                     var now = time.GetTimestamp();
