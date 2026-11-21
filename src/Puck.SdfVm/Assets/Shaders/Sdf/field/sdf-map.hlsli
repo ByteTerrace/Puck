@@ -29,15 +29,6 @@ float3 sdfRigidFoldPoint(float3 p, uint extensionOffset, uint dataOffset) {
     }
     return p;
 }
-// A relief mask band's weight at a region distance (KEEP IN SYNC with SdfFieldEvaluator.BandWeight): its outside at or
-// beyond its end, its inside at or below its start, and smoothstep between. band = (start, width, inside, outside), on
-// the grids both carriers hold exactly (SdfReliefBand), so start + width is the fixed-point end to the bit.
-precise float sdfReliefBandWeight(float4 band, float distance) {
-    if (distance >= (band.x + band.y)) { return band.w; }
-    if (distance <= band.x) { return band.z; }
-    float t = clamp(((distance - band.x) / band.y), 0.0, 1.0);
-    return (band.z + ((band.w - band.z) * ((t * t) * (3.0 - (2.0 * t)))));
-}
 // Region admission and the primitive action both come from the shape catalogue.
 precise float sdfReliefRegionDistance(uint shapeType, float3 p, float4 data0, float4 data1) {
     float result;
@@ -47,8 +38,8 @@ precise float sdfReliefRegionDistance(uint shapeType, float3 p, float4 data0, fl
     }
     return result;
 }
-// The product of a masked relief's weights at its point q, from the rowCount rows from firstRow (KEEP IN SYNC with
-// SdfFieldEvaluator.MaskProduct): each band row opens a mask, each pose row poses the next primitive row's region, and
+// The product of a masked relief's weights at its point q, from the rowCount rows from firstRow (the fixed-point
+// reader's walk is SdfFieldEvaluator.MaskProduct; a band's weight is the shared sdfReliefBandWeight): each band row opens a mask, each pose row poses the next primitive row's region, and
 // a mask's distance is the least of its regions' at turn_back(q - origin). A mask whose distance is at or below its
 // start skips its remaining regions, whose weight is its inside whatever they read, and an exactly zero product returns
 // at once. The caller bounds rowCount by SDF_MAX_RELIEF_ROWS and by the rows before the relief in its segment.
@@ -73,7 +64,7 @@ float sdfMaskProduct(uint firstRow, uint rowCount, float3 q, uint dataOffset) {
         }
     }
     if (open) {
-        weight *= sdfReliefBandWeight(band, distance);
+        weight *= sdfReliefBandWeight(distance, band.x, (band.x + band.y), band.z, band.w);
     }
     return weight;
 }
@@ -333,7 +324,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shapeHeader), rigidPosition, shapeData0, shapeData1);
                     int material = (trackMaterial ? (int)SDF_INSTRUCTION_MATERIAL(shapeHeader) : 0);
 
-                    sdfComposeCandidate(result, candidate, SDF_INSTRUCTION_BLEND(shapeHeader), material, segmentInstance, rigidSlot, shapeData1.x, trackMaterial);
+                    sdfComposeCandidate(result, candidate, SDF_INSTRUCTION_BLEND(shapeHeader), material, segmentInstance, rigidSlot, shapeData1.x, 0.0, trackMaterial);
                 }
 
                 continue;
@@ -365,6 +356,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             int composeInstance = -1;
             int composeSlot = SDF_TRANSFORM_SLOT_NONE;
             float composeSmooth = 0.0;
+            float composeOperand = 0.0;
 
             switch (op) {
 #include "../isa/sdf-field-map.hlsli"
@@ -380,7 +372,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             // is a contact locus of ties). Then blend the candidate into result.distance. composePending is false for
             // every point/field op AND for a bound-skipped SHAPE, so those paths are byte-for-byte the pre-scope walk.
             if (composePending) {
-                sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeInstance, composeSlot, composeSmooth, trackMaterial);
+                sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeInstance, composeSlot, composeSmooth, composeOperand, trackMaterial);
             }
         }
     }

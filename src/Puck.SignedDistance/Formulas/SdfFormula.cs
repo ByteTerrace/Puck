@@ -9,18 +9,23 @@ namespace Puck.SignedDistance;
 // node set is closed on purpose: every op names its lowering on both targets here, so a formula cannot reach a
 // construct one reader lacks. This source is also compiled into the Roslyn generator (Puck.Analyzers), which lowers
 // the C# reader at build time; Puck.Shaders.Generator lowers the HLSL reader from the same objects.
-internal enum SdfFormulaType { Scalar, Vector2, Vector3, Condition }
+internal enum SdfFormulaType { Scalar, Vector2, Vector3, Condition, Index, Rotation }
 
 internal interface ISdfFormulaType;
 internal readonly struct SdfScalar : ISdfFormulaType;
 internal readonly struct SdfVector2 : ISdfFormulaType;
 internal readonly struct SdfVector3 : ISdfFormulaType;
 internal readonly struct SdfCondition : ISdfFormulaType;
+// An unsigned header lane (a seed, a mode, a count): passed to a primitive, never computed with.
+internal readonly struct SdfIndex : ISdfFormulaType;
+// A unit quaternion: a point is turned back through it, and nothing else reads it.
+internal readonly struct SdfRotation : ISdfFormulaType;
 
 internal enum SdfFormulaOp {
     Name, Literal, Constant, Add, Subtract, Multiply, Divide, Negate, X, Y, Z,
     Vector2, Vector3, Abs, Min, Max, Clamp, Lerp, Length, Dot, SegmentParameter, MinLength,
     ScaledRatio, Power, FiniteOr, Ellipse2D, Equal, Less, LessEqual, Greater, GreaterEqual, And, Select, Call,
+    Round, Floor, MultiplyComponents, DivideComponents, RotateInverse, Smoothstep, Fbm3, CellDistance,
 }
 
 // An operand a catalogue formula reads from its instruction: the C# argument (a CompiledInstruction lane) and the
@@ -41,6 +46,8 @@ internal readonly record struct SdfValue<T>(SdfFormulaNode Node) : ISdfFormulaVa
         : typeof(T) == typeof(SdfVector2) ? SdfFormulaType.Vector2
         : typeof(T) == typeof(SdfVector3) ? SdfFormulaType.Vector3
         : typeof(T) == typeof(SdfCondition) ? SdfFormulaType.Condition
+        : typeof(T) == typeof(SdfIndex) ? SdfFormulaType.Index
+        : typeof(T) == typeof(SdfRotation) ? SdfFormulaType.Rotation
         : throw new ArgumentOutOfRangeException(nameof(T));
 
     internal static SdfValue<T> Of(SdfFormulaOp op, params ISdfFormulaValue[] inputs) =>
@@ -123,9 +130,24 @@ internal class SdfFormula {
     private IEnumerable<Parameter> Parameters(bool shader) => m_parameters.Where(parameter =>
         (shader ? parameter.Shader : parameter.Fixed) is not null);
 
-    // The call a catalogue dispatch makes: each operand's own argument text on that target.
-    internal string Dispatch(bool shader) {
-        var arguments = Parameters(shader).Select(parameter => (shader ? parameter.Shader : parameter.Fixed)!);
+    internal SdfFormulaType ResultType => Result;
+
+    // The walk state a formula reads on the fixed-point side: its operands whose argument is one of the given names
+    // rather than an instruction lane, in parameter order.
+    internal IEnumerable<(string Name, string Type)> FixedState(params string[] names) => Parameters(shader: false)
+        .Where(parameter => names.Contains(parameter.Fixed!))
+        .Select(static parameter => (parameter.Fixed!, TypeName(parameter.Type, shader: false)));
+
+    // The call a catalogue dispatch makes: each operand's own argument text on that target, a walk-state operand
+    // replaced by the name the calling reader holds that state under.
+    internal string Dispatch(bool shader, params (string State, string Held)[] held) {
+        var arguments = Parameters(shader).Select(parameter => {
+            var text = (shader ? parameter.Shader : parameter.Fixed)!;
+            foreach (var (state, name) in held) {
+                if (text == state) { return name; }
+            }
+            return text;
+        });
         if (!shader && UsesPower) { arguments = arguments.Concat(["ref powerWork"]); }
         return Call(NameIn(shader), arguments);
     }
@@ -186,6 +208,8 @@ internal class SdfFormula {
         SdfFormulaType.Vector2 => shader ? "float2" : "FixedVector2",
         SdfFormulaType.Vector3 => shader ? "float3" : "FixedVector3",
         SdfFormulaType.Condition => "bool",
+        SdfFormulaType.Index => "uint",
+        SdfFormulaType.Rotation => shader ? "float4" : "FixedQuaternion",
         _ => throw new ArgumentOutOfRangeException(nameof(type)),
     };
 
@@ -243,6 +267,24 @@ internal class SdfFormula {
             SdfFormulaOp.Ellipse2D => shader
                 ? $"sdfEllipse2D({At(0)}, float2({At(1)}, {At(2)}))"
                 : $"SdfEllipse2D({At(0)}, {At(1)}, {At(2)})",
+            SdfFormulaOp.Round => Math("Round"),
+            SdfFormulaOp.Floor => Math("Floor"),
+            // Component by component: HLSL's operators, the fixed vector's named methods.
+            SdfFormulaOp.MultiplyComponents => shader ? Binary("*") : Math("Multiply"),
+            SdfFormulaOp.DivideComponents => shader ? Binary("/") : Math("Divide"),
+            SdfFormulaOp.RotateInverse => shader
+                ? $"rotatePointByInverseQuaternion({At(0)}, {At(1)})"
+                : $"{At(1)}.RotateInverse({At(0)})",
+            SdfFormulaOp.Smoothstep => shader ? $"smoothstep({Arguments()})" : $"FixedQ4816.Smoothstep({Arguments()})",
+            // The noises loop over octaves and cells, which the expression language does not carry, so each is a
+            // primitive of each reader: Pcg3dLatticeNoise.Fbm3 and sdfFbm3, SdfFieldEvaluator.SampleCells and
+            // sdfCellDistance (field/sdf-noise.hlsli).
+            SdfFormulaOp.Fbm3 => shader
+                ? $"sdfFbm3({Arguments()})"
+                : $"Pcg3dLatticeNoise.Fbm3(q: {At(0)}, seed: {At(1)}, octaves: ((int){At(2)}), gain: {At(3)}, lacunarity: {At(4)})",
+            SdfFormulaOp.CellDistance => shader
+                ? $"sdfCellDistance({Arguments()})"
+                : $"SampleCells({At(0)}, {At(1)}, ((SdfCellMode){At(2)}), {At(3)})",
             SdfFormulaOp.Equal => Binary("=="),
             SdfFormulaOp.Less => Binary("<"),
             SdfFormulaOp.LessEqual => Binary("<="),

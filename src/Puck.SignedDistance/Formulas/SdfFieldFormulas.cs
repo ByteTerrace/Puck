@@ -41,6 +41,21 @@ internal static partial class SdfFieldFormulas {
     private static readonly SdfFormulaOperand<SdfScalar> Current = new("current", "current");
     private static readonly SdfFormulaOperand<SdfScalar> Candidate = new("candidate", "candidate");
     private static readonly SdfFormulaOperand<SdfScalar> SmoothRadius = new("smoothRadius", "smoothRadius");
+    // A scope pop's own operand, which a shape's join leaves at zero: a stairs pop's step count, a morph pop's weight.
+    private static readonly SdfFormulaOperand<SdfScalar> PopOperand = new("operand", "operand");
+    // The walk's state, which each reader holds under its own name (SdfFormula.Dispatch).
+    private static readonly SdfFormulaOperand<SdfScalar> Distance = new("distance", "distance");
+    private static readonly SdfFormulaOperand<SdfScalar> DistanceScale = new("distanceScale", "distanceScale");
+    // A masked relief's weight, which each reader's own row walk multiplies up (ReliefBandWeight per mask).
+    private static readonly SdfFormulaOperand<SdfScalar> Weight = new("weight", "weight");
+    private static readonly SdfFormulaOperand<SdfVector3> Data1Xyz = new("Vector1(instruction)", "data1.xyz");
+    private static readonly SdfFormulaOperand<SdfScalar> Data1X = new("instruction.Data1X", "data1.x");
+    private static readonly SdfFormulaOperand<SdfRotation> Data0Rotation = new("Rotation(instruction)", "data0");
+    private static readonly SdfFormulaOperand<SdfIndex> ShapeLane = new("instruction.Shape", "SDF_INSTRUCTION_SHAPE(instructionHeader)");
+    private static readonly SdfFormulaOperand<SdfIndex> BlendLane = new("instruction.Blend", "SDF_INSTRUCTION_BLEND(instructionHeader)");
+    // The lane a morph pop reads. The fixed-point reader walks static fields, where no dynamic slot is selected and
+    // every lane reads zero, as the kernels' sdfFieldLane reads it there.
+    private static readonly SdfFormulaOperand<SdfScalar> MorphLane = new("FixedQ4816.Zero", "sdfFieldLane(currentSlot, (uint)data0.x)");
 
     private static Scalar X(Vector2 value) => Scalar.Of(SdfFormulaOp.X, value);
     private static Scalar Y(Vector2 value) => Scalar.Of(SdfFormulaOp.Y, value);
@@ -74,6 +89,17 @@ internal static partial class SdfFieldFormulas {
     private static Scalar Ellipse2D(Vector2 point, Scalar semiX, Scalar semiY) => Scalar.Of(SdfFormulaOp.Ellipse2D, point, semiX, semiY);
     private static Scalar Select(Condition condition, Scalar whenTrue, Scalar whenFalse) => Scalar.Of(SdfFormulaOp.Select, condition, whenTrue, whenFalse);
     private static Condition Equal(Scalar a, Scalar b) => Condition.Of(SdfFormulaOp.Equal, a, b);
+    private static Scalar Floor(Scalar value) => Scalar.Of(SdfFormulaOp.Floor, value);
+    private static Scalar Smoothstep(Scalar edge0, Scalar edge1, Scalar value) => Scalar.Of(SdfFormulaOp.Smoothstep, edge0, edge1, value);
+    private static Vector3 Round(Vector3 value) => Vector3.Of(SdfFormulaOp.Round, value);
+    private static Vector3 Clamp(Vector3 value, Vector3 low, Vector3 high) => Vector3.Of(SdfFormulaOp.Clamp, value, low, high);
+    private static Vector3 Multiply(Vector3 a, Vector3 b) => Vector3.Of(SdfFormulaOp.MultiplyComponents, a, b);
+    private static Vector3 Divide(Vector3 a, Vector3 b) => Vector3.Of(SdfFormulaOp.DivideComponents, a, b);
+    private static Vector3 RotateInverse(Vector3 point, SdfValue<SdfRotation> rotation) => Vector3.Of(SdfFormulaOp.RotateInverse, point, rotation);
+    private static Scalar Fbm3(Vector3 q, SdfValue<SdfIndex> seed, SdfValue<SdfIndex> octaves, Scalar gain, Scalar lacunarity) =>
+        Scalar.Of(SdfFormulaOp.Fbm3, q, seed, octaves, gain, lacunarity);
+    private static Scalar CellDistance(Vector3 q, SdfValue<SdfIndex> seed, SdfValue<SdfIndex> mode, Scalar jitter) =>
+        Scalar.Of(SdfFormulaOp.CellDistance, q, seed, mode, jitter);
 
     // === Helpers ======================================================================================================
 
@@ -319,6 +345,104 @@ internal static partial class SdfFieldFormulas {
         Max(Max(current, -candidate), Chamfer(f) - Length(Vec2(current, candidate))));
     internal static readonly SdfFormula<SdfScalar> PipeSubtraction = Blend("sdfBlendPipeSubtraction", static (f, current, candidate) =>
         Min(Max(current, -candidate), Length(Vec2(current, candidate)) - Chamfer(f)));
+    // A scope pop's morph: the saved field at weight zero and the scope's candidate at weight one, each to the bit.
+    internal static readonly SdfFormula<SdfScalar> Morph = Blend("sdfBlendMorph", static (f, current, candidate) => {
+        var weight = f.Formula.Input("weight", PopOperand);
+        return ((One - weight) * current) + (weight * candidate);
+    });
+    // A morph pop's weight: its lane's place between the two bounds.
+    internal static readonly SdfFormula<SdfScalar> MorphWeight = Helper("sdfMorphWeight", static f => {
+        var lane = f.Input("lane", MorphLane);
+        var from = f.Input("from", Data0Y);
+        var to = f.Input("to", Data0Z);
+        f.Return(Clamp((lane - from) / (to - from), Zero, One));
+    });
+    // The stairs: n continuous steps of total radius r across the seam, the hard seam where either is not positive.
+    internal static readonly SdfFormula<SdfScalar> StairsUnion = Stairs("sdfBlendStairsUnion", subtracts: false);
+    internal static readonly SdfFormula<SdfScalar> StairsSubtraction = Stairs("sdfBlendStairsSubtraction", subtracts: true);
+
+    // === Material winners =============================================================================================
+    // Whether the candidate's material replaces the running field's. Each compare is strict, so the incumbent keeps a
+    // tie: a scoped shape resting on the ground is a locus of ties.
+    internal static readonly SdfFormula<SdfCondition> NearerWins = Winner("sdfNearerWins", static (current, candidate, _) => candidate < current);
+    internal static readonly SdfFormula<SdfCondition> FartherWins = Winner("sdfFartherWins", static (current, candidate, _) => candidate > current);
+    internal static readonly SdfFormula<SdfCondition> CutWins = Winner("sdfCutWins", static (current, candidate, _) => -candidate > current);
+    // A morph hands the material over at its midpoint.
+    internal static readonly SdfFormula<SdfCondition> WeightWins = Helper<SdfCondition>("sdfWeightWins", static f =>
+        f.Return(f.Input("weight", PopOperand) >= Half));
+
+    // === The stream ===================================================================================================
+    // What each instruction does to the walk: a point op maps the local point (and may scale the distances read through
+    // it), a field op maps the running distance. Each reader's walk, its culls and its scope stack stay its own.
+
+    internal static readonly SdfFormula<SdfVector3> TranslatePoint = PointMap("sdfTranslatePoint", static (f, p) => p - f.Input("translation", Data0Xyz));
+    internal static readonly SdfFormula<SdfVector3> RotatePoint = PointMap("sdfRotatePoint", static (f, p) => RotateInverse(p, f.Input("rotation", Data0Rotation)));
+    internal static readonly SdfFormula<SdfVector3> ScalePoint = PointMap("sdfScalePoint", static (f, p) => Divide(p, f.Input("scale", Data0Xyz)));
+    // The factor a Scale's shapes read their distances through: its least axis, baked by the builder.
+    internal static readonly SdfFormula<SdfScalar> ScaleDistance = Helper("sdfScaleDistance", static f =>
+        f.Return(f.Input("distanceScale", DistanceScale) * f.Input("factor", Data0W)));
+    internal static readonly SdfFormula<SdfVector3> ElongatePoint = PointMap("sdfElongatePoint", static (f, p) => {
+        var extents = f.Input("extents", Data0Xyz);
+        return p - Clamp(p, -extents, extents);
+    });
+    // The builder clamps the spacing away from zero and bakes its reciprocal.
+    internal static readonly SdfFormula<SdfVector3> RepeatPoint = PointMap("sdfRepeatPoint", static (f, p) => {
+        var spacing = f.Input("spacing", Data0Xyz);
+        var inverseSpacing = f.Input("inverseSpacing", Data1Xyz);
+        return p - Multiply(spacing, Round(Multiply(p, inverseSpacing)));
+    });
+    // The second vector holds the per-axis cell limit, so the reciprocal has no lane and the divide stays.
+    internal static readonly SdfFormula<SdfVector3> RepeatLimitedPoint = PointMap("sdfRepeatLimitedPoint", static (f, p) => {
+        var spacing = f.Input("spacing", Data0Xyz);
+        var limit = f.Input("limit", Data1Xyz);
+        return p - Multiply(spacing, Clamp(Round(Divide(p, spacing)), -limit, limit));
+    });
+    // The point reflected onto the positive side of the plane n·p + offset = 0.
+    internal static readonly SdfFormula<SdfVector3> SymmetryPlanePoint = PointMap("sdfSymmetryPlanePoint", static (f, p) => {
+        var normal = f.Input("normal", Data0Xyz);
+        var side = f.Bind("side", Dot(p, normal) + f.Input("offset", Data0W));
+        return p - Scale(normal, Min(side, Zero) * Two);
+    });
+
+    internal static readonly SdfFormula<SdfScalar> OnionField = FieldEdit("sdfOnionField", static (f, distance) => Abs(distance) - f.Input("thickness", Data0X));
+    internal static readonly SdfFormula<SdfScalar> DilateField = FieldEdit("sdfDilateField", static (f, distance) => distance - f.Input("amount", Data0X));
+    internal static readonly SdfFormula<SdfScalar> CellDisplaceField = FieldEdit("sdfCellDisplaceField", static (f, distance) => {
+        var p = f.Input("p", Point);
+        var frequency = f.Input("frequency", Data0X);
+        var amplitude = f.Input("amplitude", Data0Y);
+        var jitter = f.Input("jitter", Data0Z);
+        return distance + (amplitude * (CellDistance(Scale(p, frequency), f.Input("seed", ShapeLane), f.Input("mode", BlendLane), jitter) - Half));
+    });
+    // The fBm relief: the amplitude times the builder's baked 1/Σ gainᵏ times the octave sum, times its masks' weight.
+    // A weight of exactly zero adds nothing and reads no noise; a weight of exactly one adds what an unmasked relief
+    // adds, since both carriers multiply by one exactly.
+    internal static readonly SdfFormula<SdfScalar> ReliefField = Helper("sdfReliefField", static f => {
+        var distance = f.Input("distance", Distance);
+        var p = f.Input("p", Point);
+        var weight = f.Input("weight", Weight);
+        var frequency = f.Input("frequency", Data0X);
+        var amplitude = f.Input("amplitude", Data0Y);
+        var gain = f.Input("gain", Data0Z);
+        var lacunarity = f.Input("lacunarity", Data0W);
+        var normalizer = f.Input("normalizer", Data1X);
+        var seed = f.Input("seed", ShapeLane);
+        var octaves = f.Input("octaves", BlendLane);
+        f.ReturnIf(Equal(weight, Zero), distance);
+        var relief = f.Bind("relief", (amplitude * normalizer) * Fbm3(Scale(p, frequency), seed, octaves, gain, lacunarity));
+        f.Return(distance + (relief * weight));
+    });
+    // A relief mask band's weight at its regions' distance: its outside at or beyond its end, its inside at or below
+    // its start, and the smoothstep between.
+    internal static readonly SdfFormula<SdfScalar> ReliefBandWeight = Helper("sdfReliefBandWeight", static f => {
+        var distance = f.ParameterOf<SdfScalar>("distance");
+        var start = f.ParameterOf<SdfScalar>("start");
+        var end = f.ParameterOf<SdfScalar>("end");
+        var inside = f.ParameterOf<SdfScalar>("inside");
+        var outside = f.ParameterOf<SdfScalar>("outside");
+        f.ReturnIf(distance >= end, outside);
+        f.ReturnIf(distance <= start, inside);
+        f.Return(inside + ((outside - inside) * Smoothstep(start, end, distance)));
+    });
 
     // === Builders =====================================================================================================
 
@@ -329,6 +453,28 @@ internal static partial class SdfFieldFormulas {
         return formula;
     }
     private static SdfFormula<SdfScalar> Shape(string name, Action<SdfFormula<SdfScalar>> build) => Helper(name, build);
+    private static SdfFormula<SdfVector3> PointMap(string name, Func<SdfFormula<SdfVector3>, Vector3, Vector3> map) => Helper<SdfVector3>(name, f =>
+        f.Return(map(f, f.Input("p", Point))));
+    private static SdfFormula<SdfScalar> FieldEdit(string name, Func<SdfFormula<SdfScalar>, Scalar, Scalar> edit) => Helper(name, f =>
+        f.Return(edit(f, f.Input("distance", Distance))));
+    private static SdfFormula<SdfCondition> Winner(string name, Func<Scalar, Scalar, SdfFormula<SdfCondition>, Condition> wins) => Helper<SdfCondition>(name, f =>
+        f.Return(wins(f.Input("current", Current), f.Input("candidate", Candidate), f)));
+    private static SdfFormula<SdfScalar> Stairs(string name, bool subtracts) => Helper(name, f => {
+        var a = f.Input("current", Current);
+        var b = f.Input("candidate", Candidate);
+        var r = f.Input("smoothRadius", SmoothRadius);
+        var n = f.Input("steps", PopOperand);
+        var hard = subtracts ? Max(a, -b) : Min(a, b);
+        f.ReturnIf(n < One, hard);
+        f.ReturnIf(r <= Zero, hard);
+        var s = f.Bind("s", r / n);
+        var period = f.Bind("period", s * Two);
+        var u = f.Bind("u", (subtracts ? -b : b) - r);
+        var arg = f.Bind("arg", (u - a) + s);
+        var m = f.Bind("m", arg - (period * Floor(arg / period)));
+        var stairs = f.Bind("stairs", Half * ((u + a) + Abs(m - s)));
+        f.Return(subtracts ? Max(hard, -stairs) : Min(hard, stairs));
+    });
 
     // A 2D profile lifted to a solid, the family's one lift (data1.y > 0.5 extrudes along Z to ±liftAmount, else
     // revolves around Y at radial offset liftAmount). The profile parameters arrive inset by the edge-rounding radius
@@ -363,6 +509,8 @@ internal static partial class SdfFieldFormulas {
     // The blend's radius operand, declared and floored on first use.
     private sealed class BlendRadius(SdfFormula<SdfScalar> formula) {
         private Scalar? m_floored;
+
+        internal SdfFormula<SdfScalar> Formula => formula;
 
         internal Scalar Floored(string name, Scalar floor) {
             if (m_floored is { } bound) { return bound; }

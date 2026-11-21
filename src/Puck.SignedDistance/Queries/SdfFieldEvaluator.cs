@@ -602,11 +602,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // SHAPE or a POP_FIELD candidate gets, then the distance blends — never the reverse order. BlendShape is generated
     // from the blend catalogue's shared formulas (SdfFieldFormulas), as the kernel's blendShape arms are.
 
-    private static (FixedQ4816 Distance, int Material) Compose(FixedQ4816 current, int currentMaterial, FixedQ4816 candidate, int candidateMaterial, uint blend, FixedQ4816 smooth) {
-        var candidateWins = ResolveWinner(
+    private static (FixedQ4816 Distance, int Material) Compose(FixedQ4816 current, int currentMaterial, FixedQ4816 candidate, int candidateMaterial, uint blend, FixedQ4816 smooth, FixedQ4816 operand = default) {
+        var candidateWins = CandidateWins(
             blend: blend,
             candidate: candidate,
-            current: current
+            current: current,
+            operand: operand
         );
         var winnerMaterial = (candidateWins
             ? candidateMaterial
@@ -616,6 +617,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             blend: blend,
             candidate: candidate,
             current: current,
+            operand: operand,
             smoothRadius: smooth
         );
 
@@ -673,29 +675,11 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         );
     }
 
-    private static bool ResolveWinner(FixedQ4816 current, FixedQ4816 candidate, uint blend) {
-        return SdfFieldBlends.MaterialWinnerOf(value: ((SdfBlendOp)blend)) switch {
-            SdfMaterialWinnerAction.Farther => (candidate > current),
-            SdfMaterialWinnerAction.Cut => (-candidate > current),
-            SdfMaterialWinnerAction.Nearer => (candidate < current),
-            _ => throw new InvalidOperationException(message: "Invalid MaterialWinner action."),
-        };
-    }
-    // === The rigid transform ops (KEEP IN SYNC with mapCore's SDF_OP_TRANSLATE/ROTATE/SCALE/REPEAT/REPEAT_LIMITED/
-    // SYMMETRY_PLANE/ELONGATE cases) ======================================================================================
-
-    // The PRE-BAKED quaternion already ran sin/cos host-side. Route through the canonical fused fixed-point kernel so
-    // CPU queries do not insert different intermediate rounding boundaries from every other quaternion consumer.
-    private static FixedVector3 RotateByInverseQuaternion(FixedVector3 p, in CompiledInstruction instruction) {
-        var rotation = new FixedQuaternion(
-            X: instruction.Data0X,
-            Y: instruction.Data0Y,
-            Z: instruction.Data0Z,
-            W: instruction.Data0W
-        );
-
-        return rotation.RotateInverse(vector: p);
-    }
+    // A Rotate's baked unit quaternion. The point turns back through the canonical fused fixed-point kernel
+    // (FixedQuaternion.RotateInverse), so a query rounds where every other quaternion consumer does.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static FixedQuaternion Rotation(in CompiledInstruction instruction) =>
+        new(W: instruction.Data0W, X: instruction.Data0X, Y: instruction.Data0Y, Z: instruction.Data0Z);
     // |p_i| / r_i scaled by min(r): one superellipsoid axis's gauge ratio in metres. min(r) <= r_i, so it never exceeds
     // |p_i| and never wraps; it is non-decreasing in |p_i|, which SuperellipsoidScaledRatioBounds relies on.
     private static FixedQ4816 SuperellipsoidScaledRatio(FixedQ4816 magnitude, FixedQ4816 radius, FixedQ4816 minRadius) =>
