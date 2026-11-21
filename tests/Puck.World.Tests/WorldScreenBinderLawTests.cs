@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
 using Puck.Abstractions.Presentation;
@@ -102,6 +103,72 @@ public sealed class WorldScreenBinderLawTests {
         Assert.Same(observation, hosted.Observation);
         Assert.False(observation.Ended);
         Assert.Equal(ordinalBound, destination.Server.GrantTable.SessionOrdinalBound);
+    }
+
+    [Fact]
+    public void ReadAccessMatchesAccessOfAcrossTransitionsAndAllocatesNothing() {
+        using var scene = new BinderScene(new BinderOptions(GardenDisclosure: WorldDisclosureTier.Presentation));
+        scene.ConfigureViews();
+        var binder = scene.Binder;
+        using var world = scene.Residency("world");
+        binder.ViewHost = world;
+        var context = scene.Frame(new FakeGpuDevice());
+        binder.Publish(in context);
+
+        var hosted = scene.Host.ScreenSession(WorldInstanceHost.BootInstanceName, BinderScene.Session)!;
+        var observation = hosted.Observation!;
+        Assert.True(scene.Host.TryGet(hosted.InstanceName!, out var destination));
+        var grant = Assert.Single(destination!.Server.GrantRows(observation.Session), row => row.Capability == WorldCapability.Observe && row.Subject == GrantSubject.All);
+
+        var session = WorldViewNames.Session(BinderScene.Session);
+        var camera = WorldViewNames.NestedCamera(view: session, camera: "cam");
+        var child = WorldViewNames.Nested(view: session, screen: BinderScene.GardenSession);
+        var retired = WorldViewNames.Session(999);
+        var names = new[] { WorldViewGraphs.WorldInstance, session, camera, child, retired, WorldViewNames.Environment(retired), "pane-0", "pane-1" };
+
+        Assert.True(RenderGraphInstanceSet.TryCreate(
+            instances: [.. names.Select(selector: static name => new RenderGraphInstance(Name: name, Passes: 1, Reads: [], Refresh: RenderGraphRefresh.EveryFrame))],
+            refusal: out var refusal,
+            set: out var set
+        ), userMessage: refusal?.Message);
+
+        var actual = new WorldViewAccess[names.Length];
+
+        void AssertMatches() {
+            binder.ReadAccess(set: set, access: actual);
+            for (var index = 0; (index < names.Length); index++) {
+                Assert.Equal(expected: binder.AccessOf(view: names[index]), actual: actual[index]);
+            }
+        }
+
+        AssertMatches();
+        Assert.True(actual[1].Available);
+        Assert.False(actual[4].Available);
+        Assert.True(actual[5].Available);
+
+        // Steady-state ReadAccess hits the ordinal cache with zero allocations.
+        Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: () => binder.ReadAccess(set: set, access: actual)));
+
+        // Revocation, re-grant and a second revocation (epoch advance) propagate identically through ReadAccess.
+        destination.Server.Revoke(grant, Principal.Console);
+        binder.Publish(in context);
+        AssertMatches();
+        Assert.False(actual[1].Available);
+        Assert.False(actual[2].Available);
+        Assert.False(actual[3].Available);
+
+        destination.Server.Grant(grant, Principal.Console);
+        binder.Publish(in context);
+        AssertMatches();
+        Assert.True(actual[1].Available);
+        Assert.True(actual[2].Available);
+
+        var epochBefore = actual[1].Epoch;
+        destination.Server.Revoke(grant, Principal.Console);
+        binder.Publish(in context);
+        AssertMatches();
+        Assert.False(actual[1].Available);
+        Assert.NotEqual(epochBefore, actual[1].Epoch);
     }
     [Fact]
     public void AFramesOnlyObservationNeverCreatesPrivateGeometryOrFallsBackToTheRoot() {

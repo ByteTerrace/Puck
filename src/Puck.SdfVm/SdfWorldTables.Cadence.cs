@@ -108,6 +108,9 @@ public sealed partial class SdfWorldTables {
         public readonly byte[] Block = new byte[SdfFrameBlock.SizeBytes];
         public SdfFrame? Frame;
         public long Epoch = -1;
+        public SdfFrame? LightMaskFrame;
+        public long LightMaskEpoch = -1;
+        public UInt128 LightMask;
         public SdfMeshShadowCascades Cascades;
         public int Texels;
         public int DistantTexels;
@@ -125,10 +128,41 @@ public sealed partial class SdfWorldTables {
     private ViewInputs?[] m_viewInputs = [];
     private long m_viewInputsEpoch;
 
-    // Forgets every view's signature inputs, so the next signature or cascade set reads the frame afresh: the residency
-    // calls it at each frame's start and capture, where the frames these tables render are written.
+    // Forgets every view's signature inputs, cascade fits and light masks, so the next reader reads the frame afresh:
+    // the residency calls it at each frame's start and capture, where the frames these tables render are written.
     internal void ForgetViewInputs() => m_viewInputsEpoch++;
 
+    /// <summary>Returns the mask of the lights a view shades (<see cref="SdfLightSelection.Select"/>), computed once a
+    /// frame for each view and shared by every pass block and signature that reads it.</summary>
+    /// <param name="frame">The frame the tables hold.</param>
+    /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>, clamped to the frame's views.</param>
+    /// <returns>The view's light mask.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
+    public UInt128 LightMaskOf(SdfFrame frame, int view) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
+
+        if (frame.Views.Count == 0) {
+            var count = frame.Lights.Count;
+
+            return ((count == 0)
+                ? UInt128.Zero
+                : ((count >= SdfLights.MaxLights) ? ~UInt128.Zero : ((UInt128.One << count) - UInt128.One)));
+        }
+
+        var index = Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1));
+        var inputs = ViewInputsOf(index: index);
+
+        if (!ReferenceEquals(objA: inputs.LightMaskFrame, objB: frame) || (inputs.LightMaskEpoch != m_viewInputsEpoch)) {
+            SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.LightSelections);
+            var camera = frame.Views[index].Camera;
+
+            inputs.LightMask = SdfLightSelection.Select(camera: in camera, far: frame.FarDistance, lights: frame.Lights);
+            inputs.LightMaskFrame = frame;
+            inputs.LightMaskEpoch = m_viewInputsEpoch;
+        }
+
+        return inputs.LightMask;
+    }
     /// <summary>Returns the cascade set the frame fits for a view (<see cref="SdfMeshShadowCascades.Fit"/>), fitted once a
     /// frame for each view and read by every pass that asks with the view's own texels.</summary>
     /// <param name="frame">The frame the tables hold.</param>
@@ -147,15 +181,17 @@ public sealed partial class SdfWorldTables {
             ? inputs.Cascades
             : SdfMeshShadowCascades.Fit(distantTexels: distantTexels, frame: frame, texels: texels, view: view));
     }
+    private ViewInputs ViewInputsOf(int index) {
+        if (index >= m_viewInputs.Length) {
+            Array.Resize(array: ref m_viewInputs, newSize: Math.Max(val1: (index + 1), val2: (m_viewInputs.Length * 2)));
+        }
+        return (m_viewInputs[index] ??= new ViewInputs());
+    }
     private ViewInputs FitOf(SdfFrame frame, int view) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
         var index = Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1));
-
-        if (index >= m_viewInputs.Length) {
-            Array.Resize(array: ref m_viewInputs, newSize: Math.Max(val1: (index + 1), val2: (m_viewInputs.Length * 2)));
-        }
-        var inputs = (m_viewInputs[index] ??= new ViewInputs());
+        var inputs = ViewInputsOf(index: index);
 
         if (!ReferenceEquals(objA: inputs.Frame, objB: frame) || (inputs.Epoch != m_viewInputsEpoch)) {
             (inputs.Texels, inputs.DistantTexels) = SdfMeshShadowCascades.TexelsFor(frame: frame, view: index);
@@ -177,11 +213,12 @@ public sealed partial class SdfWorldTables {
         }
 
         var block = inputs.Block.AsSpan();
+        var clamped = Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1));
 
         block.Clear();
         // The draw count stands in a signature only as none or some: each row added or removed is judged by every scope
         // (NoteStagedRow, NoteUnnamedRow), so a list that grows where a pass draws nothing leaves the pass standing.
-        SdfFrameBlock.Write(block: block, frame: frame, height: 0u, tables: (values with { MeshDraws = Math.Min(val1: values.MeshDraws, val2: 1u) }), view: Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1)), width: 0u);
+        SdfFrameBlock.Write(block: block, frame: frame, height: 0u, lightMask: LightMaskOf(frame: frame, view: clamped), tables: (values with { MeshDraws = Math.Min(val1: values.MeshDraws, val2: 1u) }), view: clamped, width: 0u);
         SdfFrameBlock.WriteMeshShadows(block: block, cascades: inputs.Cascades);
         inputs.Whole = Fnv1aHash.Compute(values: block);
 

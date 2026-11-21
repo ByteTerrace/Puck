@@ -1,10 +1,20 @@
 using System.Globalization;
+using Puck.Hosting;
 using Puck.World.Client;
 using Puck.World.Server;
 
 namespace Puck.World;
 
 public sealed partial class WorldScreenBinder {
+    // One gated instance in the ordinal access cache: a session feed, an infinity layer, or both (nested camera owner).
+    private readonly record struct AccessBinding(int Index, SessionFeed? Feed, InfinityEntry? Infinity);
+
+    private RenderGraphInstanceSet? m_accessCacheSet;
+    private int m_accessCacheVersion = -1;
+    private int m_accessBindingsVersion;
+    private WorldViewAccess[] m_accessBase = [];
+    private AccessBinding[] m_accessGated = [];
+
     /// <inheritdoc/>
     /// <remarks>Reads the access each session along the view's chain settled this frame
     /// (<see cref="WorldSessionRoute.Access"/>, settled in <see cref="Publish"/>): a session view, a nested camera or
@@ -23,6 +33,79 @@ public sealed partial class WorldScreenBinder {
         // unnamed host view, and the session it showed is gone. Recognize the minted path grammar, not arbitrary
         // prefixes (for example its environment buffer is a different instance and is not an observation image).
         return (ObservationName(view) ? WorldViewAccess.Retired : WorldViewAccess.Open);
+    }
+    /// <inheritdoc/>
+    public void ReadAccess(RenderGraphInstanceSet set, Span<WorldViewAccess> access) {
+        EnsureFeeds();
+
+        var count = set.Instances.Count;
+
+        if (!ReferenceEquals(objA: set, objB: m_accessCacheSet) || (m_accessCacheVersion != m_accessBindingsVersion)) {
+            RebuildAccessBindings(set: set);
+        }
+
+        m_accessBase.AsSpan(start: 0, length: count).CopyTo(destination: access);
+
+        var gated = m_accessGated;
+
+        for (var position = 0; (position < gated.Length); position++) {
+            var slot = gated[position];
+            var value = WorldViewAccess.Open;
+
+            if (slot.Feed is { } feed) {
+                value = value.Join(other: Access(feed: feed));
+            }
+            if (slot.Infinity is { } infinity) {
+                value = value.Join(other: Access(infinity: infinity));
+            }
+
+            access[slot.Index] = value;
+        }
+    }
+    private void RebuildAccessBindings(RenderGraphInstanceSet set) {
+        var instances = set.Instances;
+        var count = instances.Count;
+
+        if (m_accessBase.Length != count) {
+            m_accessBase = new WorldViewAccess[count];
+        }
+
+        List<AccessBinding>? gated = null;
+
+        for (var index = 0; (index < count); index++) {
+            var view = instances[index].Name;
+
+            if (SessionFeedOf(name: view) is { } feed) {
+                m_accessBase[index] = WorldViewAccess.Open;
+                (gated ??= []).Add(item: new AccessBinding(Feed: feed, Index: index, Infinity: null));
+            } else if (m_infinityOutputs.TryGetValue(key: view, value: out var infinity)) {
+                m_accessBase[index] = WorldViewAccess.Open;
+                (gated ??= []).Add(item: new AccessBinding(Feed: null, Index: index, Infinity: infinity.Entry));
+            } else if ((NestedCameraLevel(name: view) is { } level) && m_nestedOwners.TryGetValue(key: level, value: out var owner)) {
+                m_accessBase[index] = WorldViewAccess.Open;
+                if ((owner.Feed is not null) || (owner.Infinity is not null)) {
+                    (gated ??= []).Add(item: new AccessBinding(Feed: owner.Feed, Index: index, Infinity: owner.Infinity));
+                }
+            } else {
+                m_accessBase[index] = (ObservationName(name: view) ? WorldViewAccess.Retired : WorldViewAccess.Open);
+            }
+        }
+
+        m_accessGated = ((gated is null) ? [] : [.. gated]);
+        m_accessCacheSet = set;
+        m_accessCacheVersion = m_accessBindingsVersion;
+    }
+    private void SetInfinityOutput(string name, InfinityOutput output) {
+        if (!m_infinityOutputs.TryGetValue(key: name, value: out var existing) || !ReferenceEquals(objA: existing.Entry, objB: output.Entry)) {
+            m_accessBindingsVersion++;
+        }
+        m_infinityOutputs[name] = output;
+    }
+    private void ClearInfinityOutputs() {
+        if (m_infinityOutputs.Count != 0) {
+            m_infinityOutputs.Clear();
+            m_accessBindingsVersion++;
+        }
     }
     private bool Available(string view) => AccessOf(view: view).Available;
     private static bool ObservationName(string name) {

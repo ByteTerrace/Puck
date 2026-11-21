@@ -1676,7 +1676,7 @@ counts in `sdf.transforms`, never in `records.posed`.
   its demand without multiplying by the buffer consumer's zero pixel footprint
   (`RenderGraphScheduler`), or a cold conversion can finish building and never
   install. A package whose last frame is incomplete cannot stand unchanged
-  (`RenderGraphRuntime.WithUnchanged`): its pending sources still need renders.
+  (`RenderGraphRuntime.CollectUnchanged`): its pending sources still need renders.
   A retained "building" reason alone does not prove a worker is still building;
   inspect the live schedule and completed build as well.
 - Screen-light reproduction must compare source bytes, not just graph publication

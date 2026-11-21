@@ -138,6 +138,7 @@ public sealed partial class WorldScreenBinder {
             Local: DestinationOf(feed: feed),
             Scene: null
         );
+        m_accessBindingsVersion++;
 
         return screens;
     }
@@ -161,6 +162,7 @@ public sealed partial class WorldScreenBinder {
         AddPresentedFeeds();
 
         m_feedsMoved = false;
+        m_accessBindingsVersion++;
     }
     private void AddFeed(SessionFeed feed) {
         m_feeds.Add(item: feed);

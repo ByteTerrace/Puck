@@ -160,7 +160,7 @@ public sealed partial class WorldScreenBinder {
                 Unexposed = true,
                 SkyViews = fit.BindingsOf(planned.Name, frame.Camera, ((uint)extent.Width), ((uint)extent.Height), entry.Tier),
             };
-            m_infinityOutputs[view.Name] = new InfinityOutput(Entry: entry, Index: index);
+            SetInfinityOutput(name: view.Name, output: new InfinityOutput(Entry: entry, Index: index));
         }
     }
     // A consumer's tier lookup, made once and kept: a lambda in UpdateInfinityFit would allocate its closure on every call.
@@ -196,6 +196,7 @@ public sealed partial class WorldScreenBinder {
         ReconcileViews();
     }
     private void RebuildInfinityOutputs() {
+        (m_infinityOutputs, m_infinityOutputsPrev) = (m_infinityOutputsPrev, m_infinityOutputs);
         m_infinityOutputs.Clear();
         foreach (var root in m_infinityRoots.Values) {
             foreach (var consumer in root.Consumers.Values) {
@@ -206,6 +207,21 @@ public sealed partial class WorldScreenBinder {
                 }
             }
         }
+        if (!SameInfinityEntries(left: m_infinityOutputs, right: m_infinityOutputsPrev)) {
+            m_accessBindingsVersion++;
+        }
+        m_infinityOutputsPrev.Clear();
+    }
+    private static bool SameInfinityEntries(Dictionary<string, InfinityOutput> left, Dictionary<string, InfinityOutput> right) {
+        if (left.Count != right.Count) {
+            return false;
+        }
+        foreach (var (name, output) in left) {
+            if (!right.TryGetValue(key: name, value: out var other) || !ReferenceEquals(objA: output.Entry, objB: other.Entry)) {
+                return false;
+            }
+        }
+        return true;
     }
     // The planned layer a fit's produced view renders, or null.
     private static WorldInfinityView? PlannedOf(WorldInfinityViews fit, string view) {

@@ -643,7 +643,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             m_recordedStatic = null;
         }
         if (m_glassPending is { } cleared) {
-            var known = m_glassDirty.FindIndex(match: entry => ReferenceEquals(objA: entry.Buffer, objB: cleared.Buffer));
+            var known = FindGlassDirtyIndex(buffer: cleared.Buffer);
 
             if (known >= 0) { m_glassDirty[known] = cleared; } else { m_glassDirty.Add(item: cleared); }
             m_glassPending = null;
@@ -658,6 +658,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             m_owner.SubmittedTaint(m_context.Instance, m_sourceTaint, m_readsHistory);
         }
         if ((m_part == SdfWorldPackage.Parts.Views) && !m_resolved) { m_owner.MarkSampleRendered(instance: m_context.Instance); }
+    }
+    private int FindGlassDirtyIndex(IGpuBuffer buffer) {
+        for (var index = 0; (index < m_glassDirty.Count); index++) {
+            if (ReferenceEquals(objA: m_glassDirty[index].Buffer, objB: buffer)) {
+                return index;
+            }
+        }
+        return -1;
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         m_recordedLayers = null;
@@ -681,7 +689,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         // render grid's width that the raster addresses the sums by (sdfGlassSumWord).
         if (m_part == SdfWorldPackage.Parts.GlassClear) {
             var sums = recording.Outputs[0].Buffer!;
-            var known = m_glassDirty.FindIndex(match: entry => ReferenceEquals(objA: entry.Buffer, objB: sums));
+            var known = FindGlassDirtyIndex(buffer: sums);
             var (start, end) = ((known >= 0) ? (m_glassDirty[known].Start, Math.Min(val1: m_glassDirty[known].End, val2: sums.SizeBytes)) : (0UL, sums.SizeBytes));
             var renderFrame = residency.Frame!;
             var rows = tables.GlassRows(
@@ -715,6 +723,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             block: recording.PassBlock,
             frame: frame,
             height: height,
+            lightMask: tables.LightMaskOf(frame: frame, view: view),
             tables: tables.PassValues,
             view: view,
             width: width
@@ -965,7 +974,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     // binned graph's plan is the one whose arguments its bins pass last wrote (ShadePlanOf).
                     m_shadePlan = (m_binned
                         ? m_owner.ShadePlanOf(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount)
-                        : SdfShadeDispatch.For(previous: m_shadePlan, frame: residency.Frame!, view: m_view.View, width: recording.Width, height: recording.Height,
+                        : SdfShadeDispatch.For(previous: m_shadePlan, frame: residency.Frame!, width: recording.Width, height: recording.Height,
                             screens: tables.PassValues.ScreenCount, glass: false, tier: residency.ShadeTier));
                     var selection = m_shade.RecordSelection(plan: m_shadePlan, residency: residency, slot: slot);
 
