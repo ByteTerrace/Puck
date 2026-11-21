@@ -763,20 +763,20 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             var cascade = CascadeEntry;
             var cascadeTexels = cascades.TexelsOf(index: cascade);
             var distant = (m_part == SdfWorldPackage.Parts.ShadowDistant);
+            // A cascade's cull is measured against the view's render extent, the mesh and glass passes' against their own.
+            var (cullWidth, cullHeight) = (IsShadowCascade ? (recording.RenderWidth, recording.RenderHeight) : (width, height));
 
+            m_owner.NoteDrawn(distantTexels: boundDistantTexels, height: cullHeight, instance: m_context.Instance, part: m_part, texels: boundTexels, width: cullWidth);
             RecordMesh(
                 cascadeTexels: cascadeTexels,
                 jitter: temporal.Jitter,
                 occlude: ((frame.MeshCull == SdfMeshCullLevel.Occlusion) || (!IsShadowCascade && (frame.MeshCull == SdfMeshCullLevel.Camera))),
                 // The distant map is held across camera turns and moves, so it keeps every caster in its light's box
-                // rather than those that may shadow what the view shows now.
-                cull: ((frame.MeshCull == SdfMeshCullLevel.Off)
-                    ? SdfMeshCull.None
-                    : (distant
-                        ? SdfMeshCull.OfLightBox(cascade: drawCamera)
-                        : (IsShadowCascade
-                            ? SdfMeshCull.Of(camera: frame.Views[view].Camera, cascade: cascades[cascade], far: frame.FarDistance, height: recording.RenderHeight, texels: cascadeTexels, width: recording.RenderWidth)
-                            : SdfMeshCull.Of(camera: frame.Views[view].Camera, far: frame.FarDistance, height: height, width: width)))),
+                // rather than those that may shadow what the view shows now. Every other pass draws under the cull its
+                // motion scope judges changes by (SdfWorldPasses.CullOf).
+                cull: (distant
+                    ? ((frame.MeshCull == SdfMeshCullLevel.Off) ? SdfMeshCull.None : SdfMeshCull.OfLightBox(cascade: drawCamera))
+                    : SdfWorldPasses.CullOf(cascade: (IsShadowCascade ? cascade : -1), cascades: in cascades, frame: frame, height: cullHeight, view: view, width: cullWidth)),
                 // The glass pass's thickness is the sums of its own triangles' ray distances, so glass draws its own.
                 detail: (IsGlass
                     ? SdfMeshDetail.Finest

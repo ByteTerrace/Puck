@@ -7,6 +7,7 @@ public sealed partial class SdfProgram {
     private SdfAppearance? m_appearance;
     private bool? m_hasGlass;
     private bool? m_hasGlassShadows;
+    private int[]? m_paintSlots;
 
     /// <summary>Returns the program of a field joined to an appearance: the field is derived from its own inputs and
     /// the appearance's <see cref="SdfAppearance.Outline"/> alone, then the appearance packs its materials and paints into
@@ -87,6 +88,23 @@ public sealed partial class SdfProgram {
     /// a view of such a program runs the glass passes (<c>SdfWorldPackage.WithGlass</c>), and a view of any other pays
     /// nothing for them. Measured once, on first read.</summary>
     public bool HasGlass => (m_hasGlass ??= MeasureGlass());
+
+    /// <summary>Gets the dynamic-transform slots the program's paints ride (<see cref="SdfPaint.Slot"/>), each once and in
+    /// increasing order; none for a program with no appearance. A paint marks whatever surface of its material its box
+    /// reaches, so no draw's box bounds what a move of its slot changes. Measured once, on first read.</summary>
+    public ReadOnlySpan<int> PaintSlots => (m_paintSlots ??= MeasurePaintSlots());
+
+    private int[] MeasurePaintSlots() {
+        var slots = new SortedSet<int>();
+
+        foreach (var material in (m_appearance?.Materials ?? [])) {
+            foreach (var paint in (material.Paints ?? [])) {
+                if (paint.Slot != SdfPaint.WinningFrame) { _ = slots.Add(item: paint.Slot); }
+            }
+        }
+
+        return [.. slots];
+    }
 
     /// <summary>Gets whether a drawn glass shape has positive shadow extinction; only these programs need optical cascades.</summary>
     public bool HasGlassShadows => (m_hasGlassShadows ??= MeasureGlass(shadows: true));

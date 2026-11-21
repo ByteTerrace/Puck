@@ -10,9 +10,12 @@ namespace Puck.SdfVm;
 // signature equals the one it last rendered at and nothing unhashed forces a render (ForcesRender).
 //
 // The whole-view signature folds every packed table and the frame block. PassSignature partitions the same inputs:
-// geometry owns the field, poses, mesh and camera; shadow owns directions and the fitted cascades; lighting owns the screens' tables,
+// geometry owns the field and camera; shadow owns directions and the fitted cascades; lighting owns the screens' tables,
 // colors, surface fog and analytic environment; visual owns sky and media. A generated offset table separates pass-block
 // members without spelling HLSL offsets. Temporal sampling is the instance's, and graph versions check last writes.
+// The poses and the draw records are the residency's in the whole-view signature alone (m_dynamicTransformRevision,
+// m_meshRevision): a pass signs with the revision of its motion scope (SdfMotionScope), which moves only for the draws
+// and slots the pass can show, so a body moving where a pass draws nothing leaves that pass standing.
 // Whole-view coverage:
 //   - m_programRevision  : changed program words and every kernel reload. The geometry signature uses the separate
 //                          m_programGeometryRevision, which excludes only palette values with identical bindings.
@@ -28,8 +31,8 @@ namespace Puck.SdfVm;
 //   - m_volumeRegion     : the bounded media, whose advection and pulse are baked from the presented tick, so a view
 //                          showing one renders again exactly when the presented tick moves it.
 //   - m_dynamicTransformRevision : bumped when packed transform contents or the active row count changes, so the table
-//                          is never re-hashed.
-//   - m_meshRevision     : the mesh draws the mesh and cascade passes rasterize.
+//                          is never re-hashed. The whole view's alone; a pass signs with its scope's revision.
+//   - m_meshRevision     : the mesh draws the mesh and cascade passes rasterize. The whole view's alone, as above.
 //   - m_frameSampledRevision : the heights the height fields' draws are displaced by, a geometry value.
 //   - m_screenSurfaceRegion, m_screenMappingRegion : the screen-surface sampling table and the mapping and bound flag
 //                          each screen is drawn from.
@@ -38,7 +41,8 @@ namespace Puck.SdfVm;
 // that samples one folds the image's publication into its signature (SdfWorldPasses.ReadSignatureOf); the whole view,
 // which sees no publication, renders while any screen shows a source (ForcesRender).
 // The pass block's temporal values (jitter, previous view) and the previous transform tables belong to each instance's
-// history, not the tables: SdfWorldPasses.IsUnchanged holds them through SdfTemporalHistory.Stands.
+// history, not the tables: SdfWorldPasses.IsUnchanged holds them through SdfTemporalHistory.Stands, by the poses of the
+// instance's own scope (SdfMotionScope.Poses).
 public sealed partial class SdfWorldTables {
     // The atmosphere occupies the packed tail; its flags precede the sky header and are hashed separately.
     private static readonly int AtmosphereOffset = Marshal.OffsetOf<SdfSkyBlock>(fieldName: nameof(SdfSkyBlock.AirLightCount)).ToInt32();
@@ -167,7 +171,9 @@ public sealed partial class SdfWorldTables {
         var block = inputs.Block.AsSpan();
 
         block.Clear();
-        SdfFrameBlock.Write(block: block, frame: frame, height: 0u, tables: values, view: Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1)), width: 0u);
+        // The draw count stands in a signature only as none or some: each row added or removed is judged by every scope
+        // (NoteStagedRow, NoteUnnamedRow), so a list that grows where a pass draws nothing leaves the pass standing.
+        SdfFrameBlock.Write(block: block, frame: frame, height: 0u, tables: (values with { MeshDraws = Math.Min(val1: values.MeshDraws, val2: 1u) }), view: Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1)), width: 0u);
         SdfFrameBlock.WriteMeshShadows(block: block, cascades: inputs.Cascades);
         inputs.Whole = Fnv1aHash.Compute(values: block);
 
@@ -201,13 +207,16 @@ public sealed partial class SdfWorldTables {
     }
 
     /// <summary>Returns the package-owned inputs of a pass group, independent of temporal sampling and graph versions.
-    /// Geometry covers the field and camera, shadow covers selected directions and reach, lighting covers hit shading,
-    /// and visual covers the sky and bounded media. The graph also checks each input's last write.</summary>
+    /// Geometry covers the field, the camera and the draws and poses the pass can show, shadow covers selected directions
+    /// and reach, lighting covers hit shading, and visual covers the sky and bounded media. The graph also checks each
+    /// input's last write.</summary>
     /// <param name="frame">The packed frame.</param>
     /// <param name="view">The view index.</param>
     /// <param name="part">The fragment pass name.</param>
+    /// <param name="motion">The revision of the pass's motion scope (<see cref="ObserveMotion(SdfMotionScope, in SdfMeshCull, int)"/>),
+    /// which stands for every draw record and transform slot the pass can show.</param>
     /// <returns>The pass group's input identity.</returns>
-    public ulong PassSignature(SdfFrame frame, int view, string part) {
+    public ulong PassSignature(SdfFrame frame, int view, string part, long motion) {
         SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Signatures);
         var inputs = InputsOf(frame: frame, view: view);
         var lighting = Fnv1aHash.Create();
@@ -227,6 +236,7 @@ public sealed partial class SdfWorldTables {
 
         geometry.Add(value: m_geometrySignature);
         geometry.Add(value: inputs.Geometry);
+        geometry.Add(value: unchecked((ulong)motion));
         var hash = Fnv1aHash.Create();
 
         hash.Add(value: geometry.Value);
@@ -407,7 +417,7 @@ public sealed partial class SdfWorldTables {
         m_tablesSignature = hash.Value;
 
         var geometry = Fnv1aHash.Create();
-        Span<ulong> geometryValues = [m_programGeometryRevision, m_dynamicTransformRevision, unchecked((ulong)m_meshRevision), m_meshDrawCount, m_frameSampledRevision];
+        Span<ulong> geometryValues = [m_programGeometryRevision, m_frameSampledRevision];
 
         geometry.Add(values: MemoryMarshal.AsBytes(span: geometryValues));
         m_geometrySignature = geometry.Value;

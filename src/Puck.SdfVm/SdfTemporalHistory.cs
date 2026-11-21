@@ -27,8 +27,9 @@ public readonly record struct SdfReprojectionView(CameraSnapshot Camera, Vector2
 /// <summary>A view instance's accumulation epoch and eight-sample Halton ray sequence. This state is presentation only.
 /// <para>
 /// History continues from one render of the instance to the next while its epoch holds and the residency's previous
-/// transform tables hold the poses the instance last rendered (<see cref="SdfWorldTables.PoseRevision"/>): frames the
-/// instance stood through, or that other views of the residency rendered without moving a pose, break nothing.
+/// transform tables hold, for the draws the instance's view can show, the poses the instance last rendered
+/// (<see cref="SdfMotionScope.Poses"/>, of the instance's own scope): frames the instance stood through, or in which
+/// only draws its view cannot show moved, break nothing.
 /// </para>
 /// <para>
 /// A frame held for a capture renders again with the temporal inputs of its latest completed render while the view
@@ -90,9 +91,9 @@ public sealed class SdfTemporalHistory {
     /// settling period (<see cref="Changed"/>), whether a dip, a recovery or a replacement graph moved it.</summary>
     /// <param name="epoch">The current reset inputs.</param>
     /// <param name="camera">The camera being rendered.</param>
-    /// <param name="previousPoses">The pose revision the residency's previous transform tables hold for this render
-    /// (<see cref="SdfWorldTables.PreviousPoseRevision"/>).</param>
-    /// <param name="currentPoses">The pose revision its current tables hold (<see cref="SdfWorldTables.PoseRevision"/>).</param>
+    /// <param name="previousPoses">The pose revision the residency's previous transform tables hold for this render, as
+    /// the instance's scope reads it (<see cref="SdfMotionScope.PreviousPoses"/>).</param>
+    /// <param name="currentPoses">The pose revision its current tables hold (<see cref="SdfMotionScope.Poses"/>).</param>
     /// <param name="renderWidth">The current sample-grid width, or zero for the output width.</param>
     /// <param name="renderHeight">The current sample-grid height, or zero for the output height.</param>
     /// <param name="counted">The samples a converging capture has counted (<c>RenderGraphConvergence.Samples</c>),

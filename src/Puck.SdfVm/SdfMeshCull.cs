@@ -7,9 +7,10 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfMeshBox"/>) may lie in the view's frustum before the frame's far distance, a shadow cascade the draws
 /// whose box lies in its light's box and, swept along the light, may shadow a receiver the view shows, a held shadow map
 /// the draws whose box lies in its light's box (<see cref="OfLightBox"/>), and <see cref="None"/> every draw. A draw with
-/// no host box is always kept.
+/// no host box is always kept. Two culls are equal when they keep by the same values, which a consumer that holds one
+/// across frames compares (<see cref="SdfMotionScope"/>).
 /// </summary>
-public readonly struct SdfMeshCull {
+public readonly record struct SdfMeshCull {
     /// <summary>The texels beside a receiver a cascade's shadow filter reads at most: the blocker search's widest disk
     /// (<c>SdfMeshShadowMaxTexels</c>, <c>passes/sdf-surface-stage.hlsli</c>) and the receiver's normal offset, rounded
     /// up.</summary>

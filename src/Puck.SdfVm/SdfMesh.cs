@@ -488,6 +488,41 @@ public static class SdfMeshRegion {
         record.Clear();
         record[(SdfMeshRecord.SelectionWord + 3)] = SdfMeshRecord.AbsentFlag;
     }
+    /// <summary>Reads back what a packed record's selection words say of its draw: whether a pass may draw it at all,
+    /// the box it is selected by, and whether it is glass. The box is the one <see cref="WriteDraw"/> wrote
+    /// (<see cref="SdfMeshBox.TryOf"/>), so a reader judges a draw by the same box every pass selects it by.</summary>
+    /// <param name="record">The record, <see cref="SdfMeshRecord.DrawWords"/> words that a write of this type packed.</param>
+    /// <param name="box">The draw's box, or <see langword="null"/> for a draw no host box bounds, which every pass
+    /// draws.</param>
+    /// <param name="glass">Whether the draw is glass (<see cref="SdfMeshDraw.Glass"/>).</param>
+    /// <returns><see langword="false"/> for an absent record (<see cref="WriteAbsent"/>), which no pass draws.</returns>
+    public static bool ReadSelection(ReadOnlySpan<uint> record, out SdfMeshBox? box, out bool glass) {
+        var selection = record.Slice(length: 16, start: SdfMeshRecord.SelectionWord);
+        var flags = selection[3];
+
+        glass = ((flags & 2u) != 0u);
+        box = null;
+        if ((flags & SdfMeshRecord.AbsentFlag) != 0u) {
+            return false;
+        }
+        if ((flags & 1u) == 0u) {
+            box = new SdfMeshBox(
+                Center: ReadSelectionVector(words: selection, offset: 0),
+                HalfX: ReadSelectionVector(words: selection, offset: 4),
+                HalfY: ReadSelectionVector(words: selection, offset: 8),
+                HalfZ: ReadSelectionVector(words: selection, offset: 12)
+            ) {
+                Stretch = BitConverter.UInt32BitsToSingle(value: selection[7]),
+            };
+        }
+
+        return true;
+    }
+    private static Vector3 ReadSelectionVector(ReadOnlySpan<uint> words, int offset) => new(
+        x: BitConverter.UInt32BitsToSingle(value: words[offset]),
+        y: BitConverter.UInt32BitsToSingle(value: words[(offset + 1)]),
+        z: BitConverter.UInt32BitsToSingle(value: words[(offset + 2)])
+    );
 
     /// <summary>The bytes of one draw's record (<see cref="SdfMeshRecord.DrawWords"/> words).</summary>
     public const int DrawBytes = (SdfMeshRecord.DrawWords * sizeof(uint));

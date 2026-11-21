@@ -308,6 +308,8 @@ public sealed partial class SdfWorldTables {
             );
         }
 
+        BeginMotionStaging(frame: frame);
+        CollectUnboundedSlots(frame: frame);
         _ = PackDynamicTransforms(frame: frame);
         PackSlotRateCodes(frame: frame);
 
