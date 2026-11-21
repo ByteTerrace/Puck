@@ -54,7 +54,9 @@ public abstract record ArenaTransform {
     /// it.</param>
     /// <param name="Lower">The enclosed range's inclusive low end.</param>
     /// <param name="Upper">The enclosed range's inclusive high end.</param>
-    public sealed record ClearEnclosed(int RowOrdinal, CellKey From, int Origin, long Lower, long Upper) : ArenaTransform;
+    /// <param name="BoundaryLower">The inclusive low end of the liberty range.</param>
+    /// <param name="BoundaryUpper">The inclusive high end of the liberty range.</param>
+    public sealed record ClearEnclosed(int RowOrdinal, CellKey From, int Origin, long Lower, long Upper, long BoundaryLower, long BoundaryUpper) : ArenaTransform;
     /// <summary>Writes the normalized mean of a vector table's admitted rows.</summary>
     /// <param name="IntoRowOrdinal">The destination row's catalog ordinal.</param>
     /// <param name="IntoKey">The destination cell key.</param>

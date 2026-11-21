@@ -536,7 +536,8 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
         );
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => (Board.Topology.CellCount + Board.Visits);
+    public override RuleWork Cost(IRuleCostContext context) =>
+        Board.Visits + (Board is BoardAttacksQuery ? 0L : Board.Topology.CellCount);
     /// <inheritdoc/>
     public override Fact Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
         ArgumentNullException.ThrowIfNull(argument: reader);
@@ -600,7 +601,7 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
             }
         }
 
-        using var values = reader.Scratch.Rent<long>(length: Board.Topology.CellCount);
+        using var values = reader.Scratch.Rent<long>(length: Board is BoardAttacksQuery ? 0 : Board.Topology.CellCount);
 
         return Fact.Finite(
             kind: CellKind.Int,

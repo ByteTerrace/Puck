@@ -1,144 +1,77 @@
 namespace Puck.State;
 
-/// <summary>The board queries a rule asks of a <see cref="StateArena"/>: the arena-facing half of
-/// <see cref="BoardQueries"/>, which reads a caller-owned span. Every entry point fills that span from the arena's
-/// own columns and hands it to the one kernel, so a query answers the same over an arena as over a document
-/// row.</summary>
+/// <summary>Reads the arena's lattice columns for board queries and patterns.</summary>
 public static class ArenaBoards {
-    private static bool TryBoard(StateArena arena, int rowOrdinal, Span<long> values, out ArenaRowLayout layout, out CompiledTopology topology, out string reason) {
+    private static bool TryBoard(StateArena arena, int rowOrdinal, out ArenaRowLayout layout, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: arena);
 
-        layout = ((((uint)rowOrdinal) < ((uint)arena.Layout.RowCount))
-            ? arena.Layout[rowOrdinal]
-            : default
-        );
-
-        if (
-            (layout.Shape != RowShape.Lattice) ||
-            (layout.Topology is null)
-        ) {
+        layout = (((uint)rowOrdinal < (uint)arena.Layout.RowCount) ? arena.Layout[rowOrdinal] : default);
+        if (layout is not { Shape: RowShape.Lattice, Topology: not null }) {
             reason = $"row ordinal {rowOrdinal} is not a lattice row the arena stores";
-            topology = null!;
-
             return false;
         }
 
-        topology = layout.Topology;
-
-        if (values.Length < topology.CellCount) {
-            reason = $"a board read over {topology.CellCount} cells needs a span that long";
-
-            return false;
-        }
-        if (!arena.TryReadBoard(
-            rowOrdinal: rowOrdinal,
-            values: values
-        )) {
-            reason = $"row ordinal {rowOrdinal} holds no board the arena can read";
-
-            return false;
-        }
-
-        reason = string.Empty;
-
-        return true;
+        reason = layout.IsStored ? string.Empty : $"row ordinal {rowOrdinal} holds no board the arena can read";
+        return layout.IsStored;
     }
 
-    /// <summary>Evaluates one board query over an arena row.</summary>
-    /// <param name="arena">The arena holding the board.</param>
-    /// <param name="rowOrdinal">The board row's catalog ordinal.</param>
-    /// <param name="query">The query.</param>
-    /// <param name="source">The key cell the query starts at, or <c>-1</c> for none.</param>
-    /// <param name="values">Scratch storage of at least the topology's cell count.</param>
-    /// <param name="result">The query's answer, on success.</param>
-    /// <param name="reason">Why the query was refused, or empty on success.</param>
-    /// <param name="dynamicTarget">The live target cell a path-cost query reads, when it declares one.</param>
-    /// <returns><see langword="true"/> when the query answered.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="arena"/> or <paramref name="query"/> is
-    /// <see langword="null"/>.</exception>
+    /// <summary>Evaluates a board query. Queries over the whole board use the supplied scratch span.</summary>
     public static bool TryQuery(StateArena arena, int rowOrdinal, BoardQuery query, int source, Span<long> values, out long result, out string reason, int dynamicTarget = 0) {
         ArgumentNullException.ThrowIfNull(argument: query);
-
         result = 0L;
 
-        if (!TryBoard(
-            arena: arena,
-            layout: out var layout,
-            reason: out reason,
-            rowOrdinal: rowOrdinal,
-            topology: out var topology,
-            values: values
-        )) {
+        if (!TryBoard(arena, rowOrdinal, out var layout, out reason)) {
             return false;
         }
-        // The query's own compile may be anchored where the row's layout compiles unanchored; the two address one
-        // board when they compiled from one authored topology, which anchoring only translates.
-        if (!ReferenceEquals(
-            objA: query.Topology.Source,
-            objB: topology.Source
-        )) {
+        var topology = layout.Topology!;
+
+        // Anchoring only translates a topology compiled from the same authored row.
+        if (!ReferenceEquals(query.Topology.Source, topology.Source)) {
             reason = $"a board query over {query.Topology.CellCount} cells does not address row ordinal {rowOrdinal}, which lays out {topology.CellCount}";
-
+            return false;
+        }
+        if (query is BoardAttacksQuery attacks) {
+            result = BoardQueries.Attacks(attacks, default, layout.Empty, source, arena, rowOrdinal);
+            return true;
+        }
+        if (!arena.TryReadBoard(rowOrdinal, values)) {
+            reason = $"a board read over {topology.CellCount} cells needs a span that long";
             return false;
         }
 
-        result = BoardQueries.Evaluate(
-            dynamicTarget: dynamicTarget,
-            empty: layout.Empty,
-            query: query,
-            scratch: arena.Scratch,
-            source: source,
-            values: values[..topology.CellCount]
-        );
-
+        result = BoardQueries.Evaluate(query, values[..topology.CellCount], layout.Empty, source, dynamicTarget, arena.Scratch);
         return true;
     }
-    /// <summary>Reads the word a pattern walks along one ray of an arena board: the cells from the origin
-    /// (exclusive) in one direction, stopping at the edge or on return to the origin.</summary>
-    /// <param name="arena">The arena holding the board.</param>
-    /// <param name="rowOrdinal">The board row's catalog ordinal.</param>
-    /// <param name="origin">The origin cell, or <c>-1</c> for none.</param>
-    /// <param name="direction">The direction ordinal; one the topology steps in, or the ray is refused.</param>
-    /// <param name="values">Scratch storage of at least the topology's cell count.</param>
-    /// <param name="word">The word buffer, at least the topology's cell count long.</param>
-    /// <param name="ray">The word, the filled prefix of <paramref name="word"/>, on success.</param>
-    /// <param name="reason">Why the ray was refused, or empty on success.</param>
-    /// <returns><see langword="true"/> when the ray was read.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
-    public static bool TryReadRay(StateArena arena, int rowOrdinal, int origin, int direction, Span<long> values, Span<long> word, out ReadOnlySpan<long> ray, out string reason) {
+
+    /// <summary>Reads a board ray directly from the arena. When supplied, <paramref name="cells"/> receives the
+    /// matching cell ordinals. Both buffers must hold the longest ray in the direction.</summary>
+    public static bool TryReadRay(StateArena arena, int rowOrdinal, int origin, int direction, Span<long> word, out ReadOnlySpan<long> ray, out string reason, scoped Span<int> cells = default) {
         ray = default;
 
-        if (!TryBoard(
-            arena: arena,
-            layout: out _,
-            reason: out reason,
-            rowOrdinal: rowOrdinal,
-            topology: out var topology,
-            values: values
-        )) {
+        if (!TryBoard(arena, rowOrdinal, out var layout, out reason)) {
             return false;
         }
-        if (word.Length < topology.CellCount) {
-            reason = $"a ray over {topology.CellCount} cells needs a word buffer that long";
+        var topology = layout.Topology!;
 
-            return false;
-        }
-        if (((uint)direction) >= topology.DirectionCount) {
+        if ((uint)direction >= topology.DirectionCount) {
             reason = $"direction ordinal {direction} is not one of the {topology.DirectionCount} the topology steps in";
-
+            return false;
+        }
+        var capacity = topology.LongestRay(direction: direction);
+        if (word.Length < capacity || (!cells.IsEmpty && cells.Length < capacity)) {
+            reason = $"a ray of up to {capacity} cells needs buffers that long";
             return false;
         }
 
-        var length = BoardQueries.ReadRay(
-            direction: direction,
-            origin: origin,
-            topology: topology,
-            values: values[..topology.CellCount],
-            word: word
-        );
-
+        var length = 0;
+        foreach (var cell in topology.Ray(origin: origin, direction: direction)) {
+            _ = arena.TryReadBoardCell(rowOrdinal, cell, out word[length]);
+            if (!cells.IsEmpty) {
+                cells[length] = cell;
+            }
+            length++;
+        }
         ray = word[..length];
-
         return true;
     }
 }
