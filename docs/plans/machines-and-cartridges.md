@@ -437,10 +437,14 @@ The Humble Gaming Deck's packages are in [its plan](humble-gaming-deck.md#open-i
   (4) Stamp audio on the same clock so a viewer's sound follows its picture.
 - **Check machine video at display rates other than the machine's.** The frame
   queue shows the latest frame due, so a 60 Hz machine repeats frames on a
-  faster display and skips some on a slower one. The lead machine verified the
-  equal-rate case; the Steam Deck's 45 Hz bar and a 120 Hz display are owed a
-  presented-frame burst of the range deck's television each, counting repeats
-  and skips with `machine.state`'s `stagedFrames` and `shownFrames`.
+  faster display and skips some on a slower one. The `queued-host-segment-parts`
+  stage reads the queue at 60 Hz positions with no display, and takes every
+  frame once. A real display at 45 Hz (the Steam Deck's bar) and at 120 Hz are
+  each owed a presented-frame burst of the range deck's nearest television,
+  held at that rate while the frames are captured, counting repeats and skips
+  with `machine.state`'s `stagedFrames` and `shownFrames`. The burst tool slows
+  the host while it captures, so the capture itself has to be made cheap enough
+  to hold the display's rate first.
 - **Show a runahead lookahead at the machine's rate.** `MachineTimeTravel`
   advances the lookahead once per segment, so the worker stages its picture
   once per segment (`QueuedMachineWorker.CompleteSegment`) and a machine with

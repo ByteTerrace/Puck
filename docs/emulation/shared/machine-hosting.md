@@ -188,7 +188,7 @@ core that measures each budget from where its clock stands
 (`CarriesBudgetOvershoot` false, the Advanced core) is given each part less
 what the part before it overran, so its last part ends at the instruction
 boundary the undivided budget ends at. With no change inside a segment the
-input is applied once, as before. `QueuedMachineWorker.DividesSegments` off is
+input is applied once, as a whole segment applies it. `QueuedMachineWorker.DividesSegments` off is
 the reference: whole segments, each holding every seat's last image from its
 start. The shared `queued-host-segment-parts` stage runs the same segments both
 ways on every core and requires byte-identical checkpoints.

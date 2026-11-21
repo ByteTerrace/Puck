@@ -113,7 +113,7 @@ which are already taped and checkpointed, so replay reproduces it.
 
 **A remote viewer gets a machine's picture as inputs or as frames, by the
 author's choice of what a viewer may hold, and neither crosses the wire at the
-machine's rate.** Today a world delivered from another authority runs its
+machine's rate.** A world delivered from another authority runs its
 machines there and they show nothing here
 ([worlds](../architecture/worlds.md#observation-and-display)), so the wire
 carries no machine video at all. The stamped queue above is what makes either
