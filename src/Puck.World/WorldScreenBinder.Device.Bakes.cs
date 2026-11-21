@@ -7,7 +7,8 @@ namespace Puck.World;
 // holds the program the latest one's content called for (SdfCompositionFrameSource.Building false), the world's
 // residency (ViewHost) bakes that very program with its meshes at the detail its demand asks
 // (SdfMeshPathBake.DetailSettled), and neither it nor any residency the binder renders besides it, a session view's, a
-// routed scene's or an infinity layer's, owes a group of its program (SdfMeshPathBake.Pending). Without the frames and the
+// routed scene's or an infinity layer's, owes a group of its program while a view draws it (SdfMeshPathBake.Pending,
+// Driven). Without the frames and the
 // program, a change delivered before the wait (a world.reload, a camera moved to a stop) reads settled while its program
 // is still queued or building, or while the bake has yet to measure its groups against the moved demand, since the
 // residency's bake of what came before it is done. The detail is the world's own residency's: the others draw at their
@@ -55,13 +56,13 @@ public sealed partial class WorldScreenBinder : IWorldBakeReadiness {
             names.Add(item: world.MeshPathBake.Describe());
         }
         foreach (var residency in m_routedResidencies.Values) {
-            if (residency.MeshPathBake.Pending) { names.Add(item: residency.MeshPathBake.Describe()); }
+            if (Bakes(bake: residency.MeshPathBake)) { names.Add(item: residency.MeshPathBake.Describe()); }
         }
         foreach (var view in m_viewResidencies.Values) {
-            if (view.Residency.MeshPathBake.Pending) { names.Add(item: view.Residency.MeshPathBake.Describe()); }
+            if (Bakes(bake: view.Residency.MeshPathBake)) { names.Add(item: view.Residency.MeshPathBake.Describe()); }
         }
         foreach (var entry in InfinityEntries()) {
-            if (entry.Residency is { MeshPathBake.Pending: true } residency) { names.Add(item: residency.MeshPathBake.Describe()); }
+            if ((entry.Residency is { } residency) && Bakes(bake: residency.MeshPathBake)) { names.Add(item: residency.MeshPathBake.Describe()); }
         }
 
         if ((names.Count == 0) && !world.MeshPathBake.DetailSettled) {
@@ -85,17 +86,21 @@ public sealed partial class WorldScreenBinder : IWorldBakeReadiness {
     // Whether a residency besides the world's own still owes its bake; allocates nothing, so a hold polls it every drain.
     private bool ViewsBake() {
         foreach (var residency in m_routedResidencies.Values) {
-            if (residency.MeshPathBake.Pending) { return true; }
+            if (Bakes(bake: residency.MeshPathBake)) { return true; }
         }
         foreach (var view in m_viewResidencies.Values) {
-            if (view.Residency.MeshPathBake.Pending) { return true; }
+            if (Bakes(bake: view.Residency.MeshPathBake)) { return true; }
         }
         foreach (var root in m_infinityRoots.Values) {
             foreach (var entry in root.Entries.Values) {
-                if (entry.Residency is { MeshPathBake.Pending: true }) { return true; }
+                if ((entry.Residency is { } residency) && Bakes(bake: residency.MeshPathBake)) { return true; }
             }
         }
 
         return false;
     }
+    // Whether a residency besides the world's own holds a wait on the bakes: its bake owes a group, or is between the
+    // rungs of a ladder it is filling (SdfMeshPathBake.Filling), while a view draws it (SdfMeshPathBake.Driven). One no
+    // view draws lands nothing, so a product of its left waiting when its last view turned away holds no wait.
+    private static bool Bakes(SdfMeshPathBake bake) => ((bake.Pending || bake.Filling) && bake.Driven);
 }

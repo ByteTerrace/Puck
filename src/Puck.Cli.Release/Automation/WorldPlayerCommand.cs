@@ -12,8 +12,13 @@ namespace Puck.Cli.Automation;
 /// from source, compiles a cartridge or cold-bakes.</summary>
 /// <remarks>The caches are filled by the published engine itself (its baking boots run with the folder's own cache
 /// root), so every identity it derives is the one the consumer derives: the mesh store keys by the bake's code and
-/// kernel bytecode, never by the adapter, and the per-device mesh tiers a profile and window size demand are covered by
-/// baking once per <c>--target</c>. The driver's own pipeline cache is per adapter and driver, so it is never shipped.</remarks>
+/// kernel bytecode, never by the adapter. One boot a backend fills the store under the engine's ladder policy
+/// (<see cref="Puck.SdfVm.SdfMeshCachePolicy.Ladder"/>): every tier of every mesh it draws, at every place the world's
+/// documents author, so the tiers a target's window size, distance or memory budget asks are all there, with no boot
+/// per target and no list of tiers kept here. Each <c>--target</c> is then booted as a player's build boots
+/// (<see cref="Puck.SdfVm.SdfMeshCachePolicy.Stored"/>), and the folder is complete only when every such boot settles
+/// at every place having dispatched no lattice, baked no group and missed no tier. The driver's own pipeline cache is
+/// per adapter and driver, so it is never shipped.</remarks>
 public static class WorldPlayerCommand {
     private const string Verb = "world player";
     // Written first as incomplete and last as complete; a rerun rebuilds only a folder that holds it.
@@ -59,9 +64,9 @@ public static class WorldPlayerCommand {
         var output = CliOptions.Output(description: "The player folder, created if missing. A folder that already holds a player build (player.json) is rebuilt in place, keeping its cache/; any other non-empty folder is refused.", required: true);
         var extensions = new Option<string[]>(name: "--extension") { AllowMultipleArgumentsPerToken = true, Description = "An extension project to install beside the engine (extensions/<name>/), such as src/Puck.World.Azure for a hosted authority's sign-in. Repeatable." };
         var backends = new Option<string[]>(name: "--backend") { AllowMultipleArgumentsPerToken = true, Description = "The backends whose caches are prewarmed, each baked in its own windowed boot: directx and vulkan. Omitted bakes both on Windows and vulkan elsewhere." };
-        var targets = new Option<string[]>(name: "--target") { AllowMultipleArgumentsPerToken = true, Description = "A baking boot's device profile and window size, [profile@]WIDTHxHEIGHT (rtx2060@1920x1080); a profile is a name of the world's render.devices, or auto for this adapter's own. Repeatable; omitted bakes once at auto@2560x1440." };
+        var targets = new Option<string[]>(name: "--target") { AllowMultipleArgumentsPerToken = true, Description = "A device the build is checked for: its profile and window size, [profile@]WIDTHxHEIGHT (rtx2060@1920x1080); a profile is a name of the world's render.devices, or auto for this adapter's own. Each is booted once per backend as a player's build boots. Repeatable; omitted checks auto@2560x1440." };
         var noBake = new Option<bool>(name: "--no-bake") { Description = "Skip the baking boots, which need a GPU: one headless boot derives the device-free caches instead, and the mesh store stays empty until a cache set fills it (puck world caches fetch)." };
-        var bakeSeconds = CliOptions.Count(defaultValue: 600, description: "Seconds each baking boot waits for its bakes to settle, 1 to 600.", maximum: 600, minimum: 1, name: "--bake-seconds");
+        var bakeSeconds = CliOptions.Count(defaultValue: 600, description: "Seconds a boot waits for its bakes to settle at each place it stands, 1 to 600.", maximum: 600, minimum: 1, name: "--bake-seconds");
         var channel = new Option<string?>(name: "--channel-url") { Description = "The release channel this build is published to (a release tree's root URL, with --channel-name): the README then names the one command that installs it. Absent, the README says how to install from a channel without naming one." };
         var channelName = new Option<string>(name: "--channel-name") { DefaultValueFactory = static _ => "player", Description = "The release channel's name under --channel-url." };
         var command = new Command(name: "player", description: "Assemble the folder a consumer machine runs: a self-contained Release engine, its launcher (stub and installer), the package compiled, and its caches prewarmed (the AGB BIOS and Rust guests, specialized shading kernels, compiled worlds and compiles, prepared cartridges and the baked mesh store per backend and target).") {
@@ -75,14 +80,21 @@ public static class WorldPlayerCommand {
             (Puck.Launcher.Setup) self-contained into launcher/; publish each --extension into extensions/<name>/; compile
             the package's parent directory into worlds/ (documents, compiled worlds and the shader package store); compose
             the package's worlds and export their specialized shading kernels into derived/; then boot the published engine
-            windowed, paused at its first tick, once per backend and --target, with --cache-dir cache, applying the target's
-            device profile and waiting for its bakes to settle. Those boots fill cache/ (meshes, compiled-worlds,
-            compilations, derived) with the identities a consumer's boot of the same folder derives; a bake's intermediates
-            land in cache/meshes-intermediates/, which a rerun reuses and a release never ships. With --no-bake, one
-            headless boot fills everything but the meshes. A consumer starts the folder with --world worlds/<package>
-            --cache-dir cache; `puck publish` turns it into a release and the installer installs that.
-            Writes player.json first as incomplete and last with the commit, runtime, backends, targets and each boot's counts, and prints each part's size. Each boot's
-            logs are in player-logs/. Exit 0 wrote a whole player build, 1 a step failed, 2 invalid arguments.
+            windowed with --cache-dir cache, once per backend with --mesh-cache ladder (the fill) and then once per backend
+            and --target with --mesh-cache stored on the target's device profile (the check). Every boot waits for its
+            bakes to settle where it spawns and at each spawn point the world's documents author, posing the first body
+            there. The fill bakes every tier of every mesh those places draw into cache/ (meshes, compiled-worlds,
+            compilations, derived) under the identities a consumer's boot of the same folder derives; a bake's
+            intermediates land in cache/meshes-intermediates/, which a rerun reuses and a release never ships. The check
+            is what a player's boot does: it draws stored tiers alone, and reads the engine's sdf.mesh-cache counters.
+            With --no-bake, one headless boot fills everything but the meshes. A consumer starts the folder with --world
+            worlds/<package> --cache-dir cache; `puck publish` turns it into a release and the installer installs that.
+            Writes player.json first as incomplete and last with the commit, runtime, backends, targets and each boot's
+            reading (places, settled, dispatches, groupsBaked, tiersMissed, loadsDeclined, tiersFilled, loaded), and prints
+            each part's size. The record says complete only when every boot settled at every place and every check
+            dispatched no lattice, baked no group and missed no tier; otherwise it lists why under incomplete, and
+            `puck world caches produce` refuses the folder. Each boot's logs are in player-logs/. Exit 0 wrote a whole
+            player build, 1 a step failed or the build is not complete, 2 invalid arguments.
             """);
         command.SetAction(action: parse => Run(
             backendNames: parse.GetValue(option: backends) ?? [],
@@ -168,22 +180,38 @@ public static class WorldPlayerCommand {
             var world = Path.Combine(path1: output, path2: "worlds", path3: Path.GetFileName(path: Path.TrimEndingDirectorySeparator(path: package)));
 
             var verified = new JsonObject();
+            // Why the folder is not a build a player may run: a boot that did not settle, or a check boot that asked its
+            // cache for more than a hit.
+            var incomplete = new List<string>();
 
             if (bake) {
-                foreach (var backend in backends) {
-                    foreach (var target in targets) {
-                        var (baking, loading, bakes) = Bake(backend: backend, bakeSeconds: bakeSeconds, logs: logs, output: output, pass: "bake", target: target, world: world);
+                // The places a body may be posed at, as the primary world's documents author them: each boot stands at
+                // every one, so the residencies a place opens (a portal's far side, a screen's session) are drawn there.
+                // The composition lists the primary world first.
+                var places = composed.Worlds[0].Definition.SpawnPoints.Select(selector: static point => point.Id).ToArray();
+                // One boot a backend fills the store: under the ladder policy it bakes every tier of every mesh it draws,
+                // whatever the window or the device's memory would have demanded, so no boot per target is needed to
+                // cover a target's tiers. It runs on this adapter's own profile, at the largest target's window.
+                var widest = targets.MaxBy(keySelector: static target => (((long)target.Width) * target.Height))!;
 
-                        verified[$"bake {WorldBackendTokens.Token(backend: backend)}-{target}"] = new JsonObject { ["baked"] = baking, ["loaded"] = loading, ["bakes"] = bakes };
-                    }
+                foreach (var backend in backends) {
+                    var key = $"fill {WorldBackendTokens.Token(backend: backend)}";
+                    var reading = Boot(backend: backend, bakeSeconds: bakeSeconds, logs: logs, output: output, pass: "fill", places: places, policy: "ladder", target: (widest with { Profile = "auto" }), world: world);
+
+                    verified[key] = reading.ToJson();
+                    incomplete.AddRange(collection: reading.Unsettled.Select(selector: place => $"{key}: not settled at {place}"));
                 }
-                // A second boot of each pair over the finished store is what a consumer's boot does: every group it demands
-                // should load. The counts it reports are the evidence the store hits.
+                // Then each backend and target boots as a player's build does, drawing stored tiers alone, on the target's
+                // profile and window, and stands at the same places: a whole cache settles everywhere with no lattice
+                // dispatched, no group baked and no tier missed.
                 foreach (var backend in backends) {
                     foreach (var target in targets) {
-                        var (baking, loading, bakes) = Bake(backend: backend, bakeSeconds: bakeSeconds, logs: logs, output: output, pass: "check", target: target, world: world);
+                        var key = $"check {WorldBackendTokens.Token(backend: backend)}-{target}";
+                        var reading = Boot(backend: backend, bakeSeconds: bakeSeconds, logs: logs, output: output, pass: "check", places: places, policy: "stored", target: target, world: world);
 
-                        verified[$"check {WorldBackendTokens.Token(backend: backend)}-{target}"] = new JsonObject { ["baked"] = baking, ["loaded"] = loading, ["bakes"] = bakes };
+                        verified[key] = reading.ToJson();
+                        incomplete.AddRange(collection: reading.Unsettled.Select(selector: place => $"{key}: not settled at {place}"));
+                        if (!reading.Hits) { incomplete.Add(item: $"{key}: the cache missed ({reading.Describe()})"); }
                     }
                 }
             } else {
@@ -195,7 +223,8 @@ public static class WorldPlayerCommand {
             WriteReadme(channel: channel, commit: commit, extensions: installed, output: output, targets: (bake ? targets : []), world: Puck.Abstractions.PuckPaths.Relative(path: world, relativeTo: output));
             CliFiles.WriteJson(path: Path.Combine(path1: output, path2: MarkerName), value: new JsonObject {
                 ["schema"] = "puck.player-build.v1",
-                ["complete"] = true,
+                ["complete"] = (incomplete.Count == 0),
+                ["incomplete"] = new JsonArray([.. incomplete.Select(selector: static reason => JsonValue.Create(value: reason))]),
                 ["commit"] = commit,
                 ["runtime"] = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
                 ["world"] = Puck.Abstractions.PuckPaths.Relative(path: world, relativeTo: output),
@@ -207,7 +236,10 @@ public static class WorldPlayerCommand {
                 ["checked"] = verified,
             });
             ReportSizes(output: output);
-            return 0;
+            if (incomplete.Count == 0) { return 0; }
+            Console.Error.WriteLine(value: $"{Verb}: the folder is not complete, and {MarkerName} says so: a player's build never bakes, so one whose boots do not settle on a whole cache does not ship.");
+            foreach (var reason in incomplete) { Console.Error.WriteLine(value: $"{Verb}:   {reason}"); }
+            return 1;
         } catch (Exception exception) when (exception is InvalidOperationException or InvalidDataException or IOException or TimeoutException or UnauthorizedAccessException) {
             Console.Error.WriteLine(value: $"{Verb}: {exception.Message}");
             return 1;
@@ -359,18 +391,58 @@ public static class WorldPlayerCommand {
         ).GetAwaiter().GetResult();
         return name;
     }
-    // One windowed boot of the published engine, held at its first tick so the view is the spawn's, with the folder's own
-    // cache root: it applies the target's device profile (whose memory bars set the mesh budget) at the target's window
-    // size (whose pixels set the tiers the bake demands) and waits until every resident bake has landed. Returns the groups
-    // its bakes baked and the groups they loaded from the store, summed over every bake start it reported, and its settle
-    // answer.
-    private static (int Baking, int Loading, string Bakes) Bake(WorldBackendPreference backend, BakeTarget target, string output, string world, string logs, int bakeSeconds, string pass) {
+    /// <summary>What one boot of the published engine asked of the folder's mesh cache: the places it stood at, those
+    /// its bakes did not settle at, and the engine's own <c>sdf.mesh-cache</c> counts as the boot ended.</summary>
+    /// <param name="Places">The places the boot stood at, its spawn included.</param>
+    /// <param name="Unsettled">Each place <c>world.wait bakes</c> released at unsettled, with the engine's reason.</param>
+    /// <param name="Dispatches">The lattices the boot's bakes handed the GPU.</param>
+    /// <param name="LiveDispatches">The lattices among them of geometry the world made as it ran.</param>
+    /// <param name="GroupsBaked">The groups that began a bake, live geometry apart.</param>
+    /// <param name="LiveBaked">The groups that began a bake because an operand or a sampled field they read moved.</param>
+    /// <param name="RungsMissed">The tiers a stored-only boot asked that the store lacked.</param>
+    /// <param name="LoadsDeclined">The stored entries a stored-only boot could not read for want of memory.</param>
+    /// <param name="RungsFilled">The tiers a ladder boot baked beyond its demand.</param>
+    /// <param name="Loaded">The groups the boot's bakes loaded from the store, summed over every start it reported.</param>
+    public sealed record BootReading(int Places, IReadOnlyList<string> Unsettled, long Dispatches, long LiveDispatches, long GroupsBaked, long LiveBaked, long RungsMissed, long LoadsDeclined, long RungsFilled, int Loaded) {
+        /// <summary>Gets whether the boot took from the store everything a cache can hold: no lattice dispatched and
+        /// no group baked but for geometry the world made as it ran, and no tier missed.</summary>
+        public bool Hits => ((Dispatches == LiveDispatches) && (GroupsBaked == 0L) && (RungsMissed == 0L));
+
+        /// <summary>Describes the counts in one line, as the verb prints them.</summary>
+        /// <returns>The line.</returns>
+        public string Describe() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"dispatches {Dispatches} ({LiveDispatches} live), groups baked {GroupsBaked} ({LiveBaked} more live), tiers missed {RungsMissed}, loads declined {LoadsDeclined}, tiers filled {RungsFilled}, groups loaded {Loaded}");
+        /// <summary>Writes the reading as <c>player.json</c> records it.</summary>
+        /// <returns>The object.</returns>
+        public JsonObject ToJson() => new() {
+            ["places"] = Places,
+            ["settled"] = (Unsettled.Count == 0),
+            ["unsettled"] = new JsonArray([.. Unsettled.Select(selector: static place => JsonValue.Create(value: place))]),
+            ["dispatches"] = Dispatches,
+            ["liveDispatches"] = LiveDispatches,
+            ["groupsBaked"] = GroupsBaked,
+            ["liveBaked"] = LiveBaked,
+            ["tiersMissed"] = RungsMissed,
+            ["loadsDeclined"] = LoadsDeclined,
+            ["tiersFilled"] = RungsFilled,
+            ["loaded"] = Loaded,
+        };
+    }
+
+    // One windowed boot of the published engine with the folder's own cache root, under a mesh cache policy
+    // (--mesh-cache): it applies the target's device profile (whose memory bars set the mesh budget) at the target's
+    // window size, waits for its bakes to settle where it spawns, then poses the first body at each authored place in
+    // turn and waits again there, so every residency a place opens is drawn. A place that does not settle ends the
+    // visits, since the boot's answer is already no. The counts are read from the engine's own counters once the last
+    // wait ends, so a settle is told apart from a bake: a boot can settle having baked, and can bake nothing while its
+    // detail still moves between stored tiers.
+    private static BootReading Boot(WorldBackendPreference backend, BakeTarget target, string policy, IReadOnlyList<string> places, string output, string world, string logs, int bakeSeconds, string pass) {
         var name = $"{WorldBackendTokens.Token(backend: backend)}-{target.Profile}-{target.Width}x{target.Height}";
         var directory = Path.Combine(path1: logs, path2: $"{pass}-{name}");
-        var deadline = TimeSpan.FromSeconds(seconds: (bakeSeconds + 300));
+        // One wait and its answer at each place, and at the spawn; the World's own exit backstop, should the verb die.
+        var deadline = TimeSpan.FromSeconds(seconds: (300L + ((places.Count + 1L) * (bakeSeconds + 90L))));
         var request = new WorldLaunchRequest(Artifact: Path.Combine(path1: output, path2: "Puck.World.dll"), Step: Verb) {
-            Arguments = ["--paused", "--width", target.Width.ToString(provider: CultureInfo.InvariantCulture), "--height", target.Height.ToString(provider: CultureInfo.InvariantCulture),
-                "--cache-dir", Path.Combine(path1: output, path2: CacheName)],
+            Arguments = ["--width", target.Width.ToString(provider: CultureInfo.InvariantCulture), "--height", target.Height.ToString(provider: CultureInfo.InvariantCulture),
+                "--cache-dir", Path.Combine(path1: output, path2: CacheName), "--mesh-cache", policy],
             Backend = backend,
             Executable = Path.Combine(path1: output, path2: (OperatingSystem.IsWindows() ? "Puck.World.exe" : "Puck.World")),
             ExitAfterSeconds = WorldLaunch.Backstop(deadline: deadline),
@@ -380,7 +452,7 @@ public static class WorldPlayerCommand {
             World = world,
         };
 
-        Console.WriteLine(value: $"{Verb}: {pass} {name}.");
+        Console.WriteLine(value: $"{Verb}: {pass} {name} ({policy}, {places.Count} places).");
 
         WorldProcess started;
 
@@ -402,41 +474,96 @@ public static class WorldPlayerCommand {
                 Console.WriteLine(value: $"{Verb}: {answer}");
             }
 
-            var mark = process.LineCount;
+            var unsettled = new List<string>();
+            var stood = 0;
 
-            _ = process.RunScript(lines: [string.Create(provider: CultureInfo.InvariantCulture, handler: $"world.wait bakes {bakeSeconds}")], timeout: TimeSpan.FromSeconds(seconds: (bakeSeconds + 60)));
+            // The engine's own counts of what the boot has asked of its mesh cache so far.
+            BootReading Read() {
+                var counted = process.RunScript(lines: [$"world.counters {Puck.SdfVm.SdfMeshCache.SourceName}"], timeout: TimeSpan.FromSeconds(seconds: 60));
 
-            var baked = process.WaitFor(accept: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[bakes:"), from: mark, timeout: TimeSpan.FromSeconds(seconds: 60));
+                long Counted(Puck.Abstractions.Counting.WorkKind kind) => (CountOf(kind: kind.Name, lines: counted.Lines.Select(selector: static line => line.Text))
+                    ?? throw new InvalidOperationException(message: $"{name}: world.counters answered no {kind.Name}; its logs are in {CliPaths.ToDisplay(fullPath: directory)}."));
 
-            var lines = process.LinesFrom(from: 0);
-
-            // Every bake the boot started has landed once a done line follows the last start. The settle barrier also waits
-            // for the detail to stop moving between tiers, which a profile whose memory bars press the mesh budget may not
-            // reach; the store then holds every tier the boot demanded, and the answer is kept as the boot's record.
-            if ((baked is null) ||
-                (lines.LastOrDefault(predicate: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] start ")) is { } last &&
-                 !lines.Any(predicate: row => (row.Index > last.Index) && row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] done ")))) {
-                throw new InvalidOperationException(message: $"{name}: the bakes did not land: {baked?.Text ?? "no answer"}; its logs are in {CliPaths.ToDisplay(fullPath: directory)}.");
+                return new BootReading(
+                    Dispatches: Counted(kind: Puck.SdfVm.SdfMeshCache.Dispatches),
+                    GroupsBaked: Counted(kind: Puck.SdfVm.SdfMeshCache.GroupsBaked),
+                    LiveBaked: Counted(kind: Puck.SdfVm.SdfMeshCache.LiveBaked),
+                    LiveDispatches: Counted(kind: Puck.SdfVm.SdfMeshCache.LiveDispatches),
+                    Loaded: process.LinesFrom(from: 0).Where(predicate: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] start ")).Sum(selector: static row => CliLineFields.Count(line: row.Text, name: "loading")),
+                    LoadsDeclined: Counted(kind: Puck.SdfVm.SdfMeshCache.LoadsDeclined),
+                    Places: stood,
+                    RungsFilled: Counted(kind: Puck.SdfVm.SdfMeshCache.RungsFilled),
+                    RungsMissed: Counted(kind: Puck.SdfVm.SdfMeshCache.RungsMissed),
+                    Unsettled: unsettled
+                );
             }
-            var (baking, loading) = (0, 0);
 
-            foreach (var line in lines.Where(predicate: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] start "))) {
-                baking += CliLineFields.Count(line: line.Text, name: "baking");
-                loading += CliLineFields.Count(line: line.Text, name: "loading");
+            var before = Read();
+
+            // Waits for the bakes where the body stands; false when they did not settle. A wait that released while
+            // the bakes were still landing work (a fill's first place bakes the whole world's tiers, past one wait's
+            // longest hold) waits again, for as long as each wait dispatched or filled more; one that released with
+            // nothing landed since is the boot's answer.
+            bool Settle(string place) {
+                stood++;
+                while (true) {
+                    var mark = process.LineCount;
+
+                    _ = process.RunScript(lines: [string.Create(provider: CultureInfo.InvariantCulture, handler: $"world.wait bakes {bakeSeconds}")], timeout: TimeSpan.FromSeconds(seconds: (bakeSeconds + 60)));
+
+                    var answer = process.WaitFor(accept: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[bakes:"), from: mark, timeout: TimeSpan.FromSeconds(seconds: 60));
+
+                    if (answer is null) { throw new InvalidOperationException(message: $"{name}: world.wait bakes gave no answer at {place}; its logs are in {CliPaths.ToDisplay(fullPath: directory)}."); }
+                    if (answer.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[bakes: settled")) { return true; }
+
+                    var after = Read();
+                    var landed = ((after.Dispatches > before.Dispatches) || (after.RungsFilled > before.RungsFilled));
+
+                    before = after;
+                    if (landed) { continue; }
+
+                    // The answer without the residency report a not-settled answer appends after its reason.
+                    var report = answer.Text.IndexOf(value: ": [sdf.mesh-bake]", comparisonType: StringComparison.Ordinal);
+
+                    unsettled.Add(item: $"{place} ({((report > 0) ? answer.Text[..report] : answer.Text).Trim(trimChars: ['[', ']'])})");
+                    return false;
+                }
             }
 
-            // The answer without the residency report a not-settled answer appends after its reason.
-            var report = baked.Text.IndexOf(value: ": [sdf.mesh-bake]", comparisonType: StringComparison.Ordinal);
-            var bakes = ((report > 0) ? baked.Text[..report] : baked.Text);
+            if (Settle(place: "its spawn")) {
+                foreach (var place in places) {
+                    _ = process.RunScript(lines: [$"body.pose spawn:{place} 0"], timeout: TimeSpan.FromSeconds(seconds: 60));
+                    if (!Settle(place: place)) { break; }
+                }
+            }
 
-            Console.WriteLine(value: $"{Verb}: {pass} {name}: {bakes}; groups baked {baking}, loaded from the store {loading}");
-            return (baking, loading, bakes);
+            var reading = Read();
+
+            Console.WriteLine(value: $"{Verb}: {pass} {name}: {((unsettled.Count == 0) ? $"settled at {stood} places" : $"not settled at {string.Join(separator: "; ", values: unsettled)}")}; {reading.Describe()}");
+            return reading;
         } finally {
             // A windowed World can outlive its quit; one that does not exit is stopped by its process.
             if (!process.Send(line: "quit") || (process.WaitForExit(timeout: TimeSpan.FromSeconds(seconds: 60)) is null)) {
                 process.Kill();
             }
         }
+    }
+    // A counter's lifetime total in world.counters' answer: the whole number after the kind's name on its line.
+    private static long? CountOf(IEnumerable<string> lines, string kind) {
+        foreach (var line in lines) {
+            var at = line.IndexOf(value: kind, comparisonType: StringComparison.Ordinal);
+
+            if (at < 0) { continue; }
+            var rest = line.AsSpan(start: (at + kind.Length));
+            var first = rest.IndexOfAnyInRange(lowInclusive: '0', highInclusive: '9');
+
+            if (first < 0) { continue; }
+            var digits = rest[first..];
+            var length = digits.IndexOfAnyExceptInRange(lowInclusive: '0', highInclusive: '9');
+
+            if (long.TryParse(s: ((length < 0) ? digits : digits[..length]), provider: CultureInfo.InvariantCulture, result: out var value)) { return value; }
+        }
+        return null;
     }
     // The page a consumer reads first: how to install the build from its channel, and how to start it locally and against
     // a remote authority.
@@ -501,9 +628,10 @@ public static class WorldPlayerCommand {
             The world runs with its authority in the same process. `--cache-dir cache` points the boot at the prewarmed
             caches; without it the boot uses the per-user caches and bakes every mesh again. `--backend directx` or
             `--backend vulkan` picks the backend (each has its own baked meshes), and `--width`/`--height` set the window.
-            The meshes were baked for {{baked}}; the profile follows the adapter's name. Start at the window size baked
-            for the device: a boot at another size, or on a device whose profile was not baked, bakes the mesh detail it
-            lacks once, into `cache/`.
+            The store holds every detail tier of every mesh the world's authored places draw, and the build was checked
+            for {{baked}}; the profile follows the adapter's name. A player's build never bakes a mesh the store holds
+            another tier of: where a tier is missing it draws the nearest stored one. Only a shape the store holds no
+            tier of bakes, into `cache/`.
 
             ## Attach to a remote authority
 
@@ -516,7 +644,9 @@ public static class WorldPlayerCommand {
             ## What a boot reports
 
             The console prints `[derived] ... hit` for each shipped product it reads and `miss` for one it had to derive;
-            `world.residency` and `[bakes: settled ...]` show the mesh store's state.
+            `world.residency` and `[bakes: settled ...]` show the mesh store's state, and `world.counters sdf.mesh-cache`
+            counts what the boot asked of the mesh store beyond a hit: `dispatches` and `groups-baked` are zero while it
+            bakes nothing, and `rungs-missed` counts each tier it drew another stored tier in place of.
             """;
 
         File.WriteAllText(path: Path.Combine(path1: output, path2: "README.md"), contents: text.ReplaceLineEndings(replacementText: "\n") + "\n");

@@ -418,6 +418,16 @@ internal static class SdfMeshBakeReport {
     public static void Refused(int selector, string refusal) => Say(line: $"[sdf.mesh-bake] group {selector} refused: {refusal}");
     /// <summary>Names a rest skin that fell back to rigid owner contours.</summary>
     public static void SkinSplit(int selector, SdfMeshGeometry geometry, string? reason) => Say(line: $"[sdf.mesh-bake] group {selector} geometry={geometry.Hash:x32} bakes as a crease: {reason}");
+    /// <summary>Writes the line for a tier a bake that draws stored tiers alone asked and the store lacked
+    /// (<see cref="SdfMeshCache.RungsMissed"/>), naming the group so the cache's producer can be asked why.</summary>
+    /// <param name="residency">The residency's name.</param>
+    /// <param name="selector">The group's selector.</param>
+    /// <param name="dynamic">Whether the group bakes in its slot's frame.</param>
+    /// <param name="asked">The tier asked.</param>
+    /// <param name="drawn">The tier drawn in its place.</param>
+    /// <param name="shape">The group's shape, which every tier of it shares.</param>
+    public static void RungMissed(string residency, int selector, bool dynamic, int asked, int drawn, UInt128 shape) =>
+        Say(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] rung-missed residency={residency} group={selector} {(dynamic ? "dynamic" : "static")} shape={shape:x32} asked={asked} drawn={drawn}"));
     /// <summary>Writes the line for a group whose store entry the store refused.</summary>
     /// <param name="selector">The group's selector.</param>
     /// <param name="refusal">Why.</param>

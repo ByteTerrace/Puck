@@ -596,6 +596,8 @@ public sealed partial class SdfMeshPathBake {
             // The copies are indexed before anything plans: a plan measures a shared geometry where they stand (Tiers).
             m_demandTransforms = frame.DynamicTransforms;
             m_demandCopies = frame.MeshInstances;
+            m_farDistance = frame.FarDistance;
+            ResumeReloads();
             if (!SameCopyLayout(frame: frame)) { IndexCopies(frame: frame); }
             m_copyCursor.Commit();
             // The bake reads only the baked handles: a frame whose height fields' heights alone moved changes nothing here.
@@ -1083,6 +1085,10 @@ public sealed partial class SdfMeshPathBake {
                 SampledHandles = (m_program?.SampledFields.Count ?? 0),
             };
             m_accounts.Batches++;
+            Library.Cache.Add(amount: batch.Lattices.Length, kind: SdfMeshCache.Dispatches);
+            foreach (var ticket in batch.Tickets) {
+                if (ticket is Group { Live: true }) { Library.Cache.Count(kind: SdfMeshCache.LiveDispatches); }
+            }
             foreach (var lattice in batch.Lattices) {
                 m_accounts.Dispatches++;
                 m_accounts.Samples += lattice.Samples;
@@ -1445,7 +1451,11 @@ public sealed partial class SdfMeshPathBake {
         // A slice samples one program and set: a new one takes every lattice again.
         m_slice?.Reset();
         // A successor waits on a group of the previous program; this program's plan is made at the frame's set already.
-        foreach (var old in previous.Values) { old.Successor = null; }
+        foreach (var old in previous.Values) {
+            old.Successor = null;
+            // A rung being filled that this program keeps is the tier its plan asks: it lands as any replacement does.
+            old.Fill = false;
+        }
         m_successors = 0;
 
         // A new program takes the plan a build already made off the frame's thread (PlanAhead), with each group this restart
@@ -1655,6 +1665,12 @@ public sealed partial class SdfMeshPathBake {
             return true;
         }
 
+        // A bake that draws stored rungs alone puts the nearest stored rung of the group's ladder in its place, and
+        // places that rung as it would any plan.
+        if (StoredRung(identity: identity, planned: group) is { } rung) {
+            group.Retired = true;
+            return Place(group: rung, identity: identity, index: index, leaders: leaders, old: old, started: ref started);
+        }
         ShowReplaced(group: group, old: old);
         if (leaders.TryGetValue(key: group.Sealed, value: out var leader)) {
             group.Leader = leader;
@@ -1764,7 +1780,15 @@ public sealed partial class SdfMeshPathBake {
         }
         group.Identity = Identity.Value;
         if (Identity.HasParts && Library.Disk is { } disk) { KeyCheckpoints(group, disk); }
-        if (!Library.MayHold(geometry: group.Sealed, identity: group.Identity) && !MayHoldCheckpoint(group)) { return false; }
+        if (!Library.MayHold(geometry: group.Sealed, identity: group.Identity) && !MayHoldCheckpoint(group)) {
+            // A dynamic group whose form the store holds a mesh of, baked at another pose, loads that mesh, as one the
+            // library holds is taken (Place): its skin carries each member through its own slot.
+            if (!HoldsForm(group: group)) {
+                Library.Cache.Count(kind: (group.Live ? SdfMeshCache.LiveBaked : SdfMeshCache.GroupsBaked));
+                return false;
+            }
+            group.LoadsForm = true;
+        }
         group.Deferred = group.Next;
         group.Next = null;
         group.Contouring = true;
@@ -2591,8 +2615,22 @@ public sealed partial class SdfMeshPathBake {
     // Takes a group's mesh from the library's store; a group whose entry the store refuses or no longer holds bakes from
     // its coarse lattice.
     private void Load(Group group) {
-        var loaded = Library.TryLoad(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refusal: out var refusal);
+        var loaded = Library.TryLoad(declined: out var declined, form: (group.Dynamic ? group.Form : null), geometry: (group.LoadsForm ? SdfMeshLibrary.FormGeometry(form: group.Form) : group.Sealed), identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refusal: out var refusal);
 
+        // A bake that draws stored rungs alone never bakes what the store holds because the account had no room to
+        // read it: a tier's replacement gives its place back, so the group keeps drawing the tier it has room for, and
+        // a group with nothing of its own to draw reads its entry again later.
+        if (!loaded && declined && (Library.Policy == SdfMeshCachePolicy.Stored)) {
+            Library.Cache.Count(kind: SdfMeshCache.LoadsDeclined);
+            if (!Decline(group: group)) { Reload(group: group); }
+            return;
+        }
+        // A dynamic group whose own entry the store turned out not to hold loads the mesh stored of its form.
+        if (!loaded && !declined && !group.LoadsForm && HoldsForm(group: group)) {
+            group.LoadsForm = true;
+            ScheduleLoad(group: group);
+            return;
+        }
         if (!loaded && ResumeCheckpoint(group)) {
             using (EnterGate(site: BakeGate.Load)) { m_loadsDone++; m_loadLast = Stopwatch.GetTimestamp(); }
             return;
@@ -2606,7 +2644,9 @@ public sealed partial class SdfMeshPathBake {
                 SdfMeshBakeReport.StoreRefused(refusal: refusal, selector: group.Selector);
             }
             if (!loaded) {
+                group.LoadsForm = false;
                 group.Next = group.Deferred;
+                Library.Cache.Count(kind: (group.Live ? SdfMeshCache.LiveBaked : SdfMeshCache.GroupsBaked));
                 return;
             }
             m_accounts.Loaded++;
@@ -2621,6 +2661,12 @@ public sealed partial class SdfMeshPathBake {
     // one lands, and then until its words stand in the mesh region (Group.Mesh): the product revision changes when the
     // drawn mesh does, so the dresser lists the new one.
     private void Draw(Group group, SdfMesh? mesh) {
+        // A rung a ladder bake fills is its store entry alone: the claim handed in is let go, and the group keeps
+        // drawing the mesh of the group it stands in for until that group takes its place back (FinishReplacements).
+        if (group.Fill) {
+            mesh?.Release();
+            return;
+        }
         group.Mesh = mesh;
         group.ResidentAt = 0;
         m_allResident = false;
@@ -3206,6 +3252,24 @@ public sealed partial class SdfMeshPathBake {
         public bool FirstDetailOwed { get; set; }
         public bool FirstDetail { get; set; }
         public bool Evicted { get; set; }
+        // Whether the group is a rung a ladder bake fills (SdfMeshPathBake.FillLadders): its product is its store entry
+        // alone, so it never takes the draws, and the group it stands in for takes its place back when it is done.
+        public bool Fill { get; set; }
+        // Whether the group loads the mesh the store holds of its form, baked at another pose, in place of its own
+        // geometry's (SdfMeshLibrary.FormGeometry).
+        public bool LoadsForm { get; set; }
+        // Whether the group's geometry is made as the world runs: it reads an operand's pose, which no two runs stand
+        // at alike, or it was planned again because a sampled field it reads published another snapshot (Revisit). No
+        // cache made beforehand holds such geometry, so it bakes under every cache policy, is counted apart, and has
+        // no ladder filled.
+        public bool Live { get => (m_live || Geometry.ReadsOperands); set => m_live = value; }
+
+        private bool m_live;
+        // The loads of the group the account has had no room for in a row (SdfMeshPathBake.Reload).
+        public int LoadRetries { get; set; }
+        // Whether the group is a tier's replacement whose stored mesh the account had no room to read
+        // (SdfMeshPathBake.Decline): it is done with nothing of its own, and the group it replaces takes its place back.
+        public bool Declined { get; set; }
 
         private SdfMesh? m_floor;
 

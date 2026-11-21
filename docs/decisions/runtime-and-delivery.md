@@ -291,6 +291,38 @@ groups its world planned, and the release compares its own world's plan
 is compared, not looked up in the store, because a live frame keys a posed
 character's parts by poses a rest scene does not stand.
 
+**A set is whole by construction, and a player's build draws only what is
+stored.** A mesh has one store entry for each detail tier, and which tier a
+view asks depends on its window size, its distance and its device's memory
+budget, so a set baked from one view misses on every other. The alternatives
+were a producing boot for each target (it covers one window and one spawn view,
+and the first consumer test baked 598 lattices on its first boot and kept
+baking on every route), a scripted route through the world (a hand list that
+goes stale as places move), and enumerating the tiers offline (a live frame
+keys posed parts by poses no rest scene stands). The producer instead runs the
+engine's own bake under a ladder policy (`SdfMeshCachePolicy.Ladder`): it bakes
+every tier between each drawn mesh's finest and coarsest, at each spawn point
+the world's documents author, so no target, distance or budget can ask a tier
+the set lacks, and the set no longer depends on which targets it was made for.
+A dynamic group's mesh is stored under its form as well as its posed geometry,
+so a body at another pose loads it. A player's build then runs the stored
+policy: where a tier is missing it draws the nearest stored one and never bakes
+it, and an entry its memory has no room to read is held (the tier it draws
+stays) or read again, never baked. Only two things bake. A shape the store holds no tier of does, because nothing
+else can draw it: a world whose rules make new static geometry in play (dealt
+cards, set type) bakes that geometry on any machine. So does live geometry, a
+mesh that reads an operand's pose or a sampled field that moved, which is a
+feature of the engine and is counted apart from the cache's misses. The guarantee stops at what the authored spawn points
+draw; a residency no such place shows is filled only as far as its frames came.
+
+**Complete means checked as a player runs it.** `puck world player` boots each
+backend and target under the stored policy on the target's device profile,
+stands at every authored spawn point, and marks the folder complete only when
+every boot settled at every place, missed no tier and baked nothing but live
+geometry (`world.counters sdf.mesh-cache`). An incomplete folder says why
+in `player.json` and produces no cache set, so the release job holds the
+channel as it does for a missing set.
+
 ## Vendor binaries
 
 A closed component from another company enters a Puck build only where its
