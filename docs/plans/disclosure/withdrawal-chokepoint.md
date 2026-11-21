@@ -313,7 +313,7 @@ Not reachable for a session screen on this tree. A session is only ever
 admitted by a world this process hosts, hosted worlds step on the pump thread,
 and frames are produced on that same thread:
 
-`src/Puck.Launcher/HostLoop.cs:123`
+`src/Puck.Launcher/HostLoop.cs:129`
 
 ```csharp
     /// <summary>Runs inline on the hosted service's existing pump thread. No simulation thread is started here.</summary>
