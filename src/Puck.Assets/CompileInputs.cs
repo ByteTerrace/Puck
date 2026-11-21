@@ -131,7 +131,7 @@ public static class CompileInputs {
     // the canonical text of what the file declares; and from a directory, the canonical text of what the files
     // directly in it claim, read through this door without recording.
     private static readonly ConcurrentDictionary<string, Declarer> Declarers = new(comparer: StringComparer.Ordinal);
-    private sealed record Declarer(Func<string, Func<byte[]>, string> Declare, Func<string, string> Claim);
+    private sealed record Declarer(string Name, Func<string, Func<byte[]>, string> Declare, Func<string, string> Claim);
     // A declaration fact's hash by declarer and file digest: what a file declares is a function of its bytes alone, so
     // its canonical text is built and digested once per declarer and digest, under the running code.
     private static readonly CodeDerivedCache<(string Declarer, string Digest), string> DeclaredHashes = new(capacity: MaxRememberedPaths);
@@ -165,11 +165,10 @@ public static class CompileInputs {
     // What one file answered in a pass: whether it exists, and its digest once a question asked for it.
     private readonly record struct FileAnswer(bool Exists, string? Digest);
     // The answers a pass read, by full path: each file's existence and digest, each directory's names and their digest,
-    // and each listing's joined paths by the directory as spelled.
+    // and each directory's claims.
     private sealed class PassMemo {
         public ConcurrentDictionary<string, FileAnswer> Files { get; } = new(comparer: Puck.Abstractions.PuckPaths.Comparer);
         public ConcurrentDictionary<string, (string[] Names, string Hash)> Listings { get; } = new(comparer: Puck.Abstractions.PuckPaths.Comparer);
-        public ConcurrentDictionary<string, IReadOnlyList<string>> Joined { get; } = new(comparer: StringComparer.Ordinal);
         public ConcurrentDictionary<(string Declarer, string Directory), (string Hash, object Value)> Claims { get; } = new();
     }
 
@@ -178,13 +177,49 @@ public static class CompileInputs {
             frame.Log.Add(input: input);
         }
     }
-    private static Stamp FileStamp(string fullPath) => StampOf(entry: new FileInfo(fileName: fullPath));
-    private static Stamp DirectoryStamp(string fullPath) => StampOf(entry: new DirectoryInfo(path: fullPath));
     // One stat: a file's length, or zero for a directory, and the entry's last write and creation.
     private static Stamp StampOf(FileSystemInfo entry) {
         Interlocked.Increment(location: ref StampReadCount);
 
         return (entry.Exists ? new Stamp(Created: entry.CreationTimeUtc, Exists: true, Length: ((entry is FileInfo file) ? file.Length : 0L), Written: entry.LastWriteTimeUtc) : default);
+    }
+    // A path's full spelling, its memory keys and the stat handles its stamps are read through, built once for a fully
+    // qualified path so a poll over an unchanged tree spells no path and creates no handle: the stat itself is the
+    // whole cost (Refresh re-reads the one handle). A relative path resolves against the current directory, which can
+    // move, so it is spelled afresh on every question.
+    private sealed class PathEntry(string fullPath) {
+        private readonly Lock m_gate = new();
+        private FileInfo? m_file;
+        private DirectoryInfo? m_directory;
+
+        public string FullPath { get; } = fullPath;
+        public string FileKey { get; } = ("F" + fullPath);
+        public string ListingKey { get; } = ("D" + fullPath);
+
+        // The handle's cached attributes are written by Refresh and read by StampOf, so both run under the gate.
+        public Stamp FileStamp() {
+            lock (m_gate) {
+                var file = (m_file ??= new FileInfo(fileName: FullPath));
+
+                file.Refresh();
+                return StampOf(entry: file);
+            }
+        }
+        public Stamp DirectoryStamp() {
+            lock (m_gate) {
+                var directory = (m_directory ??= new DirectoryInfo(path: FullPath));
+
+                directory.Refresh();
+                return StampOf(entry: directory);
+            }
+        }
+    }
+    private static readonly ConcurrentDictionary<string, PathEntry> Paths = new(comparer: StringComparer.Ordinal);
+    private static PathEntry EntryOf(string path) {
+        if (!System.IO.Path.IsPathFullyQualified(path: path)) { return new PathEntry(fullPath: System.IO.Path.GetFullPath(path: path)); }
+        if (Paths.TryGetValue(key: path, value: out var entry)) { return entry; }
+        if (Paths.Count >= MaxRememberedPaths) { Paths.Clear(); }
+        return Paths.GetOrAdd(key: path, valueFactory: static spelled => new PathEntry(fullPath: System.IO.Path.GetFullPath(path: spelled)));
     }
     // The answer remembered under `stamp`, when it was read under exactly that stamp and the stamp was old enough then.
     private static Known? Vouched(string key, Stamp stamp) => ((Remembered.TryGetValue(key: key, value: out var known) && !known.Racy && (known.Stamp == stamp))
@@ -204,14 +239,13 @@ public static class CompileInputs {
             Stamp: stamp
         );
     }
-    private static string FileKey(string fullPath) => ("F" + fullPath);
-    private static string ListingKey(string fullPath) => ("D" + fullPath);
     // Reads a file's bytes whole and remembers their digest under the stamp taken just before, unless the path's bytes
     // are derived rather than the file's own.
     private static byte[] ReadRemembering(string path, out string hash) {
-        var fullPath = System.IO.Path.GetFullPath(path: path);
+        var entry = EntryOf(path: path);
+        var fullPath = entry.FullPath;
         var trusted = !WasmGuestBuild.MayName(path: fullPath);
-        var stamp = (trusted ? FileStamp(fullPath: fullPath) : default);
+        var stamp = (trusted ? entry.FileStamp() : default);
 
         Interlocked.Increment(location: ref ContentReadCount);
 
@@ -219,7 +253,7 @@ public static class CompileInputs {
 
         hash = ContentPin.Compute(content: content).Hex;
         if (trusted && stamp.Exists) {
-            Remember(hash: hash, key: FileKey(fullPath: fullPath), names: null, stamp: stamp);
+            Remember(hash: hash, key: entry.FileKey, names: null, stamp: stamp);
             Passing.Value?.Files.TryAdd(key: fullPath, value: new FileAnswer(Digest: hash, Exists: true));
         }
 
@@ -228,7 +262,8 @@ public static class CompileInputs {
     // The file names directly in a directory, in ordinal order, remembered under the directory's stamp; a directory's
     // last write moves when a file directly in it is added, removed or renamed.
     private static string[] Names(string directory, out string hash, out bool read) {
-        var fullPath = System.IO.Path.GetFullPath(path: directory);
+        var entry = EntryOf(path: directory);
+        var fullPath = entry.FullPath;
         var pass = Passing.Value;
 
         read = false;
@@ -238,8 +273,8 @@ public static class CompileInputs {
             return answered.Names;
         }
 
-        var key = ListingKey(fullPath: fullPath);
-        var stamp = DirectoryStamp(fullPath: fullPath);
+        var key = entry.ListingKey;
+        var stamp = entry.DirectoryStamp();
 
         if (Vouched(key: key, stamp: stamp) is { Names: { } held } known) {
             hash = known.Hash;
@@ -288,35 +323,37 @@ public static class CompileInputs {
         if (query.Kind == CompileInputKind.Listing) {
             _ = Names(directory: query.Path, hash: out var hash, read: out read);
 
-            return new CompileInput(ContentHash: hash, Kind: CompileInputKind.Listing, Path: query.Path);
+            return Answered(query: query, kind: CompileInputKind.Listing, hash: hash);
         }
 
         if (query.Kind is (CompileInputKind.Declaration or CompileInputKind.Claims)) {
-            var prefix = DeclarerPrefix(contentHash: query.ContentHash);
-
-            if ((prefix.Length == 0) || !Declarers.TryGetValue(key: prefix[..^1], value: out var declarer)) {
+            if (!TryDeclarerOf(contentHash: query.ContentHash, declarer: out var declarer)) {
                 read = false;
 
                 // A recorded declaration or claims fact is never empty, so an unregistered declarer's fact never holds.
-                return new CompileInput(ContentHash: string.Empty, Kind: query.Kind, Path: query.Path);
+                return Answered(query: query, kind: query.Kind, hash: string.Empty);
             }
             if (query.Kind == CompileInputKind.Claims) {
                 var contentReads = ContentReads;
-                var claimed = ClaimsHash(canonical: Unrecorded(read: () => declarer.Claim(arg: query.Path)), declarer: prefix[..^1]);
+                var claimed = ClaimsHash(canonical: Unrecorded(read: static state => state.Declarer.Claim(arg: state.Path), state: (Declarer: declarer, query.Path)), declarer: declarer.Name);
 
                 read = (ContentReads != contentReads);
 
-                return new CompileInput(ContentHash: claimed, Kind: CompileInputKind.Claims, Path: query.Path);
+                return Answered(query: query, kind: CompileInputKind.Claims, hash: claimed);
             }
 
             var fileDigest = Answer(path: query.Path, content: out var bytes, read: out read, wantDigest: true);
 
             if (fileDigest is null) {
-                return new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Absent, Path: query.Path);
+                return Answered(query: query, kind: CompileInputKind.Absent, hash: string.Empty);
+            }
+            // A digest whose declaration is held needs no reader of the bytes.
+            if (DeclaredHashes.TryGetValue(key: (declarer.Name, fileDigest), value: out var held)) {
+                return Answered(query: query, kind: CompileInputKind.Declaration, hash: held);
             }
 
             var wasRead = read;
-            var hash = DeclaredHash(declare: declarer.Declare, declarer: prefix[..^1], digest: fileDigest, read: () => {
+            var hash = DeclaredHash(declare: declarer.Declare, declarer: declarer.Name, digest: fileDigest, read: () => {
                 wasRead = true;
 
                 return (bytes ??= ReadRemembering(hash: out _, path: query.Path));
@@ -324,17 +361,30 @@ public static class CompileInputs {
 
             read = wasRead;
 
-            return new CompileInput(ContentHash: hash, Kind: CompileInputKind.Declaration, Path: query.Path);
+            return Answered(query: query, kind: CompileInputKind.Declaration, hash: hash);
         }
 
         var digested = (query.Kind == CompileInputKind.Content);
         var digest = Answer(path: query.Path, content: out _, read: out read, wantDigest: digested);
 
         return ((digest is null)
-            ? new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Absent, Path: query.Path)
+            ? Answered(query: query, kind: CompileInputKind.Absent, hash: string.Empty)
             : (digested
-                ? new CompileInput(ContentHash: digest, Kind: query.Kind, Path: query.Path)
-                : new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Present, Path: query.Path)));
+                ? Answered(query: query, kind: query.Kind, hash: digest)
+                : Answered(query: query, kind: CompileInputKind.Present, hash: string.Empty)));
+    }
+    // The fact a question answers: the question itself when it already holds that answer, so proving an unchanged input
+    // creates nothing, else a new fact for the same path.
+    private static CompileInput Answered(CompileInput query, CompileInputKind kind, string hash) =>
+        ((query.Kind == kind) && string.Equals(a: query.ContentHash, b: hash, comparisonType: StringComparison.Ordinal))
+            ? query
+            : new CompileInput(ContentHash: hash, Kind: kind, Path: query.Path);
+    // The registered declarer a declaration or claims fact's hash names before its slash, found without spelling the name.
+    private static bool TryDeclarerOf(string contentHash, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out Declarer? declarer) {
+        var slash = contentHash.IndexOf(value: '/');
+
+        declarer = null;
+        return ((slash > 0) && Declarers.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(key: contentHash.AsSpan(start: 0, length: slash), value: out declarer));
     }
     // A declaration fact's hash: its declarer's name and slash, then the digest of what the file declares, which the
     // declarer reads from the file's digest and, for a digest it does not hold, the file's bytes. Held by declarer and
@@ -366,7 +416,8 @@ public static class CompileInputs {
         content = null;
         read = false;
 
-        var fullPath = System.IO.Path.GetFullPath(path: path);
+        var entry = EntryOf(path: path);
+        var fullPath = entry.FullPath;
 
         if (WasmGuestBuild.MayName(path: fullPath)) {
             if (!Assets.Exists(path: path)) {
@@ -388,7 +439,7 @@ public static class CompileInputs {
             return (!answered.Exists ? null : (wantDigest ? answered.Digest : string.Empty));
         }
 
-        var stamp = FileStamp(fullPath: fullPath);
+        var stamp = entry.FileStamp();
 
         if (!stamp.Exists) {
             pass?.Files.TryAdd(key: fullPath, value: new FileAnswer(Digest: null, Exists: false));
@@ -398,7 +449,7 @@ public static class CompileInputs {
             pass?.Files.TryAdd(key: fullPath, value: new FileAnswer(Digest: null, Exists: true));
             return string.Empty;
         }
-        if (Vouched(key: FileKey(fullPath: fullPath), stamp: stamp) is { } known) {
+        if (Vouched(key: entry.FileKey, stamp: stamp) is { } known) {
             pass?.Files[fullPath] = new FileAnswer(Digest: known.Hash, Exists: true);
             return known.Hash;
         }
@@ -466,7 +517,7 @@ public static class CompileInputs {
             throw new ArgumentException(message: "A declarer's name holds no '/'.", paramName: nameof(name));
         }
 
-        _ = Declarers.TryAdd(key: name, value: new Declarer(Claim: claim, Declare: declare));
+        _ = Declarers.TryAdd(key: name, value: new Declarer(Claim: claim, Declare: declare, Name: name));
     }
     /// <summary>Reads what the files directly in <paramref name="directory"/> claim through <paramref name="build"/>,
     /// recording one claims fact (<see cref="CompileInputKind.Claims"/>) under the registered declarer named
@@ -504,14 +555,28 @@ public static class CompileInputs {
 
         return value;
     }
-    private static string ClaimsHash(string declarer, string canonical) => string.Concat(str0: declarer, str1: "/", str2: ContentPin.OfText(text: canonical).Hex);
+    // A claims fact's hash, held by the canonical text's own instance: a declarer that answers an unchanged directory
+    // hands back the text it built before, so proving the fact again digests and spells nothing.
+    private static string ClaimsHash(string declarer, string canonical) {
+        if (HeldClaimsHashes.TryGetValue(key: canonical, value: out var held) && string.Equals(a: held.Declarer, b: declarer, comparisonType: StringComparison.Ordinal)) {
+            return held.Hash;
+        }
+        var hash = string.Concat(str0: declarer, str1: "/", str2: ContentPin.OfText(text: canonical).Hex);
+
+        HeldClaimsHashes.AddOrUpdate(key: canonical, value: new HeldClaimsHash(Declarer: declarer, Hash: hash));
+        return hash;
+    }
+    private sealed record HeldClaimsHash(string Declarer, string Hash);
+    // Keyed by the canonical text's instance, so an entry lives exactly as long as the declarer holds that text.
+    private static readonly Puck.Abstractions.CodeDerivedTable<string, HeldClaimsHash> HeldClaimsHashes = new();
     // Runs a read on the calling flow with no recording, so the facts it reads are not facts of the compile.
-    private static T Unrecorded<T>(Func<T> read) {
+    private static T Unrecorded<T>(Func<T> read) => Unrecorded(read: static read => read(), state: read);
+    private static T Unrecorded<TState, T>(TState state, Func<TState, T> read) {
         var recording = Recording.Value;
 
         Recording.Value = null;
         try {
-            return read();
+            return read(arg: state);
         } finally {
             Recording.Value = recording;
         }
@@ -573,10 +638,20 @@ public static class CompileInputs {
             Path: directory
         ));
 
-        IReadOnlyList<string> Join() => [.. names.Select(selector: name => System.IO.Path.Join(path1: directory, path2: name))];
+        // The names array is the listing's own held instance while its stamp vouches, so the paths joined from it stand
+        // with it: an unchanged directory is listed without spelling a path.
+        if (HeldJoins.TryGetValue(key: directory, value: out var held) && ReferenceEquals(objA: held.Names, objB: names)) { return held.Paths; }
+        var paths = new string[names.Length];
 
-        return ((Passing.Value is { } pass) ? pass.Joined.GetOrAdd(key: directory, valueFactory: _ => Join()) : Join());
+        for (var index = 0; (index < names.Length); index++) { paths[index] = System.IO.Path.Join(path1: directory, path2: names[index]); }
+        if (HeldJoins.Count >= MaxRememberedPaths) { HeldJoins.Clear(); }
+        var joined = Array.AsReadOnly(array: paths);
+
+        HeldJoins[directory] = (names, joined);
+        return joined;
     }
+    // Each listed directory's joined paths, by the directory as spelled, with the names instance they were joined from.
+    private static readonly ConcurrentDictionary<string, (string[] Names, IReadOnlyList<string> Paths)> HeldJoins = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Records <paramref name="content"/> as what the compile read from <paramref name="path"/> through a
     /// reader of its own.</summary>

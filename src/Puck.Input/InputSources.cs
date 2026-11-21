@@ -103,8 +103,13 @@ public static class InputSources {
                 9
             );
 
-            return $"keyboard.{number}";
+            return Digits[number];
         }
+        // Each family's identifiers, spelled once: a lamp legend composes them every frame.
+        private static readonly string[] Digits = [.. Enumerable.Range(start: 0, count: 10).Select(static number => $"keyboard.{number}")];
+        private static readonly string[] Functions = [.. Enumerable.Range(start: 1, count: 12).Select(static number => $"keyboard.f{number}")];
+        private static readonly string[] Letters = [.. Enumerable.Range(start: 'a', count: 26).Select(static letter => $"keyboard.{(char)letter}")];
+        private static readonly string[] NumpadDigits = [.. Enumerable.Range(start: 0, count: 10).Select(static number => $"keyboard.numpad{number}")];
         /// <summary>The source for function key F<paramref name="number"/> (F1, F2, …).</summary>
         /// <param name="number">The function-key number, from 1 through 12.</param>
         /// <returns>The physical source identifier for the function key.</returns>
@@ -119,7 +124,7 @@ public static class InputSources {
                 other: 12
             );
 
-            return $"keyboard.f{number}";
+            return Functions[number - 1];
         }
         /// <summary>The source for a letter key. A chord like <c>Ctrl+C</c> is a <see cref="Puck.Commands.BindingModifierDefinition"/>
         /// declaring <see cref="ControlLeft"/> (or <see cref="ControlRight"/>) alongside this source — modifiers are ordinary
@@ -136,7 +141,7 @@ public static class InputSources {
                 );
             }
 
-            return $"keyboard.{char.ToLowerInvariant(c: letter)}";
+            return Letters[char.ToLowerInvariant(c: letter) - 'a'];
         }
         /// <summary>Gets the source for a numpad digit.</summary>
         /// <param name="number">The digit, from 0 through 9.</param>
@@ -147,7 +152,7 @@ public static class InputSources {
                 9
             );
 
-            return $"keyboard.numpad{number}";
+            return NumpadDigits[number];
         }
     }
     /// <summary>

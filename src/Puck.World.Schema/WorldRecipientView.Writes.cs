@@ -63,7 +63,10 @@ public sealed partial class WorldRecipientView {
                 var ordinal = handle.Ordinal;
                 var domain = Arena.Layout[ordinal].DomainOrdinal;
                 if (!WritesWhole(ordinal) || ((domain >= 0) && !WritesWhole(domain))) { return false; }
-                foreach (var dependent in catalog.DependentRows(ordinal)) {
+                // Indexed loops: a foreach over an interface list allocates its enumerator on every admission.
+                var dependents = catalog.DependentRows(ordinal);
+                for (var index = 0; index < dependents.Length; index++) {
+                    var dependent = dependents[index];
                     if (!WritesWhole(dependent)) { return false; }
                     var dependentName = catalog.Descriptors[dependent].Name;
                     if (reached.Add(dependentName)) { pending.Enqueue(dependentName); }
@@ -71,11 +74,13 @@ public sealed partial class WorldRecipientView {
             } else if (!AdmitsSet(name)) {
                 return false;
             }
-            foreach (var spelled in declared.Spells(name)) {
-                if (!WritesWholeName(spelled)) { return false; }
+            var spells = declared.Spells(name);
+            for (var index = 0; index < spells.Count; index++) {
+                if (!WritesWholeName(spells[index])) { return false; }
             }
-            foreach (var spelling in declared.SpelledBy(name)) {
-                if (reached.Add(spelling)) { pending.Enqueue(spelling); }
+            var spelledBy = declared.SpelledBy(name);
+            for (var index = 0; index < spelledBy.Count; index++) {
+                if (reached.Add(spelledBy[index])) { pending.Enqueue(spelledBy[index]); }
             }
         }
         return true;
