@@ -424,6 +424,11 @@ prototypes {
     document {
       schema: "puck.creation.v1"
       name: "moth-pilot"
+      // At rest her breath re-poses her ten times a second: a breath's few millimetres stay smooth at it, and the views
+      // that show her stand between poses. A stride poses her on the frame it starts.
+      behavior {
+        restRate: 10
+      }
       frames [
         // Holding: the handheld leaves its rest inside her chest for her hands, its screen toward her eyes. A frame poses
         // each shape it names, not the shapes riding it, so every part of the brick is posed with the shell: its rest

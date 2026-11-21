@@ -311,6 +311,7 @@ public sealed partial class SdfWorldTables {
             );
         }
 
+        PackScreenReaches(frame: frame);
         BeginMotionStaging(frame: frame);
         CollectReaders(frame: frame);
         _ = PackDynamicTransforms(frame: frame);

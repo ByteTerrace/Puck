@@ -58,7 +58,7 @@ public sealed partial class SdfWorldTables : IDisposable {
     // ScreenMappingData.treatment and .treatmentShape in frame/sdf-screen-mapping.hlsli.
     private const int ScreenTreatmentOffset = ((sizeof(float) * 4) * 7);
     private const int ScreenTreatmentFloats = 8;
-    private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with frame/sdf-environment.hlsli)
+    private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+range (KEEP IN SYNC with frame/sdf-environment.hlsli)
     // Packed flow/cloud volume stride; paired with shade-volumes.hlsli.
     private const int VolumeByteLength = ((sizeof(float) * 4) * SdfVolume.VectorsPerEntry);
     // The bytes of the dummy buffer a pass binds at a member whose storage it does not touch: one element of the widest

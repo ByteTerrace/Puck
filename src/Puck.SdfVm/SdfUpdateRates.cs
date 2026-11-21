@@ -45,8 +45,8 @@ public enum SdfUpdateRates : byte {
 public static class SdfUpdateRateTiers {
     /// <summary>The on-screen step, in pixels, a held update may jump by and stay barely perceptible.</summary>
     public const float PerceptibleStepPixels = 2f;
-    /// <summary>The fastest a body's parts move relative to its root, in metres a second, that the body tiers are sized
-    /// for: a stride's swing. A placed creation's tiers are sized for its own measured part speed instead
+    /// <summary>The fastest a moving body's parts move relative to its root, in metres a second, that its tiers are sized
+    /// for at least: a stride's swing. A resting body and a placed creation are sized for their own measured part speed
     /// (<see cref="BodyHertz"/>).</summary>
     public const float BodyPartSpeed = 2f;
     /// <summary>Gets the rates a body's pose takes, in hertz, fastest first: every frame, then each reduced tier. Each
@@ -94,9 +94,9 @@ public static class SdfUpdateRateTiers {
     /// cascade may draw, a camera whose view the display showed none of yet, or a consumer of its parts (a light, a camera
     /// anchor, an audio emitter). A creation no displayed view may see but that is shown elsewhere takes the 15 Hz tier,
     /// its pose still moving.</param>
-    /// <param name="partSpeed">The fastest the creation's parts move relative to its root, in metres a second: a body's
-    /// assumed <see cref="BodyPartSpeed"/>, a placed creation's measured bound; infinity for motion no bound covers,
-    /// which updates every frame wherever anything may show it.</param>
+    /// <param name="partSpeed">The fastest the creation's parts move relative to its root, in metres a second: a moving
+    /// body's <see cref="BodyPartSpeed"/> or faster, a resting body's or a placed creation's measured bound; infinity for
+    /// motion no bound covers, which updates every frame wherever anything may show it.</param>
     /// <returns>The slowest of <see cref="BodyTiers"/> that bound allows, where 60 means every frame; 15 for a creation
     /// only shown elsewhere, whose size in what shows it is not measured, when its motion has a bound; or
     /// <see cref="HeldHertz"/> when nothing may show or read its pose.</returns>

@@ -1437,6 +1437,10 @@ export type CreationBehaviorDocument = {
    * Whether a placed copy of the creation may animate at the update-rate lever's reduced tiers (world.rates bodies: at least 30 or 15 updates a second) while it stands small on every view that may see it. Null or false = full rate wherever anything may show or read it; a copy nothing may show holds either way. A body-rooted creation takes the reduced tiers whatever this says.
    */
   reducedRateAtDistance?: boolean | null;
+  /**
+   * The most often a body wearing the creation re-poses while it rests, in updates a second: while its root and every input its rig reads stand as they stood at its last pose, its idle motion (a breath, a sway) updates at most this often. Null = as often as the motion its parts were measured to make needs (the update-rate lever's tiers, world.rates bodies). A stride or any other input that starts the body moving poses it on that frame whatever this says. Positive; a value of 60 or more is every frame.
+   */
+  restRate?: number | null;
 };
 
 export type CreationCameraDocument = {

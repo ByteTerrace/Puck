@@ -20,6 +20,14 @@ namespace Puck.World.Client;
 // spread over the period's frames. The levers and the step flags are this frame's (PresentAt, before the pack); the
 // views and shadow cascades are the frame just dressed, a frame's lag the tiers do not notice, so a camera cut shows a
 // held body's held pose for one frame.
+//
+// A body is rated by the part speed it was measured to move at, as a placed creation is, but over its latest interval
+// alone, so the rate falls as soon as it rests. It rests while its root target and every other input its pose reads (the
+// digest its wake reads) stand as they stood at its last full pack and did over the interval that pack closed; at rest
+// it takes the tier its measured speed allows, no faster than its creation's authored rest rate
+// (CreationBehaviorDocument.RestRate). A body that moves takes the tiers sized for a stride's swing
+// (SdfUpdateRateTiers.BodyPartSpeed) or for its measured speed where that is faster, and the frame an input first changes
+// after a rest it poses in full whatever its tier (StartsMoving), so no stride starts on a held pose.
 public sealed partial class WorldCreationInstances {
     // The packs this pool has run, the clock NotePoseRead stamps a registration's last read with.
     private long m_packCount;
@@ -154,7 +162,7 @@ public sealed partial class WorldCreationInstances {
             var shownElsewhere = ((pixelsPerMetre <= 0f) && Shown(center: center, live: live, radius: radius));
 
             hertz = ((live.BodyIndex is not null)
-                ? SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: pixelsPerMetre, shownElsewhere: shownElsewhere)
+                ? BodyHertz(live: live, pixelsPerMetre: pixelsPerMetre, placementScale: placementScale, shownElsewhere: shownElsewhere)
                 : (ReducesAtDistance(live: live)
                     ? SdfUpdateRateTiers.BodyHertz(partSpeed: (live.PartSpeed * placementScale), pixelsPerMetre: pixelsPerMetre, shownElsewhere: shownElsewhere)
                     : (((pixelsPerMetre > 0f) || shownElsewhere) ? SdfUpdateRateTiers.EveryFrameHertz : SdfUpdateRateTiers.HeldHertz)));
@@ -187,6 +195,47 @@ public sealed partial class WorldCreationInstances {
         : RateOf(center: root.Position, live: reader, placementScale: root.Scale, radius: RateReach(live: reader, placementScale: root.Scale)).Hertz);
     // Whether a row-rooted registration's author lets it take the reduced tiers.
     private static bool ReducesAtDistance(Registration live) => (live.Creation.EngineDocument.Behavior?.ReducedRateAtDistance == true);
+    // A body's tier: every frame until its part speed is measured; while it moves, the tier a stride's swing or its
+    // measured speed allows, whichever is faster; at rest, the tier its latest measured speed allows, no faster than its
+    // creation's rest rate.
+    private static int BodyHertz(Registration live, float pixelsPerMetre, float placementScale, bool shownElsewhere) {
+        var moving = (live.Moving || live.MovedLast);
+        var partSpeed = (float.IsPositiveInfinity(f: live.PartSpeed)
+            ? float.PositiveInfinity
+            : ((moving ? MathF.Max(x: SdfUpdateRateTiers.BodyPartSpeed, y: live.MovingPartSpeed) : live.PartSpeed) * placementScale));
+        var hertz = SdfUpdateRateTiers.BodyHertz(partSpeed: partSpeed, pixelsPerMetre: pixelsPerMetre, shownElsewhere: shownElsewhere);
+
+        return ((!moving && (live.Creation.EngineDocument.Behavior?.RestRate is { } rest) && (hertz > rest) && (hertz != SdfUpdateRateTiers.HeldHertz))
+            ? Math.Max(val1: 1, val2: ((int)rest))
+            : hertz);
+    }
+    // Notes whether a body moves this frame: whether its root target or the other inputs its wake read differ from its
+    // last full pack's.
+    private static void NoteMotion(Registration live, Vector3 rootPosition, Quaternion rootRotation) =>
+        live.Moving = ((live.BodyIndex is not null) && ((rootPosition != live.PackedRootTarget) || (rootRotation != live.PackedRootTurn) || (live.InputVersion != live.PackedInputVersion)));
+    // Whether a body starts moving this frame: it moves now and the interval its last full pack closed did not. It poses
+    // in full on this frame, so a stride never shows the pose its rest held.
+    private static bool StartsMoving(Registration live) => (live.Moving && !live.MovedLast);
+    // Closes a body's interval at a full pack: whether it moved over the interval, the fastest it has moved since it
+    // started moving, and the inputs the next interval is judged against.
+    private static void PosedMotion(Registration live, Vector3 rootPosition, Quaternion rootRotation) {
+        if (live.BodyIndex is null) {
+            return;
+        }
+
+        if (live.Moving && !live.MovedLast) {
+            live.MovingPartSpeed = 0f;
+        }
+        if (live.Moving && float.IsFinite(f: live.PartSpeed)) {
+            live.MovingPartSpeed = MathF.Max(x: live.MovingPartSpeed, y: live.PartSpeed);
+        }
+
+        live.MovedLast = live.Moving;
+        live.Moving = false;
+        live.PackedRootTarget = rootPosition;
+        live.PackedRootTurn = rootRotation;
+        live.PackedInputVersion = live.InputVersion;
+    }
     // Measures a reducing placed creation's part speed after a full pack (the bound RateOf sizes its tiers for): each
     // part's travel relative to the root since the previous full pack, its centre's displacement plus the chord its
     // reach sweeps by its turn, over the seconds between the packs. The bound keeps the fastest any such interval
@@ -194,7 +243,9 @@ public sealed partial class WorldCreationInstances {
     // step for any speed already seen. An interval across a cut (a new registration, a reseat, a resume after an unseen
     // hold, a scale change) measures nothing and only restarts the comparison.
     private void MeasurePartSpeed(Registration live, in DynamicTransform root, int shapeCount, float elapsedSeconds, bool continuous) {
-        if ((live.BodyIndex is not null) || !ReducesAtDistance(live: live) || (root.Scale <= 0f)) {
+        var body = (live.BodyIndex is not null);
+
+        if ((!body && !ReducesAtDistance(live: live)) || (root.Scale <= 0f)) {
             return;
         }
         if (live.PartLocalPositions.Length != shapeCount) {
@@ -228,7 +279,7 @@ public sealed partial class WorldCreationInstances {
         if (measures) {
             var speed = (fastest / elapsedSeconds);
 
-            live.PartSpeed = (float.IsPositiveInfinity(f: live.PartSpeed) ? speed : MathF.Max(x: live.PartSpeed, y: speed));
+            live.PartSpeed = ((body || float.IsPositiveInfinity(f: live.PartSpeed)) ? speed : MathF.Max(x: live.PartSpeed, y: speed));
         }
     }
     // Whether anything but a displayed view's image may show a body's pose or read it, so it may not hold: something

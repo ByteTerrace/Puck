@@ -228,8 +228,7 @@ public sealed partial class WorldCreationInstances {
 
             var packedBefore = ReferenceEquals(objA: m_packedRegistrations[index], objB: live);
             var posed = false;
-
-            if (Wake(
+            var woken = Wake(
                 client: client,
                 deltaSeconds: deltaSeconds,
                 index: index,
@@ -237,7 +236,10 @@ public sealed partial class WorldCreationInstances {
                 moved: moved,
                 rootPosition: rootPosition,
                 rootRotation: rootRotation
-            ) || live.RateOwed) {
+            );
+
+            NoteMotion(live: live, rootPosition: rootPosition, rootRotation: rootRotation);
+            if (woken || live.RateOwed) {
                 // A pose holds between its rated packs, except on the frame its slots change owner or the whole table is
                 // owed (WorldCreationInstances.Rates, whose one decision gives a placed creation only the held tier).
                 var mayHold = (
@@ -256,7 +258,8 @@ public sealed partial class WorldCreationInstances {
                     ForgetPhase(live: live);
                 }
 
-                var holds = (mayHold && HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, placementScale: placementScale, radius: RateReach(live: live, placementScale: placementScale)));
+                // A body that starts moving poses on the frame it starts, whatever tier its rest held it at (StartsMoving).
+                var holds = (mayHold && !StartsMoving(live: live) && HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, placementScale: placementScale, radius: RateReach(live: live, placementScale: placementScale)));
                 // A held pose whose root has not moved moves no slot, so nothing is carried or compared.
                 var (heldPosition, heldRotation) = (rootPosition, rootRotation);
                 var still = false;
@@ -319,6 +322,7 @@ public sealed partial class WorldCreationInstances {
                     // A pack that may not hold (a new owner, a reseat, a scale change, the whole table owed) or that
                     // resumes an unseen hold is a cut the part speed is not measured across.
                     MeasurePartSpeed(continuous: (mayHold && !unseen), elapsedSeconds: elapsedSeconds, live: live, root: in transforms[rootSlot], shapeCount: shapeCount);
+                    PosedMotion(live: live, rootPosition: rootPosition, rootRotation: rootRotation);
                     m_rateCounts?.Count(kind: ((live.BodyIndex is not null) ? SdfUpdateRateCounts.BodiesPosed : SdfUpdateRateCounts.PlacementsPosed));
                     posed = true;
                     live.RateSeconds = 0f;
@@ -490,6 +494,7 @@ public sealed partial class WorldCreationInstances {
         version.Add(value: unchecked((uint)live.EffectiveCursor));
         version.Add(value: unchecked((uint)facts));
         version.Add(value: live.WakeRevision);
+        live.InputVersion = version.Value;
 
         var wake = m_owners.Wake(
             deltaSeconds: deltaSeconds,

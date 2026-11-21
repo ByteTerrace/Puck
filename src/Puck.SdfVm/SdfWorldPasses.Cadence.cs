@@ -28,7 +28,7 @@ public sealed partial class SdfWorldPasses {
             return FarSignatureOf(entry: entry, signature: null);
         }
         if (!frame.EnableCadenceGate || entry.Picker.Pending || (entry.Convergence is { IsActive: true }) ||
-            (ReadSignatureOf(entry: entry, frame: frame, part: part, reads: reads, view: view) is not { } images)) {
+            (ReadSignatureOf(entry: entry, frame: frame, part: part, reads: reads, tables: tables, view: view) is not { } images)) {
             SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Forced);
             return ((part == SdfWorldPackage.Parts.ShadowFar) ? FarSignatureOf(entry: entry, signature: null) : null);
         }
@@ -46,7 +46,7 @@ public sealed partial class SdfWorldPasses {
         }
         var hash = Fnv1aHash.Create();
 
-        hash.Add(value: tables.PassSignature(frame: frame, motion: motion, part: part, view: Math.Min(val1: view.View, val2: (frame.Views.Count - 1))));
+        hash.Add(value: tables.PassSignature(frame: frame, scopeLighting: LightingOf(entry: entry, part: part, tables: tables), motion: motion, part: part, view: Math.Min(val1: view.View, val2: (frame.Views.Count - 1))));
         hash.Add(value: entry.Bindings);
         // A cascade is drawn from its light's camera, which no sample of the view's jitter moves, so a cascade stands
         // through the samples a temporal view takes of a still scene.
@@ -62,6 +62,7 @@ public sealed partial class SdfWorldPasses {
         var signature = tables.PassSignature(
             frame: frame,
             motion: MotionOf(entry: entry, instance: instance, part: SdfWorldPackage.Parts.Views, tables: tables, view: view),
+            scopeLighting: LightingOf(entry: entry, part: SdfWorldPackage.Parts.Views, tables: tables),
             part: SdfWorldPackage.Parts.Views,
             view: Math.Min(val1: view.View, val2: (frame.Views.Count - 1))
         );

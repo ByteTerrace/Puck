@@ -18,12 +18,17 @@ namespace Puck.SdfVm;
 //   - its frame slot's row (the material frame and the lanes) : NoteMovedSlots judges each changed slot's draws
 //                          (m_rowsByFrameSlot) by the box they hold, unless the staging already judged the record.
 //   - its members' slots (a skinned mesh) : no record changes as a member moves, so NoteSkinnedRows judges each
-//                          skinned row a changed slot may pose by a host bound (SdfMeshBox.TryOfSkin), kept beside the
-//                          row from one staging to the next.
+//                          skinned row a changed slot may pose by a host bound (SdfMeshBox.TryOfSkin, under the shared
+//                          rows and each view's pose overlay), kept beside the row from one staging to the next and
+//                          written into the record's selection words, so every pass selects the draw by it.
 // What shading reads of a slot besides a draw (CollectReaders), each judged by the box it reaches under the pose the
 // slot held before the staging wrote it and the pose it holds after (NoteMovedReaders): a positional light's range, a
 // bounded medium's box and a paint's box. A cascade holds depths alone and reads none of them. A view's pose overlay
 // rows move that view's scopes.
+// What shading reads of the screens' emission (SdfScreenEmission), whose reduction is published after the staging: each
+// screen a publication changed is judged by the box its light reaches (NoteEmission, EmissionBoxOf), which no pass that
+// shades past the screen's range can show (sdfLightWindow), and moves the lighting revision of each scope that shades
+// (SdfMotionScope.Lighting), not its revision: no draw or pose changed.
 // A kernel that reads sdfDynamicTransforms for anything else must be named here, or a pass stands on a stale image.
 // The field interpreter reads slots too, but only the bake runs it, which no pass signature covers.
 //
@@ -55,8 +60,12 @@ public sealed partial class SdfWorldTables {
     private readonly List<SlotReader> m_frameReaders = [];
     private byte[] m_slotReaderMarks = [];
     private readonly List<(int Slot, Vector3 Position, Quaternion Orientation)> m_movedReaderSlots = [];
-    // Each view's pose overlay rows.
-    private readonly List<(int First, int Count, int View)> m_overlayRows = [];
+    // Each view's pose overlay: the rows it reads from, how many, the view, and the first slot it replaces; whether the
+    // list differs from the previous staging's; and the table a skinned row's bound under one overlay reads.
+    private readonly List<(int First, int Count, int View, int Stamp)> m_overlayRows = [];
+    private readonly List<(int First, int Count, int View, int Stamp)> m_previousOverlayRows = [];
+    private bool m_overlaysChanged;
+    private readonly OverlaidTransforms m_overlaid = new();
     // The skinned rows: the slots each may read, and the bound it held when last judged.
     private readonly Dictionary<int, SkinRow> m_skinRows = [];
     private readonly List<int> m_skinOrder = [];
@@ -125,6 +134,7 @@ public sealed partial class SdfWorldTables {
                 SdfMotionCause.Draw or SdfMotionCause.Skin or SdfMotionCause.Slot when ((detail >= 0) && (detail < m_stagedCount)) => DescribeRow(row: detail),
                 SdfMotionCause.Reader => $"slot{detail}({string.Join(separator: '+', values: m_paintReaders.Concat(second: m_frameReaders).Where(predicate: reader => (reader.Slot == detail)).Select(selector: static reader => reader.Reader).Distinct())})",
                 SdfMotionCause.Overlay => $"slot{detail}",
+                SdfMotionCause.Emission => $"screen{detail}",
                 _ => string.Empty,
             });
 
@@ -171,6 +181,8 @@ public sealed partial class SdfWorldTables {
     private void CollectReaders(SdfFrame frame) {
         foreach (var reader in m_frameReaders) { Mark(slot: reader.Slot, mark: FrameMark, set: false); }
         m_frameReaders.Clear();
+        m_previousOverlayRows.Clear();
+        m_previousOverlayRows.AddRange(collection: m_overlayRows);
         m_overlayRows.Clear();
         for (var index = 0; (index < frame.Lights.Count); index++) {
             var light = frame.Lights[index];
@@ -196,8 +208,9 @@ public sealed partial class SdfWorldTables {
             foreach (var reader in m_paintReaders) { Mark(slot: reader.Slot, mark: PaintMark, set: true); }
         }
         for (var view = 0; (view < frame.Views.Count); view++) {
-            if (frame.Views[view].PoseOverlay is { SlotCount: > 0 } overlay) { m_overlayRows.Add(item: (overlay.OverlaySlot, overlay.SlotCount, view)); }
+            if (frame.Views[view].PoseOverlay is { SlotCount: > 0 } overlay) { m_overlayRows.Add(item: (overlay.OverlaySlot, overlay.SlotCount, view, overlay.FirstSlot)); }
         }
+        m_overlaysChanged = !m_overlayRows.SequenceEqual(second: m_previousOverlayRows);
 
         void Mark(int slot, byte mark, bool set) {
             if (slot >= m_slotReaderMarks.Length) { Array.Resize(array: ref m_slotReaderMarks, newSize: Math.Max(val1: (slot + 1), val2: (m_slotReaderMarks.Length * 2))); }
@@ -348,25 +361,84 @@ public sealed partial class SdfWorldTables {
         if (last != row) { CollectionsMarshal.GetValueRefOrNullRef(dictionary: m_skinRows, key: last).Order = skin.Order; }
     }
     // Judges each skinned row this staging staged, or whose slots a changed or reseated transform may be, by the bound
-    // it held and the bound it holds under the frame's transforms. The held bound follows the pose on every staging,
-    // open scope or none, or a later staging would judge the row by a bound it left stagings ago.
+    // it held and the bound it holds under the frame's transforms, and writes the bound into its record. The held bound
+    // follows the pose on every staging, open scope or none, or a later staging would judge the row by a bound it left
+    // stagings ago and a pass would select the draw by one its vertices left.
     private void NoteSkinnedRows() {
         foreach (var row in m_skinOrder) {
             ref var skin = ref CollectionsMarshal.GetValueRefOrNullRef(dictionary: m_skinRows, key: row);
 
-            if ((m_rowStagings[row] != m_motionStaging) &&
-                !m_changedTransforms.Overlaps(length: skin.SlotCount, start: skin.FirstSlot) &&
-                !m_reseatedTransforms.Overlaps(length: skin.SlotCount, start: skin.FirstSlot)) {
+            if ((m_rowStagings[row] != m_motionStaging) && !m_overlaysChanged && !SkinSlotsMoved(count: skin.SlotCount, first: skin.FirstSlot)) {
                 continue;
             }
 
             ref readonly var draw = ref m_stagedDraws[row];
             var live = !m_absentRows.Contains(item: row);
-            SdfMeshBox? box = (SdfMeshBox.TryOfSkin(box: out var bound, draw: in draw, transforms: m_motionTransforms) ? bound : null);
+            var box = SkinBoxOf(count: skin.SlotCount, draw: in draw, first: skin.FirstSlot);
 
             NoteMotion(cause: SdfMotionCause.Skin, row: row, wasLive: skin.Live, before: in skin.Box, wasGlass: skin.Glass, isLive: live, after: in box, isGlass: draw.Glass);
             (skin.Live, skin.Box, skin.Glass) = (live, box, draw.Glass);
+            WriteSkinSelection(box: in box, row: row);
         }
+    }
+    // Whether a changed or reseated slot is one a skinned row may read: one of its own, or a row of a view's pose overlay
+    // that replaces one of its own.
+    private bool SkinSlotsMoved(int first, int count) {
+        if (Moved(start: first, length: count)) { return true; }
+        foreach (var (overlay, overlayCount, _, stamp) in m_overlayRows) {
+            if (Covers(stamp: stamp, overlayCount: overlayCount, first: first, count: count) && Moved(start: overlay, length: overlayCount)) { return true; }
+        }
+
+        return false;
+
+        bool Moved(int start, int length) => (m_changedTransforms.Overlaps(length: length, start: start) || m_reseatedTransforms.Overlaps(length: length, start: start));
+    }
+    // Whether an overlay's replaced slots meet a skinned row's slots.
+    private static bool Covers(int stamp, int overlayCount, int first, int count) =>
+        ((((long)stamp) < (((long)first) + count)) && (((long)first) < (((long)stamp) + overlayCount)));
+    // The bound of a skinned draw as every view's passes pose it: under the shared rows, and under each view's pose
+    // overlay that replaces any of its slots (sdfViewPoseSlot), held in one box. Null when any of them has no bound.
+    private SdfMeshBox? SkinBoxOf(in SdfMeshDraw draw, int first, int count) {
+        if (!SdfMeshBox.TryOfSkin(box: out var box, draw: in draw, transforms: m_motionTransforms)) { return null; }
+        foreach (var (overlay, overlayCount, _, stamp) in m_overlayRows) {
+            if (!Covers(stamp: stamp, overlayCount: overlayCount, first: first, count: count)) { continue; }
+            m_overlaid.Overlay(count: overlayCount, rows: overlay, stamp: stamp, table: m_motionTransforms);
+            if (!SdfMeshBox.TryOfSkin(box: out var posed, draw: in draw, transforms: m_overlaid)) { return null; }
+            box = SdfMeshBox.Enclosing(first: in box, second: in posed);
+        }
+
+        return box;
+    }
+    // Writes a skinned row's bound into its record's selection words (SdfMeshRegion.WriteSelectionBox), owing the region
+    // only the words it changes.
+    private void WriteSkinSelection(int row, in SdfMeshBox? box) {
+        var start = ((row * SdfMeshRecord.DrawWords) + SdfMeshRecord.SelectionWord);
+        var selection = m_meshDrawWords.AsSpan(length: SdfMeshRegion.SelectionWords, start: start);
+        Span<uint> words = stackalloc uint[SdfMeshRegion.SelectionWords];
+
+        selection.CopyTo(destination: words);
+        SdfMeshRegion.WriteSelectionBox(box: in box, selection: words);
+        if (words.SequenceEqual(other: selection)) { return; }
+        words.CopyTo(destination: selection);
+        _ = m_meshRegion.Write(bytes: MemoryMarshal.AsBytes(span: selection), offset: (((long)start) * sizeof(uint)));
+    }
+    // A transform table whose slots one view's pose overlay replaces with the rows it reads from.
+    private sealed class OverlaidTransforms : IReadOnlyList<DynamicTransform> {
+        private IReadOnlyList<DynamicTransform> m_table = [];
+        private int m_stamp;
+        private int m_count;
+        private int m_rows;
+
+        public void Overlay(IReadOnlyList<DynamicTransform> table, int stamp, int count, int rows) => (m_table, m_stamp, m_count, m_rows) = (table, stamp, count, rows);
+
+        public DynamicTransform this[int index] => (((index >= m_stamp) && ((index - m_stamp) < m_count) && (((m_rows + index) - m_stamp) < m_table.Count))
+            ? m_table[((m_rows + index) - m_stamp)]
+            : m_table[index]);
+        public int Count => m_table.Count;
+        public IEnumerator<DynamicTransform> GetEnumerator() {
+            for (var index = 0; (index < Count); index++) { yield return this[index]; }
+        }
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
     // Judges each reader of a slot the staging wrote, by the box it reached under the pose the slot held before the write
     // and the box it reaches now. A slot written for the first time held no pose, and its table is seeded whole, which
@@ -404,7 +476,7 @@ public sealed partial class SdfWorldTables {
 
             for (var slot = slots.Start(index: run); (slot < end); slot++) {
                 if (m_motionOpen == 0) { return; }
-                foreach (var (first, count, view) in m_overlayRows) {
+                foreach (var (first, count, view, _) in m_overlayRows) {
                     if ((slot >= first) && ((slot - first) < count)) { MeetEveryScope(cause: SdfMotionCause.Overlay, detail: slot, view: view); }
                 }
                 for (var row = m_rowsByFrameSlot.First(key: slot); (row >= 0); row = m_rowsByFrameSlot.Next(row: row)) {
@@ -428,6 +500,53 @@ public sealed partial class SdfWorldTables {
         SdfCadenceWork.ProcessWork.Add(kind: SdfCadenceWork.ScopeTests, amount: m_motionTests);
         (m_motionChanges, m_motionTests) = (0L, 0L);
     }
+    // Judges a publication of the screens' emission: each scope that shades is lit by each screen the publication changed
+    // (one bit a screen) whose light reaches what the scope's cull keeps. A publication lands after the frame's staging, and
+    // every scope it lights moves, however often the staging met it.
+    internal void NoteEmission(uint screens) {
+        if ((screens == 0u) || (m_motionScopes.Count == 0)) { return; }
+        for (var bits = screens; (bits != 0u); bits &= (bits - 1u)) {
+            var screen = BitOperations.TrailingZeroCount(value: bits);
+            var box = EmissionBoxOf(screen: screen);
+
+            foreach (var scope in m_motionScopes) {
+                if ((scope.Reader != SdfMotionReader.Caster) && scope.Shows(box: in box, isGlass: true)) {
+                    scope.Light(cause: SdfMotionCause.Emission, detail: screen);
+                    SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.ScopesLit);
+                }
+            }
+        }
+    }
+    // The box a screen's light reaches: the half of its range's sphere in front of its face, whose center the light rides
+    // (sdfLightNext's screen half), or null for a range no box bounds (an opening's).
+    private SdfMeshBox? EmissionBoxOf(int screen) {
+        var reach = m_screenReach[screen];
+
+        if (!float.IsFinite(f: reach)) { return null; }
+        var (origin, right, up, _) = ScreenFrameOf(screen: screen);
+        var facing = Vector3.Normalize(value: Vector3.Cross(vector1: right, vector2: up));
+
+        return new SdfMeshBox(Center: (origin + (facing * (0.5f * reach))), HalfX: (right * reach), HalfY: (up * reach), HalfZ: (facing * (0.5f * reach)));
+    }
+    /// <summary>Returns whether a view's pass under a motion scope may show a screen's face, so may sample its image: the
+    /// face's rectangle (<see cref="SetScreenSurface"/>) is one the scope's cull keeps.</summary>
+    /// <param name="scope">The scope of the pass that shades the face.</param>
+    /// <param name="screen">The screen slot.</param>
+    /// <returns><see langword="false"/> when no pixel the pass shades can lie on the face.</returns>
+    internal bool ScreenFaceShows(SdfMotionScope scope, int screen) {
+        var (origin, right, up, extent) = ScreenFrameOf(screen: screen);
+
+        return scope.Shows(box: new SdfMeshBox(Center: origin, HalfX: (right * extent.X), HalfY: (up * extent.Y), HalfZ: Vector3.Zero), isGlass: true);
+    }
+    // A screen's face as its surface row holds it: its center, its unit axes and its half width and height.
+    private (Vector3 Origin, Vector3 Right, Vector3 Up, Vector2 Extent) ScreenFrameOf(int screen) {
+        var row = MemoryMarshal.Cast<byte, float>(span: m_screenSurfaceRegion.Contents).Slice(length: (ScreenSurfaceByteLength / sizeof(float)), start: (screen * (ScreenSurfaceByteLength / sizeof(float))));
+
+        return (new(x: row[8], y: row[9], z: row[10]), SafeUnit(value: new(x: row[0], y: row[1], z: row[2])), SafeUnit(value: new(x: row[4], y: row[5], z: row[6])), new(x: row[3], y: row[7]));
+
+        static Vector3 SafeUnit(Vector3 value) => ((value.LengthSquared() > 0f) ? Vector3.Normalize(value: value) : Vector3.Zero);
+    }
+
     // The upload advanced the previous tables: each scope's poses follow.
     private void UploadedMotion() {
         foreach (var scope in m_motionScopes) { scope.Uploaded(); }

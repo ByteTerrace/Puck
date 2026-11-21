@@ -17,10 +17,12 @@ namespace Puck.SdfVm;
 // image's publication or taint differs from the last observation, so a revision never names two images. An image that
 // carries no publication (a handle-only lease) leaves every pass that samples it without a signature.
 //
-// Which passes sample which images follows the kernels and their recorders: the views pass shades every screen surface
-// (sampleScreenSource, shade/sdf-environment.hlsli), and the sky and the composite sample the screens a sky layer names
-// (SdfSky.ScreenAt) and the view's infinity images (SdfSkyRecorder.BindInfinityViews). A pass named nowhere in ReadsOf
-// folds every screen, so a pass that starts sampling one cannot stand on a stale image.
+// Which passes sample which images follows the kernels and their recorders: the views pass shades the screen surfaces its
+// primary hits land on (sampleScreenSource, shade/sdf-environment.hlsli), so it folds each screen whose face its mesh
+// scope's cull keeps (SdfWorldTables.ScreenFaceShows): a face that cull leaves out has no pixel the mesh pass drew, and a
+// change of cull moves the scope's revision, which the pass signs with. The sky and the composite sample the screens a
+// sky layer names (SdfSky.ScreenAt) and the view's infinity images (SdfSkyRecorder.BindInfinityViews). A pass named
+// nowhere in ReadsOf folds every screen, so a pass that starts sampling one cannot stand on a stale image.
 public sealed partial class SdfWorldPasses {
     private long m_readRevision;
 
@@ -42,7 +44,7 @@ public sealed partial class SdfWorldPasses {
     };
 
     // The identity of the other instances' images a part samples this frame, or null when one carries no publication.
-    private ulong? ReadSignatureOf(Entry entry, SdfWorldView view, SdfFrame frame, RenderGraphExternalReads? reads, string part) {
+    private ulong? ReadSignatureOf(Entry entry, SdfWorldView view, SdfFrame frame, SdfWorldTables tables, RenderGraphExternalReads? reads, string part) {
         var sampled = ReadsOf(part: part);
 
         if (sampled == ExternalReads.None) { return 0UL; }
@@ -59,10 +61,13 @@ public sealed partial class SdfWorldPasses {
         // its layers name.
         view.Residency.DeclareScreens(declared: screens);
         if (sampled == ExternalReads.Sky) { frame.Sky.MarkScreens(screens: sky); }
+        // The views pass's scope holds the cull its mesh pass draws this frame (MotionOf, asked first).
+        var faces = ((part == SdfWorldPackage.Parts.Views) ? entry.DrawnOf(scope: DrawScope.Mesh, tables: tables).Motion : null);
         var hash = Fnv1aHash.Create();
 
         for (var screen = 0; (screen < screens.Length); screen++) {
-            if (screens[screen] && ((sampled != ExternalReads.Sky) || sky[screen]) && !Fold(hash: ref hash, images: images, read: view.Residency.ScreenRead(reads: reads, screen: screen, view: view.View))) { return null; }
+            if (!screens[screen] || ((sampled == ExternalReads.Sky) && !sky[screen]) || ((faces is not null) && !tables.ScreenFaceShows(scope: faces, screen: screen))) { continue; }
+            if (!Fold(hash: ref hash, images: images, read: view.Residency.ScreenRead(reads: reads, screen: screen, view: view.View))) { return null; }
         }
         if (sampled == ExternalReads.Sky) {
             foreach (var binding in (frame.Views[Math.Min(val1: view.View, val2: (frame.Views.Count - 1))].SkyViews ?? [])) {

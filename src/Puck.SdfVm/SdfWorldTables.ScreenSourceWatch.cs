@@ -30,8 +30,10 @@ public sealed partial class SdfWorldTables {
             m_sources[screen] = publication;
             m_tainted[screen] |= tainted;
         }
-        public bool Changed() {
+        // The screens, one bit each, whose reading differs from the last render's.
+        public uint ChangedScreens() {
             var mappings = tables.m_screenMappingRegion.Contents;
+            var changed = 0u;
 
             for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
                 if (!Screens[screen] && !m_renderedScreens[screen]) { continue; }
@@ -43,10 +45,10 @@ public sealed partial class SdfWorldTables {
                     (m_tainted[screen] != m_renderedTainted[screen]) ||
                     !mappings.Slice(length: ScreenMappingByteLength, start: offset).SequenceEqual(other: m_renderedMappings.AsSpan(length: ScreenMappingByteLength, start: offset))
                 ) {
-                    return true;
+                    changed |= (1u << screen);
                 }
             }
-            return false;
+            return changed;
         }
         public void Commit() {
             Screens.CopyTo(array: m_renderedScreens, index: 0);

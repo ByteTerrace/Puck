@@ -756,10 +756,7 @@ The frame thread's CPU work, largest first:
   sphere (`WorldCreationInstances.Shown`), so at flight B the motion gallery's
   exhibits pose every frame behind the stairwell. `lane/g5`'s occlusion-aware
   rate floor is the fix.
-- [medium] Bodies tier on an assumed 2 m/s part speed (`BodyPartSpeed`), so a
-  sprinting body's planted foot can step more than two pixels at a far tier.
-  Pass `max(BodyPartSpeed, measured)` through the `MeasurePartSpeed` placements
-  use. `sdf.creations.registrations.rate-held` counts on every rendered frame,
+- [low] `sdf.creations.registrations.rate-held` counts on every rendered frame,
   so it scales with frames; count it once per tick.
 - [high] The meadow (`debug.go meadow`) is a forcing workload past both bars.
   What remains of [visibility](visibility.md)'s V2a: under lockstep the 30 Hz
@@ -1865,8 +1862,7 @@ on both backends, once the frame time allows the refresh cadence.
 
 ### Standing passes
 
-Owner: integration rendering follow-up · medium · Next: the standing body's
-pose rate, then the screens' emission.
+Owner: integration rendering follow-up · medium · Next: the owner bound below.
 
 A pass signs with the changes its own draws can show
 ([decision](../decisions/rendering.md#a-pass-stands-on-what-it-can-show)), so
@@ -1874,28 +1870,6 @@ what keeps a pass rendering on a still frame is now each of these, in the order
 `world.residency`'s motion line and `world.counters render.record` show them on
 the debug world:
 
-- [medium] A standing body poses every frame. A body takes its rate tier from an
-  assumed part speed (`SdfUpdateRateTiers.BodyPartSpeed`, a stride's swing), so
-  the Moth's breath, which moves it a few millimetres a second, re-poses it at
-  the display's rate, and every view and cascade that can show it renders every
-  frame. A placed creation is rated by its measured part speed instead
-  (`WorldCreationInstances`' `MeasurePartSpeed`); a body needs a measure that
-  falls when it stops and rises before a stride shows a held pose.
-- [medium] The screens' emission map is submitted on every frame a machine's
-  screen changes, and every view's lighting signature folds its revision
-  (`SdfWorldTables.PassSignature`), so the shading passes of every view render
-  every frame while any machine plays, wherever the view is. The emission
-  reaches a surface only near a screen; judge it as a light is judged, by its
-  reach.
-- [medium] The selection kernel draws every skinned draw in every pass, since a
-  skinned draw's record carries no box. The host bound the motion scopes use
-  (`SdfMeshBox.TryOfSkin`) can be written into the record when a member's slot
-  moves, so every pass culls a skinned body it cannot show; check the bound
-  against a posed mesh (`SdfMeshSkin.Pose`) and for a pop at the frustum's edge.
-- [low] The whole-view signature (`SdfWorldTables.ViewSignature`) still folds
-  the residency-wide revisions, so a view with no screen records its passes on a
-  frame anything moves and each then stands on its own signature. Fold the
-  view's scopes instead once a view's scopes are known to the residency.
 - [low] A staging judges each changed draw against each open scope. A patch of
   several hundred blades is one owner with one reach
   (`WorldCreationInstances`' rate sphere); carrying an owner's bound with its

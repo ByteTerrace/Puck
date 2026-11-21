@@ -81,8 +81,15 @@ name it there, or a pass stands on a stale image; nothing else catches it. Build
 pass's cull through `SdfWorldPasses.CullOf` and note its extent (`NoteDrawn`), so
 the scope judges by the cull the image was drawn under. `world.residency` prints
 each scope and why it last moved (`motion-scopes=`); `sdf.cadence.scopes` against
-`scopes.met` is how many stood. A scope that never stands names its cause there:
-on the debug world the standing body's breath meets every scope that can show it.
+`scopes.met` is how many stood. A scope that never stands names its cause there.
+A skinned draw's record carries the host bound the scopes judge it by
+(`SdfMeshBox.TryOfSkin`, written by `NoteSkinnedRows`), so every pass culls it.
+A screen's emission lights the scopes its range reaches (`NoteEmission`), moving
+their lighting revision (`SdfMotionScope.Lighting`, `sdf.cadence.scopes.lit`);
+the range lives in the screen surface row's `origin.w` and the shader windows the
+light to zero there (`sdfLightWindow`), so the two stay one value. The views pass
+folds only the screen images whose faces its mesh scope keeps
+(`SdfWorldTables.ScreenFaceShows`).
 
 `Shared/bloom-filter.hlsli` uses cell-edge reflection and conservative cell
 integration. Unit-sum taps alone only preserve constants: edge clamping duplicated
