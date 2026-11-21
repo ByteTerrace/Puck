@@ -154,8 +154,8 @@ public sealed partial class WorldRuleHost {
         return false;
     }
 
-    // The catalog ordinal of a row a carrier sweep iterates, or -1.
-    private int CarrierRowOrdinal(string name) => (Host.Arena.Catalog.TryResolve(
+    // The catalog ordinal of a document row (the row a carrier sweep iterates, a board binding reads), or -1.
+    internal int DocumentRowOrdinal(string name) => (Host.Arena.Catalog.TryResolve(
         handle: out var handle,
         lane: StateLane.Document,
         name: name
@@ -183,18 +183,19 @@ public sealed partial class WorldRuleHost {
             key: out var key,
             rowOrdinal: rowOrdinal
         )) {
-            if (!Host.Arena.Keys.TryCandidateIndex(index: out var index, key: key)) {
-                continue;
+            if (liveNonzero ? TryTaggedBody(rowOrdinal: rowOrdinal, key: key, index: out var index, body: out _) : Host.Arena.Keys.TryCandidateIndex(index: out index, key: key)) {
+                into.Add(item: index);
             }
-            if (liveNonzero && ((Host.Body(index: index) is null) ||
-                !Host.ReadArenaCell(key: key, rowOrdinal: rowOrdinal).TryFinite(raw: out var value) || (value == 0L))) {
-                continue;
-            }
-
-            into.Add(item: index);
         }
 
         into.Sort();
+    }
+    // Whether a keyed row's held cell names an active body (its key spells the participant index) and reads a nonzero
+    // number: the one reading of a tag row that a forEach over it and a nearest search share.
+    private bool TryTaggedBody(int rowOrdinal, CellKey key, out int index, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldBody? body) {
+        body = null;
+        return Host.Arena.Keys.TryCandidateIndex(index: out index, key: key) && ((body = Host.Body(index: index)) is not null) &&
+            Host.ReadArenaCell(key: key, rowOrdinal: rowOrdinal).TryFinite(raw: out var value) && (value != 0L);
     }
 
     // Evaluates every compiled rule's gate and fires its effects in document order, then every compiled

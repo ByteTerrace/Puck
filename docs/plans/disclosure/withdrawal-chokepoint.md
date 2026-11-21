@@ -96,7 +96,7 @@ The same session's own stream is filtered by more than that. Its document comes
 from the cursor's disclosed images, and each snapshot's fields, solid sizes and
 inputs and input answers are filtered for the recipient:
 
-`src/Puck.World.Server/WorldSessionSink.cs:479-482`
+`src/Puck.World.Server/WorldSessionSink.cs:505-508`
 
 ```csharp
                 FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica),

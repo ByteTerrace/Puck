@@ -73,6 +73,10 @@ internal sealed record WorldRebuildPreparation(WorldRebuildRequest Request, Prin
         }
 
         var reconstructed = System.Diagnostics.Stopwatch.GetTimestamp();
+        // The verdict reports the request's wire size; measuring it here keeps the encode off the tick.
+        var requestBytes = ((failure is null) && (request.Delta is not null) && WorldSubmissionCodec.TryEncodeRebuild(request with { Definition = null }, out var encoded, out _))
+            ? encoded.Length
+            : 0;
 
         if (failure is null) {
             if (reload is { } prepared) {
@@ -110,6 +114,7 @@ internal sealed record WorldRebuildPreparation(WorldRebuildRequest Request, Prin
         return Op(request: request, failure: failure, admission: admission, reload: reload) with {
             AdmitMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: reconstructed).TotalMilliseconds,
             ReconstructMilliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: started, endingTimestamp: reconstructed).TotalMilliseconds,
+            RequestBytes = requestBytes,
         };
     }
     /// <summary>The buffered op for a preparation that could not complete.</summary>

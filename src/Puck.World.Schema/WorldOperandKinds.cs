@@ -296,8 +296,8 @@ public sealed class PointerOperand : WorldOperandFact {
         };
     }
 }
-/// <summary>The nearest body carrying a tag-row cell (<see cref="WorldRuleFacts.NearestPrefix"/>); scans every
-/// population slot.</summary>
+/// <summary>The nearest body carrying a tag-row cell (<see cref="WorldRuleFacts.NearestPrefix"/>); walks the tag row's
+/// held cells.</summary>
 public sealed class NearestOperand : WorldOperandFact {
     public NearestOperand(CompiledBodyRef bodyA, string row, StateHandle stateHandle) : base(CellKind.Int) {
         BodyA = bodyA;

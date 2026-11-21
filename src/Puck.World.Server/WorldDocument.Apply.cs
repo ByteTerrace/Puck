@@ -383,13 +383,13 @@ public sealed partial class WorldDocument {
     // (WorldDefinitionAdmission.AppliesTo); a reload's preparation is taken only while the revision and the live document
     // it was merged against are still the authority's, and is merged again here otherwise.
     internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null, WorldDefinitionAdmission? admission = null, WorldReloadPreparation? reload = null,
-        double reconstructMilliseconds = 0, double admitMilliseconds = 0) {
+        double reconstructMilliseconds = 0, double admitMilliseconds = 0, int requestBytes = 0) {
         var reads = Host.DrawKeys.Reads;
         var accepted = false;
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
         try {
-            accepted = ApplyRebuildCore(request, principal, connectionId, correlationId, expectedContentHash, preparationFailure, admission, reload);
+            accepted = ApplyRebuildCore(request, principal, connectionId, correlationId, expectedContentHash, preparationFailure, admission, reload, requestBytes);
             // Where an installed rebuild's time went off the tick (the delta's reconstruction, the candidate's
             // admission) and on it (the install), beside the console's own line for the source's compile.
             if (accepted && Host.Output.HasNarrationSink) {
@@ -402,7 +402,7 @@ public sealed partial class WorldDocument {
         }
     }
 
-    private bool ApplyRebuildCore(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash, string? preparationFailure, WorldDefinitionAdmission? admission, WorldReloadPreparation? reload) {
+    private bool ApplyRebuildCore(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash, string? preparationFailure, WorldDefinitionAdmission? admission, WorldReloadPreparation? reload, int requestBytes) {
         var verb = RebuildVerb(kind: request.Kind);
 
         if (!Host.Grants.IsOperator(principal: principal)) {
@@ -609,6 +609,7 @@ public sealed partial class WorldDocument {
                     prepared: prepared,
                     principal: principal,
                     request: request,
+                    requestBytes: requestBytes,
                     verb: verb
                 );
             }
@@ -786,12 +787,7 @@ public sealed partial class WorldDocument {
         // under the candidate.
         FinishInstall(stage: stage);
 
-        var message = $"{verb} applied — {history}{stateKept}{changedMembers}{DescribeConflicts(conflicts: conflicts)}";
-
-        if ((request.Delta is { } appliedDelta) &&
-            WorldSubmissionCodec.TryEncodeRebuild(request with { Definition = null }, out var payload, out _)) {
-            message += $", delta={appliedDelta.Patch.Length} bytes payload={payload.Length} bytes";
-        }
+        var message = $"{verb} applied — {history}{stateKept}{changedMembers}{DescribeConflicts(conflicts: conflicts)}{DescribeDelta(request: request, requestBytes: requestBytes)}";
 
         if (Host.Output.HasNarrationSink) {
             Host.Output.Narrate(channel: "world.definition", text: $"[world.definition: {message}]");
@@ -812,13 +808,14 @@ public sealed partial class WorldDocument {
     // The non-consuming primer for one sink. It PEEKS every body's continuity hint instead of consuming it, so a
     // primer never steals the hint an attached sink is still due in the next EmitSnapshot broadcast (see
     // docs/architecture/worlds.md's "Observation and display" section). It is built into the primer carrier, never the
-    // tick's, because a delivery can prime a sink (a session observer whose frame a deal moved is primed by the state
-    // delivery that precedes the tick's snapshot) after the tick's snapshot is built and before it is fanned out.
-    // Stamped with Host.CompletedTick/Host.LastStepTicks, which are 0/0 before the first Step has run.
-    internal WorldSnapshot BuildPrimerSnapshot() {
+    // tick's, because a delivery can prime a sink (a session observer whose stream the tick's state delivery cut) after
+    // the tick's snapshot is built and before it is fanned out. Without cells it carries the body table alone, for a
+    // sink whose observer holds every cell but owes rows the sink adds itself. Stamped with
+    // Host.CompletedTick/Host.LastStepTicks, which are 0/0 before the first Step has run.
+    internal WorldSnapshot BuildPrimerSnapshot(bool cells = true) {
         using (Host.EnterAtTickBoundary()) {
             Host.ThrowIfTickPending();
-            return BuildSnapshotCore(Host.CompletedTick, Host.LastStepTicks, m_primerCarrier);
+            return BuildSnapshotCore(Host.CompletedTick, Host.LastStepTicks, m_primerCarrier, cells);
         }
     }
     // Every live body's authoritative sim pose, color, archetype, and this tick's continuity hint, written into the
@@ -832,10 +829,10 @@ public sealed partial class WorldDocument {
         tick: tick
     );
 
-    private WorldSnapshot BuildSnapshotCore(ulong tick, ulong stepTicks, SnapshotCarrier carrier) {
+    private WorldSnapshot BuildSnapshotCore(ulong tick, ulong stepTicks, SnapshotCarrier carrier, bool cells = true) {
         var capacity = Host.Population.Capacity;
         carrier.Reserve(capacity: capacity, stateSlots: Host.Population.ActionStateLane.Definitions.Count);
-        return FinishSnapshot(tick, stepTicks, carrier, WriteSnapshotRows(Host.Population, carrier, end: capacity, first: 0, offset: 0));
+        return FinishSnapshot(tick, stepTicks, carrier, WriteSnapshotRows(Host.Population, carrier, end: capacity, first: 0, offset: 0), cells);
     }
 
     internal struct SnapshotOperation {
@@ -868,15 +865,15 @@ public sealed partial class WorldDocument {
         return WaitOutcome.Completed;
     }
 
-    private WorldSnapshot FinishSnapshot(ulong tick, ulong stepTicks, SnapshotCarrier carrier, int count) {
+    private WorldSnapshot FinishSnapshot(ulong tick, ulong stepTicks, SnapshotCarrier carrier, int count, bool cells = true) {
         var consumeContinuity = carrier.ConsumesContinuity;
-        var fieldsFull = !consumeContinuity;
+        var fieldsFull = (cells && !consumeContinuity);
         var latticeDeltas = m_latticeSnapshotDeltas;
 
         latticeDeltas.Clear();
         var regions = Host.Population.FieldRegions;
 
-        for (var regionIndex = 0; (regionIndex < regions.Count); regionIndex++) {
+        for (var regionIndex = 0; (cells && (regionIndex < regions.Count)); regionIndex++) {
             var region = regions[regionIndex];
             var deltas = region.Lattice.TakeDeltas(full: !consumeContinuity, isFull: out var regionFull);
 
@@ -901,7 +898,7 @@ public sealed partial class WorldDocument {
         }
         // The kernel's own delta shape carries no Puck.World.Protocol reference; the wire shape is minted here,
         // the one caller that needs both.
-        var stateCells = Host.PublishedCellCount(full: !consumeContinuity);
+        var stateCells = (cells ? Host.PublishedCellCount(full: !consumeContinuity) : 0);
         var cellCount = (latticeDeltas.Count + stateCells);
 
         var fieldCells = carrier.ReserveCells(count: cellCount);
@@ -910,7 +907,7 @@ public sealed partial class WorldDocument {
             fieldCells.Span[index] = latticeDeltas[index];
         }
 
-        Host.CopyPublishedCells(fieldCells.Span[latticeDeltas.Count..], full: !consumeContinuity);
+        if (cells) { Host.CopyPublishedCells(fieldCells.Span[latticeDeltas.Count..], full: !consumeContinuity); }
 
         return new WorldSnapshot(
             Tick: tick,

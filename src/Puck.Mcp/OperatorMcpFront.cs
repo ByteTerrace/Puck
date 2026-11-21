@@ -143,7 +143,7 @@ public static class OperatorMcpFront {
             var running = call();
 
             if (await Task.WhenAny(running, worker.Exited).ConfigureAwait(continueOnCapturedContext: false) != running) {
-                _ = running.ContinueWith(continuationAction: static task => _ = task.Exception, continuationOptions: TaskContinuationOptions.OnlyOnFaulted, cancellationToken: CancellationToken.None, scheduler: TaskScheduler.Default);
+                running.Observe();
                 throw new IOException(message: "the worker's process exited before it answered");
             }
             return await running.ConfigureAwait(continueOnCapturedContext: false);

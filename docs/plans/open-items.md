@@ -2959,6 +2959,14 @@ is pushed to `main` ([the player channel](../development/ci.md#the-player-channe
   and a verbose GC trace. The machine's only readings came from a source
   build before the device table applied and before the far and distant
   shadow work landed, so they describe nothing current.
+- [low] `worldSiloConfigType`'s `compute.spot.restoreTimeout`
+  (`avm/ptn/platform/world-silo/main.bicep`) is read by nothing, since Flexible
+  scale sets refuse Spot Try & Restore and `worldSiloCompute.bicep` holds the
+  worker count with an autoscale setting instead. The type comes from the
+  published `ptn_platform_world-silo` Template Spec, so dropping the field
+  needs a new spec version in `template-specs.json`, every `ts/bvm` import
+  moved to it, and `puck azure publish-template-specs` run before CI builds
+  against it.
 - [medium] Composite ReadyToRun puts the framework and Puck in one image of
   about 291 MB (`Puck.World.r2r.dll`), so every engine change re-downloads it
   whole through a channel built to ship only the files that changed. Read
@@ -3775,27 +3783,6 @@ their lane order; this packet keeps the single duplicates and leads.
   (`SdfSampledLattice.m_fineGradients`, `m_crossingGradients`,
   `m_crossingRootIndex`). Each moves to `RentedList`/`RentedArrays` as the
   contour's did. The bake-garbage lane holds this now.
-- A host with no job pool prepares a load or reload on the thread that
-  submits it (`WorldDocument.SubmitRebuild` prepares inline unless
-  `WorldServer.Jobs` has workers), and a silo row has none: its reload's
-  reconstruction, merge and one validation, with the neighbour reads that
-  validation makes, run on the silo's step thread. The preparation reads only
-  its capture (`WorldRebuildPreparation`), so a silo row can prepare on the
-  thread pool as the desktop does; the choice wants a flag of its own instead
-  of following the job pool.
-- An accepted reload encodes its whole request on the tick only to report the
-  payload's size in its verdict (`WorldSubmissionCodec.TryEncodeRebuild` in
-  `WorldDocument.ApplyRebuild` and `WorldDocument.ApplyReloadEdit`). The work
-  is proportional to the patch; the sender already knows the size.
-- "Commit a host's plan, then finish it at once" is written at five boot and
-  restore sites (`WorldPersistence.RestoreCheckpointCore`,
-  `WorldPersistence.RestoreAttachedAddons`, `WorldPersistence.RestoreReplayStart`,
-  `WorldServer`'s constructor, `WorldAddonRuntime.TryCreate`). They are not
-  document installs, so they stay outside `WorldDocument.TryStageInstall`; one
-  helper per host would hold the pair.
-- Two private "await a task and swallow its failure" helpers
-  (`LocalControlServer.ObserveAbandonedAsync`, `BoundedMcpTransport.ObserveAsync`)
-  restate `ConfigureAwaitOptions.SuppressThrowing`.
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock

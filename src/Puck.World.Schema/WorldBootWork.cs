@@ -171,6 +171,18 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     public static WorkKind PresentationRowsDelivered { get; } = Registry.Declare("world.boot.presentation-rows-delivered", "count", WorkClass.Deterministic);
     /// <summary>Gets the kind counting compact row payload bytes delivered to local or replica clients.</summary>
     public static WorkKind PresentationBytesDelivered { get; } = Registry.Declare("world.boot.presentation-bytes-delivered", "bytes", WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the whole-state primer snapshots session observers were handed after their
+    /// admission's own: a cut's new generation, a resumed span or a replaced document whose delivery could not be
+    /// completed by the rows it owed.</summary>
+    public static WorkKind SessionPrimers { get; } = Registry.Declare("world.boot.session-primers", "count", WorkClass.Pacing);
+    /// <summary>Gets the kind counting the cells those primers carried before each observer's disclosure filtered
+    /// them.</summary>
+    public static WorkKind SessionPrimerCells { get; } = Registry.Declare("world.boot.session-primer-cells", "count", WorkClass.Pacing);
+    /// <summary>Gets the kind counting the cells every snapshot handed a session observer carried, primers and ticks
+    /// alike, after its disclosure.</summary>
+    public static WorkKind SessionCellsDelivered { get; } = Registry.Declare("world.boot.session-cells-delivered", "count", WorkClass.Pacing);
+    /// <summary>Gets the kind counting the body entries every snapshot handed a session observer carried.</summary>
+    public static WorkKind SessionEntriesDelivered { get; } = Registry.Declare("world.boot.session-entries-delivered", "count", WorkClass.Pacing);
     /// <summary>Gets the kind counting the installs that judged the compiled products against the parts of the
     /// document they were built from: a full install of a mutation or a reload, an undo, and a presentation install
     /// fitting the render envelope.</summary>

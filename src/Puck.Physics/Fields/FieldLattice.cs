@@ -1765,40 +1765,23 @@ public sealed class FieldLattice {
                         tick: tick
                     );
                     break;
-                case FieldReactionInput.Emit emit:
+                case FieldReactionInput.Emit emit: {
                     ProcessWork.Add(BodyVisits, bodyCount);
+                    // A body write moves field values, never a state row, so the amount holds for the whole pass.
+                    var amount = Resolve(host: host, input: emit.Amount, tick: tick);
+
                     for (var body = 0; (body < bodyCount); body++) {
                         if (
                             (host.BodyPosition(body: body) is not { } position) ||
-                            (host.ReadTag(
-                            row: emit.Tag,
-                            body: body,
-                            tick: tick
-                        ) == 0L) ||
-                            !TryBodyCellOf(
-                            cell: out var cell,
-                            position: in position
-                        )
+                            !TryBodyCellOf(cell: out var cell, position: in position) ||
+                            (host.ReadTag(row: emit.Tag, body: body, tick: tick) == 0L)
                         ) {
                             continue;
                         }
-
-                        Write(
-                            cell: cell,
-                            field: emit.Field,
-                            value: AddClamped(
-                                field: emit.Field,
-                                x: m_values[emit.Field][cell],
-                                y: Resolve(
-                                    host: host,
-                                    input: emit.Amount,
-                                    tick: tick
-                                )
-                            )
-                        );
+                        Write(cell: cell, field: emit.Field, value: AddClamped(field: emit.Field, x: m_values[emit.Field][cell], y: amount));
                     }
-
                     break;
+                }
                 case FieldReactionInput.Flow flow:
                     StepFlow(
                         reaction: flow,
@@ -1811,36 +1794,18 @@ public sealed class FieldLattice {
                         tick: tick
                     );
                     break;
-                case FieldReactionInput.Expose expose:
+                case FieldReactionInput.Expose expose: {
                     ProcessWork.Add(BodyVisits, bodyCount);
+                    // The value reads a row's slot cell and the pass writes body-keyed cells, so it holds for the pass.
+                    var expected = Resolve(host: host, input: expose.Value, tick: tick);
+
+                    // A body outside this lattice is another region's to expose, or the host's to clear.
                     for (var body = 0; (body < bodyCount); body++) {
-                        if (host.BodyPosition(body: body) is not { } position) {
-                            continue;
-                        }
-
-                        var exposed = (TryBodyCellOf(
-                            cell: out var cell,
-                            position: in position
-                        ) && expose.Comparison.Holds(
-                            expected: Resolve(
-                                host: host,
-                                input: expose.Value,
-                                tick: tick
-                            ),
-                            value: m_values[expose.Field][cell]
-                        ));
-
-                        host.WriteTag(
-                            body: body,
-                            row: expose.Row,
-                            tick: tick,
-                            value: (exposed
-                            ? 1L
-                            : 0L)
-                        );
+                        if ((host.BodyPosition(body: body) is not { } position) || !TryBodyCellOf(cell: out var cell, position: in position)) { continue; }
+                        host.WriteTag(body: body, row: expose.Row, tick: tick, value: (expose.Comparison.Holds(expected: expected, value: m_values[expose.Field][cell]) ? 1L : 0L));
                     }
-
                     break;
+                }
             }
         }
     }

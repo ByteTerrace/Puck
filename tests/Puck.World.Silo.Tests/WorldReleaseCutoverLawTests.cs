@@ -622,11 +622,11 @@ public sealed partial class WorldReleaseCutoverLawTests {
             cancellationToken: cancellationToken,
             operation: operation
         );
-        public Task<WorldReleaseRuntimePublication> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.PublishCandidateAsync(
+        public Task<WorldReleaseRuntimePublicationResult> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.PublishCandidateAsync(
             cancellationToken: cancellationToken,
             operation: operation
         );
-        public Task<WorldReleaseRuntimePublication> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.PublishRecoveredSourceAsync(
+        public Task<WorldReleaseRuntimePublicationResult> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.PublishRecoveredSourceAsync(
             cancellationToken: cancellationToken,
             operation: operation
         );
@@ -684,6 +684,10 @@ public sealed partial class WorldReleaseCutoverLawTests {
             actual: stale.Status,
             expected: 409
         );
+        Assert.Contains(
+            actualString: stale.Body,
+            expectedSubstring: "is not the durable pending operation"
+        );
         Assert.False(condition: host.IsDraining);
         var status = await ControlAsync(
             host,
@@ -727,19 +731,21 @@ public sealed partial class WorldReleaseCutoverLawTests {
                 : null)
             );
         }
-        public async Task<WorldReleaseRuntimePublication> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
+        public async Task<WorldReleaseRuntimePublicationResult> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
             var result = await ControlAsync(
                 candidate,
                 "POST",
                 $"/release/publish/{operation.PendingOperationId:D}"
             );
 
-            return ((result.Status == 200)
+            return new(
+                ((result.Status == 200)
                 ? WorldReleaseRuntimePublication.Opened
-                : WorldReleaseRuntimePublication.Refused
+                : WorldReleaseRuntimePublication.Refused),
+                result.Body
             );
         }
-        public Task<WorldReleaseRuntimePublication> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.PublishRecoveredSourceAsync(
+        public Task<WorldReleaseRuntimePublicationResult> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => inner.PublishRecoveredSourceAsync(
             cancellationToken: cancellationToken,
             operation: operation
         );

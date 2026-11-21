@@ -375,14 +375,15 @@ public sealed partial class SdfWorldTables {
     /// the frame is packed and its screens are bound.</summary>
     public void UpdateTablesSignature() {
         ForgetViewInputs();
-        // Each region's bytes are hashed once, word-wide, and the signatures fold those hashes.
-        var volumes = XxHash3.HashToUInt64(source: m_volumeRegion.Contents);
-        var lights = XxHash3.HashToUInt64(source: m_lightRegion.Contents);
-        var skies = XxHash3.HashToUInt64(source: m_skyRegion.Contents);
-        var skyLayers = XxHash3.HashToUInt64(source: m_skyLayerRegion.Contents);
+        // A region's write already compares its bytes with the host copy, so the signatures fold the revision that
+        // comparison moves (GpuRegion.ContentRevision) rather than hashing the same bytes again.
+        var volumes = unchecked((ulong)m_volumeRegion.ContentRevision);
+        var lights = unchecked((ulong)m_lightRegion.ContentRevision);
+        var skies = unchecked((ulong)m_skyRegion.ContentRevision);
+        var skyLayers = unchecked((ulong)m_skyLayerRegion.ContentRevision);
         var handoffs = XxHash3.HashToUInt64(source: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));
-        var screenSurfaces = XxHash3.HashToUInt64(source: m_screenSurfaceRegion.Contents);
-        var screenMappings = XxHash3.HashToUInt64(source: m_screenMappingRegion.Contents);
+        var screenSurfaces = unchecked((ulong)m_screenSurfaceRegion.ContentRevision);
+        var screenMappings = unchecked((ulong)m_screenMappingRegion.ContentRevision);
         var hash = Fnv1aHash.Create();
 
         Span<ulong> values = [

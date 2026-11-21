@@ -125,6 +125,7 @@ public sealed partial class WorldTick {
             WorldPendingOp.Rebuild rebuild => Host.Document.ApplyRebuild(
             admitMilliseconds: rebuild.AdmitMilliseconds,
             reconstructMilliseconds: rebuild.ReconstructMilliseconds,
+            requestBytes: rebuild.RequestBytes,
             request: rebuild.Request,
             principal: rebuild.Principal,
             connectionId: rebuild.ConnectionId,
@@ -606,6 +607,7 @@ public sealed partial class WorldTick {
             m_deliveringCues = true;
             try { Host.Output.DeliverSnapshot(in frame); } finally { m_deliveringCues = false; }
         }
+        m_pendingTick.Delivered = true;
         m_cues.Clear();
         m_lastCompletedTick = tick;
         m_lastStepTicks = context.StepTicks;
@@ -947,8 +949,15 @@ public sealed partial class WorldTick {
         public ulong PreviousEngineTicks;
         public ReadOnlyMemory<ScreenPadSnapshot> Pads;
         public bool RoutedMachines;
+        public bool Delivered;
         public WorldDocument.SnapshotOperation Snapshot;
     }
+
+    /// <summary>Gets whether a delivery made now is followed by this tick's snapshot, fanned out to every typed sink
+    /// before the tick ends and before any delivery the tick boundary admits: the tick is running and has not yet
+    /// delivered its snapshot. A held tick resumes on its owner's thread with no delivery in between, and a stalled one
+    /// freezes the authority, whose recovery delivers a whole document and primer.</summary>
+    internal bool SnapshotFollows => (m_resumingTick && !m_pendingTick.Delivered && Host.Output.HasTypedSubscribers && !Host.Output.WithholdsTimeline);
 
     internal WaitReason? PendingReason => m_tickBlock?.Reason;
     private bool ResumingOnOwner => Host.AuthorityGate.IsHeldByCurrentThread && m_resumingTick;

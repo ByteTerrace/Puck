@@ -205,9 +205,10 @@ way.
   ([`SdfMeshPathBake.Pending`](../../../../src/Puck.SdfVm/SdfMeshPathBake.cs));
   `BindScreens` uses the window's index as its latched order rather than
   searching a list for each routed window.
-- **Hash once, compare once.** The tables' cadence signatures hashed each region
-  byte-wise with FNV twice a frame; they now hash each region once with
-  `XxHash3` ([`SdfWorldTables.UpdateTablesSignature`](../../../../src/Puck.SdfVm/SdfWorldTables.Cadence.cs)).
+- **Compare once.** A region's write already compares its bytes with the host
+  copy, so the tables' cadence signatures fold the revision that comparison
+  moves (`GpuRegion.ContentRevision`) instead of hashing the same bytes again
+  ([`SdfWorldTables.UpdateTablesSignature`](../../../../src/Puck.SdfVm/SdfWorldTables.Cadence.cs)).
 - **A short fixed scan is not the quadratic.** The cost is items × a list that
   grows with the world; a scan over a few entries that never grow beats sorting
   or hashing them (dotnet/aspnetcore#70209 skips the sort at eight keys or
