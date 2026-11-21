@@ -25,9 +25,10 @@ public sealed partial class WorldPopulation {
     /// <param name="recompute">Whether to encode every section afresh and read no holder's cached digest: the fold a
     /// cached one is checked against.</param>
     /// <remarks>A section a body keeps behind a holder (<see cref="WorldBody.HeldDigests"/>) folds by the digest its
-    /// holder hands out, which is cached while the section is unchanged. Every other section of every active slot
-    /// encodes afresh on every fold: its state is still written directly by the step, commands, contacts and tethers,
-    /// so nothing says it is unchanged.</remarks>
+    /// holder hands out, which is cached while the section is unchanged. The larger sections the step writes directly
+    /// fold through the slot's <see cref="WorldContinuationMemo"/>, which encodes one only when its content differs
+    /// from the content its cached digest was taken from; the rest encode afresh on every fold. A recompute reads
+    /// neither cache.</remarks>
     /// <exception cref="InvalidOperationException">A pending-output list is non-empty.</exception>
     [System.Runtime.CompilerServices.SkipLocalsInit]
     public void AppendContinuationHash(ref Fnv1aHash hash, bool recompute = false) {
@@ -51,6 +52,7 @@ public sealed partial class WorldPopulation {
                 var held = (recompute ? 0U : body.HeldDigests(digests: work.HeldDigests, work: work.Held, writer: writer));
 
                 EntryCheckpoint(alias: true, body: body, entry: entry, held: (held != 0U), image: out var image, index: index);
+                if (!recompute) { held |= FoldMemo(index: index).Digest(digests: work.HeldDigests, image: ref image, work: work.Held, writer: writer); }
                 digests[index] = WorldAuthorityCheckpointCodec.ContinuationSlotDigest(entry: ref image, held: held, heldDigests: work.HeldDigests, work: work, writer: writer);
                 beside.Add(entry: in image, work: work, writer: writer);
                 work.Slots++;
@@ -88,6 +90,7 @@ public sealed partial class WorldPopulation {
                 var held = body.HeldDigests(digests: work.HeldDigests, work: work.Held, writer: writer);
 
                 EntryCheckpoint(alias: true, body: body, entry: entry, held: (held != 0U), image: out var image, index: index);
+                held |= FoldMemo(index: index).Digest(digests: work.HeldDigests, image: ref image, work: work.Held, writer: writer);
                 hash.Add(value: WorldAuthorityCheckpointCodec.ContinuationSlotDigest(entry: ref image, held: held, heldDigests: work.HeldDigests, work: work, writer: writer));
                 hash.Add(value: WorldAuthorityCheckpointCodec.ContinuationTailDigest(tail: in image.Tail, work: work, writer: writer));
                 work.Slots++;
@@ -107,6 +110,14 @@ public sealed partial class WorldPopulation {
     private ulong[] m_foldDigests = [];
     private bool[] m_foldPresent = [];
     private WorldContinuationFoldWork? m_foldWork;
+    // Each slot's digests of the sections no body holder keeps, cached over equal content (WorldContinuationMemo).
+    private WorldContinuationMemo?[] m_foldMemos = [];
+
+    // The slot's memo, made on its first fold. A memo answers by content alone, so it serves a slot's next occupant too.
+    private WorldContinuationMemo FoldMemo(int index) {
+        if (m_foldMemos.Length < Capacity) { Array.Resize(array: ref m_foldMemos, newSize: Capacity); }
+        return (m_foldMemos[index] ??= new WorldContinuationMemo());
+    }
 
     /// <summary>Captures every active slot's simulation state. Asserts the per-tick pending-output lists are empty —
     /// guaranteed by <see cref="WorldServer.TryCaptureCheckpoint"/>'s capture point sitting between a completed
