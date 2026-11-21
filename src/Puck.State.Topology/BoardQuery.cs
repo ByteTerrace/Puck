@@ -251,5 +251,13 @@ public sealed class BoardAttacksQuery : BoardQuery {
     /// <summary>Gets the inclusive range upper bound.</summary>
     public long Upper { get; }
     /// <inheritdoc/>
-    public override long Visits => (((long)Topology.CellCount) * Directions.Length);
+    public override long Visits {
+        get {
+            var reads = 0L;
+            foreach (var direction in Directions) {
+                reads += Topology.LongestRay(direction);
+            }
+            return 2L * reads;
+        }
+    }
 }

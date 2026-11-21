@@ -13,7 +13,8 @@ namespace Puck.State;
 /// <param name="TreeStep">One step of a tree search in its costliest phase.</param>
 /// <param name="Restart">Discarding a job's progress and reading its tokens again.</param>
 /// <param name="Scopes">The most scopes the job holds open, each replayed as a candidate when a step resumes.</param>
-public readonly record struct SearchWork(long Allowance, long Judge, long Inspect, long Candidate, long Outcome, long TreeStep, long Restart, int Scopes) {
+/// <param name="Prepare">The maximum work to build occupancy and move reach when resolving a candidate.</param>
+public readonly record struct SearchWork(long Allowance, long Judge, long Inspect, long Candidate, long Outcome, long TreeStep, long Restart, int Scopes, long Prepare = 0L) {
     /// <summary>The cost of a cursor move that inspects no candidate.</summary>
     public const long Cursor = 1L;
 
@@ -27,12 +28,9 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
         right: Unit
     );
     /// <summary>Gets the costliest indivisible unit, which is what the walk reserves before running any.</summary>
-    public long Unit => Math.Max(
-        val1: Math.Max(
-            val1: Candidate,
-            val2: Outcome
-        ),
-        val2: TreeStep
+    public long Unit => BinaryIntegerFunctions.AddSaturating(
+        left: Math.Max(Math.Max(Candidate, Outcome), TreeStep),
+        right: Prepare
     );
 
     /// <summary>Returns a job bounded by its judged-candidate quota alone: every unit is priced at its judge run
@@ -76,8 +74,10 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
 
         var candidates = 0L;
         var hops = 1L;
+        var prepare = 0L;
 
         foreach (var shape in shapes) {
+            prepare = Math.Max(prepare, shape.MovePreparation(tokens, cellCount));
             candidates = BinaryIntegerFunctions.AddSaturating(
                 left: candidates,
                 right: BinaryIntegerFunctions.MultiplySaturating(
@@ -94,7 +94,7 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
         }
 
         // A resolution scans the tokens for an occupant at most twice a hop, and a chained jump also scans the
-        // cells it has already visited; a relocate's move patterns walk their rays instead.
+        // cells it has already visited. A patterned relocate reads one bit after preparing reach.
         var inspect = BinaryIntegerFunctions.AddSaturating(
             left: 2L,
             right: BinaryIntegerFunctions.MultiplySaturating(
@@ -103,12 +103,6 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
             )
         );
 
-        foreach (var shape in shapes) {
-            inspect = Math.Max(
-                val1: inspect,
-                val2: shape.MoveInspect(tokens: tokens)
-            );
-        }
         // Applying writes a handful of cells and scans the tokens once for a capture.
         var apply = (8L + tokens);
         var candidate = BinaryIntegerFunctions.AddSaturating(
@@ -153,6 +147,7 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
             Candidate: candidate,
             Inspect: inspect,
             Judge: judge,
+            Prepare: prepare,
             Outcome: ((chanceCells > 0)
                 ? BinaryIntegerFunctions.AddSaturating(
                     left: (2L + chanceCells),
@@ -179,6 +174,6 @@ public readonly record struct SearchWork(long Allowance, long Judge, long Inspec
     /// <returns>The work units.</returns>
     public long Replay(int scopes) => BinaryIntegerFunctions.MultiplySaturating(
         left: scopes,
-        right: Candidate
+        right: BinaryIntegerFunctions.AddSaturating(left: Candidate, right: Prepare)
     );
 }

@@ -124,10 +124,9 @@ public class ParserSugarTests {
             """);
         var schedule = Assert.IsType<ScheduleStatementNode>(@object: FirstRule(doc: document!).Statements[0]);
 
-        Assert.Equal(
-            2m,
-            schedule.DelaySeconds
-        );
+        var delay = Assert.IsType<LiteralExpressionNode>(schedule.Delay);
+        Assert.Equal(2L, delay.Value);
+        Assert.Null(delay.Unit);
     }
     [InlineData(": Int")]
     [InlineData("as Int")]
@@ -482,10 +481,9 @@ public class ParserSugarTests {
             "respawnAt",
             schedule.Target.Name
         );
-        Assert.Equal(
-            2m,
-            schedule.DelaySeconds
-        );
+        var delay = Assert.IsType<LiteralExpressionNode>(schedule.Delay);
+        Assert.Equal(2L, delay.Value);
+        Assert.Equal("s", delay.Unit);
     }
     // §2 — effect statements
 

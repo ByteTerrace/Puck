@@ -118,7 +118,12 @@ wall clock in a World, and in a device-free law a `VirtualClock` the rig steps o
 display period for each frame it drives (`VirtualClock.Frame`), so the frames the
 law drives decide when background work lands. A wait for work running on the
 thread pool (a build, a trace's worker) stays real time and is bounded by
-`TestLiveness`; never meter it with the device clock.
+`TestLiveness`; never meter it with the device clock. A rig that settles the
+irradiance volume within a count of frames waits out `SdfMeshIrradiance.HostWorking`
+after each one (the worker computing on the host, not blocked on a probe job), so
+the frames count device round trips, not how fast the pool runs. A frame's default
+`Lights` and `Sky` are written into its content on first read, so a residency's copy
+carries a rig's edits to them.
 Waiting on every allocated residency
 deadlocks on hidden routed scenes whose GPU work correctly never starts.
 

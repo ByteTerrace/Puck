@@ -177,6 +177,13 @@ public static partial class ArenaTransforms {
 
         return true;
     }
+    // Literal origins are compiled to ordinals. Only a dynamic key reads a name at firing time.
+    private static bool TryBoardOrigin(StateArena arena, CompiledTopology topology, in ArenaTransformBinding binding, int literal, out int origin) {
+        origin = literal;
+        return (!binding.BindsKey || (arena.Keys.TryGetName(binding.Key, out var name) && topology.TryCell(name.Value, out origin))) &&
+            (uint)origin < topology.CellCount;
+    }
+
     private static bool TryMemberRow(in ArenaTransformContext context, int rowOrdinal, TransformRefusal code, string verb, out ArenaRowLayout layout, out EffectRefusal refusal) {
         if (
             (((uint)rowOrdinal) >= ((uint)context.Arena.Layout.RowCount)) ||

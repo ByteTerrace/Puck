@@ -5151,7 +5151,7 @@ export type StateTransformBoardCombine = {
 };
 
 /**
- * Clears every group of cells valued Lower..Upper beside the cell From names that has no empty cell beside it, writing the board's empty value over their members. The write-path twin of $board:enclosedAt, applied after the value lands.
+ * Clears every group of cells valued Lower..Upper beside the cell From names that has no liberty in the boundary range, writing the board's empty value over its members. The write-path twin of $board:enclosedAt, applied after the value lands.
  */
 export type StateTransformClearEnclosed = {
   $type?: "clearEnclosed";
@@ -5171,6 +5171,14 @@ export type StateTransformClearEnclosed = {
    * The enclosed range's inclusive high end.
    */
   upper: number;
+  /**
+   * The liberty range's inclusive low end. Defaults to the board's empty value.
+   */
+  boundaryLower?: number | null;
+  /**
+   * The liberty range's inclusive high end. Defaults to the board's empty value.
+   */
+  boundaryUpper?: number | null;
 };
 
 /**
