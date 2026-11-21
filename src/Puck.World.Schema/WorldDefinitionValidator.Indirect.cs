@@ -13,11 +13,7 @@ public static partial class WorldDefinitionValidator {
         if ((indirect.Bounces is { } bounces) && ((bounces < 0) || (bounces > SdfIndirectGains.MaximumBounces))) {
             errors.Add(item: $"render.indirect.bounces must be an integer from 0 to {SdfIndirectGains.MaximumBounces}; the selected tier caps its actual depth.");
         }
-        if (indirect.Budget is { } budget) {
-            if (budget.RelightPerSecond is < 1) { errors.Add(item: "render.indirect.budget.relightPerSecond must be at least one probe a second; omit it to leave relighting unbounded."); }
-            if (budget.TracePerSecond is < 1) { errors.Add(item: "render.indirect.budget.tracePerSecond must be at least one probe a second; omit it to leave tracing unbounded."); }
-            if ((budget.Age is { } age) && (!float.IsFinite(f: age) || (age <= 0f))) { errors.Add(item: "render.indirect.budget.age must be a positive number of seconds."); }
-        }
+        if (indirect.Budget?.Refusal(path: "render.indirect.budget") is { } budget) { errors.Add(item: budget); }
         var sources = indirect.Sources;
 
         JudgeScalar(WorldValueFields.IndirectLights, sources?.Lights, definition, "render.indirect.sources.lights", errors);

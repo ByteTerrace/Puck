@@ -11,45 +11,43 @@
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
-    if (any(id.xy >= passGroup.skyFieldExtent)) {
-        return;
-    }
+    if (all(id.xy < passGroup.skyFieldExtent)) {
+        bool seen = false;
 
-    bool seen = false;
-
-    // Include the complete lit footprint and its one-pixel border. A reduced field texel cannot hide an
-    // uncovered lit sample at an edge, including an odd-sized final footprint.
-    int2 first = int2((id.xy * passGroup.imageExtent) / passGroup.skyFieldExtent) - 1;
-    int2 last = int2(((id.xy + 1u) * passGroup.imageExtent + passGroup.skyFieldExtent - 1u) / passGroup.skyFieldExtent);
-    [loop] for (int y = first.y; y <= last.y; y++) {
-        [loop] for (int x = first.x; x <= last.x; x++) {
-            uint2 pixel = uint2(clamp(int2(x, y), int2(0, 0), int2(passGroup.imageExtent) - 1));
-            seen = seen || (lit.Load(int3(pixel, 0)).a < 1.0);
-        }
-    }
-
-    if (seen && (sdfDebugComposesFinal(passGroup.debugMode) || (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST))) {
-        float3 direction = cameraRayDirection(sdfSkyPassView(), (float2(id.xy) + 0.5) / float2(passGroup.skyFieldExtent));
-        uint upper = min(sdfSky[0].UpperRuns, SDF_SKY_MAX_UPPER_FIELD_RUNS);
-        float3 base;
-        float3 scales[SDF_SKY_MAX_UPPER_FIELD_RUNS];
-        float3 offsets[SDF_SKY_MAX_UPPER_FIELD_RUNS];
-
-        sdfSkyFieldRuns(direction, base, scales, offsets);
-        skyBaseRW[id.xy] = float4(((passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST) ? sdfSkyCost : base), 1.0);
-        puckCountDetail(0u, 0u, 1u, 0u, 0u, 0u);
-        if (upper > 0u) {
-            skyUpper0RW[id.xy] = float4(scales[0], offsets[0].x);
-            skyUpper1RW[id.xy] = float4(offsets[0].yz, scales[1].xy);
-            puckCountDetail(1u, 0u, 2u, 0u, 0u, 0u);
-            if (upper > 1u) {
-                skyUpper2RW[id.xy] = float4(scales[1].z, offsets[1]);
-                puckCountDetail(2u, 0u, 1u, 0u, 0u, 0u);
+        // Include the complete lit footprint and its one-pixel border. A reduced field texel cannot hide an
+        // uncovered lit sample at an edge, including an odd-sized final footprint.
+        int2 first = int2((id.xy * passGroup.imageExtent) / passGroup.skyFieldExtent) - 1;
+        int2 last = int2(((id.xy + 1u) * passGroup.imageExtent + passGroup.skyFieldExtent - 1u) / passGroup.skyFieldExtent);
+        [loop] for (int y = first.y; y <= last.y; y++) {
+            [loop] for (int x = first.x; x <= last.x; x++) {
+                uint2 pixel = uint2(clamp(int2(x, y), int2(0, 0), int2(passGroup.imageExtent) - 1));
+                seen = seen || (lit.Load(int3(pixel, 0)).a < 1.0);
             }
         }
-    } else {
-        skyBaseRW[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
-        sdfWorkTexels = 1u;
+
+        if (seen && (sdfDebugComposesFinal(passGroup.debugMode) || (passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST))) {
+            float3 direction = cameraRayDirection(sdfSkyPassView(), (float2(id.xy) + 0.5) / float2(passGroup.skyFieldExtent));
+            uint upper = min(sdfSky[0].UpperRuns, SDF_SKY_MAX_UPPER_FIELD_RUNS);
+            float3 base;
+            float3 scales[SDF_SKY_MAX_UPPER_FIELD_RUNS];
+            float3 offsets[SDF_SKY_MAX_UPPER_FIELD_RUNS];
+
+            sdfSkyFieldRuns(direction, base, scales, offsets);
+            skyBaseRW[id.xy] = float4(((passGroup.debugMode == SDF_DEBUG_VIEW_SKY_COST) ? sdfSkyCost : base), 1.0);
+            puckCountDetail(0u, 0u, 1u, 0u, 0u, 0u);
+            if (upper > 0u) {
+                skyUpper0RW[id.xy] = float4(scales[0], offsets[0].x);
+                skyUpper1RW[id.xy] = float4(offsets[0].yz, scales[1].xy);
+                puckCountDetail(1u, 0u, 2u, 0u, 0u, 0u);
+                if (upper > 1u) {
+                    skyUpper2RW[id.xy] = float4(scales[1].z, offsets[1]);
+                    puckCountDetail(2u, 0u, 1u, 0u, 0u, 0u);
+                }
+            }
+        } else {
+            skyBaseRW[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
+            sdfWorkTexels = 1u;
+        }
     }
 
     puckCountWork(sdfWorkSteps, sdfWorkTexels);

@@ -309,7 +309,8 @@ public sealed partial class RenderGraphRuntime {
             if (
                 (m_sources[index] is null) &&
                 (
-                    m_outputs.HasEnded(index: index, latch: in m_latch) ||
+                    // A render under a route the latch refuses would end at once too, so it is not asked for.
+                    (m_outputs.HasEnded(index: index, latch: in m_latch) && m_routes[index].Allows(latch: in m_latch)) ||
                     (
                         !standing.IsOwn &&
                         (standing.IsOneFrame || (LatestOf(index: index, latch: in m_latch).Frame < 0))

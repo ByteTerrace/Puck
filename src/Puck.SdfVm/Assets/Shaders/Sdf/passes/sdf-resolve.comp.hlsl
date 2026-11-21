@@ -679,47 +679,48 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint lan
     if (temporal || any(render != extent)) {
         sdfResolveTileFill((groupId.xy * 8u), lane, extent, render);
     }
-    if (any(id.xy >= extent)) return;
-    // The spatial path at this frame's sample grid: the sample of render pixel i lies at i + 0.5 + jitter.
-    bool unjittered = (!temporal || all(jitter == 0.0));
-    float3 airOrigin = passGroup.viewPosition;
-    float3 airDirection = sdfResolveAirDirection(id.xy, extent);
-    bool accepted = false;
-    bool complete = false;
-    float total = 0.0;
-    float reactive = 0.0;
-    float4 accumulated = float4(0.0, 0.0, 0.0, 0.0);
-    float4 accumulatedTransport = float4(0.0, 0.0, 0.0, 0.0);
+    if (all(id.xy < extent)) {
+        // The spatial path at this frame's sample grid: the sample of render pixel i lies at i + 0.5 + jitter.
+        bool unjittered = (!temporal || all(jitter == 0.0));
+        float3 airOrigin = passGroup.viewPosition;
+        float3 airDirection = sdfResolveAirDirection(id.xy, extent);
+        bool accepted = false;
+        bool complete = false;
+        float total = 0.0;
+        float reactive = 0.0;
+        float4 accumulated = float4(0.0, 0.0, 0.0, 0.0);
+        float4 accumulatedTransport = float4(0.0, 0.0, 0.0, 0.0);
 
-    if (temporal) {
-        sdfResolveTemporal(id, extent, render, jitter, airDirection, accepted, complete, total, reactive, accumulated, accumulatedTransport);
+        if (temporal) {
+            sdfResolveTemporal(id, extent, render, jitter, airDirection, accepted, complete, total, reactive, accumulated, accumulatedTransport);
+        }
+
+        // The spatial path shows where the history is rejected or holds less than one sample's weight, and by its
+        // reactivity where the pixel is reactive; a pixel whose gathered weight covers it shows the mean alone and
+        // reconstructs nothing. A reactive pixel gathers this frame's samples alone, whose weight swings about one sample's
+        // as the jitter moves, so it takes the spatial path whatever it gathered (weighing the two by that weight would
+        // switch a whole reactive screen between the two filters frame by frame), and it takes it on the unjittered grid, as
+        // a view with no temporal path does: a screen reads its image along the unjittered ray, so that sample holds still.
+        // Reactivity is the pixel's own sample's, so a jittered edge beside a screen keeps its history.
+        float shown = (accepted ? ((complete ? 1.0 : saturate(total)) * (1.0 - reactive)) : 0.0);
+        bool still = (unjittered || (reactive > 0.0));
+        float4 resolved = accumulated;
+        uint2 transportWord = sdfPackTransport(accumulatedTransport);
+
+        if (shown < 1.0) {
+            float4 spatial;
+            float4 spatialTransport;
+            uint2 spatialWord;
+
+            sdfResolveSpatial(id.xy, (((((float2(id.xy) + 0.5) * float2(render)) / float2(extent)) - 0.5) - (still ? float2(0.0, 0.0) : jitter)),
+                (still && all(render == extent)), render, airOrigin, airDirection, spatial, spatialTransport, spatialWord);
+            resolved = lerp(spatial, accumulated, shown);
+            transportWord = ((shown > 0.0) ? sdfPackTransport(lerp(spatialTransport, accumulatedTransport, shown)) : spatialWord);
+        }
+
+        output[id.xy] = resolved;
+        sdfWorkTexels = 1u;
+        transportRW[((id.y * extent.x) + id.x)] = transportWord;
     }
-
-    // The spatial path shows where the history is rejected or holds less than one sample's weight, and by its
-    // reactivity where the pixel is reactive; a pixel whose gathered weight covers it shows the mean alone and
-    // reconstructs nothing. A reactive pixel gathers this frame's samples alone, whose weight swings about one sample's
-    // as the jitter moves, so it takes the spatial path whatever it gathered (weighing the two by that weight would
-    // switch a whole reactive screen between the two filters frame by frame), and it takes it on the unjittered grid, as
-    // a view with no temporal path does: a screen reads its image along the unjittered ray, so that sample holds still.
-    // Reactivity is the pixel's own sample's, so a jittered edge beside a screen keeps its history.
-    float shown = (accepted ? ((complete ? 1.0 : saturate(total)) * (1.0 - reactive)) : 0.0);
-    bool still = (unjittered || (reactive > 0.0));
-    float4 resolved = accumulated;
-    uint2 transportWord = sdfPackTransport(accumulatedTransport);
-
-    if (shown < 1.0) {
-        float4 spatial;
-        float4 spatialTransport;
-        uint2 spatialWord;
-
-        sdfResolveSpatial(id.xy, (((((float2(id.xy) + 0.5) * float2(render)) / float2(extent)) - 0.5) - (still ? float2(0.0, 0.0) : jitter)),
-            (still && all(render == extent)), render, airOrigin, airDirection, spatial, spatialTransport, spatialWord);
-        resolved = lerp(spatial, accumulated, shown);
-        transportWord = ((shown > 0.0) ? sdfPackTransport(lerp(spatialTransport, accumulatedTransport, shown)) : spatialWord);
-    }
-
-    output[id.xy] = resolved;
-    sdfWorkTexels = 1u;
-    transportRW[((id.y * extent.x) + id.x)] = transportWord;
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

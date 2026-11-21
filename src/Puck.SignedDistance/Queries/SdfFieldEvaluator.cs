@@ -134,12 +134,19 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     /// <see cref="RenderWarpOps"/>, answering the field the renderer's interpreter samples.</summary>
     /// <param name="program">The program to wrap.</param>
     /// <param name="reading">What the program is read as.</param>
+    /// <param name="regional">Whether the evaluator keeps, for each region of the world a point query touches, the
+    /// chains of the program that can change the field there, and walks those alone
+    /// (<see cref="IndexesRegions"/>). Every answer is the one the evaluator gives without it, to the bit; it pays for a
+    /// program large enough that a walk of the whole of it is the cost of a query, and holds the regions it has
+    /// built.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="program"/> contains an op or shape the reading cannot
     /// interpret, or, read for contact, a <see cref="SdfOp.Scale"/> whose axes differ in magnitude.</exception>
-    public SdfFieldEvaluator(SdfProgram program, SdfFieldReading reading) {
-        m_rootFrames = program.RootFrames;
+    public SdfFieldEvaluator(SdfProgram program, SdfFieldReading reading, bool regional = false) {
         ArgumentNullException.ThrowIfNull(argument: program);
+
+        m_rootFrames = program.RootFrames;
+        m_regions = (regional ? new RegionIndex() : null);
 
         m_reading = reading;
         m_instructions = Compile(program: program, reading: reading);
@@ -150,7 +157,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         (m_cullBounds, m_members) = BuildCullBounds(compiled: m_instructions, program: program, reaches: reaches);
         (m_segmentSlots, m_segmentBounds, var segmentEnclosures) = BuildSegments(compiled: m_instructions, program: program, reaches: reaches);
         (m_segmentGroupHeads, m_segmentGroups, m_segmentGroupNext) = BuildSegmentGroups(bounds: m_segmentBounds, compiled: m_instructions, cullBounds: m_cullBounds, enclosures: segmentEnclosures, slots: m_segmentSlots);
-        m_primeable = ComposesByHardUnion(compiled: m_instructions);
+        m_primeable = program.ComposesByHardUnion(parts: false);
         (m_rotationSlots, m_rotationBounds) = BuildRotationBounds(instructions: m_instructions);
 
         for (var index = 0; (index < m_instructions.Length); index++) {
@@ -964,7 +971,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // The reach prepass a gradient's six taps share: one at its point, lowered by GradientReachMargin. Unfilled when the
     // point is outside the frame (each tap then runs its own) or the step is too wide for the margin to stay small.
     private GradientReaches FillGradientReaches(FixedPosition position, FixedQ4816 step) {
-        if ((step.Value > MaxSharedGradientStep) || !TryWorldPoint(position: position, worldPosition: out var centre)) {
+        // A regional evaluator walks each tap over its own region's tape, which needs no prepass.
+        if ((m_regions is not null) || (step.Value > MaxSharedGradientStep) || !TryWorldPoint(position: position, worldPosition: out var centre)) {
             return default;
         }
 

@@ -255,7 +255,6 @@ public sealed partial class RenderGraphRuntime {
         var hostLabel = DeliveryLabel.ForSource(source: DeliveryPublicSource.Host);
         var producerLabels = new DeliveryLabel[count];
         var routes = new DeliveryLabel[count];
-        var boundLabels = new DeliveryLabel[count];
         var unreadFrames = new long[count];
         // Each old instance's index in the new set, or -1 when it retires.
         var renumbered = new int[m_set.Instances.Count];
@@ -279,7 +278,6 @@ public sealed partial class RenderGraphRuntime {
             routes[index] = ((old >= 0)
                 ? m_routes[old]
                 : hostLabel);
-            boundLabels[index] = routes[index];
             unreadFrames[index] = ((old >= 0)
                 ? m_unreadFrames[old]
                 : 0L);
@@ -334,7 +332,6 @@ public sealed partial class RenderGraphRuntime {
         m_producers = producers;
         m_producerLabels = producerLabels;
         m_routes = routes;
-        m_boundLabels = boundLabels;
         m_root = rootIndex;
         m_sources = sources;
         m_schedules = [

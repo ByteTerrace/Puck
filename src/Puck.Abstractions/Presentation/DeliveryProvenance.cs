@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace Puck.Abstractions.Presentation;
 
@@ -313,7 +314,7 @@ public readonly struct DeliveryLabel : IEquatable<DeliveryLabel> {
         return true;
     }
 
-    private bool ContainsSpan(DeliverySpan candidate) {
+    internal bool ContainsSpan(DeliverySpan candidate) {
         if (m_kind != KindSpans) {
             return false;
         }
@@ -350,7 +351,7 @@ public readonly struct DeliveryLabel : IEquatable<DeliveryLabel> {
 
         return true;
     }
-    private void AppendUnique(List<DeliverySpan> into) {
+    internal void AppendUnique(List<DeliverySpan> into) {
         if (m_kind != KindSpans) {
             return;
         }
@@ -375,11 +376,11 @@ public readonly struct DeliveryLabel : IEquatable<DeliveryLabel> {
 
         into.Add(item: span);
     }
-    private static DeliveryLabel FromDistinct(List<DeliverySpan> spans, bool external) => (spans.Count switch {
+    internal static DeliveryLabel FromDistinct(List<DeliverySpan> spans, bool external) => (spans.Count switch {
         0 => new DeliveryLabel(external: external, kind: KindPublic, more: null, span0: null, span1: null),
         1 => new DeliveryLabel(external: external, kind: KindSpans, more: null, span0: spans[0], span1: null),
         2 => new DeliveryLabel(external: external, kind: KindSpans, more: null, span0: spans[0], span1: spans[1]),
-        _ => new DeliveryLabel(external: external, kind: KindSpans, more: [.. spans.Skip(count: 2)], span0: spans[0], span1: spans[1]),
+        _ => new DeliveryLabel(external: external, kind: KindSpans, more: [.. CollectionsMarshal.AsSpan(list: spans)[2..]], span0: spans[0], span1: spans[1]),
     });
 
     /// <inheritdoc/>
@@ -414,6 +415,58 @@ public readonly struct DeliveryLabel : IEquatable<DeliveryLabel> {
     public static bool operator ==(DeliveryLabel left, DeliveryLabel right) => left.Equals(other: right);
     /// <summary>Returns whether two labels differ in classification, external flag or span set.</summary>
     public static bool operator !=(DeliveryLabel left, DeliveryLabel right) => !left.Equals(other: right);
+}
+
+/// <summary>Builds the union of many labels (<see cref="DeliveryLabel.Union"/>), reusing the label it built last when
+/// the union names the same spans and external flag, so an owner that unions the same labels every frame allocates
+/// nothing once it is steady. One builder serves one owner on one thread.</summary>
+public sealed class DeliveryLabelUnion {
+    private readonly List<DeliverySpan> m_spans = [];
+    private bool m_classified = true;
+    private bool m_external;
+    private DeliveryLabel m_last;
+
+    /// <summary>Starts a new union with nothing in it.</summary>
+    public void Clear() {
+        m_spans.Clear();
+        m_classified = true;
+        m_external = false;
+    }
+    /// <summary>Adds a label to the union: its spans, its external flag, and an unclassified label makes the whole union
+    /// unclassified.</summary>
+    /// <param name="label">The label to add.</param>
+    public void Add(in DeliveryLabel label) {
+        if (!label.IsClassified) {
+            m_classified = false;
+            return;
+        }
+        m_external |= label.External;
+        label.AppendUnique(into: m_spans);
+    }
+    /// <summary>Returns the union of every label added since <see cref="Clear"/>: unclassified when any was, public
+    /// when none names a span, otherwise the label of every span named.</summary>
+    /// <returns>The union.</returns>
+    public DeliveryLabel Build() {
+        if (!m_classified) {
+            return DeliveryLabel.Unclassified;
+        }
+        if (!SameAsLast()) {
+            m_last = DeliveryLabel.FromDistinct(external: m_external, spans: m_spans);
+        }
+        return m_last;
+    }
+
+    private bool SameAsLast() {
+        if (!m_last.IsClassified || (m_last.External != m_external) || (m_last.SpanCount != m_spans.Count)) {
+            return false;
+        }
+        for (var index = 0; (index < m_spans.Count); index++) {
+            if (!m_last.ContainsSpan(candidate: m_spans[index])) {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
 /// <summary>Pairs a content value with its <see cref="DeliveryLabel"/> so the value can be obtained only through a

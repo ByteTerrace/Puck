@@ -12,15 +12,15 @@
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     ImageSourceHeader header = imageSourceHeader(region);
+    uint texels = 0u;
 
-    if ((id.x >= header.width) || (id.y >= header.height)) {
-        return;
+    if ((id.x < header.width) && (id.y < header.height)) {
+        uint luma = imageSourceByte(region, (header.plane0 + (id.y * header.stride0) + id.x));
+        uint chroma = (header.plane1 + ((id.y / 2u) * header.stride1) + ((id.x / 2u) * 2u));
+        float3 rgb = imageSourceYuvToRgb(luma, imageSourceByte(region, chroma), imageSourceByte(region, (chroma + 1u)), header.color);
+
+        image[id.xy] = float4(saturate(rgb), 1.0);
+        texels = 1u;
     }
-
-    uint luma = imageSourceByte(region, (header.plane0 + (id.y * header.stride0) + id.x));
-    uint chroma = (header.plane1 + ((id.y / 2u) * header.stride1) + ((id.x / 2u) * 2u));
-    float3 rgb = imageSourceYuvToRgb(luma, imageSourceByte(region, chroma), imageSourceByte(region, (chroma + 1u)), header.color);
-
-    image[id.xy] = float4(saturate(rgb), 1.0);
-    puckCountWork(0u, 1u);
+    puckCountWork(0u, texels);
 }

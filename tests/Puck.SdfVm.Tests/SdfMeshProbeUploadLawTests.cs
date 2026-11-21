@@ -76,12 +76,14 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 gpu.Services.BufferFactory, gpu.Services.Bindings, gpu.Services.Recorder, pipeline!.Compute!, default);
             region.Shadow((IGpuRegionSource)chunk, 4);
             using var carry = region.Grow(words.Length * 4L);
+            // The root word is owed, so the chunk's run joins it across the small gap the chunk must supply.
+            region.Write(0, [7, 0, 0, 0]);
             region.OweSourced(word * 4L, 8);
             var copy = new GpuRegionCopyRecording(gpu.Services.Recorder, GpuStage.ComputeShader, () => 2);
             copy.Record(region, 3, handsToReaders: true);
             copy.Finish();
             var actual = MemoryMarshal.Cast<byte, uint>(gpu.Memory(region.Buffer(0).BufferHandle));
-            Assert.Equal(0u, actual[0]);
+            Assert.Equal(7u, actual[0]);
             Assert.Equal(words.AsSpan(1, word + 1).ToArray(), actual.Slice(1, word + 1).ToArray());
         } finally { lease.Release(); }
     }

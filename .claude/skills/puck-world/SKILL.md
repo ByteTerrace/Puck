@@ -141,7 +141,10 @@ added to the debug world is added to that fragment.
 The arena is the live gameplay store. `WorldServer.Definition` holds declarations
 and seeds; use `ExportDefinition()` only at an explicit snapshot/edit boundary.
 Runtime value readers use `WorldStateReader` bound to the live arena, and
-publication carries journal changes without rebuilding document rows. Rules,
+publication carries journal changes without rebuilding document rows. A
+client-side sink never holds the server's bound document: it adopts each
+delivery through `WorldDocumentStateView.Adopt`, which binds every state-bound
+value to the cells that sink was delivered. Rules,
 bound addon batches and host cell commands share the grant-checked transaction.
 Every untrusted read and delivery checks `WorldStateDisclosure` again; caching
 a bound address never caches permission. Responses, deals and tenure are
@@ -595,7 +598,11 @@ rooms the current question finds at `r` and at `r + 2m`, so the eye never comes
 nearer geometry than `r`. A target inside geometry (the obstructed overlap
 test) keeps exact inputs. `world.counters world.field-queries` reads requests,
 skipped, reused and marched per family; a headless World poses no creation and
-places no camera, so it counts none.
+places no camera, so it counts none. The field itself is a regional evaluator
+(`SdfFieldEvaluator.IndexesRegions`): a march's samples walk the chains near
+them, not the whole static world, to the same answers. `world.counters
+sdf.point` reads instructions a sample and `sdf.regions` the regions recorded
+([region tapes](../../../docs/rendering/sdf/handbook/queries-and-determinism.md#region-tapes)).
 
 **Mint generated names through `GeneratedName`** (`$` inside a document, `~` in
 a path), never by concatenation.

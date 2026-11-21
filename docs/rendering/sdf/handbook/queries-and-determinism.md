@@ -448,6 +448,62 @@ random fields of turned, scaled and mirrored shapes.
 positions reach the carrier's ends, and holds every point answer inside its
 bounds or both refusing.
 
+### Region tapes
+
+A point query's skips are decided again at every sample, over the whole
+program. For a program the size of a world that deciding is the cost: the
+debug world's presentation field ranks about 1,900 instances and visits about
+1,500 instructions a sample, to find the hundred or two that matter.
+
+An evaluator constructed regional (`SdfFieldEvaluator.IndexesRegions`) decides
+once per region instead. It keeps, for each cube of the world a point query
+has touched, a tape: the ranges of the instruction stream a walk at any point
+of the cube has to read. Cubes are 16 units on a side at the root and halve to
+2 units, each recorded over its parent's tape, and a cube whose tape is short
+stops dividing. A point walk reads the tape of the cube its point lies in and
+still makes its own skips at its own point.
+
+A tape is the record of one box walk over the cube. The walk carries the
+interval that encloses the accumulator of every point walk in the cube, as any
+bounds query does, and drops three things against it:
+
+- **What a certificate clears everywhere in the cube.** The point walk's own
+  skip, asked at the cube's nearest point to the certificate's centre against
+  the interval's upper end. Where the primer orders the walk, its clearance is
+  held one raw past the primer's upper end, because an instance it skips may
+  stand before the primer in the stream, where an equal candidate would keep
+  its own material.
+- **A chain whose joins are all inert.** The candidate the walk enclosed over
+  the cube stands at or past the accumulator's upper end for a union, and past
+  it by the smooth union's identity margin for a smooth union. This needs no
+  certificate, so it reaches the shapes and folds that carry none: a repeat's
+  copies are enclosed by the fold's own interval rule.
+
+- **Everything before a take-over.** The first two are skips at a chain's own
+  place in the stream, so they keep every chain that stands before the nearest
+  geometry in stream order. A join whose candidate stands below the
+  accumulator's lower end by the same margin leaves the accumulator equal to
+  the candidate at every point of the cube, whatever the stream read before
+  that chain, so everything before it goes. A program emitted in rows needs
+  this: beside one shape of a grid of a thousand, it is the difference between
+  reading a few shapes and reading a few dozen.
+
+Each drop leaves every point walk in the cube with the distance and material
+it had, so a regional evaluator answers what a plain one answers, to the bit.
+Nothing is dropped on a tolerance or on a value at one point, and a tape keeps
+the stream's order. `SdfFieldEvaluatorRegionLawTests` holds the two evaluators
+to each other on a fold across its seam, tied candidates, a staircase of
+smooth unions, relieved scopes and carves, and on the raws either side of
+every region face.
+
+Regions are immutable once published, so queries on any thread share them.
+The index holds a bounded number of regions and drops them all when it reaches
+its limit. `world.counters sdf.regions` reads regions recorded, the
+instructions the recording walks visited, the instructions the tapes hold and
+the drops. Regions pay for a program large enough that walking all of it is
+what a query costs; the presentation field is regional and the server's
+per-collider fields are not.
+
 Pruning research has different preservation contracts.
 [Barbier et al., Lipschitz Pruning (2025)](https://wbrbr.org/publications/LipschitzPruning/)
 construct region-local reductions of primitive CSG trees.

@@ -352,9 +352,12 @@ differ on bank count, and a padded stride of 65 avoids conflicts with either.
 
 A wave intrinsic sums lanes in registers; one lane then does the atomic.
 
-- **Done right.** `puckCountWork` and `puckCountShapes` sum with
-  `WaveActiveSum` and write one atomic a wave
-  (`puckCountWork` in [`ShaderWorkCounters.AppendHlsl`](../../../../src/Puck.Shaders.Model/Interface/ShaderWorkCounters.cs)).
+- **Done right.** A compute kernel's `puckCountWork` and `puckCountShapes` sum with
+  `WaveActiveSum`, reduce the waves in groupshared memory and write one global atomic a thread group
+  (`puckAddGroupWork` in [`ShaderWorkCounters.AppendHlsl`](../../../../src/Puck.Shaders.Model/Interface/ShaderWorkCounters.cs));
+  every thread of the group reaches the call, so a kernel never returns before it. A pass the node records
+  with `GpuKernelCounters.DisabledRow` (no reading demands the counts) branches out of every counting function
+  before any wave, groupshared or atomic work.
 - Wave size is the device's (32 on NVIDIA, 32 or 64 on AMD), so never size data
   by it. A float reduction's order differs by wave size; counts are integers,
   and the sky reduction sums in a fixed order so its coefficients repeat on one
