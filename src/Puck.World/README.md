@@ -87,7 +87,10 @@ A reload refusal shows its file and location first, relative to the world's
 document directory.
 
 `world.gpu-timing on|off` enables optional observational per-pass timestamps;
-bare reads completed means over at most 32 pairs. The inspector's FPS and timing
+bare reports the mean per recording and the mean per frame over each node's
+last 32 completed submissions. A skipped pass contributes zero to its per-frame
+mean. Rows show the sample count and the last submission that timed the pass.
+A row is stale once all its samples have left the window. The inspector's FPS and timing
 rows follow that toggle. Timing starts off and creates no timestamp objects or
 commands until requested; dynamic resolution (see [Graphics options](#graphics-options))
 also requests them while it reads the views' GPU frame time, in which case the

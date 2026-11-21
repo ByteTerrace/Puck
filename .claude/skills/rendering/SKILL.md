@@ -689,7 +689,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   the occlusion live.
 - **A cascade has two layers.** Each cascade pass draws its depth (every face,
   `SdfMeshRasterPass.ShadowDescription`) and its exit layer (faces toward the
-  light culled, `ShadowExitDescription`) into its two outputs. A triangle the
+  light culled, `SdfMeshRasterPass.ShadowExitKey`) into its two outputs. A triangle the
   surface pass sees turned from the light compares against the exit layer, so
   its own body lets a wrapped material's light through while any other solid in
   front shadows it; one facing the light keeps the depth, which holds no wall's

@@ -386,7 +386,7 @@ internal sealed class FakeGpuDevice :
             )
         );
     }
-    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) {
+    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule? fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) {
         BeforeGraphicsPipeline?.Invoke(obj: description);
         Hit(key: "IGpuPipelineFactory.Create(graphics)");
 
