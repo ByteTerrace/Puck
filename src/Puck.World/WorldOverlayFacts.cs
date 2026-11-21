@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.World.Client;
+using Puck.SdfVm;
 using Puck.Abstractions.Presentation;
 
 namespace Puck.World;
@@ -296,44 +297,27 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
 
         return (((uint)body) < ((uint)WorldClient.EntityCapacity));
     }
-    // Subject to position: a body subject reads the client's render pose; a placement reads its live stamped shape
-    // position, else the static stamp math.
+    // Subject to position, through the one anchor resolver: a body subject rides its drawn root, and a placement its live
+    // pose, else its rest pose; one the frame draws nothing for resolves no position.
     private bool TryResolvePosition(int slot, OverlaySubject subject, out Vector3 position) {
-        if (subject is OverlaySubject.Placement placement) {
-            if (m_stamps.TryShapePosition(
-                client: m_client,
+        SdfAnchor pose;
+        var resolved = ((subject is OverlaySubject.Placement placement)
+            ? WorldAnchorPoses.TryPlacement(
                 placementId: placement.PlacementId,
-                position: out position,
-                shapeId: placement.ShapeId
-            )) {
-                return true;
-            }
+                pose: out pose,
+                shapeId: placement.ShapeId,
+                source: m_client,
+                stamps: m_stamps
+            )
+            : WorldAnchorPoses.TryEntity(
+                body: (TryResolveBody(body: out var body, slot: slot, subject: subject) ? body : -1),
+                pose: out pose,
+                scope: new WorldAnchorScope(Source: m_client, Stamps: m_stamps, Transforms: default)
+            ));
 
-            position = WorldAnchorGeometry.StaticPlacementPosition(
-                definition: m_client.Definition,
-                placementId: placement.PlacementId,
-                shapeId: placement.ShapeId
-            );
+        position = pose.Position;
 
-            return true;
-        }
-
-        if (
-            !TryResolveBody(
-            body: out var body,
-            slot: slot,
-            subject: subject
-        ) ||
-            !m_client.IsActive(index: body)
-        ) {
-            position = default;
-
-            return false;
-        }
-
-        position = m_client.Position(index: body);
-
-        return true;
+        return resolved;
     }
 
     /// <summary>Evaluates a predicate for one local seat; a <see langword="null"/> predicate is true.</summary>

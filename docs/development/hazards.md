@@ -97,6 +97,15 @@ until the next writer, shape or case arrives.
   (`WorldBody.SnapYawToPlanarIntent`) and a first-person look lands on the posed
   heading (`WorldSeatViewState.ObserveBody`); a new input-relevant field of the
   view state owes the same pair.
+- A snapshot lends its subscribers borrowed storage (entries, register file,
+  cell writes) that the next build overwrites, so nothing may build another
+  while one is lent. A session observer whose frame a deal moved was primed from
+  the state delivery `FinishTick` makes between building the tick's snapshot and
+  fanning it out, and the primer rewrote the lent cells: the local client and
+  every peer received the primer's first cells in place of the tick's writes,
+  and a row that moved on such a tick stayed stale until it moved again. The
+  tick broadcast and the per-sink primer now each own a carrier
+  (`WorldDocument.SnapshotCarrier`), so a primer cannot reach the tick's storage.
 - The cascades' exit layer assumes a caster encloses a solid
   (`SdfMeshDraw.EnclosesSolid`); a body clipped at a portal's glass is a thin
   caster that shadows its own wrapped side

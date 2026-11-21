@@ -281,14 +281,12 @@ public sealed record WorldPlacementDeal(
             ((lattice.StepA.Reference is not null) || (lattice.StepB.Reference is not null))) {
             return DeriveOffsets(template: template, worldSeed: worldSeed);
         }
-        if (OffsetCache.TryGetValue(key: distribution, value: out var held) && (held.WorldSeed == worldSeed)) {
-            return held.Offsets;
-        }
-
-        var derived = new OffsetEntry(WorldSeed: worldSeed, Offsets: DeriveOffsets(template: template, worldSeed: worldSeed));
-
-        OffsetCache.AddOrUpdate(key: distribution, value: derived);
-        return derived.Offsets;
+        return OffsetCache.GetValue(
+            derive: static (_, state) => new OffsetEntry(WorldSeed: state.worldSeed, Offsets: DeriveOffsets(template: state.template, worldSeed: state.worldSeed)),
+            holds: static (held, _, state) => (held.WorldSeed == state.worldSeed),
+            key: distribution,
+            state: (template, worldSeed)
+        ).Offsets;
     }
     /// <summary>Returns the offset of <paramref name="slot"/> in <paramref name="template"/>'s region, in the template's
     /// frame and in fixed point: where a child dealt at that slot stands before its own displacement. A slot the region

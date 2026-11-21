@@ -54,6 +54,37 @@ public sealed class CodeDerivedTable<TKey, [DynamicallyAccessedMembers(memberTyp
             ? derived
             : held;
     }
+    /// <summary>Gets the value derived from <paramref name="key"/> and <paramref name="state"/>, deriving it again and
+    /// holding the new value when the table holds none under the running code or the held one no longer
+    /// <paramref name="holds"/> for them: a value that also depends on an input the key's identity cannot vouch for
+    /// (a seed, the length of a list still being appended to).</summary>
+    /// <typeparam name="TState">The type of the input beside the key.</typeparam>
+    /// <param name="key">The object the value is derived from.</param>
+    /// <param name="state">The input beside the key.</param>
+    /// <param name="derive">The derivation.</param>
+    /// <param name="holds">Whether a held value still answers for the key and state.</param>
+    /// <returns>The held or newly derived value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/>, <paramref name="derive"/> or
+    /// <paramref name="holds"/> is <see langword="null"/>.</exception>
+    /// <remarks>Two callers racing on a stale value both derive, and the last value held wins; each returns its own
+    /// derivation, which answers for the same key and state.</remarks>
+    public TValue GetValue<TState>(TKey key, TState state, Func<TKey, TState, TValue> derive, Func<TValue, TKey, TState, bool> holds) {
+        ArgumentNullException.ThrowIfNull(argument: key);
+        ArgumentNullException.ThrowIfNull(argument: derive);
+        ArgumentNullException.ThrowIfNull(argument: holds);
+
+        var values = CurrentGeneration().Values;
+
+        if (values.TryGetValue(key: key, value: out var held) && holds(arg1: held, arg2: key, arg3: state)) {
+            return held;
+        }
+
+        var derived = derive(arg1: key, arg2: state);
+
+        values.AddOrUpdate(key: key, value: derived);
+
+        return derived;
+    }
     /// <summary>Reads the value held for <paramref name="key"/> under the running code.</summary>
     /// <param name="key">The object the value is derived from.</param>
     /// <param name="value">The held value, or the default when none is held.</param>

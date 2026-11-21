@@ -621,14 +621,14 @@ public static class WorldCameraRigCompiler {
 
             for (var index = 0; (index < m_subjectSources.Count); index++) {
                 subjects[index] = (m_subjectSources[index].Subject switch {
-                    WorldCameraSubject.Placement placement => new SdfAnchor(
-                    Orientation: Quaternion.Identity,
-                    Position: WorldAnchorGeometry.StaticPlacementPosition(
-                        definition: m_definition,
-                        placementId: placement.PlacementId,
-                        shapeId: placement.ShapeId
-                    )
-                ),
+                    WorldCameraSubject.Placement placement => (WorldAnchorPoses.TryRestPlacement(
+                    definition: m_definition,
+                    placementId: placement.PlacementId,
+                    pose: out var rest,
+                    shapeId: placement.ShapeId
+                )
+                    ? rest
+                    : new SdfAnchor(Orientation: Quaternion.Identity, Position: Vector3.Zero)),
                     WorldCameraSubject.WorldPoint worldPoint => new SdfAnchor(
                     Orientation: Quaternion.Identity,
                     Position: worldPoint.Point.Value
@@ -651,16 +651,5 @@ public static class WorldCameraRigCompiler {
 
             m_definition = definition;
         }
-    }
-}
-/// <summary>An anchor source that resolves one fixed pose for every id.</summary>
-public sealed class FixedAnchorSource(SdfAnchor anchor) : ISdfAnchorSource {
-    private readonly SdfAnchor m_anchor = anchor;
-
-    /// <inheritdoc/>
-    public bool TryResolveAnchor(int anchorId, out SdfAnchor anchor) {
-        anchor = m_anchor;
-
-        return true;
     }
 }

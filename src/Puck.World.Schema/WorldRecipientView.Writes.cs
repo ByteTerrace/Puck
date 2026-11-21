@@ -221,7 +221,7 @@ public sealed partial class WorldRecipientView {
     /// <param name="rows">Finds the section's installed rows in the document, or returns <see langword="null"/>.</param>
     /// <param name="key">The key the write targets.</param>
     /// <returns><see langword="true"/> when every row the write may replace admits.</returns>
-    public bool AdmitsReplaced<T, TKey>(WorldRowKey<T, TKey> keys, Func<WorldDefinition, IReadOnlyList<T>?> rows, TKey key) where T : class {
+    public bool AdmitsReplaced<T, TKey>(WorldRowKey<T, TKey> keys, Func<WorldDefinition, IReadOnlyList<T>?> rows, TKey key) where T : class where TKey : notnull {
         ArgumentNullException.ThrowIfNull(keys);
         ArgumentNullException.ThrowIfNull(rows);
         if (Unrestricted) { return true; }
@@ -241,7 +241,7 @@ public sealed partial class WorldRecipientView {
     /// <param name="rows">Finds the section's installed rows in the document, or returns <see langword="null"/>.</param>
     /// <param name="incoming">The submitted row.</param>
     /// <returns><see langword="true"/> when every row the write may replace admits.</returns>
-    public bool AdmitsReplacing<T, TKey>(WorldRowKey<T, TKey> keys, Func<WorldDefinition, IReadOnlyList<T>?> rows, T incoming) where T : class {
+    public bool AdmitsReplacing<T, TKey>(WorldRowKey<T, TKey> keys, Func<WorldDefinition, IReadOnlyList<T>?> rows, T incoming) where T : class where TKey : notnull {
         ArgumentNullException.ThrowIfNull(keys);
         ArgumentNullException.ThrowIfNull(incoming);
         return (keys.ReferenceOf(incoming) is null) ? AdmitsReplaced(keys, rows, keys.Of(incoming)) : AdmitsInstalledRows(rows);

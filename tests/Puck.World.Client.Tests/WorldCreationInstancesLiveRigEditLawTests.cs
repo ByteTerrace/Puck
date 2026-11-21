@@ -89,7 +89,7 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
         Assert.True(condition: ((shape.TurnRadians > 0f) || (shape.Delta != Vector3.Zero)), userMessage: "the read-back shows no chained delta on a swinging arm.");
         Assert.Equal(expected: -1, actual: (scene.Pool.TryBodyRig(bodyIndex: 0, shapeName: "absent", state: out var absent) ? absent!.Shape!.Value.Index : 0));
     }
-    // TryShapePosition answers where the frame drew each shape — the torso's own swing, and the arm carried by its
+    // A placement anchor resolves where the frame drew each shape — the torso's own swing, and the arm carried by its
     // parent chain — so a placement anchor (the audio director, the overlay facts, a camera view) rides the moving part.
     [Fact]
     public void AShapePositionFollowsTheSwingTheFrameDrew() {
@@ -103,7 +103,8 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
             _ = scene.Frame();
 
             foreach (var (shapeId, slot) in (((int, int)[])[(0, (ArmSlot - 1)), (1, ArmSlot)])) {
-                Assert.True(condition: scene.Pool.TryShapePosition(client: scene.Client, placementId: Seat, position: out var read, shapeId: shapeId));
+                Assert.True(condition: WorldAnchorPoses.TryPlacement(placementId: Seat, shapeId: shapeId, source: scene.Client, stamps: scene.Pool, pose: out var readPose));
+                var read = readPose.Position;
 
                 var drawn = scene.Drawn(slot: slot);
 

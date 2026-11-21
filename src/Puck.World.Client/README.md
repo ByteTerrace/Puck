@@ -218,10 +218,10 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
   published per-seat viewport + camera a pointer consumer reads.
 - `WorldTextCatalog.cs`—deterministic glyph-atlas generation for a
   world-authored font.
-- `WorldCameraRigCompiler.cs`, `WorldAnchorGeometry.cs`, `WorldRigCatalog.cs`,
-  `WorldScreenTextDecal.cs`—the camera-program translation, static
-  placement/shape anchor geometry, the avatar instance layout, and screen decal
-  text.
+- `WorldCameraRigCompiler.cs`, `WorldAnchorPoses.cs`, `WorldRigCatalog.cs`,
+  `WorldScreenTextDecal.cs`—the camera-program translation, the one
+  anchor-to-pose resolver every camera, light, speaker and overlay reads, the
+  avatar instance layout, and screen decal text.
 - `Sources/`—the runtime half of an image producer: `IWorldImageProducer` and
   `IWorldImageFeed`, the `WorldImageProducers` registry a screen's `producer`
   source opens through, `WorldSourceInstances` (the render-graph source
