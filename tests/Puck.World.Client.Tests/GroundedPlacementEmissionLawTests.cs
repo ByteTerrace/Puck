@@ -24,7 +24,7 @@ public sealed class GroundedPlacementEmissionLawTests {
             assets.Reconcile(current.Creations, [], null, [roots]);
             var builder = new SdfProgramBuilder();
             assets.Emit(builder, WorldBakedColors.Of(current), 0, null, new WorldPickMapBuilder());
-            return (builder.Build().Words.ToArray(), assets.Copies.Select(c => c.Transform.Position).ToArray(),
+            return (builder.Build().CopyWords(), assets.Copies.Select(c => c.Transform.Position).ToArray(),
                 assets.Copies.Select(c => c.Identity).ToArray());
         }
         var before = Emit(world);
@@ -43,7 +43,7 @@ public sealed class GroundedPlacementEmissionLawTests {
         uint[] Emit(WorldDefinition current, WorldStaticPalettes? palettes) {
             var builder = new SdfProgramBuilder();
             WorldPlacementStamper.EmitStatic(builder, current, current.Creations, [roots], palettes: palettes);
-            return builder.Build().Words.ToArray();
+            return builder.Build().CopyWords();
         }
         var before = Emit(world, cache);
         var changed = world with { PlacementRowsRaw = [ground with { Position = new Vector3(0, 2, 0) }, roots] };
