@@ -53,8 +53,8 @@ public sealed class WorldHostOwnedCellOperand : WorldFactOperand, IStateAddresse
             : RuleReads.Named(key: in keys[0]));
 
         if (!resolved.TryNamed(value: out var key)) { return Fact.Absent(kind: ValueKind); }
-        var value = ((key.IsValid && RuleReads.TryKeyIndex(keys: reader.Arena.Keys, key: key, index: out var cell) &&
-            (cell >= 0) && (cell <= int.MaxValue) && facet.TryReadHostOwnedCell(RowOrdinal, ((int)cell), out var raw)) ? raw : 0L);
+        var value = ((key.IsValid && reader.Arena.Keys.TryCandidateIndex(key: key, index: out var cell) &&
+            facet.TryReadHostOwnedCell(RowOrdinal, cell, out var raw)) ? raw : 0L);
 
         return Fact.Finite(kind: ValueKind, value: value);
     }

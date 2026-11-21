@@ -408,33 +408,34 @@ internal static class WorldCompiler {
         try {
             JsonObject? state = null;
 
-            if ((basis is not null) && (TryReadComposed(name: basis, referrer: referrer, session: session) is { } basisDoc)) {
-                state = (keepState
-                    ? ((basisDoc["state"] as JsonObject)?.DeepClone() as JsonObject)
-                    : (basisDoc["state"] as JsonObject));
+            if (basis is not null) {
+                state = TryReadComposedState(name: basis, referrer: referrer, session: session);
             }
 
             foreach (var import in imports) {
-                if (TryReadComposed(name: import.Path, referrer: referrer, session: session) is not { } importedDoc) {
-                    continue;
-                }
-                if (!string.IsNullOrEmpty(value: import.Alias)) {
-                    importedDoc = ((JsonObject)importedDoc.DeepClone());
+                JsonObject? importedState;
 
-                    if (!WorldModuleNamespace.TryApply(alias: import.Alias, module: importedDoc, reason: out _)) {
+                if (string.IsNullOrEmpty(value: import.Alias)) {
+                    importedState = TryReadComposedState(name: import.Path, referrer: referrer, session: session);
+                } else {
+                    // An alias renames across the whole module, so the namespace is applied to the whole document.
+                    if ((TryReadComposed(name: import.Path, referrer: referrer, session: session) is not { } composed) ||
+                        (JsonNode.Parse(utf8Json: composed) is not JsonObject importedDoc) ||
+                        !WorldModuleNamespace.TryApply(alias: import.Alias, module: importedDoc, reason: out _)) {
                         continue;
                     }
+                    importedState = (importedDoc["state"]?.DeepClone() as JsonObject);
                 }
-                if (importedDoc["state"] is not JsonObject importedState) {
+                if (importedState is null) {
                     continue;
                 }
 
                 state = ((state is null)
-                    ? ((JsonObject)importedState.DeepClone())
+                    ? importedState
                     : (WorldDocumentBasis.TryMerge(
                         basis: new JsonObject { ["state"] = state },
                         composed: out var merged,
-                        overlay: new JsonObject { ["state"] = importedState.DeepClone() },
+                        overlay: new JsonObject { ["state"] = importedState },
                         reason: out _
                     )
                         ? (((JsonObject?)merged?["state"]?.DeepClone()) ?? state)
@@ -459,7 +460,10 @@ internal static class WorldCompiler {
             ReadingBasisOf.Value = previous;
         }
     }
-    private static JsonObject? TryReadComposed(string name, string referrer, WorldCompileSession session) => (
+    // The composed bytes of the document a basis or import names, through the one composer; a held composition's
+    // image is shared and never written, and is sliced once (WorldDefinitionFileSource.MemberTree), so a
+    // language-server edit to a source over a large basis parses only that basis's state, never its whole image.
+    private static byte[]? TryReadComposed(string name, string referrer, WorldCompileSession session) => (
         (
             session.TryRead(
                 content: out var content,
@@ -469,14 +473,19 @@ internal static class WorldCompiler {
                 resolvedName: out var resolved
             ) &&
             (content is not null) &&
-            session.TryCompose(
-                composed: out var composed,
-                reason: out _,
-                rootBytes: content,
-                rootResolvedPath: resolved
+            session.TryComposeBytes(
+                document: content,
+                json: out var composed,
+                path: resolved,
+                reason: out _
             )
         )
-            ? (composed ?? (JsonNode.Parse(utf8Json: content) as JsonObject))
+            ? composed
+            : null
+    );
+    private static JsonObject? TryReadComposedState(string name, string referrer, WorldCompileSession session) => (
+        (TryReadComposed(name: name, referrer: referrer, session: session) is { } composed)
+            ? (WorldDefinitionFileSource.MemberTree(json: composed, name: WorldDefinitionMembers.StateMemberName) as JsonObject)
             : null
     );
 

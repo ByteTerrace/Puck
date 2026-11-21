@@ -468,9 +468,8 @@ public static class RuleReads {
             reader: reader,
             reference: in reference
         );
-        var spelled = TryKeyIndex(
-            keys: reader.Arena.Keys,
-            index: out var keyIndex,
+        var spelled = reader.Arena.Keys.TryKeyInteger(
+            integer: out var keyIndex,
             key: key
         );
 
@@ -478,44 +477,6 @@ public static class RuleReads {
             index: keyIndex,
             named: spelled
         );
-    }
-    /// <summary>Returns the interned key whose name is an integer's decimal spelling, without minting one the
-    /// arena does not already hold.</summary>
-    /// <param name="keys">The runtime key table whose names resolve through.</param>
-    /// <param name="index">The integer.</param>
-    /// <param name="key">The key, on success.</param>
-    /// <returns><see langword="true"/> when the arena already interns the name.</returns>
-    public static bool TryIndexKey(CellKeyTable keys, long index, out CellKey key) {
-        ArgumentNullException.ThrowIfNull(argument: keys);
-
-        return keys.TryResolveIndex(
-            index: index,
-            key: out key
-        );
-    }
-    /// <summary>Returns the integer an interned key's name spells.</summary>
-    /// <param name="keys">The runtime key table that resolves the key.</param>
-    /// <param name="key">The key.</param>
-    /// <param name="index">The integer, on success.</param>
-    /// <returns><see langword="true"/> when the key's name is an integer.</returns>
-    public static bool TryKeyIndex(CellKeyTable keys, CellKey key, out long index) {
-        ArgumentNullException.ThrowIfNull(argument: keys);
-
-        if (keys.TryGetName(
-            key: key,
-            name: out var name
-        )) {
-            return long.TryParse(
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                result: out index,
-                s: name.Value,
-                style: System.Globalization.NumberStyles.Integer
-            );
-        }
-
-        index = 0L;
-
-        return false;
     }
 
     private static CellKey BoundKeyOf(IStateReader reader, BoundKey binding) => (binding switch {
@@ -528,10 +489,9 @@ public static class RuleReads {
         index: reader.BoundIndex(key: binding)
     ),
     });
-    private static CellKey IndexKey(CellKeyTable keys, long index) => (TryIndexKey(
+    private static CellKey IndexKey(CellKeyTable keys, long index) => (keys.TryResolveIndex(
         index: index,
-        key: out var key,
-        keys: keys
+        key: out var key
     )
         ? key
         : default

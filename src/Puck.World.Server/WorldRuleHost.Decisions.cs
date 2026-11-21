@@ -160,8 +160,7 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
         }
         try {
             foreach (var key in runtime.Keys) {
-                BoundEachKey = (((key >= 0) && RuleReads.TryIndexKey(
-                    keys: Host.Arena.Keys,
+                BoundEachKey = (((key >= 0) && Host.Arena.Keys.TryResolveIndex(
                     index: key,
                     key: out var bound
                 ))

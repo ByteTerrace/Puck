@@ -65,10 +65,9 @@ public static partial class StateReader {
         var cursor = 0;
         var any = false;
         var result = 0L;
-        while (arena.TryNextCell(rowOrdinal, ref cursor, out var key)) {
+        while (arena.TryNextLiveNumber(rowOrdinal, ref cursor, in time, out var key, out var value)) {
             if (filter is { } gate && (!arena.TryReadLiveNumber(gate, key, in time, out var enabled) || enabled == 0)) { continue; }
-            if (!arena.TryReadLiveNumber(rowOrdinal, key, in time, out var value) ||
-                range is { } bounds && (value < bounds.Lower || value > bounds.Upper)) { continue; }
+            if (range is { } bounds && (value < bounds.Lower || value > bounds.Upper)) { continue; }
             result = op switch {
                 StateReduceOp.Count => result + 1,
                 StateReduceOp.Sum => Puck.Maths.BinaryIntegerFunctions.AddSaturating(result, value),
@@ -100,9 +99,8 @@ public static partial class StateReader {
         if (!arena.Catalog.TryGetDescriptor(handle: handle, descriptor: out _)) { throw new ArgumentException(message: "The handle is stale.", paramName: nameof(handle)); }
         var time = ArenaTime.At(tick: tick, engineTick: engineTick);
         var cursor = 0; var best = -1; var bestValue = 0L; string? bestKey = null;
-        while (arena.TryNextCell(rowOrdinal: handle.Ordinal, cursor: ref cursor, key: out var key)) {
-            if (!arena.Keys.TryCandidateIndex(key: key, index: out var index) || !isCandidateIndex(index, state) ||
-                !arena.TryReadLiveNumber(rowOrdinal: handle.Ordinal, key: key, time: in time, value: out var raw)) { continue; }
+        while (arena.TryNextLiveNumber(rowOrdinal: handle.Ordinal, cursor: ref cursor, time: in time, key: out var key, value: out var raw)) {
+            if (!arena.Keys.TryCandidateIndex(key: key, index: out var index) || !isCandidateIndex(index, state)) { continue; }
             if ((best < 0) || (op == StateReduceOp.Max ? raw > bestValue : raw < bestValue) || ((raw == bestValue) && (index < best))) {
                 best = index; bestValue = raw; bestKey = arena.Keys[key].Value;
             }

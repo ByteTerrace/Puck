@@ -656,22 +656,18 @@ public sealed partial class WorldServer {
         var best = -1;
         var bestValue = FixedQ4816.Zero;
         var cursor = 0;
+        var time = m_ruleHost.Time;
+        var lifted = (m_arena.Layout[rowOrdinal].Kind != CellKind.Fixed);
 
-        while (m_arena.TryNextCell(
+        while (m_arena.TryNextLiveNumber(
             cursor: ref cursor,
             key: out var key,
-            rowOrdinal: rowOrdinal
+            rowOrdinal: rowOrdinal,
+            time: in time,
+            value: out var raw
         )) {
-            var name = m_arena.Keys[key].Value;
-
             if (
-                !int.TryParse(
-                s: name,
-                style: System.Globalization.NumberStyles.Integer,
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                result: out var index
-            ) ||
-                (index < 0) ||
+                !m_arena.Keys.TryCandidateIndex(key: key, index: out var index) ||
                 (index >= m_population.Capacity) ||
                 (Body(index: index) is null)
             ) {
@@ -687,13 +683,7 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            if (!ReadArenaCell(
-                key: key,
-                rowOrdinal: rowOrdinal
-            ).TryFinite(raw: out var raw)) {
-                continue;
-            }
-            var value = FixedQ4816.FromRawBits(value: raw);
+            var value = (lifted ? StateReader.LiftSaturating(raw: raw) : FixedQ4816.FromRawBits(value: raw));
 
             if (
                 (best < 0) ||

@@ -14,15 +14,16 @@ public sealed partial class StateArena {
             if (!changedRows.IsEmpty && !changedRows[ordinal] && !changedRows[layout.DomainOrdinal]) { continue; }
             var cursor = 0;
 
-            while (TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: ordinal)) {
+            while (TryNextSlot(cursor: ref cursor, key: out var key, rowOrdinal: ordinal, slot: out var slot)) {
                 if (!TryRead(layout.DomainOrdinal, key, out _)) {
                     reason = $"state row '{m_rows[ordinal].Name}': key '{m_keys[key]}' is outside token domain '{m_rows[layout.DomainOrdinal].Name}'";
                     return false;
                 }
-                if ((layout.Shape == RowShape.Ordered) && TryRead(key: key, rowOrdinal: ordinal, value: out var value) && (value.Raw != 1L)) {
+                if (!Bit(index: slot, words: m_presence)) { continue; }
+                if ((layout.Shape == RowShape.Ordered) && (ValueAt(layout: in layout, slot: slot).Raw != 1L)) {
                     reason = "an ordered zone's membership must be true"; return false;
                 }
-                if ((layout.ValueTopology is { } topology) && TryRead(key: key, rowOrdinal: ordinal, value: out var position) && (((ulong)position.Raw) >= ((ulong)topology.CellCount))) {
+                if ((layout.ValueTopology is { } topology) && (((ulong)ValueAt(layout: in layout, slot: slot).Raw) >= ((ulong)topology.CellCount))) {
                     reason = "a token position is outside its valuesFrom topology"; return false;
                 }
             }

@@ -133,12 +133,14 @@ public sealed partial class RuleEvaluator {
 
         var applied = false;
         var faulted = false;
+        var states = latch.States(rules: rules);
 
         m_host.Arena.BeginChangeWindow();
         try {
             foreach (var member in group.Members) {
                 var outcome = EvaluateRule(
                     applied: out var moved,
+                    bindings: states[member],
                     latch: latch,
                     rule: rules[member],
                     stepTicks: stepTicks
@@ -264,6 +266,7 @@ public sealed partial class RuleEvaluator {
 
         var outcome = EvaluateRule(
             applied: out var applied,
+            bindings: latch.States(rules: rules)[group.Members[step]],
             latch: latch,
             rule: rules[group.Members[step]],
             stepTicks: stepTicks

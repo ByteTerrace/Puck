@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
+using Puck.Abstractions;
 using Puck.Abstractions.Memory;
 using Puck.Maths;
 
@@ -60,9 +61,11 @@ public sealed class CellKeyTable {
     // the invalid default where no local key does. A derived view of local membership, kept by the only doors that
     // change it (TryIntern and the fork add, Rewind releases), so a read never writes it.
     private CellKey[] m_indexKeys = [];
-    // Each local key's participant index (StateReader.TryParseCandidateIndex over its name), -1 where the name spells
-    // none, by ordinal: a derived view of m_names kept by the same doors, so a scan reads an index without parsing.
-    private readonly List<int> m_candidateIndices;
+    // Each local key's integer (CanonicalDecimal over its name), NoInteger where the name spells none, by ordinal: a
+    // derived view of m_names kept by the same doors, so a read takes an integer without parsing. TryKeyInteger is the
+    // one reader, and it parses again only for NoInteger, which long.MinValue's own spelling also stores.
+    private readonly List<long> m_integers;
+    private const long NoInteger = long.MinValue;
 
     /// <summary>Initializes an empty table.</summary>
     public CellKeyTable() {
@@ -71,7 +74,7 @@ public sealed class CellKeyTable {
         m_names = [];
         m_keys = [];
         m_nameDigests = [];
-        m_candidateIndices = [];
+        m_integers = [];
         m_readOnlyNames = m_names.AsReadOnly();
     }
 
@@ -82,42 +85,26 @@ public sealed class CellKeyTable {
         m_names = source.m_names.GetRange(count: m_initialCount, index: 0);
         m_keys = source.m_keys.GetRange(count: m_initialCount, index: 0);
         m_nameDigests = source.m_nameDigests.GetRange(count: m_initialCount, index: 0);
-        m_candidateIndices = source.m_candidateIndices.GetRange(count: m_initialCount, index: 0);
+        m_integers = source.m_integers.GetRange(count: m_initialCount, index: 0);
         m_byName = new Dictionary<string, CellKey>(capacity: m_initialCount, comparer: StringComparer.Ordinal);
         for (var index = 0; (index < m_initialCount); index++) {
             m_byName.Add(key: m_names[index].Value, value: m_keys[index]);
             m_bytes += EntryBytes(name: m_names[index]);
             m_ledger = m_ledger.Add(element: m_nameDigests[index]);
-            NoteIndex(key: m_keys[index], name: m_names[index].Value);
+            NoteIndex(key: m_keys[index], integer: m_integers[index]);
         }
         m_readOnlyNames = m_names.AsReadOnly();
     }
 
-    // Records a local key in the index view when its name is an index's canonical spelling.
-    private void NoteIndex(string name, CellKey key) {
-        if (!TryParseIndex(index: out var index, name: name)) {
+    // Records a local key in the index view when its name spells an index below IndexKeyCache's bound.
+    private void NoteIndex(CellKey key, long integer) {
+        if (((ulong)integer) >= ((ulong)StateCapacity.MaxCellsPerRow)) {
             return;
         }
-        if (index >= m_indexKeys.Length) {
-            Array.Resize(ref m_indexKeys, ArrayCapacity.Grown(m_indexKeys.Length, index + 1, ceiling: StateCapacity.MaxCellsPerRow));
+        if (integer >= m_indexKeys.Length) {
+            Array.Resize(ref m_indexKeys, ArrayCapacity.Grown(m_indexKeys.Length, ((int)integer) + 1, ceiling: StateCapacity.MaxCellsPerRow));
         }
-        m_indexKeys[index] = key;
-    }
-    // Whether a name is the canonical decimal spelling IndexKeyCache gives an index below its cache bound: digits
-    // only, no sign, and no leading zero except "0" itself.
-    private static bool TryParseIndex(string name, out int index) {
-        index = 0;
-        if ((name.Length == 0) || (name.Length > 9) || ((name.Length > 1) && (name[0] == '0'))) {
-            return false;
-        }
-        foreach (var digit in name) {
-            if ((digit < '0') || (digit > '9')) {
-                return false;
-            }
-            index = ((index * 10) + (digit - '0'));
-        }
-
-        return (index < StateCapacity.MaxCellsPerRow);
+        m_indexKeys[integer] = key;
     }
 
     internal CellKeyTable Fork() => new(source: this);
@@ -154,12 +141,12 @@ public sealed class CellKeyTable {
             m_bytes -= EntryBytes(name: m_names[index]);
             m_ledger = m_ledger.Remove(element: m_nameDigests[index]);
             m_byName.Remove(key: m_names[index].Value);
-            if (TryParseIndex(index: out var released, name: m_names[index].Value) && (released < m_indexKeys.Length)) {
-                m_indexKeys[released] = default;
+            if (((ulong)m_integers[index]) < ((ulong)m_indexKeys.Length)) {
+                m_indexKeys[m_integers[index]] = default;
             }
         }
         m_nameDigests.RemoveRange(index: count, count: (m_nameDigests.Count - count));
-        m_candidateIndices.RemoveRange(index: count, count: (m_candidateIndices.Count - count));
+        m_integers.RemoveRange(index: count, count: (m_integers.Count - count));
         m_keys.RemoveRange(index: count, count: (m_keys.Count - count));
         m_names.RemoveRange(index: count, count: (m_names.Count - count));
         // A reused ordinal gets a new generation without allocating an identity object. Renew the identity
@@ -243,10 +230,12 @@ public sealed class CellKeyTable {
         var digest = NameDigest(name: name.Value);
 
         m_nameDigests.Add(item: digest);
-        m_candidateIndices.Add(item: (StateReader.TryParseCandidateIndex(index: out var candidate, key: name.Value) ? candidate : -1));
+        var integer = (CanonicalDecimal.TryParse(text: name.Value, value: out var spelled) ? spelled : NoInteger);
+
+        m_integers.Add(item: integer);
         m_bytes += EntryBytes(name: name);
         m_ledger = m_ledger.Add(element: digest);
-        NoteIndex(key: key, name: name.Value);
+        NoteIndex(integer: integer, key: key);
 
         reason = string.Empty;
 
@@ -267,22 +256,34 @@ public sealed class CellKeyTable {
 
         return TryResolve(key: out key, name: IndexKeyCache.Get(index: index).AsSpan());
     }
-    /// <summary>Attempts to read the participant index a key's name spells (the answer
-    /// <see cref="StateReader.TryParseCandidateIndex"/> gives for that name) without parsing it again.</summary>
+    /// <summary>Attempts to read the integer a key's name spells in <see cref="CanonicalDecimal"/>, the spelling
+    /// <see cref="IndexKeyCache"/> gives an index, without parsing it again: the inverse of
+    /// <see cref="TryResolveIndex"/>, which names this key for exactly the integer this answers.</summary>
     /// <param name="key">The key to read.</param>
-    /// <param name="index">The non-negative index on success; otherwise <c>-1</c>.</param>
-    /// <returns><see langword="true"/> when the key addresses this table and its name spells a non-negative
-    /// integer.</returns>
-    public bool TryCandidateIndex(CellKey key, out int index) {
+    /// <param name="integer">The integer on success; otherwise zero.</param>
+    /// <returns><see langword="true"/> when the key addresses this table and its name is an integer's canonical
+    /// spelling.</returns>
+    public bool TryKeyInteger(CellKey key, out long integer) {
         if (!TryGetAddress(key: key, name: out var name, ordinal: out var ordinal)) {
-            index = -1;
+            integer = 0L;
             return false;
         }
-        if (ordinal >= 0) {
-            index = m_candidateIndices[ordinal];
-            return (index >= 0);
+        if ((ordinal >= 0) && ((integer = m_integers[ordinal]) != NoInteger)) {
+            return true;
         }
-        return StateReader.TryParseCandidateIndex(index: out index, key: name.Value);
+        return CanonicalDecimal.TryParse(text: name.Value, value: out integer);
+    }
+    /// <summary>Attempts to read the participant index a key's name spells: a <see cref="TryKeyInteger"/> answer
+    /// that is non-negative and fits an <see cref="int"/>.</summary>
+    /// <param name="key">The key to read.</param>
+    /// <param name="index">The non-negative index on success; otherwise <c>-1</c>.</param>
+    /// <returns><see langword="true"/> when the key addresses this table and its name spells such an index.</returns>
+    public bool TryCandidateIndex(CellKey key, out int index) {
+        var spelled = (TryKeyInteger(key: key, integer: out var integer) && (((ulong)integer) <= int.MaxValue));
+
+        index = (spelled ? ((int)integer) : -1);
+
+        return spelled;
     }
     /// <summary>Attempts to read the name behind a key this table minted.</summary>
     /// <param name="key">The key to render.</param>

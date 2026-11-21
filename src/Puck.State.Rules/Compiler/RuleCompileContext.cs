@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace Puck.State.Rules;
 
 /// <summary>One static table a section pins, as the compiler sees it: the authored name and either the loaded
@@ -257,7 +255,7 @@ public class RuleCompileContext : IRuleCostContext {
             var seeds = StateRows.FindStateRow(StateCatalog.ExpandRows(Section), row.Name);
             if (seeds?.HasCell(key: key) == true || ((row.EffectiveDomain is StateDomain.CellsOf domain) &&
                 (FindTopology(name: domain.Topology) is { } topology) &&
-                long.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var ordinal) && (ordinal < topology.CellCount))) {
+                topology.TryCell(key: key, cell: out _))) {
                 return true;
             }
             if ((row.EffectiveDomain is not StateDomain.KeysOf keysOf) || (FindRow(name: keysOf.Row) is not { } domainRow)) {

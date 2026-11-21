@@ -321,8 +321,7 @@ public sealed class LocalKeyFact : RuleKeyFact {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         // A binding spells an integer, so it always names a cell; one no key table interns is a cell no row holds.
-        return Resolved<CellKey>.Named(value: (RuleReads.TryIndexKey(
-            keys: reader.Arena.Keys,
+        return Resolved<CellKey>.Named(value: (reader.Arena.Keys.TryResolveIndex(
             index: reader.LocalValue(ordinal: Ordinal),
             key: out var key
         )

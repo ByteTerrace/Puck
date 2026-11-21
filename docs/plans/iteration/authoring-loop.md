@@ -153,8 +153,10 @@ code now works this way:
   `WorldCompileSession.TrySelectCarrier` asks `WorldSourceIndex.Index` for
   the directory's claims, indexed by the names they claim. The index is held
   while the directory's listing and every source's digest are the ones it was
-  built from, and what a source declares is held by the digest of its bytes,
-  with the declaration fact's own digest held by declarer and file digest.
+  built from, what a source declares is held by the digest of its bytes, and a
+  compile that reads the claims rests on one claims fact for the directory
+  (`CompileInputKind.Claims`), built once per pass however many names resolve
+  there, rather than on a listing and a declaration fact per sibling.
 - **Proving a cached product still stands costs at most a stat per input per
   pass.** `CompileInputs` remembers each file's digest and each directory's
   listing under the stamp (existence, length, last write, creation) the path
@@ -788,9 +790,9 @@ stays a static index the session reads, and the cartridge vocabulary's own
 stage order is in [the duplicates](#duplicates-to-remove).
 
 3. **Deltas from changed sources.** Built in part: a value edit recompiles
-   only the source it is in, because a compile rests on what a sibling it
-   resolved a name in declares (`CompileInputKind.Declaration`), not on the
-   sibling's bytes; a recomposition reuses layers with unchanged inputs,
+   only the source it is in, because a compile rests on what the siblings it
+   resolved a name among claim (`CompileInputKind.Claims`), not on their
+   bytes; a recomposition reuses layers with unchanged inputs,
    including on the first reload after a warm boot, and merges again only
    the root members whose layer values changed
    (`WorldDefinitionFileSource.ComposedLayers`, counted as

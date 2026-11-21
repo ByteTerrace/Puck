@@ -404,10 +404,9 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         var keys = m_host.Arena.Keys;
 
         foreach (var index in m_bodyIndexScratch) {
-            if (RuleReads.TryIndexKey(
+            if (keys.TryResolveIndex(
                 index: index,
-                key: out var key,
-                keys: keys
+                key: out var key
             )) {
                 m_eachKeyScratch.Add(item: key);
             }

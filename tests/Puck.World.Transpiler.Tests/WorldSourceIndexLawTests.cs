@@ -161,9 +161,9 @@ public sealed class WorldSourceIndexLawTests {
         Assert.Equal(actual: ComposedDocumentId(basis: "north", directory: directory), expected: "north");
         Assert.Equal(actual: ComposedDocumentId(basis: "south", directory: directory), expected: "south");
     }
-    /// <summary>A compile that resolved its basis through the index stops standing when a file appears beside the
-    /// basis, when the basis document is renamed only in letter case, and when a source there changes the names it
-    /// declares; it stands while nothing there moved.</summary>
+    /// <summary>A compile that resolved its basis through the index stops standing when a claiming file appears beside
+    /// the basis, when the basis document is renamed only in letter case, and when a source there changes the names it
+    /// declares; it stands while nothing there moved and when a file that claims no name appears.</summary>
     [Fact]
     public void AHeldCompileStandsOnlyWhileTheIndexItResolvedThroughHolds() {
         using var directory = new TemporaryDirectory();
@@ -175,10 +175,11 @@ public sealed class WorldSourceIndexLawTests {
 
         var first = Compile(cache: cache, path: child);
 
-        Assert.Contains(collection: first.Inputs, filter: static input => (input.Kind == CompileInputKind.Listing));
+        Assert.Single(collection: first.Inputs, predicate: static input => (input.Kind == CompileInputKind.Claims));
+        Assert.DoesNotContain(collection: first.Inputs, filter: static input => (input.Kind == CompileInputKind.Declaration));
         Assert.Same(actual: Compile(cache: cache, path: child), expected: first);
 
-        // A source beside the basis starts declaring another name: the listing holds, the source's bytes do not.
+        // A source beside the basis starts declaring another name: the files hold, what one claims does not.
         directory.WriteText(name: "bar.puck", text: (Module + "world different = room(1)\n"));
 
         var renamed = Compile(cache: cache, path: child);
@@ -186,8 +187,12 @@ public sealed class WorldSourceIndexLawTests {
         Assert.NotSame(actual: renamed, expected: first);
         Assert.Same(actual: Compile(cache: cache, path: child), expected: renamed);
 
-        // A file appears beside the basis.
+        // A file that claims no name appears beside the basis, then one that claims a name.
         directory.WriteText(name: "notes.txt", text: string.Empty);
+
+        Assert.Same(actual: Compile(cache: cache, path: child), expected: renamed);
+
+        directory.WriteText(name: "baz.world.json", text: """{ "schema": "puck.world.definition.v1", "documentId": "baz" }""");
 
         var added = Compile(cache: cache, path: child);
 

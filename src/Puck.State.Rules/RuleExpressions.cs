@@ -423,18 +423,13 @@ public static partial class RuleExpressions {
         var time = reader.Time;
         var cursor = 0;
 
-        while (arena.TryNextCell(
+        while (arena.TryNextLiveNumber(
             cursor: ref cursor,
-            key: out var key,
-            rowOrdinal: fold.RowOrdinal
+            key: out _,
+            rowOrdinal: fold.RowOrdinal,
+            time: in time,
+            value: out var member
         )) {
-            _ = arena.TryReadLiveNumber(
-                key: key,
-                rowOrdinal: fold.RowOrdinal,
-                time: in time,
-                value: out var member
-            );
-
             var memberOutcome = Run(
                 arguments: arguments,
                 kind: fold.MemberKind,

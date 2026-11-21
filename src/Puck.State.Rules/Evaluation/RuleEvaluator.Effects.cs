@@ -437,9 +437,8 @@ public sealed partial class RuleEvaluator {
                         return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
-                    return Outcome.Finite(raw: ((resolved.TryNamed(value: out var key) && RuleReads.TryKeyIndex(
-                        index: out var index,
-                        keys: m_host.Arena.Keys,
+                    return Outcome.Finite(raw: ((resolved.TryNamed(value: out var key) && m_host.Arena.Keys.TryKeyInteger(
+                        integer: out var index,
                         key: key
                     ))
                         ? index
