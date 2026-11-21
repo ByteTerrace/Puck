@@ -244,7 +244,19 @@ the published definition, independently of checkpoint network fields. Reload
 checks that activation binding; moving an endpoint requires a fresh activation.
 `puck azure test-world-container --image <image>` boots the primary (`debug`) row, verifies a durable
 checkpoint and the expected QUIC key, then replaces the container against the
-same store and repeats the checks. Linux requires `libmsquic` and UDP ingress.
+same store and repeats the checks. The first boot runs the image's own entry point;
+the second runs the deployment's MCP shape (`WorldSiloImageLayout.McpArguments`: the
+image's CLI composing the installed Azure extensions over the silo, with an
+Azure-shaped `mcp.json` whose inventory observation builds an ARM pipeline), so an
+extension that cannot load fails CI rather than the VM. Linux requires `libmsquic` and UDP ingress.
+
+An installed extension resolves each assembly name to one copy
+(`PuckExtensionLoadContext`): the host's when the host carries at least the
+version the extension's published graph carries, otherwise the graph's, whatever
+version a reference asks for. Two copies of one name in one process split its
+types: the CLI host carries the `System.Memory.Data` Orleans pins, older than the
+Azure SDK's, and a reference to one copy's `BinaryData` finds no matching member
+on a `System.ClientModel` bound to the other (`MissingMethodException` at startup).
 Unmanaged pinned activation waits for host startup, establishes its initial checkpoint,
 and reconciles changed published content through `WorldSiloHost.ReloadAsync` and
 the ordinary rebuild submission. A release marker advances only after its
