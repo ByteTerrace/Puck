@@ -35,6 +35,10 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         await ActivateAsync();
         Assert.True(condition: rig.Cache.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var created));
         Assert.Equal(actual: created, expected: (nativePipelines + 2));
+        // The replaced pipeline's lease retires once the upload that follows the install completes
+        // (SdfWorldTables.InstallReload), which the next upload services.
+        rig.Render();
+        rig.Render();
         Assert.Equal(expected: nativePipelines + 1, actual: rig.Cache.SharedPipelines);
         // The replacement stays active on an unchanged request; neither an extra lease nor pipeline is added.
         Assert.Equal(expected: 0, actual: rig.Reload(kernels: changed));

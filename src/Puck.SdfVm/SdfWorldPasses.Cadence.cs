@@ -5,7 +5,7 @@ using Puck.Shaders;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldPasses {
-    internal ulong? SignatureOf(string instance, string part, bool temporal, in FrameContext context) {
+    internal ulong? SignatureOf(string instance, string part, bool temporal, in FrameContext context, RenderGraphExternalReads? reads) {
         var entry = Refresh(instance: instance);
 
         if (entry.View is not { } view) { return null; }
@@ -24,7 +24,9 @@ public sealed partial class SdfWorldPasses {
         if ((part == SdfWorldPackage.Parts.ShadowFar) && HoldsFar(frame: frame, instance: instance, tables: tables, view: view.View)) {
             return FarSignatureOf(entry: entry, signature: null);
         }
-        if (tables.ForcesPass(frame: frame, part: part) || entry.Picker.Pending || (entry.Convergence is { IsActive: true })) {
+        if (!frame.EnableCadenceGate || entry.Picker.Pending || (entry.Convergence is { IsActive: true }) ||
+            (ReadSignatureOf(entry: entry, frame: frame, part: part, reads: reads, view: view) is not { } images)) {
+            SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Forced);
             return ((part == SdfWorldPackage.Parts.ShadowFar) ? FarSignatureOf(entry: entry, signature: null) : null);
         }
         UpdateSurfaceInputs(entry: entry, tables: tables, view: view);
@@ -34,6 +36,7 @@ public sealed partial class SdfWorldPasses {
                 height: entry.Temporal.Epoch.Height, debug: tables.PassValues.DebugMode, temporal: temporal,
                 unread: entry.UnreadFrames), previousPoses: tables.PoseRevision)) {
                 entry.SampleRevision++;
+                SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Resampled);
             }
         }
         var hash = Fnv1aHash.Create();
@@ -41,6 +44,7 @@ public sealed partial class SdfWorldPasses {
         hash.Add(value: tables.PassSignature(frame: frame, view: Math.Min(val1: view.View, val2: (frame.Views.Count - 1)), part: part));
         hash.Add(value: entry.Bindings);
         hash.Add(value: entry.SampleRevision);
+        hash.Add(value: images);
         return ((part == SdfWorldPackage.Parts.ShadowFar) ? FarSignatureOf(entry: entry, signature: hash.Value) : hash.Value);
     }
 

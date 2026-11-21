@@ -53,7 +53,7 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
         m_owner.Leave(view: m_view);
     }
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) =>
-        m_owner.SignatureOf(instance: m_context.Instance, part: SdfWorldPackage.Parts.GlassShade, temporal: m_temporal, context: in context);
+        m_owner.SignatureOf(instance: m_context.Instance, part: SdfWorldPackage.Parts.GlassShade, temporal: m_temporal, context: in context, reads: reads);
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         _ = m_owner.Follow(instance: m_context.Instance, view: ref m_view);
         var residency = m_view.Residency;
