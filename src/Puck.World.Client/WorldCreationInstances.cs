@@ -331,7 +331,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         public readonly Vector3[] EffectorNormal = new Vector3[rig.Effectors.Count];
         public readonly float[] EffectorAlign = new float[rig.Effectors.Count];
         public readonly bool[] EffectorHasTarget = new bool[rig.Effectors.Count];
-        // Each effector's held surface-probe answer, which TryProbeSurface reuses for its bit-identical next question.
+        // Each effector's held surface-probe answer, which its next question reuses where WorldSurfaceQuery.Covers holds.
         public readonly WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer>[] EffectorProbe = new WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer>[rig.Effectors.Count];
         // A resting plant's step (CreationReplantDocument): whether the tip is mid-step, the latched point it left,
         // the point it is heading for and that point's contact normal, and how far through the step it is, in [0, 1].

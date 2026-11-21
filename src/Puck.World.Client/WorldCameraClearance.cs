@@ -155,7 +155,7 @@ public sealed class WorldCameraClearance {
         float RetractionSkin, float ObstructedSkin, float Margin) : IWorldFieldQuery<ClearanceQuery, float> {
         public static WorldFieldQueryFamily Family => WorldFieldQueryWork.Clearance;
 
-        public bool Covers(in ClearanceQuery asked) {
+        public bool Covers(in ClearanceQuery asked, in float room) {
             if (
                 (TargetObstructed != asked.TargetObstructed) ||
                 (Radius != asked.Radius) ||

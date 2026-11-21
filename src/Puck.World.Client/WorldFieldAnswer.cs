@@ -21,8 +21,10 @@ public interface IWorldFieldQuery<TQuery, TResult> where TQuery : struct, IWorld
     /// further from the answer a march of <paramref name="asked"/> would give than the bound this query's family
     /// states. A query that cannot prove that answers <see langword="false"/>, and the asked query marches.</summary>
     /// <param name="asked">The query asked now, over the same field.</param>
+    /// <param name="held">The answer this query was marched for, which a bound may read (how far a held hit lies from
+    /// the point the asker compares it with).</param>
     /// <returns>Whether the held answer may be returned for <paramref name="asked"/>.</returns>
-    bool Covers(in TQuery asked);
+    bool Covers(in TQuery asked, in TResult held);
     /// <summary>Marches the query against its field.</summary>
     /// <returns>The answer.</returns>
     TResult March();
@@ -87,7 +89,7 @@ public struct WorldFieldAnswer<TQuery, TResult> where TQuery : struct, IWorldFie
 
         WorldFieldQueryWork.Process.Count(kind: family.Requests);
 
-        if (m_held && ReferenceEquals(objA: m_query.Field, objB: asked.Field) && m_query.Covers(asked: in asked)) {
+        if (m_held && ReferenceEquals(objA: m_query.Field, objB: asked.Field) && m_query.Covers(asked: in asked, held: in m_result)) {
             WorldFieldQueryWork.Process.Count(kind: family.Reused);
 
             return m_result;

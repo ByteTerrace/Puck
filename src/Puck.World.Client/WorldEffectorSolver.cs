@@ -247,49 +247,119 @@ public static class WorldEffectorSolver {
             return false;
         }
 
-        var answered = answer.Ask(asked: new WorldSurfaceQuery(Field: field, Origin: origin, Reach: reach, Rotation: rootRotation, Standoff: standoff, Towards: towards));
+        var answered = answer.Ask(asked: new WorldSurfaceQuery(Field: field, Origin: origin, Reach: reach, Rotation: rootRotation, Standoff: standoff, Towards: towards, Normal: true));
 
         target = answered.Target;
         normal = answered.Normal;
 
         return answered.Hit;
     }
+    /// <summary>Probes a query field for the surface point under a resting effector's latched stance, only to decide
+    /// whether that stance has drifted past its replant distance: the march is reused while the decision provably
+    /// stands (<see cref="WorldSurfaceQuery.Covers"/>), and no surface normal is computed.</summary>
+    /// <param name="answer">The effector's held probe answer, shared with <see cref="TryProbeSurface"/>.</param>
+    /// <param name="field">The static-scene query field, or <see langword="null"/> when none is resolved.</param>
+    /// <param name="origin">The tip's world position — where the probe starts.</param>
+    /// <param name="towards">The probe direction in the creation's own frame.</param>
+    /// <param name="rootRotation">The body/placement root's world attitude.</param>
+    /// <param name="reach">How far to march, world units; a non-positive reach probes nothing.</param>
+    /// <param name="latch">The latched stance's surface point, world units.</param>
+    /// <param name="distance">The replant distance, world units: the drift a stance holds through.</param>
+    /// <returns><see langword="true"/> when the probe hit a surface point farther than <paramref name="distance"/>
+    /// from <paramref name="latch"/>.</returns>
+    public static bool StanceDrifted(ref WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer> answer, SdfFieldEvaluator? field, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, Vector3 latch, float distance) {
+        if ((field is null) || (reach <= 0f) || (towards.LengthSquared() <= 0f)) {
+            WorldFieldQueryWork.Surface.Skip();
+            return false;
+        }
+
+        var answered = answer.Ask(asked: new WorldSurfaceQuery(Field: field, Origin: origin, Reach: reach, Rotation: rootRotation, Standoff: 0f, Towards: towards,
+            Latch: latch, Slack: MathF.Max(x: 0f, y: distance)));
+
+        return (answered.Hit && (Vector3.Distance(value1: latch, value2: answered.Point) > distance));
+    }
 }
 /// <summary>The answer to a <see cref="WorldSurfaceQuery"/>.</summary>
 /// <param name="Hit">Whether the march hit.</param>
-/// <param name="Target">The world-space target off the hit, or the probe's origin when nothing answered.</param>
+/// <param name="Target">The world-space target off the hit, or the probe's origin when nothing answered. Meaningful only
+/// where <paramref name="HasNormal"/> holds, since the standoff is taken along the normal.</param>
 /// <param name="Normal">The hit surface's unit world normal; back along the probe where the march missed or the field
-/// reports no gradient.</param>
-public readonly record struct WorldSurfaceAnswer(bool Hit, Vector3 Target, Vector3 Normal);
+/// reports no gradient. Meaningful only where <paramref name="HasNormal"/> holds.</param>
+/// <param name="Point">The surface point the march hit, or the probe's origin when it missed.</param>
+/// <param name="HasNormal">Whether the march took the field gradient: <see cref="Normal"/> and <see cref="Target"/>
+/// are the hit's own.</param>
+public readonly record struct WorldSurfaceAnswer(bool Hit, Vector3 Target, Vector3 Normal, Vector3 Point, bool HasNormal);
 /// <summary>
 /// An effector's surface probe (<see cref="WorldEffectorSolver.TryProbeSurface"/>): a ray marched from behind the tip
-/// along a body-relative direction, its hit lifted off the field gradient by a standoff. A ray's hit is not continuous
-/// in its origin, so no drift bound holds for it: an answer is reused only for bit-identical inputs.
+/// along a body-relative direction, its hit lifted off the field gradient by a standoff.
 /// </summary>
+/// <remarks>
+/// <para>A ray's hit is not continuous in its origin, so no drift bound holds for a target: an answer that names a
+/// target is reused only for bit-identical inputs over the same field instance. The presentation field is immutable
+/// and replaced whole when the static scene changes (<see cref="WorldClient.StaticField"/>), so the instance is the
+/// field's change revision.</para>
+/// <para>A stance question (<see cref="Slack"/> positive, <see cref="WorldEffectorSolver.StanceDrifted"/>) asks only
+/// whether the hit lies farther than <see cref="Slack"/> from <see cref="Latch"/>. Over a smooth surface no steeper
+/// than <see cref="StanceSlope"/> allows, the hit moves at most <see cref="StanceDriftFactor"/> times the probe ray's
+/// drift, so a held hit within the slack by that margin answers the question as a fresh march would. The latched foot
+/// draws its latch, never the held hit, so where a step edge breaks that bound the reuse only delays a replant by a
+/// drift of at most <see cref="Slack"/> over <see cref="StanceDriftFactor"/>; it never floats or sinks a foot.</para>
+/// </remarks>
 /// <param name="Field">The static-scene query field.</param>
 /// <param name="Origin">The tip's world position, where the probe starts.</param>
 /// <param name="Towards">The probe direction in the creation's own frame; nonzero.</param>
 /// <param name="Rotation">The body/placement root's world attitude.</param>
 /// <param name="Reach">How far to march, world units; positive.</param>
 /// <param name="Standoff">How far off the hit surface, along its own normal, the target sits.</param>
-public readonly record struct WorldSurfaceQuery(SdfFieldEvaluator Field, Vector3 Origin, Vector3 Towards, Quaternion Rotation, float Reach, float Standoff) : IWorldFieldQuery<WorldSurfaceQuery, WorldSurfaceAnswer> {
+/// <param name="Normal">Whether the asker reads the normal and the target, which the field gradient at the hit gives.</param>
+/// <param name="Latch">A stance question's latched surface point, world units.</param>
+/// <param name="Slack">A stance question's replant distance, world units; zero for a question reused only on
+/// bit-identical inputs.</param>
+public readonly record struct WorldSurfaceQuery(SdfFieldEvaluator Field, Vector3 Origin, Vector3 Towards, Quaternion Rotation, float Reach, float Standoff,
+    bool Normal = false, Vector3 Latch = default, float Slack = 0f) : IWorldFieldQuery<WorldSurfaceQuery, WorldSurfaceAnswer> {
+    /// <summary>How much farther than the probe ray a stance question's hit may move: the hit on a plane at angle
+    /// θ from the ray's normal moves 1/cos θ times the ray, so 2 covers a surface up to <see cref="StanceSlope"/>.</summary>
+    public const float StanceDriftFactor = 2f;
+    /// <summary>The steepest surface, degrees from facing the probe, over which <see cref="StanceDriftFactor"/>
+    /// bounds a stance question's hit.</summary>
+    public const float StanceSlope = 60f;
+
     /// <inheritdoc/>
     public static WorldFieldQueryFamily Family => WorldFieldQueryWork.Surface;
 
     /// <inheritdoc/>
-    public bool Covers(in WorldSurfaceQuery asked) => (
-        Bits(value: Origin.X, other: asked.Origin.X) && Bits(value: Origin.Y, other: asked.Origin.Y) && Bits(value: Origin.Z, other: asked.Origin.Z) &&
-        Bits(value: Towards.X, other: asked.Towards.X) && Bits(value: Towards.Y, other: asked.Towards.Y) && Bits(value: Towards.Z, other: asked.Towards.Z) &&
-        Bits(value: Rotation.X, other: asked.Rotation.X) && Bits(value: Rotation.Y, other: asked.Rotation.Y) &&
-        Bits(value: Rotation.Z, other: asked.Rotation.Z) && Bits(value: Rotation.W, other: asked.Rotation.W) &&
-        Bits(value: Reach, other: asked.Reach) && Bits(value: Standoff, other: asked.Standoff)
-    );
+    public bool Covers(in WorldSurfaceQuery asked, in WorldSurfaceAnswer held) {
+        if (
+            (asked.Normal && !held.HasNormal) ||
+            !Bits(value: Towards.X, other: asked.Towards.X) || !Bits(value: Towards.Y, other: asked.Towards.Y) || !Bits(value: Towards.Z, other: asked.Towards.Z) ||
+            !Bits(value: Reach, other: asked.Reach)
+        ) {
+            return false;
+        }
+        if (
+            Bits(value: Origin.X, other: asked.Origin.X) && Bits(value: Origin.Y, other: asked.Origin.Y) && Bits(value: Origin.Z, other: asked.Origin.Z) &&
+            Bits(value: Rotation.X, other: asked.Rotation.X) && Bits(value: Rotation.Y, other: asked.Rotation.Y) &&
+            Bits(value: Rotation.Z, other: asked.Rotation.Z) && Bits(value: Rotation.W, other: asked.Rotation.W) &&
+            (!asked.Normal || Bits(value: Standoff, other: asked.Standoff))
+        ) {
+            return true;
+        }
+        if (!(asked.Slack > 0f) || !held.Hit) {
+            return false;
+        }
+
+        // Every point of the probe ray moves by at most |dOrigin| + length * |dDirection| between the two questions.
+        // Both marches start from origins rounded to the field's Q48.16 grid, which the float drift does not see: a few
+        // grid steps along the origin and along the ray are charged too.
+        var length = (Reach + WorldEffectorSolver.ProbeBackoff);
+        var drift = (Vector3.Distance(value1: Origin, value2: asked.Origin) + (length * Vector3.Distance(value1: Direction(), value2: asked.Direction())) +
+            ((4f + (8f * length)) / 65536f));
+
+        return ((Vector3.Distance(value1: asked.Latch, value2: held.Point) + (StanceDriftFactor * drift)) <= asked.Slack);
+    }
     /// <inheritdoc/>
     public WorldSurfaceAnswer March() {
-        var direction = Vector3.Normalize(value: Vector3.Transform(
-            rotation: Rotation,
-            value: Towards
-        ));
+        var direction = Direction();
         var start = (Origin - (direction * WorldEffectorSolver.ProbeBackoff));
 
         if (!Field.Raycast(
@@ -298,13 +368,17 @@ public readonly record struct WorldSurfaceQuery(SdfFieldEvaluator Field, Vector3
             maxDist: FixedQ4816.FromDouble(value: (Reach + WorldEffectorSolver.ProbeBackoff)),
             origin: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: start))
         )) {
-            return new WorldSurfaceAnswer(Hit: false, Normal: -direction, Target: Origin);
+            return new WorldSurfaceAnswer(Hit: false, Normal: -direction, Point: Origin, Target: Origin, HasNormal: Normal);
         }
 
         // The hit point is rebuilt from the marched distance rather than read off the returned FixedPosition, so the
         // answer stays in the same float world frame the origin was expressed in whichever cell the march ended in.
         var point = (start + (direction * ((float)hit.Distance)));
         var normal = -direction;
+
+        if (!Normal) {
+            return new WorldSurfaceAnswer(Hit: true, Normal: normal, Point: point, Target: point, HasNormal: false);
+        }
 
         // The march reports no normal, so the surface's own is the field gradient at the hit: the standoff is along the
         // surface's normal, not back along the probe, so a foot on a slope stands off perpendicular to it.
@@ -319,11 +393,16 @@ public readonly record struct WorldSurfaceQuery(SdfFieldEvaluator Field, Vector3
             normal = Vector3.Normalize(value: surface);
         }
 
-        return new WorldSurfaceAnswer(Hit: true, Normal: normal, Target: (point + (normal * MathF.Max(
+        return new WorldSurfaceAnswer(Hit: true, Normal: normal, Point: point, HasNormal: true, Target: (point + (normal * MathF.Max(
             x: 0f,
             y: Standoff
         ))));
     }
 
+    // The probe's unit world direction.
+    private Vector3 Direction() => Vector3.Normalize(value: Vector3.Transform(
+        rotation: Rotation,
+        value: Towards
+    ));
     private static bool Bits(float value, float other) => (BitConverter.SingleToInt32Bits(value: value) == BitConverter.SingleToInt32Bits(value: other));
 }
