@@ -481,9 +481,10 @@ reaches outside the server is one of these.
 | `HostFrameWork` measurements | The step thread binds its own; collect folds its parts into the iteration |
 | `WorldNarrationScope` | Set by the step thread for each tick of a wave |
 
-One thing the tick reaches is not the authority's and is not safe where it
-is. `WorldAdjacencyFields.BeginTick` runs inside the tick and resolves a
-neighbour through the host (`WorldInstanceHost.TryResolveObservedProjection`).
+One thing the tick reached was not the authority's and was not safe where it
+was: adjacency resolved a neighbour through the host
+(`WorldInstanceHost.TryResolveObservedProjection`) from inside the tick. Step 6
+moved it to prepare (`WorldTick.PrepareAdvance`); the reasoning follows.
 That reads and writes the host's tables, can start a world instance, and
 attaches or disposes an observation, whose first delivery is made straight to
 the sink. The host's tables are the pump's. So the resolution, the start, the
