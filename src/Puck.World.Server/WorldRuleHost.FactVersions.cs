@@ -65,7 +65,7 @@ public sealed partial class WorldRuleHost {
                 }
                 return true;
             }
-            var row = CarrierRowOrdinal(name: name);
+            var row = DocumentRowOrdinal(name: name);
             if (row < 0) { return false; }
             rows.Add(row);
             if (distance) {

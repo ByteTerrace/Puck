@@ -154,8 +154,8 @@ public sealed partial class WorldRuleHost {
         return false;
     }
 
-    // The catalog ordinal of a row a carrier sweep iterates, or -1.
-    private int CarrierRowOrdinal(string name) => (Host.Arena.Catalog.TryResolve(
+    // The catalog ordinal of a document row (the row a carrier sweep iterates, a board binding reads), or -1.
+    internal int DocumentRowOrdinal(string name) => (Host.Arena.Catalog.TryResolve(
         handle: out var handle,
         lane: StateLane.Document,
         name: name

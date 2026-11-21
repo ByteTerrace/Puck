@@ -35,10 +35,9 @@ public sealed partial class WorldTick : IWorldPersistedSection<WorldBoardEnforce
         m_boardReturns.Clear();
         foreach (var ordinal in WorldPlacementIndex.Of(placements: placements).ReturnBoards) {
             if (placements[ordinal] is not { Board: { Verdict: { } verdict, Move: { } move } board } placement) { continue; }
-            m_boardReturns.Add(item: new BoardReturn(PlacementId: placement.Id, Board: board, VerdictRow: DocumentRowOrdinal(name: verdict), MoveRow: DocumentRowOrdinal(name: move)));
+            m_boardReturns.Add(item: new BoardReturn(PlacementId: placement.Id, Board: board, VerdictRow: Host.RuleHost.DocumentRowOrdinal(name: verdict), MoveRow: Host.RuleHost.DocumentRowOrdinal(name: move)));
         }
     }
-    private int DocumentRowOrdinal(string name) => ((Host.RuleHost.TryResolveDocumentRow(handle: out var handle, name: name, row: out var row) && (row is not null)) ? handle.Ordinal : -1);
     private bool TryReadKeyedCell(int rowOrdinal, CellName key, out long value) {
         value = 0;
         return (rowOrdinal >= 0) && Host.Arena.Keys.TryResolve(key, out var cell) &&
