@@ -599,6 +599,8 @@ public sealed class WorldPeerHost : IDisposable {
             // mutation/rebuild that never touches Admission leaves this reference unchanged; one that does mints a
             // new list — see WorldServer.TryAdmitPeerConnection's own remarks on this parameter).
             var admissionEntriesAtVerify = m_server.Definition.Admission;
+            var clientKeyHash = client.Link.RemoteId.KeyHash;
+            var serverKeyHash = m_network.Peer.Id.KeyHash;
 
             Puck.Attestation.SignedAttestation claimAttestation;
             Puck.Attestation.SignedAttestation[] chainAttestations;
@@ -614,6 +616,8 @@ public sealed class WorldPeerHost : IDisposable {
                 outcome = WorldAdmissionDoor.TryAdmit(
                     entries: admissionEntriesAtVerify,
                     challenge: challenge,
+                    clientKeyHash: clientKeyHash,
+                    serverKeyHash: serverKeyHash,
                     claim: claimAttestation,
                     chain: chainAttestations,
                     now: m_timeProvider.GetUtcNow()
@@ -638,9 +642,12 @@ public sealed class WorldPeerHost : IDisposable {
                 return;
             }
 
+            var initialTrustIdentity = outcome.Verdict!.TrustIdentity;
             using var peerCredential = new Credential(this, admissionEntriesAtVerify, new(outcome.Domain!, outcome.ValidThrough), (policy, _) => {
-                var next = WorldAdmissionDoor.TryAdmit(policy, challenge, claimAttestation, chainAttestations, m_timeProvider.GetUtcNow());
-                return new ValueTask<VerifiedPeerIdentity?>(next.Admitted ? new VerifiedPeerIdentity(next.Domain!, next.ValidThrough) : null);
+                var next = WorldAdmissionDoor.TryAdmit(policy, challenge, clientKeyHash, serverKeyHash, claimAttestation, chainAttestations, m_timeProvider.GetUtcNow());
+                return new ValueTask<VerifiedPeerIdentity?>((next.Admitted && (next.Verdict!.TrustIdentity == initialTrustIdentity))
+                    ? new VerifiedPeerIdentity(next.Domain!, next.ValidThrough)
+                    : null);
             }, ct);
 
             // Population/grant admission runs through the ordered-domain path, fed the verified identity's own
