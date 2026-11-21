@@ -1,16 +1,13 @@
 // The mesh pass's and the surface and views passes' reads of the mesh region, SdfMeshRegion's raw word layout: one
-// record a draw (its row-vector object-to-world matrix row by row, its material, the word its first
-// index sits at, its index count, the word its first vertex sits at, its attribute flags, the word its first triangle
-// material sits at, its normal matrix, the inverse transpose of the matrix's upper 3x3, row by row, the dynamic-transform
-// slot whose frame its mesh is stored in, or -1, the word its mesh's members sit at, its carry, its clip plane and the
-// first triangle of each coarser level, and the handle of the heights it is displaced by), then the vertices, six words
-// each (position, normal), then the triangle materials, then the indices, then each mesh's members. Every offset and
-// flag is SdfMeshRecord's (Puck.SdfVm.Model), generated into sdf-render.hlsli (SDF_MESH_*). The includer's interface
-// declares the region, sdfMeshRegion, the frame's dynamic transforms, sdfDynamicTransforms, and the frame's sampled
-// table, sdfFrameSampled: sdf-world and sdf-mesh all do. Every read of the region passes through sdf-mesh-words.hlsli:
-// a record's words through sdfMeshRecordWord, a mesh's own words through sdfMeshWord. Every read of a vertex's position or normal passes through
-// sdfMeshWorldPosition, sdfMeshWorldNormal or, for the previous frame, sdfMeshPreviousPosition, which displace a height
-// field's draw (sdfMeshDisplaced), so every pass sees one surface.
+// record a draw (SdfMeshRecord), then the vertices, six words each (position, normal), then the triangle materials,
+// then the indices, then each mesh's members. Every offset and flag is SdfMeshRecord's (Puck.SdfVm.Model), generated
+// into sdf-render.hlsli (SDF_MESH_*). The includer's interface declares the region, sdfMeshRegion, the frame's dynamic
+// transforms, sdfDynamicTransforms, and the frame's sampled table, sdfFrameSampled: sdf-world and sdf-mesh all do.
+// Every read of the region passes through sdf-mesh-words.hlsli: a record's words through sdfMeshRecordWord, a mesh's
+// own words through sdfMeshWord. A draw's placement passes through sdfMeshPoseOf, which poses a draw riding its frame
+// slot from the slot's row and any other from the matrix its record holds. Every read of a vertex's position or normal
+// passes through sdfMeshWorldPosition, sdfMeshWorldNormal or, for the previous frame, sdfMeshPreviousPosition, which
+// displace a height field's draw (sdfMeshDisplaced), so every pass sees one surface.
 #ifndef SDF_MESH_HLSLI
 #define SDF_MESH_HLSLI
 #include "../field/sdf-quaternion.hlsli"
@@ -92,18 +89,70 @@ int sdfMeshRasterMaterial(uint draw, uint triangleIndex) {
 // count, first overlay row; SdfPoseOverlay) reads one stamp's slots from the overlay's rows, which hold that stamp posed
 // for this view alone; every other slot, and every slot of a view with no overlay (a zero count), reads its own row. A
 // negative slot (SDF_TRANSFORM_SLOT_NONE) wraps far past any range and reads as itself. Every reader of a mesh vertex's
-// slots (sdfMeshSkinSlotsOf, sdfMeshWorldVertex, sdfMeshPreviousPosition) and of a hit's shading frame
-// (sdfMeshHitFrameSlot, sdfMeshSurfaceNormal) goes through it.
+// slots (sdfMeshSkinSlotsOf, sdfMeshPoseOf, sdfMeshPreviousPoseOf) and of a hit's shading frame (sdfMeshHitFrameSlot,
+// sdfMeshSurfaceNormal) goes through it.
 uint sdfViewPoseSlot(uint slot) {
     uint offset = (slot - passGroup.poseOverlay.x);
     return ((offset < passGroup.poseOverlay.y) ? (passGroup.poseOverlay.z + offset) : slot);
 }
-// Carries a draw's world point and normal from the pose its frame slot's own row holds (p0, q0) to the pose the view's
-// overlay row holds for it (p1, q1): a draw's matrix is its frame slot's own row, so a view that reads the slot from an
-// overlay row places the draw under that row instead.
-void sdfViewPoseCarry(float3 p0, float4 q0, float3 p1, float4 q1, inout float3 position, inout float3 normal) {
-    position = rotatePointByQuaternion(rotatePointByInverseQuaternion(position - p0, q0), q1) + p1;
-    normal = rotatePointByQuaternion(rotatePointByInverseQuaternion(normal, q0), q1);
+// A draw's placement before its carry: the rows an object-space point goes through (x * basis + origin, the row-vector
+// convention), and the rows an object-space normal goes through (the inverse transpose of the basis, up to a positive
+// factor for a draw riding its slot, whose normals every reader normalizes).
+struct SdfMeshPose {
+    float3x3 basis;
+    float3 origin;
+    float3x3 normals;
+};
+// The pose a slot's row places a draw riding it in, at the draw's scale: the scale first, then the row's orientation
+// and position, as SdfMeshBox.Ridden places its box on the host. The orientation is read as the row holds it, so an
+// unset one is the identity.
+SdfMeshPose sdfMeshPoseOfRow(float4 position, float4 orientation, float scale) {
+    float3 x = rotatePointByQuaternion(float3(1.0, 0.0, 0.0), orientation);
+    float3 y = rotatePointByQuaternion(float3(0.0, 1.0, 0.0), orientation);
+    float3 z = rotatePointByQuaternion(float3(0.0, 0.0, 1.0), orientation);
+    SdfMeshPose pose;
+    pose.basis = float3x3(x * scale, y * scale, z * scale);
+    pose.origin = position.xyz;
+    pose.normals = float3x3(x, y, z);
+    return pose;
+}
+// The pose an affine matrix's rows place a draw in, normals going through the inverse transpose of its basis, the
+// cofactor rows over the determinant; a singular basis, which draws no area, carries normals by itself.
+SdfMeshPose sdfMeshPoseOfRows(float3 r0, float3 r1, float3 r2, float3 origin) {
+    SdfMeshPose pose;
+    pose.basis = float3x3(r0, r1, r2);
+    pose.origin = origin;
+    float3 c0 = cross(r1, r2);
+    float3 c1 = cross(r2, r0);
+    float3 c2 = cross(r0, r1);
+    float determinant = dot(r0, c0);
+    if (determinant != 0.0) {
+        pose.normals = float3x3(c0, c1, c2) * (1.0 / determinant);
+    } else {
+        pose.normals = pose.basis;
+    }
+    return pose;
+}
+// Three of a pose word table's words as a float3, from `word`.
+float3 sdfMeshPoseRow(uint word) {
+    return asfloat(uint3(sdfMeshRecordWord(word), sdfMeshRecordWord(word + 1u), sdfMeshRecordWord(word + 2u)));
+}
+// A draw's pose in this view. A draw riding its frame slot (SDF_MESH_FRAME_SLOT_WORD at or above zero) is posed by the
+// row the view reads the slot from (sdfViewPoseSlot) at the scale its record holds (SDF_MESH_SCALE_WORD), so it moves
+// as its slot's row moves and its record never does; any other by the affine matrix its pose words hold, read from the
+// record alone.
+SdfMeshPose sdfMeshPoseOf(uint record) {
+    int slot = asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD));
+    if (slot >= 0) {
+        uint shown = sdfViewPoseSlot((uint)slot);
+        return sdfMeshPoseOfRow(sdfDynamicTransforms[3u * shown], sdfDynamicTransforms[3u * shown + 1u],
+            asfloat(sdfMeshRecordWord(record + SDF_MESH_SCALE_WORD)));
+    }
+    return sdfMeshPoseOfRows(sdfMeshPoseRow(record), sdfMeshPoseRow(record + 3u), sdfMeshPoseRow(record + 6u), sdfMeshPoseRow(record + 9u));
+}
+// The uniform scale a pose takes an object-space length by: its basis's first row's length.
+float sdfMeshPoseScale(SdfMeshPose pose) {
+    return length(pose.basis[0]);
 }
 // The dynamic-transform slot whose row a resolved hit's draw shades in this view (sdfViewPoseSlot), or
 // SDF_TRANSFORM_SLOT_NONE.
@@ -143,21 +192,10 @@ uint sdfMeshMemberEntry(uint record, uint vertex) {
 uint sdfMeshMemberSlot(uint record, uint entry) {
     return (uint)(asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD)) + asint(sdfMeshWord(entry)));
 }
-// One row of a draw's matrix.
-float3 sdfMeshRow(uint record, uint row) {
-    uint word = (record + (4u * row));
-
-    return asfloat(uint3(sdfMeshRecordWord(word), sdfMeshRecordWord(word + 1u), sdfMeshRecordWord(word + 2u)));
-}
-// The uniform scale of a draw's matrix, its first row's length: a dynamic group's mesh is in its slot's own units
-// (DynamicTransform.Scale), and a vertex riding a member takes the draw's scale out of the member's frame as the rest of
-// the mesh takes it from the matrix (SdfMeshDresser.Dress).
-float sdfMeshDrawScale(uint record) {
-    return length(sdfMeshRow(record, 0u));
-}
-// A direction in a draw's object space, under its matrix without the translation (v * M, the row-vector convention).
+// A direction in a draw's object space, under its pose's basis without the translation (v * M, the row-vector
+// convention).
 float3 sdfMeshWorldDirection(uint record, float3 v) {
-    return (((v.x * sdfMeshRow(record, 0u)) + (v.y * sdfMeshRow(record, 1u))) + (v.z * sdfMeshRow(record, 2u)));
+    return mul(v, sdfMeshPoseOf(record).basis);
 }
 // The object position of the vertex a draw's index `k` names.
 float3 sdfMeshObjectPosition(uint record, uint k) {
@@ -276,35 +314,17 @@ float3 sdfMeshDisplaced(uint record, float3 p, bool previous, inout float3 norma
     return p;
 }
 #include "sdf-mesh-skin.hlsli"
-// An object-space normal under a draw's normal matrix (the inverse transpose of its matrix, so a nonuniform scale keeps
-// the normal perpendicular to the surface).
-float3 sdfMeshNormalToWorld(uint record, float3 n) {
-    uint rows = (record + SDF_MESH_NORMAL_MATRIX_WORD);
-    float3 row0 = asfloat(uint3(sdfMeshRecordWord(rows), sdfMeshRecordWord(rows + 1u), sdfMeshRecordWord(rows + 2u)));
-    float3 row1 = asfloat(uint3(sdfMeshRecordWord(rows + 3u), sdfMeshRecordWord(rows + 4u), sdfMeshRecordWord(rows + 5u)));
-    float3 row2 = asfloat(uint3(sdfMeshRecordWord(rows + 6u), sdfMeshRecordWord(rows + 7u), sdfMeshRecordWord(rows + 8u)));
-
-    return (((n.x * row0) + (n.y * row1)) + (n.z * row2));
-}
 // The world position and normal of a draw's index `k`: the vertex it names displaced by a height field's heights
-// (sdfMeshDisplaced), skinned under its members' slots in this frame (sdfMeshSkinCurrent), then under the draw's
-// row-vector matrix, whose fourth row carries translation (its normal matrix for the normal), carried to the row this
-// view reads the draw's frame slot from (sdfViewPoseCarry), and its portal carry. The normal is meaningful only for a mesh
-// that carries normals.
+// (sdfMeshDisplaced), skinned under its members' slots in this frame (sdfMeshSkinCurrent), then under the draw's pose in
+// this view (sdfMeshPoseOf: its basis and origin, the normal through its normal rows), and its portal carry. The normal
+// is meaningful only for a mesh that carries normals.
 void sdfMeshWorldVertex(uint record, uint k, out float3 position, out float3 normal) {
+    SdfMeshPose pose = sdfMeshPoseOf(record);
     normal = asfloat(sdfMeshWords3(sdfMeshVertexAt(record, k) + 3u));
     float3 object = sdfMeshDisplaced(record, sdfMeshObjectPosition(record, k), false, normal);
-    object = sdfMeshSkinCurrent(record, k, object, normal);
-    position = sdfMeshWorldDirection(record, object) + sdfMeshRow(record, 3u);
-    normal = sdfMeshNormalToWorld(record, normal);
-    uint frameSlot = asuint(asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD)));
-    uint shown = sdfViewPoseSlot(frameSlot);
-    if (shown != frameSlot) {
-        sdfViewPoseCarry(sdfDynamicTransforms[3u * frameSlot].xyz, sdfDynamicTransforms[3u * frameSlot + 1u],
-            sdfDynamicTransforms[3u * shown].xyz, sdfDynamicTransforms[3u * shown + 1u], position, normal);
-    }
-    position = sdfMeshCarryPoint(record, position);
-    normal = sdfMeshCarryDirection(record, normal);
+    object = sdfMeshSkinCurrent(record, k, object, normal, sdfMeshPoseScale(pose));
+    position = sdfMeshCarryPoint(record, mul(object, pose.basis) + pose.origin);
+    normal = sdfMeshCarryDirection(record, mul(normal, pose.normals));
 }
 float3 sdfMeshWorldPosition(uint record, uint k) {
     float3 position, normal;

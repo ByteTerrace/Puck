@@ -374,7 +374,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_previousDynamicTransforms = scope.Own(new GpuFittedBuffer(gpu.BufferFactory, NameOf("previous-dynamic-transforms"), sizing: GpuBufferSizing.Exact));
         m_previousDynamicTransforms.Fit((ulong)m_dynamicTransformRegion.ByteCount);
         m_previousMeshTransforms = scope.Own(new GpuFittedBuffer(gpu.BufferFactory, NameOf("previous-mesh-transforms"), retire: RetireBuffer));
-        m_previousMeshTransforms.Fit(MeshMatrixBytes);
+        m_previousMeshTransforms.Fit(MeshPoseBytes);
         m_meshIrradiance = scope.Own(new GpuFittedBuffer(gpu.BufferFactory, NameOf("mesh-irradiance"), sizing: GpuBufferSizing.Exact, retire: RetireBuffer));
         m_meshHistoryCopies = scope.Own(created: new GpuBufferStridedCopy(buffers: gpu.BufferFactory, bindings: gpu.Bindings,
             recorder: gpu.Recorder, pipeline: m_regionCopyPipeline, frameSlotCount: FrameRingSize, recordingCount: 2,

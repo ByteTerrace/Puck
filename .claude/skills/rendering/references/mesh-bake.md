@@ -924,8 +924,8 @@ laws exercise that boundary.
   the group's slot in the group's units (`SdfMeshGeometryBuilder.RelativePose`,
   `UnitsOf`), as an operand's snapped pose is, so the key, the detail and the lattice
   are the full-size body's; the group's draw matrix takes the scale
-  (`SdfMeshDresser.Dress`), and a member's vertex takes the draw's scale
-  (`sdfMeshDrawScale`, the current and previous positions). A body crossing a
+  (`SdfMeshDresser.Dress`, kept in the record of a draw riding its slot), and a member's vertex takes the draw's scale
+  (`sdfMeshPoseScale`, the current and previous positions). A body crossing a
   portal pair of two sizes (Wonderland) bakes nothing and draws its full-size
   mesh scaled. Its material layers stay in world units at its scale, since the
   shading reads the slots' world poses. Never fold a body's scale back into its

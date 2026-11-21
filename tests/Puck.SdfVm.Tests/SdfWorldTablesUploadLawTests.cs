@@ -700,9 +700,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         ];
         var expected = new List<uint>();
 
-        // A draw's record: its matrix row by row, its material, then the word its mesh's first index sits at, its index
+        // A draw's record: its affine rows, its material, then the word its mesh's first index sits at, its index
         // count, the word its first vertex sits at, its attribute flags, the word its first triangle material sits at, and
-        // its normal matrix (the inverse transpose of its upper 3x3), its frame slot, -1 for a mesh stored in world
+        // its frame slot, -1 for a mesh stored in world
         // space, and the word its members sit at, zero for a mesh without them. The arena starts past the reserved draw
         // records, and each
         // mesh lies whole there in the order the list first names it: the quad's four vertices, six indices and its level
@@ -739,20 +739,16 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             expected[(at + 15)] = ((uint)draw.Mesh.Levels.Count);
         }
         void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint vertexWord, uint flags, uint materialWord, uint levelWord) {
+            // A draw with no frame slot holds its affine rows: the basis rows, then the translation.
             float[] rows = [
-                matrix.M11, matrix.M12, matrix.M13, matrix.M14,
-                matrix.M21, matrix.M22, matrix.M23, matrix.M24,
-                matrix.M31, matrix.M32, matrix.M33, matrix.M34,
-                matrix.M41, matrix.M42, matrix.M43, matrix.M44,
+                matrix.M11, matrix.M12, matrix.M13,
+                matrix.M21, matrix.M22, matrix.M23,
+                matrix.M31, matrix.M32, matrix.M33,
+                matrix.M41, matrix.M42, matrix.M43,
             ];
 
             expected.AddRange(collection: rows.Select(selector: BitConverter.SingleToUInt32Bits));
             expected.AddRange(collection: [material, indexWord, indexCount, vertexWord, flags, materialWord]);
-            Assert.True(condition: Matrix4x4.Invert(matrix: matrix with { M41 = 0f, M42 = 0f, M43 = 0f }, result: out var inverse));
-
-            var normal = Matrix4x4.Transpose(matrix: inverse);
-
-            expected.AddRange(collection: new[] { normal.M11, normal.M12, normal.M13, normal.M21, normal.M22, normal.M23, normal.M31, normal.M32, normal.M33 }.Select(selector: BitConverter.SingleToUInt32Bits));
             expected.Add(item: unchecked((uint)SdfProgram.NoDynamicTransformSlot));
             expected.Add(item: 0u);
             // The identity carry (rotation, translation, a scale of one) and the clip plane that clips nothing.
@@ -837,12 +833,12 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         Assert.Equal(
             expected: BitConverter.SingleToUInt32Bits(value: 7f),
-            actual: BitConverter.ToUInt32(startIndex: ((((2 * SdfMeshRecord.DrawWords) + 14) * sizeof(uint))), value: shiftedWords)
+            actual: BitConverter.ToUInt32(startIndex: ((((2 * SdfMeshRecord.DrawWords) + 11) * sizeof(uint))), value: shiftedWords)
         );
 
         // A list that moves draws over the meshes the region holds repacks only the draw records, and the meshes it kept
         // are the ones a whole repack writes.
-        expected[((2 * SdfMeshRecord.DrawWords) + 14)] = BitConverter.SingleToUInt32Bits(value: 7f);
+        expected[((2 * SdfMeshRecord.DrawWords) + 11)] = BitConverter.SingleToUInt32Bits(value: 7f);
         Selection(draw: in shifted[2], record: 2);
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray(),
