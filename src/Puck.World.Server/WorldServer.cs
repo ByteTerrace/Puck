@@ -521,6 +521,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// time; it runs outside the gate and must not enter it.</summary>
     public Action? AuthorityGateContended { get; set; }
 
+    /// <inheritdoc cref="WorldTick.SnapshotFollows"/>
+    internal bool SnapshotFollows => m_tick.SnapshotFollows;
+
     internal void ThrowIfTickPending() {
         if (m_tick?.BlockedDetail is { } reason) {
             throw new InvalidOperationException($"Authority tick is incomplete while waiting for {reason}.");

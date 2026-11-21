@@ -8,20 +8,9 @@ public sealed partial class WorldDocument {
     private bool m_pendingStateDelivery;
     private WorldDefinition? m_pendingPresentationBasis;
 
-    /// <summary>Gets whether the delivery in progress is followed by the tick's snapshot, fanned out to every sink it
-    /// reaches before anything else is delivered: a sink that owes its observer only rows a snapshot carries can leave
-    /// them to that snapshot instead of priming.</summary>
-    internal bool SnapshotFollows { get; private set; }
-
     /// <summary>Delivers whatever the step installed and has not yet delivered: the definition after a shape change,
     /// or the state after a value change, stamped with the tick and the rows the export sweep found moved.</summary>
-    /// <param name="snapshotFollows">Whether the caller fans the tick's snapshot out to the same sinks as soon as this
-    /// returns (<see cref="SnapshotFollows"/>).</param>
-    internal void DeliverPending(bool snapshotFollows = false) {
-        SnapshotFollows = snapshotFollows;
-        try { DeliverPendingCore(); } finally { SnapshotFollows = false; }
-    }
-    private void DeliverPendingCore() {
+    internal void DeliverPending() {
         if (m_pendingDefinitionDelivery) {
             Host.ForgetMovedRows();
             Host.Output.DeliverDefinition(

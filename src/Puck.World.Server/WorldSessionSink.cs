@@ -320,7 +320,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     // otherwise a primer of the body table alone does, now, so a paused world never shows a row without its header.
     // A body table is never omitted: a snapshot without it erases every body.
     private void CompleteReplacement() {
-        if (!m_cursor.OwesRows || server.Document.SnapshotFollows || m_deliveringSnapshot) { return; }
+        if (!m_cursor.OwesRows || server.SnapshotFollows || m_deliveringSnapshot) { return; }
         FollowObserverDetach();
         if (DetachReason is null) { WorldBootWork.Count(WorldBootWork.TmpWhy[3]); DeliverSnapshot(snapshot: server.Document.BuildPrimerSnapshot(cells: false), stream: WorldStreamStamp.Unspanned); }
     }
