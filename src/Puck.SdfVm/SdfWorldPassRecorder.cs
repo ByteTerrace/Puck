@@ -1403,40 +1403,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
         Array.Clear(array: m_screens[slot]);
     }
-    // Writes each screen's image into the slot's pass set: a host's image every frame, since its handle is unique only among
-    // live objects, and the filler once while the screen shows nothing.
-    private void BindScreens(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
-        var bound = m_screens[recording.Slot];
-        var filler = tables.SampledFiller.ImageViewHandle;
-        var residency = m_view.Residency;
-
-        for (var screen = 0; (screen < SdfWorldTables.MaxScreenSurfaces); screen++) {
-            var image = (m_declaredScreens[screen]
-                ? residency.ScreenImage(
-                    leases: recording.Leases,
-                    reads: recording.Reads,
-                    screen: screen,
-                    view: m_view.View
-                )
-                : 0);
-
-            if (image == 0) {
-                if (bound[screen] == filler) {
-                    continue;
-                }
-
-                image = filler;
-            }
-
-            tables.Bindings.WriteSampledImage(
-                arrayElement: ((uint)screen),
-                binding: ScreenSourcesBinding,
-                descriptorSetHandle: set,
-                imageViewHandle: image
-            );
-            bound[screen] = image;
-        }
-    }
+    // Writes each declared screen's image into the slot's pass set.
+    private void BindScreens(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) =>
+        _ = m_view.Residency.BindScreenImages(view: m_view.View, shown: m_declaredScreens, recording: in recording, bindings: tables.Bindings,
+            binding: ScreenSourcesBinding, set: set, filler: tables.SampledFiller.ImageViewHandle, bound: m_screens[recording.Slot]);
     // Where a part counts its march steps and texels written: every one counts
     // (RenderGraphFragmentPass.CountsKernelWork), so its node always hands it a row.
     private GpuKernelCounterRow WorkCountersOf(in RenderGraphPackageRecording recording) =>

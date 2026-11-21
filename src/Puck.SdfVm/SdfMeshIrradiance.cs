@@ -675,6 +675,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
     }
 
+    /// <summary>Gets whether the volume's background work is computing on the host: a scene build runs, or the worker runs
+    /// while its probe service waits on no answer from the device. A frame driven while this holds advances nothing the
+    /// work waits for, so a device-free driver waits this out before its next frame. Safe to read from any thread.</summary>
+    public bool HostWorking {
+        get {
+            lock (m_gate) {
+                return ((m_build is { IsCompleted: false }) || ((m_worker is { IsCompleted: false }) && !(m_gpuTrace?.AwaitsDevice ?? false)));
+            }
+        }
+    }
     /// <summary>Gets whether the volume's light has converged for the lighting it is given: it is not settling at all
     /// (<see cref="Settling"/>), or, under a lighting that changes every frame (a moving sun, a keyed sky), its geometry is
     /// settled (no scene build, trace or window refill owed and every traced probe written) and the latest relight cycle

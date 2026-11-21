@@ -263,7 +263,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 }
 
                 var done = m_window.Peek();
-                var part = done.Answer.Task.GetAwaiter().GetResult();
+                var part = Await(answer: done.Answer.Task);
 
                 _ = m_window.Dequeue();
                 m_partAnswers[done.Ring] = part;
@@ -273,12 +273,21 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             // Whatever failed (a part's answer, or cutting the next part), every part already submitted is waited out, so
             // the window is empty for the next call and no job still reads the caller's arrays.
             while (m_window.TryDequeue(out var rest)) {
-                try { _ = rest.Answer.Task.GetAwaiter().GetResult(); } catch (Exception) { }
+                try { _ = Await(answer: rest.Answer.Task); } catch (Exception) { }
             }
             throw;
         }
         return answer;
     }
+    // Blocks the coordinator on a part's answer, marked as waiting for the device (AwaitsDevice) while it blocks.
+    private uint[] Await(Task<uint[]> answer) {
+        Volatile.Write(location: ref m_awaitsDevice, value: true);
+        try { return answer.GetAwaiter().GetResult(); } finally { Volatile.Write(location: ref m_awaitsDevice, value: false); }
+    }
+    private bool m_awaitsDevice;
+    /// <summary>Gets whether the coordinator is blocked on the answer of a job it submitted: the volume's background worker
+    /// waits for the device, not for host work. Safe to read from any thread.</summary>
+    internal bool AwaitsDevice => Volatile.Read(location: ref m_awaitsDevice);
     // A part submitted while the client stops is answered cancelled, as every pending job is, so its coordinator's window
     // never waits on a job that cannot be taken.
     private Task<uint[]> SubmitAsync(Job job) {
