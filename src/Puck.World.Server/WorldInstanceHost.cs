@@ -733,9 +733,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// fixed-step pump already produced (<see cref="FixedStepContext.StepTicks"/> from the call that invoked this),
     /// never a second clock this type samples on its own.</param>
     public void StepInstances(ulong masterDeltaTicks) {
-        if (TryStepInstances(masterDeltaTicks, WaitDeadline.Standalone()) is { } pending) {
-            throw new TimeoutException(pending.ToString());
-        }
+        HostWaits.ThrowIfPending(TryStepInstances(masterDeltaTicks, WaitDeadline.Synchronous()));
     }
 
     private IReadOnlyList<string>? m_stepNames;

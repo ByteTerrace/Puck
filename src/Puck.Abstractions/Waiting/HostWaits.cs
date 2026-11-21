@@ -11,8 +11,8 @@ namespace Puck.Abstractions.Waiting;
 /// <para>
 /// The host loop registers its pump thread at each control phase (<see cref="BeginPumpIteration"/>): a slice deadline
 /// wait on that thread is clipped to what the iteration's allowance has left and the time it blocked is charged to it,
-/// so sequential slice waits between two control phases block for at most one allowance in all. A stall deadline
-/// (<see cref="WaitDeadline.IsStall"/>) is charged and never clipped: its caller cannot resume the wait, so a clip
+/// so sequential slice waits between two control phases block for at most one allowance in all. A synchronous deadline
+/// (<see cref="WaitDeadline.IsSynchronous"/>) is charged and never clipped: its caller cannot resume the wait, so a clip
 /// could only fail it. A pump thread cannot claim a consumer, and a consumer's thread cannot become a pump.
 /// </para>
 /// <para>
@@ -310,6 +310,29 @@ public static class HostWaits {
         Thread.Sleep(timeout: Timeout.InfiniteTimeSpan);
     }
 
+    /// <summary>Ends a synchronous door, which waits under <see cref="WaitDeadline.Synchronous()"/> and cannot resume a
+    /// pending operation: returns when nothing is pending, and otherwise throws naming the dependency and the calling
+    /// thread's latest expired wait.</summary>
+    /// <param name="pending">The dependency the operation still waits for, or <see langword="null"/> when it
+    /// completed.</param>
+    /// <exception cref="TimeoutException"><paramref name="pending"/> is not <see langword="null"/>.</exception>
+    public static void ThrowIfPending(WaitReason? pending) {
+        if (pending is not { } reason) {
+            return;
+        }
+
+        var records = new WaitRecord[ExpiredCapacity];
+        var count = Expired(destination: records);
+        var thread = Environment.CurrentManagedThreadId;
+
+        for (var index = 0; (index < count); index++) {
+            if (records[index].ThreadId == thread) {
+                throw new TimeoutException(message: $"{reason} (expired: {records[index].Describe(nowTimestamp: Stopwatch.GetTimestamp())})");
+            }
+        }
+
+        throw new TimeoutException(message: reason.ToString());
+    }
     /// <summary>Copies the deadline waits standing now, one per waiting thread, into <paramref name="destination"/>.</summary>
     /// <param name="destination">The span to fill.</param>
     /// <returns>The number of records written, at most the span's length.</returns>
@@ -414,7 +437,7 @@ public static class HostWaits {
         var start = Stopwatch.GetTimestamp();
         var end = deadline.Timestamp;
 
-        if (slot.IsPump && !deadline.IsStall) {
+        if (slot.IsPump && !deadline.IsSynchronous) {
             end = Math.Min(val1: end, val2: start.AddSaturating(right: slot.AllowanceTicks));
         }
 

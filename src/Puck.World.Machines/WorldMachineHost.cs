@@ -490,9 +490,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
     /// <inheritdoc/>
     public void Advance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads) {
-        if (TryAdvance(stepTicks, pads, WaitDeadline.Standalone()) is { } pending) {
-            throw new TimeoutException(pending.ToString());
-        }
+        HostWaits.ThrowIfPending(TryAdvance(stepTicks, pads, WaitDeadline.Synchronous()));
     }
 
     /// <inheritdoc/>
