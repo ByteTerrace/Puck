@@ -59,6 +59,14 @@ public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineRea
         kinds: SdfMeshBakeShare.Kinds,
         name: SdfMeshBakeShare.SourceName
     );
+    /// <summary>The <c>sdf.mesh-cache</c> counters as <c>world.counters</c> reads them (<see cref="SdfMeshCache"/>): the
+    /// lattices the bakes dispatched and the groups they baked, live geometry counted apart, the tiers a stored-only
+    /// boot missed, the stored entries it had no room to read, and the tiers a ladder boot filled; pointed at the screen
+    /// binder's mesh library's counts as <see cref="MeshInputs"/> is.</summary>
+    public ForwardingWorkCounterSource MeshCache { get; } = new(
+        kinds: SdfMeshCache.Kinds,
+        name: SdfMeshCache.SourceName
+    );
     /// <summary>The <c>sdf.mesh-gi</c> counters as <c>world.counters</c> reads them (<see cref="SdfMeshIrradiance"/>):
     /// registered with the probe before the renderer exists, and pointed at the world residency's irradiance volume when
     /// the render factory stores the residency.</summary>

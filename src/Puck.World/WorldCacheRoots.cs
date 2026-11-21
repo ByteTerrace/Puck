@@ -33,4 +33,8 @@ public sealed class WorldCacheRoots {
     /// <summary>Gets the absolute directory the baked-mesh store (<see cref="Puck.SdfVm.SdfMeshStore"/>) keeps its
     /// entries in.</summary>
     public string Meshes { get; }
+    /// <summary>Gets what the presentation's bakes do about a tier of a mesh the store lacks
+    /// (<see cref="Puck.SdfVm.SdfMeshCachePolicy"/>): bake what the view demands, an author's boot; bake every tier of
+    /// what it draws, the producer of a shipped cache; or draw stored tiers alone, the build that ships one.</summary>
+    public Puck.SdfVm.SdfMeshCachePolicy MeshPolicy { get; init; }
 }

@@ -117,22 +117,30 @@ image of about 291 MB that every Puck change rewrites.
 
 **Delivers, in this order:**
 
-1. **A set whole for the tiers a target demands.** The `player` job holds the
-   channel's publish when a backend has no set for the build's bake identity,
-   or when its set was produced for other groups than the release's world
-   plans (`puck world caches fetch`; the set's record carries the world's
-   plan, `WorldCachePlan`). It cannot tell whether the producer's store held
-   every tier a view demands at each target, so a set produced from a store
-   that was not settled still passes. `produce` could read the baking boots'
-   own check pass, which reports the groups it baked over the finished store,
-   and refuse a set whose check baked any; a device whose detail never settles
-   (the `rtx2060` profile on Direct3D 12 may be one,
-   [residency and streaming](open-items.md#residency-and-streaming)) re-bakes
-   tiers in play however complete its set is, so that refusal needs the
-   settle question answered first. *Check:* a producer folder whose check pass
-   baked a group produces no set, and one whose check pass baked none
-   produces; the 2060's first boot of the released build reports zero groups
-   baked on both backends.
+1. **The whole set, read on the consumer.** The producer fills every detail
+   tier of what the world's authored spawn points draw
+   (`SdfMeshCachePolicy.Ladder`), a player's build draws stored tiers alone
+   (`SdfMeshCachePolicy.Stored`), and a folder is complete only when each
+   target's check boot settles at every place with no lattice dispatched, no
+   group baked and no tier missed
+   ([the decision](../decisions/runtime-and-delivery.md#the-player-channel)).
+   Three things remain. The reading on the consumer machine itself: the RTX
+   2060's boots of the next released build, both backends, at rest and over
+   the benchmark route, with `world.counters sdf.mesh-cache` read at the end.
+   The geometry a world's rules make in play (dealt cards, set type, a moved
+   cutter) has no stored tier and still bakes on the player's machine: the
+   route shows how much of it there is, and whether it needs a budget of its
+   own. A residency no authored spawn point shows is filled only as far as its
+   frames came, so a place that opens one needs a spawn point or the fill
+   needs a door that draws it. Two costs of the fill are open as well. It
+   bakes at the frame budget's pace, several times slower than a tick-locked
+   bake, because a fill started tick-locked in a running world never settles:
+   its frame stays withheld for its meshes (`SdfWorldResidency.MeshesPending`)
+   after every ladder is whole. And a whole set is about three times a
+   demand set's bytes, most of them tiers of far geometry no player reaches;
+   bounding a ladder's finest tier by how near a body can stand needs the
+   world's reach, which nothing computes yet. *Check:* the 2060's route reads
+   zero `rungs-missed`, and its `groups-baked` are all geometry a rule made.
 2. **The first boot after an update.** The driver's pipeline cache is per
    adapter and driver, so it is never shipped, and every release's first boot
    compiles the engine's pipelines on the player's machine; the 2060's one

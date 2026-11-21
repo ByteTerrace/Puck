@@ -130,6 +130,9 @@ public static class WorldCachesCommand {
                     ["commit"] = record["commit"]?.DeepClone(),
                     ["runtime"] = record["runtime"]?.DeepClone(),
                     ["targets"] = record["targets"]?.DeepClone(),
+                    // What the producer's boots read of the finished store: each target's check settled having
+                    // dispatched, baked and missed nothing, or the folder would not be complete.
+                    ["checked"] = record["checked"]?.DeepClone(),
                     ["plan"] = WorldCachePlan.ToJson(keys: plan),
                     ["files"] = files,
                 };

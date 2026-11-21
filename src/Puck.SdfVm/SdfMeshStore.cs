@@ -153,6 +153,15 @@ public sealed class SdfMeshStore {
     /// <param name="geometry">The group's geometry.</param>
     /// <returns><see langword="false"/> when the entry is known to be absent.</returns>
     public bool MayHold(UInt128 identity, SdfMeshGeometry geometry) => EntrySetOf(identity, Extension).MayHold(KeyOf(identity, geometry));
+    /// <summary>Returns whether the store holds an entry for a geometry under a bake's identity, as this process knows
+    /// it: the identity's listed entries with this process's writes and deletes once the listing stands, and the file
+    /// system's own answer (<see cref="Contains"/>) until then. Unlike <see cref="MayHold"/> it never answers for an
+    /// entry it has not seen, so a caller that decides what to draw from what is stored asks this.</summary>
+    /// <param name="identity">The bake's identity.</param>
+    /// <param name="geometry">The group's geometry.</param>
+    /// <returns><see langword="true"/> when the store holds the entry.</returns>
+    public bool Holds(UInt128 identity, SdfMeshGeometry geometry) =>
+        (EntrySetOf(identity, Extension).Holds(KeyOf(identity, geometry)) ?? Contains(identity: identity, geometry: geometry));
     /// <summary>Reads a geometry's mesh under a bake's identity: the mesh and the material ids its group's shapes carried,
     /// in the order the geometry numbers them (<see cref="SdfMeshLibrary.Store"/>). An entry the store refuses is
     /// deleted.</summary>
@@ -656,6 +665,10 @@ public sealed class SdfMeshStore {
 
         public bool MayHold(UInt128 key) {
             lock (m_gate) { return (!m_listed || m_keys.Contains(key)); }
+        }
+        // Whether the set holds a key; null until the listing stands, when only the file system knows.
+        public bool? Holds(UInt128 key) {
+            lock (m_gate) { return (m_listed ? m_keys.Contains(key) : (m_keys.Contains(key) ? true : null)); }
         }
         public void Listed(List<UInt128> keys) {
             lock (m_gate) {

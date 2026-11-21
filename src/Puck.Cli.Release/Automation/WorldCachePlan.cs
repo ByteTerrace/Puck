@@ -13,8 +13,9 @@ namespace Puck.Cli.Automation;
 /// It names every group the world plans, so a document change to one group's surface makes the set stale for a release.
 /// The plan is compared rather than looked up in the store because a live frame keys some groups (a posed character's
 /// parts) by poses a rest scene does not stand, so those keys cannot be enumerated offline. What the plan cannot show
-/// is whether the producer's store held every group and tier a view demands; the player folder's own check boots, which
-/// load the finished store, report that.</remarks>
+/// is whether the producer's store held every group and tier a view demands; the player folder's own check boots
+/// (<see cref="WorldPlayerCommand"/>), which draw the finished store alone on each target's profile at every authored
+/// place, show that, and a folder whose check boots did not is not complete, so it produces no set.</remarks>
 public static class WorldCachePlan {
     /// <summary>Plans the groups of the world a player folder runs.</summary>
     /// <param name="folder">The player folder, whose <c>worlds/</c> holds the compiled package.</param>

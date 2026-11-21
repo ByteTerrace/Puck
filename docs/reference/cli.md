@@ -374,22 +374,39 @@ provider is one); compiles the package's parent directory into `worlds/` as
 `compile --tree` does; and exports the package's specialized shading kernels into
 `derived/` as `world prepare` does, and prepares every file a machine of the
 package can mount from its content folders into `cache/derived/`. It then boots
-the published engine itself, windowed and paused at its first tick, once per
-`--backend` and `--target`, with `--cache-dir cache`: each boot applies the
-target's device profile (a name of the world's `render.devices`, or `auto`) at
-the target's window size and waits for its bakes to settle, which fills `cache/`
-with the baked meshes, compiled worlds and compiles a consumer's boot of the same
-folder reads. The bakes' intermediates (stage checkpoints and sample sets) land
-in `cache/meshes-intermediates/` under their own bound, where a rerun reuses them
-and a release leaves them out. With `--no-bake` (a machine without a GPU) one
-headless boot fills the device-free caches instead, and the mesh store stays
-empty until `world caches fetch` fills it. A second boot of each pair over the finished store reports the
-groups it baked and the groups it loaded, which `player.json` keeps under
-`checked`; a store that hits bakes none. The
-mesh store keys by the bake's code and kernel bytecode, never the adapter, but the
-tiers a view demands follow its window size and its profile's memory bars, so each
-consumer device gets its own target. The driver's pipeline cache is per adapter
-and is not shipped. A consumer starts the folder with
+the published engine itself, windowed, with `--cache-dir cache`. Every boot
+waits for its bakes to settle where it spawns and then at each spawn point the
+world's documents author, posing the first body there (`body.pose spawn:<id>`),
+so the residencies a place opens (a portal's far side, a screen's session) are
+drawn too.
+
+- **The fill**, once per `--backend`, runs with `--mesh-cache ladder`: it bakes
+  every detail tier of every mesh those places draw, not only the tier its own
+  view asks, so the tiers a target's window size, distance or memory budget
+  asks are all in the store. It fills `cache/` with the baked meshes, compiled
+  worlds and compiles a consumer's boot of the same folder reads. The bakes'
+  intermediates (stage checkpoints and sample sets) land in
+  `cache/meshes-intermediates/` under their own bound, where a rerun reuses
+  them and a release leaves them out.
+- **The check**, once per `--backend` and `--target`, runs as a player's build
+  does, with `--mesh-cache stored` on the target's device profile (a name of
+  the world's `render.devices`, or `auto`) at the target's window size, and
+  reads the engine's `sdf.mesh-cache` counters when its last wait ends.
+
+`player.json` keeps each boot's reading under `checked` (`places`, `settled`,
+`unsettled`, `dispatches`, `liveDispatches`, `groupsBaked`, `liveBaked`,
+`tiersMissed`, `loadsDeclined`, `tiersFilled`, `loaded`). It says `complete`
+only when every boot settled at every place and every check missed no tier and
+baked nothing but live geometry, which the world makes as it runs (a mesh that
+reads an operand's pose or a sampled field that moved) and no cache can hold;
+otherwise `incomplete` lists why, the verb exits 1, and `world caches produce`
+refuses the folder. Settling and baking are read apart: a boot can
+settle having baked, and can bake nothing while its detail still moves between
+stored tiers under a memory budget. With `--no-bake` (a machine without a GPU)
+one headless boot fills the device-free caches instead, and the mesh store
+stays empty until `world caches fetch` fills it. The mesh store keys by the
+bake's code and kernel bytecode, never the adapter. The driver's pipeline cache
+is per adapter and is not shipped. A consumer starts the folder with
 `--world worlds/<package> --cache-dir cache`. The verb writes `player.json` at
 its first write (incomplete) and again at its end, and rebuilds only a folder
 that holds one: everything but `cache/` is replaced, and the caches stay, since

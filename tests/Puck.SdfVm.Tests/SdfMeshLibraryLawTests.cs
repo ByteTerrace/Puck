@@ -395,7 +395,7 @@ public sealed class SdfMeshLibraryLawTests {
 
         using var library = new SdfMeshLibrary(allocator: new HeapAllocator(), store: store);
 
-        Assert.True(condition: library.TryLoad(geometry: geometry, identity: identity, materials: [7], mesh: out var first, refusal: out _));
+        Assert.True(condition: library.TryLoad(geometry: geometry, identity: identity, materials: [7], mesh: out var first, refusal: out _, declined: out _));
         Assert.True(condition: library.TryTake(geometry: geometry, identity: identity, materials: [20], mesh: out var second));
         Assert.Equal(expected: [7u, 7u, 7u], actual: first!.TriangleMaterials.ToArray());
         Assert.Equal(expected: [20u, 7u, 20u], actual: second.TriangleMaterials.ToArray());
@@ -421,7 +421,7 @@ public sealed class SdfMeshLibraryLawTests {
 
         using var library = new SdfMeshLibrary(allocator: new HeapAllocator(), store: store);
 
-        Assert.True(condition: library.TryLoad(geometry: geometry, identity: identity, materials: [0, 1], mesh: out var native, refusal: out _));
+        Assert.True(condition: library.TryLoad(geometry: geometry, identity: identity, materials: [0, 1], mesh: out var native, refusal: out _, declined: out _));
         Assert.NotNull(@object: native);
         AssertSamePlanes(actual: native, expected: arrays);
         AssertARestoreWritesTheSameWords(native: native);
