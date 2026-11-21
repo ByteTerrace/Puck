@@ -486,9 +486,13 @@ A recovered source is reported as a failed deployment, not a successful upgrade.
 `world release deploy` verifies the package, retains its files and versioned
 deployment inputs, protects and pulls the exact source and target registry
 digests, and runs qualification before entering the coordinator. Repeating a
-pending target resumes it; another target refuses. A previous rollback window
+pending target resumes it; another target refuses, except that it supersedes an
+unfinished first deployment (abandoned when it captured no recovery root,
+recovered otherwise). A previous rollback window
 must be finalized before a third release. Bootstrap refuses existing unmanaged
-workers and persisted gameplay. Azure production runs this same command after
+workers and persisted gameplay; a worker an earlier recovered bootstrap of the
+group left is replaced with fresh compute, and a bootstrap's recovery deletes
+its compute. Azure production runs this same command after
 `azure prepare-world-release`.
 Deployment automatically exports all source worlds at one simulation boundary.
 The worker retains complete immutable checkpoints, and the CLI builds an isolated

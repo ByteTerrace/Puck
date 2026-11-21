@@ -41,16 +41,34 @@ public static partial class AzureCommand {
                     (current is { } pending) &&
                     (pending.Record.PendingOperationId is { } existingOperation)
                 ) {
+                    var requestedOther = ((operationId is { } requested) && (requested != existingOperation));
+
                     if (
-                        (pending.Record.PendingTargetRelease != manifest.Identity) ||
-                        ((operationId is { } requested) && (requested != existingOperation))
+                        (pending.Record.PendingTargetRelease != manifest.Identity) &&
+                        !requestedOther &&
+                        (pending.Record.ActiveRelease is null) &&
+                        !pending.Record.PendingCommitted
                     ) {
-                        throw new InvalidOperationException(message: $"operation {existingOperation:D} is already pending; run 'puck world release resume'");
+                        // A first deployment that never committed holds nothing a newer release must keep: a newer
+                        // bootstrap supersedes it, so a failed one never needs a hand-run resume before the next deploy.
+                        current = await SupersedeWorldReleaseBootstrapAsync(
+                            context: context,
+                            state: pending,
+                            successor: manifest.Identity,
+                            token: token
+                        ).ConfigureAwait(continueOnCapturedContext: false);
+                    } else {
+                        if (
+                            (pending.Record.PendingTargetRelease != manifest.Identity) ||
+                            requestedOther
+                        ) {
+                            throw new InvalidOperationException(message: $"operation {existingOperation:D} is already pending; run 'puck world release resume'");
+                        }
+                        return await ResumeWorldReleaseCoreAsync(
+                            context: context,
+                            token: token
+                        ).ConfigureAwait(continueOnCapturedContext: false);
                     }
-                    return await ResumeWorldReleaseCoreAsync(
-                        context: context,
-                        token: token
-                    ).ConfigureAwait(continueOnCapturedContext: false);
                 }
                 if (current?.Record.ActiveRelease == manifest.Identity) {
                     var active = await LoadWorldReleaseDeploymentAsync(

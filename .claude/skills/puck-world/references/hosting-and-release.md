@@ -355,6 +355,14 @@ bytes, never `LoadDefinitionAsync`'s initialized result. A different published
 definition is replaced only when an earlier bootstrap of the same group captured
 it in a recovery root (`PublishedByRecoveredBootstrapAsync` reads the group's
 history), so a fixed release can bootstrap again after a failed first deploy.
+Workers follow the same evidence: a bootstrap that finds a worker replaces it (deletes the scale set, then creates
+fresh compute at Activate) only when `WorldReleaseGroupRecord.HasRecoveredBootstrap` holds, that is, the group never
+committed and its history records a bootstrap that captured roots and recovered; otherwise it refuses. A bootstrap's
+recovery deletes its compute (`StopCandidateAsync` with no source), since nothing restarts on it and Azure's
+automatic repairs would keep rerunning the refused extension. A deploy of another release supersedes the group's
+unfinished bootstrap (`WorldReleaseCoordinator.SupersedeBootstrapAsync`): one with no recovery root is abandoned
+(`AbandonBootstrapAsync` keeps any roots it saved unrecorded), one with roots is recovered. So every failed
+bootstrap leaves a group the next deploy can bootstrap without a hand-run resume or an Azure change.
 Every pre-commit recovery outcome names its cause: `RecoverPreCommitAsync` is
 the one door, and it appends the failure that began recovery to every result. `world prepare` relocates
 provider-declared machine asset paths from nested origins to the common worlds

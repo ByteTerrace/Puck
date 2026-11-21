@@ -27,12 +27,65 @@ public static partial class AzureCommand {
                 Snapshot: state
             );
         }
-        var candidate = await LoadWorldReleaseDeploymentAsync(
+        // Staging holds nothing a later look needs, so it is deleted however the step ends.
+        using var temporary = RunDirectory.Create(
+            keepOnFailure: false,
+            prefix: "puck-release-resume-"
+        );
+        var (candidate, runtime) = await CreateWorldReleaseRuntimeAsync(
             context: context,
-            identity: state.Record.PendingTargetRelease!,
+            record: state.Record,
+            temporary: temporary.Path,
             token: token
         ).ConfigureAwait(continueOnCapturedContext: false);
-        var source = ((state.Record.PendingSourceRelease is { } sourceIdentity)
+
+        return await new WorldReleaseCoordinator(groups: context.Groups).ResumeAsync(
+            state,
+            candidate,
+            runtime,
+            token
+        ).ConfigureAwait(continueOnCapturedContext: false);
+    }
+    // Ends the group's unfinished bootstrap of another release (WorldReleaseCoordinator.SupersedeBootstrapAsync) and
+    // returns the group state that holds no pending operation, or refuses with the reason it could not end.
+    private static async Task<WorldReleaseGroupSnapshot> SupersedeWorldReleaseBootstrapAsync(WorldReleaseContext context,
+        WorldReleaseGroupSnapshot state, string successor, CancellationToken token) {
+        using var temporary = RunDirectory.Create(
+            keepOnFailure: false,
+            prefix: "puck-release-supersede-"
+        );
+        var (candidate, runtime) = await CreateWorldReleaseRuntimeAsync(
+            context: context,
+            record: state.Record,
+            temporary: temporary.Path,
+            token: token
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        var result = await new WorldReleaseCoordinator(groups: context.Groups).SupersedeBootstrapAsync(
+            state,
+            successor,
+            candidate,
+            await runtime.FindCapturedRootsAsync(
+                cancellationToken: token,
+                operationId: state.Record.PendingOperationId!.Value
+            ).ConfigureAwait(continueOnCapturedContext: false),
+            runtime,
+            token
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        Console.WriteLine(value: $"Superseded operation {state.Record.PendingOperationId:D}: {result.Detail}");
+        return ((result.Snapshot is { Record.PendingOperationId: null } ended)
+            ? ended
+            : throw new InvalidOperationException(message: $"the unfinished bootstrap {state.Record.PendingOperationId:D} could not be superseded: {result.Detail}"));
+    }
+    // The Azure runtime driver for the record's pending operation, over its retained source and target deployments.
+    private static async Task<(WorldReleaseManifest Candidate, AzureWorldReleaseRuntime Runtime)> CreateWorldReleaseRuntimeAsync(
+        WorldReleaseContext context, WorldReleaseGroupRecord record, string temporary, CancellationToken token) {
+        var candidate = await LoadWorldReleaseDeploymentAsync(
+            context: context,
+            identity: record.PendingTargetRelease!,
+            token: token
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        var source = ((record.PendingSourceRelease is { } sourceIdentity)
             ? await LoadWorldReleaseDeploymentAsync(
                 context: context,
                 identity: sourceIdentity,
@@ -40,56 +93,42 @@ public static partial class AzureCommand {
             ).ConfigureAwait(continueOnCapturedContext: false)
             : null
         );
-        // Staging holds nothing a later look needs, so it is deleted however the step ends.
-        using (var temporary = RunDirectory.Create(
-            keepOnFailure: false,
-            prefix: "puck-release-resume-"
-        )) {
-            var runtime = new AzureWorldReleaseRuntime(
-                context.ResourceGroup,
-                context.Group,
-                temporary.Path,
-                Text(value: Value(
-                    context.Outputs,
-                    "worldSiloStorageEndpoint"
-                )),
-                Text(value: Value(
-                    context.Outputs,
-                    "worldSiloClientId"
-                )),
-                context.Groups,
-                context.Authority,
-                context.Archive,
-                new WorldReleaseRestore(
-                    context.Blobs,
-                    Puck.Storage.Azure.AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: Text(value: Value(
-                        context.Outputs,
-                        "worldSiloStorageEndpoint"
-                    ))),
-                    context.Owner,
-                    context.Clock
-                ),
-                source,
-                candidate,
-                ct => InitializeWorldReleaseBootstrapAsync(
-                    candidate.Manifest,
-                    context.Archive,
-                    context.Authority,
-                    context.Owner,
-                    LocalWorldsDirectory,
-                    state.Record.History,
-                    ct
-                ),
-                context.Clock
-            );
+        var endpoint = Text(value: Value(
+            context.Outputs,
+            "worldSiloStorageEndpoint"
+        ));
 
-            return await new WorldReleaseCoordinator(groups: context.Groups).ResumeAsync(
-                state,
+        return (candidate.Manifest, new AzureWorldReleaseRuntime(
+            context.ResourceGroup,
+            context.Group,
+            temporary,
+            endpoint,
+            Text(value: Value(
+                context.Outputs,
+                "worldSiloClientId"
+            )),
+            context.Groups,
+            context.Authority,
+            context.Archive,
+            new WorldReleaseRestore(
+                context.Blobs,
+                Puck.Storage.Azure.AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: endpoint),
+                context.Owner,
+                context.Clock
+            ),
+            source,
+            candidate,
+            ct => InitializeWorldReleaseBootstrapAsync(
                 candidate.Manifest,
-                runtime,
-                token
-            ).ConfigureAwait(continueOnCapturedContext: false);
-        }
+                context.Archive,
+                context.Authority,
+                context.Owner,
+                LocalWorldsDirectory,
+                record.History,
+                ct
+            ),
+            context.Clock
+        ));
     }
 
     /// <summary>Publishes each definition of a first release, as the exact bytes the archive retains, through an unowned

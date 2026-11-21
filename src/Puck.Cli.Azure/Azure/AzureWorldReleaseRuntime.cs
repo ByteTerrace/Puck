@@ -114,6 +114,22 @@ public static partial class AzureCommand {
                 deployment
             ).ConfigureAwait(continueOnCapturedContext: false);
         }
+        /// <summary>Finds the recovery roots saved under an operation for this release's inventory, recorded in the group
+        /// or not, by root key; an identity with no saved root is absent.</summary>
+        public async Task<SortedDictionary<string, string>> FindCapturedRootsAsync(Guid operationId, CancellationToken cancellationToken) {
+            var captured = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
+
+            foreach (var identity in m_identities) {
+                var saved = await authority.FindRecoveryRootAsync(
+                    identity,
+                    operationId,
+                    cancellationToken
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                if (saved is { } root) { captured[identity.RootKey] = root.Pin; }
+            }
+            return captured;
+        }
         private async Task<string> GuestGuardAsync(WorldReleaseGroupRecord operation, WorldReleaseOperationPhase[] phases, CancellationToken token) {
             await RequireAsync(
                 cancellationToken: token,
@@ -245,14 +261,29 @@ public static partial class AzureCommand {
             IReadOnlyDictionary<string, string> roots;
 
             if (source is null) {
-                if ((await WorkersAsync(
+                if ((await StableWorkersAsync(
+                    clock: clock,
                     group: resourceGroup,
                     scaleSet: scaleSet
                 ).ConfigureAwait(continueOnCapturedContext: false)).Length != 0) {
-                    return new(
-                        false,
-                        "bootstrap refuses an existing worker without an adopted managed release"
-                    );
+                    if (!operation.HasRecoveredBootstrap) {
+                        return new(
+                            false,
+                            "bootstrap refuses an existing worker that no earlier recovered bootstrap of this group left behind"
+                        );
+                    }
+                    // The worker is an earlier bootstrap's, and no release ever ran on it. The candidate starts on fresh
+                    // compute, as a first bootstrap's does, rather than on a host a failed release configured.
+                    await RequireAsync(
+                        cancellationToken: cancellationToken,
+                        expected: operation,
+                        phases: [WorldReleaseOperationPhase.Drain]
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    await DeleteWorldComputeAsync(
+                        clock: clock,
+                        group: resourceGroup,
+                        scaleSet: scaleSet
+                    ).ConfigureAwait(continueOnCapturedContext: false);
                 }
                 await initializeBootstrap(cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
                 var captured = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
@@ -270,17 +301,10 @@ public static partial class AzureCommand {
                 }
                 roots = captured;
             } else {
-                var retained = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
-
-                foreach (var identity in m_identities) {
-                    var saved = await authority.FindRecoveryRootAsync(
-                        identity,
-                        operation.PendingOperationId!.Value,
-                        cancellationToken
-                    ).ConfigureAwait(continueOnCapturedContext: false);
-
-                    if (saved is { } root) { retained[identity.RootKey] = root.Pin; }
-                }
+                var retained = await FindCapturedRootsAsync(
+                    cancellationToken: cancellationToken,
+                    operationId: operation.PendingOperationId!.Value
+                ).ConfigureAwait(continueOnCapturedContext: false);
                 var workers = await WorkersAsync(
                     group: resourceGroup,
                     scaleSet: scaleSet
@@ -503,6 +527,19 @@ public static partial class AzureCommand {
                 expected: operation,
                 phases: [WorldReleaseOperationPhase.Recover]
             ).ConfigureAwait(continueOnCapturedContext: false);
+            if (source is null) {
+                // A bootstrap has no source to restart, so its recovery keeps no compute: a worker left behind would
+                // only rerun the refused bootstrap under Azure's automatic repairs, and the next bootstrap starts fresh.
+                await DeleteWorldComputeAsync(
+                    clock: clock,
+                    group: resourceGroup,
+                    scaleSet: scaleSet
+                ).ConfigureAwait(continueOnCapturedContext: false);
+                return new(
+                    true,
+                    "the bootstrap's compute was deleted"
+                );
+            }
             var workers = await WorkersAsync(
                 group: resourceGroup,
                 scaleSet: scaleSet
