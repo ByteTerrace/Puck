@@ -67,12 +67,14 @@ bool sdfViewsLightReachesBox(SdfLight light, float3 position, float3 low, float3
 // Whether a screen's face, at `origin` facing `facing`, has any point of the box `low`..`high` in front of its plane:
 // the box's farthest reach along the facing, its centre's offset plus its half extent projected on the facing's
 // magnitudes.
-bool sdfViewsScreenFacesBox(float3 origin, float3 facing, float3 low, float3 high) {
+bool sdfViewsScreenFacesBox(float3 origin, float3 facing, float range, float3 low, float3 high) {
     float3 center = ((low + high) * 0.5);
     float3 extent = ((high - low) * 0.5);
     float3 offset = (center - origin);
+    float reach = (range * (1.0 + SdfViewsLightReachMargin));
 
-    return ((dot(facing, offset) + dot(abs(facing), extent)) > (-SdfViewsLightReachMargin * (length(offset) + length(extent))));
+    return ((sdfViewsBoxDistanceSquared(origin, low, high) <= (reach * reach)) &&
+        ((dot(facing, offset) + dot(abs(facing), extent)) > (-SdfViewsLightReachMargin * (length(offset) + length(extent)))));
 }
 
 // The masks of the lights and screens the tile's walks visit: the view's that can reach a hit point of the tile.
@@ -166,8 +168,8 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
                 float3 origin = surface.origin.xyz;
                 float3 facing = normalize(cross(surface.right.xyz, surface.up.xyz));
 
-                if ((nearHeld && sdfViewsScreenFacesBox(origin, facing, nearLow, nearHigh))
-                    || (farHeld && sdfViewsScreenFacesBox(origin, facing, farLow, farHigh))) {
+                if ((nearHeld && sdfViewsScreenFacesBox(origin, facing, surface.origin.w, nearLow, nearHigh))
+                    || (farHeld && sdfViewsScreenFacesBox(origin, facing, surface.origin.w, farLow, farHigh))) {
                     InterlockedOr(sdfViewsLightTile[4], (1u << lane));
                 }
             }

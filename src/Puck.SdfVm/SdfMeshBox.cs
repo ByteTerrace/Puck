@@ -88,7 +88,8 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
     /// <param name="draw">The draw.</param>
     /// <param name="box">The box, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="false"/> for a draw whose mesh has members (<see cref="SdfMesh.Members"/>): those vertices
-    /// ride dynamic-transform slots the GPU reads, so no host box bounds them and every pass draws them. A displaced
+    /// ride dynamic-transform slots, so the record's box is the one a residency's tables derive from the slots
+    /// (<see cref="TryOfSkin"/>) whenever they move, not the draw's. A displaced
     /// draw's box spans its displacement's band of heights (<see cref="SdfMeshDraw.Displacement"/>) as well as its
     /// mesh's.</returns>
     public static bool TryOf(in SdfMeshDraw draw, out SdfMeshBox box) {
@@ -178,6 +179,20 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
         box = Placed(center: ((low + high) * 0.5f), draw: in draw, half: new Vector3(value: radius));
 
         return true;
+    }
+
+    /// <summary>Returns the world-axis box that holds two boxes, the larger of their stretches its own.</summary>
+    /// <param name="first">The first box.</param>
+    /// <param name="second">The second box.</param>
+    /// <returns>The box.</returns>
+    public static SdfMeshBox Enclosing(in SdfMeshBox first, in SdfMeshBox second) {
+        var low = Vector3.Min(value1: (first.Center - first.AxisHalf), value2: (second.Center - second.AxisHalf));
+        var high = Vector3.Max(value1: (first.Center + first.AxisHalf), value2: (second.Center + second.AxisHalf));
+        var half = ((high - low) * 0.5f);
+
+        return new SdfMeshBox(Center: ((low + high) * 0.5f), HalfX: new Vector3(x: half.X, y: 0f, z: 0f), HalfY: new Vector3(x: 0f, y: half.Y, z: 0f), HalfZ: new Vector3(x: 0f, y: 0f, z: half.Z)) {
+            Stretch = MathF.Max(x: first.Stretch, y: second.Stretch),
+        };
     }
 
     // The box an object-space box of a draw's mesh becomes under the draw's matrix and then its carry.

@@ -497,7 +497,7 @@ public static class SdfMeshRegion {
     /// <param name="glass">Whether the draw is glass (<see cref="SdfMeshDraw.Glass"/>).</param>
     /// <returns><see langword="false"/> for an absent record (<see cref="WriteAbsent"/>), which no pass draws.</returns>
     public static bool ReadSelection(ReadOnlySpan<uint> record, out SdfMeshBox? box, out bool glass) {
-        var selection = record.Slice(length: 16, start: SdfMeshRecord.SelectionWord);
+        var selection = record.Slice(length: SelectionWords, start: SdfMeshRecord.SelectionWord);
         var flags = selection[3];
 
         glass = ((flags & 2u) != 0u);
@@ -517,6 +517,34 @@ public static class SdfMeshRegion {
         }
 
         return true;
+    }
+    /// <summary>The words of a record's selection rows, from <see cref="SdfMeshRecord.SelectionWord"/>.</summary>
+    public const int SelectionWords = 16;
+    /// <summary>Writes the box a draw is selected by into a record's selection words, as <see cref="ReadSelection"/> reads
+    /// it, leaving every other selection word as it stands: a box's center and half axes and its stretch, or the unboxed
+    /// flag for a draw no host box bounds, which every pass draws. A skinned draw's record takes its host bound
+    /// (<see cref="SdfMeshBox.TryOfSkin"/>) here, whenever its members move.</summary>
+    /// <param name="selection">The record's <see cref="SelectionWords"/> selection words.</param>
+    /// <param name="box">The box, or <see langword="null"/> for none.</param>
+    public static void WriteSelectionBox(Span<uint> selection, in SdfMeshBox? box) {
+        if (box is not { } bounded) {
+            selection[3] |= 1u;
+
+            return;
+        }
+
+        WriteVector(offset: 0, selection: selection, value: bounded.Center);
+        WriteVector(offset: 4, selection: selection, value: bounded.HalfX);
+        selection[7] = BitConverter.SingleToUInt32Bits(value: bounded.Stretch);
+        WriteVector(offset: 8, selection: selection, value: bounded.HalfY);
+        WriteVector(offset: 12, selection: selection, value: bounded.HalfZ);
+        selection[3] &= ~1u;
+
+        static void WriteVector(Span<uint> selection, int offset, Vector3 value) {
+            selection[offset] = BitConverter.SingleToUInt32Bits(value: value.X);
+            selection[(offset + 1)] = BitConverter.SingleToUInt32Bits(value: value.Y);
+            selection[(offset + 2)] = BitConverter.SingleToUInt32Bits(value: value.Z);
+        }
     }
     private static Vector3 ReadSelectionVector(ReadOnlySpan<uint> words, int offset) => new(
         x: BitConverter.UInt32BitsToSingle(value: words[offset]),

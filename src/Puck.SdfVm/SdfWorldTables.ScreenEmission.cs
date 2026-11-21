@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.SignedDistance;
@@ -6,6 +7,13 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldTables {
     private readonly ScreenEmissionPass m_screenEmission;
+    // Each screen's range: the distance from its face's center past which its light, at the face's peak luminance, gives
+    // a white surface facing it less than SdfPhotometry.RangeThreshold of display white at the world's brightest exposure,
+    // as a point light's range is sized (SdfPhotometry.RangeOf). Shading eases the light to zero there (sdfLightWindow), so
+    // nothing past it receives any. An opening shows the luminance beyond it, which no peak bounds, so its light reaches
+    // everywhere. The one value shading and the motion scopes read (EmissionBoxOf): the fourth word of the screen's
+    // surface row, which every writer of the row keeps (WriteScreenReach).
+    private readonly float[] m_screenReach = new float[MaxScreenSurfaces];
 
     /// <summary>Gets the one GPU image reduction every direct screen light reads.</summary>
     public IGpuBuffer ScreenEmission => m_screenEmission.Buffer;
@@ -22,10 +30,35 @@ public sealed partial class SdfWorldTables {
     internal void CompleteScreenEmission(long sequence) => m_screenEmission.Publication.Complete(sequence: sequence);
     internal void WithdrawScreenEmission(long sequence) => m_screenEmission.Withdraw(sequence: sequence);
 
+    // Sizes each screen's range from its face's area, its peak luminance (SetScreenLuminance) and the frame's brightest
+    // exposure, after the frame's screens are bound and placed.
+    private void PackScreenReaches(SdfFrame frame) {
+        var gain = frame.Exposure.BrightestGain;
+        var surfaces = MemoryMarshal.Cast<byte, float>(span: m_screenSurfaceRegion.Contents);
+        var mappings = m_screenMappingRegion.Contents;
+
+        for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
+            var row = (screen * (ScreenSurfaceByteLength / sizeof(float)));
+            var area = ((4f * surfaces[(row + 3)]) * surfaces[(row + 7)]);
+            var luminance = MemoryMarshal.Read<float>(source: mappings[(((screen * ScreenMappingStride) + ScreenBoundOffset) + (sizeof(float) * 2))..]);
+
+            m_screenReach[screen] = ((m_screenFaces[screen] == SdfScreenFace.Opening)
+                ? float.PositiveInfinity
+                : SdfPhotometry.RangeOf(exposure: gain, weight: ((luminance * area) / MathF.PI)));
+            WriteScreenReach(screen: screen);
+        }
+    }
+    // Writes a screen's range into its surface row, owing only a changed word.
+    private void WriteScreenReach(int screen) =>
+        _ = m_screenSurfaceRegion.Write(bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in m_screenReach[screen])),
+            offset: ((screen * ScreenSurfaceByteLength) + (sizeof(float) * 11)));
+
     private sealed class ScreenEmissionPass : IDisposable {
+        private readonly SdfWorldTables m_tables;
         private readonly ScreenSourceWatch m_watch;
 
         public ScreenEmissionPass(SdfWorldTables tables, GpuDeviceServices gpu, GpuCreationScope scope) {
+            m_tables = tables;
             m_watch = new ScreenSourceWatch(tables: tables);
             Publication = new EnvironmentPublication(owner: this);
             Buffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "screen-emission"),
@@ -59,14 +92,21 @@ public sealed partial class SdfWorldTables {
                     m_watch.Observe(publication: input.Publication, screen: screen, tainted: input.Tainted);
                 }
             }
-            Owes = ((Publication.Submitted is null) || m_watch.Changed() || Forced);
+            Owes = ((Publication.Submitted is null) || (m_watch.ChangedScreens() != 0u) || Forced);
             return unchecked((ulong)(Publication.Renders + (Owes ? 1 : 0)));
         }
+        // Publishes the reduction and judges the screens whose emission it changed against the scopes that shade
+        // (NoteEmission): every screen when no earlier reduction stands or the sources are read again whole.
         public long Publish() {
+            var screens = (((Publication.Submitted is null) || Forced) ? uint.MaxValue : m_watch.ChangedScreens());
+
             m_watch.Commit();
             Owes = false;
             Forced = false;
-            return Publication.Publish(tainted: m_watch.Tainted);
+            var sequence = Publication.Publish(tainted: m_watch.Tainted);
+
+            m_tables.NoteEmission(screens: screens);
+            return sequence;
         }
         public void Withdraw(long sequence) {
             if (Publication.Unproven(sequence: sequence)) { Forget(); }

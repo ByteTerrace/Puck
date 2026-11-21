@@ -382,8 +382,8 @@ public sealed partial class SdfWorldTables {
     private readonly HashSet<int> m_glassIndices = [];
 
     /// <summary>Returns whether the glass pass would draw any glass draw of the staged list under a cull: the test the
-    /// pass's own selection applies to each draw's host box (<see cref="SdfMeshCull.Keeps"/>), so a draw no host box
-    /// bounds counts as drawn.</summary>
+    /// pass's own selection applies to the box each draw's record holds (<see cref="SdfMeshCull.Keeps"/>), so a draw no
+    /// host box bounds counts as drawn and an absent one does not.</summary>
     /// <param name="cull">The glass pass's cull.</param>
     /// <returns><see langword="false"/> when the pass keeps no glass draw, so it rasterizes nothing.</returns>
     public bool GlassMaySee(in SdfMeshCull cull) {
@@ -391,9 +391,7 @@ public sealed partial class SdfWorldTables {
             return false;
         }
         foreach (var index in m_glassIndices) {
-            SdfMeshBox? box = (SdfMeshBox.TryOf(draw: in m_stagedDraws[index], box: out var bounded) ? bounded : null);
-
-            if (cull.Keeps(box: in box)) {
+            if (SdfMeshRegion.ReadSelection(box: out var box, glass: out _, record: m_meshDrawWords.AsSpan(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords))) && cull.Keeps(box: in box)) {
                 return true;
             }
         }

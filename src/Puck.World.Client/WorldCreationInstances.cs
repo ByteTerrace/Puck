@@ -246,10 +246,22 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         public float RatePixelsPerMetre;
         public string? RateName;
 
-        // A reducing placed creation's measured part speed relative to its root, in creation units a second (infinity
-        // until measured), and each shape's root-relative pose at its last full pack, which the next one measures
-        // against (WorldCreationInstances.MeasurePartSpeed).
+        // The measured part speed relative to the root, in creation units a second (infinity until measured): a reducing
+        // placed creation's fastest any interval showed, a body's over its latest interval between full packs; and each
+        // shape's root-relative pose at its last full pack, which the next one measures against
+        // (WorldCreationInstances.MeasurePartSpeed).
         public float PartSpeed = float.PositiveInfinity;
+        // A body's motion (WorldCreationInstances.Rates): the digest of the inputs its pose reads besides its root, as
+        // this frame's wake read it; its root target and that digest at its last full pack; whether they differ now
+        // (Moving) and whether they differed over the interval its last full pack closed (MovedLast); and the fastest part
+        // speed measured since it started moving.
+        public ulong InputVersion;
+        public ulong PackedInputVersion;
+        public Vector3 PackedRootTarget;
+        public Quaternion PackedRootTurn;
+        public bool Moving;
+        public bool MovedLast;
+        public float MovingPartSpeed;
         public Vector3[] PartLocalPositions = [];
         public Quaternion[] PartLocalOrientations = [];
         // The pack count when something outside the pack last read one of the body's parts (NotePoseRead), and the

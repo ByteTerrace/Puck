@@ -29,6 +29,9 @@ public static class SdfCadenceWork {
     /// <summary>Counts the scopes a staging moved the revision of, each at most once a staging: a change one of its draws
     /// could show, or one no box bounds. A scope not counted stood through its staging.</summary>
     public static readonly WorkKind ScopesMet = new(name: "sdf.cadence.scopes.met", unit: "scopes", workClass: WorkClass.Pacing);
+    /// <summary>Counts the scopes a publication of the screens' emission lit (<see cref="SdfMotionScope.Lighting"/>): one
+    /// for each changed screen whose light reaches a scope that shades. A view that shows no screen's light counts none.</summary>
+    public static readonly WorkKind ScopesLit = new(name: "sdf.cadence.scopes.lit", unit: "scopes", workClass: WorkClass.Pacing);
     /// <summary>Counts the changes no box bounds that moved every open scope: a view's pose overlay row (that view's
     /// scopes) or a previous table seeded whole.</summary>
     public static readonly WorkKind ScopeUnbounded = new(name: "sdf.cadence.scopes.unbounded", unit: "changes", workClass: WorkClass.Pacing);
@@ -41,5 +44,5 @@ public static class SdfCadenceWork {
     public static readonly WorkKind ScopeTests = new(name: "sdf.cadence.scopes.tests", unit: "tests", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the process's cadence counts.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.cadence", kinds: [Signatures, Forced, Resampled, Blocks, Fits, Scopes, ScopesMet, ScopeUnbounded, ScopeCulls, ScopeChanges, ScopeTests]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.cadence", kinds: [Signatures, Forced, Resampled, Blocks, Fits, Scopes, ScopesMet, ScopesLit, ScopeUnbounded, ScopeCulls, ScopeChanges, ScopeTests]);
 }

@@ -13,9 +13,12 @@ namespace Puck.SdfVm;
 // geometry owns the field and camera; shadow owns directions and the fitted cascades; lighting owns the screens' tables,
 // colors, surface fog and analytic environment; visual owns sky and media. A generated offset table separates pass-block
 // members without spelling HLSL offsets. Temporal sampling is the instance's, and graph versions check last writes.
-// The poses and the draw records are the residency's in the whole-view signature alone (m_dynamicTransformRevision,
-// m_meshRevision): a pass signs with the revision of its motion scope (SdfMotionScope), which moves only for the draws
-// and slots the pass can show, so a body moving where a pass draws nothing leaves that pass standing.
+// A pass signs with the revision of its motion scope (SdfMotionScope), which moves only for the draws and slots the pass
+// can show, so a body moving where a pass draws nothing leaves that pass standing. The whole view signs with the
+// revisions of every scope the tables hold for it, and the static draws' revision the distant map signs with, in place of
+// the residency's (m_dynamicTransformRevision, m_meshRevision): every pass of the view signs with one of those scopes or
+// with the distant map's own inputs, so no change a pass can show leaves the whole view standing. A view the tables hold
+// no scope for yet signs with the residency's revisions.
 // Whole-view coverage:
 //   - m_programRevision  : changed program words and every kernel reload. The geometry signature uses the separate
 //                          m_programGeometryRevision, which excludes only palette values with identical bindings.
@@ -52,6 +55,8 @@ public sealed partial class SdfWorldTables {
     private readonly byte[] m_signatureBlock = new byte[SdfFrameBlock.SizeBytes];
 
     private ulong m_tablesSignature;
+    // The tables' signature without the residency's poses and draw records, which a view's scopes stand for instead.
+    private ulong m_tablesStillSignature;
     private ulong m_geometrySignature;
     private ulong m_lightingSignature;
     private ulong m_shadowSignature;
@@ -217,16 +222,19 @@ public sealed partial class SdfWorldTables {
     /// <param name="part">The fragment pass name.</param>
     /// <param name="motion">The revision of the pass's motion scope (<see cref="ObserveMotion(SdfMotionScope, in SdfMeshCull, int)"/>),
     /// which stands for every draw record and transform slot the pass can show.</param>
+    /// <param name="scopeLighting">The lighting revision of the pass's motion scope (<see cref="SdfMotionScope.Lighting"/>),
+    /// which stands for the screens' emission the pass can show; folded by the passes that shade.</param>
     /// <returns>The pass group's input identity.</returns>
-    public ulong PassSignature(SdfFrame frame, int view, string part, long motion) {
+    public ulong PassSignature(SdfFrame frame, int view, string part, long motion, long scopeLighting = 0L) {
         SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Signatures);
         var inputs = InputsOf(frame: frame, view: view);
         var lighting = Fnv1aHash.Create();
 
         lighting.Add(value: m_lightingSignature);
-        // Submit records the environment before signatures are read; a sub-code candidate keeps this revision.
+        // Submit records the environment before signatures are read; a sub-code candidate keeps this revision. The screens'
+        // emission lights the scopes its changed screens reach instead (NoteEmission), whose lighting revision is folded.
         lighting.Add(value: unchecked((ulong)m_skyEnvironment.Publication.Renders));
-        lighting.Add(value: unchecked((ulong)m_screenEmission.Publication.Renders));
+        lighting.Add(value: unchecked((ulong)scopeLighting));
         lighting.Add(value: m_shadowSignature);
         lighting.Add(value: inputs.Lighting);
         var shadow = Fnv1aHash.Create();
@@ -350,8 +358,16 @@ public sealed partial class SdfWorldTables {
         SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Signatures);
         var hash = Fnv1aHash.Create();
         var inputs = InputsOf(frame: frame, view: view);
+        var scopes = 0;
 
-        hash.Add(value: m_tablesSignature);
+        foreach (var scope in m_motionScopes) {
+            if (scope.View != view) { continue; }
+            hash.Add(value: unchecked((ulong)scope.Revision));
+            hash.Add(value: unchecked((ulong)scope.Lighting));
+            scopes++;
+        }
+        hash.Add(value: ((uint)scopes));
+        hash.Add(value: ((scopes > 0) ? m_tablesStillSignature : m_tablesSignature));
         hash.Add(value: unchecked((ulong)m_skyEnvironment.Publication.Renders));
         hash.Add(value: unchecked((ulong)m_screenEmission.Publication.Renders));
         hash.Add(value: inputs.Whole);
@@ -418,6 +434,11 @@ public sealed partial class SdfWorldTables {
 
         hash.Add(values: MemoryMarshal.AsBytes(span: values));
         m_tablesSignature = hash.Value;
+        // As a pass signs, the draw count stands as none or some, and the poses and records as the view's scopes.
+        values[2] = unchecked((ulong)m_staticDrawRevision);
+        values[3] = 0UL;
+        values[4] = Math.Min(val1: m_meshDrawCount, val2: 1u);
+        m_tablesStillSignature = Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: values));
 
         var geometry = Fnv1aHash.Create();
         Span<ulong> geometryValues = [m_programGeometryRevision, m_frameSampledRevision];

@@ -2464,6 +2464,11 @@ prototypes {
     document {
       schema: "puck.creation.v1"
       name: "moth"
+      // At rest her breath re-poses her ten times a second: a breath's few millimetres stay smooth at it, and the views
+      // that show her stand between poses. A stride poses her on the frame it starts.
+      behavior {
+        restRate: 10
+      }
       // The blink seats each closed lid over its eye and parks the open eye's pieces behind the face, at the head's scale.
       frames [mothBlinkFrame(headAt, headScale)]
       // The suit is pristine, as on the sheets: wear reaches only the tightest edges, and faintly.

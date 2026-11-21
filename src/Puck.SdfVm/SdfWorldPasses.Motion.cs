@@ -115,6 +115,10 @@ public sealed partial class SdfWorldPasses {
 
         return drawn.Revision;
     }
+    // The lighting revision a part of an instance signs with: its scope's (SdfMotionScope.Lighting), or zero for the
+    // distant map. Asked after the part's revision (MotionOf), which holds the scope.
+    private static long LightingOf(Entry entry, string? part, SdfWorldTables tables) =>
+        ((DrawScopeOf(part: part) is { } scope) ? entry.DrawnOf(scope: scope, tables: tables).Motion.Lighting : 0L);
     // The scope whose poses an instance's temporal history follows: its mesh pass's, kept held by the asking.
     private static SdfMotionScope PosesOf(Entry entry, SdfWorldTables tables) {
         var motion = entry.DrawnOf(scope: DrawScope.Mesh, tables: tables).Motion;

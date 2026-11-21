@@ -385,13 +385,13 @@ public sealed partial class SdfWorldTables {
 
         var unitRight = Vector3.Normalize(value: right);
         var unitUp = Vector3.Normalize(value: up);
-        // 3 float4 per entry (right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad) — KEEP IN SYNC with SdfProgram's
+        // 3 float4 per entry (right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+range) — KEEP IN SYNC with SdfProgram's
         // ScreenSurfaceWords packing and frame/sdf-environment.hlsli's ScreenSurfaceData.
         Span<float> floats = stackalloc float[(ScreenSurfaceByteLength / sizeof(float))];
 
         floats[0] = unitRight.X; floats[1] = unitRight.Y; floats[2] = unitRight.Z; floats[3] = halfWidth;
         floats[4] = unitUp.X; floats[5] = unitUp.Y; floats[6] = unitUp.Z; floats[7] = halfHeight;
-        floats[8] = origin.X; floats[9] = origin.Y; floats[10] = origin.Z; floats[11] = 0f;
+        floats[8] = origin.X; floats[9] = origin.Y; floats[10] = origin.Z; floats[11] = m_screenReach[screenIndex];
         // The residency polls this every frame via transform providers, often with an unchanged value (a static screen,
         // or a rig sampled at the same pose); the region owes only the words that actually changed.
         _ = m_screenSurfaceRegion.Write(

@@ -52,6 +52,8 @@ public sealed partial class SdfWorldTables {
             bytes: MemoryMarshal.Cast<uint, byte>(span: program.Appearance.ScreenSurfaceWords),
             offset: 0
         );
+        // The program's words carry no range; each screen keeps the one its last frame sized (PackScreenReaches).
+        for (var screen = 0; (screen < MaxScreenSurfaces); screen++) { WriteScreenReach(screen: screen); }
 
         m_liveInstanceMaskWordCount = program.InstanceMaskWordCount;
         m_liveProgram = program;

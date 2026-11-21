@@ -75,8 +75,17 @@ float3 worldKeyRadiance() {
 
     return (key.Color * key.Weight);
 }
+// The window a positional light's falloff is eased to zero by at its range r: saturate(1 - (d / r)^4)^2, one at the light
+// and exactly zero at and past r, so nothing past the range receives any of its light. A point's and a screen's reach
+// both take it. KEEP IN SYNC with SdfPhotometry.Falloff.
+float sdfLightWindow(float distanceSquared, float range) {
+    float ratio = (distanceSquared / max((range * range), 1.0e-8));
+    float window = saturate(1.0 - (ratio * ratio));
+
+    return (window * window);
+}
 // A point or spot light's reach at a surface point, and the unit direction toward the light: the windowed inverse square
-// saturate(1 - (d / r)^4)^2 / max(d, SDF_LIGHT_MINIMUM_DISTANCE)^2, exactly zero at the range r, under the spot's cone
+// sdfLightWindow(d, r) / max(d, SDF_LIGHT_MINIMUM_DISTANCE)^2 under the spot's cone
 // saturate(dot(-l, SpotAxis) + SpotOffset)^2 (one for a point, whose axis is zero and offset one). The light's own weight
 // is no part of it. KEEP IN SYNC with SdfPhotometry.Falloff and SdfPhotometry.Cone.
 float sdfPointReach(SdfLight light, float3 lightPosition, float3 surfacePosition, out float3 direction) {
@@ -86,10 +95,8 @@ float sdfPointReach(SdfLight light, float3 lightPosition, float3 surfacePosition
 
     direction = (toLight / max(lightDistance, 1.0e-4));
 
-    float ratio = (distanceSquared / max((light.Param * light.Param), 1.0e-8));
-    float window = saturate(1.0 - (ratio * ratio));
     float cone = saturate(dot(-direction, light.SpotAxis) + light.SpotOffset);
 
-    return (((window * window) * (cone * cone)) / max(distanceSquared, (SDF_LIGHT_MINIMUM_DISTANCE * SDF_LIGHT_MINIMUM_DISTANCE)));
+    return ((sdfLightWindow(distanceSquared, light.Param) * (cone * cone)) / max(distanceSquared, (SDF_LIGHT_MINIMUM_DISTANCE * SDF_LIGHT_MINIMUM_DISTANCE)));
 }
 #endif
