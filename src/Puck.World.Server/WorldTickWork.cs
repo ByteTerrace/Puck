@@ -71,11 +71,22 @@ public static class WorldTickWork {
     public static WorkKind InterestBodies { get; } = new("world.tick.interest-bodies", "count", WorkClass.Deterministic);
     /// <summary>Bytes of body records serialized before sharing across streams.</summary>
     public static WorkKind InterestBytes { get; } = new("world.tick.interest-bytes", "bytes", WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the input batches from another process this authority applied.</summary>
+    public static WorkKind FederatedBatches { get; } = new(name: "world.tick.federated-batches", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the events in those batches whose claimed capture time this authority moved to
+    /// the tick that admitted them.</summary>
+    public static WorkKind FederatedRetimed { get; } = new(name: "world.tick.federated-retimed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the batches dropped for naming an input epoch this authority had left.</summary>
+    public static WorkKind FederatedStale { get; } = new(name: "world.tick.federated-stale", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the input streams this authority restarted after refusing a batch of the
+    /// current epoch.</summary>
+    public static WorkKind FederatedRestarts { get; } = new(name: "world.tick.federated-restarts", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the ledger a host's servers count into. Declared after the kinds, which it reads as it is
     /// created.</summary>
     public static WorkCounterSet Process { get; } = new(
         kinds: [
             InterestCandidates, InterestBodies, InterestBytes,
+            FederatedBatches, FederatedRetimed, FederatedStale, FederatedRestarts,
             FactDerives, FactSlots, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids, NearestCells, DealRedeals,
             ContinuationProfiles, ContinuationProfileBytes, ContinuationTailBytes, .. SectionEncodes, .. SectionBytes,
             .. SectionComparedBytes, .. SectionFilteredCompares, .. SectionUnchangedEncodes,

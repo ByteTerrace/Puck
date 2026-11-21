@@ -13,9 +13,11 @@ joins the hosted debug world and sees all of it.
 It follows [the MMO foundations memo](mmo-foundations/synthesis.md)'s manner.
 Each decision gives the options, the evidence, the attacks it closes, what it
 costs and the ruling it rests on. Nothing here is built except the narration
-described under [what ran](#what-ran-and-what-it-settled). This draft has not
-been reviewed; its review's findings are answered here, one by one, in the next
-revision.
+described under [what ran](#what-ran-and-what-it-settled). Another family
+reviewed the first draft and raised fourteen high findings, three medium and
+two low. Each was rechecked against the code and is
+[answered below](#the-reviews-findings-answered); the decisions here already
+carry the changes.
 
 Four words are used throughout.
 
@@ -63,10 +65,9 @@ Four words are used throughout.
   arriving bodies. The engine keeps no default that admits anyone.
 - **A client simulates only what it presents.** Its own copy of the world stops
   stepping once its seat has left for the remote authority.
-- **One rule the owner may want to overrule:** a client that may show a
-  machine's screen holds the machine's whole memory, not only its picture. An
-  author who needs a machine's state hidden from a viewer withholds the machine
-  from that viewer, who then sees nothing
+- **A machine's author chooses how viewers are shown it.** A client that runs a
+  machine holds its whole memory, not only its picture. A machine's declaration
+  says whether viewers run it, are sent its pictures, or see nothing
   ([decision 2](#decision-2-a-machine-runs-on-the-client)).
 
 ## What ran, and what it settled
@@ -170,12 +171,27 @@ creations travel as pins and are fetched on a miss
 | The authority streams the finished picture (glyph images) | An encoder per screen | Text is the cheapest thing a client can draw |
 | **Rows name pins; one resolver finds the bytes** | The resolver, and a pin on the row families that lack one | Nothing found |
 
-**Favoured: the last.** One resolver answers a pin with bytes. It looks in the
-packages this process loaded, indexed by content hash when they load. It looks
-next in the per-user content store (`ContentAddressedStore`), which is shared
-across worlds and runs. Last it fetches through the stream's authenticated
-request lane and checks the bytes against the pin before it uses or stores
-them. A delivered row is read by its pin alone, and its path is a label. The
+**Favoured: the last.** One resolver answers a pin with bytes. A row's pin
+names the canonical bytes of its family (`WorldAssetRowLoader` hashes the
+canonical document, not the file as written), so the resolver serves canonical
+bytes everywhere. It looks first in the packages this process loaded, whose
+index is built from those canonical forms when the package is prepared. It
+looks next in the per-user content store (`ContentAddressedStore`), which is
+shared across worlds and runs. Last it fetches through the stream's
+authenticated request lane and checks the bytes against the pin before it uses
+them. One resolver serves the whole process: every scene shown from another
+world builds its own text catalog and font cache today, and those become
+readers of the one resolver and one atlas cache keyed by pin.
+
+Four limits come with it. A voice sample set names its samples by path, so the
+set's canonical form carries a pin for each sample. A machine's declaration
+carries the pin of its prepared image (`WorldMachineCartridge.RomHash`),
+because a player's build cannot compile a cartridge. Bytes fetched from an
+authority are checked as their family's type before they are stored, and are
+stored against a byte budget for that authority, so a hostile authority cannot
+push other worlds' content out of the shared store. A delivered font catalog is
+bounded in font bytes, glyph count and atlas pixels before any glyph is
+rasterized. A delivered row is read by its pin alone, and its path is a label. The
 loaders that take a directory today (the font resolver's `IAssetSource`, the
 audio row loaders, `WorldVoiceSampleLoader`, the machine content folders) take
 the resolver instead when the document was delivered.
@@ -183,6 +199,14 @@ the resolver instead when the document was delivered.
 This deletes `EmbedAudio` and the directory closure in `WorldTextCatalog`, and
 widens the prototype fetch into a content fetch. Voice sample sets, which the
 trace found carry no pin, gain one at compile as the other families have.
+
+The presentation tier needs one more thing. A projection carries neither the
+world's text catalog nor its machines (`WorldProjectionDocument` has no member
+for either), and presentation is the tier a visitor is given unless a row
+authors another. The projection gains both: the font catalog's rows with their
+pins, and each machine's presentation half (its engine, its prepared image's
+pin, its screens and outputs), without the bindings that tie a machine to state
+cells.
 
 **Evidence.** The pair's refusal list above. The resolver's three sources all
 exist: the player folder ships the compiled package and prepared cartridges
@@ -219,7 +243,7 @@ about a machine crosses the wire.
 
 | Option | Cost per viewer per machine | Fails at |
 |---|---|---|
-| The authority streams frames and sound | A small handheld's frame is 5,760 bytes uncompressed, about 2.7 megabits a second before compression, plus sound; an encoder per machine on the authority | A town of viewers in an arcade; and the authority runs an encoder for every watched machine |
+| The authority streams frames and sound | A machine's picture is the same for every viewer, so it is encoded once per watched machine and sent to each. A small handheld's frame is 5,760 bytes uncompressed, about 2.7 megabits a second before compression, plus sound | The authority runs an encoder for every watched machine, and each viewer pays the stream for as long as it watches |
 | **The client runs the machine from the same inputs** | One image when it starts watching (tens to hundreds of kilobytes), then the pad changes, a few bytes when a player presses something | A machine whose state a viewer must not hold; a machine that cannot save its state |
 
 The figures are worked from the formats and were not measured.
@@ -230,19 +254,31 @@ function of its content and its inputs: its host's replay policy is
 the pad lanes (`IWorldMachineHost.Advance`). The design sends exactly those.
 
 - **What is sent.** For each authority tick, in the order the authority applied
-  them: the step and the pad lanes that changed, each hardware write a rule made
-  (`IWorldMachineHost.WriteHardware`), and each committed operation such as a
-  cartridge swap (`IWorldMachineHost.TryCommitOperation`). These three members
-  are every way the simulation changes a machine, so the record is taken at
-  that interface, by a recorder that wraps the host where the World is
-  composed. A restore or a rewind of the machines
-  (`IWorldMachineCheckpointHost.RestoreCheckpoint`) is not replayed: it ends
-  the record and starts a new image.
+  them, every call that changes a machine: the step with each screen's whole
+  pad lane, its timed presses within the tick included (`ScreenPadSnapshot`),
+  each hardware write a rule made (`IWorldMachineHost.WriteHardware`), each
+  committed operation such as a cartridge swap
+  (`IWorldMachineHost.TryCommitOperation`), and each change to the cables and
+  the screens' selections (`IWorldMachineHost.ReconcileLinks`,
+  `IWorldMachineHost.ReconcileScreens`). The record is taken at the host's
+  interface, by a recorder that wraps the host where the World is composed and
+  implements every member. A change that replaces the machines themselves is
+  not replayed: a restore or rewind
+  (`IWorldMachineCheckpointHost.RestoreCheckpoint`) and a document install that
+  changes the machine declarations (`IWorldMachineHost.Commit`) each end the
+  record and start a new image.
 - **How a viewer starts.** The authority captures the machine's image at a tick
   boundary (`WorldMachineCheckpoint`, which the authority's own checkpoints
   already produce) and names it by pin. Viewers who start within a short window
-  share one image and replay the records since it. The cartridge is content,
-  found by pin under [decision 1](#decision-1-content-travels-by-pin).
+  share one image and replay the records since it. The image and a swapped
+  cartridge are not in the document, so their fetch is authorized by the
+  viewer's subscription to that machine, which names them, and not by the
+  document. The cartridge is content, found by pin under
+  [decision 1](#decision-1-content-travels-by-pin). Two cases cannot start
+  today and show the screen's fallback with a named reason until they can:
+  machines coupled by a live cable, whose capture the host refuses, and an
+  engine with no saved state. Capturing a coupled pair as one unit, at the
+  barrier the host already steps it at, is part of this step.
 - **What a viewer watches.** The unit is a machine and everything cabled to it,
   since linked machines step as one. A client asks for a unit while one of its
   screens is in sight, by the test that already decides whether a window's
@@ -263,23 +299,32 @@ the pad lanes (`IWorldMachineHost.Advance`). The design sends exactly those.
 
 **The invariant.** A client's machine is at the authority's state for every
 step it has replayed. **What enforces it:** the recorder is the only holder of
-the real host that the simulation is handed, so a new caller cannot change a
-machine without the change being recorded. The digest shows a difference
+the real host that the simulation is handed, and it implements the host's
+whole interface, so a new member does not compile until its author has written
+the recorder's half. Whether that half records is checked by review and caught
+by the digest. The digest shows a difference
 within one interval. **Where it stops:** the client's machine is behind the
 authority's by the time its records take to arrive.
 
-**The disclosure rule, which the owner may want otherwise.** A client is sent a
-machine's image and inputs only while the document it was last delivered
-carries that machine's declaration. That is the rule a session screen follows
-today: a delivery that withholds the declaration opens no reader. A client that
-is sent them holds the machine's whole memory and every player's pad input to
-it, not only the picture. For an arcade cabinet that is nothing a viewer could
-not see on the screen. For a machine that keeps a secret in memory, such as a
-hand of cards, the author withholds the machine from the viewers who must not
-read it, and they see its fallback. A machine that shows its picture to a
-viewer while hiding its memory needs the authority to send pictures, and that
-is the first option above, built for that machine alone. It is not built here
-([open questions](#open-questions-and-their-owners)).
+**The disclosure rule is authored per machine.** A client that runs a machine
+holds its whole memory and every player's pad input to it, not only the
+picture. For an arcade cabinet that is nothing a viewer could not see on the
+screen. For a machine that keeps a secret in memory, such as a hand of cards or
+a typed code, it is a leak. So a machine's declaration gains an authored member
+that says how it is shown to a viewer who is not the authority: run from its
+inputs, shown as pictures, or not shown. The engine's default is the first, and
+the choice is the author's.
+
+- *Run from its inputs.* A client is sent the image and inputs only while the
+  document it was last delivered carries the machine's declaration, and only
+  when every machine cabled to it is also run from its inputs for that client.
+  A unit with one member the client may not run is not run at all.
+- *Shown as pictures.* The authority encodes the machine's frames and sound
+  once and sends them to each viewer. This is the first option above, taken for
+  the machines that need it. It is the last step of
+  [the build order](#the-build-order), since no debug world machine keeps a
+  secret; until it is built such a machine shows its fallback.
+- *Not shown.* The viewer sees the screen's fallback.
 
 **Strongest case against.** The client pays the processor time of every machine
 it watches. The bound is the machines in sight, and an arcade wall could exceed
@@ -337,9 +382,27 @@ owns the screen, so that authority serves the stream.
   authority finds the recipient as a traveller's observation does
   (`WorldTravelerProjection`). It checks that the recipient's current delivery
   carries that screen with a session source. It finds the session it already
-  holds. It then attaches one more federation sink
-  (`WorldFederationProjectionSink`) to the destination, for the session's own
-  principal, at the lower of the session's tier and the recipient's.
+  holds, and subscribes the recipient to that session's relay.
+- **A relay is a projection, never the document.** A window shows a picture of
+  its destination. The destination's rules, grants, admission rows and unbound
+  state are no part of a picture, so a relay is composed at the presentation
+  tier whatever tier the session or the recipient holds, and at nothing when
+  either holds only frames.
+- **One encoder for each scene, and no new connection.** The owning authority
+  keeps one relay for each session scene: one sink
+  (`WorldFederationProjectionSink`) on the destination for the session's own
+  principal, which composes and encodes each record once. Every subscriber is
+  sent the same bytes. A subscriber who joins late is sent the relay's retained
+  primer, the whole projection and the latest bodies, and then what everyone
+  is sent. The records travel on the observation stream the client already
+  holds, each tagged with its relay, because a connection carries one stream
+  and an authority admits a bounded number of connections
+  (`WorldPeerHost.MaximumFederationConnections`). Subscribing and unsubscribing
+  are requests on the client's existing request lane.
+- **Content a relayed world names is fetched through the relay.** A fetch for a
+  pin from a relayed world names the relay it came from, and the door checks
+  that the pin occurs in that relay's current projection, since it does not
+  occur in the owning world's.
 - **What the client does with it.** The screen binder's lookup for a session
   answers, for a remote world, with a session whose mirror is fed by that
   stream. Everything after the mirror is unchanged: the binder builds the scene
@@ -350,11 +413,24 @@ owns the screen, so that authority serves the stream.
   (`WorldViewGraphHost.PortalSightOf`), and closes it after the same linger as
   a machine. A headless client opens them unread for every screen within the
   depth, as a headless authority does, so a run without a GPU can count them.
-- **One stream for one scene.** When the authority's proofs say two sessions
-  are handed the same scene (`WorldSceneProof`; several of the debug world's
-  paintings look into one world), it answers both requests with one stream
-  key. The client then keeps one mirror and one residency for both. The client
-  never compares content to decide this: only the authority's key does.
+- **One relay for one scene.** Several of the debug world's paintings look into
+  one world. When two sessions onto one destination are composed for one
+  audience, by the audience key the authority already keeps for its policy
+  table (`WorldDisclosureImages.Audience`), the authority gives both screens
+  one relay. The key never leaves the authority and is decided again when the
+  policy table changes, which cuts the relay. The scene proof that lets two
+  windows share inside one process (`WorldSceneProof`) is issued only at the
+  replica tier, so it cannot decide this. The client keeps one mirror and one
+  residency for a relay, and keeps the relay while any of its screens is in
+  sight. Each screen's own picture is still held under two spans, the owning
+  world's and the relay's, so losing one screen withdraws that screen alone.
+  The client never compares content to decide sharing.
+- **A screen whose destination depends on who looks** is not served by this.
+  The authority holds one session for a screen, so a relay shows every viewer
+  what a presentation in the authority's own process would show. A screen that
+  shows each viewer a different world needs a session for each viewer, which
+  is [the multi-seat design](open-items.md#a-multi-seat-client)'s open item;
+  the voucher below is how such a viewer would attach.
 - **A destination on another authority** is not reachable by a session screen
   at all today. When it is ([the moon on another authority](open-items.md#the-debug-world-at-mmo-scale)),
   the same request is forwarded along the session's own route with a tier
@@ -420,6 +496,9 @@ document into members with a digest each, for the reload door. The recipient
 assembles the document by resolving each entry: from the document it holds,
 whose members it digests the same way; from its content store; or by a fetch.
 After the first manifest the authority sends only the entries that changed.
+Members that came from the wire are read as untrusted input
+(`WorldJsonContext.Untrusted`), which the reload door's reader does not do
+today because it reads an author's own file.
 
 A reservation's answer and a route description stop carrying a document. They
 name its version, and the document arrives on the observation stream. That
@@ -463,30 +542,43 @@ Each defect is fixed at the cause that the pair or the code showed.
 silently.** One change to the stream, and two rules in the one place a remote
 batch enters the tick (`WorldTick.ApplyFederatedIntents`).
 
-1. *The stream carries what the seat last did, not every tick's copy of it.*
-   The client writes batches without waiting for each to be acknowledged; the
-   authority's answer to an input already returns in its deliveries
-   (`WorldInputAnswer`). A batch with no event replaces an unsent batch with no
-   event, so only batches that carry events queue, in order. The authority
-   takes an arrived batch under its authority gate, as the path inside one
-   process already does, and does not wait for its tick thread before it reads
-   the next. A batch is then late by its transit and at most one tick.
+1. *The stream does not wait.* The client writes each batch as it is made and
+   does not wait for an acknowledgement; the authority's answer to an input
+   already returns in its deliveries (`WorldInputAnswer`). The authority takes
+   an arrived batch under its authority gate, as the path inside one process
+   already does, and does not wait for its tick thread before it reads the
+   next. A batch is then late by its transit and at most one tick. Batches are
+   never merged or replaced: a batch can carry a pointer's movement or a
+   source's return to neutral with no event to mark it, so dropping one loses
+   input. The queue keeps its existing bound, past which the stream restarts as
+   a lost capture.
 2. *The authority decides when a remote input happened.* An event in a remote
    batch claims a capture time in the authority's ticks that the client could
-   only estimate. The door moves each claim into the window the authority still
-   honours: no earlier than the world's lateness allowance before the tick that
-   applies it, no later than that tick, and never before an earlier event of the
-   same stream. A world that wants a remote player's timing honoured more
-   exactly authors a larger allowance (`WorldInputHistory.MaximumLatenessSeconds`),
-   which is the author's to choose. A local seat's events are stamped in the
-   same process and keep today's refusal.
-3. *An event is applied or its stream is restarted, and the client is told.*
-   When the admission refuses a remote batch for any reason but permission, the
-   door resets that input owner through the reset a lost capture already uses.
-   The reset starts a new epoch, the authority publishes it, and the client
-   continues from the published state, as it already does at the start of a
-   stream. This is the rule the overflow path states: an unobserved edge is
-   never silently dropped.
+   only estimate. The admission keeps a claim it can honour: one inside the
+   world's lateness allowance, in an interval it still holds. Any other claim,
+   late or ahead, is moved to the tick that applies it, at or after the last
+   event the stream delivered, so the stream's events stay in order. A world
+   that wants a remote player's timing honoured more exactly authors a larger
+   allowance (`WorldInputHistory.MaximumLatenessSeconds`), and with it accepts
+   that a player may act on what the allowance let them see; that trade is the
+   author's. A local seat's events are stamped in the same process and keep
+   today's refusal.
+3. *An event is applied or its stream is restarted once, and the client is
+   told.* A batch that names an epoch the authority has left is dropped; that
+   is the ordinary state of a stream for a moment after any epoch change, and
+   restarting for it would restart forever while batches are in flight. When
+   the admission refuses a batch of the current epoch for any reason but
+   permission, the door resets that input owner. The reset starts a new epoch,
+   the authority publishes it, and the client continues from the published
+   state, as it already does at the start of a stream.
+
+A seat submits to a remote authority once for each tick it has observed, which
+is once for each delivery. The review asked whether a world that steps several
+times for each delivery loses the input between deliveries. It does not: the
+pair was run on a staged document that steps eight times for each delivery,
+and every stick movement was admitted. A stick movement reaches the authority
+within one delivery interval of when it was made, so a push measured in ticks
+can differ from the same push in one process by that much at each end.
 
 The narration added for the pair stays: one line when a body's remote input
 starts being dropped or the reason changes. The per-tick bare line from the
@@ -498,18 +590,22 @@ stream gains the same treatment for a worker that ends on an error it does not
 handle, which today ends the stream without a word (read in the code, not
 observed).
 
-**The invariant.** Every event a remote seat sends is applied once, in order,
-or its stream is restarted and says so. **What enforces it:** the door is the
-only caller of the admission for a remote batch, and its refusal branch has no
-path that continues without the reset. **Where it stops:** a remote event's
-time is the authority's, within the allowance the world authors.
+**The invariant.** Every event a remote seat sends in the current epoch is
+applied once, in order, or its stream is restarted and says so. **What
+enforces it:** the door is the only caller of the admission for a remote
+batch, and its refusal branch for a current-epoch batch has no path that
+continues without the reset. **Where it stops:** a remote event's time is the
+authority's, within the allowance the world authors. Two events that arrive in
+one tick after a stall are applied in that tick, so a hold shorter than the
+stall can be shortened to that tick; an author who needs holds measured across
+a stall authors an allowance that covers it.
 
 **Attacks it closes.** A client cannot claim a capture time earlier than the
 allowance to win a timing judgement, because the claim is moved. It cannot
-wedge its own stream into a state the authority refuses forever. And a slow
-client cannot make the authority hold a growing queue of stale batches:
-batches without events replace each other, and the event queue keeps its
-existing bound, past which the stream restarts.
+wedge its own stream into a state the authority refuses forever, and a stale
+batch cannot make the authority restart a stream again and again. A slow
+client cannot make the authority hold a growing queue, because the queue is
+bounded and its overflow restarts the stream.
 
 **Admission is authored, and says what kind of arrival it admits.** One debug
 world row serves two kinds of arrival today: a session looking in through a
@@ -517,30 +613,37 @@ window, and a traveller's body. Its `observe all` grant is right for a session
 and refused for a body, so a traveller is delivered nothing. Whether a world
 admits windows, visitors or both is the author's policy, so an admission row
 gains an authored member that names the kinds it admits (`WorldAdmissionEntry`),
-and the door matches a row to the arrival's kind. The standard package gains a
+and the door matches a row to the arrival's kind. A row that authors none
+admits both, as every row does today. Two rows may then name one authority for
+different kinds, so the validator's rule that rows differ by domain, subject
+and mode gains the kind, and each lookup that asks what an authority is
+disclosed is told which kind is asking. The standard package gains a
 template for a visitor's row: an exclusive `Drive` and an `Observe` over the
 body the admission assigns. The debug world expands it, keeps its session row
 for the paintings, and authors its visitor slots (`bodies.networkPlayers`) and
 its `host.authorityNamespace`. No engine default admits anyone.
 
-**The remote authority's name comes from the handshake.** A `--connect` run
-refuses a document that authors no namespace, because it reads the name it
-expects from the client's own document. The authenticated handshake already
-answers with the authority's namespace. The run reads it there and checks it
-against what the client's trust rows or authentication configuration pin, so
-the client's document is content and not the source of the authority's
-identity.
+**The remote authority's name stays pinned by the client.** A `--connect` run
+refuses a document that authors no namespace, because the name it expects at
+the endpoint is the one its own document authors. That is a pin, and it must
+stay one: when trust rests on a root that vouches for many authorities, a name
+taken from the handshake would let any of them answer for the world the player
+meant to join. The defect is only that the debug world authors no namespace.
+It authors one, the client boots the same package, and the pin holds. The
+first draft proposed reading the name from the handshake; the review showed
+why that is wrong.
 
 **A client simulates only what it presents.** A `--connect` client boots its
 own copy of the world to have a body to send. Once the seat's route turns
 remote, nobody stands in that copy and nothing shows it, yet it steps every
-tick with its machines, its addons and the worlds its own screens observe. The
-rule every other instance follows is that a world left with nobody in it and
-nothing observing it stops (`WorldInstanceHost.ReapIfEmpty`), and the boot
-world is exempt. The exemption is narrowed: a host that does not listen stops
-stepping its boot world while no seat stands in it and nothing it presents
-shows it, closes that world's sessions, and resumes when a seat returns. A host
-that listens keeps stepping, since others may join it.
+tick with its machines, its addons and the worlds its own screens observe. A
+host that does not listen pauses its boot world while no seat stands in it,
+nothing it presents shows it, and no transfer, custody or unsettled crossing
+still refers to it: the conditions under which any other world would be
+stopped (`WorldInstanceHost.ReapIfEmpty`). A paused world takes no simulation
+step and still drains its administrative work, so a late settlement is not
+stranded. It closes that world's sessions and resumes when a seat returns. A
+host that listens keeps stepping, since others may join it.
 
 ## Decision 6: the lease after a lost connection
 
@@ -557,9 +660,13 @@ none. The value travels to the observer once, with the stream's admission, and
 never changes during the stream. When the connection is lost the observer's
 transport waits that long on its own clock before it closes the span
 (`WorldRemoteAuthority.CloseObserved`, the one caller that closes a span for a
-loss). A new session's first record closes the old span at once, as it does
-today. A terminal cut that arrived before the loss is not delayed: a lease
-covers only a loss.
+loss). A lease covers only silence. Any word from the authority ends it at
+once: a terminal cut, a notice that the projection is no longer valid, a new
+session's first record, or a refusal when the observer tries to reconnect,
+which it keeps doing throughout the lease. An authority that revokes a
+credential or refuses a disclosure sends a terminal cut before it closes the
+connection, where today it only closes it. A relayed window's lease is the
+shorter of the owning world's and the destination's.
 
 **The invariant.** A span closed for a lost connection is shown for at most the
 lease its admission granted. **What enforces it:** one caller closes a span for
@@ -592,14 +699,14 @@ objects, which the existing withdrawal releases.
 | A client's machine matches the authority's | The periodic digest; a difference takes a new image and is counted | Is corrected within one interval |
 | A machine's image and inputs go only to a recipient delivered its declaration | The one door that opens a machine subscription reads the recipient's current delivery | Has no other door |
 | A window's world goes only to a recipient delivered the screen | The one relay request handler, and the sink's test at each delivery | Has no other producer of a relayed stream |
-| Two screens share a scene only on the authority's word | The stream key is minted by the authority from its proofs | Cannot mint a key |
+| Two screens share a relay only on the authority's word | The authority assigns a screen to a relay from its own audience key, which never leaves it | Has no key to compare |
 | A document reaches a recipient through one door | Reservation and route answers carry no document | Has no field to put one in |
 | A remote event is applied or its stream restarts | The federated door's refusal branch | Has no path past the reset |
 | A span closed for a loss is shown at most its lease | One caller closes for a loss | Is not asked |
 
 Three hold by review only, and the build names each in the code it touches. A
-new way for the simulation to change a machine, added beside the three members
-the recorder wraps, would go unrecorded until the digest caught it. A new
+new member of the machine host whose recorder half forwards without recording
+would go unrecorded until the digest caught it. A new
 family of content row owes a pin. A new kind of arrival owes a place in the
 admission row's list of kinds.
 
@@ -617,6 +724,35 @@ admission row's list of kinds.
   carry that rule at all is the disclosure plan's question
   ([open questions](#open-questions-and-their-owners)).
 
+## The review's findings, answered
+
+Another family reviewed the first draft. Each finding was rechecked against the
+code. "Taken" means the design above changed as the finding asks.
+
+| # | Finding | Answer |
+|---|---|---|
+| H1 | A relay at the lower of two tiers sends a window's viewer the destination's rules and unseen state; screens scoped to a viewer break | Taken for the tier: a relay is always a projection ([decision 3](#decision-3-a-windows-world-is-relayed-by-the-authority-that-owns-the-screen)). The scoped screen is not made worse: a relay shows what the authority's own presentation shows, one session for one screen. A destination per viewer is the multi-seat design's open item, and decision 3 now says so |
+| H2 | A fetch for a relayed world's content is refused, because the pin does not occur in the owning world | Taken: the fetch names its relay and is checked against the relay's projection |
+| H3 | A connection per relayed stream exhausts the authority's connection limit, and a sink per viewer repeats the work | Taken. Rechecked: `WorldPeerHost.MaximumFederationConnections` bounds connections and a connection carries one stream. Relayed records ride the client's one observation stream, tagged, from one encoder for each scene |
+| H4 | The presentation projection carries no text catalog and no machines | Taken. Rechecked: `WorldProjectionDocument` has no member for either. The projection gains both ([decision 1](#decision-1-content-travels-by-pin)) |
+| H5 | A cabled unit leaks a partner the viewer may not run; a machine with a secret needs pictures | Taken: disclosure is authored for each machine, a unit is run only when every member may be, and pictures are a built option, last in the order |
+| H6 | The recorder misses most of the host's mutating members, capture refuses a live cable, the pad lane's timed presses must travel, and an image's pin is not in the document | Taken. Rechecked: the interface has more mutating members than the three the draft named. The recorder implements the whole interface, the record carries the whole pad lane, a coupled pair is captured as a unit, and an image is authorized by the subscription |
+| H7 | Restarting on every refusal restarts forever once batches are in flight | Taken: a batch of a past epoch is dropped, and only a refused batch of the current epoch restarts the stream |
+| H8 | Replacing an unsent batch loses pointer movement and a source's return to neutral | Taken by removing the replacement: batches are never merged or dropped. Once the stream does not wait there is no backlog to shed |
+| H9 | A seat submits once for each delivery, so a world that steps eight times for each delivery loses most of its ticks | Not taken. Rechecked two ways: the debug world steps once for each delivery (its basis authors the rate), and on a staged document that steps eight times for each delivery every stick movement was admitted and the body's travel was within a twentieth of the same script's in one process. The authority repeats the held image on each of its ticks, so the ticks between deliveries are not lost |
+| H10 | Re-timing lets a player act on what the allowance let them see, shortens a hold after a stall, and can break the order of offsets | Taken for the order: a moved claim lands at or after the stream's last event. The other two are stated as where the guarantee stops: both are what an authored allowance means, and the remedy for each is the author's allowance. The suggested bound by acknowledged delivery is not taken, because [replication](replication.md#decision-4-what-a-delta-is-a-difference-against) removes that acknowledgement |
+| H11 | A name read from the handshake lets any authority under a shared root answer for another | Taken: the proposal is withdrawn and the client's pin stays |
+| H12 | A row's pin names canonical bytes, not the file; a voice set's samples are unpinned; a player's build cannot compile a cartridge | Taken. Rechecked: the row loader hashes the canonical document. The resolver serves canonical bytes, samples gain pins, and a machine names its prepared image |
+| H13 | Members read from the wire use the authored reader; fetched bytes can evict the shared store; a font catalog can ask for unbounded work | Taken: untrusted reader, type check before storing, a byte budget for each authority, bounds on a delivered font catalog |
+| H14 | A lease keeps revoked content on screen | Taken: a lease covers only silence, any word ends it, and a revoking authority sends a terminal cut |
+| M1 | The kinds member has no default and collides with the rule that rows differ | Taken: none means both, and the rule gains the kind |
+| M2 | Stopping the boot world strands a settlement | Taken: it is a pause, entered only when nothing unsettled refers to the world |
+| M3 | The scene proof exists only at the replica tier, and a shared stream must outlive one of its screens | Taken: sharing is decided by the authority's audience key, and a relay lives while any of its screens is watched |
+| L1 | The federated door allocates an array for every admitted batch | Taken in step 2 |
+| L2 | A machine's picture is the same for every viewer | Taken: the options table says so, and it is why pictures are practical for the machines that need them |
+| U1 | Whether every engine saves its state and is exact across processors | The step that builds machines lists them; an engine that cannot save shows its fallback with a reason, where capture throws today |
+| U2 | A hostile font's outline complexity | The bounds of H13 cover bytes, glyphs and pixels. Outline complexity inside the rasterizer was not read; the step that builds the resolver reads it and bounds it there |
+
 ## The build order
 
 Each step is one assignment's worth and closes on a check that shows it
@@ -633,12 +769,21 @@ its picture needs.
    *Check:* on the small staged pair, twenty stick movements ten ticks apart
    are all admitted, where run 4 above admitted two: `world.input.federated`
    narrates only the epoch change at the start, and the body's travel on the
-   authority equals the same script's travel in one process. A counter reads
-   the ticks between a batch's capture and its admission, and reads at most one
-   beyond transit. With the authority paused for a second under a held stick
-   and resumed, the body moves again and the restart is counted once.
-3. **Content by pin.** The resolver, the loaders moved to it, a pin on voice
-   sample sets, `EmbedAudio` and the text catalog's directory deleted.
+   authority is the same script's travel in one process to within one delivery
+   interval at each stick movement. The same holds on a staged document that
+   steps eight times for each delivery. Counters read the batches applied, the
+   events the door moved, the batches dropped for a past epoch and the streams
+   restarted, and read no restart.
+   *Built, with step 1,* and checked on the pair except for the pause under a
+   held stick, which was not run. A push of ten ticks on the world that steps
+   once for each delivery moved the body nine ticks' worth, the one-interval
+   difference above; whether that interval can be halved by sending a seat's
+   input when it changes, without waiting for the next delivery, is the next
+   thing to read here.
+3. **Content by pin.** The resolver shared by every scene, the loaders moved to
+   it, pins on a voice set's samples, the text catalog and the machines'
+   presentation half in the projection, the bounds on fetched content and
+   delivered fonts, `EmbedAudio` and the text catalog's directory deleted.
    *Check:* with the debug world staged, the reservation is no longer refused
    for a relative path; on the client `world.nesting` reports that the world's
    text resolves; a counter reads content found in the package, found in the
@@ -653,30 +798,41 @@ its picture needs.
    withheld cell no longer refuses the delivery.
 5. **Authored admission and the idle boot world.** The admission row's kinds,
    the standard package's visitor template, the debug world's rows, namespace
-   and visitor slots, the namespace read from the handshake, and the narrowed
-   boot exemption.
+   and visitor slots, and the boot world's pause.
    *Check:* the pair boots `worlds/debug` unmodified but for the pair's own key
    row; the traveller is delivered the world; after the route turns remote the
    client's host loop reports no simulation step and its local machines report
    no step; `body.where` for the remote seat answers.
-6. **Machines.** Decision 2.
+6. **Machines run from their inputs.** Decision 2: the recorder, the record,
+   the image by pin, a coupled pair captured as a unit, the client's host, and
+   the authored disclosure member with its first and last values.
    *Check:* on the client `world.nesting` shows each machine screen with its
    source and no fault; counters read one image per watched unit, and replayed
    steps equal to the authority's for the same span; digest differences read
    zero across a run in which a pad is pressed at a cabinet; a cartridge swap on
-   the authority shows on the client's `screen.state`.
+   the authority shows on the client's `screen.state`; a machine authored as
+   not shown opens no subscription.
 7. **Windows.** Decision 3.
    *Check:* on the client `world.nesting` lists each painting's session with its
-   destination; streams opened equal the distinct scenes; revoking the
-   traveller's sight of a screen ends its stream with a terminal cut, counted.
+   destination; relays opened equal the distinct scenes, and the authority's
+   connection count does not rise when a relay opens; a second client watching
+   the same painting adds no composition on the authority, counted; revoking
+   the traveller's sight of a screen ends its relay with a terminal cut,
+   counted; a creation only the destination names is fetched through the relay.
 8. **The lease.** Decision 6.
    *Check:* with the authority's listener stopped for less than the lease the
    client's mirror keeps its delivery, and for longer it is withdrawn; a
-   reconnection inside the lease replaces the stream without a withdrawal.
+   reconnection inside the lease replaces the stream without a withdrawal; a
+   credential revoked on the authority withdraws the client's mirror at once.
+9. **Machines shown as pictures.** The authored value that sends a machine's
+   frames and sound, encoded once and sent to each viewer.
+   *Check:* a machine authored that way shows on the client with no image or
+   input record sent, counted; a second viewer adds no encode.
 
 Step 2 depends on nothing. Step 4 needs step 3's resolver. Step 5 needs steps 3
 and 4, since the debug world's transfer does not commit without them. Steps 6
-and 7 need step 5 and do not depend on each other. Step 8 needs step 7.
+and 7 need step 5 and do not depend on each other. Step 8 needs step 7, and
+step 9 needs step 6.
 
 After step 7 the capture set the packet names (the press, an emulator cabinet,
 a chess screen and a gallery painting, on the client against the same set in
@@ -689,7 +845,7 @@ process) is a windowed leg for the lead, since this lane holds no GPU grant.
 | A client's installed package as a prewarmed cache for the document it is delivered | Member digests, pins, and a player build that ships its world |
 | One image of a machine shared by every viewer who starts watching together | The image named by pin; exact replay |
 | A machine's picture as a derived product on the viewer's machine | Fixed content, recorded inputs, a digest to check them |
-| Two windows onto one scene as one stream, decided by the authority's proof | `WorldSceneProof`, extended to a stream key on the wire |
+| Two windows onto one scene as one relay, encoded once for every viewer | The authority's audience key; one sink for each session scene |
 | The same sight test deciding what is drawn and what is subscribed | `WorldPortalVisibility` |
 
 ## What would change the answer
@@ -752,10 +908,9 @@ Searched and read before proposing a mechanism. Each is cited by symbol.
 - **Which of the debug world's machines cannot be captured or are not exact
   across processors.** The step 6 lane reads each engine's checkpoint
   capability and runs the digest check on the pair, and lists them.
-- **A machine that shows its picture and hides its memory.** No debug world
-  machine needs it. It becomes work when an author's machine does; the owner of
-  [machines as authored logic](open-items.md#machines-as-authored-logic) takes
-  it then, as the frames option of decision 2.
+- **Which encoding a machine's pictures use.** Step 9 chooses it from what the
+  tree already holds for recorded clips and measures its bytes on a debug world
+  cabinet; the choice is not a product question.
 - **Whether a disclosed replica should carry a rule whose reads are withheld.**
   [The disclosure plan](disclosure.md)'s owner. This design only stops the
   client refusing the document.

@@ -1707,9 +1707,14 @@ public sealed class WorldPeerHost : IDisposable {
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     return;
                 }
-                var (resolved, accepted) = await ExecuteAuthenticatedAsync(credential, () =>
-                    WorldLocalForwardedAuthority.TryApplyIntent(m_server, sourceAuthority, in mobility, leaseId, in submission)
-                ).ConfigureAwait(false);
+                // Taken under the authority gate on this connection's own thread, as a forwarded arm in the same process
+                // takes it. Waiting for the tick thread here would take one batch a tick, the rate batches are made, so
+                // a stall would leave a backlog that never drains.
+                var (resolved, accepted) = m_server.ExecuteAuthorityOperation(operation: () => {
+                    credential.RequireValid();
+
+                    return WorldLocalForwardedAuthority.TryApplyIntent(m_server, sourceAuthority, in mobility, leaseId, in submission);
+                });
                 if (resolved is not { } stamped) {
                     await WriteFederationRefusal(
                         ct: ct,
@@ -1751,13 +1756,9 @@ public sealed class WorldPeerHost : IDisposable {
                     return;
                 }
 
+                // An accepted update is not answered: the lane writes without waiting, and the authority's answer to an
+                // input travels in its deliveries. Only a refusal, or a handoff's acknowledgement, is written here.
                 touched[mobility] = (Principal: stamped.Principal, Submission: stamped);
-                await WorldFederationCodec.WriteResponseAsync(
-                    body: default,
-                    ct: ct,
-                    kind: WorldFederationResponse.Ack,
-                    stream: stream
-                ).ConfigureAwait(continueOnCapturedContext: false);
             }
         } finally {
             _ = m_server.RunOnTickThreadAsync(() => {

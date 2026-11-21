@@ -752,10 +752,12 @@ whose check boots did not settle with no tier missed.
 
 ### A hosted world on a client
 
-Owner: federation and presentation · high, M1 · Next: another family's review
-of [the design](remote-content.md), then its
-[build order](remote-content.md#the-build-order), whose first steps are the
-pair started from `puck_world_start` and the remote seat's input.
+Owner: federation and presentation · high, M1 · Next: step 3 of
+[the design](remote-content.md)'s
+[build order](remote-content.md#the-build-order), content by pin, then the
+manifest; the debug world's transfer does not commit until both land. Steps 1
+and 2 (the pair from `puck_world_start`, and the remote seat's input) are
+built, and the design carries its review's answers.
 
 - [high] A world delivered from another authority shows no text, no machines
   and no session screens on the client that presents it
