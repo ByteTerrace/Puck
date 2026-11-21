@@ -114,9 +114,9 @@ lane; it does not gate starting them.
    reads its slot's transform instead of storing a matrix, so a moving body
    rewrites one transform row and pack stops restaging records.
 4. **`field-queries`** · high · a principal. Item 4: presentation queries
-   (effector probes, camera clearance) leave the interpreted CPU field, on
-   the GPU a frame late or as compiled vectorized code, whichever the lane
-   shows is better.
+   (effector probes, camera clearance) leave the interpreted CPU field for a
+   compiled CPU reader over pruned cells ([the design](field-queries.md)),
+   reviewed by another family before its code.
 5. **`frame-garbage`** · high · a specialist. Item 5 and the memory tenants:
    no collection pauses during play, the 26 MB appearance clone, the 80 MB
    clearance evaluator.
@@ -668,18 +668,18 @@ wait behind them.
    creation effectors' surface probes (`WorldCreationInstances.ApplyEffectors`)
    and the chase camera's clearance march (`WorldCameraClearance.March`) walk
    `SdfFieldEvaluator` on the frame thread, and the clearance keeps a whole
-   CPU evaluator alive for it. A design lane weighs two replacements. Batch
-   the probes onto the GPU and answer them a frame late: the kernels already
-   evaluate the same program, and the cost is a frame of lag in feet and
-   camera. Or compile the CPU evaluator to vectorized native code from the
-   one definition per field op the
-   [field programs](field-programs.md#build-order) plan generates readers
-   from, which also serves contact and the bake's CPU twin. These are
-   presentation queries; the simulation's fixed-point contact is not moved.
-   Check: `world.counters world.field-queries` and the frame thread's share
-   in the trace, with the feet captures of the verification debts unchanged.
-   At scale: a town's feet are hundreds of probes a frame, which only a batch
-   or compiled code can answer.
+   CPU evaluator alive for it. [The design](field-queries.md) weighs a GPU
+   batch answered a frame late against a compiled CPU reader and chooses the
+   reader: a tape per cell of the world, pruned to what can change the field
+   there, evaluated by a float reader in vector width that the shared
+   formulas generate. Its review by another family comes before its code.
+   These are presentation queries; the simulation's fixed-point contact is
+   not moved. Check: the design's build order, step by step, then
+   `world.counters world.field-queries` and the frame thread's share in the
+   trace, with the feet captures of the verification debts unchanged. At
+   scale: a town's feet are hundreds of probes a frame, and a server asks the
+   field about every body with no GPU, so the cost has to follow the
+   neighbourhood, not the world.
 5. **Background garbage leaves the shared heap.** A bake's and a worker's
    scratch is rented or owned (`RentedArrays`, `RentedScope`, `IAllocator`),
    so background work cannot pause the frame thread with a collection, and
@@ -1939,7 +1939,9 @@ in [sweep](#sweep-and-visual-checks).
   that refused store reads on the 2060's own run.
 - [medium] The camera's clearance keeps a whole CPU field evaluator alive
   (`WorldCameraClearance`, `SdfFieldEvaluator`). It goes with
-  [the CPU frame](#the-cpu-frame)'s item 4.
+  [the CPU frame](#the-cpu-frame)'s item 4, whose
+  [design](field-queries.md#what-the-client-holds) stops the client
+  constructing one.
 - [medium] The allocator's slack is never returned in play, and the bar is
   read on private bytes, which count driver commit the process does not
   touch. Read the bar on resident pages, as the bake's host bar already does,

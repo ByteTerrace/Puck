@@ -28,6 +28,11 @@ owner authorized the design round.
   silhouette coverage and curvature finer than the bake's cell. This is the
   mesh-first trade more than the interpreter, and is recorded here because a
   better field pipeline may recover some of it.
+- **CPU queries on the frame thread.** The camera's clearance and the
+  effectors' probes walk the whole static world's program at every sample.
+  [Presentation field queries](field-queries.md) designs their replacement:
+  a third reader, in single precision and vector width, that the shared
+  formulas generate, over tapes pruned per cell of the world.
 
 The two readers no longer drift apart by construction. One catalogue entry per
 op, shape, blend and relief-row kind (`SdfFieldOps`, `SdfFieldShapes`,
