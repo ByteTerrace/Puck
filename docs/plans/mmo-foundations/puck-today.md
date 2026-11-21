@@ -1043,7 +1043,7 @@ cites correct lines whose conclusion this lane's reading narrows.
 Every other **[checked]** citation holds at the cited lines: the `src/` files
 named in sections 1 to 3 of the catalogue, `docs/plans/companion-redesign.md`,
 `docs/plans/hub-and-saves.md`, `docs/plans/disclosure.md`,
-`docs/plans/mmo-foundations.md`, `docs/development/hazards.md:225-228`,
+`docs/plans/mmo-foundations.md`, `docs/development/hazards.md:286-289`,
 `docs/development/security-review-reference.md:143` and
 `docs/reference/attestation.md`. Two holding citations are narrower than their
 prose: `src/Puck.World.Server/WorldAdjacencyFields.cs:486-498` declares the
