@@ -7,8 +7,6 @@ public sealed partial class WorldServer {
     /// <summary>Gets the document facade — the live definition, the journal and its base, the buffered live-edit
     /// ops, the compose and apply pipeline, the solid field, and the per-tick delivery decision.</summary>
     public WorldDocument Document { get { ThrowIfTickPending(); return m_document; } }
-    /// <summary>Gets the per-entity snapshot scratch the tick's delivery fills.</summary>
-    internal EntitySnapshot[] SnapshotEntries => m_tick.SnapshotEntries;
     /// <summary>Gets the entity indices an allowed intent has already written this tick.</summary>
     public int[] TickWrittenEntity => m_tick.TickWrittenEntity;
 
