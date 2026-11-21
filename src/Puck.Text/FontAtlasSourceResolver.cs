@@ -277,12 +277,8 @@ public sealed class FontAtlasSourceResolver(
         ArgumentNullException.ThrowIfNull(generationOptions);
 
         if (basePath is null) {
-            if (
-                (pinned is null) ||
-                !ContentPin.TryParse(pin: out var pin, text: expectedHash) ||
-                !pinned.TryRead(content: out var held, maximumBytes: MaxPinnedFontBytes, pin: pin)
-            ) {
-                throw new InvalidDataException(message: $"Font '{expectedHash}' is not held by this process: no loaded package registered it and the content store does not hold it.");
+            if (!TryReadPinned(expectedHash: expectedHash, font: out var held)) {
+                throw new InvalidDataException(message: UnheldMessage(expectedHash: expectedHash));
             }
 
             return LoadFromFont(
@@ -315,6 +311,25 @@ public sealed class FontAtlasSourceResolver(
             generationOptions: generationOptions
         );
     }
+    /// <summary>Reads a font by its pin from what this process holds, the one read a document with no directory
+    /// takes: nothing is rasterized and no path is opened.</summary>
+    /// <param name="expectedHash">The canonical <c>sha256/{64 lowercase hex}</c> content pin.</param>
+    /// <param name="font">The font's bytes, which hash to the pin, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when this process holds the font.</returns>
+    public bool TryReadPinned(string expectedHash, out ReadOnlyMemory<byte> font) {
+        font = default;
+
+        return (
+            (pinned is not null) &&
+            ContentPin.TryParse(pin: out var pin, text: expectedHash) &&
+            pinned.TryRead(content: out font, maximumBytes: MaxPinnedFontBytes, pin: pin)
+        );
+    }
+    /// <summary>Returns the refusal a font that <see cref="TryReadPinned"/> could not read is reported with.</summary>
+    /// <param name="expectedHash">The font's content pin.</param>
+    /// <returns>The message.</returns>
+    public static string UnheldMessage(string expectedHash) =>
+        $"Font '{expectedHash}' is not held by this process: no loaded world names a file that holds it and the content store does not hold it.";
     /// <summary>Resolves a pre-baked font atlas metadata file through <see cref="FontAtlasLoader"/> instead of generating one.</summary>
     /// <remarks>
     /// The atlas image is expected alongside <paramref name="atlasPath"/>, sharing its base name with a

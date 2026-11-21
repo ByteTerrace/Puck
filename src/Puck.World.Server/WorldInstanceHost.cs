@@ -628,6 +628,19 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <see cref="LeaveRosterSeat"/> already applies to a stale route.</returns>
     public WorldDefinition ResolveRoutedDefinition(int slot) =>
         (m_seats.RoutedEndpoint(slot: slot)?.Definition ?? Boot!.Server.Definition);
+    /// <summary>Lists each authority another process runs that a local seat is routed to, once each, in seat
+    /// order: the worlds this process presents from a delivery and does not simulate.</summary>
+    /// <param name="endpoints">The list the endpoints are added to.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="endpoints"/> is <see langword="null"/>.</exception>
+    public void AddRemoteSeatEndpoints(List<WorldAuthorityEndpoint> endpoints) {
+        ArgumentNullException.ThrowIfNull(argument: endpoints);
+
+        for (var slot = 0; (slot < m_seats.SeatCount); slot++) {
+            if ((m_seats.RoutedEndpoint(slot: slot) is { ClockOwnedHere: false } endpoint) && !endpoints.Contains(item: endpoint)) {
+                endpoints.Add(item: endpoint);
+            }
+        }
+    }
     /// <summary>Scans the boot instance's document for portal faces (a <see cref="WorldPlacementFace"/> carrying a
     /// <see cref="WorldPlacementPortal"/> facet) against its own active local seats, and enqueues a transfer for each
     /// edge — a seat whose body was outside the face's enterable volume last scan and is inside it now (see

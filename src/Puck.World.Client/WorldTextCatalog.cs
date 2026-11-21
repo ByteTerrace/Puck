@@ -192,6 +192,29 @@ public sealed class WorldTextCatalog {
         m_definition = text;
         m_resolvedDirectory = directory;
     }
+    /// <summary>Returns why the fonts of a document another authority delivered cannot all be read, or
+    /// <see langword="null"/> when this process holds every one: the first font whose pin nothing here answers. It
+    /// reads each font by its pin and rasterizes nothing, so a host that draws no scene can still say whether the
+    /// world's text would resolve. A document loaded from a file answers <see langword="null"/>: its fonts are read
+    /// beside it.</summary>
+    /// <param name="definition">The definition.</param>
+    /// <returns>The fault, or <see langword="null"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static string? Unheld(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        if ((definition.DocumentDirectory is not null) || (definition.Text?.Fonts is not { } fonts)) {
+            return null;
+        }
+
+        foreach (var font in fonts) {
+            if ((font is null) || !Fonts.TryReadPinned(expectedHash: font.Hash, font: out _)) {
+                return FontAtlasSourceResolver.UnheldMessage(expectedHash: (font?.Hash ?? string.Empty));
+            }
+        }
+
+        return null;
+    }
     /// <summary>Preflights a candidate catalog without changing the live binding.</summary>
     public bool TryValidate(WorldDefinition definition, string origin, out string reason) {
         ArgumentNullException.ThrowIfNull(definition);

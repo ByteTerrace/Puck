@@ -1121,8 +1121,11 @@ what it would show in the boot world, from that world's own sources, never the b
 - Text draws through that world's own font catalog. A world this process loaded from a file reads
   its fonts beside that file. A world another authority delivered has no directory, and its font
   paths are never opened: each font is read by its content pin from what this process already holds,
-  a font file a world it loaded named under the same pin, or the shared content store
-  (`WorldProjectionContent.Resolver`). Every catalog shares one font cache, keyed by font content.
+  a font file a world it runs names under the same pin, or the shared content store
+  (`WorldProjectionContent.Resolver`). Every world this process runs has the content it names by pin
+  indexed when its document becomes live (`WorldContentIndex`), so a delivered world finds a font
+  whether or not the world that ships it has drawn any text. Every catalog shares one font cache,
+  keyed by font content.
   An unresolved delivery clears the drawn text and atlas, including a catalog that previously drew,
   and reports its text fault until a valid delivery arrives.
 - A probe shows nothing: only the boot world runs a probe host, so a probe of another world opens
@@ -1131,8 +1134,12 @@ what it would show in the boot world, from that world's own sources, never the b
   shown through a portal never opens the local user's camera or desktop.
 
 A world delivered from another authority runs its machines there, so its machines show nothing here,
-and its text shows only when this process holds its fonts: no message yet fetches a font it lacks,
-and a presentation-tier delivery carries no text catalog. `world.nesting` says why in each case. Its
+and its text shows only when this process holds its fonts: no message yet fetches a font it lacks.
+A presentation-tier delivery carries the world's font catalog and each machine's presentation half
+(`WorldProjectedMachine`: what it is and what it is cabled to, never its hardware bindings or
+content folders). `world.nesting` says why a screen is dark in each case; on a host that draws
+nothing it lists the delivered world as unread, with the fonts and machines its document carries and
+a text fault when a font is not held. Its
 session screens show nothing too: the authority holds a screen's session only for the worlds this
 process runs, and no message carries a remote world's screen session to the presenting process. A
 remote world's camera views and producers show.

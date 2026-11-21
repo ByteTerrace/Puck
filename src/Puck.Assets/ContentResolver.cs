@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Puck.Abstractions.Counting;
 
 namespace Puck.Assets;
 
@@ -10,22 +11,31 @@ namespace Puck.Assets;
 /// <param name="store">Resolves the content store consulted after the registered files, or <see langword="null"/> for
 /// none; called at each read, so a host may configure its store after this resolver is made.</param>
 public sealed class ContentResolver(Func<ContentAddressedStore?>? store = null) {
+    /// <summary>The name a counters report heads a resolver's section with.</summary>
+    public const string SourceName = "assets.content";
+
+    private static readonly WorkKindRegistry Registry = new();
+
+    /// <summary>Gets the kind counting reads a registered file answered. Where a pin is found depends on what the
+    /// process loaded and on a store that outlives the run, as every kind here does.</summary>
+    public static WorkKind FromFiles { get; } = Registry.Declare(name: "assets.content.files", unit: "reads", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting reads the content store answered.</summary>
+    public static WorkKind FromStore { get; } = Registry.Declare(name: "assets.content.store", unit: "reads", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting reads nothing this process holds could answer.</summary>
+    public static WorkKind Missing { get; } = Registry.Declare(name: "assets.content.missing", unit: "reads", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the bytes every answered read returned.</summary>
+    public static WorkKind Bytes { get; } = Registry.Declare(name: "assets.content.bytes", unit: "bytes", workClass: WorkClass.Pacing);
+
     private readonly ConcurrentDictionary<ContentPin, string> m_files = new();
     private readonly FileSystemAssetSource m_reader = new();
+    private readonly WorkCounterSet m_work = new(kinds: Registry.Kinds, name: SourceName);
 
-    private long m_fromFiles;
-    private long m_fromStore;
-    private long m_missing;
+    /// <summary>Gets this resolver's counts, each a monotonic total: where each read was answered from, and the bytes
+    /// answered.</summary>
+    public IWorkCounterSource Work => m_work;
 
-    /// <summary>Gets how many reads a registered file answered.</summary>
-    public long FromFiles => Interlocked.Read(location: ref m_fromFiles);
-    /// <summary>Gets how many reads the content store answered.</summary>
-    public long FromStore => Interlocked.Read(location: ref m_fromStore);
-    /// <summary>Gets how many reads nothing this process holds could answer.</summary>
-    public long Missing => Interlocked.Read(location: ref m_missing);
-
-    /// <summary>Records that a file this process loaded holds a pin's bytes. The caller has already checked the file
-    /// against the pin; a later read checks it again.</summary>
+    /// <summary>Records the file a document this process loaded says holds a pin's bytes. Nothing is opened here: each
+    /// read hashes the file against the pin, and forgets a file that does not answer it.</summary>
     /// <param name="pin">The content pin.</param>
     /// <param name="path">The file's absolute path.</param>
     /// <exception cref="ArgumentException"><paramref name="path"/> is not fully qualified.</exception>
@@ -48,10 +58,7 @@ public sealed class ContentResolver(Func<ContentAddressedStore?>? store = null) 
                 var held = m_reader.Read(maximumBytes: maximumBytes, path: path);
 
                 if (ContentPin.Compute(content: held.Span) == pin) {
-                    content = held;
-                    _ = Interlocked.Increment(location: ref m_fromFiles);
-
-                    return true;
+                    return Answer(bytes: held, content: out content, kind: FromFiles);
                 }
             } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException) {
                 // The file moved, cannot be read or outgrew the bound: it no longer holds the pin for this caller.
@@ -64,15 +71,20 @@ public sealed class ContentResolver(Func<ContentAddressedStore?>? store = null) 
             (bytes.Length <= maximumBytes) &&
             (ContentPin.Compute(content: bytes) == pin)
         ) {
-            content = bytes;
-            _ = Interlocked.Increment(location: ref m_fromStore);
-
-            return true;
+            return Answer(bytes: bytes, content: out content, kind: FromStore);
         }
 
         content = default;
-        _ = Interlocked.Increment(location: ref m_missing);
+        m_work.Count(kind: Missing);
 
         return false;
+    }
+
+    private bool Answer(WorkKind kind, ReadOnlyMemory<byte> bytes, out ReadOnlyMemory<byte> content) {
+        content = bytes;
+        m_work.Count(kind: kind);
+        m_work.Add(amount: bytes.Length, kind: Bytes);
+
+        return true;
     }
 }

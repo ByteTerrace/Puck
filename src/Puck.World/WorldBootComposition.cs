@@ -166,6 +166,8 @@ public static class WorldBootComposition {
         // What keeping presentation-tier recipients current costs: projections, deltas, their bytes and the anchor rows
         // held per recipient.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldProjectionWork.Process);
+        // Where content read by pin was found: a file a loaded world names, the content store, or nowhere.
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldProjectionContent.Resolver.Work);
         // What render nodes' frame record jobs cost the frame thread, phase by phase.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Shaders.RenderRecordWork.Process);
         // The certified body sweeps every authoritative shape runs: what proving a moving body's travel costs.

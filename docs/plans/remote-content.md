@@ -12,8 +12,8 @@ joins the hosted debug world and sees all of it.
 
 It follows [the MMO foundations memo](mmo-foundations/synthesis.md)'s manner.
 Each decision gives the options, the evidence, the attacks it closes, what it
-costs and the ruling it rests on. Nothing here is built except the narration
-described under [what ran](#what-ran-and-what-it-settled). Another family
+costs and the ruling it rests on. [The build order](#the-build-order) says
+which steps are built. Another family
 reviewed the first draft and raised fourteen high findings, three medium and
 two low. Each was rechecked against the code and is
 [answered below](#the-reviews-findings-answered); the decisions here already
@@ -174,8 +174,13 @@ creations travel as pins and are fetched on a miss
 **Favoured: the last.** One resolver answers a pin with bytes. A row's pin
 names the canonical bytes of its family (`WorldAssetRowLoader` hashes the
 canonical document, not the file as written), so the resolver serves canonical
-bytes everywhere. It looks first in the packages this process loaded, whose
-index is built from those canonical forms when the package is prepared. It
+bytes everywhere. It looks first in the files the worlds this process runs name
+under the pin. That index is derived from each document when it becomes live
+(`WorldContentIndex`, called from the one door every live definition passes),
+and is never written down: a document already carries each pin beside its path,
+so a recorded index would be a second copy that could go stale, and a source
+boot has no prepare step to write one. Indexing opens no file, and the reader
+hashes the file against the pin at every read. It
 looks next in the per-user content store (`ContentAddressedStore`), which is
 shared across worlds and runs. Last it fetches through the stream's
 authenticated request lane and checks the bytes against the pin before it uses
@@ -184,9 +189,10 @@ world builds its own text catalog and font cache today, and those become
 readers of the one resolver and one atlas cache keyed by pin.
 
 Four limits come with it. A voice sample set names its samples by path, so the
-set's canonical form carries a pin for each sample. A machine's declaration
-carries the pin of its prepared image (`WorldMachineCartridge.RomHash`),
-because a player's build cannot compile a cartridge. Bytes fetched from an
+set's canonical form carries a pin for each sample. A viewer of a machine is
+sent the pin of the prepared image it runs (`WorldMachineCartridge.RomHash`,
+which the authority's machine host already computes), because a player's build
+cannot compile a cartridge. Bytes fetched from an
 authority are checked as their family's type before they are stored, and are
 stored against a byte budget for that authority, so a hostile authority cannot
 push other worlds' content out of the shared store. A delivered font catalog is
@@ -200,13 +206,17 @@ This deletes `EmbedAudio` and the directory closure in `WorldTextCatalog`, and
 widens the prototype fetch into a content fetch. Voice sample sets, which the
 trace found carry no pin, gain one at compile as the other families have.
 
-The presentation tier needs one more thing. A projection carries neither the
-world's text catalog nor its machines (`WorldProjectionDocument` has no member
-for either), and presentation is the tier a visitor is given unless a row
-authors another. The projection gains both: the font catalog's rows with their
-pins, and each machine's presentation half (its engine, its prepared image's
-pin, its screens and outputs), without the bindings that tie a machine to state
-cells.
+The presentation tier needs one more thing, since presentation is the tier a
+visitor is given unless a row authors another. A projection carries the font
+catalog's rows with their pins, and each machine's presentation half
+(`WorldProjectedMachine`): its name, engine, configuration, whether it runs and
+its cable. It carries no binding that ties a machine to state cells, and no
+content folder, which is a path on the authority's disk. The pin of the image a
+machine runs is not in the projection. A cartridge can be swapped while the
+world runs, so what a machine runs now is live state: it is named, with the
+machine's image, by the subscription of
+[decision 2](#decision-2-a-machine-runs-on-the-client), and a pin written into
+the document would be a recorded copy of a derived product's identity.
 
 **Evidence.** The pair's refusal list above. The resolver's three sources all
 exist: the player folder ships the compiled package and prepared cartridges
@@ -742,7 +752,7 @@ code. "Taken" means the design above changed as the finding asks.
 | H9 | A seat submits once for each delivery, so a world that steps eight times for each delivery loses most of its ticks | Not taken. Rechecked two ways: the debug world steps once for each delivery (its basis authors the rate), and on a staged document that steps eight times for each delivery every stick movement was admitted and the body's travel was within a twentieth of the same script's in one process. The authority repeats the held image on each of its ticks, so the ticks between deliveries are not lost |
 | H10 | Re-timing lets a player act on what the allowance let them see, shortens a hold after a stall, and can break the order of offsets | Taken for the order: a moved claim lands at or after the stream's last event. The other two are stated as where the guarantee stops: both are what an authored allowance means, and the remedy for each is the author's allowance. The suggested bound by acknowledged delivery is not taken, because [replication](replication.md#decision-4-what-a-delta-is-a-difference-against) removes that acknowledgement |
 | H11 | A name read from the handshake lets any authority under a shared root answer for another | Taken: the proposal is withdrawn and the client's pin stays |
-| H12 | A row's pin names canonical bytes, not the file; a voice set's samples are unpinned; a player's build cannot compile a cartridge | Taken. Rechecked: the row loader hashes the canonical document. The resolver serves canonical bytes, samples gain pins, and a machine names its prepared image |
+| H12 | A row's pin names canonical bytes, not the file; a voice set's samples are unpinned; a player's build cannot compile a cartridge | Taken. Rechecked: the row loader hashes the canonical document. The resolver serves canonical bytes, samples gain pins, and a machine's viewer is sent the pin of its prepared image with the machine's subscription |
 | H13 | Members read from the wire use the authored reader; fetched bytes can evict the shared store; a font catalog can ask for unbounded work | Taken: untrusted reader, type check before storing, a byte budget for each authority, bounds on a delivered font catalog |
 | H14 | A lease keeps revoked content on screen | Taken: a lease covers only silence, any word ends it, and a revoking authority sends a terminal cut |
 | M1 | The kinds member has no default and collides with the rule that rows differ | Taken: none means both, and the rule gains the kind |
@@ -785,18 +795,38 @@ its picture needs.
    presentation half in the projection, the bounds on fetched content and
    delivered fonts, `EmbedAudio` and the text catalog's directory deleted.
    *Built in part:* the resolver (`ContentResolver`, reached as
-   `WorldProjectionContent.Resolver`) answers a pin from a file a loaded world
-   registered and then from the shared store; a delivered document's fonts are
-   read through it by pin and its font paths are never opened; every text
-   catalog shares one font cache; and the client's intent stream narrates and
-   restarts when its worker fails on anything but the transport. *Not built:*
-   the fetch on a miss, the other loaders (audio rows, voice sets, machine
-   content), pins on a voice set's samples, the projection's text catalog and
-   machines, the store's budget for each authority, the glyph and pixel bounds
-   on a delivered font catalog, the resolver's counts on `world.counters`, and
-   the deletion of `EmbedAudio`. The delivered text itself has not been seen:
-   a headless host builds no scene for a delivered world, so the check below
-   needs a rendering host.
+   `WorldProjectionContent.Resolver`) answers a pin from a file a world this
+   process runs names and then from the shared store, and counts where each
+   read was answered (`world.counters assets.content`); the index of those
+   files is derived when a document becomes live (`WorldContentIndex`), so a
+   delivered world finds a font whether or not the world that ships it has
+   drawn text; a delivered document's fonts are read by pin and its font paths
+   are never opened; every text catalog shares one font cache; a
+   presentation-tier delivery carries the font catalog and each machine's
+   presentation half; and the client's intent stream narrates and restarts
+   when its worker fails on anything but the transport. A host that draws
+   nothing lists a delivered world in `world.nesting` as unread, with the
+   fonts and machines its document carries and a text fault when it does not
+   hold a font. On a headless pair at the presentation tier, a client booted
+   from the authority's document read the delivered font from its own file and
+   reported no fault, and a client booted from a document with no font catalog
+   reported the font as not held. *Not built:* the fetch on a miss, the other
+   loaders (audio rows, voice sets, machine content), pins on a voice set's
+   samples, the store's budget for each authority, the glyph and pixel bounds
+   on a delivered font catalog, and the deletion of `EmbedAudio`. The delivered
+   text itself has not been seen drawn: that needs a rendering host.
+   *How the rest is shaped.* Every loader of a pinned row reads by pin through
+   the resolver and takes no directory, for a loaded document and a delivered
+   one alike, so the loader has no path to open. A loaded document's rows are
+   in the index before any loader runs. An audio row's pin names its canonical
+   document, which is not the file's bytes, so its index entry carries the
+   family's canonicalizer and the reader hashes the canonical form
+   (`WorldAssetRowLoader` holds the four canonicalizers today). A delivered
+   audio row then travels as its pin and a path label, and
+   `WorldDefinitionValidator.TryValidateDeliveredAudio` checks the content it
+   resolves instead of requiring it inline. The fetch is the resolver's third
+   source: `WorldProjectionContent.TryResolve`, which reads the store, fetches
+   and stores a prototype itself today, becomes a caller of it.
    *Check:* with the debug world staged, the reservation is no longer refused
    for a relative path; on the client `world.nesting` reports that the world's
    text resolves; a counter reads content found in the package, found in the
