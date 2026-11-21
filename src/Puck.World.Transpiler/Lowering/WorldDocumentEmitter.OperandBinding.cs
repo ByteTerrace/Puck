@@ -570,9 +570,11 @@ public static partial class WorldDocumentEmitter {
             (QualifiedName.From(syntax: node)?.ToString() is { } dotted) && scope.TryQualify(qualified: out var name, reference: dotted)) ? name : null);
         // A name a runtime binding owns where it is read (the lambda binder in flight, a pool binding, the rule's
         // locals) hides a compile-time binding of the same name: the innermost binding wins, as SyntaxScopes.Resolve
-        // answers for hover, go-to-definition and the import rewriter.
+        // answers for hover, go-to-definition and the import rewriter. Inside a rule body, a spliced rule template's
+        // parameters and a compile-time loop's variables (DocumentScope.RuleBinders) are inner to the rule's
+        // locals, so they win over a local of the same name.
         private bool IsRuntimeName(string name) => ((name == m_binder) || GetPoolBindings(scope: scope).Contains(item: name) ||
-            (Syntax.CurrentLocals?.Contains(item: name) == true));
+            ((Syntax.CurrentLocals?.Contains(item: name) == true) && !scope.RuleBinders.Contains(item: name)));
         private bool HasRuntimeRoot(Syntax.SyntaxNode node) {
             while (true) {
                 switch (node) {

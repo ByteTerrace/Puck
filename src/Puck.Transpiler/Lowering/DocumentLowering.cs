@@ -2145,9 +2145,11 @@ public static partial class DocumentLowering {
                     : null);
                 using var origin = scope.SourceMap?.PushOrigin(sourcePath: template.DefinitionPath);
                 using var diagSource = scope.Diagnostics.PushSource(related: useSite, sourcePath: template.DefinitionPath);
+                // The template's parameters are its body's inner bindings, above the calling rule's locals.
+                string[] binders = [.. scope.RuleBinders, .. template.Parameters.Select(selector: static parameter => parameter.Name)];
 
                 foreach (var (member, invocation) in spliced) {
-                    foreach (var flattened in ExpandBody(scope: invocation, statements: [member])) {
+                    foreach (var flattened in ExpandBody(scope: invocation.WithRuleBinders(names: binders), statements: [member])) {
                         yield return flattened;
                     }
                 }
@@ -2182,7 +2184,7 @@ public static partial class DocumentLowering {
                 }
 
                 foreach (var flattened in ExpandBody(
-                    scope: iteration,
+                    scope: iteration.WithRuleBinders(names: [.. ((IEnumerable<string?>)[loop.Item, loop.Index]).OfType<string>()]),
                     statements: [produced]
                 )) {
                     yield return flattened;

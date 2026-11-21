@@ -367,7 +367,10 @@ shadows a row of the same name; an enumeration word is never shadowed, and
 one bare word that is a key is never a binding. The innermost binding wins: a
 rule's `local`, a lambda's parameter and a pool binding hide a document
 constant of the same name where they are in scope, for lowering, hover and
-go-to-definition alike (`SyntaxScopes`).
+go-to-definition alike (`SyntaxScopes`). Inside a rule, a spliced rule
+template's parameters and a compile-time loop's variables are inner to the
+rule's locals, so a template body reads its parameters first, then the
+calling rule's locals, then document constants (`DocumentScope.RuleBinders`).
 
 **P5 — One door.** Every consumer that compiles a source calls the same entry
 point with the same options; a harness that compiles a source differently

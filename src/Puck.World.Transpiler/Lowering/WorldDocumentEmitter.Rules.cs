@@ -1260,7 +1260,8 @@ public static partial class WorldDocumentEmitter {
         while (syntax is ExpressionSpelling.SourceGroup group) { syntax = group.Value; }
         var value = syntax switch {
             ExpressionSpelling.SourceAtom atom => DocumentLowering.LowerValue(operand.Atoms[atom.Index].Value, scope),
-            ExpressionSpelling.SourceName { Quoted: false } name when (!GetPoolBindings(scope: scope).Contains(item: name.Name) && (ExpressionSpelling.CurrentLocals?.Contains(item: name.Name) != true) &&
+            ExpressionSpelling.SourceName { Quoted: false } name when (!GetPoolBindings(scope: scope).Contains(item: name.Name) &&
+                ((ExpressionSpelling.CurrentLocals?.Contains(item: name.Name) != true) || scope.RuleBinders.Contains(item: name.Name)) &&
                 scope.TryLowerBinding(name.Name, out var bound)) => bound,
             _ => null,
         };

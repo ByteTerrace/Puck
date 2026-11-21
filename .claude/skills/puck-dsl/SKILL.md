@@ -119,7 +119,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   effect to make its pre-effect read explicit. A header `when`
   (`rule "x" when … { }`) stands after the body's leading locals. A local
   hides a document constant of the same name inside its rule: the innermost
-  binding wins, in lowering, hover and go-to-definition.
+  binding wins, in lowering, hover and go-to-definition. A spliced `rule
+  template`'s parameters and a rule-body `for`'s variables are inner to the
+  rule's locals (`DocumentScope.RuleBinders`).
   A rule has one gate and one decision, so a `when`, `decision` or nested
   `rule` inside a rule-body `for` is **PUCK114**; write the condition in the
   rule's own `when`, or in an `if` inside the loop.
