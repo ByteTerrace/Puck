@@ -1363,6 +1363,8 @@ public static partial class WorldModelShape {
                 M("from", typeof(global::Puck.State.StateChannelRef), typeof(global::Puck.State.StateTransform.ClearEnclosed), "From", Read | Write | Required, static value => ((global::Puck.State.StateTransform.ClearEnclosed)value).From, kind: WorldNameKind.State, role: WorldNameRole.Key, facet: WorldExportFacet.Read),
                 M("lower", typeof(global::System.Int64), typeof(global::Puck.State.StateTransform.ClearEnclosed), "Lower", Read | Write | Required, static value => ((global::Puck.State.StateTransform.ClearEnclosed)value).Lower),
                 M("upper", typeof(global::System.Int64), typeof(global::Puck.State.StateTransform.ClearEnclosed), "Upper", Read | Write | Required, static value => ((global::Puck.State.StateTransform.ClearEnclosed)value).Upper),
+                M("boundaryLower", typeof(global::System.Nullable<global::System.Int64>), typeof(global::Puck.State.StateTransform.ClearEnclosed), "BoundaryLower", Read | Write, static value => ((global::Puck.State.StateTransform.ClearEnclosed)value).BoundaryLower),
+                M("boundaryUpper", typeof(global::System.Nullable<global::System.Int64>), typeof(global::Puck.State.StateTransform.ClearEnclosed), "BoundaryUpper", Read | Write, static value => ((global::Puck.State.StateTransform.ClearEnclosed)value).BoundaryUpper),
             ],
             []),
         T(typeof(global::Puck.State.StateTransform.Mean), true, JsonTypeInfoKind.Object, null,

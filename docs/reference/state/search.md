@@ -176,6 +176,11 @@ that would leave the board, or a relocate onto the token's own cell. The walk
 charges a small inspection price for each of these and moves on without
 running the judge.
 
+A patterned relocate reads occupancy from the open search position and
+prepares a bitset of reachable cells for the current shape and token. The
+cursor still visits targets in cell order and tests one bit per target.
+Preparing reach has a separate allowance charge.
+
 ## Choose the candidate shapes
 
 A job declares one or more shapes. Without any, it uses `relocate` with

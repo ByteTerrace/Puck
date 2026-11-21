@@ -113,28 +113,24 @@ public sealed record SearchMovePlan(long[] Codes, bool AnyTurn, long Turn, int[]
 /// <param name="Moves">The move patterns a <see cref="SearchShapeKind.Relocate"/> narrows its targets to, or
 /// <see langword="null"/> to try every other cell. A pattern naming codes reads them from <paramref name="Codes"/>.</param>
 public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] Directions, int CompanionIndex, string? Codes = null, long[]? PromoteTo = null, ZoneSelector Selector = ZoneSelector.Last, bool InsertFirst = false, int MaxHops = 1, SearchMovePlan[]? Moves = null) {
-    /// <summary>Returns the most work units resolving one candidate against <see cref="Moves"/> costs: one unit per
-    /// pattern to test it applies, then, for the costliest code, every applicable pattern's every step, each a lattice
-    /// offset and a scan of the tokens for an occupant. Zero for a shape with no patterns.</summary>
+    /// <summary>Returns the work to prepare move reach for one token, including an occupancy rebuild and every
+    /// applicable step for the costliest code. Zero for a shape with no move patterns.</summary>
     /// <param name="tokens">The most tokens the job walks.</param>
+    /// <param name="cellCount">The number of cells in each bitset.</param>
     /// <returns>The work units.</returns>
-    public long MoveInspect(int tokens) {
+    public long MovePreparation(int tokens, int cellCount) {
         if (Moves is not { Length: > 0 } moves) {
             return 0L;
         }
 
-        long Walk(SearchMovePlan move) => BinaryIntegerFunctions.MultiplySaturating(
-            left: BinaryIntegerFunctions.MultiplySaturating(
-                left: ((long)move.OffsetCount),
-                right: ((long)move.Steps)
-            ),
-            right: (1L + tokens)
-        );
+        long Walk(SearchMovePlan move) => 3L * move.OffsetCount * move.Steps;
 
         // A code no pattern names walks the code-free patterns alone; a named code walks those and its own.
         var unnamed = 0L;
+        var setup = 2L + tokens + (2L * cellCount.CeilingDivide(divisor: 32));
 
         foreach (var move in moves) {
+            setup += 1L + move.Codes.Length;
             if (move.Codes.Length == 0) {
                 unnamed = BinaryIntegerFunctions.AddSaturating(left: unnamed, right: Walk(move: move));
             }
@@ -160,7 +156,7 @@ public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] 
         }
 
         return BinaryIntegerFunctions.AddSaturating(
-            left: (2L + moves.Length),
+            left: setup,
             right: costliest
         );
     }

@@ -47,79 +47,96 @@ public static class BoardQueries {
     // depends only on the set of pairs and not on the order cells are walked.
     private static ulong Pair(int ordinal, long value) =>
         ((((ulong)ordinal) * SplitMix64.GoldenGamma) ^ ((ulong)value));
-    // A flood along the topology's directions from the key cell over in-range cells; every settled member is one
-    // visit against the budget. Boundary are counted once each through a second mark, so a cell touching the group
-    // twice is one boundary cell.
     private static long Component(BoardComponentQuery query, ReadOnlySpan<long> values, int source, ArenaScratch scratch) {
-        var topology = query.Topology;
-        var count = topology.CellCount;
-
-        if (query.Kind is BoardQueryKind.BoundaryAt or BoardQueryKind.EnclosedAt) {
-            return Placement(
-                query: query,
-                scratch: scratch,
-                source: source,
-                values: values
-            );
+        var enclosed = query.Kind == BoardQueryKind.EnclosedAt;
+        var placement = enclosed || query.Kind == BoardQueryKind.BoundaryAt;
+        var boundary = (query.BoundaryLower, query.BoundaryUpper);
+        if (placement && !InRange(values[source], boundary)) {
+            return -1;
         }
-        if (
-            (values[source] < query.Lower) ||
-            (values[source] > query.Upper)
-        ) {
+
+        var count = query.Topology.CellCount;
+        using var marks = scratch.Rent<int>(count);
+        using var stack = scratch.Rent<int>(count);
+        var flood = new BoardFlood(query.Topology, values, (query.Lower, query.Upper), boundary, marks.Span, stack.Span, query.MaxVisits);
+
+        if (enclosed) {
+            return flood.EnclosedBeside(source, default);
+        }
+        if (!placement && !flood.CanStart(source)) {
             return 0;
         }
-        using var markLease = scratch.Rent<byte>(length: count);
-        using var stackLease = scratch.Rent<int>(length: count);
+        var members = flood.Visit(source, query.Kind == BoardQueryKind.Component ? 0 : 1, default, out var free);
+        return ((members < 0 || query.Kind == BoardQueryKind.Component) ? members : free);
+    }
 
-        var mark = markLease.Span;
-        var stack = stackLease.Span;
+    private static bool InRange(long value, (long Lower, long Upper) range) =>
+        value >= range.Lower && value <= range.Upper;
 
-        var boundary = (query.Kind == BoardQueryKind.Boundary);
-        var size = 0;
-        var members = 0L;
-        var free = 0L;
+    // Members stay marked across groups. A positive stamp makes boundary marks local to one group.
+    private ref struct BoardFlood(CompiledTopology topology, ReadOnlySpan<long> values, (long, long) members,
+        (long, long) boundary, Span<int> marks, Span<int> stack, int budget) {
+        private readonly ReadOnlySpan<long> m_values = values;
+        private readonly Span<int> m_marks = marks;
+        private readonly Span<int> m_stack = stack;
+        private int m_remaining = budget;
 
-        mark[source] = 1;
-        stack[size++] = source;
-        while (size > 0) {
-            var cell = stack[--size];
+        public bool CanStart(int cell) => cell >= 0 && m_marks[cell] >= 0 && InRange(m_values[cell], members);
 
-            if (members == query.MaxVisits) {
-                return -2;
-            }
-            members++;
-            for (var direction = 0; (direction < topology.DirectionCount); direction++) {
-                var next = topology.Neighbour(
-                    cell: cell,
-                    direction: direction
-                );
+        public int EnclosedBeside(int origin, scoped Span<int> cleared) {
+            m_marks[origin] = -1;
+            var total = 0;
 
-                if (
-                    (next < 0) ||
-                    (mark[next] != 0)
-                ) {
+            for (var direction = 0; direction < topology.DirectionCount; direction++) {
+                var start = topology.Neighbour(cell: origin, direction: direction);
+                if (!CanStart(start)) {
                     continue;
                 }
-                if (
-                    (values[next] >= query.Lower) &&
-                    (values[next] <= query.Upper)
-                ) {
-                    mark[next] = 1;
-                    stack[size++] = next;
-                } else if (
-                    boundary &&
-                    (values[next] >= query.BoundaryLower) &&
-                    (values[next] <= query.BoundaryUpper)
-                ) {
-                    mark[next] = 2;
-                    free++;
+                var size = Visit(start, direction + 1, cleared.IsEmpty ? default : cleared[total..], out var free);
+                if (size < 0) {
+                    return size;
+                }
+                if (free == 0) {
+                    total += size;
                 }
             }
+            return total;
         }
-        return (boundary
-            ? free
-            : members
-        );
+
+        public int Visit(int start, int stamp, scoped Span<int> ordinals, out int free) {
+            var pending = 1;
+            var settled = 0;
+            free = 0;
+            m_marks[start] = -1;
+            m_stack[0] = start;
+
+            while (pending > 0) {
+                var cell = m_stack[--pending];
+                if (m_remaining-- == 0) {
+                    return -2;
+                }
+                if (!ordinals.IsEmpty) {
+                    ordinals[settled] = cell;
+                }
+                settled++;
+
+                for (var direction = 0; direction < topology.DirectionCount; direction++) {
+                    var next = topology.Neighbour(cell: cell, direction: direction);
+                    if (next < 0 || m_marks[next] < 0) {
+                        continue;
+                    }
+                    var value = m_values[next];
+                    if (InRange(value, members)) {
+                        m_marks[next] = -1;
+                        m_stack[pending++] = next;
+                    } else if (stamp != 0 && m_marks[next] != stamp && InRange(value, boundary)) {
+                        m_marks[next] = stamp;
+                        free++;
+                    }
+                }
+            }
+            return settled;
+        }
     }
     // Dijkstra over a binary heap keyed (distance, cell ordinal): the same settle order as a linear scan (least
     // distance, lowest ordinal on ties), at O((V + E) log V) instead of O(V²) per query. Stale heap entries are
@@ -210,138 +227,6 @@ public static class BoardQueries {
         }
         return -2;
     }
-    // A value on the empty key cell: BoundaryAt floods the in-range component it would join (the key cell a member)
-    // and counts the distinct boundary cells beside it other than the key cell; EnclosedAt floods each in-range
-    // component beside the key cell and counts the cells of those left with no boundary cell once the key cell is
-    // filled. -1 when the key cell is not empty, -2 when the settled-cell budget runs out across the floods.
-    private static long Placement(BoardComponentQuery query, ReadOnlySpan<long> values, int source, ArenaScratch scratch) {
-        var topology = query.Topology;
-        var count = topology.CellCount;
-
-        if (
-            (values[source] < query.BoundaryLower) ||
-            (values[source] > query.BoundaryUpper)
-        ) {
-            return -1;
-        }
-        using var markLease = scratch.Rent<byte>(length: count);
-        using var stackLease = scratch.Rent<int>(length: count);
-
-        var mark = markLease.Span;
-        var stack = stackLease.Span;
-
-        mark[source] = 1;
-        var settled = 0L;
-
-        if (query.Kind == BoardQueryKind.BoundaryAt) {
-            var size = 0;
-            var free = 0L;
-
-            stack[size++] = source;
-            while (size > 0) {
-                var cell = stack[--size];
-
-                if (settled == query.MaxVisits) {
-                    return -2;
-                }
-                settled++;
-                for (var direction = 0; (direction < topology.DirectionCount); direction++) {
-                    var next = topology.Neighbour(
-                        cell: cell,
-                        direction: direction
-                    );
-
-                    if (
-                        (next < 0) ||
-                        (mark[next] != 0)
-                    ) {
-                        continue;
-                    }
-                    if (
-                        (values[next] >= query.Lower) &&
-                        (values[next] <= query.Upper)
-                    ) {
-                        mark[next] = 1;
-                        stack[size++] = next;
-                    } else if (
-                        (values[next] >= query.BoundaryLower) &&
-                        (values[next] <= query.BoundaryUpper)
-                    ) {
-                        mark[next] = 2;
-                        free++;
-                    }
-                }
-            }
-            return free;
-        }
-        var enclosed = 0L;
-
-        for (var seed = 0; (seed < topology.DirectionCount); seed++) {
-            var start = topology.Neighbour(
-                cell: source,
-                direction: seed
-            );
-
-            if (
-                (start < 0) ||
-                (mark[start] != 0) ||
-                (values[start] < query.Lower) ||
-                (values[start] > query.Upper)
-            ) {
-                continue;
-            }
-            // Boundary cells seen for earlier components are cleared back to unmarked so each counts its own.
-            mark.Replace(
-                newValue: ((byte)0),
-                oldValue: ((byte)2)
-            );
-            var size = 0;
-            var free = 0L;
-            var members = 0L;
-
-            mark[start] = 1;
-            stack[size++] = start;
-            while (size > 0) {
-                var cell = stack[--size];
-
-                if (settled == query.MaxVisits) {
-                    return -2;
-                }
-                settled++;
-                members++;
-                for (var direction = 0; (direction < topology.DirectionCount); direction++) {
-                    var next = topology.Neighbour(
-                        cell: cell,
-                        direction: direction
-                    );
-
-                    if (
-                        (next < 0) ||
-                        (mark[next] != 0)
-                    ) {
-                        continue;
-                    }
-                    if (
-                        (values[next] >= query.Lower) &&
-                        (values[next] <= query.Upper)
-                    ) {
-                        mark[next] = 1;
-                        stack[size++] = next;
-                    } else if (
-                        (values[next] >= query.BoundaryLower) &&
-                        (values[next] <= query.BoundaryUpper)
-                    ) {
-                        mark[next] = 2;
-                        free++;
-                    }
-                }
-            }
-            if (free == 0) {
-                enclosed += members;
-            }
-        }
-        return enclosed;
-    }
     // One path-cost frontier entry: a cell reached at a distance, possibly stale once a cheaper entry for it exists.
     private readonly record struct PathEntry(long Distance, int Cell);
     // Least distance first, lowest cell ordinal on ties: a total order, so the settle order is the linear scan's.
@@ -354,94 +239,38 @@ public static class BoardQueries {
         );
     }
 
-    /// <summary>Clears every group whose values lie in <paramref name="lower"/>..<paramref name="upper"/> beside
-    /// <paramref name="source"/> that has no cell at <paramref name="empty"/> beside it, writing <paramref name="empty"/>
-    /// over its members. The source cell itself counts as filled whatever it holds, so the value just placed there is
-    /// what closes the last gap.</summary>
-    /// <param name="topology">The board's topology.</param>
-    /// <param name="values">One value per cell, rewritten in place.</param>
-    /// <param name="source">The cell the placement landed on.</param>
-    /// <param name="lower">The enclosed range's inclusive low end.</param>
-    /// <param name="upper">The enclosed range's inclusive high end.</param>
-    /// <param name="empty">The board's empty value.</param>
-    /// <param name="scratch">The working storage the flood borrows its marks and stacks from, normally the owning
-    /// arena's; a throwaway one is made when it is <see langword="null"/>.</param>
-    /// <returns>How many cells were cleared.</returns>
-    public static long ClearEnclosed(CompiledTopology topology, Span<long> values, int source, long lower, long upper, long empty, ArenaScratch? scratch = null) {
-        ArgumentNullException.ThrowIfNull(topology);
-        scratch ??= new ArenaScratch();
+    /// <summary>Finds groups beside a filled cell that have no boundary cells in the given inclusive range.
+    /// Writes their ordinals into a buffer of at least the topology's cell count and returns the filled length.</summary>
+    public static int FindEnclosed(CompiledTopology topology, ReadOnlySpan<long> values, int source, long lower, long upper,
+        long boundaryLower, long boundaryUpper, Span<int> cleared, ArenaScratch scratch) {
         var count = topology.CellCount;
+        using var marks = scratch.Rent<int>(count);
+        using var stack = scratch.Rent<int>(count);
+        var flood = new BoardFlood(topology, values, (lower, upper), (boundaryLower, boundaryUpper), marks.Span, stack.Span, count);
+        return flood.EnclosedBeside(source, cleared);
+    }
 
-        if (
-            (((uint)source) >= ((uint)count)) ||
-            (values[source] == empty)
-        ) {
-            return 0L;
+    internal static long Attacks(BoardAttacksQuery query, ReadOnlySpan<long> values, long empty, int source, StateArena? arena = null, int rowOrdinal = -1) {
+        if ((uint)source >= query.Topology.CellCount) {
+            return -1;
         }
-        using var markLease = scratch.Rent<byte>(length: count);
-        using var stackLease = scratch.Rent<int>(length: (2 * count));
-
-        var mark = markLease.Span;
-        var stack = stackLease.Span[..count];
-        var members = stackLease.Span[count..];
-
-        mark[source] = 1;
-        var cleared = 0L;
-
-        for (var seed = 0; (seed < topology.DirectionCount); seed++) {
-            var start = topology.Neighbour(
-                cell: source,
-                direction: seed
-            );
-
-            if (
-                (start < 0) ||
-                (mark[start] != 0) ||
-                (values[start] < lower) ||
-                (values[start] > upper)
-            ) {
-                continue;
-            }
-            var size = 0;
-            var memberCount = 0;
-            var alive = false;
-
-            mark[start] = 1;
-            stack[size++] = start;
-            while (size > 0) {
-                var cell = stack[--size];
-
-                members[memberCount++] = cell;
-                for (var direction = 0; (direction < topology.DirectionCount); direction++) {
-                    var next = topology.Neighbour(
-                        cell: cell,
-                        direction: direction
-                    );
-
-                    if (next < 0) {
-                        continue;
+        foreach (var direction in query.Directions) {
+            foreach (var cell in query.Topology.Ray(origin: source, direction: direction)) {
+                long value;
+                if (arena is null) {
+                    value = values[cell];
+                } else {
+                    _ = arena.TryReadBoardCell(rowOrdinal, cell, out value);
+                }
+                if (value != empty) {
+                    if (InRange(value, (query.Lower, query.Upper))) {
+                        return 1;
                     }
-                    if (values[next] == empty) {
-                        alive = true;
-                    } else if (
-                        (mark[next] == 0) &&
-                        (values[next] >= lower) &&
-                        (values[next] <= upper)
-                    ) {
-                        mark[next] = 1;
-                        stack[size++] = next;
-                    }
+                    break;
                 }
             }
-            if (alive) {
-                continue;
-            }
-            for (var index = 0; (index < memberCount); index++) {
-                values[members[index]] = empty;
-            }
-            cleared += memberCount;
         }
-        return cleared;
+        return 0;
     }
     /// <summary>Evaluates one preflighted query. A ray search never revisits its own wrapped origin.</summary>
     /// <param name="query">The compiled query.</param>
@@ -516,35 +345,7 @@ public static class BoardQueries {
             return jump.Evaluate(values, empty, source, (jump.TargetIsLive ? dynamicTarget : jump.Target), scratch);
         }
         if (query is BoardAttacksQuery attacks) {
-            var directions = attacks.Directions;
-
-            for (var directionIndex = 0; (directionIndex < directions.Length); directionIndex++) {
-                var direction = directions[directionIndex];
-                var rayCell = source;
-
-                for (var distance = 1; (distance < topology.CellCount); distance++) {
-                    rayCell = topology.Neighbour(
-                        cell: rayCell,
-                        direction: direction
-                    );
-                    if (
-                        (rayCell < 0) ||
-                        (rayCell == source)
-                    ) {
-                        break;
-                    }
-                    if (values[rayCell] != empty) {
-                        if (
-                            (values[rayCell] >= attacks.Lower) &&
-                            (values[rayCell] <= attacks.Upper)
-                        ) {
-                            return 1;
-                        }
-                        break;
-                    }
-                }
-            }
-            return 0;
+            return Attacks(attacks, values, empty, source);
         }
         throw new InvalidOperationException(message: $"unhandled board query kind {query.Kind}");
     }
@@ -623,41 +424,6 @@ public static class BoardQueries {
                 values[index] = cell.Value.Raw;
             }
         }
-    }
-    /// <summary>Reads the ray from the origin (exclusive) in one direction, stopping at the edge or on return to the
-    /// origin; an origin that names no cell is the empty word.</summary>
-    /// <param name="topology">The compiled addressing.</param>
-    /// <param name="values">One value per cell.</param>
-    /// <param name="origin">The origin cell, or -1 for none.</param>
-    /// <param name="direction">The direction ordinal.</param>
-    /// <param name="word">The word buffer, at least CellCount long.</param>
-    /// <returns>The ray's length.</returns>
-    public static int ReadRay(CompiledTopology topology, ReadOnlySpan<long> values, int origin, int direction, Span<long> word) {
-        var length = 0;
-
-        if (origin < 0) {
-            return 0;
-        }
-
-        var cell = origin;
-
-        for (var distance = 1; (distance < topology.CellCount); distance++) {
-            cell = topology.Neighbour(
-                cell: cell,
-                direction: direction
-            );
-
-            if (
-                (cell < 0) ||
-                (cell == origin)
-            ) {
-                break;
-            }
-
-            word[length++] = values[cell];
-        }
-
-        return length;
     }
     /// <summary>Moves every set bit of a cell mask to its neighbour in the query's direction, dropping a bit whose
     /// cell has no neighbour that way.</summary>
