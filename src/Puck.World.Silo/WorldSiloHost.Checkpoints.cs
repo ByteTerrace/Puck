@@ -300,6 +300,10 @@ public sealed partial class WorldSiloHost {
                 bookkeeping.LastCheckpointOutcome = $"ok (retention will retry: {failure})";
                 bookkeeping.RetentionFailure = failure;
                 bookkeeping.RetentionFailures++;
+                // Once per failing streak, at the limit private health judges: the operator's signal for leaked storage.
+                if (bookkeeping.RetentionFailures == RetentionFailureLimit) {
+                    Console.Error.WriteLine(value: $"[silo.retention: '{worldId}' cannot delete superseded checkpoints ({failure}); storage leaks until it can]");
+                }
             } else {
                 bookkeeping.RetentionFailure = null;
                 bookkeeping.RetentionFailures = 0;
