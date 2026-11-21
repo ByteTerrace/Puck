@@ -300,7 +300,7 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
 
         if (
             fresh &&
-            (submission is QueuedMachineSubmission.Accepted or QueuedMachineSubmission.AcceptedAfterBackpressure or QueuedMachineSubmission.PendingDrain)
+            submission.IsAccepted()
         ) {
             foreach (var change in m_changes) {
                 m_inputs[change.Seat] = change.Pad;

@@ -43,8 +43,6 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     private readonly string m_workerName;
     private readonly QueuedMachineWorker[] m_workers;
 
-    // The host clock position the last accepted segment ended at, in engine ticks. Producer thread only.
-    private ulong m_clock;
     // The one tick-to-cycle phase for the whole group, so every member advances by identical wall time.
     private RationalRateAccumulator m_cyclePhase;
     private int m_disposed;
@@ -204,28 +202,20 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
             );
         }
 
-        // A call that resumes an accepted segment's drain submits nothing, so only a fresh acceptance moves the clock.
-        var fresh = (generation == 0UL);
-        var clock = (endTicks ?? unchecked(m_clock + deltaTicks));
+        var clock = m_lifecycle.SegmentEnd(
+            deltaTicks: deltaTicks,
+            endTicks: endTicks
+        );
+        // A call that resumes an accepted segment's drain submits nothing, so it copies nothing.
         var item = GroupWorkItem.Step(
-            changes: ((fresh && !changes.IsEmpty) ? changes.ToArray() : null),
+            changes: (((generation == 0UL) && !changes.IsEmpty) ? changes.ToArray() : null),
             clock: clock,
             deltaTicks: deltaTicks,
             forceStage: forceStage,
             inputs: MachinePads.From(inputs: inputs)
         );
-        var submission = (forceStage
-            ? m_lifecycle.Step(in item, ref generation, deadline)
-            : m_lifecycle.Submit(in item, deadline));
 
-        if (
-            fresh &&
-            (submission is QueuedMachineSubmission.Accepted or QueuedMachineSubmission.AcceptedAfterBackpressure or QueuedMachineSubmission.PendingDrain)
-        ) {
-            m_clock = clock;
-        }
-
-        return submission;
+        return m_lifecycle.SubmitSegment(in item, clock, forceStage, ref generation, deadline);
     }
     private void WorkerLoop() {
         var current = default(GroupWorkItem);
@@ -236,17 +226,14 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
 
                 switch (current.Kind) {
                     case GroupWorkKind.Step:
-                        var parts = new SegmentParts(
-                            clock: current.Clock,
-                            deltaTicks: current.DeltaTicks,
-                            workers: m_workers
-                        );
+                        var parts = new SegmentParts(workers: m_workers);
 
                         _ = MachineSegment.Run(
                             changes: current.Changes,
                             core: m_core,
                             deltaTicks: current.DeltaTicks,
                             divides: true,
+                            endTicks: current.Clock,
                             input: current.Inputs,
                             observer: ref parts,
                             phase: ref m_cyclePhase,
@@ -435,17 +422,17 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
 
     // One part of a group segment: every member notes where its own frame completes, then stages the frame the part
     // completed for it.
-    private readonly struct SegmentParts(QueuedMachineWorker[] workers, ulong clock, ulong deltaTicks) : IMachineSegmentObserver {
+    private readonly struct SegmentParts(QueuedMachineWorker[] workers) : IMachineSegmentObserver {
         public void PartStarting() {
             foreach (var worker in workers) {
                 worker.BeginLentPart();
             }
         }
-        public void PartCompleted(ulong positionTicks, bool presents) {
+        public void PartCompleted(ulong stampTicks, bool presents) {
             foreach (var worker in workers) {
                 worker.PublishLentPart(
                     presents: presents,
-                    stamp: unchecked((clock - deltaTicks) + positionTicks)
+                    stamp: stampTicks
                 );
             }
         }

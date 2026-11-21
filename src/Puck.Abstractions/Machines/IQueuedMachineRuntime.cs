@@ -22,6 +22,16 @@ public enum QueuedMachineSubmission {
     /// <summary>The segment was accepted and its ordered drain is still outstanding.</summary>
     PendingDrain,
 }
+/// <summary>Reads a <see cref="QueuedMachineSubmission"/>.</summary>
+public static class QueuedMachineSubmissions {
+    /// <summary>Returns whether the segment is in the machine's queue or beyond it: accepted, with or without a wait
+    /// for capacity, or accepted with its drain still outstanding. A caller that hands over anything with a segment (a
+    /// clock position, scheduled controller changes) lets go of it exactly when a fresh submission answers this.</summary>
+    /// <param name="submission">The submission outcome.</param>
+    /// <returns><see langword="true"/> for every outcome but a rejection and a capacity wait that ran out.</returns>
+    public static bool IsAccepted(this QueuedMachineSubmission submission) =>
+        (submission is QueuedMachineSubmission.Accepted or QueuedMachineSubmission.AcceptedAfterBackpressure or QueuedMachineSubmission.PendingDrain);
+}
 /// <summary>
 /// Optional asynchronous submission capability for a computationally heavy <see cref="IMachineRuntime"/>. Below its
 /// capacity, a host submits exact tick/input segments without waiting for emulation; the machine executes every accepted

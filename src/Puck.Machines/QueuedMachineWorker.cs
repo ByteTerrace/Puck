@@ -77,8 +77,6 @@ public sealed class QueuedMachineWorker : IDisposable {
     private long m_shownFrames;
     // Half the attached core's native frame period, in engine ticks: how far a display is kept in sequence.
     private ulong m_frameSlackTicks = (FixedTickConversion.TicksPerSecond / 120UL);
-    // The host clock position the last accepted segment ended at, in engine ticks. Producer thread only.
-    private ulong m_clock;
     // Reference execution: whole segments, the image held at a segment's end held from its start.
     private volatile bool m_dividesSegments = true;
     // The part in flight, on whichever thread steps the core (this worker's, or a link's while lent): the cycle count
@@ -319,22 +317,13 @@ public sealed class QueuedMachineWorker : IDisposable {
             return QueuedMachineSubmission.Rejected;
         }
 
-        // A call that resumes an accepted segment's drain submits nothing, so only a fresh acceptance moves the clock.
-        var fresh = (generation == 0UL);
-        var clock = (endTicks ?? unchecked(m_clock + deltaTicks));
+        var clock = m_lifecycle.SegmentEnd(
+            deltaTicks: deltaTicks,
+            endTicks: endTicks
+        );
         var item = WorkItem.Step(changes: changes, clock: clock, deltaTicks: deltaTicks, forceStage: forceStage, input: in input);
-        var submission = (forceStage
-            ? m_lifecycle.Step(in item, ref generation, deadline)
-            : m_lifecycle.Submit(in item, deadline));
 
-        if (
-            fresh &&
-            (submission is QueuedMachineSubmission.Accepted or QueuedMachineSubmission.AcceptedAfterBackpressure or QueuedMachineSubmission.PendingDrain)
-        ) {
-            m_clock = clock;
-        }
-
-        return submission;
+        return m_lifecycle.SubmitSegment(in item, clock, forceStage, ref generation, deadline);
     }
     private void ExecuteCheckpoint(IQueuedMachineCore core, CheckpointRequest request) {
         if (request.Restore is { } restore) {
@@ -875,9 +864,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                 switch (current.Kind) {
                     case WorkKind.Step:
                         var parts = new SegmentParts(
-                            clock: current.Clock,
                             core: core,
-                            deltaTicks: current.DeltaTicks,
                             worker: this
                         );
                         var held = MachineSegment.Run(
@@ -885,6 +872,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                             core: core,
                             deltaTicks: current.DeltaTicks,
                             divides: m_dividesSegments,
+                            endTicks: current.Clock,
                             input: current.Input,
                             observer: ref parts,
                             phase: ref m_cyclePhase,
@@ -1442,12 +1430,12 @@ public sealed class QueuedMachineWorker : IDisposable {
     }
 
     // One part of a segment as this worker's own thread publishes it.
-    private struct SegmentParts(QueuedMachineWorker worker, IQueuedMachineCore core, ulong clock, ulong deltaTicks) : IMachineSegmentObserver {
-        public readonly void PartStarting() => worker.BeginPart(core: core);
-        public readonly void PartCompleted(ulong positionTicks, bool presents) => worker.CompletePart(
+    private readonly struct SegmentParts(QueuedMachineWorker worker, IQueuedMachineCore core) : IMachineSegmentObserver {
+        public void PartStarting() => worker.BeginPart(core: core);
+        public void PartCompleted(ulong stampTicks, bool presents) => worker.CompletePart(
             core: core,
             presents: presents,
-            stamp: unchecked((clock - deltaTicks) + positionTicks)
+            stamp: stampTicks
         );
     }
     // One queued frame: its packed RGBA8 pixels, its sequence number, the host clock position it is due at, and the

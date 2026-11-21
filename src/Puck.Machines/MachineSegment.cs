@@ -9,11 +9,11 @@ public interface IMachineSegmentObserver {
     /// <summary>Notes the instant a part starts at, before its input is applied and its cycles run.</summary>
     void PartStarting();
     /// <summary>Publishes what a part completed, with the core standing at an instruction boundary.</summary>
-    /// <param name="positionTicks">The engine ticks of the segment run so far: the segment's whole budget after its last
-    /// part.</param>
+    /// <param name="stampTicks">The host clock position the part ended at, in engine ticks: the segment's end after
+    /// its last part.</param>
     /// <param name="presents">Whether the part's frames are for display: <see langword="false"/> in every repetition of
     /// a fast-forwarded segment but the last.</param>
-    void PartCompleted(ulong positionTicks, bool presents);
+    void PartCompleted(ulong stampTicks, bool presents);
 }
 /// <summary>
 /// The one way a host executes an accepted segment, shared by the single-machine worker and the cable-linked group: the
@@ -41,6 +41,8 @@ public static class MachineSegment {
     /// <param name="input">The seat image held at the segment's start.</param>
     /// <param name="changes">The seats' changes inside the segment, in rising offset order. A change at or past the
     /// segment's end is not applied here.</param>
+    /// <param name="endTicks">The host clock position the segment ends at, in engine ticks, from which each part's
+    /// stamp is counted back.</param>
     /// <param name="divides">Whether the segment runs in parts. <see langword="false"/> is the reference the parts are
     /// held to: one part, holding every seat's last image of the segment from its start.</param>
     /// <param name="observer">The host's publication around each part.</param>
@@ -52,6 +54,7 @@ public static class MachineSegment {
         ulong deltaTicks,
         in MachinePads input,
         ReadOnlySpan<MachineSeatChange> changes,
+        ulong endTicks,
         bool divides,
         ref TObserver observer
     ) where TObserver : IMachineSegmentObserver {
@@ -159,8 +162,8 @@ public static class MachineSegment {
                 }
 
                 observer.PartCompleted(
-                    positionTicks: position,
-                    presents: (repeat == (factor - 1))
+                    presents: (repeat == (factor - 1)),
+                    stampTicks: unchecked((endTicks - deltaTicks) + position)
                 );
             } while (position < deltaTicks);
         }
