@@ -2,7 +2,6 @@ using System.Globalization;
 using Puck.Maths;
 using Puck.Overlays;
 using Puck.World.Client;
-using Puck.World.Server;
 using Puck.Abstractions.Presentation;
 
 namespace Puck.World;
@@ -21,13 +20,12 @@ namespace Puck.World;
 /// </summary>
 /// <param name="client">The client whose mirror world-scope panels read, and whose tick <c>world.tick</c> presents.</param>
 /// <param name="frameRate">The frame-rate monitor <c>world.fps</c> presents.</param>
-/// <param name="population">The population <c>population.active</c> counts.</param>
+/// <param name="feed">The published values whose body counts <c>population.active</c> presents and whose history window
+/// the <c>history.*</c> tokens present; a window the boot world does not hold reads "off".</param>
 /// <param name="continuum">The continuum a seat position resolves through.</param>
 /// <param name="seatBindings">The seat bindings, whose routed mirror a seat's panel reads.</param>
-/// <param name="history">The boot world's in-session history the <c>history.*</c> tokens present, or
-/// <see langword="null"/> for a host with none, where they read "off".</param>
 /// <param name="readings">The host's optional named presentation sources.</param>
-public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor frameRate, WorldPopulation population, WorldContinuum continuum, WorldSeatBindings seatBindings, WorldHistory? history, PresentationReadings? readings = null) : IHudBindingResolver {
+public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor frameRate, WorldPresentationFeed feed, WorldContinuum continuum, WorldSeatBindings seatBindings, PresentationReadings? readings = null) : IHudBindingResolver {
     private readonly char[] m_readingText = new char[64];
 
     /// <inheritdoc/>
@@ -68,10 +66,9 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
 
     private readonly WorldClient m_client = client;
     private readonly FrameRateMonitor m_frameRate = frameRate;
-    private readonly WorldPopulation m_population = population;
+    private readonly WorldPresentationFeed m_feed = feed;
     private readonly WorldContinuum m_continuum = continuum;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
-    private readonly WorldHistory? m_history = history;
     // Two UInt64 decimal values and their two-character separator, reused by the history bindings.
     private readonly char[] m_historyText = new char[42];
     // Every token seen so far, parsed once; an unknown token is remembered as unresolvable.
@@ -91,10 +88,11 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
         );
     }
     private void ResolvePopulationActive(out float fraction, out ReadOnlySpan<char> text) {
-        var active = m_population.SimulatedCount;
+        var tick = m_feed.Tick;
+        var active = tick.SimulatedBodies;
 
         fraction = Math.Clamp(
-            value: (((float)active) / m_population.PeerCapacity),
+            value: (((float)active) / Math.Max(val1: 1, val2: tick.PeerCapacity)),
             min: 0f,
             max: 1f
         );
@@ -158,7 +156,11 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
             fraction = Fraction(presented, sample.Min, sample.Max, value.Kind == CellKind.Fixed);
         }
     }
-    internal static string FormatValue(CellValue value) => !value.HasValue ? string.Empty : value.Kind switch {
+    /// <summary>Formats a state cell's value as a HUD binding shows it.</summary>
+    /// <param name="value">The cell's value.</param>
+    /// <returns>The text, empty for a cell holding no value.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is of a kind no binding presents.</exception>
+    public static string FormatValue(CellValue value) => !value.HasValue ? string.Empty : value.Kind switch {
         CellKind.Int => value.AsInt.ToString(CultureInfo.InvariantCulture),
         CellKind.Fixed => FixedQ4816.FromRawBits(value.AsFixed).ToString(),
         CellKind.Bool => value.AsBool ? "true" : "false",
@@ -166,9 +168,14 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
         CellKind.Vector => $"vector[{value.AsVector.Length.ToString(CultureInfo.InvariantCulture)}]",
         _ => throw new ArgumentOutOfRangeException(nameof(value))
     };
-    // A row declaring no range draws empty. The envelope is raw, so a Fixed row's bounds convert to the presented
-    // value's units first.
-    internal static float Fraction(double presented, long? min, long? max, bool fixedPoint) {
+    /// <summary>Returns the fraction of its row's declared range a presented value fills, for a gauge: zero for a row
+    /// declaring no range. The range is raw, so a fixed-point row's bounds convert to the presented value's units first.</summary>
+    /// <param name="presented">The presented value.</param>
+    /// <param name="min">The row's raw minimum, or <see langword="null"/> for none.</param>
+    /// <param name="max">The row's raw maximum, or <see langword="null"/> for none.</param>
+    /// <param name="fixedPoint">Whether the row holds Q48.16 fixed-point values.</param>
+    /// <returns>The fraction, clamped to [0, 1].</returns>
+    public static float Fraction(double presented, long? min, long? max, bool fixedPoint) {
         if (
             (min is not { } lo) ||
             (max is not { } hi) ||
@@ -196,17 +203,14 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
     // and how far it has filled toward its length. Both read "off" with an empty gauge while no window is held. Neither
     // reads a byte count: the keyframes' bytes include rows a seat may not read.
     private void ResolveHistory(HudBindingKind kind, out float fraction, out ReadOnlySpan<char> text) {
-        if (
-            (m_history is not { } history) ||
-            (history.OldestTick is not { } oldest) ||
-            (history.HeadTick is not { } head) ||
-            (history.CursorTick is not { } cursor)
-        ) {
+        if (m_feed.Tick.History is not { } history) {
             fraction = 0f;
             text = "off";
 
             return;
         }
+
+        var (oldest, head, cursor, windowTicks) = history;
 
         if (kind == HudBindingKind.HistoryCursor) {
             fraction = ((head > oldest)
@@ -223,7 +227,7 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
             min: 0f,
             value: (((float)(head - oldest)) / Math.Max(
                 val1: 1UL,
-                val2: history.WindowTicks
+                val2: windowTicks
             ))
         );
         _ = oldest.TryFormat(destination: m_historyText, charsWritten: out var prefix, provider: CultureInfo.InvariantCulture);

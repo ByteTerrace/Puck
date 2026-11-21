@@ -31,7 +31,7 @@ public sealed partial class WorldScreenBinder : IWorldScreenImages {
     /// (the feed its source instance opened: a probe's states its provisioned ring's).</remarks>
     public bool TryExtent(int screen, out int width, out int height) {
         (width, height) = ((ShownOf(screen: screen) is WorldScreenSource.Machine machine)
-            ? ExtentOf(output: m_machines.VideoOutput(
+            ? ExtentOf(output: MachinesOf(world: WorldInstanceHost.BootInstanceName)?.VideoOutput(
                 instance: machine.Instance,
                 output: machine.Output
             ))

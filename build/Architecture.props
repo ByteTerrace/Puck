@@ -263,6 +263,17 @@
              document validator checks a views.post row's package against). No Puck.World.Server, no Backends row, no
              Presentation row: this project reads the document and the wire, never the authoritative fold. -->
         <PuckArchitectureProfile Include="Puck.World.Client" Forbid="Puck.World.Server;Backends;Presentation" />
+        <!-- The frame's side of the World, split out of the composition root (docs/project-map.md's
+             Puck.World.Presentation row): the types a produced frame runs, which may not hold the authority, and the
+             values the authority publishes for them at each collect (the tick record, the machine presentation table, the
+             diagnostic copy). Everything Puck.World.Client's closure carries, plus Client itself. The profile is the
+             proof that no frame type holds the authority: a field, parameter or closure of a Puck.World.Server or
+             Puck.World.Machines type here (WorldServer, WorldPopulation, WorldBody, a machine host) fails the build, so
+             a reference taken inside the boundary window cannot be read outside it from frame code. Puck.World.Console
+             and Puck.World.Addons hold Puck.World.Server, so they are out too. What the composition root wires in
+             (a delegate, a published record) is the one place left to read. No Backends or Presentation row: the frame
+             reaches the GPU through Puck.SdfVm and Puck.Shaders, never a backend. -->
+        <PuckArchitectureProfile Include="Puck.World.Presentation" Forbid="Puck.World.Server;Puck.World.Machines;Backends;Presentation" />
         <!-- The document vocabulary row (docs/project-map.md's Puck.World.Vocabulary row): WorldAffordances,
              WorldContextFamilies and WorldSchemaVocabularyHooks, the one wiring of Puck.World.Schema's injection seams.
              Puck.Input for the physical source vocabulary, Puck.Shaders for the render graph package catalog a

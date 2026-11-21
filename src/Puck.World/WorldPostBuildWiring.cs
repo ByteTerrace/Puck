@@ -89,11 +89,17 @@ public static class WorldPostBuildWiring {
         // (WorldSeatBindings holds the boot instance's; the document validator compiles the candidate's).
         WorldAffordances.Install(registry: consoleRegistry);
 
-        // The live document's `commands` rows answer beside the engine's verbs. The registry reads the set on every
-        // resolution, so a reload, a load or an undo that swaps the document changes them with it.
-        var commandServer = services.GetRequiredService<WorldServer>();
+        // The first collect, so a frame or a key press before the first host step reads published values.
+        var presentation = services.GetRequiredService<WorldPresentationCollect>();
 
-        consoleRegistry.UseAuthoredCommands(source: _ => WorldConsoleCommands.For(definition: commandServer.Configuration));
+        presentation.Collect();
+
+        // The live document's `commands` rows answer beside the engine's verbs. The registry reads the set on every
+        // resolution, from a key press while input is captured as from a console line, so it reads the set the last
+        // collect published: a reload, a load or an undo that swaps the document changes it at the next collect.
+        var feed = services.GetRequiredService<WorldPresentationFeed>();
+
+        consoleRegistry.UseAuthoredCommands(source: _ => feed.Tick.Commands);
         consoleRegistry.UseVerbCatalog(catalog: WorldConsoleVerbCatalog.Lookup);
 
         var seatBindings = services.GetRequiredService<WorldSeatBindings>();
@@ -121,6 +127,8 @@ public static class WorldPostBuildWiring {
         // exactly the authority PrincipalOf reports. Unconditional — Disengage on an already-clear route is the
         // ordinary NotEngaged no-op.
 
+        // A timeline restored by a console verb moves the authority outside a step, so the frame's values are copied again.
+        services.GetRequiredService<WorldReplayTape>().TimelineRestored += presentation.Collect;
         services.GetRequiredService<WorldReplayTape>().TimelineRestored += () => {
             for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
                 if (

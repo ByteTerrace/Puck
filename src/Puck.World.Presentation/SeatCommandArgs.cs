@@ -7,13 +7,13 @@ namespace Puck.World;
 /// Shared seat-scoped console-argument helpers: seat resolution and echo formatting, usable by any seat-scoped verb
 /// without a hard-coded mode.
 /// </summary>
-internal static class SeatCommandArgs {
+public static class SeatCommandArgs {
     /// <summary>Formats a seat-scoped command result for the transcript.</summary>
     /// <param name="slot">The zero-based player slot.</param>
     /// <param name="verb">The command name.</param>
     /// <param name="detail">The command result detail.</param>
     /// <returns>The formatted command result.</returns>
-    internal static CommandResult Echo(int slot, string verb, string detail) =>
+    public static CommandResult Echo(int slot, string verb, string detail) =>
         new(Output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} {detail}]");
     /// <summary>Resolves the acting seat exactly like <see cref="ResolveSlot"/>, additionally requiring it to be
     /// JOINED — the gate a verb that DRIVES or MUTATES a live seat needs, in the ONE wording every call site shares.
@@ -26,7 +26,7 @@ internal static class SeatCommandArgs {
     /// <param name="verb">The verb name for error text.</param>
     /// <param name="defaultSlot">See <see cref="ResolveSlot"/>.</param>
     /// <returns>The resolved 0-based slot, or an error result on a malformed index or an unjoined seat.</returns>
-    internal static (int Slot, CommandResult? Error) ResolveJoinedSeat(PlayerRoster roster, CommandContext context, in WireArgs args, int at, string verb, int? defaultSlot = null) {
+    public static (int Slot, CommandResult? Error) ResolveJoinedSeat(PlayerRoster roster, CommandContext context, in WireArgs args, int at, string verb, int? defaultSlot = null) {
         var (slot, error) = ResolveSlot(
             args: in args,
             at: at,
@@ -59,7 +59,7 @@ internal static class SeatCommandArgs {
     /// <see cref="CommandContext.Slot"/> fallback — pass <c>0</c> for a verb documented as "default 1" regardless of
     /// the acting session.</param>
     /// <returns>The resolved 0-based slot, or an error result on a malformed index (-1 slot).</returns>
-    internal static (int Slot, CommandResult? Error) ResolveSlot(CommandContext context, in WireArgs args, int at, string verb, int? defaultSlot = null) {
+    public static (int Slot, CommandResult? Error) ResolveSlot(CommandContext context, in WireArgs args, int at, string verb, int? defaultSlot = null) {
         if (args.Count <= at) {
             return (Slot: (defaultSlot ?? context.Slot), Error: null);
         }

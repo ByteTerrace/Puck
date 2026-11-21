@@ -260,7 +260,10 @@ public sealed class WorldScreenBinderLawTests {
         Assert.False(condition: binder.TryExtent(height: out _, screen: BinderScene.Pattern, width: out _));
         Assert.Equal(actual: binder.CurrentHandle(index: BinderScene.Pattern), expected: 0);
         Assert.Null(@object: binder.FenceOrderAt(index: BinderScene.Probe));
-        Assert.Same(actual: binder.MachinesOf(world: WorldInstanceHost.BootInstanceName), expected: scene.Machines);
+        // A screen reads its world's machines from the table a collect publishes, never from a machine host.
+        Assert.Null(@object: binder.MachinesOf(world: WorldInstanceHost.BootInstanceName));
+        scene.Feed.Publish(diagnostics: WorldDiagnosticCopy.Off, machines: WorldPresentationCopy.Machines(held: WorldMachineTable.Empty, instances: scene.Host), tick: WorldTickRecord.Empty);
+        Assert.Same(actual: binder.MachinesOf(world: WorldInstanceHost.BootInstanceName), expected: scene.Machines.CapturePresentation());
         Assert.Null(@object: binder.MachinesOf(world: "nowhere"));
         Assert.NotNull(@object: binder.MachinesOf(world: session.InstanceName));
         Assert.Contains(
@@ -977,6 +980,7 @@ public sealed class WorldScreenBinderLawTests {
                 cameras: (options.Cameras ?? boot.Cameras),
                 domains: new WorldValueDomainGuard(),
                 facts: static () => new NoFacts(),
+                feed: Feed,
                 hostsOnDirectX: options.HostsOnDirectX,
                 instanceHost: Host,
                 machines: Machines,
@@ -995,6 +999,7 @@ public sealed class WorldScreenBinderLawTests {
 
         public WorldScreenBinder Binder { get; }
         public WorldRenderProbe RenderProbe { get; } = new();
+        public WorldPresentationFeed Feed { get; } = new();
         public WorldInstance Boot { get; }
         public WorldCamera Camera { get; }
         public WorldInstanceHost Host { get; }

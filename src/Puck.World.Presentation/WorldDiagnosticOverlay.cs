@@ -2,14 +2,22 @@ using System.Numerics;
 using Puck.Overlays;
 using Puck.SdfVm;
 using Puck.World.Client;
-using Puck.World.Server;
 using Puck.Assets;
 using Puck.Shaders;
 
 namespace Puck.World;
 
-// The diagnostic overlay is a consumer of a retained scene, never a producer of simulation or lighting input.
-internal sealed class WorldDiagnosticOverlay(WorldDiagnostics diagnostics, WorldSeatViewports viewports,
+/// <summary>
+/// Draws the published diagnostic copy (<see cref="WorldPresentationFeed.Diagnostics"/>) over the first seat's view: a pin
+/// per finding the report holds, its occlusion sampled one finding a round trip, and the report a capture of the frame
+/// writes beside it. It projects the report the collect last made and never starts one, so it reads no authority value;
+/// a consumer of a retained scene, never a producer of simulation or lighting input.
+/// </summary>
+/// <param name="feed">The published values whose diagnostic copy the overlay draws.</param>
+/// <param name="viewports">The seats' viewports, the first of which the pins are projected into.</param>
+/// <param name="probe">The render probe holding the world residency whose frame the pins are drawn over.</param>
+/// <param name="graphs">The view graph host whose pickers sample a pin's occlusion.</param>
+public sealed class WorldDiagnosticOverlay(WorldPresentationFeed feed, WorldSeatViewports viewports,
     WorldRenderProbe probe, WorldViewGraphHost graphs) : IDiagnosticOverlaySource {
     private SdfWorldPicker? m_sampler;
     private long m_request;
@@ -19,21 +27,31 @@ internal sealed class WorldDiagnosticOverlay(WorldDiagnostics diagnostics, World
     private readonly Dictionary<string, (bool Hidden, float Delta)> m_depth = new(comparer: StringComparer.Ordinal);
 
     private int m_nextSample;
-    private ulong m_lastTick;
-
-    private long m_revision = -1;
-
-    private bool m_drawnReady;
     private Puck.Abstractions.Cameras.CameraSnapshot? m_camera;
 
+    /// <summary>Gets the overlay frame the latest snapshot drew, or <see langword="null"/> while no diagnostic view is
+    /// drawn.</summary>
     public DiagnosticOverlayFrame? Retained { get; private set; }
+    /// <summary>Gets the report the latest snapshot drew, each finding marked with its visibility in the first seat's
+    /// view, or <see langword="null"/> while no diagnostic view is drawn.</summary>
     public WorldDiagnosticReport? RetainedReport { get; private set; }
 
+    /// <summary>Returns whether a capture of the frame can be served: no diagnostic view is drawn, or the overlay has drawn
+    /// a report and the scene's beauty node can read its presented surface.</summary>
+    /// <param name="runtime">The render graph runtime.</param>
+    /// <param name="scene">The scene instance the capture reads.</param>
+    /// <returns><see langword="true"/> when the capture can be served.</returns>
     public bool CaptureReady(RenderGraphRuntime runtime, string scene) =>
-        ((diagnostics.Mode is not ("colliders" or "contacts")) || ((RetainedReport is not null) &&
+        (!feed.Diagnostics.Drawn || ((RetainedReport is not null) &&
         (runtime.NodeOf(instance: scene) is { } node) && node.CanReadPresented(image: node.PublishedSurface)));
+    /// <summary>Returns what a capture of the frame writes beside its image while a diagnostic view is drawn: the raw
+    /// beauty frame and the drawn report, each finding naming the frame.</summary>
+    /// <param name="runtime">The render graph runtime.</param>
+    /// <param name="scene">The scene instance the capture reads.</param>
+    /// <returns>The companion writer, given the capture's path, or <see langword="null"/> while no view is drawn.</returns>
+    /// <exception cref="InvalidOperationException">The scene has no retained beauty node, or its frame is not ready.</exception>
     public Action<string>? CaptureCompanion(RenderGraphRuntime runtime, string scene) {
-        if ((RetainedReport is not { } report) || (diagnostics.Mode is not ("colliders" or "contacts"))) { return null; }
+        if ((RetainedReport is not { } report) || !feed.Diagnostics.Drawn) { return null; }
         var node = (runtime.NodeOf(instance: scene) ?? throw new InvalidOperationException(message: "The diagnostic frame has no retained beauty node."));
         var image = node.PublishedSurface;
 
@@ -55,30 +73,25 @@ internal sealed class WorldDiagnosticOverlay(WorldDiagnostics diagnostics, World
             File.WriteAllText(contents: json, path: (stem + ".report.json"));
         };
     }
+    /// <inheritdoc/>
     public DiagnosticOverlayFrame? Snapshot() {
-        if ((diagnostics.Mode is not ("colliders" or "contacts")) || (probe.Residency?.Frame is not { } frame)) {
+        var copy = feed.Diagnostics;
+
+        if (!copy.Drawn || (copy.Report is null) || (probe.Residency?.Frame is not { } frame)) {
             Retained = null;
             RetainedReport = null;
             return null;
         }
         // Apart from the check, since the projection's closure is made on entry to the method holding it, and every
         // frame with the view off returns above.
-        return Snapshot(frame: frame);
+        return Snapshot(copy: copy, frame: frame);
     }
 
-    private DiagnosticOverlayFrame? Snapshot(SdfFrame frame) {
+    private DiagnosticOverlayFrame? Snapshot(WorldDiagnosticCopy copy, SdfFrame frame) {
         var view = viewports.Seat(slot: 0);
 
         if (!view.Present) { return null; }
-        var report = diagnostics.Latest;
-
-        if ((report is null) || diagnostics.HasPending(view: diagnostics.Mode) || (m_revision != diagnostics.Revision) || (m_drawnReady != diagnostics.DrawnReady) || (frame.DrawRowsRevision != m_meshRevision) ||
-            ((diagnostics.Mode == "contacts") && (diagnostics.Tick != m_lastTick))) {
-            report = diagnostics.Report(diagnostics.Mode);
-            m_lastTick = diagnostics.Tick;
-            m_revision = diagnostics.Revision;
-            m_drawnReady = diagnostics.DrawnReady;
-        }
+        var report = copy.Report!;
         var instance = view.RenderInstance;
 
         if (instance is null) { return null; }
@@ -89,7 +102,7 @@ internal sealed class WorldDiagnosticOverlay(WorldDiagnostics diagnostics, World
             m_camera = view.Camera;
         }
         if ((m_sampler?.Result is { } answer) && (answer.Request == m_request) && (m_requestedFinding is { } id) &&
-            (answer.MeshRevision == frame.DrawRowsRevision) && (diagnostics.Find(id: id) is { } sampled) && (answer.Sample is { } sample) && (sample.Camera == view.Camera)) {
+            (answer.MeshRevision == frame.DrawRowsRevision) && (copy.Find(id: id) is { } sampled) && (answer.Sample is { } sample) && (sample.Camera == view.Camera)) {
             var witnessDistance = Vector3.Distance(value1: sample.Camera.Position, value2: (sampled.PinAnchor ?? sampled.Witness));
             var difference = (witnessDistance - answer.Distance);
 
@@ -116,7 +129,7 @@ internal sealed class WorldDiagnosticOverlay(WorldDiagnostics diagnostics, World
         var protectedRegions = new List<Vector4>();
         var visibleFindings = new List<WorldDiagnosticFinding>();
 
-        foreach (var finding in report.Findings.Where(predicate: f => (!f.Resolved && ((f.Severity == "red") || (diagnostics.Amber && (f.Severity == "amber")))))) {
+        foreach (var finding in report.Findings.Where(predicate: f => (!f.Resolved && ((f.Severity == "red") || (copy.Amber && (f.Severity == "amber")))))) {
             var anchor = Project((finding.PinAnchor ?? finding.Witness), out var offscreen);
             var low = anchor;
             var high = anchor;
@@ -144,7 +157,7 @@ internal sealed class WorldDiagnosticOverlay(WorldDiagnostics diagnostics, World
                 ((evidence.X + evidence.Z) > region.X) && ((evidence.Y + evidence.W) > region.Y)) { protectedRegions.Add(item: evidence); }
             var depth = m_depth.GetValueOrDefault(key: finding.Id);
             Vector2? caliper = ((finding.SurfaceWitness is { } surface) ? Project(offscreen: out _, point: surface) : null);
-            var normalDirection = ((diagnostics.Mode == "contacts") ? (Project((finding.Witness + (finding.Normal * 0.2f)), out _) - Project(finding.Witness, out _)) : Vector2.Zero);
+            var normalDirection = ((copy.Mode == "contacts") ? (Project((finding.Witness + (finding.Normal * 0.2f)), out _) - Project(finding.Witness, out _)) : Vector2.Zero);
 
             pins.Add(item: new(finding.Id, anchor, evidence, (finding.Severity == "amber"), depth.Hidden, offscreen, depth.Delta, caliper, normalDirection));
             visibleFindings.Add(item: finding with {
@@ -163,9 +176,8 @@ internal sealed class WorldDiagnosticOverlay(WorldDiagnostics diagnostics, World
             m_request = m_sampler.Request(Math.Clamp(max: 0.999999f, min: 0, value: x), Math.Clamp(max: 0.999999f, min: 0, value: y), surface: true);
             m_requestedFinding = pin.Id;
         }
-        RetainedReport = report with { Findings = visibleFindings.Concat(second: report.Findings.Where(predicate: f => ((f.Severity == "unknown") || f.Resolved || ((f.Severity == "amber") && !diagnostics.Amber)))).ToArray() };
-        diagnostics.Retain(report: RetainedReport);
-        Retained = new(pins.OrderBy(keySelector: p => p.Amber).ThenBy(keySelector: p => p.Offscreen).ToArray(), protectedRegions, viewport, report.Summary(), (diagnostics.Presentation == "focus"), (diagnostics.Presentation == "pins-only"));
+        RetainedReport = report with { Findings = visibleFindings.Concat(second: report.Findings.Where(predicate: f => ((f.Severity == "unknown") || f.Resolved || ((f.Severity == "amber") && !copy.Amber)))).ToArray() };
+        Retained = new(pins.OrderBy(keySelector: p => p.Amber).ThenBy(keySelector: p => p.Offscreen).ToArray(), protectedRegions, viewport, report.Summary(), (copy.Presentation == "focus"), (copy.Presentation == "pins-only"));
         return Retained;
     }
 }

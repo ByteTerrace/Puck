@@ -8,7 +8,7 @@ namespace Puck.World;
 /// event through its OWN device), so this is reached only for a genuinely unclassified device (e.g. a platform that
 /// has not yet stamped one, or the brief window before a fresh mouse's first report is observed).
 /// </summary>
-internal static class WorldPointerSlot {
+public static class WorldPointerSlot {
     /// <summary>Resolves the fallback seat for an unresolvable pointer event.</summary>
     /// <param name="roster">The live local-player roster.</param>
     /// <returns>Slot 0.</returns>

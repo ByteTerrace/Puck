@@ -2,7 +2,7 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Puck.World.Server;
+namespace Puck.World;
 
 /// <summary>A check-specific uncertainty budget, in metres. Snap reach is deliberately absent.</summary>
 /// <param name="CollisionMargin">Authored collision expansion.</param>
@@ -13,7 +13,7 @@ public sealed record WorldDiagnosticBudget(double CollisionMargin, double Contac
     /// <summary>A shape-derived maximum inward error of a conservative collider. Never permits outward error.</summary>
     public double ConservativeInset { get; init; }
     /// <summary>The rest band a rigid support settles within past the contact skin
-    /// (<see cref="WorldPopulation.RigidRestBand"/>), in metres; zero for any other body.</summary>
+    /// (<c>WorldPopulation.RigidRestBand</c>), in metres; zero for any other body.</summary>
     public double RestBand { get; init; }
     /// <summary>Total explained uncertainty.</summary>
     public double Total => ((((Math.Abs(value: CollisionMargin) + Math.Abs(value: ContactSkin)) + Math.Abs(value: Numerical)) + Math.Abs(value: BakeHalfDiagonal)) + Math.Abs(value: RestBand));
@@ -100,7 +100,7 @@ public sealed record WorldDiagnosticCoverage(int Tested, int Eligible, IReadOnly
 public sealed record WorldDiagnosticSampleCounts(int Red, int Clean, int Unknown) {
     /// <summary>Gets the witnesses certified outside the comparison: each lies in a seam or crevice its solids enclose,
     /// narrower than the drawn surface's precision there, which the drawn mesh closes over
-    /// (<see cref="WorldDiagnosticGeometry.OpensOnto"/>). Neither clean nor red.</summary>
+    /// (<c>WorldDiagnosticGeometry.OpensOnto</c>). Neither clean nor red.</summary>
     public int Enclosed { get; init; }
 }
 /// <summary>An immutable diagnostic snapshot, including incomplete coverage.</summary>

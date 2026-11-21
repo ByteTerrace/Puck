@@ -29,7 +29,7 @@ namespace Puck.World;
 /// <param name="Presence">The authored <see cref="WorldBindingBarAuthoring.Visible"/> condition's presence, 0..1 —
 /// the bar's opacity multiplier, so a fading <c>recently</c> predicate fades the bar rather than cutting it. 1
 /// under a live override or with no condition.</param>
-internal readonly record struct WorldBindingBarStatus(
+public readonly record struct WorldBindingBarStatus(
     BindingPageView ActivePage,
     int ActiveBank,
     WorldBindingBarAuthoring Authoring,
@@ -49,7 +49,7 @@ internal readonly record struct WorldBindingBarStatus(
 /// (<see cref="BindingProfileDocument.BindingBar"/>), and the live override.</summary>
 /// <remarks>Read-only over the live override: the only writer is the <c>binding-bar</c> session lever's registered
 /// setter, so a forced bar has crossed the server's <c>Mutate</c> check over <c>section:bindings</c>.</remarks>
-internal sealed class WorldBindingBarControl {
+public sealed class WorldBindingBarControl {
     // The compiled form of each seat's live layout, rebuilt only when the layout instance changes (a document
     // swap or a layout-cell flip) — the one derivation a status call may hand out without allocating.
     private readonly WorldBindingBarLayout?[] m_compiledSource = new WorldBindingBarLayout?[PlayerRoster.MaxSlots];

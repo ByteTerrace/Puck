@@ -511,6 +511,7 @@ public static class WorldBootComposition {
             var definition = sp.GetRequiredService<WorldDefinition>();
             var probe = sp.GetService<WorldRenderProbe>();
             var binder = new WorldScreenBinder(
+                feed: sp.GetRequiredService<WorldPresentationFeed>(),
                 renderProbe: probe,
                 screens: ExpandedScreens(definition: definition),
                 machines: sp.GetRequiredService<WorldMachineHost>(),
@@ -840,25 +841,42 @@ public static class WorldBootComposition {
         // panel's row rather than having a door of its own. CORE: every dependency (WorldClient, FrameRateMonitor, WorldPopulation) is
         // core data, and the HUD document itself is server state — only the STRUCTURE store that feeds the
         // on-screen overlay (HudStore/WorldHudFeed) is presentation-only.
+        // The values the authority publishes for the frame, and the collect that copies them once a host step inside the
+        // boundary window (the seat post-step runs it): every frame-side reader of the authority reads these.
+        services.AddSingleton<WorldPresentationFeed>();
+        services.AddSingleton(implementationFactory: static sp => {
+            var draws = (sp.GetService<WorldRenderProbe>() is not null);
+            WorldDiagnosticOverlay? overlay = null;
+
+            return new WorldPresentationCollect(
+                diagnostics: sp.GetRequiredService<WorldDiagnostics>(),
+                // Read only while a diagnostic view is on over a drawn frame, when the render root already holds the overlay.
+                drawnReport: () => (draws ? (overlay ??= sp.GetRequiredService<WorldDiagnosticOverlay>()).RetainedReport : null),
+                feed: sp.GetRequiredService<WorldPresentationFeed>(),
+                history: sp.GetRequiredService<WorldHistory>(),
+                instances: sp.GetRequiredService<WorldInstanceHost>(),
+                server: sp.GetRequiredService<WorldServer>()
+            );
+        });
         services.AddSingleton(implementationFactory: static sp => {
             var readings = new PresentationReadings();
             sp.GetService<HostFrameTimeline>()?.RegisterReadings(readings);
-            // Each local seat body's innermost place in the boot world (body.place's `at`), for a HUD template to bind.
-            if (sp.GetService<WorldServer>() is { } server) {
-                for (var seat = 0; (seat < WorldBodiesLimits.LocalSeatCount); seat++) {
-                    var slot = seat;
+            // Each local seat body's innermost place in the boot world (body.place's `at`), for a HUD template to bind,
+            // as the last collect copied it.
+            var feed = sp.GetRequiredService<WorldPresentationFeed>();
 
-                    readings.Register(name: $"seat.{(seat + 1)}.place", read: () => new(PresentationReadingState.Present, Text: (server.Events.SeatPlace(seat: slot) ?? "none")));
-                }
+            for (var seat = 0; (seat < WorldBodiesLimits.LocalSeatCount); seat++) {
+                var slot = seat;
+
+                readings.Register(name: $"seat.{(seat + 1)}.place", read: () => new(PresentationReadingState.Present, Text: (feed.Tick.SeatPlace(seat: slot) ?? "none")));
             }
             return readings;
         });
         services.AddSingleton<IHudBindingResolver>(implementationFactory: static sp => new WorldHudBindingResolver(
             client: sp.GetRequiredService<WorldClient>(),
             frameRate: sp.GetRequiredService<FrameRateMonitor>(),
-            population: sp.GetRequiredService<WorldPopulation>(),
+            feed: sp.GetRequiredService<WorldPresentationFeed>(),
             continuum: sp.GetRequiredService<WorldContinuum>(),
-            history: sp.GetRequiredService<WorldHistory>(),
             readings: sp.GetRequiredService<PresentationReadings>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>()
         ));
@@ -1266,6 +1284,7 @@ public static class WorldBootComposition {
         var haptics = sp.GetRequiredService<WorldHapticDirector>();
         var keyLights = sp.GetRequiredService<WorldKeyLightDirector>();
         var highlights = sp.GetService<WorldHighlightDirector>();
+        var presentation = sp.GetRequiredService<WorldPresentationCollect>();
 
         return () => {
             for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
@@ -1289,6 +1308,8 @@ public static class WorldBootComposition {
             haptics.Tick(tick: client.Tick);
             keyLights.Tick();
             highlights?.Tick();
+            // The collect: what the frame reads of the authority, copied after every instance stepped.
+            presentation.Collect();
         };
     }
     /// <summary>Registers the boot shape the resolved host settings select over the authoritative core: the headless

@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Text;
 using Puck.SdfVm;
 using Puck.World.Protocol;
-using Puck.World.Server;
 
 namespace Puck.World;
 
@@ -34,8 +33,9 @@ namespace Puck.World;
 /// than starting another loop, so a script's <c>begin</c> line names the reload or kernel reload that follows it. Any
 /// other new loop supersedes the latest one, whose stages stop there, since the next edit's frames can no longer tell the
 /// two apart. The boot loop runs beside them.</remarks>
-/// <param name="server">The authority whose installed document version a loop's edit must move past.</param>
-public sealed class WorldIterationClock(WorldServer server) : IWorldIterationReadiness {
+/// <param name="feed">The published values whose document version, the one the boot authority installed at the last
+/// collect, a loop's edit must move past.</param>
+public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIterationReadiness {
     // The loops kept for world.iteration besides the boot's.
     private const int Kept = 16;
     // The source work a loop's line counts, as the world.boot ledger counts it: sources compiled, compositions merged
@@ -134,7 +134,7 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
         }
 
         var loop = new Loop(
-            after: server.DocumentVersion,
+            after: feed.Tick.DocumentVersion,
             name: name,
             named: named,
             number: ++m_count,

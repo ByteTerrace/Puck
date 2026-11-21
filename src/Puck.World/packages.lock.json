@@ -653,6 +653,21 @@
           "Puck.World.Server": "[1.0.0, )"
         }
       },
+      "puck.world.presentation": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
+          "Puck.Overlays": "[1.0.0, )",
+          "Puck.SdfVm": "[1.0.0, )",
+          "Puck.World.Client": "[1.0.0, )",
+          "Puck.World.Protocol": "[1.0.0, )",
+          "Puck.World.Schema": "[1.0.0, )"
+        }
+      },
       "puck.world.protocol": {
         "type": "Project",
         "dependencies": {

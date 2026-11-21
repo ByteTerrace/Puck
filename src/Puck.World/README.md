@@ -1922,8 +1922,9 @@ can capture their execution. A screen showing a machine output reads it as a
 render-graph source instance (package `source.machine`), an uploaded source:
 on each presented frame that brings a new machine frame its upload
 (`MachineVideoSourceUpload`, made by the binder's `MachineSource`) copies the
-output's frame due at the position the world's machine host presents
-(`IWorldMachineHost.PresentedTicks`) into the
+output's frame due at the position the world's machines present
+(`WorldMachinePresentation.PresentedTicks`, from the machine table the collect
+publishes, never the host) into the
 instance's region (`IMachineVideoOutput.WriteFrame`, in the `Format` the output
 declares: RGBA8, or an indexed image and its palette), the instance converts it
 once however many screens show it, and the world's `sdf.world` passes bind the

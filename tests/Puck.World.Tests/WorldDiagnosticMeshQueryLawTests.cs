@@ -46,7 +46,7 @@ public sealed class WorldDiagnosticMeshQueryLawTests {
     }
     [Fact]
     public void AShapeBoundExplainsOnlyAnInwardMeshSeparation() {
-        var budget = new Server.WorldDiagnosticBudget(0, 0, 0.001) { ConservativeInset = 0.03 };
+        var budget = new WorldDiagnosticBudget(0, 0, 0.001) { ConservativeInset = 0.03 };
         var inside = WorldDiagnosticMeshQuery.Measure(Scene(gap: -0.025f), Vector3.Zero, budget, 0.01);
 
         Assert.NotNull(@object: inside);

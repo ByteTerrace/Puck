@@ -65,6 +65,7 @@
         <ProjectReference Include="../Puck.HumbleGamingDeck.Forge/Puck.HumbleGamingDeck.Forge.csproj" />
         <ProjectReference Include="../Puck.World.Authoring/Puck.World.Authoring.csproj" />
         <ProjectReference Include="../Puck.World.Machines/Puck.World.Machines.csproj" />
+        <ProjectReference Include="../Puck.World.Presentation/Puck.World.Presentation.csproj" />
         <ProjectReference Include="../Puck.World.Protocol/Puck.World.Protocol.csproj" />
         <ProjectReference Include="../Puck.World.Schema/Puck.World.Schema.csproj" />
         <ProjectReference Include="../Puck.World.Server/Puck.World.Server.csproj" />

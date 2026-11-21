@@ -19,7 +19,7 @@ namespace Puck.World;
 /// pressed probes and the chord hints are preallocated and reused — safe because the feed and the overlay reader run
 /// on the same thread, sequentially (see <see cref="BindingBarStore"/>'s remarks).
 /// </summary>
-internal sealed class WorldOverlayFeed {
+public sealed class WorldOverlayFeed {
     private static readonly Func<string, OverlayResolvedGlyph> NoBadge = static _ => OverlayResolvedGlyph.None;
 
     // Per-SEAT parsed-slot-set cache: re-parses the authored button-name strings only when the resolved
