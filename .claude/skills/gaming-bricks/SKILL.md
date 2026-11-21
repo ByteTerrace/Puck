@@ -104,9 +104,13 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
   wrote. The `battery-save` and `host-persistence` stages pin the restore case.
 - **Deck boards own offsets, not memory, and time from bus edges.** NROM,
   MMC1 (`HgdMmc1`) and MMC3 (`HgdMmc3`) keep every RAM byte, the battery save's
-  layout and its snapshot order in one `HgdBoardMemory`; a new board does the
-  same. Board timing comes only from `IHgdMapper.ObserveM2` and
-  `ObservePpuAddress`: MMC1's consecutive-cycle write rule counts M2 falls, and
+  layout and its snapshot order in one `HgdBoardMemory`; a new board derives
+  `HgdBoard`, which owns that memory and the PPU window. A board maps its ROM
+  banks into `HgdBoardMemory`'s windows, and its nametable `Wiring`, whenever a
+  register changes and after it loads state, never per read. Board timing comes
+  only from `IHgdMapper.ObserveM2` and `ObservePpuAddress`, which the machine
+  calls only for a board with `TimesOnEdges` (NROM times nothing): MMC1's
+  consecutive-cycle write rule counts M2 falls, and
   MMC3's counter clocks on a PPU A12 rise after three whole low M2 cycles. A
   board's laws live in `BoardLawTests`, and its fixture joins
   `PostMachine.Fixtures`, which the determinism, fork and mid-instruction replay

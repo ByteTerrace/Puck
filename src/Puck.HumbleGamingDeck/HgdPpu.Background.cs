@@ -96,10 +96,7 @@ public sealed partial class HgdPpu {
     // https://www.nesdev.org/wiki/MMC3#IRQ_Specifics
     private void PutAddress(ushort address) {
         m_fetchAddress = address;
-        m_mapper.ObservePpuAddress(
-            address: address,
-            masterTick: m_masterTick
-        );
+        ObserveAddress(address: address);
     }
     private byte LatchFetch() =>
         m_mapper.PpuRead(

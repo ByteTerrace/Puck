@@ -9,6 +9,7 @@ namespace Puck.HumbleGamingDeck;
 public sealed class HgdMachine : ISnapshotableMachine {
     private readonly HgdMachineIdentity m_identity;
     private readonly ISnapshotable[] m_components;
+    private readonly bool m_boardTimes;
 
     private readonly string[] m_componentNames = ["clock", "cpu", "dma", "bus", "ppu", "nametables", "apu", "controllers", "mapper"];
     private readonly StateWriter m_writer = new();
@@ -21,6 +22,8 @@ public sealed class HgdMachine : ISnapshotableMachine {
 
         Configuration = configuration;
         var mapper = configuration.Cartridge.CreateMapper();
+
+        m_boardTimes = mapper.TimesOnEdges;
 
         Clock = new(configuration: configuration);
         Nametables = new();
@@ -119,14 +122,14 @@ public sealed class HgdMachine : ISnapshotableMachine {
             ppuDot: out var ppuDot
         );
 
-        if (edge == HgdM2Edge.Rising) {
+        if (m_boardTimes && (edge == HgdM2Edge.Rising)) {
             Bus.Mapper.ObserveM2(high: true, masterHalfTick: edgeHalfTick);
         }
 
         // The board's IRQ output trails its inputs: a request raised by the address a dot drives, or by the write that
         // lands, on the tick M2 falls reaches the CPU's next sample, while an acknowledgement that lands then counts.
         // Only the falling tick samples it.
-        var boardIrq = ((edge == HgdM2Edge.Falling) && Bus.Mapper.Irq);
+        var boardIrq = (m_boardTimes && (edge == HgdM2Edge.Falling) && Bus.Mapper.Irq);
 
         if (ppuDot) {
             Ppu.StepDot(masterTick: Clock.MasterTicks);
@@ -146,7 +149,9 @@ public sealed class HgdMachine : ISnapshotableMachine {
             Cpu.CompleteCycle();
             Apu.StepCpuCycle();
             Audio.Sample(apu: Apu);
-            Bus.Mapper.ObserveM2(high: false, masterHalfTick: edgeHalfTick);
+            if (m_boardTimes) {
+                Bus.Mapper.ObserveM2(high: false, masterHalfTick: edgeHalfTick);
+            }
         }
     }
     /// <summary>Captures all components, including CPU latches and the master-clock phase.</summary>
