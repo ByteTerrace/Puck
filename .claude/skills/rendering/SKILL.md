@@ -1521,7 +1521,8 @@ parts` are `HostFrameWorkPart`s: `capture` is the residency's scene capture
 creations' drivers and effector surface probes, and the mesh dresser), never a
 screenshot, so it costs whatever the scene animates with nothing armed; `pack`
 is `SdfWorldTables.Pack`, mostly the changed mesh records
-(`sdf.instances.records.changed` per frame).
+(`sdf.instances.records.changed` per frame; `records.posed` of them moved their
+matrix alone and wrote only their pose words through `StagePose`).
 
 - **The far cascade is the frame's largest variable pass; read whether it
   holds.** With box-only selection it draws nearly every caster in a 280 m box out to 200 m toward the
