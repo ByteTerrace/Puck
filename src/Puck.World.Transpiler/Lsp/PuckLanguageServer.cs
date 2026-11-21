@@ -687,7 +687,7 @@ public sealed partial class PuckLanguageServer {
             table: WorldConstructs.Table,
             text: completionText
         );
-        var inRule = (enclosing is "rule" or "option" or "if" or "else" or "transaction" or "onFailure");
+        var inRule = ((enclosing is not null) && WorldConstructs.Table.TryGet(construct: out var holder, keyword: enclosing) && (holder?.HoldsEffects == true));
         var parsedDocument = ((completionText.Length > 0) ? TryParseDocumentBestEffort(cursorOffset: cursorOffset, text: completionText) : null);
         var vocabulary = m_vocabularyResolver.Resolve(source: completionText);
         var completionSourcePath = (TryGetLocalPath(path: out var localCompPath, uri: uri) ? localCompPath : null);

@@ -740,12 +740,12 @@ pile of a game:
 
 ```puck
 rule playTop {
-  when count($zones[game[from]]) > 0
+  when count($zones[game.from]) > 0
   zones [
     hand
     discard
   ]
-  draw $zones[game[from]] to $zones[game[to]]
+  draw $zones[game.from] to $zones[game.to]
 }
 ```
 
