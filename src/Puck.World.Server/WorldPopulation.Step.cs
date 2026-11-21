@@ -85,7 +85,7 @@ public sealed partial class WorldPopulation {
             AffectingSubject: (entry.Body?.AffectingSubject ?? -1)
         );
     }
-    private BodyProducerSensors ReadProducerSensors(int selfIndex, Entry entry, int currentTarget, in FixedVector3 self, in FixedVector3 forward, CompiledBodyProducer producer) {
+    private BodyProducerSensors ReadProducerSensors(int selfIndex, Entry entry, int currentTarget, in FixedVector3 self, CompiledBodyProducer producer) {
         var candidate = BodySensorTarget.None;
         var targetSource = producer.Target;
         var frozen = (producer.Flock is not null);
@@ -105,7 +105,7 @@ public sealed partial class WorldPopulation {
                 (m_entries[designated.Index].Body is { } designatedBody)
             ) {
                 var position = (frozen
-                    ? m_flockImage!.Position(index: designated.Index)
+                    ? m_perception!.Position(index: designated.Index)
                     : designatedBody.FixedPosition
                 );
 
@@ -124,55 +124,7 @@ public sealed partial class WorldPopulation {
                 self: self
             );
         } else if (targetSource?.Source is BodyTargetSource.Sensed sensed) {
-            var fixedSource = targetSource.Value;
-
-            for (var index = 0; (index < Capacity); index++) {
-                if (
-                    (index == selfIndex) ||
-                    !m_entries[index].Active ||
-                    (m_entries[index].Body is not { } body) ||
-                    ((sensed.Scope == BodyTargetScope.Seats) && (m_entries[index].Kind != PopulationKind.LocalSeat))
-                ) {
-                    continue;
-                }
-
-                var position = (frozen
-                    ? m_flockImage!.Position(index: index)
-                    : body.FixedPosition
-                );
-
-                if (
-                    !BodyTargetConeSense.Contains(
-                    origin: in self,
-                    forward: in forward,
-                    candidate: in position,
-                    range: fixedSource.Range,
-                    minimumDot: fixedSource.MinimumDot,
-                    distanceSquared: out var squared
-                ) ||
-                    // Nearer first: a candidate no nearer than the best so far loses whatever its sight line, so only
-                    // a nearer one pays the line-of-sight query.
-                    (squared >= candidate.DistanceSquared) ||
-                    (sensed.RequiresLineOfSight && !HasLineOfSight(
-                    from: self,
-                    fromOrientation: (frozen
-                    ? m_flockImage!.Orientation(index: selfIndex)
-                    : m_entries[selfIndex].Body!.FixedOrientation),
-                    to: position,
-                    toOrientation: (frozen
-                    ? m_flockImage!.Orientation(index: index)
-                    : body.FixedOrientation)
-                ))
-                ) {
-                    continue;
-                }
-
-                candidate = new BodySensorTarget(
-                    DistanceSquared: squared,
-                    Index: index,
-                    Position: position
-                );
-            }
+            candidate = SenseNearest(selfIndex: selfIndex, sensed: sensed, source: targetSource.Value, self: in self);
         } else if (targetSource?.Source is BodyTargetSource.CurveFollow) {
             var fixedSource = targetSource.Value;
 
@@ -210,10 +162,10 @@ public sealed partial class WorldPopulation {
                 ? new BodySensorTarget(
                     Index: currentTarget,
                     Position: (frozen
-                    ? m_flockImage!.Position(index: currentTarget)
+                    ? m_perception!.Position(index: currentTarget)
                     : held.FixedPosition),
                     DistanceSquared: ((frozen
-                    ? m_flockImage!.Position(index: currentTarget)
+                    ? m_perception!.Position(index: currentTarget)
                     : held.FixedPosition) - self).LengthSquared
                 )
                 : BodySensorTarget.None
@@ -241,7 +193,7 @@ public sealed partial class WorldPopulation {
             (m_entries[designation.Index].Body is { } designatedBody)
         ) {
             goal = (frozen
-                ? m_flockImage!.Position(index: designation.Index)
+                ? m_perception!.Position(index: designation.Index)
                 : designatedBody.FixedPosition
             );
             targetIndex = designation.Index;
@@ -635,7 +587,6 @@ public sealed partial class WorldPopulation {
             entry: entry,
             currentTarget: entry.ProducerState.AcquiredTarget,
             self: body.FixedPosition,
-            forward: body.FixedOrientation.Rotate(vector: LocalForward),
             producer: producer
         );
 

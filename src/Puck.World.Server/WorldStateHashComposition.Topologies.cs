@@ -12,12 +12,7 @@ public static partial class WorldStateHashComposition {
         hash.Add(value: (rows?.Count ?? 0));
         for (var index = 0; (index < (rows?.Count ?? 0)); index++) {
             var row = rows![index];
-            // A physical field normalizes on the same flat terms as the discrete kinds: its footprint, no wrap, no
-            // radius.
-            var (width, depth, layers, wrap, radius) = ((row is WorldFieldTopology field)
-                ? (field.Width, field.Depth, field.Layers, TopologyWrap.None, 0)
-                : Discrete(topology: row)
-            );
+            var (width, depth, layers, wrap, radius) = row.Footprint();
 
             AppendString(
                 hash: ref hash,
@@ -41,11 +36,5 @@ public static partial class WorldStateHashComposition {
                 }
             }
         }
-    }
-
-    private static (int Width, int Depth, int Layers, TopologyWrap Wrap, int Radius) Discrete(LatticeTopology topology) {
-        var normalized = TopologyCompilation.Normalize(topology: topology);
-
-        return (normalized.Width, normalized.Depth, normalized.Layers, normalized.Wrap, normalized.Radius);
     }
 }

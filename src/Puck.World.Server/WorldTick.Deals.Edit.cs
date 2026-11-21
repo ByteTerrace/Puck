@@ -17,7 +17,11 @@ public sealed partial class WorldTick {
             arena ??= WorldStateReader.Seed(definition);
             var ordinal = arena.Catalog.TryResolve(StateLane.Document, deal.Row, out var handle) ? handle.Ordinal : -1;
             var variantOrdinal = deal.Variants is { } declared && arena.Catalog.TryResolve(StateLane.Document, declared.Row, out var variantHandle) ? variantHandle.Ordinal : -1;
-            Deal(definition, arena, template, deal, ordinal, variantOrdinal, new DealMemo(), definition.Generation?.WorldSeed ?? 0UL);
+            var memo = new DealMemo();
+            for (var index = 0; (index < definition.Placements.Count); index++) {
+                if (WorldPlacementDeal.IsChild(placement: definition.Placements[index], parent: template)) { memo.Children.Add(item: index); }
+            }
+            Deal(definition.Placements, arena, template, deal, ordinal, variantOrdinal, memo, definition.Generation?.WorldSeed ?? 0UL);
         }
         if (m_dealChanges.Count == 0) { return definition; }
         var placements = definition.Placements.ToList();
@@ -30,21 +34,29 @@ public sealed partial class WorldTick {
         return definition with { PlacementRowsRaw = placements.ToArray() };
     }
 
-    // The reconstructed document already carries the projection. Its next ordinary tick owes no second sweep.
+    // The reconstructed document already carries the projection. Its next ordinary tick owes no second sweep: every
+    // template is indexed against the installed list, marked swept at its current rows, and its children left as they
+    // stand.
     internal void PrimeDealProjection() {
-        m_dealMemos.Clear();
         var arena = Host.Arena;
-        foreach (var template in Host.Definition.Placements) {
-            if (template.Deal is not { } deal) { continue; }
-            var row = arena.Catalog.TryResolve(StateLane.Document, deal.Row, out var handle) ? handle.Ordinal : -1;
-            var variant = deal.Variants is { } declared && arena.Catalog.TryResolve(StateLane.Document, declared.Row, out var other) ? other.Ordinal : -1;
-            m_dealMemos[template.Id] = new DealMemo {
-                Arena = arena, RowVersion = row < 0 ? 0UL : arena.RowVersion(row),
-                VariantVersion = variant < 0 ? 0UL : arena.RowVersion(variant),
-                Template = template, Swept = true, WorldSeed = Host.Definition.Generation?.WorldSeed ?? 0UL,
-                Distribution = template.Distribution,
-                Slots = WorldPlacementDeal.InstanceCount(template, Host.Definition.Generation?.WorldSeed ?? 0UL),
-            };
+        var placements = Host.Definition.Placements;
+        var worldSeed = (Host.Definition.Generation?.WorldSeed ?? 0UL);
+
+        m_dealMemos.Clear();
+        m_dealTemplatesOf = null;
+        _ = IndexDealTemplates(placements: placements, catalog: arena.Catalog);
+        foreach (var (index, memo) in m_dealTemplates) {
+            var template = placements[index];
+
+            memo.Arena = arena;
+            memo.RowVersion = ((memo.RowOrdinal < 0) ? 0UL : arena.RowVersion(rowOrdinal: memo.RowOrdinal));
+            memo.VariantVersion = ((memo.VariantOrdinal < 0) ? 0UL : arena.RowVersion(rowOrdinal: memo.VariantOrdinal));
+            memo.Template = template;
+            memo.Swept = true;
+            memo.WorldSeed = worldSeed;
+            memo.Distribution = template.Distribution;
+            memo.Slots = WorldPlacementDeal.InstanceCount(template: template, worldSeed: worldSeed);
         }
+        LeaveDealChildren(placements: placements);
     }
 }
