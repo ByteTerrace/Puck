@@ -171,15 +171,14 @@ public sealed partial class WorldHistory {
         var document = m_server.Document;
         var baseDefinition = document.Base;
         var baseOrigin = document.BaseOrigin;
-        var journal = document.Journal.ToArray();
+        var journal = document.Journal;
 
         m_server.RestoreCheckpoint(checkpoint: checkpoint!);
         document.AdoptBase(
             definition: baseDefinition,
             origin: baseOrigin
         );
-        document.Journal.Clear();
-        document.Journal.AddRange(collection: journal);
+        document.SetJournal(journal: journal);
         m_counters = (m_counters with { InPlaceRestores = (m_counters.InPlaceRestores + 1L) });
 
         return null;
@@ -230,7 +229,7 @@ public sealed partial class WorldHistory {
         // The re-simulated step forwards nothing through a portal: the worlds beyond it are not rewinding.
         server.ReplaysInput = true;
         server.Advance(stepTicks: stepTicks);
-        server.EnforceJournalDepth();
+        server.FoldJournal();
         m_counters = (m_counters with {
             HashFolds = (m_counters.HashFolds + 1L),
             TicksResimulated = (m_counters.TicksResimulated + 1L),

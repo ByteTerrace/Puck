@@ -96,9 +96,10 @@ public sealed partial class WorldReplayTape {
             }
         };
         m_liveServer.LinkDeliveryTap = adjacency => m_currentAuthority.Add(item: new WorldReplayEntry.LinkDelivery(Adjacency: adjacency));
-        m_transport.UndoTap = (count, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Undo(
+        m_transport.UndoTap = (undo, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Undo(
             Actor: actor,
-            Count: count
+            Count: undo.Count,
+            Redo: undo.Redo
         ));
         m_transport.CompositionTap = (composition, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Composition(
             Actor: actor,

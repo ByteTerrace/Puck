@@ -898,7 +898,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 |---|---|
 | Document schema, serialization, validators, profiles, capacity constants | [documents.md](references/documents.md) |
 | Binding layers, pages, chords, wheels, the binding bar, input modes and patterns | the [`input`](../input/SKILL.md) skill and its [bindings.md](../input/references/bindings.md) |
-| Tick order, mutation kinds, journal and undo, rule sugar lowering | [mutations.md](references/mutations.md) |
+| Tick order, mutation kinds, journal, undo and redo, rule sugar lowering | [mutations.md](references/mutations.md) |
 | Grants, principals, verdicts, budgets, refusals, `world.why` | [authority.md](references/authority.md) |
 | `SubmissionEnvelope`, the one queue, completions, echo routing | [ordered-domain.md](references/ordered-domain.md) |
 | HUD schema, overlay reservation, bindings, HUD verbs | [hud.md](references/hud.md) |

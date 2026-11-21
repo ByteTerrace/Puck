@@ -82,9 +82,9 @@ public sealed class LoopbackTransport : IServerLink {
     /// <summary>Gets an optional record tap invoked with every session request before it applies. Occupancy, profile, and
     /// population changes are authoritative inputs to later simulation ticks.</summary>
     public Action<SessionRequest>? SessionTap { get; set; }
-    /// <summary>Gets an optional record tap invoked with every journal undo before it reaches the server, carrying the
-    /// entry count and its actor. <see langword="null"/> (the default) is a free pass-through.</summary>
-    public Action<int, Principal>? UndoTap { get; set; }
+    /// <summary>Gets an optional record tap invoked with every journal undo or redo before it reaches the server, carrying
+    /// the request and its actor. <see langword="null"/> (the default) is a free pass-through.</summary>
+    public Action<WorldSubmissionPayload.Undo, Principal>? UndoTap { get; set; }
 
     // Only canonical payloads reach replay taps and the ordered submission domain.
     private long Mint(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion, WorldDeferredVerbRow? console) {
@@ -141,7 +141,7 @@ public sealed class LoopbackTransport : IServerLink {
             case WorldSubmissionPayload.Designation designation: DesignationTap?.Invoke(designation.Value, envelope.Principal); break;
             case WorldSubmissionPayload.Grant grant: GrantTap?.Invoke(grant.Value, envelope.Principal); break;
             case WorldSubmissionPayload.Revoke revoke: RevokeTap?.Invoke(revoke.Value, envelope.Principal); break;
-            case WorldSubmissionPayload.Undo undo: UndoTap?.Invoke(undo.Count, envelope.Principal); break;
+            case WorldSubmissionPayload.Undo undo: UndoTap?.Invoke(undo, envelope.Principal); break;
             case WorldSubmissionPayload.Query query: QueryTap?.Invoke(query.Value, envelope.Principal); break;
             case WorldSubmissionPayload.Session session: SessionTap?.Invoke(session.Value); break;
         }

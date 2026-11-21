@@ -53,11 +53,13 @@ public abstract record WorldReplayEntry {
     /// accepted-but-now-refused or live-refused-but-now-accepted disagreement is a real determinism finding, never
     /// something a later-tick pose comparison alone could ever surface.</param>
     internal sealed record Mutation(WorldMutation Value, Principal Actor, bool Outcome) : WorldReplayEntry;
-    /// <summary>A journal undo (<c>world.undo</c>) — buffered to the tick boundary on re-drive exactly as a live
-    /// submission is, so the recorded journal tail is replayed back through the same all-or-nothing gates.</summary>
-    /// <param name="Count">The number of journal entries to undo.</param>
-    /// <param name="Actor">The principal that submitted it.</param>
-    internal sealed record Undo(int Count, Principal Actor) : WorldReplayEntry;
+    /// <summary>A journal undo (<c>world.undo</c>) or redo (<c>world.redo</c>) — buffered to the tick boundary on
+    /// re-drive exactly as a live submission is, so the recorded journal is replayed back through the same all-or-nothing
+    /// gates.</summary>
+    /// <param name="Count">The number of the actor's entries to undo or redo.</param>
+    /// <param name="Actor">The principal that submitted it, whose entries it acts on.</param>
+    /// <param name="Redo">Whether it redoes the actor's undone entries.</param>
+    internal sealed record Undo(int Count, Principal Actor, bool Redo) : WorldReplayEntry;
     /// <summary>A window-composition override (<c>view.override</c>) and its acting principal — applied
     /// synchronously on re-drive, exactly as it is live.</summary>
     /// <param name="Value">The composition submission.</param>
@@ -318,7 +320,7 @@ public sealed partial class WorldReplaySnapshot {
     // authority, every arrival a commit decided with its outcome and each traveler as its identity projection alone,
     // federated input, the seat identity a fork switches to, and the optional start checkpoint a mid-session recording
     // or a saved history branch starts from.
-    private const uint Version = 15u;
+    private const uint Version = 16u;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>
@@ -546,7 +548,8 @@ public sealed partial class WorldReplaySnapshot {
                 case WorldReplayEntry.Undo undo:
                     server.EnqueueUndo(
                         count: undo.Count,
-                        principal: undo.Actor
+                        principal: undo.Actor,
+                        redo: undo.Redo
                     );
 
                     break;
@@ -927,10 +930,12 @@ public sealed partial class WorldReplaySnapshot {
                 }
             case 12: {
                     var count = reader.ReadInt32();
+                    var actor = WorldWireCodec.ReadPrincipal(reader: ref reader);
 
                     return new WorldReplayEntry.Undo(
-                        Actor: WorldWireCodec.ReadPrincipal(reader: ref reader),
-                        Count: count
+                        Actor: actor,
+                        Count: count,
+                        Redo: reader.ReadBoolean()
                     );
                 }
             case 13: {
@@ -1612,6 +1617,7 @@ public sealed partial class WorldReplaySnapshot {
                     writer: writer,
                     principal: undo.Actor
                 );
+                writer.WriteBoolean(value: undo.Redo);
 
                 break;
             case WorldReplayEntry.Composition composition:

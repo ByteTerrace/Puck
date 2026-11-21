@@ -100,7 +100,7 @@ public sealed class WorldReplayProbe : IDisposable {
                 // delivery here would mutate that still-live companion a second time.
                 m_server.ReplaysInput = true;
                 m_server.Advance(stepTicks: step);
-                m_server.EnforceJournalDepth();
+                m_server.FoldJournal();
                 WorldReplaySnapshot.VerifyRecordedMutationOutcomes(expected: expected, replayed: outcomes, tick: tick);
                 var replayed = WorldStateHashComposition.HashAuthoritative(server: m_server, tick: (m_server.NextInputTick - 1));
 

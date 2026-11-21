@@ -49,7 +49,7 @@ public static class WorldFrameCodec {
         WorldSubmissionKind.Session => (256 * 1024),
         WorldSubmissionKind.Rebuild => ((16 * 1024) * 1024),
         WorldSubmissionKind.Mutation => ((4 * 1024) * 1024),
-        WorldSubmissionKind.Undo => sizeof(int),
+        WorldSubmissionKind.Undo => WorldSubmissionCodec.UndoLeafBytes,
         WorldSubmissionKind.Composition => (16 * 1024),
         WorldSubmissionKind.Lever => WorldSubmissionCodec.MaxLeverBytes,
         WorldSubmissionKind.Query => (4 * 1024),

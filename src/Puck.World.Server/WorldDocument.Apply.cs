@@ -308,7 +308,8 @@ public sealed partial class WorldDocument {
                     count: undo.Count,
                     principal: envelope.Principal,
                     connectionId: envelope.ConnectionId,
-                    correlationId: envelope.CorrelationId
+                    correlationId: envelope.CorrelationId,
+                    redo: undo.Redo
                 );
 
                 return WorldSubmissionResult.Ack.Instance;
@@ -554,14 +555,15 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        // The live-authoring guard: world.load without `force` refuses outright while the journal is dirty, rather
-        // than silently discarding unsaved work. Reset discards that work explicitly, and reload adds to it.
+        // The live-authoring guard: world.load without `force` refuses outright while the journal holds edits a session
+        // made and no source holds (WorldJournalEntry.Unsaved), rather than silently discarding them. The World's own
+        // entries and source edits are no one's unsaved work. Reset discards that work explicitly, and reload adds to it.
         if (
             (request.Kind == WorldRebuildKind.Load) &&
             !request.Force &&
-            (m_journal.Count > 0)
+            (m_journal.Count(static entry => entry.Unsaved) is var unsaved and > 0)
         ) {
-            var denial = $"{m_journal.Count} unsaved mutation(s) would be discarded — world.save first, world.reset to discard them without loading a new document, or world.load {request.Origin} force to discard them and load anyway";
+            var denial = $"{unsaved} unsaved mutation(s) would be discarded — world.save first, world.reset to discard them without loading a new document, or world.load {request.Origin} force to discard them and load anyway";
 
             if (Host.Output.HasNarrationSink) {
                 Host.Output.Narrate(channel: "world.load rejected", text: $"[world.load rejected: {denial}]");
@@ -742,7 +744,7 @@ public sealed partial class WorldDocument {
         // the live document, whose dealt placements it keeps, so its deals stand.
         if (request.Kind != WorldRebuildKind.Reload) {
             Host.ResetPlacementDeals();
-            m_journal.Clear();
+            m_journal = [];
         }
 
         // Snapshot, for every CURRENTLY CONNECTED (admitted, not parked) peer, exactly
@@ -779,7 +781,7 @@ public sealed partial class WorldDocument {
             // Installed as of this point: a later live commit resolves against the candidate's own directory too.
             Host.PipelineSources = rebuildPipelineSources;
         } else {
-            history = AcceptReload(request, next, contentHash, journalPatch, WorldPrivateDrawKeys.Positions(m_definition));
+            history = AcceptReload(request, principal, next, contentHash, journalPatch, WorldPrivateDrawKeys.Positions(m_definition));
             Host.PipelineSources = rebuildPipelineSources;
         }
         // After the candidate's own grants installed and the peers' were re-minted: an addon's capability disclosure

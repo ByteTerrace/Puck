@@ -279,39 +279,53 @@ its own.
   Reset targets `m_base` WITHOUT moving it; Load/Reload REPLACE it. Fully
   replay-compatible: the trio rides the tape, CAS-pinned, and applies while a
   `replay.record` is armed — see [replay.md](replay.md).
-- **Undo** (`ApplyUndo`, the `world.undo [count]` path): Mutate over every
-  section. The journal is the whole document history over its base, but undo
-  is an author's: it drops the last `count` entries a principal authored
-  (`WorldJournalEntry.Authored`: a source edit, or a mutation a session
-  submitted; `count` clamps to `1..` that many) and never an entry the World
-  applied itself (a sweep's, a search's, a field's or a rule's document write
-  under `Principal.World`, or a `Played` one a scoped replay or an addon guest
-  applied in a principal's name). Restores the base and
-  deterministically replays every other entry, the World's own after the
-  dropped ones included, through the SAME per-entry
-  gates a live mutation passes (compose, whole-document validate, envelope,
-  solid buildability — everything but the per-entry authority check, which the
-  every-section hold already re-proves). ALL-OR-NOTHING: any entry failing any
-  gate refuses the whole undo, names the failing entry's index and reason on
-  stderr, and installs NOTHING. Either outcome echoes through `EchoTap`
-  (an acceptance as `dropped <n> (<entries>), <m> remaining`, then the install
-  it took and the parts it changed), so `world.undo` answers its own line like
-  every registered verb. There is no per-mutation inverse. A reload entry's
-  patch replays row by row (`WorldDefinitionMembers.ApplyPatch`): only the rows
-  it names are read again (`world.boot.patch-rows-read`). When the dropped
-  entries, composed alone again over the replay's document at the first of
-  them, changed only state row values, or only creations in what shading reads
-  and shade programs, the undo sets exactly those rows on the live document to
-  the replay's values and takes the install a reload of that change takes
-  (counted as `world.boot.undo-narrow-installs`; `WorldPersistence.DroppedEdit`,
-  `WorldDocument.ReloadInstallKindOf`, `WorldDocument.TryInstallEdit`): the
-  arena, deals, draws and every compiled product but the envelope's fit stay,
-  and only the changed rows are delivered. Any other undo installs the replayed
-  document whole through the install door, which also restores the state and
-  deals the document holds and keeps the live field lattices and rule latches. Proven
-  in-process by `tests/Puck.World.Server.Tests/MutationAllOrNothingLawTests.cs`
-  against the shared apply gate; the replay loop's own early-return on a
-  genuine mid-replay failure is unproven (see that law's own remarks).
+- **Undo and redo** (`WorldPersistence.ApplyUndo`, the `world.undo [count]`
+  and `world.redo [count]` paths): operator, and Mutate over every section.
+  The journal is the whole document history over its base, but an undo is the
+  acting principal's: it marks that principal's last `count` edits `Undone`
+  (`WorldJournalEntry.Authored` and `Author`: a source edit whose reload it
+  submitted, or a mutation it submitted; `count` clamps to `1..` that many) and
+  never touches another principal's edit or an entry the World applied itself
+  (a sweep's, a search's, a field's or a rule's document write under
+  `Principal.World`, or a `Played` one a scoped replay or an addon guest
+  applied in a principal's name). An undone entry keeps its place, and a redo
+  clears the mark on the first `count` of the principal's undone edits, so
+  both restore the base and replay every entry not undone through compose.
+  The principal's next edit discards its undone entries
+  (`WorldDocument.AppendJournal`), so they are always the last of its edits.
+  An undo or redo is refused by name, naming the row and the other principal,
+  when a later edit by another principal changed a row it would change
+  (`WorldDocumentWalker.ChangedRows`). The document the step installs is
+  validated once, against the live document, by the install door it takes; no
+  intermediate replay document is validated or installed. ALL-OR-NOTHING: a
+  compose failure (naming the entry's index), a conflict or the install
+  door's refusal leaves the journal and the document as they stood. Either
+  outcome echoes through `EchoTap` (an acceptance as `undid <n> (<entries>),
+  <u> left to undo, <r> to redo`, then the install it took and the parts it
+  changed), so the verb answers its own line like every registered verb.
+  There is no per-mutation inverse. A reload entry's patch replays row by row
+  (`WorldDefinitionMembers.ApplyPatch`): only the rows it names are read again
+  (`world.boot.patch-rows-read`). When the toggled entries, composed alone
+  again over the replay's document at the first of them, changed only state
+  row values, or only creations in what shading reads and shade programs, the
+  step sets exactly those rows on the live document to the replay's values and
+  takes the install a reload of that change takes, which validates the rows it
+  moves (counted as `world.boot.undo-narrow-installs`;
+  `WorldPersistence.ToggledEdit`, `WorldDocument.ReloadInstallKindOf`,
+  `WorldDocument.TryInstallEdit`): the arena, deals, draws and every compiled
+  product but the envelope's fit stay, and only the changed rows are
+  delivered. Any other step validates the units the replayed document holds
+  differently from the live one and installs it whole through the install
+  door, which builds and checks its products, restores the state and deals the
+  document holds, and keeps the live field lattices and rule latches.
+- **Journal fold** (`WorldPersistence.FoldJournal`, once per completed tick):
+  folds into the base the entries past the `host.journalDepth` horizon and the
+  World's own entries ahead of the first edit the fold leaves, which no undo
+  or redo reaches. A journal holding no edit keeps its World entries, so the
+  base (which a history keyframe serializes) moves once per edit rather than
+  once per World write. An undone entry the fold reaches is discarded with its
+  author's later undone entries. The base origin reads `the journal's folded
+  entries`.
 - **Save** (`world.save`): writes the authored document and compacts the
   journal. `WorldSaveSnapshot.Compose` runs the authority fold
   (`WorldSessionCapture.Capture`: peer-source default, machine declarations,

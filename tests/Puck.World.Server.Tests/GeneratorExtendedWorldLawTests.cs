@@ -89,6 +89,8 @@ public sealed class GeneratorExtendedWorldLawTests {
     [Fact]
     public void Undo_PastAnExtendedDraw_RestoresTheCursorAndTheNextDraw() {
         using var fixture = Fixtures.FreshServer(definition: BuildDocument());
+        // An undo takes back its own principal's edits, so the drawing seat undoes its draw.
+        Assert.True(condition: fixture.Server.GrantTable.TryGrant(new WorldGrant(Actor, WorldCapability.Operate, GrantSubject.All, false), Principal.Console, out var operate), userMessage: operate);
 
         var (bootCursor, bootValue) = ReadSlot(definition: fixture.Server.ExportDefinition());
 
@@ -112,7 +114,7 @@ public sealed class GeneratorExtendedWorldLawTests {
 
         fixture.Server.EnqueueUndo(
             count: 1,
-            principal: Principal.Console
+            principal: Actor
         );
         fixture.Step();
 

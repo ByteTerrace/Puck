@@ -230,15 +230,17 @@ public static class ServerLinkSubmissions {
     /// with no output of its own that settles with the tick-boundary verdict.</returns>
     public static CommandResult SubmitRebuild(this IServerLink link, WorldRebuildRequest request, Principal principal, WorldDeferredVerbEchoes echoes, string verb) =>
         SubmitDeferred(link, new WorldSubmissionPayload.Rebuild(Value: request), principal, echoes, verb);
-    /// <summary>Submits an undo and waits for its local tick-boundary verdict.</summary>
+    /// <summary>Submits an undo or a redo of the acting principal's own entries and waits for its local tick-boundary
+    /// verdict.</summary>
     /// <param name="link">The server link.</param>
-    /// <param name="count">The number of entries to undo.</param>
-    /// <param name="principal">The acting identity.</param>
+    /// <param name="count">The number of entries to undo or redo.</param>
+    /// <param name="principal">The acting identity, whose entries it acts on.</param>
     /// <param name="echoes">The local authority's pending verdict table.</param>
     /// <param name="verb">The submitting verb.</param>
-    /// <returns>A result settling with the undo verdict or a transport refusal.</returns>
-    public static CommandResult SubmitUndo(this IServerLink link, int count, Principal principal, WorldDeferredVerbEchoes echoes, string verb) =>
-        SubmitDeferred(link, new WorldSubmissionPayload.Undo(Count: count), principal, echoes, verb);
+    /// <param name="redo">Whether it redoes what the principal's undos removed.</param>
+    /// <returns>A result settling with the verdict or a transport refusal.</returns>
+    public static CommandResult SubmitUndo(this IServerLink link, int count, Principal principal, WorldDeferredVerbEchoes echoes, string verb, bool redo = false) =>
+        SubmitDeferred(link, new WorldSubmissionPayload.Undo(Count: count, Redo: redo), principal, echoes, verb);
 
     private static CommandResult SubmitDeferred(IServerLink link, WorldSubmissionPayload payload, Principal principal, WorldDeferredVerbEchoes echoes, string verb) {
         var settlement = new CommandSettlement();
@@ -300,16 +302,18 @@ public static class ServerLinkSubmissions {
         payload: new WorldSubmissionPayload.Lever(Value: lever),
         principal: principal
     );
-    /// <summary>Requests a journal undo of the last <paramref name="count"/> applied mutations (the undo engine is
-    /// replay: restore the loaded base and deterministically replay the journal minus its tail through the same apply
-    /// path). Buffers on the server and drains at the next step boundary, in FIFO order with mutations and swaps. Journal
-    /// control is Mutate-capability territory: the server checks <paramref name="principal"/> holds
+    /// <summary>Requests a journal undo of the acting principal's last <paramref name="count"/> edits, or with
+    /// <paramref name="redo"/> a redo of what its undos removed (the undo engine is replay: restore the loaded base and
+    /// deterministically replay the journal without the undone entries through the same apply path). Buffers on the
+    /// server and drains at the next step boundary, in FIFO order with mutations and swaps. Journal control is
+    /// Mutate-capability territory: the server checks <paramref name="principal"/> holds
     /// <see cref="WorldCapability.Mutate"/> over every section before it replays.</summary>
     /// <param name="link">The link.</param>
-    /// <param name="count">How many trailing mutations to undo (at least 1).</param>
-    /// <param name="principal">The acting identity the undo is checked against.</param>
-    public static void SubmitUndo(this IServerLink link, int count, Principal principal) => link.SubmitEnvelope(
-        payload: new WorldSubmissionPayload.Undo(Count: count),
+    /// <param name="count">How many of the principal's edits to undo or redo (at least 1).</param>
+    /// <param name="principal">The acting identity, whose edits it acts on and which the request is checked against.</param>
+    /// <param name="redo">Whether it redoes the principal's undone edits.</param>
+    public static void SubmitUndo(this IServerLink link, int count, Principal principal, bool redo = false) => link.SubmitEnvelope(
+        payload: new WorldSubmissionPayload.Undo(Count: count, Redo: redo),
         principal: principal
     );
     /// <summary>Submits a live world edit. Buffers on the server and drains at the next step boundary before intents:

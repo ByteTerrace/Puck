@@ -232,6 +232,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
                 writer.WriteInt32(value: value.ConnectionId);
                 writer.WriteInt64(value: value.CorrelationId);
+                writer.WriteBoolean(value: value.Redo);
                 break;
             default:
                 throw new InvalidOperationException(message: $"pending op '{op.GetType().Name}' has no wire discriminant");
@@ -292,12 +293,14 @@ public static partial class WorldAuthorityCheckpointCodec {
                     var principal = WorldWireCodec.ReadPrincipal(reader: ref reader);
                     var connectionId = reader.ReadInt32();
                     var correlationId = reader.ReadInt64();
+                    var redo = reader.ReadBoolean();
 
                     return new WorldPendingOpCheckpoint.Undo(
                         ConnectionId: connectionId,
                         CorrelationId: correlationId,
                         Count: count,
-                        Principal: principal
+                        Principal: principal,
+                        Redo: redo
                     );
                 }
             default:
@@ -329,7 +332,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         if (
             !reader.Failed &&
-            ((kind > ((byte)WorldBaseOriginKind.JournalHorizon)) ||
+            ((kind > ((byte)WorldBaseOriginKind.JournalFold)) ||
             (loaded != (source is not null)) ||
             ((source is WorldRebuildOrigin.File { Path: var path }) && ((path.Length == 0) || !WorldCheckpointPaths.IsRelativeUnderRoot(path: path))) ||
             (depth < 0))
@@ -377,10 +380,12 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeItem: static (w, entry) => {
                 w.WriteUInt64(value: entry.Tick);
                 w.WriteUInt64(value: entry.EngineTick);
+                w.WriteBoolean(entry.Undone);
                 w.WriteBoolean(entry.ReloadPatch is not null);
                 if (entry.ReloadPatch is { } patch) {
                     w.WriteBlock(patch);
                     WriteDrawPositions(w, entry.ReloadDrawPositions);
+                    WorldWireCodec.WritePrincipal(writer: w, principal: entry.Author);
                     return;
                 }
                 w.WriteBlock(value: EncodeLeafBlock<WorldMutation>(
@@ -602,9 +607,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             readItem: static (ref WireReader r) => {
                 var tick = r.ReadUInt64();
                 var engineTick = r.ReadUInt64();
+                var undone = r.ReadBoolean();
                 if (r.ReadBoolean()) {
                     var patch = r.ReadBlock("journal reload patch", MaxSectionBytes);
-                    return new WorldJournalEntry(tick, engineTick, patch, ReadDrawPositions(ref r));
+                    var positions = ReadDrawPositions(ref r);
+                    return new WorldJournalEntry(tick, engineTick, patch, positions, author: WorldWireCodec.ReadPrincipal(reader: ref r)) { Undone = undone };
                 }
                 var mutation = ReadLeafBlock<WorldMutation>(
                     field: "journal mutation",
@@ -613,7 +620,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
 
                 var played = r.ReadBoolean();
-                return new WorldJournalEntry(tick, engineTick, mutation!) { Played = played, DrawHistory = ReadDrawHistory(ref r) };
+                return new WorldJournalEntry(tick, engineTick, mutation!) { Played = played, Undone = undone, DrawHistory = ReadDrawHistory(ref r) };
             },
             maximum: MaxCollectionCount
         );

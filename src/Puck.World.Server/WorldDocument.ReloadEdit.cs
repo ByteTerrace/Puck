@@ -18,7 +18,7 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        var history = AcceptReload(request, next, contentHash, journalPatch);
+        var history = AcceptReload(request, principal, next, contentHash, journalPatch);
 
         var message = $"{verb} applied — {history}{detail}{changed}{DescribeConflicts(conflicts: conflicts)}{DescribeDelta(request: request, requestBytes: requestBytes)}";
 
@@ -95,17 +95,17 @@ public sealed partial class WorldDocument {
         return true;
     }
 
-    private string AcceptReload(WorldRebuildRequest request, WorldDefinition next, string contentHash, byte[]? patch, WorldDrawPositions? drawPositions = null) {
+    private string AcceptReload(WorldRebuildRequest request, Principal principal, WorldDefinition next, string contentHash, byte[]? patch, WorldDrawPositions? drawPositions = null) {
         m_revision = new WorldSourceRevision(ContentHash: contentHash, Definition: next);
         if (request.Origin is WorldRebuildOrigin.Store) {
             // A deployment changes the hosted release's base. A save by the local author changes the session.
             AdoptBase(m_definition, new WorldBaseOrigin(Kind: WorldBaseOriginKind.Reload, Source: request.Origin));
-            m_journal.Clear();
+            m_journal = [];
             return $"base is {m_baseOrigin}, journal cleared";
         }
         if (patch is { Length: > 2 }) {
             var time = Host.DeliveryTime;
-            m_journal.Add(new WorldJournalEntry(time.Tick, time.EngineTick, patch, drawPositions));
+            AppendJournal(entry: new WorldJournalEntry(time.Tick, time.EngineTick, patch, drawPositions, author: principal));
         }
         return $"journal entries={m_journal.Count}";
     }

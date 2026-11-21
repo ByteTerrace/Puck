@@ -36,6 +36,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
     private static readonly CommandForms WorldPopulationDefaultsForms = CommandForms.Of(verb: "world.population.defaults", "<local> <network>");
     private static readonly CommandForms WorldPlacementGetForms = CommandForms.Of(verb: "world.placement.get", "<id>");
     private static readonly CommandForms WorldUndoForms = CommandForms.Of(verb: "world.undo", "[n]");
+    private static readonly CommandForms WorldRedoForms = CommandForms.Of(verb: "world.redo", "[n]");
     private static readonly CommandForms WorldSaveForms = CommandForms.Of(verb: "world.save", "[path]");
     private static readonly CommandForms WorldLoadForms = CommandForms.Of(verb: "world.load", "<path> [force]");
     private static readonly CommandForms WorldTextForms = CommandForms.Of(verb: "world.text", "[font]");
@@ -57,6 +58,46 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
 
         return !string.IsNullOrWhiteSpace(value: path);
+    }
+
+    // world.undo and world.redo: one optional positive count, submitted as the acting principal's own journal step.
+    private CommandDefinition JournalStep(CommandForms forms, bool redo, string description) {
+        var verb = (redo ? "world.redo" : "world.undo");
+
+        return Simulation(
+            audience: CommandAudience.Operator,
+            name: verb,
+            description: description,
+            forms: forms,
+            handler: (context, args) => {
+                if (scheduleRoot.RefuseInsideArmedRun(
+                    definition: server.ReadView(context: context).Definition,
+                    verb: verb
+                ) is { } armed) {
+                    return CommandResult.Error(output: armed);
+                }
+
+                var count = 1;
+
+                if (
+                    (args.Count >= 1) &&
+                    (!args.TryInt(
+                    index: 0,
+                    value: out count
+                ) || (count < 1))
+                ) {
+                    return CommandResult.Error(output: $"[{verb}: bad count '{args[0].ToString()}' — a positive integer]");
+                }
+
+                return link.SubmitUndo(
+                    echoes: echoes,
+                    verb: verb,
+                    count: count,
+                    principal: context.Principal,
+                    redo: redo
+                );
+            }
+        );
     }
 
     /// <inheritdoc/>
@@ -302,38 +343,15 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 return reload.Run(context: context);
             }
         );
-        yield return Simulation(
-            audience: CommandAudience.Operator,
-            name: "world.undo",
-            description: $"Undoes the last n edits a principal authored (default 1: source edits and submitted mutations) by replaying the journal without them through the same apply path: {WorldUndoForms.Spelling}. The World's own entries (sweeps, searches, field writes, rule effects, scoped replays) are replayed and never undone, and the verdict names what it dropped. Refused by name, naming host.journalDepth, when n reaches past what a bounded journal has kept — entries beyond that horizon already compacted into the base and cannot be replayed.",
+        yield return JournalStep(
             forms: WorldUndoForms,
-            handler: (context, args) => {
-                if (scheduleRoot.RefuseInsideArmedRun(
-                    definition: server.ReadView(context: context).Definition,
-                    verb: "world.undo"
-                ) is { } undoArmed) {
-                    return CommandResult.Error(output: undoArmed);
-                }
-
-                var count = 1;
-
-                if (
-                    (args.Count >= 1) &&
-                    (!args.TryInt(
-                    index: 0,
-                    value: out count
-                ) || (count < 1))
-                ) {
-                    return CommandResult.Error(output: $"[world.undo: bad count '{args[0].ToString()}' — a positive integer]");
-                }
-
-                return link.SubmitUndo(
-                    echoes: echoes,
-                    verb: "world.undo",
-                    count: count,
-                    principal: context.Principal
-                );
-            }
+            redo: false,
+            description: $"Undoes the acting principal's own last n edits (default 1: source edits whose reload it submitted, and mutations it submitted), never another principal's, by replaying the journal without them through the same apply path: {WorldUndoForms.Spelling}. An undone edit keeps its place, and world.redo takes it back there until the principal's next edit. The World's own entries (sweeps, searches, field writes, rule effects, scoped replays) are replayed and never undone, and the verdict names what it undid and the principal's undo and redo depths. Refused by name, naming the row and the other principal, when a later edit by another principal changed a row the undo would change; refused by name, naming host.journalDepth, when n reaches past what a bounded journal has kept — entries beyond that horizon already compacted into the base and cannot be replayed."
+        );
+        yield return JournalStep(
+            forms: WorldRedoForms,
+            redo: true,
+            description: $"Takes back the first n edits the acting principal's undos removed (default 1), each at the place it held, by replaying the journal with them through the same apply path world.undo takes: {WorldRedoForms.Spelling}. The principal's next edit, a load or a save clears what it can redo. Refused by name, naming the row and the other principal, when a later edit by another principal changed a row the redo would change, and when the principal has nothing to redo."
         );
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Host,

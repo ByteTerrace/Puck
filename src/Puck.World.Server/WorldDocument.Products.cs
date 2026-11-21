@@ -135,59 +135,6 @@ public sealed partial class WorldDocument {
     /// <param name="inputs">What the boot preparation read.</param>
     internal void AdoptBootMachineInputs(WorldDocumentInputs inputs) => m_machineInputs = inputs;
 
-    /// <summary>Begins checking the documents an undo replays: each must fit the render envelope, compile its solid
-    /// field and prepare its addons, and each check runs only when the document changed a part the check last read
-    /// (starting from the live document, which the live products already passed).</summary>
-    /// <returns>The check.</returns>
-    internal WorldProductReplay BeginProductReplay() => new(document: this);
-
-    /// <summary>The checks an undo's replay runs on each document it composes (<see cref="BeginProductReplay"/>).</summary>
-    internal sealed class WorldProductReplay {
-        private readonly WorldDocument m_document;
-        private (WorldDefinition Basis, WorldDocumentInputs Inputs) m_envelope;
-        private (WorldDefinition Basis, WorldDocumentInputs Inputs) m_solids;
-        private (WorldDefinition Basis, WorldDocumentInputs Inputs) m_addons;
-
-        internal WorldProductReplay(WorldDocument document) {
-            var live = document.m_definition;
-
-            m_document = document;
-            m_envelope = (live, document.EnvelopeInputs);
-            m_solids = (live, document.SolidInputsOf(definition: live));
-            m_addons = (live, (document.m_addonInputs ?? WorldDocumentInputs.All));
-        }
-
-        /// <summary>Checks one replayed document against the checks whose inputs it changed since the document each
-        /// last passed on.</summary>
-        /// <param name="next">The replayed document.</param>
-        /// <param name="reason">The refusal, or empty.</param>
-        /// <returns>Whether the document passes.</returns>
-        public bool TryCheck(WorldDefinition next, out string reason) {
-            reason = string.Empty;
-            if (WorldDocumentInputs.Changed(before: m_envelope.Basis, after: next).Overlaps(other: m_envelope.Inputs)) {
-                if (!m_document.TryFitEnvelope(candidate: next, inputs: out var fitted, reason: out reason)) { return false; }
-                m_envelope = (next, fitted);
-            }
-            if (WorldDocumentInputs.Changed(before: m_solids.Basis, after: next).Overlaps(other: m_solids.Inputs)) {
-                _ = WorldDocumentReads.Record(build: () => RequiresSolidField(definition: next), inputs: out var requirement);
-                if (!TryBuildSolids(definition: next, reason: out reason, solids: out var solids)) { return false; }
-                m_solids = (next, (requirement | (solids?.BuiltFrom ?? WorldDocumentInputs.None)));
-            }
-            // An intermediate document this pass never installs still owes proof it could have mounted, so a kept
-            // entry whose pinned module has since gone missing refuses the whole undo. The probe plan is disposed at
-            // once.
-            if ((m_document.Host.Addons is { } addons) && WorldDocumentInputs.Changed(before: m_addons.Basis, after: next).Overlaps(other: m_addons.Inputs)) {
-                if (!TryPrepareAddons(addons: addons, candidate: next, current: m_document.m_definition, inputs: out var prepared, plan: out var plan, reason: out var addonReason)) {
-                    reason = (addonReason ?? string.Empty);
-                    return false;
-                }
-                plan?.Dispose();
-                m_addons = (next, prepared);
-            }
-            return true;
-        }
-    }
-
     // Narrates which products an install rebuilt and which parts of the document moved them.
     private void NarrateProducts(WorldProductPlan plan, bool population) {
         WorldBootWork.Count(kind: WorldBootWork.ProductPlans);

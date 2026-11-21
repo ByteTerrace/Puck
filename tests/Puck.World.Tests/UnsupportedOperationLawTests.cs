@@ -94,7 +94,7 @@ public sealed class UnsupportedOperationLawTests {
                 Row: new WorldStateRow(Name: CellName.Parse(candidate: $"probe{index}"), Kind: CellKind.Int)
             ));
             twin.Step();
-            twin.Server.EnforceJournalDepth();
+            twin.Server.FoldJournal();
         }
     }
 

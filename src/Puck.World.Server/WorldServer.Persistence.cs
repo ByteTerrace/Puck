@@ -22,15 +22,16 @@ public sealed partial class WorldServer {
             profiles: profiles,
             restoreOwnedIdentities: restoreOwnedIdentities
         );
-    /// <inheritdoc cref="WorldPersistence.EnforceJournalDepth"/>
-    public void EnforceJournalDepth() => m_persistence.EnforceJournalDepth();
+    /// <inheritdoc cref="WorldPersistence.FoldJournal"/>
+    public void FoldJournal() => m_persistence.FoldJournal();
     /// <inheritdoc cref="WorldPersistence.EnqueueUndo"/>
-    public void EnqueueUndo(int count, Principal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>
+    public void EnqueueUndo(int count, Principal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, bool redo = false) =>
         m_persistence.EnqueueUndo(
             connectionId: connectionId,
             correlationId: correlationId,
             count: count,
-            principal: principal
+            principal: principal,
+            redo: redo
         );
     /// <inheritdoc cref="WorldPersistence.RestoreCheckpoint"/>
     [Replaces(root: typeof(StateArena))]

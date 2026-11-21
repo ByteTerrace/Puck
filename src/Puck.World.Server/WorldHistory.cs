@@ -1,4 +1,5 @@
 using Puck.Maths;
+using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using Puck.Abstractions.Machines;
 using Puck.Abstractions.Memory;
@@ -212,30 +213,20 @@ public sealed partial class WorldHistory {
         }
     }
 
-    // What a keyframe's in-place restore relies on: no structural edit (a journaled mutation, a rebuild, an undo, a
-    // compaction, or a solid rebuild) landed between it and the live document.
-    internal readonly record struct WorldHistoryFingerprint(WorldDefinition? Base, WorldDefinition? Source, int JournalCount, object? LastEdit, ulong LastJournalTick, int SolidRevision) {
-        public static WorldHistoryFingerprint Of(WorldServer server) {
-            var journal = server.Document.Journal;
-            var last = ((journal.Count > 0)
-                ? journal[^1]
-                : default);
-
-            return new WorldHistoryFingerprint(
-                Base: server.Document.Base,
-                Source: server.Document.Revision.Definition,
-                JournalCount: journal.Count,
-                LastEdit: last.Identity,
-                LastJournalTick: last.Tick,
-                SolidRevision: server.Document.SolidRevision
-            );
-        }
+    // What a keyframe's in-place restore relies on: no structural edit (a journaled mutation, a rebuild, an undo or redo,
+    // a compaction, a journal fold, or a solid rebuild) landed between it and the live document. The journal is an
+    // immutable list every change replaces, so holding the same instance is holding the same journal.
+    internal readonly record struct WorldHistoryFingerprint(WorldDefinition? Base, WorldDefinition? Source, ImmutableList<WorldJournalEntry>? Journal, int SolidRevision) {
+        public static WorldHistoryFingerprint Of(WorldServer server) => new(
+            Base: server.Document.Base,
+            Source: server.Document.Revision.Definition,
+            Journal: server.Document.Journal,
+            SolidRevision: server.Document.SolidRevision
+        );
         public bool Matches(WorldHistoryFingerprint other) => (
             ReferenceEquals(objA: Base, objB: other.Base) &&
             ReferenceEquals(objA: Source, objB: other.Source) &&
-            (JournalCount == other.JournalCount) &&
-            ReferenceEquals(objA: LastEdit, objB: other.LastEdit) &&
-            (LastJournalTick == other.LastJournalTick) &&
+            ReferenceEquals(objA: Journal, objB: other.Journal) &&
             (SolidRevision == other.SolidRevision)
         );
     }

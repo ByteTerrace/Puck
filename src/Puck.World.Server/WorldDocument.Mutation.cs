@@ -219,7 +219,7 @@ public sealed partial class WorldDocument {
             Mutation: mutation,
             Tick: tick
         ) { DrawHistory = privateWords, Played = (derived || (connectionId == SubmissionEnvelope.ScopedReplayConnectionId)) };
-        m_journal.Add(entry);
+        AppendJournal(entry: entry);
         commitJournal?.Invoke();
         // Guest decisions belong to the checkpoint's tick, not the external-edit recovery tail.
         if (!derived) { Host.MutationJournalTap?.Invoke(entry); }

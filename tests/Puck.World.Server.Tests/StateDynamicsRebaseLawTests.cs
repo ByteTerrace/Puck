@@ -256,6 +256,8 @@ public sealed class StateDynamicsRebaseLawTests {
     [Fact]
     public void Undo_RestoresTheRebasedTraitBitExactly() {
         using var fixture = Fixtures.FreshServer(definition: BuildDocument(dynamicsRow: "kickPos"));
+        // An undo takes back its own principal's edits, so the writing seat undoes its write.
+        Assert.True(condition: fixture.Server.GrantTable.TryGrant(new WorldGrant(Actor, WorldCapability.Operate, GrantSubject.All, false), Principal.Console, out var operate), userMessage: operate);
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
             Principal: Actor,
@@ -290,7 +292,7 @@ public sealed class StateDynamicsRebaseLawTests {
 
         fixture.Server.EnqueueUndo(
             count: 1,
-            principal: Principal.Console
+            principal: Actor
         );
         fixture.Step();
 

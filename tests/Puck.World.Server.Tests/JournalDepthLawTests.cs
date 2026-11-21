@@ -10,7 +10,7 @@ namespace Puck.World.Server.Tests;
 /// <summary>
 /// <c>host.journalDepth</c>: the undo horizon, in journal entries. <c>0</c> (the default, every world authored
 /// before this field existed) keeps today's unbounded growth. A positive depth folds entries past the horizon
-/// forward into the base the journal already keeps as they age out — <see cref="WorldServer.EnforceJournalDepth"/>
+/// forward into the base the journal already keeps as they age out — <see cref="WorldServer.FoldJournal"/>
 /// — so the journal never grows past it, <c>world.undo</c> can never reach past what it kept, and a checkpoint
 /// captured at any point still restores the live definition bit-identically.
 /// </summary>
@@ -45,7 +45,7 @@ public sealed class JournalDepthLawTests {
                 Row: row
             ));
             fixture.Step();
-            fixture.Server.EnforceJournalDepth();
+            fixture.Server.FoldJournal();
         }
 
         Assert.Equal(
@@ -77,7 +77,7 @@ public sealed class JournalDepthLawTests {
                 Row: row
             ));
             fixture.Step();
-            fixture.Server.EnforceJournalDepth();
+            fixture.Server.FoldJournal();
 
             Assert.True(
                 condition: (fixture.Server.JournalLength <= Depth),
@@ -149,7 +149,7 @@ public sealed class JournalDepthLawTests {
                 Row: row
             ));
             fixture.Step();
-            fixture.Server.EnforceJournalDepth();
+            fixture.Server.FoldJournal();
         }
 
         Assert.Equal(

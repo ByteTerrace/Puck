@@ -343,7 +343,8 @@ public sealed class WorldReleaseMetadataTransitionLawTests {
             "operator note",
             restored.Server.Definition.Metadata.Description
         );
-        Assert.Empty(collection: Capture(fixture: restored).Server.Journal);
+        // The undone edit keeps its place in the journal, for world.redo.
+        Assert.Single(collection: Capture(fixture: restored).Server.Journal);
         // Preparing either transition did not mutate its source checkpoint.
         AssertMetadata(
             checkpoint: original,

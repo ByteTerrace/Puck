@@ -94,6 +94,33 @@ public sealed class ReloadDeltaLawTests {
         }
     }
 
+    // A reload whose source changes a state row the session also edited merges into the owned list the section holds (an
+    // immutable array the model enumerates only as objects): the source wins that row and is named, every other row stays
+    // the live instance, and the accepted patch replays the merge over the live document.
+    [Fact]
+    public void AReloadOverALiveEditedOwnedListRowTakesTheSourceRow() {
+        static WorldStateRow Row(int index, string value) => new(
+            Name: CellName.Parse(candidate: $"ink{index}"),
+            Kind: CellKind.Text,
+            Capacity: 4,
+            Cells: [new StateCell(Key: CellName.Parse(candidate: "recorded"), Value: CellValue.Text(value: value))]
+        );
+        var rows = Enumerable.Range(start: 0, count: 8).Select(selector: index => Row(index: index, value: "#000000")).ToArray();
+        var previous = Fixtures.BuildDocument().WithWorldState(rows: rows);
+        var live = previous.WithWorldState(rows: [.. previous.StateRaw!.World!.Select(selector: (row, index) => (index == 5) ? Row(index: 5, value: "#AAAAAA") : row)]);
+        var next = previous.WithWorldState(rows: [.. previous.StateRaw!.World!.Select(selector: (row, index) => (index == 5) ? Row(index: 5, value: "#112233") : row)]);
+        var delta = WorldReloadDelta.Between(previous, next);
+
+        Assert.True(delta.TryMergeOver(previous, next, live, out var candidate, out var conflicts, out var accepted, out var reason), reason);
+        Assert.Equal(expected: "$.state.world[name=\"ink5\"]", actual: Assert.Single(conflicts));
+        Assert.Equal(WorldDefinitionSerialization.Serialize(next), WorldDefinitionSerialization.Serialize(candidate));
+        for (var index = 0; (index < rows.Length); index++) {
+            Assert.Equal(expected: (index != 5), actual: ReferenceEquals(live.StateRaw!.World![index], candidate.StateRaw!.World![index]));
+        }
+        Assert.True(WorldReloadDelta.TryApplyPatch(live, accepted, live.DocumentDirectory, out var replayed, out reason), reason);
+        Assert.Equal(WorldDefinitionSerialization.Serialize(candidate), WorldDefinitionSerialization.Serialize(replayed!));
+    }
+
     [Theory]
     [InlineData("base", WorldReloadDelta.StaleBaseCode)]
     [InlineData("target", WorldReloadDelta.TargetMismatchCode)]

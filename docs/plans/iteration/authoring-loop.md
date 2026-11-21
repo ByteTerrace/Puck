@@ -405,15 +405,29 @@ the tick it arrives on is recorded, as a console line's is.
 
 - **A person and a file.** A reload merges the file's change over the live
   document, so a person's live edits survive except on a row the file also
-  changed, where the file wins and the verdict names the row. The reload still
-  clears the journal, so those edits can no longer be undone one by one.
+  changed, where the file wins and the verdict names the row. The accepted
+  overlay joins the journal as an edit of the principal whose save submitted
+  the reload, so the person's edits and the file's stay undoable one by one.
+- **Undo and redo by one author beside another's edits.** `world.undo` takes
+  back only the acting principal's own edits and `world.redo` restores them
+  where they stood; the World's own entries are replayed on both sides. A
+  later edit by another principal is replayed over whatever the step leaves,
+  so the step is refused, naming the row and that principal, when that edit
+  changed a row the step would change: undoing beneath it would drop or bury
+  what its author saw, and the refusal leaves both edits as they are
+  (`WorldPersistence.ApplyUndo`, rows read by `WorldDocumentWalker.ChangedRows`).
+  Edits on different rows undo independently. A principal's undone edits keep
+  their place until its own next edit (a save whose reload it submits
+  included) discards them; a load or a save's compaction discards everyone's,
+  and the journal horizon discards an author's undone edits when it reaches
+  the first of them.
 - **Two writers of one file.** `world.save` writes its target without
   checking it still holds what the save read.
 - **An agent beside a person.** An agent's `puck_exec` mutations in the
   owner's World are stamped as the console, so they are not distinguishable
-  from the owner's console lines and cannot be undone as a set. The
-  [editor plan](../editor.md#decisions) already decides that undo is per
-  principal.
+  from the owner's console lines, and the owner's undo can take back the
+  agent's last edit. An agent needs a principal of its own (see
+  [an agent is a principal](#remote-authorities-trust-and-scale)).
 - **Several lanes on one machine** share the per-user compile directory,
   which the bound above lets them evict from each other.
 
@@ -821,20 +835,26 @@ stage order is in [the duplicates](#duplicates-to-remove).
    changed rows, and `WorldDefinitionMembers.Replace` shares unchanged rows after
    reading and resolving a replacement. Presentation delivery therefore
    carries only the changed creation and shade rows, and
-   value delivery uses changed snapshot rows. `world.undo` drops the author's
-   last edit, not the World's entries recorded after it (sweeps, searches,
-   field writes, rule effects and scoped replays are replayed, never undone),
-   and a replayed patch reads again only the rows it names
-   (`WorldDefinitionMembers.ApplyPatch`, `world.boot.patch-rows-read`). An undo
-   of a value or presentation edit is the same narrow install: the dropped
+   value delivery uses changed snapshot rows. `world.undo` takes back the
+   acting principal's last edit, not the World's entries recorded after it
+   (sweeps, searches, field writes, rule effects and scoped replays are
+   replayed, never undone), and `world.redo` restores it in place
+   ([several authors](#several-authors-at-once) holds the conflict rule). A
+   replayed patch reads again only the rows it names
+   (`WorldDefinitionMembers.ApplyPatch`, `world.boot.patch-rows-read`), and the
+   World's entries ahead of the journal's first edit fold into the base at the
+   end of the tick that edit lands on, so they cost an undo neither compose nor
+   journal depth (`WorldPersistence.FoldJournal`). An undo
+   of a value or presentation edit is the same narrow install: the undone
    entries are composed alone again over the replay's document at the first of
    them, and when they changed only state row values, or only creations in what
    shading reads and shade programs, exactly those rows are set on the live
    document to the replay's values
-   (`WorldPersistence.DroppedEdit`) and installed through the narrow install a
+   (`WorldPersistence.ToggledEdit`) and installed through the narrow install a
    reload uses (`WorldDocument.TryInstallEdit`, kind named by
-   `WorldDocument.ReloadInstallKindOf`). The session's arena, deals and draws
-   carry over. The
+   `WorldDocument.ReloadInstallKindOf`), which validates the rows it moves
+   once; no intermediate replay document is validated. The session's arena,
+   deals and draws carry over. The
    [live edit path](../iteration.md#the-live-edit-path-step-3) describes the
    mechanisms and counters. Section-scoped admission for remote authors stays
    with the [published-world decision](#what-the-owner-settled). *Check:* a
