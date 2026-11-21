@@ -89,6 +89,8 @@ public sealed class PostProcessPackageLawTests {
             width: Extent
         );
 
+        // The pinned recording is the counting one: a node counts its kernels' work only while a reading demands it.
+        node.DemandKernelCounting();
         node.Swap(pipeline: new CompiledShaderPipeline(
             plan: plan.Pipeline,
             shaders: new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal)

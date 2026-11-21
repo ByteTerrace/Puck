@@ -8,10 +8,15 @@ namespace Puck.Shaders;
 /// The members a pass interface declares when its kernels count their own work (<see cref="GpuWork.KernelKinds"/>) into
 /// their node's kernel counters (<see cref="GpuKernelCounters"/>): the pass's row and first named detail row, and the frame
 /// slot's counter buffer, bound read-write in the pass group. Every generated include (<see cref="ShaderInterfaceHlsl"/>)
-/// declares the counting functions: <c>puckCountWork(steps, texels)</c>, which sums a wave's counts and adds them with its
-/// first active lane, and <c>puckCountFragmentWork(steps, texels)</c>, which does the same for a fragment stage over the
-/// wave's lanes that are not helper lanes, since a helper lane's atomics have no effect. <c>puckCountDetail</c> adds to a
-/// named row per active invocation, including divergent layer branches, <c>puckCountShapes</c> adds a wave's primitive
+/// declares the counting functions: <c>puckCountWork(steps, texels)</c>, which reduces a compute thread group's counts in
+/// groupshared memory and adds them once for the group (so every thread of the group must reach the call, a kernel never
+/// returning ahead of it), and <c>puckCountFragmentWork(steps, texels)</c>, which sums a fragment stage's counts over the
+/// wave's lanes that are not helper lanes, since a helper lane's atomics have no effect, and adds them from the first.
+/// A pass whose row is <see cref="GpuKernelCounters.DisabledRow"/> branches out of each of them, and of
+/// <c>puckCountShapes</c> and <c>puckCountRejectedHit</c>, before any wave, groupshared or atomic work: the pass block's
+/// row is uniform across the dispatch, so the branch is too. <c>puckCountDetail</c> adds to a
+/// named row per active invocation, including divergent layer branches, and is gated by its own detail row alone, which
+/// consumers that decide from named counts rely on; <c>puckCountShapes</c> adds a group's primitive
 /// evaluations to the pass row, and <c>puckCountRejectedHit()</c> adds one hit the mesh hit door rejected
 /// (<see cref="GpuWork.MeshHitsRejected"/>) from the rejecting lane.
 /// An interface that declares all

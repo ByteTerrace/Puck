@@ -516,7 +516,7 @@ public sealed class WorldCountersCommandModuleLawTests {
 
         Assert.StartsWith(
             actualString: output,
-            expectedStartString: """[world.counters: {"sources":[],"gpu":{"device":null,"capabilities":null,"nodes":[{"name":"sdf:world","sample":{"submission":1,"revision":1,"passes":[{"label":"sdf.world$mesh","class":"deterministic","state":"executed","details":[],"counts":{"gpu.vertices":42}}],"outside":{}},"lifetime":null,"owned-bytes":null}]},"kinds":{"gpu.vertices":{"unit":"count","class":"per-backend-deterministic"}}}]"""
+            expectedStartString: """[world.counters: {"sources":[],"gpu":{"device":null,"capabilities":null,"nodes":[{"name":"sdf:world","sample":{"submission":1,"revision":1,"kernelCounts":true,"passes":[{"label":"sdf.world$mesh","class":"deterministic","state":"executed","details":[],"counts":{"gpu.vertices":42}}],"outside":{}},"lifetime":null,"owned-bytes":null}]},"kinds":{"gpu.vertices":{"unit":"count","class":"per-backend-deterministic"}}}]"""
         );
     }
     [Fact]

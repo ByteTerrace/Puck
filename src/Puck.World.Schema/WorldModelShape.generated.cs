@@ -5213,6 +5213,7 @@ public static partial class WorldModelShape {
                 M("farShadows", typeof(global::Puck.World.WorldFarShadows), typeof(global::Puck.World.WorldQualityPreset), "FarShadows", Read | Write, static value => ((global::Puck.World.WorldQualityPreset)value).FarShadows),
                 M("viewsRate", typeof(global::Puck.SignedDistance.SdfViewsRate), typeof(global::Puck.World.WorldQualityPreset), "ViewsRate", Read | Write, static value => ((global::Puck.World.WorldQualityPreset)value).ViewsRate),
                 M("nested", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldNestedViewQuality>), typeof(global::Puck.World.WorldQualityPreset), "Nested", Read | Write, static value => ((global::Puck.World.WorldQualityPreset)value).Nested),
+                M("indirectBudget", typeof(global::Puck.World.WorldRenderIndirectBudget), typeof(global::Puck.World.WorldQualityPreset), "IndirectBudget", Read | Write, static value => ((global::Puck.World.WorldQualityPreset)value).IndirectBudget),
             ],
             []),
         T(typeof(global::Puck.World.WorldReaction), true, JsonTypeInfoKind.Object, null,
@@ -5412,8 +5413,8 @@ public static partial class WorldModelShape {
         T(typeof(global::Puck.World.WorldRenderIndirectBudget), true, JsonTypeInfoKind.Object, null,
             [],
             [
-                M("relightPerSecond", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldRenderIndirectBudget), "RelightPerSecond", Read | Write, static value => ((global::Puck.World.WorldRenderIndirectBudget)value).RelightPerSecond),
-                M("tracePerSecond", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldRenderIndirectBudget), "TracePerSecond", Read | Write, static value => ((global::Puck.World.WorldRenderIndirectBudget)value).TracePerSecond),
+                M("relightPerFrame", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldRenderIndirectBudget), "RelightPerFrame", Read | Write, static value => ((global::Puck.World.WorldRenderIndirectBudget)value).RelightPerFrame),
+                M("tracePerFrame", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldRenderIndirectBudget), "TracePerFrame", Read | Write, static value => ((global::Puck.World.WorldRenderIndirectBudget)value).TracePerFrame),
                 M("age", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldRenderIndirectBudget), "Age", Read | Write, static value => ((global::Puck.World.WorldRenderIndirectBudget)value).Age),
             ],
             []),

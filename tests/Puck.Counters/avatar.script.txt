@@ -9,5 +9,6 @@ world.indirect off
 world.rate pause
 world.wait ready 180
 world.rate resume
+world.counters arm
 world.wait 30
 world.counters --json

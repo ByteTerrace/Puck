@@ -17,12 +17,4 @@ public interface IGpuWorkRegistry {
     /// <param name="nodes">The list to append to.</param>
     /// <exception cref="ArgumentNullException"><paramref name="nodes"/> is <see langword="null"/>.</exception>
     void CopyNodes(List<GpuWorkNode> nodes);
-    /// <summary>Requests that registered render nodes capture GPU kernel work counters for a readout. Returns
-    /// <see langword="false"/> when every counting node already holds a counted sample (or no node counts kernel work),
-    /// so the caller may read immediately; returns <see langword="true"/> when counting was armed and
-    /// <paramref name="onReady"/> will be invoked once the next counted frame completes or the presentation closes.</summary>
-    /// <param name="onReady">Invoked when the counted sample is ready to read.</param>
-    /// <returns><see langword="true"/> when the caller should wait for <paramref name="onReady"/>; otherwise
-    /// <see langword="false"/>.</returns>
-    bool TryDemandKernelCounters(Action onReady) => false;
 }

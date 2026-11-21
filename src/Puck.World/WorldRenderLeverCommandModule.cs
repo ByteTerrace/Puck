@@ -57,7 +57,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             ? "on"
             : "off")} dynamic-resolution={(settings.DynamicResolution
             ? "on"
-            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()} distant-shadows={DistantShadowsName(map: settings.DistantShadows)} far-shadows={FarShadowsName(rate: settings.FarShadows)} views-rate={(settings.ViewsRate ?? SdfViewsRate.Full).MaxRate} tile-size={(settings.ViewsRate ?? SdfViewsRate.Full).TileSize}]";
+            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()} distant-shadows={DistantShadowsName(map: settings.DistantShadows)} far-shadows={FarShadowsName(rate: settings.FarShadows)} indirect-budget={IndirectBudgetName(budget: settings.IndirectBudget)} views-rate={(settings.ViewsRate ?? SdfViewsRate.Full).MaxRate} tile-size={(settings.ViewsRate ?? SdfViewsRate.Full).TileSize}]";
     }
     // The distant shadow map's spelling in an echo: off, or its reach, texels, light tolerance and the frames a redraw spans.
     private static string DistantShadowsName(WorldDistantShadows? map) => ((map is { } value)
@@ -67,6 +67,10 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     private static string FarShadowsName(WorldFarShadows? rate) => ((rate is { } value)
         ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"{value.Hertz}hz/{value.TurnDegrees:0.####}deg")
         : "every-frame");
+    // The irradiance budget's spelling in an echo: the world's own, or the device row's probes a frame and age target.
+    private static string IndirectBudgetName(WorldRenderIndirectBudget? budget) => ((budget is { } value)
+        ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(value.RelightPerFrame?.ToString(provider: CultureInfo.InvariantCulture) ?? "unbounded")}relit/{(value.TracePerFrame?.ToString(provider: CultureInfo.InvariantCulture) ?? "unbounded")}traced/{value.Age:0.##}s")
+        : "world");
     // A sky tier's spelling, as the document and world.sky-quality spell it.
     private static string SkyQualityName(WorldSkyTier tier) => tier switch {
         WorldSkyTier.Low => "low",
@@ -360,6 +364,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         link.SubmitSessionLever(lever: WorldSessionLevers.ShadowPolicy(preset: preset), principal: principal);
         link.SubmitSessionLever(lever: WorldSessionLevers.DistantShadowPolicy(preset: preset), principal: principal);
         link.SubmitSessionLever(lever: WorldSessionLevers.FarShadowPolicy(preset: preset), principal: principal);
+        link.SubmitSessionLever(lever: WorldSessionLevers.IndirectBudgetPolicy(preset: preset), principal: principal);
         link.SubmitSessionLever(lever: new WorldSessionLever(Section: WorldSection.Render, Name: WorldSessionLevers.NestedTable, A: 0d, View: table), principal: principal);
         SubmitLever(
             link: link,

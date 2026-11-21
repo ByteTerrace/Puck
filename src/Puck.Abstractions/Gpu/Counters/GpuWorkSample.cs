@@ -170,7 +170,7 @@ public sealed class GpuWorkSample {
     }
     // counts holds the outside row, then pass rows and detail rows, or is empty for no submission. Labels, classes
     // and detail identities are immutable and held by reference.
-    internal void Load(ReadOnlySpan<long> counts, string[] labels, WorkClass[] classes, long revision, ReadOnlySpan<GpuPassState> states, long submission, GpuWorkDetail[]? details = null, bool kernelCountsIncluded = false) {
+    internal void Load(ReadOnlySpan<long> counts, string[] labels, WorkClass[] classes, long revision, ReadOnlySpan<GpuPassState> states, long submission, GpuWorkDetail[]? details = null, bool kernelCountsIncluded = true) {
         m_copiedLedger = null;
         var passCount = states.Length;
         var countLength = (((passCount + (details?.Length ?? 0)) + 1) * GpuWork.SubmissionColumnCount);

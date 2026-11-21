@@ -11180,6 +11180,10 @@ export type WorldQualityPreset = {
    * The nested-view table the preset runs (WorldNestedViewQuality), in place of the world's render.nested, so each device chooses what its windows, portals and filmed screens give up at each size. Absent runs the world's table.
    */
   nested?: WorldNestedViewQualityList | null;
+  /**
+   * The irradiance work each presented frame grants the volume on this device (WorldRenderIndirectBudget), in place of the world's render.indirect.budget, so each device chooses how much lighting work it affords a frame. Absent runs the world's budget.
+   */
+  indirectBudget?: WorldRenderIndirectBudget | null;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -11646,15 +11650,18 @@ export type WorldRenderIndirectApply = {
   contact?: BindableScalar;
 };
 
+/**
+ * The irradiance volume's budget: a light change costs a relight of the probes' cached hits and a geometry change costs a trace, each granted a count for each presented frame (never a rate of wall time, so a slow frame owes no more probe work than a fast one), and overload lengthens the lighting's age rather than the frame. A device's quality row (IndirectBudget) chooses its own. Every member is optional; an absent one leaves that part unbounded.
+ */
 export type WorldRenderIndirectBudget = {
   /**
-   * The probes relit each second, at least one.
+   * The probes relit each presented frame, at least one.
    */
-  relightPerSecond?: number | null;
+  relightPerFrame?: number | null;
   /**
-   * The probes whose hits are traced each second, at least one.
+   * The probes whose hits are traced each presented frame, at least one.
    */
-  tracePerSecond?: number | null;
+  tracePerFrame?: number | null;
   /**
    * The lighting age, in seconds, past which the volume reports it is behind; positive.
    */
