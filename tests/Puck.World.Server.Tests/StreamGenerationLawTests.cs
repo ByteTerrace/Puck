@@ -210,7 +210,7 @@ public sealed class StreamGenerationLawTests {
         duringWithdrawal.Clear();
         mirror.DeliverDefinition(definition: document, stream: Next(2L), version: default);
         Assert.NotEmpty(duringWithdrawal);
-        Assert.Equal(false, duringWithdrawal[0]);
+        Assert.False(duringWithdrawal[0]);
         Assert.Same(document, mirror.Definition);
         Assert.False(DeliveryLatch.Capture().IsCurrent(span: after));
         Assert.True(DeliveryLatch.Capture().IsCurrent(span: mirror.DeliverySpan));

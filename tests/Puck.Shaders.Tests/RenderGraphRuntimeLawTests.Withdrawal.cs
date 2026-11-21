@@ -375,6 +375,58 @@ public sealed partial class RenderGraphRuntimeLawTests {
     }
 
     [Fact]
+    public void APausedViewWhoseRouteMovesShowsNoReaderItsPictureUnderTheNextRoute() {
+        using var scene = new StandingScene(
+            [],
+            Set(
+                Instance(name: "camera"),
+                Instance("main", reads: new RenderGraphRead(Producer: "camera"))
+            ),
+            Graph(pipeline: CameraGraph()),
+            Graph(ScreensGraph(false, "near"), ("near", "camera"))
+        );
+        var spans = new DeliverySpanSource();
+        var camera = scene.Runtime.Instances.IndexOf(name: "camera");
+        RenderGraphFootprint[] filmed = [
+            new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "camera", Width: 1.0),
+        ];
+
+        scene.Runtime.SetRoute(instance: camera, route: DeliveryLabel.Of(span: spans.Span));
+        TestLiveness.Until(
+            reason: () => "The camera and the root never settled.",
+            step: () => {
+                _ = scene.Produce(footprints: filmed, roots: MainRoot);
+
+                return (
+                    scene.Runtime.IsSettled &&
+                    scene.Runtime.TryLatestImage(image: out _, instance: "camera")
+                );
+            }
+        );
+
+        var image = scene.Recorders.Of(instance: "camera").OutputImage;
+
+        // Positive control: under its first route the camera's picture reaches its reader.
+        Assert.True(condition: scene.Runtime.TryLatestImage(image: out var shown, instance: "camera"));
+        Assert.Equal(expected: image, actual: shown.ImageHandle);
+
+        // The view is paused, as a clock-held session view is, and its route moves the way the host moves it when the
+        // viewer's access narrows: the old span ends and the view renders under the next. Its picture was made under
+        // the old span, so no frame may give it out under the new one.
+        scene.Node(instance: "camera").Paused = true;
+        _ = spans.Advance();
+        scene.Runtime.SetRoute(instance: camera, route: DeliveryLabel.Of(span: spans.Span));
+
+        for (var frame = 0; (frame < 4); frame++) {
+            _ = scene.Produce(footprints: filmed, roots: MainRoot);
+            Assert.False(condition: (
+                scene.Runtime.TryLatestImage(image: out var latest, instance: "camera") &&
+                (latest.ImageHandle == image)
+            ));
+        }
+    }
+
+    [Fact]
     public void ACutAcceptedBetweenTheLatchAndTheReturnChangesNothingInThatFrameAndEverythingInTheNext() {
         var gpu = new FakePipelineGpu {
             Recording = true,

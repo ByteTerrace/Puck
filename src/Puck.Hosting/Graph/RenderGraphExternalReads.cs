@@ -55,6 +55,7 @@ public sealed class RenderGraphExternalReads {
     private readonly Dictionary<string, int> m_indexByProducer;
     private readonly RenderGraphExternalInput[] m_inputs;
     private readonly bool[] m_taken;
+    private readonly DeliveryLabelUnion m_union = new();
 
     /// <summary>Initializes a new instance of the <see cref="RenderGraphExternalReads"/> class.</summary>
     /// <param name="producers">The instances read, in the order the consumer declares them.</param>
@@ -88,15 +89,15 @@ public sealed class RenderGraphExternalReads {
     /// when no read is bound.</summary>
     public DeliveryLabel Label {
         get {
-            var combined = DeliveryLabel.ForSource(source: DeliveryPublicSource.Host);
-
+            m_union.Clear();
+            m_union.Add(label: DeliveryLabel.ForSource(source: DeliveryPublicSource.Host));
             for (var index = 0; (index < m_inputs.Length); index++) {
                 if (m_inputs[index].IsClassified) {
-                    combined = combined.Union(other: m_inputs[index].Label);
+                    m_union.Add(label: m_inputs[index].Label);
                 }
             }
 
-            return combined;
+            return m_union.Build();
         }
     }
     /// <summary>Gets whether any read bound this frame holds external pixels the capture gate did not fill.</summary>
