@@ -372,12 +372,12 @@ public sealed class WorldSessionMirror : IClientSink {
         ArgumentNullException.ThrowIfNull(argument: placeholder);
 
         m_unread = unread;
+        m_stateView = new WorldDocumentStateView(clock: () => (Tick, EngineTick), delivered: placeholder, gate: m_followGate);
         m_document = new WorldDeliveredDocument(
-            Definition: placeholder,
+            Definition: m_stateView.Definition,
             Lifetime: 0,
             Version: default
         );
-        m_stateView = new WorldDocumentStateView(definition: () => Definition);
         m_synchronizedStateView = new SynchronizedStateView(owner: this);
         m_kitColliders = CompileColliders(definition: placeholder);
         m_kitBodyContacts = CompileBodyContacts(definition: placeholder);
@@ -626,24 +626,28 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 CurrentPosition(int index) => m_poses.CurrentPosition(index: index);
 
-    // Publishes a delivered definition and its version as one pair; the same pair delivered again is kept, so a
-    // repeated delivery allocates nothing.
-    private void Publish(WorldDefinition definition, WorldDocumentVersion version) {
+    // Adopts a delivered definition through the state view, the mirror's one door for documents, and publishes it with
+    // its version as one pair; the same pair delivered again is kept, so a repeated delivery allocates nothing. Returns
+    // the published definition.
+    private WorldDefinition Publish(WorldDefinition definition, WorldDocumentVersion version) {
         lock (m_followGate) {
+            var adopted = m_stateView.Adopt(delivered: definition);
             var current = Volatile.Read(location: ref m_document);
 
-            if (ReferenceEquals(objA: current.Definition, objB: definition) && (current.Version == version)) {
-                return;
+            if (ReferenceEquals(objA: current.Definition, objB: adopted) && (current.Version == version)) {
+                return adopted;
             }
 
             Volatile.Write(
                 location: ref m_document,
                 value: new WorldDeliveredDocument(
-                    Definition: definition,
+                    Definition: adopted,
                     Lifetime: (current.Lifetime + ((current.Version.Activation != version.Activation) ? 1 : 0)),
                     Version: version
                 )
             );
+
+            return adopted;
         }
     }
 
@@ -672,7 +676,7 @@ public sealed class WorldSessionMirror : IClientSink {
         lock (m_snapshotWriteGate) {
             lock (m_followGate) {
                 if (!rows.TryApply(Document.Definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the mirror's creation roster."); }
-                Publish(changed, version);
+                _ = Publish(changed, version);
                 _ = Interlocked.Increment(ref m_definitionRevision);
             }
         }
@@ -686,19 +690,20 @@ public sealed class WorldSessionMirror : IClientSink {
             m_stateTime = null;
         }
 
-        Volatile.Write(
-            location: ref m_kitColliders,
-            value: CompileColliders(definition: definition)
-        );
-        Volatile.Write(
-            location: ref m_kitBodyContacts,
-            value: CompileBodyContacts(definition: definition)
-        );
         lock (m_snapshotWriteGate) {
             lock (m_followGate) {
-                Publish(
+                var adopted = Publish(
                     definition: definition,
                     version: version
+                );
+
+                Volatile.Write(
+                    location: ref m_kitColliders,
+                    value: CompileColliders(definition: adopted)
+                );
+                Volatile.Write(
+                    location: ref m_kitBodyContacts,
+                    value: CompileBodyContacts(definition: adopted)
                 );
                 _ = Interlocked.Increment(location: ref m_definitionRevision);
                 m_observedSnapshotInstall = true;
@@ -937,16 +942,17 @@ public sealed class WorldSessionMirror : IClientSink {
         // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
         // Publish the definition and its stamped clock together with respect to followers, including event readers.
         lock (m_followGate) {
-            // A delivery that moved placement rows is a scene change to this mirror's readers, which watch the definition
-            // revision alone.
-            if (WorldPlacementResponse.ComparePlacements(after: definition, before: Volatile.Read(location: ref m_document).Definition, solid: out _) != WorldPlacementChange.None) {
-                _ = Interlocked.Increment(location: ref m_definitionRevision);
-            }
-
-            Publish(
+            var previous = Volatile.Read(location: ref m_document).Definition;
+            var adopted = Publish(
                 definition: definition,
                 version: version
             );
+
+            // A delivery that moved placement rows is a scene change to this mirror's readers, which watch the definition
+            // revision alone.
+            if (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, solid: out _) != WorldPlacementChange.None) {
+                _ = Interlocked.Increment(location: ref m_definitionRevision);
+            }
 
             lock (m_stampGate) {
                 // Anchor and observation deltas arrive at unsampled ticks too. Their values stand at the delivery's

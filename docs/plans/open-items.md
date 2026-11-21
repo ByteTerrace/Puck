@@ -3839,9 +3839,6 @@ State across an install:
 - A cell written back under a per-cell `advance` trait after removal
   (`TryApplyCellUpsert`) gets no birth clock and accumulates from the origin,
   where an import settles such a cell to its install time.
-- A bound document value read by the in-process client reads the server's
-  arena from the presentation thread (`WorldLiveValues`), unsynchronized with
-  the tick.
 - [low] Rule-group progress (`RuleGroupState`) and decision state survive a
   load, while latches and scoped replays clear on one
   (`WorldServer.ContinueArena`). Clearing them needs a reorder: a checkpoint
