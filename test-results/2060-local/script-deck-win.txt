@@ -1,0 +1,14 @@
+world.wait 300
+machine.state
+screen.state 2
+world.wait 600
+machine.state
+screen.state 2
+host.frames 30
+debug.go range
+world.wait 300
+world.screenshot C:/Users/kitto/AppData/Local/PuckLocalTest/runs/deck-windowed/burst.png presented 60
+world.wait captures 120
+machine.state
+host.frames 30
+quit

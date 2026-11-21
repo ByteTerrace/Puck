@@ -1,0 +1,11 @@
+world.wait 2400
+world.device-profile
+world.quality
+host.memory
+world.wait 1800
+world.benchmark run debug
+world.wait 4500
+world.gpu-timing
+host.frames
+host.memory
+quit

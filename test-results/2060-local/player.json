@@ -1,0 +1,62 @@
+{
+  "schema": "puck.player-build.v1",
+  "complete": true,
+  "commit": "862d5ee6be4561b68cd7d3464cc695e0583f853b",
+  "runtime": "win-x64",
+  "world": "worlds/debug",
+  "cacheDirectory": "cache",
+  "backends": [
+    "directx",
+    "vulkan"
+  ],
+  "targets": [
+    "rtx2060@1920x1080",
+    "rtx4070@2560x1440"
+  ],
+  "extensions": [
+    "Puck.World.Azure"
+  ],
+  "launcher": "launcher",
+  "checked": {
+    "bake directx-rtx2060@1920x1080": {
+      "baked": 1237,
+      "loaded": 0,
+      "bakes": "[bakes: not settled after 600 seconds, so world.wait released: the world\u0027s meshes are still moving to the detail their demand asks"
+    },
+    "bake directx-rtx4070@2560x1440": {
+      "baked": 0,
+      "loaded": 1231,
+      "bakes": "[bakes: settled at tick 0]"
+    },
+    "bake vulkan-rtx2060@1920x1080": {
+      "baked": 1237,
+      "loaded": 0,
+      "bakes": "[bakes: settled at tick 0]"
+    },
+    "bake vulkan-rtx4070@2560x1440": {
+      "baked": 0,
+      "loaded": 1231,
+      "bakes": "[bakes: settled at tick 0]"
+    },
+    "check directx-rtx2060@1920x1080": {
+      "baked": 0,
+      "loaded": 1237,
+      "bakes": "[bakes: not settled after 600 seconds, so world.wait released: the world\u0027s meshes are still moving to the detail their demand asks"
+    },
+    "check directx-rtx4070@2560x1440": {
+      "baked": 0,
+      "loaded": 1231,
+      "bakes": "[bakes: settled at tick 0]"
+    },
+    "check vulkan-rtx2060@1920x1080": {
+      "baked": 0,
+      "loaded": 1237,
+      "bakes": "[bakes: not settled after 600 seconds, so world.wait released: the world\u0027s meshes are still moving to the detail their demand asks"
+    },
+    "check vulkan-rtx4070@2560x1440": {
+      "baked": 0,
+      "loaded": 1231,
+      "bakes": "[bakes: settled at tick 0]"
+    }
+  }
+}

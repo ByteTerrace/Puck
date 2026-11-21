@@ -1,0 +1,58 @@
+[world.wait: 300 ticks from 0 — releasing at tick 300]
+[machine.state: humble-gaming-brick generation=1 engine=gaming-brick running=true status=Running segments=300 pending=0 fault=none advanced-gaming-brick generation=2 engine=advanced-gaming-brick running=true status=Running segments=300 pending=0 fault=none humble-gaming-deck generation=3 engine=humble-gaming-deck running=true status=Running segments=299 pending=1 fault=none range-deck-9 generation=4 engine=humble-gaming-deck running=true status=Running segments=299 pending=1 fault=none range-deck-24 generation=5 engine=humble-gaming-deck running=true status=Running segments=299 pending=1 fault=none range-deck-50 generation=6 engine=humble-gaming-deck running=true status=Running segments=299 pending=1 fault=none]
+[screen.state: 2 assigned humble-gaming-deck bound frames=299 pending=1/8 backpressure=0 engaged=none gun=off pad=off cartridge cartridges/deck/colour-bars.deck hash sha256-64/511453bb77f1dea6 rom sha256-64/9541ade3453285db]
+[world.wait: 600 ticks from 300 — releasing at tick 900]
+[machine.state: humble-gaming-brick generation=1 engine=gaming-brick running=true status=Running segments=900 pending=0 fault=none advanced-gaming-brick generation=2 engine=advanced-gaming-brick running=true status=Running segments=900 pending=0 fault=none humble-gaming-deck generation=3 engine=humble-gaming-deck running=true status=Running segments=900 pending=0 fault=none range-deck-9 generation=4 engine=humble-gaming-deck running=true status=Running segments=900 pending=0 fault=none range-deck-24 generation=5 engine=humble-gaming-deck running=true status=Running segments=900 pending=0 fault=none range-deck-50 generation=6 engine=humble-gaming-deck running=true status=Running segments=900 pending=0 fault=none]
+[screen.state: 2 assigned humble-gaming-deck bound frames=900 pending=0/8 backpressure=0 engaged=none gun=off pad=off cartridge cartridges/deck/colour-bars.deck hash sha256-64/511453bb77f1dea6 rom sha256-64/9541ade3453285db]
+[host.frames: 30 iterations | avg=60.16 p50=60.84 p99=67.31 max=67.57 ms | over 16.7 ms: 30 | busiest 66.33 ms of work | pacer late at most 0.00 ms | 0 collections pausing 0.00 ms]
+    produce: avg=44.83 p50=44.56 p99=48.73 max=48.80 ms
+    produce-work: avg=44.83 p50=44.56 p99=48.73 max=48.80 ms
+    produce-work parts mean [ms] pump 1.851 capture 7.395 pack 32.269 lighting 0.043 exposure 0 schedule 0.243 prepare 0.311 record 2.527 flush 0.179 other 0.012
+    produce-fence: avg=0.00 p50=0.00 p99=0.00 max=0.00 ms
+    control-gap: avg=53.51 p50=53.32 p99=58.52 max=58.65 ms
+    simulate: avg=14.54 p50=15.70 p99=17.82 max=18.04 ms
+    produce+simulate: avg=59.37 p50=60.31 p99=65.49 max=65.82 ms
+    produce with a step: avg=44.83 p50=44.56 p99=48.73 max=48.80 ms
+    produce-work with a step: avg=44.83 p50=44.56 p99=48.73 max=48.80 ms
+    frame thread allocated: avg=78404 p50=80104 p99=98664 max=99376 total=2352144 bytes
+    #415 67.57 ms: input=0.01 commands=0.09 simulate=18.04 (2 steps) begin=0.01 produce=45.03 (fence 0.00) present=0.41 wait=3.98 (late 0.00) gc=0/0/0 pause=0.00 allocated=90200 thread-allocated=92192
+    #423 66.67 ms: input=0.02 commands=0.08 simulate=16.37 (2 steps) begin=0.01 produce=46.72 (fence 0.00) present=0.43 wait=3.05 (late 0.00) gc=0/0/0 pause=0.00 allocated=82000 thread-allocated=79880
+    #420 66.34 ms (busiest): input=0.01 commands=0.08 simulate=17.02 (2 steps) begin=0.01 produce=48.80 (fence 0.00) present=0.42 wait=0.00 (late 0.00) gc=0/0/0 pause=0.00 allocated=82000 thread-allocated=85448
+    #441 65.27 ms: input=0.01 commands=0.10 simulate=16.12 (2 steps) begin=0.01 produce=48.56 (fence 0.00) present=0.46 wait=0.00 (late 0.00) gc=0/0/0 pause=0.00 allocated=73800 thread-allocated=77720
+    #421 64.44 ms: input=0.02 commands=0.09 simulate=16.07 (2 steps) begin=0.01 produce=47.82 (fence 0.00) present=0.43 wait=0.00 (late 0.00) gc=0/0/0 pause=0.00 allocated=90200 thread-allocated=92240
+    #428 63.43 ms: input=0.01 commands=0.08 simulate=17.26 (2 steps) begin=0.01 produce=45.69 (fence 0.00) present=0.38 wait=0.00 (late 0.00) gc=0/0/0 pause=0.00 allocated=82000 thread-allocated=85448
+    #422 63.05 ms: input=0.01 commands=0.09 simulate=15.44 (2 steps) begin=0.01 produce=45.55 (fence 0.00) present=0.39 wait=1.55 (late 0.00) gc=0/0/0 pause=0.00 allocated=82000 thread-allocated=79208
+    #433 62.95 ms: input=0.01 commands=0.09 simulate=16.94 (2 steps) begin=0.03 produce=45.52 (fence 0.00) present=0.36 wait=0.00 (late 0.00) gc=0/0/0 pause=0.00 allocated=90200 thread-allocated=89568
+    ticks: count=900 avg=29.36 p50=9.59 p99=359.05 max=4484.18 ms
+    steps.shed=410
+[body.pose: body:0 -> spawn 'range' (-100.00, 0.00, 118.00) yaw=0° pitch=0° roll=0°]
+  [view.override: camera auto]
+  [view.override: layout play]
+[world.wait: 300 ticks from 901 — releasing at tick 1201]
+[world.screenshot: pending C:\Users\kitto\AppData\Local\PuckLocalTest\runs\deck-windowed\burst-000.png .. C:\Users\kitto\AppData\Local\PuckLocalTest\runs\deck-windowed\burst-059.png — presented, the next 60 frames the display shows, read as presented; world.wait captures <seconds> fences them, and the report lands on stderr]
+[world.wait: holding until the captures have landed, at most 120 seconds, from tick 1201]
+[machine.state: humble-gaming-brick generation=1 engine=gaming-brick running=true status=Running segments=1443 pending=0 fault=none advanced-gaming-brick generation=2 engine=advanced-gaming-brick running=true status=Running segments=1443 pending=0 fault=none humble-gaming-deck generation=3 engine=humble-gaming-deck running=true status=Running segments=1443 pending=0 fault=none range-deck-9 generation=4 engine=humble-gaming-deck running=true status=Running segments=1443 pending=0 fault=none range-deck-24 generation=5 engine=humble-gaming-deck running=true status=Running segments=1443 pending=0 fault=none range-deck-50 generation=6 engine=humble-gaming-deck running=true status=Running segments=1443 pending=0 fault=none]
+[host.frames: 30 iterations | avg=139.95 p50=146.90 p99=161.74 max=162.54 ms | over 16.7 ms: 30 | busiest 162.54 ms of work | pacer late at most 0.00 ms | 3 collections pausing 20.01 ms]
+    produce: avg=103.46 p50=108.39 p99=120.56 max=121.20 ms
+    produce-work: avg=102.79 p50=107.66 p99=119.86 max=120.50 ms
+    produce-work parts mean [ms] pump 49.526 capture 15.837 pack 32.636 lighting 0.092 exposure 0.001 schedule 0.328 prepare 1.035 record 3.113 flush 0.204 other 0.016
+    produce-fence: avg=0.67 p50=0.73 p99=0.89 max=0.90 ms
+    control-gap: avg=118.14 p50=120.85 p99=134.79 max=135.20 ms
+    simulate: avg=34.49 p50=37.65 p99=49.18 max=52.28 ms
+    produce+simulate: avg=137.94 p50=145.38 p99=160.75 max=161.93 ms
+    produce with a step: avg=109.31 p50=109.24 p99=120.63 max=121.20 ms
+    produce without one: avg=50.77 p50=50.53 p99=51.87 max=51.90 ms
+    produce-work with a step: avg=108.57 p50=108.49 p99=119.93 max=120.50 ms
+    produce-work without one: avg=50.77 p50=50.53 p99=51.87 max=51.90 ms
+    frame thread allocated: avg=7797616 p50=8500172 p99=11420602 max=12589040 total=233928480 bytes
+    #622 162.54 ms (busiest): input=0.01 commands=0.08 simulate=52.28 (4 steps) begin=0.01 produce=109.66 (fence 0.77) present=0.51 wait=0.00 (late 0.00) gc=1/0/0 pause=2.81 allocated=28284552 thread-allocated=12589040
+    #609 159.77 ms: input=0.02 commands=0.09 simulate=36.66 (3 steps) begin=1.39 produce=121.20 (fence 0.70) present=0.42 wait=0.00 (late 0.00) gc=1/1/1 pause=0.49 allocated=22341640 thread-allocated=8489928
+    #605 158.72 ms: input=0.01 commands=0.09 simulate=39.08 (3 steps) begin=1.43 produce=117.72 (fence 0.75) present=0.39 wait=0.00 (late 0.00) gc=0/0/0 pause=0.00 allocated=22405648 thread-allocated=8497328
+    #610 157.12 ms: input=0.01 commands=0.09 simulate=37.55 (3 steps) begin=0.01 produce=119.01 (fence 0.70) present=0.45 wait=0.00 (late 0.00) gc=0/0/0 pause=12.90 allocated=22849576 thread-allocated=8496144
+    #625 156.19 ms: input=0.01 commands=0.08 simulate=38.81 (4 steps) begin=1.44 produce=115.38 (fence 0.72) present=0.47 wait=0.00 (late 0.00) gc=0/0/0 pause=0.00 allocated=22453584 thread-allocated=8559864
+    #616 155.74 ms: input=0.01 commands=0.09 simulate=41.59 (3 steps) begin=0.01 produce=113.49 (fence 0.71) present=0.55 wait=0.00 (late 0.00) gc=1/1/0 pause=3.81 allocated=25819056 thread-allocated=8503016
+    #617 153.85 ms: input=0.01 commands=0.09 simulate=36.57 (3 steps) begin=1.41 produce=115.28 (fence 0.73) present=0.48 wait=0.00 (late 0.00) gc=0/0/0 pause=0.00 allocated=22397624 thread-allocated=8477008
+    #629 153.29 ms: input=0.01 commands=0.09 simulate=38.82 (4 steps) begin=1.43 produce=112.51 (fence 0.85) present=0.43 wait=0.00 (late 0.00) gc=0/0/0 pause=0.00 allocated=23789416 thread-allocated=8558016
+    ticks: count=1443 avg=22.02 p50=9.45 p99=38.21 max=4484.18 ms
+    steps.shed=458
+[quit: exiting]
