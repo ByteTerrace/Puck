@@ -13,6 +13,9 @@ public sealed partial class SdfWorldTables {
     private bool m_meshIrradianceFresh;
     private IGpuBuffer? m_meshIrradianceSource;
     private readonly List<int> m_meshIrradianceSlots = [];
+    // Moves with every publication, which changes what the passes that gather the volume read behind one binding: the
+    // tables' signature and the lighting passes' signature fold it (UpdateTablesSignature).
+    private long m_meshIrradianceRevision;
 
     /// <summary>Gets the published irradiance table's device bytes.</summary>
     public GpuMemoryBytes MeshIrradianceBufferBytes => new(DeviceLocal: m_meshIrradiance.Buffer?.SizeBytes ?? 0, HostVisible: 0);
@@ -30,6 +33,7 @@ public sealed partial class SdfWorldTables {
         }
         m_meshIrradianceSource = source;
         m_meshIrradianceSlots.AddRange(slots);
+        m_meshIrradianceRevision++;
     }
 
     private void RecordMeshIrradiance(nint command) {

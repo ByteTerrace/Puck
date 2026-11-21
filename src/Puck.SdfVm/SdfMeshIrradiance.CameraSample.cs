@@ -1,4 +1,5 @@
 using Puck.Abstractions.Collections;
+using Puck.Abstractions.Memory;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
@@ -21,6 +22,9 @@ public sealed partial class SdfMeshIrradiance {
     // The frame's views as the latest Stage saw them, so TrySampleCamera, which names a position, finds its view's row.
     private Vector3[] m_gpuCameraSampleViewPositions = [];
     private ReferenceRevision[] m_gpuCameraSampleViewCuts = [];
+    // The frame thread's scratch for a schedule's distinct positions and each view's row among them.
+    private Vector3[] m_gpuCameraSamplePositions = [];
+    private int[] m_gpuCameraSampleRows = [];
 
     // One completed reading: SdfMeshProbeRelight.CameraSampleOutputWords words a distinct position, and for each view its row
     // (or -1) and its cut revision.
@@ -51,30 +55,33 @@ public sealed partial class SdfMeshIrradiance {
             // A fault is Stage's to report, once, as the worker's is.
             if (m_gpuCameraSampleTask is { IsCompleted: false } or { IsFaulted: true }) { return; }
             if (frame.ConvergesLighting && (m_owed || m_worker is { IsCompleted: false })) { return; }
-            rows = new int[count];
-            cuts = new ReferenceRevision[count];
-            var distinct = new List<Vector3>(count);
+            // The distinct positions and each view's row are composed in scratch, and copied out only for a sample that is
+            // scheduled: a frame that asks nothing new allocates nothing.
+            var scratchRows = ArrayCapacity.EnsureScratch(ref m_gpuCameraSampleRows, count);
+            var scratchPositions = ArrayCapacity.EnsureScratch(ref m_gpuCameraSamplePositions, count);
+            var distinct = 0;
             for (var view = 0; view < count; view++) {
-                cuts[view] = m_gpuCameraSampleViewCuts[view];
-                if (frame.Views[view].Elsewhere) { rows[view] = -1; continue; }
+                if (frame.Views[view].Elsewhere) { scratchRows[view] = -1; continue; }
                 var position = m_gpuCameraSampleViewPositions[view];
-                var row = distinct.IndexOf(position);
-                if (row < 0) { row = distinct.Count; distinct.Add(position); }
-                rows[view] = row;
+                var row = Array.IndexOf(array: scratchPositions, value: position, startIndex: 0, count: distinct);
+                if (row < 0) { row = distinct++; scratchPositions[row] = position; }
+                scratchRows[view] = row;
             }
-            if (distinct.Count == 0) { return; }
-            positions = [.. distinct];
+            if (distinct == 0) { return; }
             var key = (m_geometry, m_windowVersion, m_lightingVersion, m_relit);
             var sameClient = ReferenceEquals(m_gpuCameraSampleAskedOf, client);
             var sameScene = SdfMeshIrradianceScene.SameGpuContent(m_gpuCameraSampleScene, m_scene);
-            var cut = !cuts.AsSpan().SequenceEqual(m_gpuCameraSampleAskedCuts);
-            var moved = !positions.AsSpan().SequenceEqual(m_gpuCameraSampleAsked);
+            var cut = !m_gpuCameraSampleViewCuts.AsSpan().SequenceEqual(m_gpuCameraSampleAskedCuts);
+            var moved = !scratchPositions.AsSpan(start: 0, length: distinct).SequenceEqual(m_gpuCameraSampleAsked);
             if (sameClient && sameScene && m_gpuCameraSampleKey == key && !moved && !cut) { return; }
             // A camera sample shares the service's one admitted job with the relight, so movement and lighting are read at
             // most every LightingInterval; a cut is read at once, since its view's exposure waits for it.
             if (!frame.ConvergesLighting && !cut && Time.GetElapsedTime(m_gpuCameraSampleAt) < LightingInterval) { return; }
             if (TakeSnapshot() is not { } captured) { return; }
             snapshot = captured;
+            positions = scratchPositions.AsSpan(start: 0, length: distinct).ToArray();
+            rows = scratchRows.AsSpan(start: 0, length: count).ToArray();
+            cuts = [.. m_gpuCameraSampleViewCuts];
             // Rewritten in place only here, with the one camera sample a volume runs at a time completed (above), so no job in
             // flight still reads the rows a new camera sample rewrites.
             lighting = (m_gpuCameraSampleLightingRows = LightingRows(snapshot.Lighting, in snapshot, snapshot.Lighting.Feedback && snapshot.Layout.Bounce, rows: m_gpuCameraSampleLightingRows));

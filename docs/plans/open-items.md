@@ -3950,6 +3950,15 @@ their lane order; this packet keeps the single duplicates and leads.
     hygiene. Then consider raising CA2027 to an error in `.editorconfig`: the
     SDK ships it but reports it as a build warning only under a stricter
     `AnalysisMode` than Puck's default.
+  - **Rendering: the far cascade's split refresh.** [medium] A rated far
+    cascade below every-frame rates always holds a static layer
+    (`SdfFarShadows.HoldsStaticLayer`), and `SdfWorldPasses.RecordFar` answers
+    both layers whenever the recorder's `SdfFarStaticLayer.Held` is set, so
+    the split path (`SdfFarLayers.Depth` and `Exit`, `FarExitOwed`, the exit
+    camera the surface pass reads as the cascades' fourth, and the exit branch
+    of `FarSignatureOf`) runs only while a rebuilt graph without the static
+    depths is installed. Make that window draw both layers too and delete the
+    split, with the exit camera row in the pass block and its HLSL reader.
 
 ### Author leaks to the standard
 

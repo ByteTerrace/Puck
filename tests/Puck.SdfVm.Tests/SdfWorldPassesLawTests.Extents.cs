@@ -7,6 +7,11 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfWorldPassesLawTests {
+    // Produces frames of a view on the device's wall clock until its irradiance volume has settled
+    // (SdfMeshIrradiance.Settling), a camera sample included.
+    private static void SettleWallLighting(SdfTestView view, FrameContext context) => TestLiveness.Until(
+        step: () => (view.Produce(context: in context) && !view.Residency.MeshIrradiance.Settling),
+        reason: () => view.Residency.MeshIrradiance.Describe(), wait: view.Residency.WaitPipelineBuilds);
     [Fact]
     public void VariableRenderGridKeepsOutputAndCeilingStorageWhilePickingUsesTheActiveStride() {
         // The view's three shadow cascades hold about 250 MB, so a rebuild's replacement peak needs a device that reports
@@ -35,6 +40,9 @@ public sealed partial class SdfWorldPassesLawTests {
 
         Assert.Equal(expected: ((24 * 24) * SdfWorldPackage.VisibilityRecordByteLength), actual: storage.Length);
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
+        // The irradiance volume's first lighting, which creates its GPU work's objects as it starts and lands in wall time,
+        // settles before the scale changes count buffers.
+        SettleWallLighting(view: view, context: context);
         // Picking allocates its tiny readback only on demand; warm every frame slot before measuring scale changes.
         for (var warm = 0; (warm < 4); warm++) {
             _ = picker.Request(x: 0.25f, y: 0.75f);
@@ -97,6 +105,8 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.Equal(expected: (Extent, Extent), actual: node.Extent);
             Assert.Equal(expected: (passes == ReconstructingPasses), actual: node.Plan!.Storages.Any(predicate: static item => item.Versions.Any(predicate: static version => version.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.CurrentColor}"))));
         }
+        // Each publication of the irradiance volume renders the view again (SdfWorldTables.UpdateTablesSignature).
+        SettleWallLighting(view: view, context: context);
         current = current with { EnableCadenceGate = true };
         _ = view.Produce(context: in context);
         _ = view.Produce(context: in context);

@@ -183,14 +183,15 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Views,
             SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display }, actual: Executed(work: CadenceWork(rig: rig)));
     }
+    // A sky layer samples only a screen the world declares (SdfWorldResidency.DeclareScreens), so a panorama naming a
+    // screen no world declares reads no image, and the still view stands.
     [Fact]
-    public void CadenceRunsTheSkyEveryFrameWhileALayerSamplesAScreen() {
+    public void ASkyLayerNamingAnUndeclaredScreenLeavesTheStillViewStanding() {
         using var rig = new TemporalRig(sky: static sky => { _ = sky.Add(label: "panorama", parameters: new SdfSkyPanorama { Intensity = 1f, Screen = 0 }); }, views: 1, cadence: true);
 
         for (var frame = 0; (frame < 3); frame++) {
             rig.Produce();
-            Assert.False(condition: rig.Stood(), userMessage: $"frame {frame}");
-            Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display }, actual: Executed(work: CadenceWork(rig: rig)));
+            Assert.True(condition: rig.Stood(), userMessage: $"frame {frame}");
         }
     }
     [Fact]

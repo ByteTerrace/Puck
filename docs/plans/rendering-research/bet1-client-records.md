@@ -380,7 +380,7 @@ covered by the signature or by a refusal.
 | What each screen shows, its face, mapping, treatment, luminance and ripple (`ISdfScreenSources`); a screen carried by a body; text decals (`WorldScreenDecals`) | Bound on every frame. The mapping and surface tables are hashed, the decal buffer carries a revision, a pass that samples a screen's image folds the image's publication into its signature (`SdfWorldPasses.ReadSignatureOf`), and a screen that shows a source forces the whole view to render (`SdfWorldTables.ForcesRender`) |
 | The glyph atlas (`ISdfFrameSource.GlyphAtlas`) | Compared by identity on every frame |
 | A shader reload (`SdfWorldResidency.RequestShaderReload`), the debug view (`SdfWorldResidency.DebugMode`) and the hit-door diagnostic (`SdfWorldTables.ForceHitBound`) | The program revision moves at a reload, and the pass block carries the other two |
-| Indirect light (`SdfMeshIrradiance.Stage`) | `SdfMeshIrradiance.Settling` refuses a stand until the probes have reached the tables |
+| Indirect light (`SdfMeshIrradiance.Stage`) | Each publication moves the tables' irradiance revision, which the tables' signature and the lighting group fold (`SdfWorldTables.UpdateTablesSignature`) |
 | Each view's exposure (`SdfViewExposures.Stage`), eased over the host's interval | The multiplier is in the pass block. A view whose exposure is still adapting renders again, whether or not it was captured |
 | Meshes that land after the pack, and a memory trim | Staged on every frame (`SdfWorldTables.StageLandedMeshes`). The mesh revision is in the signature |
 | The device and the shading kernels | A lost device clears every rendered signature, and a frame whose kernel is still building is not ready (`SdfWorldTables.FrameWaiting`) |

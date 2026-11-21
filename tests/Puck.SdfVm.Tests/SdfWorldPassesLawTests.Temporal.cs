@@ -365,13 +365,20 @@ public sealed partial class SdfWorldPassesLawTests {
         var revision = rig.World.WorkRevision;
 
         foreach (var grid in new[] { 0.5f, 0.625f }) {
-            var preceding = rig.HistoryFrames();
+            // The last block before the move may be a resolve's (the count before its sample completed) or a later
+            // composite-only frame's (the count after), so the move's own first block is the reference: the history
+            // continues from a converged period rather than restarting at zero, one sample a frame.
+            var first = 0U;
 
             rig.RenderGrid = grid;
             for (var sample = 0U; (sample < SdfWorldPackage.TemporalPeriod); sample++) {
                 rig.Produce();
                 Assert.False(condition: rig.Stood(), userMessage: $"grid {grid}, sample {sample}");
-                Assert.Equal(expected: ((preceding + sample) + 1u), actual: rig.HistoryFrames());
+                if (sample == 0U) {
+                    first = rig.HistoryFrames();
+                    Assert.True(condition: (first >= SdfWorldPackage.TemporalPeriod), userMessage: $"grid {grid}: the history restarted at {first}");
+                }
+                Assert.Equal(expected: (first + sample), actual: rig.HistoryFrames());
                 Assert.True(condition: rig.PreviousValid());
                 Assert.Equal(expected: revision, actual: rig.World.WorkRevision);
             }
@@ -607,7 +614,7 @@ public sealed partial class SdfWorldPassesLawTests {
                     (World.Extent == (Extent, Extent)) && !World.IsBuildingCandidate && !Selected.MeshPathBake.Pending);
             }, reason: () => $"{Selected.NotReadyReason} ready={Selected.IsReady} resolved={Passes.HasRenderedResolvedView(instance: "world")} extent={World.Extent} candidate={World.IsBuildingCandidate} bake={Selected.MeshPathBake.Pending}", wait: Selected.WaitPipelineBuilds);
             // The irradiance volume's first lighting lands over the frames it is granted, so the rig settles it before a law
-            // counts frames: a view stands only once its lighting has settled (SdfWorldResidency.IsUnchanged).
+            // counts frames: each publication renders the view again (SdfWorldTables.UpdateTablesSignature).
             SettleLighting();
             // Past one lighting interval, so the capture the volume throttles to it has run, and then settled again: a
             // law counts frames from a rig the periodic lighting work has nothing more to change.
@@ -663,7 +670,7 @@ public sealed partial class SdfWorldPassesLawTests {
             _ = Runtime.ProduceFrame(context: in context, frame: in scheduled);
         }
         // Produces frames until the irradiance volume's lighting has settled, which a lighting change relights over the
-        // frames it is granted: a view stands only once its lighting has (SdfWorldResidency.IsUnchanged).
+        // frames it is granted: each publication renders the view again (SdfWorldTables.UpdateTablesSignature).
         // The frames bound it, not the clock: after each frame the rig waits out the volume's host work (a scene build, the
         // worker between device jobs), so a volume that never settles fails the law within them however the pool runs.
         public void SettleLighting() => TestLiveness.Within(frames: SettleFrames, step: () => {
