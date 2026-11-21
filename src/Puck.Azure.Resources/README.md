@@ -240,7 +240,11 @@ versions and rejects changed content under an existing version. The comparison
 ignores the compiler's `_generator` stamp, so a Bicep upgrade alone needs no new
 version. Bump the manifest
 version and consuming Bicep references together; existing published versions are
-preserved. Application CI consumes these pins without bootstrapping identities.
+preserved. Application CI consumes these pins without bootstrapping identities:
+`puck azure build-infrastructure` runs the same comparison without publishing,
+and refuses a pattern whose pinned version is unpublished or differs from its
+source, because a deployment reads the published version and would otherwise
+deploy the old content silently.
 
 ## Documentation
 

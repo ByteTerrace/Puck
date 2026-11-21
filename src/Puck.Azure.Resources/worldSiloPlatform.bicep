@@ -1,7 +1,7 @@
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Imports
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-import { worldSiloConfigType, worldSiloActionGroupConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.6'
+import { worldSiloConfigType, worldSiloActionGroupConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.7'
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Parameters
@@ -25,7 +25,7 @@ module identity 'br/public:avm/res/managed-identity/user-assigned-identity:0.6.0
     tags: union(tags, configuration.userAssignedIdentity.?tags ?? {})
   }
 }
-module world 'ts/bvm:ptn_platform_world-silo:0.0.6' = {
+module world 'ts/bvm:ptn_platform_world-silo:0.0.7' = {
   params: {
     configuration: configuration
     actionGroup: actionGroup

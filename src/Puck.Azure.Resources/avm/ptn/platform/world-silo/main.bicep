@@ -33,8 +33,8 @@ type worldSiloConfigType = {
     osDiskSizeGB: int
     osDiskStorageType: string
     sku: string
-    @description('Runs the worker at Spot priority, restoring it after eviction for up to restoreTimeout (ISO 8601). Omit for a regular worker.')
-    spot: { restoreTimeout: string }?
+    @description('Runs the worker at Spot priority when present. Omit for a regular worker.')
+    spot: {}?
     vmNamePrefix: string
     zones: int[]
   }
