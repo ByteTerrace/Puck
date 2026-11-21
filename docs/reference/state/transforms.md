@@ -125,7 +125,7 @@ transform: it's the `pushState` effect, spelled `push row = value` (see
 | `writeSet` | `transform writeSet(…)` | Write one value into the board cells a 64-bit mask or a declared set selects. |
 | `boardCombine` | `transform boardCombine(…)` | Rewrite a board from set operations over boards and declared sets. |
 | `setRay` | `transform setRay(…)` | Write over the longest run a pattern accepts along a ray. |
-| `clearEnclosed` | `transform clearEnclosed(…)` | Clear groups of cells that have no empty neighbor. |
+| `clearEnclosed` | `transform clearEnclosed(…)` | Clear groups of cells with no liberty in the boundary range. |
 | `pushRay` | `transform pushRay(…)` | Move a pool token and the tokens ahead of it one cell. |
 | `observe` | `transform observe(row:)` | Refresh a knowledge row from what is visible. |
 
@@ -332,13 +332,16 @@ pattern language.
 ### clearEnclosed
 
 `clearEnclosed` finds every group of cells whose values lie in the inclusive
-range `lower..upper` beside the origin cell, and clears each group that has no
-empty neighboring cell by writing the board's empty value over it. It's the
-write-side twin of the `$board:enclosedAt` query, applied after a placement
-lands.
+range `lower..upper` beside the filled origin cell. A neighboring cell
+outside the group counts as a liberty if its value is in the inclusive range
+`boundaryLower..boundaryUpper`. Each boundary bound defaults to the board's
+empty value. The transform writes the empty value over every group with no
+liberties. Use the same ranges in `$board:enclosedAt` to predict the capture
+before placing the piece. Both inspect the groups with the origin treated
+as filled.
 
 ```puck
-transform clearEnclosed(row: board, from: cell(moveCell, $value), lower: 2, upper: 2)
+transform clearEnclosed(row: board, from: cell(moveCell, $value), lower: 2, upper: 2, boundaryLower: 0, boundaryUpper: 0)
 ```
 
 The board must be an `Int` board, and the range can't contain its empty value.

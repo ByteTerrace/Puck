@@ -105,7 +105,6 @@ public sealed partial class WorldRuleHost {
                 return "[world.match: a board source needs a direction or any]";
             }
 
-            var values = new long[topology.CellCount];
             var first = ((direction == "any")
                 ? 0
                 : topology.Direction(token: direction)
@@ -126,7 +125,6 @@ public sealed partial class WorldRuleHost {
                     ray: out var ray,
                     reason: out var rayReason,
                     rowOrdinal: rowOrdinal,
-                    values: values,
                     word: word
                 )) {
                     return $"[world.match: {rayReason}]";

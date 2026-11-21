@@ -1,3 +1,5 @@
+using System.Collections;
+
 namespace Puck.State;
 
 public sealed partial class ArenaSearch {
@@ -6,19 +8,40 @@ public sealed partial class ArenaSearch {
 
     private int m_openScopes;
 
+    // Cache only the current shape/token for each open position. Child writes and rewinds leave the parent's
+    // cached position intact. A new scope (including replay) discards whatever previously occupied its depth.
+    private sealed class MoveReach(int cells) {
+        public readonly BitArray Occupied = new(cells);
+        public readonly BitArray Targets = new(cells);
+        public int Shape;
+        public int Token = -1;
+    }
+
+    private int OpenScope(Job job, int index) {
+        var mark = m_arena.BeginScope();
+        if (job.Reach?[index + 1] is { } reach) {
+            reach.Token = -1;
+        }
+        m_openScopes = index + 1;
+        return mark;
+    }
+
+    private void RecordScope(Job job, int shapeIndex, int token, int candidateIndex) {
+        var index = job.ScopeCount;
+
+        job.ScopeMark[index] = OpenScope(job, index);
+        job.ScopeShape[index] = shapeIndex;
+        job.ScopeTarget[index] = candidateIndex;
+        job.ScopeToken[index] = token;
+        job.ScopeCount = (index + 1);
+    }
+
     // How many moves the position the arena holds sits below the root. A chance draw opens a scope and is no move.
     private static int MovePly(Job job) => (job.ScopeCount - job.ChanceScopes);
     // Opens one scope, writes the resolved candidate into it, and runs the judge, leaving the scope open: the
     // caller either pops it (a folded candidate) or leaves it as the deeper ply's position.
     private void PushScope(Job job, int shapeIndex, int token, int candidateIndex, int target, int mid, int companionIndex, int companionTarget, long code) {
-        var index = job.ScopeCount;
-
-        job.ScopeMark[index] = m_arena.BeginScope();
-        job.ScopeShape[index] = shapeIndex;
-        job.ScopeTarget[index] = candidateIndex;
-        job.ScopeToken[index] = token;
-        job.ScopeCount = (index + 1);
-        m_openScopes = job.ScopeCount;
+        RecordScope(job, shapeIndex, token, candidateIndex);
 
         ApplyCandidate(
             code: code,
@@ -46,15 +69,8 @@ public sealed partial class ArenaSearch {
     // Opens one scope holding a chance draw's outcome instead of a candidate's move. The shape cursor is recorded
     // negative, which is how a replay and a checkpoint tell the two apart; the token cursor carries the outcome.
     private void PushChanceScope(Job job, int outcome) {
-        var index = job.ScopeCount;
-
-        job.ScopeMark[index] = m_arena.BeginScope();
-        job.ScopeShape[index] = ChanceScope;
-        job.ScopeTarget[index] = 0;
-        job.ScopeToken[index] = outcome;
-        job.ScopeCount = (index + 1);
+        RecordScope(job, ChanceScope, token: outcome, candidateIndex: 0);
         job.ChanceScopes++;
-        m_openScopes = job.ScopeCount;
 
         ApplyChanceOutcome(
             job: job,
@@ -94,6 +110,9 @@ public sealed partial class ArenaSearch {
         var moves = 0;
 
         m_openScopes = 0;
+        if (job.Reach?[0] is { } root) {
+            root.Token = -1;
+        }
 
         while (m_openScopes < job.ScopeCount) {
             var index = m_openScopes;
@@ -101,8 +120,7 @@ public sealed partial class ArenaSearch {
             var token = job.ScopeToken[index];
 
             if (shapeIndex == ChanceScope) {
-                job.ScopeMark[index] = m_arena.BeginScope();
-                m_openScopes = (index + 1);
+                job.ScopeMark[index] = OpenScope(job, index);
 
                 ApplyChanceOutcome(
                     job: job,
@@ -129,8 +147,7 @@ public sealed partial class ArenaSearch {
                 return false;
             }
 
-            job.ScopeMark[index] = m_arena.BeginScope();
-            m_openScopes = (index + 1);
+            job.ScopeMark[index] = OpenScope(job, index);
 
             ApplyCandidate(
                 code: code,
@@ -236,6 +253,7 @@ public sealed partial class ArenaSearch {
         var plan = job.Plan;
         var shape = plan.Shapes[shapeIndex];
 
+        job.PreparedReach = false;
         code = 0L;
         companionIndex = -1;
         companionTarget = -1;
@@ -295,14 +313,9 @@ public sealed partial class ArenaSearch {
             case SearchShapeKind.Relocate: {
                     if (
                         (candidateIndex == from) ||
-                        ((shape.Moves is { } moves) && !MovesReach(
-                            from: ((int)from),
-                            job: job,
-                            moves: moves,
-                            shapeIndex: shapeIndex,
-                            target: candidateIndex,
-                            token: token
-                        ))
+                        (shape.Moves is { } moves && (moves.Length == 0 ||
+                            (uint)candidateIndex >= plan.CellCount ||
+                            !ReachFor(job, shapeIndex, moves, token, (int)from)[candidateIndex]))
                     ) {
                         return false;
                     }
@@ -442,11 +455,27 @@ public sealed partial class ArenaSearch {
                 return false;
         }
     }
-    // Whether a move pattern that applies to the token's code on this turn reaches the target: each offset is stepped
-    // up to its pattern's steps, and a ray ends on the first cell a token stands on, which it still reaches. A token
-    // with no code in the shape's codes row matches only the code-free patterns.
-    private bool MovesReach(Job job, int shapeIndex, SearchMovePlan[] moves, int token, int from, int target) {
+    private BitArray ReachFor(Job job, int shapeIndex, SearchMovePlan[] moves, int token, int from) {
         var plan = job.Plan;
+        var reach = job.Reach![m_openScopes] ??= new MoveReach(plan.CellCount);
+        if (reach.Token == token && reach.Shape == shapeIndex) {
+            return reach.Targets;
+        }
+        // Read the open position after its judge or chance writes. Every ray excludes its origin, so a bit for
+        // any token at another cell is enough, even when several tokens share a cell.
+        if (reach.Token < 0) {
+            reach.Occupied.SetAll(false);
+            for (var index = 0; index < job.TokenCount; index++) {
+                if (TryNumberAt(rowOrdinal: plan.TokensOrdinal, position: index, value: out var standing) && standing >= 0 && standing < plan.CellCount) {
+                    reach.Occupied[(int)standing] = true;
+                }
+            }
+        }
+        reach.Shape = shapeIndex;
+        reach.Token = token;
+        reach.Targets.SetAll(false);
+        job.PreparedReach = true;
+
         var topology = plan.Topology!;
         var codes = plan.CodeOrdinals[shapeIndex];
         var code = 0L;
@@ -487,22 +516,15 @@ public sealed partial class ArenaSearch {
                     ) || (cell == from)) {
                         break;
                     }
-                    if (cell == target) {
-                        return true;
-                    }
-                    if (AnyTokenAt(
-                        cell: cell,
-                        excludeA: token,
-                        excludeB: -1,
-                        job: job
-                    )) {
+                    reach.Targets[cell] = true;
+                    if (reach.Occupied[cell]) {
                         break;
                     }
                 }
             }
         }
 
-        return false;
+        return reach.Targets;
     }
     // A jump chain (SearchShapePlan.MaxHops > 1): a candidate is a whole sequence of 1..MaxHops hops, each over an
     // occupied cell onto an empty one, never revisiting a cell of the chain (the token's own starting cell

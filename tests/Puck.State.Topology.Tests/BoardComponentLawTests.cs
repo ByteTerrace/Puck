@@ -373,94 +373,23 @@ public sealed class BoardComponentLawTests {
             )
         );
     }
-    [Fact]
-    public void EnclosedAtCountsCellsAndClearEnclosedSweepsThem() {
+    [Theory]
+    [InlineData(0L, 2L, 2)]
+    [InlineData(-1L, -1L, 0)]
+    public void EnclosedAtAndTheClearUseTheSameLiberties(long boundaryLower, long neighbour, int expected) {
         var topology = Board();
-        var whiteEnclosedAt = new BoardComponentQuery(
-            topology,
-            lower: 1,
-            upper: 1,
-            maxVisits: 25,
-            boundaryLower: 0,
-            boundaryUpper: 0,
-            BoardQueryKind.EnclosedAt
-        );
+        var values = (long[])Pair.Clone();
+        values[2] = neighbour;
+        var query = new BoardComponentQuery(topology, 1L, 1L, values.Length, boundaryLower, 0L, BoardQueryKind.EnclosedAt);
 
-        Assert.Equal(
-            2L,
-            BoardQueries.Evaluate(
-                whiteEnclosedAt,
-                Pair,
-                0,
-                source: 6
-            )
-        );
+        Assert.Equal(expected, BoardQueries.Evaluate(query, values, 0L, source: 6));
 
-        // The value lands, then the transform sweeps the pair; white's own cells stand.
-        var board = ((long[])Pair.Clone());
+        values[6] = 2L;
+        var cleared = new int[values.Length];
+        var count = BoardQueries.FindEnclosed(topology, values, 6, 1L, 1L, boundaryLower, 0L, cleared, new ArenaScratch());
 
-        board[6] = 2;
-        Assert.Equal(
-            2L,
-            BoardQueries.ClearEnclosed(
-                topology,
-                board,
-                source: 6,
-                lower: 1,
-                upper: 1,
-                empty: 0
-            )
-        );
-        Assert.Equal(
-            0L,
-            board[0]
-        );
-        Assert.Equal(
-            0L,
-            board[1]
-        );
-        Assert.Equal(
-            2L,
-            board[2]
-        );
-        Assert.Equal(
-            2L,
-            board[5]
-        );
-        Assert.Equal(
-            2L,
-            board[6]
-        );
-        // Nothing beside a value that closed no last gap is touched.
-        Assert.Equal(
-            0L,
-            BoardQueries.ClearEnclosed(
-                topology,
-                board,
-                source: 2,
-                lower: 1,
-                upper: 1,
-                empty: 0
-            )
-        );
-        // An empty origin encloses nothing: it is every neighbour's boundary cell.
-        var untouched = ((long[])Pair.Clone());
-
-        Assert.Equal(
-            0L,
-            BoardQueries.ClearEnclosed(
-                topology,
-                untouched,
-                source: 6,
-                lower: 1,
-                upper: 1,
-                empty: 0
-            )
-        );
-        Assert.Equal(
-            actual: untouched,
-            expected: Pair
-        );
+        Assert.Equal(expected, count);
+        Assert.Equal(expected == 0 ? Array.Empty<int>() : [0, 1], cleared[..count].Order().ToArray());
     }
     [Fact]
     public void NineteenByNineteenEnclosureUsesTheGeneralBoardPath() {
@@ -509,21 +438,9 @@ public sealed class BoardComponentLawTests {
             )
         );
         values[placement] = 2L;
-        Assert.Equal(
-            expected: 1L,
-            actual: BoardQueries.ClearEnclosed(
-                empty: 0L,
-                lower: 1L,
-                source: placement,
-                topology: topology,
-                upper: 1L,
-                values: values
-            )
-        );
-        Assert.Equal(
-            expected: 0L,
-            actual: values[centre]
-        );
+        var cleared = new int[values.Length];
+        Assert.Equal(1, BoardQueries.FindEnclosed(topology, values, placement, 1L, 1L, 0L, 0L, cleared, new ArenaScratch()));
+        Assert.Equal(centre, cleared[0]);
     }
     [Fact]
     public void TheBudgetBoundsTheFloodAndReadsMinusTwoWhenItRunsOut() {
