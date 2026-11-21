@@ -756,6 +756,9 @@ public sealed partial class DocumentScope {
 }
 /// <summary>JSON helpers every lowering pass needs and none should restate.</summary>
 public static class JsonNodeExtensions {
+    /// <summary>Reads a JSON string, returning null for a missing member or any other kind of value.</summary>
+    public static string? StringValue(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+
     /// <summary>Appends a node to an array, keeping a null as a JSON null rather than refusing it.</summary>
     /// <param name="array">The array to append to.</param>
     /// <param name="item">The node, which may be null.</param>

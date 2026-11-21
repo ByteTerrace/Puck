@@ -1318,6 +1318,12 @@ public static partial class GeneratorEngine {
 
         result = default;
 
+        if (!WritesText(source: generator.Source)) {
+            if (!DrawStream.TryOpen(generator, targetKind, seed, cursor, masks, out var draws, out reason, secret, skip) ||
+                !draws.TryNext(reason: out reason, value: out var value)) { return false; }
+            result = new FireResult(null, value, draws.Advances, draws.MasksAfter);
+            return true;
+        }
         if (!TryCheckFire(
             cursor: cursor,
             generator: generator,
@@ -1329,12 +1335,6 @@ public static partial class GeneratorEngine {
             return false;
         }
 
-        if (!WritesText(source: generator.Source)) {
-            if (!DrawStream.TryOpen(generator, targetKind, seed, cursor, masks, out var draws, out reason, secret, skip) ||
-                !draws.TryNext(reason: out reason, value: out var value)) { return false; }
-            result = new FireResult(null, value, draws.Advances, draws.MasksAfter);
-            return true;
-        }
         if (generator.Extended is not null) {
             var compiled = Compiled(generator: generator);
 

@@ -21,7 +21,7 @@ public sealed class WorldKeyedDrawLawTests {
         WorldSubmissionResult? result = null;
         WorldMutation generate = new WorldMutation.Generate(Principal.Console, "dice", keys);
         if (mixedBatch) {
-            generate = new WorldMutation.Batch(Principal.Console, [generate, new WorldMutation.SetAudioDefaults(Principal.Console, fixture.Server.ExportDefinition().Audio)]);
+            generate = new WorldMutation.Batch(Principal.Console, [generate, new WorldMutation.SetAudioDefaults(Principal.Console, WorldAudioDefaults.Absent with { DefaultSpeakerRadius = 1 })]);
         }
 
         fixture.Server.Submit(
@@ -265,7 +265,7 @@ public sealed class WorldKeyedDrawLawTests {
             dice.DrawCursor
         );
         Assert.Equal(
-            new[] { "d1", "d2", "d3", "d4", "d5" },
+            Find(definition, "dice").Cells!.Select(static cell => cell.Key.Value),
             dice.Cells!.Select(selector: c => c.Key.Value)
         );
         Assert.All(

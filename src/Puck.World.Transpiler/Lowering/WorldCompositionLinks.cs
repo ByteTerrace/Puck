@@ -1,3 +1,4 @@
+using static Puck.Transpiler.Lowering.JsonNodeExtensions;
 using Puck.Assets.Documents;
 using System.Text.Json.Nodes;
 using Puck.State;
@@ -395,7 +396,6 @@ public static class WorldCompositionLinks {
         ? node?.DeepClone()
         : budget.Copy(value: node, span: link.Span)
     );
-    internal static string? StringValue(JsonNode? node) => (((node is JsonValue value) && value.TryGetValue<string>(value: out var text)) ? text : null);
     private static bool HasValidSectionShapes(JsonObject world, out string reason) {
         foreach (var sectionName in new[] { "references", "destinations", "adjacencies", "prototypes", "spawnPoints" }) {
             if (world[sectionName] is not null and not JsonArray) {

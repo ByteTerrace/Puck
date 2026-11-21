@@ -1,3 +1,4 @@
+using static Puck.Transpiler.Lowering.JsonNodeExtensions;
 using Puck.Assets.Documents;
 using System.Text.Json.Nodes;
 using Puck.State;
@@ -269,11 +270,11 @@ public static partial class WorldDocumentEmitter {
             return;
         }
         foreach (var ground in grounds.OfType<JsonObject>()) {
-            if (WorldCompositionLinks.StringValue(node: ground["name"]) is { } name) {
+            if (StringValue(node: ground["name"]) is { } name) {
                 ground["name"] = GeneratedName.Qualify(head: alias, name: name);
             }
         }
     }
 
-    private static bool HasMalformedName(JsonArray rows, string member) => rows.OfType<JsonObject>().Any(predicate: row => ((row[member] is not null) && (WorldCompositionLinks.StringValue(node: row[member]) is null)));
+    private static bool HasMalformedName(JsonArray rows, string member) => rows.OfType<JsonObject>().Any(predicate: row => ((row[member] is not null) && (StringValue(node: row[member]) is null)));
 }
