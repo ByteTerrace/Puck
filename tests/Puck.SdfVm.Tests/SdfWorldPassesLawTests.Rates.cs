@@ -84,7 +84,8 @@ public sealed partial class SdfWorldPassesLawTests {
 
     // A receiver-conditioned cascade's coverage names the sample grid, not the camera or the geometry: a camera moving
     // within the hold's tolerance keeps its static layer and refreshes at the rate under occlusion culling as it does under
-    // box culling, and one moving past it redraws the static layer with every frame's refresh.
+    // box culling, and one moving past it refreshes every frame with every caster drawn straight into the cascade, never
+    // drawing a static layer that the next frame's refresh could not reuse.
     [Theory]
     [InlineData(0.001f, true)]
     [InlineData(2f, false)]
@@ -94,13 +95,12 @@ public sealed partial class SdfWorldPassesLawTests {
             change: (frame, index) => WithCamera(frame, new Vector3(metresAFrame * (index + 1), 0f, -5f), new Vector3(metresAFrame * (index + 1), 0f, 0f)));
 
         Assert.Equal(expected: 0L, actual: split);
+        Assert.Equal(expected: 0L, actual: drawnStatic);
         if (holds) {
-            Assert.Equal(expected: 0L, actual: drawnStatic);
             Assert.True(condition: (held > 0), userMessage: $"held {held}");
             Assert.Equal(expected: RateFrames, actual: (rendered + held));
         } else {
             Assert.Equal(expected: RateFrames, actual: rendered);
-            Assert.Equal(expected: RateFrames, actual: drawnStatic);
             Assert.Equal(expected: 0L, actual: held);
         }
     }
@@ -144,7 +144,8 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: 0L, actual: drawnStatic);
     }
     // A view that turns past the tier's tolerance every frame, moves past it, cuts or whose key light turns past one far
-    // texel ends every fit, so every frame redraws the static layer with both cascade layers; the controls turn, move and
+    // texel ends every fit, so every frame draws both cascade layers with every caster straight into them and no static
+    // layer, which the next frame's refresh would end again; the controls turn, move and
     // turn the light within the tolerances of the camera the static layer was drawn from, which a refresh over it keeps
     // as its anchor, so they keep the static layer and refresh only at the rate.
     [InlineData("turn", false)]
@@ -171,13 +172,12 @@ public sealed partial class SdfWorldPassesLawTests {
         });
 
         Assert.Equal(expected: 0L, actual: split);
+        Assert.Equal(expected: 0L, actual: drawnStatic);
         if (holds) {
-            Assert.Equal(expected: 0L, actual: drawnStatic);
             Assert.Equal(expected: (RateFrames / 2), actual: held);
             Assert.Equal(expected: RateFrames, actual: (rendered + held));
         } else {
             Assert.Equal(expected: RateFrames, actual: rendered);
-            Assert.Equal(expected: RateFrames, actual: drawnStatic);
             Assert.Equal(expected: 0L, actual: held);
         }
     }

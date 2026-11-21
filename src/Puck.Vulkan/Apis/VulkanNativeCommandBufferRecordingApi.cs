@@ -681,7 +681,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         endRenderPass(commandBufferHandle);
     }
     /// <inheritdoc/>
-    public void FillBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+    public void FillBuffer(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, ulong offsetBytes = 0) {
         if (
             (sizeBytes == 0) ||
             ((sizeBytes & 3) != 0)
@@ -692,12 +692,15 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 "Vulkan buffer fills require a positive size divisible by four."
             );
         }
+        if ((offsetBytes & 3) != 0) {
+            throw new ArgumentOutOfRangeException(nameof(offsetBytes), offsetBytes, "Vulkan buffer fills start on a multiple of four bytes.");
+        }
         var fillBuffer = device.CmdFillBuffer;
 
         fillBuffer(
             commandBufferHandle,
             bufferHandle,
-            0,
+            offsetBytes,
             sizeBytes,
             0
         );

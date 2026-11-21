@@ -314,7 +314,7 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         );
     }
     /// <inheritdoc/>
-    public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+    public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, ulong offsetBytes = 0) {
         ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
         ArgumentOutOfRangeException.ThrowIfZero(bufferHandle);
         if (
@@ -328,6 +328,9 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
                 "Direct3D 12 buffer clears require a positive size divisible by four and representable by a raw UAV."
             );
         }
+        if ((offsetBytes & 3) != 0) {
+            throw new ArgumentOutOfRangeException(nameof(offsetBytes), offsetBytes, "Direct3D 12 buffer clears start on a four-byte element.");
+        }
 
         var state = DecodeState(commandBufferHandle: commandBufferHandle);
         var commandList = ((ID3D12GraphicsCommandList*)state.CommandList);
@@ -336,7 +339,7 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
                 Anonymous = new D3D12_UNORDERED_ACCESS_VIEW_DESC._Anonymous_e__Union {
                     Buffer = new D3D12_BUFFER_UAV {
                         CounterOffsetInBytes = 0,
-                        FirstElement = 0,
+                        FirstElement = (offsetBytes / 4),
                         Flags = D3D12_BUFFER_UAV_FLAGS.D3D12_BUFFER_UAV_FLAG_RAW,
                         NumElements = checked((uint)(sizeBytes / 4)),
                         StructureByteStride = 0,

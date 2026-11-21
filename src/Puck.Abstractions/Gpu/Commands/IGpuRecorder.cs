@@ -190,13 +190,14 @@ public interface IGpuRecorder {
     /// <param name="destinationOffsetBytes">The first destination byte written; the range must fit the destination buffer.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="sizeBytes"/> is zero.</exception>
     void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0, ulong destinationOffsetBytes = 0);
-    /// <summary>Records a zero fill of a whole storage buffer, ordered before the next compute shader access.</summary>
+    /// <summary>Records a zero fill of a range of a storage buffer, ordered before the next compute shader access.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="bufferHandle">The buffer.</param>
-    /// <param name="sizeBytes">The buffer's size in bytes; positive and a multiple of four.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sizeBytes"/> is zero or not a multiple of
-    /// four.</exception>
-    void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes);
+    /// <param name="sizeBytes">The bytes filled; positive and a multiple of four, the range lying within the buffer.</param>
+    /// <param name="offsetBytes">The first byte filled; a multiple of four.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sizeBytes"/> is zero or not a multiple of four, or
+    /// <paramref name="offsetBytes"/> is not a multiple of four.</exception>
+    void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, ulong offsetBytes = 0);
     /// <summary>Records a barrier moving an image between layouts over the given access and stage scopes.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="imageHandle">The image.</param>

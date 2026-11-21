@@ -154,6 +154,16 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly SdfMeshOcclusion? m_staticOcclusion;
     // The target instance whose static layer the latest recording drew, which Submitted marks written.
     private int? m_recordedStatic;
+    // The glass clear's record of each glass sums buffer it has cleared (GlassClear): the bytes the glass raster may have
+    // left nonzero there, from the rows its glass draws spanned (SdfWorldTables.GlassRows). The invariant is that every
+    // word outside that range is zero, so a clear of the range alone leaves the whole buffer zero for the raster. A buffer
+    // this recorder has not cleared yet holds anything and is cleared whole. The raster stands and records with the clear
+    // (one signature), so the range a submitted clear staged is the one its frame's raster wrote within.
+    private readonly List<(IGpuBuffer Buffer, ulong Start, ulong End)> m_glassDirty = [];
+    // The rows a glass draw's span is widened by on each side: the jitter moves the grid under half a pixel, and a
+    // rasterized triangle covers the pixels whose centres it holds.
+    private const uint GlassRowMargin = 2;
+    private (IGpuBuffer Buffer, ulong Start, ulong End)? m_glassPending;
     // The mesh sets of one group, one per frame slot and tables ring slot: the sets are laid out by group, the cascade's own
     // selection first, the static layer's next when the pass keeps one, then the glass extinction's (OcclusionGroups).
     private readonly int m_rasterSets;
@@ -632,6 +642,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             m_staticWritten[drawn] = true;
             m_recordedStatic = null;
         }
+        if (m_glassPending is { } cleared) {
+            var known = m_glassDirty.FindIndex(match: entry => ReferenceEquals(objA: entry.Buffer, objB: cleared.Buffer));
+
+            if (known >= 0) { m_glassDirty[known] = cleared; } else { m_glassDirty.Add(item: cleared); }
+            m_glassPending = null;
+        }
         if (m_part == SdfWorldPackage.Parts.ShadowFar) {
             m_owner.SubmittedFar(instance: m_context.Instance);
         }
@@ -660,12 +676,26 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
 
         m_owner.RecordHits(instance: m_context.Instance, part: m_part, tables: tables);
-        // The glass clear zeroes the glass sums, its one output, ahead of the glass pass's accumulation.
+        // The glass clear zeroes the glass sums, its one output, ahead of the glass pass's accumulation: the bytes the last
+        // submitted raster may have written (m_glassDirty), and it stages the rows this frame's raster may write, at the
+        // render grid's width that the raster addresses the sums by (sdfGlassSumWord).
         if (m_part == SdfWorldPackage.Parts.GlassClear) {
             var sums = recording.Outputs[0].Buffer!;
+            var known = m_glassDirty.FindIndex(match: entry => ReferenceEquals(objA: entry.Buffer, objB: sums));
+            var (start, end) = ((known >= 0) ? (m_glassDirty[known].Start, Math.Min(val1: m_glassDirty[known].End, val2: sums.SizeBytes)) : (0UL, sums.SizeBytes));
+            var renderFrame = residency.Frame!;
+            var rows = tables.GlassRows(
+                camera: renderFrame.Views[Math.Min(val1: m_view.View, val2: (renderFrame.Views.Count - 1))].Camera,
+                height: recording.RenderHeight,
+                margin: GlassRowMargin
+            );
+            var rowBytes = ((ulong)recording.RenderWidth * SdfWorldPackage.GlassSumWords * sizeof(uint));
 
             m_owner.NoteGlassExtent(instance: m_context.Instance, width: recording.RenderWidth, height: recording.RenderHeight);
-            recording.Recorder.ClearStorageBuffer(recording.CommandBuffer, sums.BufferHandle, sums.SizeBytes);
+            if (end > start) {
+                recording.Recorder.ClearStorageBuffer(recording.CommandBuffer, sums.BufferHandle, (end - start), start);
+            }
+            m_glassPending = ((rows is { } span) ? (sums, (span.First * rowBytes), ((span.Last + 1UL) * rowBytes)) : (sums, 0UL, 0UL));
 
             return RenderGraphPackageOutcome.Drew;
         }
@@ -731,11 +761,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var boundDistantTexels = BoundCascadeTexels(recording: in recording, distant: true);
         // The far cascade may draw one layer of a split refresh; asking stages the camera each drawn layer is drawn from,
         // which the cascades below and every later reader this frame read.
-        var drawsStatic = false;
+        var staticUse = SdfFarStaticUse.Absent;
         var layers = ((m_part == SdfWorldPackage.Parts.ShadowFar)
             ? m_owner.RecordFar(
                 counts: frame.RateCounts,
-                drawsStatic: out drawsStatic,
+                staticUse: out staticUse,
                 fresh: tables.CascadesOf(frame: frame, texels: boundTexels, view: view)[SdfMeshShadowCascades.FarEntry],
                 instance: m_context.Instance,
                 layer: new SdfFarStaticLayer(Held: HasFarStatic, Revision: tables.StaticDrawRevision, Written: StaticWritten(target: recording.Outputs[0].Owned)),
@@ -744,7 +774,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             : SdfFarLayers.Both);
 
         // A static layer drawn now may miss a caster absent from the records, whose landing must then move the revision.
-        if (drawsStatic) {
+        if (staticUse == SdfFarStaticUse.Draws) {
             tables.CastersRead();
         }
 
@@ -793,9 +823,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                             : SdfMeshDetail.Of(camera: frame.Views[view].Camera, displayHeight: recording.FrameHeight)),
                         _ => SdfMeshDetail.Forced(level: (((int)frame.MeshDetail) - 1)),
                     })),
-                drawsStatic: drawsStatic,
+                staticUse: staticUse,
                 layers: layers,
-                motion: (distant ? SdfMeshMotion.Static : (HasFarStatic ? SdfMeshMotion.Dynamic : SdfMeshMotion.Any)),
+                motion: (distant ? SdfMeshMotion.Static : (((staticUse == SdfFarStaticUse.Reuses) || (staticUse == SdfFarStaticUse.Draws)) ? SdfMeshMotion.Dynamic : SdfMeshMotion.Any)),
                 recording: in recording,
                 share: ((distantDraw is { IsShare: true } share) ? share : null),
                 tables: tables
@@ -1061,9 +1091,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // A share of a distant map redraw (`share`) draws into the back map instead, clearing it on the first share and loading
     // it on each later one, and the last share copies the back map into the map receivers read.
     // A far cascade with a static layer draws both layers each recording: the static draws into the static layer first when
-    // `drawsStatic`, then a copy of the layer into the cascade, then the moving draws (`motion`) loading that copy, and the
-    // glass extinction of every glass draw over the result.
-    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels, in SdfMeshCull cull, in SdfMeshDetail detail, bool occlude, SdfFarLayers layers, System.Numerics.Vector2 jitter, SdfMeshMotion motion, bool drawsStatic = false, SdfDistantDraw? share = null) {
+    // `staticUse` draws it, then a copy of the layer into the cascade, then the moving draws (`motion`) loading that copy, and
+    // the glass extinction of every glass draw over the result; a recording that bypasses the layer draws as a cascade
+    // without one.
+    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels, in SdfMeshCull cull, in SdfMeshDetail detail, bool occlude, SdfFarLayers layers, System.Numerics.Vector2 jitter, SdfMeshMotion motion, SdfFarStaticUse staticUse = SdfFarStaticUse.Absent, SdfDistantDraw? share = null) {
         var drawsDepth = (!IsShadowCascade || ((layers & SdfFarLayers.Depth) != 0));
         var drawsExit = ((layers & SdfFarLayers.Exit) != 0);
         var count = tables.MeshDrawCount;
@@ -1113,11 +1144,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         // The static layer: drawn again when RecordFar says so, into its own depths through its own selection, then copied
         // into the cascade, which the moving draws below load rather than clear.
-        if (HasFarStatic && (targetIndex >= 0)) {
+        if (HasFarStatic && (targetIndex >= 0) && ((staticUse == SdfFarStaticUse.Reuses) || (staticUse == SdfFarStaticUse.Draws))) {
             var staticDepth = m_staticDepths[targetIndex];
             var staticExit = m_staticExits[targetIndex];
 
-            if (drawsStatic) {
+            if (staticUse == SdfFarStaticUse.Draws) {
                 var staticSet = (meshSet + m_rasterSets);
                 var staticSelection = ((count > 0) ? m_staticOcclusion : null);
 

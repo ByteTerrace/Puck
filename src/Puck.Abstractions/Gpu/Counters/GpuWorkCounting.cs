@@ -391,10 +391,11 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         inner.WriteCompactedSize(commandBufferHandle: commandBufferHandle, destination: destination, destinationOffsetBytes: destinationOffsetBytes, source: source);
     public void CompactAccelerationStructure(nint commandBufferHandle, IGpuAccelerationStructure source, IGpuAccelerationStructure destination) =>
         inner.CompactAccelerationStructure(commandBufferHandle: commandBufferHandle, destination: destination, source: source);
-    public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+    public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, ulong offsetBytes = 0) {
         inner.ClearStorageBuffer(
             bufferHandle: bufferHandle,
             commandBufferHandle: commandBufferHandle,
+            offsetBytes: offsetBytes,
             sizeBytes: sizeBytes
         );
         Tally(column: GpuWork.ClearsColumn);
