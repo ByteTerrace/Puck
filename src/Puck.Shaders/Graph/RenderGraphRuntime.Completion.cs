@@ -92,14 +92,19 @@ public sealed partial class RenderGraphRuntime {
             input.TryRead(latch: in m_latch, image: out var resolvedInput))
             ? resolvedInput.Publication
             : new ReferenceRevision(Owner: node, Revision: node.SubmissionCount));
+        // The node's published label is its route and everything it bound when it committed the frame
+        // (ShaderPipelineRenderNode.FrameBindingLabel). A frame the runtime rendered adds the instance's route, which a
+        // source's node is not given; a frame presented again without rendering keeps the label it was made under, never
+        // the route the instance has now. A node that publishes nothing (withdrawn, or refused at the latch) leaves no
+        // record.
         var label = (rendered
-            ? m_routes[index].Union(other: m_boundLabels[index]).Union(other: node.PublishedLabel)
-            : m_routes[index].Union(other: node.PublishedLabel));
+            ? m_routes[index].Union(other: node.PublishedLabel)
+            : node.PublishedLabel);
 
         if (rendered && (m_taintedReads[index] is not null)) {
             label = label.WithExternal(external: true);
         }
-        if (!label.IsClassified || (surface.IsEmpty && (node.LatestOutputBuffer().Buffer is null))) {
+        if (!label.IsClassified) {
             m_outputs.Forget(index: index);
 
             return;
