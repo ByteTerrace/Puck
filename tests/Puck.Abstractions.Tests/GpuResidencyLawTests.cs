@@ -376,6 +376,40 @@ public sealed class GpuResidencyLawTests {
         Assert.Equal(expected: (1, 1), actual: (begun, gpu.UploadCopies));
         Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: 1).BufferHandle));
     }
+    // A slot is flushed once per recording: recording it again before the recording is finished leaves the staging the
+    // first copy reads where it stands (a second flush would release its ring block and give back the idle ring), and a
+    // write between the two is refused rather than restaged under that copy.
+    [Fact]
+    public void ARecordingNeverReleasesTheStagingItsOwnCopyReads() {
+        const int Bytes = (4 << 20);
+        const int Update = (2 << 20);
+        var gpu = new UploadModelGpu();
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: Bytes,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            policy: GpuResidencyPolicy.Staged,
+            recorder: gpu.Services.Recorder,
+            slotCount: 2,
+            name: default
+        );
+        var recording = new GpuRegionCopyRecording(begin: static () => 7, readers: GpuStage.ComputeShader, recorder: gpu.Services.Recorder);
+
+        _ = region.Write(bytes: Enumerable.Repeat(element: ((byte)9), count: Update).ToArray(), offset: 0);
+        recording.Record(handsToReaders: true, region: region, slot: 0);
+        var staged = region.OwnedBytes.HostVisible;
+
+        Assert.True(condition: (staged >= ((ulong)Update)));
+        recording.Record(handsToReaders: true, region: region, slot: 0);
+        Assert.Equal(expected: staged, actual: region.OwnedBytes.HostVisible);
+        _ = region.Write(bytes: [1, 2, 3, 4], offset: 64);
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => recording.Record(handsToReaders: true, region: region, slot: 0));
+        Assert.Equal(expected: 7, actual: recording.Finish());
+        Assert.Equal(expected: staged, actual: region.OwnedBytes.HostVisible);
+    }
     // The memory model refuses a copy recorded where nothing ordered the earlier reads of its destination before it.
     [Fact]
     public void ACopyRecordedWithNoBarrierOrderingTheEarlierReadsIsRefused() {
@@ -1499,7 +1533,10 @@ public sealed class GpuResidencyLawTests {
         Assert.Equal(expected: Runs, actual: source.Words);
         for (var word = 0; (word < held.Length); word++) { Assert.Equal(expected: (owed.Contains(item: word) ? truth[word] : 0U), actual: held[word]); }
 
-        // Words owed from a source that never flushed are dropped when the next exact source is handed over.
+        // The upload consumed everything the source was owed, so the region let it go; words owed from a source that
+        // never flushed are dropped when the next exact source is handed over.
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => region.OweSourced(length: sizeof(uint), offset: 4));
+        region.Shadow(exact: true, shadowBytes: 0, source: new CheckedSource(words: truth, owed: [1]));
         region.OweSourced(length: sizeof(uint), offset: 4);
         region.Shadow(exact: true, shadowBytes: 0, source: new CheckedSource(words: truth, owed: []));
         Assert.False(condition: region.OwesCopy);

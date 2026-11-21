@@ -110,6 +110,8 @@ public sealed unsafe class GpuRegion : IDisposable {
     // Clipping can split each coalesced run at every native page. Reserve that worst-case request size in the
     // address ceiling, not in each staging allocation; StageOwed allocates only its actual request table.
     private const long MaxCopyHeaderBytes = ((CopyBlockBase * 4L) + (((uint.MaxValue / GpuBufferPages.MinimumPageBytes) + 1L) * 8L));
+    // The most runs one request's header and run table hold within MaxCopyHeaderBytes.
+    private const int MostRequestRuns = ((int)(((MaxCopyHeaderBytes / sizeof(uint)) - CopyHeaderWords) / 2));
     // The most separate owed ranges a host-written buffer holds before neighbours pair up.
     private const int HostRunCapacity = 8;
 
@@ -140,6 +142,9 @@ public sealed unsafe class GpuRegion : IDisposable {
     private readonly IAllocationObserver? m_hostCopies;
 
     private IGpuRegionSource? m_source;
+    // Whether the words past the host copy are an owner's: a source holds them, or an exact source was handed over and
+    // let go after its upload (RecordCopy), which leaves the host copy where it stands.
+    private bool Sourced => ((m_source is not null) || m_exactSource);
 
     private readonly IGpuComputePipeline? m_copyPipeline;
 
@@ -1184,7 +1189,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     // GPU (RecordCarry).
     private IDisposable GrowDestination(long byteCount) {
         if (m_destination is IGpuMappedBuffer mapped) {
-            var contents = m_source is null ? CopyContents(byteCount, zero: true) : null;
+            var contents = !Sourced ? CopyContents(byteCount, zero: true) : null;
             try {
                 mapped.Map(bytes: ((ulong)(byteCount - ByteCount)), offset: ((ulong)ByteCount));
             } catch {
@@ -1217,7 +1222,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         // The host copy grows with a region that holds all of it; a source keeps the new tail, and the host copy its
         // shadow.
         try {
-            if (m_source is null) {
+            if (!Sourced) {
                 GrowContents(byteCount: byteCount);
             }
         } catch {
@@ -1511,8 +1516,9 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <param name="exact">Whether the source answers only the words it was owed (<see cref="OweSourced"/>) since it was
     /// handed over: the region then joins no owed runs across a word it was not owed and never coarsens them, and the
     /// words past the host copy that an earlier source was owed and no flush staged are dropped, since the new source does
-    /// not hold them; their owner owes them again. A source that holds every word past the host copy (an owner's whole
-    /// table) is not exact.</param>
+    /// not hold them; their owner owes them again. Once a recorded copy leaves nothing past the host copy owed, the
+    /// region lets an exact source go, so the owner hands one over again before it owes more. A source that holds every
+    /// word past the host copy (an owner's whole table) is not exact.</param>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The region is not staged, or its destination is external.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="shadowBytes"/> is negative, not a whole number of
@@ -1700,6 +1706,11 @@ public sealed unsafe class GpuRegion : IDisposable {
         owed.Clear();
         owed.Append(m_deferredCopies);
         m_stagedSlot = -1;
+        // An exact source served this upload alone: once nothing past the host copy is owed, the region lets it go, so
+        // it holds no owner's data (a returned snapshot) between uploads.
+        if (m_exactSource && ((owed.Count == 0) || ((((long)(owed.Start(index: (owed.Count - 1)) + owed.Length(index: (owed.Count - 1)))) * sizeof(uint)) <= m_shadowBytes))) {
+            m_source = null;
+        }
         return true;
     }
 
@@ -2154,6 +2165,13 @@ public sealed unsafe class GpuRegion : IDisposable {
         for (var run = 0; (run < owed.Count); run++) {
             m_pages!.Clip(owed.Start(index: run), owed.Length(index: run), m_destinationWord, m_copyRuns, m_deferredCopies);
         }
+        // An exact source's runs never coarsen, so more than one request holds wait, owed, for the next copy.
+        while (m_copyRuns.Count > MostRequestRuns) {
+            var last = m_copyRuns[^1];
+
+            m_deferredCopies.Add(length: last.Length, start: last.Start);
+            m_copyRuns.RemoveAt(index: (m_copyRuns.Count - 1));
+        }
         var requestWords = checked((CopyHeaderWords + (m_copyRuns.Count * 2)));
 
         if (m_header.Length < requestWords) { Array.Resize(array: ref m_header, newSize: requestWords); }
@@ -2237,32 +2255,54 @@ public sealed unsafe class GpuRegion : IDisposable {
         var capacity = ((long)(m_ring?.SizeBytes ?? 0UL));
         var need = (live + bytes);
         var floor = RingFloorBytes;
-        var offset = -1L;
+        var fit = ((m_ring is null) ? -1L
+            : (((m_ringHead + bytes) <= capacity) && IsFree(offset: m_ringHead, bytes: bytes)) ? m_ringHead
+            : (IsFree(offset: 0L, bytes: bytes) && (bytes <= capacity)) ? 0L
+            : -1L);
+        var oversized = ((m_ring is not null) && (capacity > Math.Max(val1: floor, val2: (4L * need))));
+        var offset = (oversized ? -1L : fit);
 
-        if ((m_ring is not null) && (capacity <= Math.Max(val1: floor, val2: (4L * need)))) {
-            offset = (((m_ringHead + bytes) <= capacity) && IsFree(offset: m_ringHead, bytes: bytes)) ? m_ringHead
-                : (IsFree(offset: 0L, bytes: bytes) && (bytes <= capacity)) ? 0L
-                : -1L;
-        }
         if (offset < 0L) {
-            // The new ring must hold this block alone, since the live ones stay where they are; room for them too keeps the
-            // next flushes from replacing it again. It stays within one storage view.
-            var ceiling = Math.Max(val1: bytes, val2: Math.Min(val1: Math.Max(val1: need, val2: Math.Max(val1: ByteCount, val2: floor)), val2: MaxByteCount));
+            // The new ring must hold this block alone, since the live ones stay where they are; room for them too keeps
+            // the next flushes from replacing it. It is never larger than the region itself (or the floor), so a ring
+            // binds wherever the region's own destination does.
+            var ceiling = Math.Max(val1: bytes, val2: Math.Min(val1: Math.Max(val1: ByteCount, val2: floor), val2: MaxByteCount));
             var least = Math.Min(val1: floor, val2: ceiling);
             // An oversized ring shrinks to twice what it must hold; one with no room grows (a fragmented one included).
-            var size = ((capacity > Math.Max(val1: floor, val2: (4L * need)))
+            var size = (oversized
                 ? Math.Max(val1: least, val2: Math.Min(val1: (2L * need), val2: ceiling))
                 : GpuCapacity.Grown(current: capacity, required: Math.Min(val1: ceiling, val2: Math.Max(val1: need, val2: (capacity + 1L))), ceiling: ceiling, divisor: 1, minimum: least));
-            var replacement = m_buffers.CreateHostVisible(name: m_stagingName, sizeBytes: ((ulong)size), usage: m_usage);
+
+            // An oversized ring no block lives in is given back before its replacement is asked for, so the shrink never
+            // holds both.
+            if (oversized && (live == 0L) && (CountBlocksIn(ring: m_ring!) == 0)) {
+                m_ring!.Dispose();
+                m_ring = null;
+                fit = -1L;
+            }
+            IGpuStorageBuffer replacement;
+
+            try {
+                replacement = m_buffers.CreateHostVisible(name: m_stagingName, sizeBytes: ((ulong)size), usage: m_usage);
+            } catch (GpuMemoryRefusedException) when (fit >= 0L) {
+                // A shrink is optional: a ring with room for the block keeps serving when its smaller replacement is
+                // refused.
+                return Place(slot: slot, offset: fit, bytes: bytes);
+            }
 
             if (m_ring is { } old) {
-                if (live == 0L) { old.Dispose(); }
+                if (CountBlocksIn(ring: old) == 0) { old.Dispose(); }
                 else { m_retiredRings.Add(item: new RetiredRing(ring: old, live: CountBlocksIn(ring: old))); }
             }
             m_ring = replacement;
             m_copySets!.ForgetWriter(region: this);
             offset = 0L;
         }
+
+        return Place(slot: slot, offset: offset, bytes: bytes);
+    }
+    // Records the slot's block of the current ring.
+    private (IGpuStorageBuffer Ring, long Offset) Place(int slot, long offset, long bytes) {
         m_blocks[slot] = new RingBlock(Ring: m_ring, Offset: offset, Bytes: bytes);
         m_ringHead = (offset + bytes);
 

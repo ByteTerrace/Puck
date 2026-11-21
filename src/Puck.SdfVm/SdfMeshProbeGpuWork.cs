@@ -715,6 +715,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         if (job is SceneChunk chunk) { lock (m_gate) { m_sceneInFlight--; m_sceneUpload!.Deferred.Enqueue(chunk); } return; }
         if (job is StructureJob structures) { lock (m_gate) { AbandonStructures(job: structures); } return; }
         var query = (Job)job;
+        // An abandoned relight may have handed the feedback region its updates; their owner reuses or returns that
+        // data once the job is cancelled, so the region lets it go now (the volume resends a full snapshot).
+        if (query.Updates.Count != 0) { m_feedback?.Shadow(source: FeedbackUpdates.None, shadowBytes: 0, exact: true); }
         lock (m_gate) {
             Land(query: query);
             if (query.Batch is { } batch) { batch.Failed = true; }
@@ -857,6 +860,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // since the region joins owed runs only where updates touch. The updates may come in any order; a flush asks for a
     // run that can span several adjacent ones.
     private sealed class FeedbackUpdates : IGpuRegionSource {
+        // No updates: what the region holds between a cancelled job and the next relight.
+        public static FeedbackUpdates None { get; } = new(updates: default);
+
         private readonly Deltas m_updates;
         // The updates' first words in increasing order, and each one's update.
         private readonly int[] m_starts;

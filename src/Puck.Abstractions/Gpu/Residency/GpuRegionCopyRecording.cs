@@ -23,6 +23,8 @@ namespace Puck.Abstractions.Gpu;
 /// frame's buffer.</param>
 public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage readers, Func<nint> begin) {
     private readonly List<IGpuBuffer> m_copied = [];
+    // The region slots recorded since the last Finish, each with the region's content revision when recorded.
+    private readonly List<(GpuRegion Region, int Slot, long Revision)> m_recorded = [];
 
     private nint m_commandBuffer;
     // The copy pipeline the recording last bound, which the next region copying through it does not bind again.
@@ -43,11 +45,24 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
     public void Record(GpuRegion region, int slot, bool handsToReaders, bool flushed = false) {
         ArgumentNullException.ThrowIfNull(argument: region);
 
+        // A slot's staging (its request and ring block) is read by the copy this recording already holds until the
+        // recording's submission completes, so the slot is flushed once per recording: a second flush would restage or
+        // release what that copy reads. A repeat with nothing newly written records nothing, and debt a copy could not
+        // reach (unmapped pages) waits for the slot's next recording.
+        foreach (var (recorded, recordedSlot, revision) in m_recorded) {
+            if (!ReferenceEquals(objA: recorded, objB: region) || (recordedSlot != slot)) { continue; }
+            if (revision != region.ContentRevision) {
+                throw new InvalidOperationException(message: $"The region was written after its slot {slot} was recorded in this recording; a slot copies once per recording.");
+            }
+            return;
+        }
+        m_recorded.Add(item: (region, slot, region.ContentRevision));
         if (!flushed) { region.Flush(slot: slot); }
 
         var copies = region.OwesCopy;
+        var carries = region.OwesCarry;
 
-        if (!copies && !region.OwesCarry) {
+        if (!copies && !carries) {
             return;
         }
 
@@ -76,7 +91,12 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
             commandBuffer: m_commandBuffer,
             pipelineBound: (region.CopyPipelineHandle == m_boundPipeline),
             slot: slot
-        )) { return; }
+        )) {
+            // Every owed word lay on an unmapped page, so no dispatch follows the clear, which left the destination a
+            // compute write: hand it to the readers as a copy would.
+            if (carries && handsToReaders) { m_copied.Add(item: region.Buffer(slot: slot)); }
+            return;
+        }
         m_boundPipeline = region.CopyPipelineHandle;
         if (handsToReaders) {
             m_copied.Add(item: region.Buffer(slot: slot));
@@ -106,6 +126,7 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
         var commandBuffer = m_commandBuffer;
 
         m_copied.Clear();
+        m_recorded.Clear();
         m_commandBuffer = 0;
         m_boundPipeline = 0;
 

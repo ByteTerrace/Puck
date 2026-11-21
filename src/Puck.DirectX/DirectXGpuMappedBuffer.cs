@@ -219,6 +219,9 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
             }
         }
         if (m_resource != 0) {
+            // The one release door every buffer passes, so a clear descriptor keyed by the resource goes with it. The
+            // resource is reserved, not placed or committed, so the door counts nothing for it.
+            DirectXDeviceMemory.CountReleased(memory: null, resource: m_resource);
             _ = ((IUnknown*)m_resource)->Release();
             m_resource = 0;
         }
