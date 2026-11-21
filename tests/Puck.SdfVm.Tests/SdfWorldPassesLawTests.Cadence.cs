@@ -164,7 +164,9 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.False(condition: rig.Stood(), userMessage: $"lighting sample {sample}");
             Assert.Contains(SdfWorldPackage.Resolve, Executed(work: CadenceWork(rig: rig)));
         }
+        // The relight's last publication changes what the shading passes gather, which owes the view one more period.
         rig.SettleLighting();
+        for (var sample = 0; (sample < SdfWorldPackage.TemporalPeriod); sample++) { rig.Produce(); }
         rig.Produce();
         Assert.True(condition: rig.Stood());
     }

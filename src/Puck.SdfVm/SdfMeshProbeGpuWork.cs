@@ -188,7 +188,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // the ones submitted after it, and the tests left are shared evenly among the jobs left, since a short last job would
     // measure its fixed cost as a high rate.
     internal uint[] Select(SdfMeshIrradianceScene scene, Memory<Vector4> centers, ReadOnlyMemory<uint> metadata, Vector4[] changes, uint hitCapacity, uint[]? reuse = null) {
-        // Each remembered change, oldest first, as SdfMeshIrradiance.WriteChanges packs it: its geometry and the rays'
+        // Each remembered change, oldest first, as SdfMeshIrradiance.SelectionRows packs it: its geometry and the rays'
         // walks of it a probe older than it pays, one a hierarchy level, summed with every later change's.
         var count = (int)changes[1].X;
         m_selectNewer.Clear();

@@ -67,7 +67,7 @@ public sealed partial class SdfMeshIrradiance {
     // Whether a probe traced against an earlier geometry may have other hits or another placement under the current
     // one: some draw a change since added or removed lies in the region its placement searches, or meets one of its
     // rays before the hit the ray recorded. A probe no change can reach keeps its hits, which a trace would reproduce.
-    // KEEP IN SYNC with sdf-probe-select, which answers the same on the GPU from the rows WriteChanges packs.
+    // KEEP IN SYNC with sdf-probe-select, which answers the same on the GPU from the rows SelectionRows packs.
     private static bool Affected(in ProbeData probe, (int X, int Y, int Z) cell, Vector3 spacing, Layout layout, in Snapshot snapshot) {
         var changes = snapshot.Changes;
 
