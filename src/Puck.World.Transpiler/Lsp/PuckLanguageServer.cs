@@ -346,17 +346,30 @@ public sealed partial class PuckLanguageServer {
         rowName = candidate;
         return true;
     }
+    // One buffer text's vocabulary and whole-text parse. An open document's text is replaced on every change, never
+    // edited in place, so the parse is kept beside the text object it was read from: a request finds it again exactly
+    // while that buffer is current, and every reader of one buffer (completion, hover, definition, the outline) parses
+    // it once between edits.
+    private sealed record ParsedBuffer(IDocumentVocabulary Vocabulary, DocumentNode? Document);
+
+    private readonly Puck.Abstractions.CodeDerivedTable<string, ParsedBuffer> m_parsed = new();
+
+    private ParsedBuffer Parsed(string text) => m_parsed.GetValue(key: text, derive: buffer => {
+        var vocabulary = m_vocabularyResolver.Resolve(source: buffer);
+
+        try {
+            return new ParsedBuffer(Document: PuckParser.ParseDocumentWithDiagnostics(source: buffer, vocabulary: vocabulary).Value, Vocabulary: vocabulary);
+        } catch {
+            return new ParsedBuffer(Document: null, Vocabulary: vocabulary);
+        }
+    });
     // Best-effort, recovery-tolerant parse for a buffer mid-edit: a clean parse covers the common case (the
     // dotted read sits inside an already-closed rule), and the fallback truncates at the cursor and synthesizes
     // the closing braces/brackets/parens the truncated prefix is still owed, so an unclosed rule or block being
     // typed for the first time still parses far enough to see its declared rows.
     private DocumentNode? TryParseDocumentBestEffort(string text, int cursorOffset) {
-        try {
-            if (PuckParser.ParseDocumentWithDiagnostics(source: text, vocabulary: m_vocabularyResolver.Resolve(source: text)).Value is { } direct) {
-                return direct;
-            }
-        } catch {
-            // Falls through to the truncate-and-close recovery below.
+        if (Parsed(text: text).Document is { } direct) {
+            return direct;
         }
 
         try {
@@ -705,7 +718,7 @@ public sealed partial class PuckLanguageServer {
             key: uri,
             value: out var source
         ) &&
-            (PuckParser.ParseDocumentWithDiagnostics(source: source, vocabulary: m_vocabularyResolver.Resolve(source: source)).Value is { } document) &&
+            (Parsed(text: source).Document is { } document) &&
             (m_completeDocument(document) is { } specialized)
         ) {
             SendResponse(
@@ -732,7 +745,7 @@ public sealed partial class PuckLanguageServer {
         );
         var inRule = (enclosing is "rule" or "option" or "if" or "else" or "transaction" or "onFailure");
         var parsedDocument = ((completionText.Length > 0) ? TryParseDocumentBestEffort(cursorOffset: cursorOffset, text: completionText) : null);
-        var vocabulary = m_vocabularyResolver.Resolve(source: completionText);
+        var vocabulary = Parsed(text: completionText).Vocabulary;
         var completionSourcePath = (TryGetLocalPath(path: out var localCompPath, uri: uri) ? localCompPath : null);
         var imported = PuckSymbolResolver.CollectImportedDeclarations(
             document: parsedDocument,
@@ -1076,11 +1089,7 @@ public sealed partial class PuckLanguageServer {
             return;
         }
 
-        var parseResult = PuckParser.ParseDocumentWithDiagnostics(
-            source: text,
-            vocabulary: m_vocabularyResolver.Resolve(source: text)
-        );
-        var docNode = parseResult.Value;
+        var docNode = Parsed(text: text).Document;
 
         if (docNode is null) {
             SendResponse(
@@ -1268,11 +1277,7 @@ public sealed partial class PuckLanguageServer {
             return;
         }
 
-        var vocabulary = m_vocabularyResolver.Resolve(source: text);
-        var parsedDocument = PuckParser.ParseDocumentWithDiagnostics(
-            source: text,
-            vocabulary: vocabulary
-        ).Value;
+        var (vocabulary, parsedDocument) = Parsed(text: text);
         var imported = PuckSymbolResolver.CollectImportedDeclarations(
             document: parsedDocument,
             sourcePath: hoverSourcePath,
@@ -1333,7 +1338,7 @@ public sealed partial class PuckLanguageServer {
         }
 
         var sourcePath = (TryGetLocalPath(path: out var localPath, uri: uri) ? localPath : null);
-        var vocabulary = m_vocabularyResolver.Resolve(source: text);
+        var vocabulary = Parsed(text: text).Vocabulary;
         var offset = LspJson.Offset(character: col, line: line, source: text);
         var parsedDocument = TryParseDocumentBestEffort(cursorOffset: offset, text: text);
         var target = PuckSymbolResolver.FindDefinition(

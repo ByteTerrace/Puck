@@ -38,7 +38,7 @@ public sealed partial class WorldScopedReplayRuntime {
         }
     }
     private void CollectBodyWrite(CellKey key, CompiledCellRef? keyFrom, HashSet<int> into) {
-        into.Add(item: (((keyFrom is null) && RuleReads.TryKeyIndex(keys: m_server.Arena.Keys, key: key, index: out var index) && (index >= 0) && (index <= int.MaxValue)) ? (int)index : -1));
+        into.Add(item: (((keyFrom is null) && m_server.Arena.Keys.TryCandidateIndex(key: key, index: out var index)) ? index : -1));
     }
     private void CollectBodyWrite(WorldBodyRef body, HashSet<int> into) {
         if (body.Kind == CompiledBodyRefKind.Literal) {

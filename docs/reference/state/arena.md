@@ -197,6 +197,7 @@ row ordinal and `rook` to a key once, then reads.
 | `TryReadBoard(row, Span<long>)` | Every cell of a lattice row by cell ordinal, with the row's `Empty` value for absent cells. |
 | `ReadWord(row, …)` | A row's values as the word a pattern walks. |
 | `CellCount(row)`, `TryNextCell(row, ref cursor, out key)` | How many cells a row holds, and each held cell in member order (storage-slot order for boards, rings, and pools). |
+| `TryNextLiveNumber(row, ref cursor, in ArenaTime, out key, out long)` | The same walk, with each held cell's live number read from the slot the walk found. |
 
 A live read applies `StateAdvance` and `StateCycle` and never eases a
 `StateDynamics` cell, so rules and search read stored truth. Every read a rule,
@@ -635,7 +636,15 @@ to follow them too:
 - **Each caller uses one entry point.** A tick-path caller that reads by
   ordinal doesn't also keep a name-keyed call for the same read. The name-keyed
   entry points serve console read-backs, presentation bindings, and validators,
-  which run outside the tick.
+  which run outside the tick. A walk that reads what it visits takes the value
+  from the slot it found (`TryNextLiveNumber`), never by resolving the key it
+  was handed back to that slot.
+- **A key spells an integer one way.** The integer a key's name spells is its
+  canonical decimal (`Puck.Abstractions.CanonicalDecimal`): `7` and `-3`, never
+  `007`, `+7` or `-0`. `CellKeyTable.TryKeyInteger` reads it from a per-key
+  cache and is the exact inverse of `TryResolveIndex`, so a lattice cell, a
+  ring slot, a body index and a participant key all agree on which key names
+  which integer.
 
 For the reasoning behind this design, see
 [State and the authoring language: decisions](../../decisions/state-and-language.md).

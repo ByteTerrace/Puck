@@ -15,13 +15,13 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         for (var index = 0; (index < owner!.Count); index++) {
             var record = owner.Record(index: index);
 
-            if ((record.Epoch == owner.Epoch) && (record.Admission.Tick == Host.Input.Interval.Tick) && RuleReads.TryIndexKey(Arena.Keys, index, out var key)) { into.Add(item: key); }
+            if ((record.Epoch == owner.Epoch) && (record.Admission.Tick == Host.Input.Interval.Tick) && Arena.Keys.TryResolveIndex(index, out var key)) { into.Add(item: key); }
         }
     }
     /// <inheritdoc/>
     public long InputEventGeneration(WorldInputOwnerReference reference, CellKey key) {
-        if (!TryInputOwner(owner: out var owner, principal: out _, reference: reference) || !RuleReads.TryKeyIndex(Arena.Keys, key, out var index) || (index < 0) || (index >= owner!.Count)) { return 0; }
-        return checked((long)owner.Record(index: ((int)index)).Id);
+        if (!TryInputOwner(owner: out var owner, principal: out _, reference: reference) || !Arena.Keys.TryCandidateIndex(key, out var index) || (index >= owner!.Count)) { return 0; }
+        return checked((long)owner.Record(index: index).Id);
     }
     /// <inheritdoc/>
     public Fact Read(WorldInputOperand operand) {
@@ -609,12 +609,11 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         return true;
     }
     // The participant index bound to $each: the iterated key spelled as a body index, or -1 when it is not one.
-    private int BoundEachIndex() => (RuleReads.TryKeyIndex(
-        keys: Host.Arena.Keys,
+    private int BoundEachIndex() => (Host.Arena.Keys.TryCandidateIndex(
         index: out var index,
         key: BoundEachKey
     )
-        ? ((int)index)
+        ? index
         : -1
     );
     private static int OrdinalOf(StateHandle handle) => (handle.IsValid

@@ -352,7 +352,7 @@ internal sealed class RuleDueList {
                 var body = ((word << 6) + bit);
 
                 bits &= (bits - 1UL);
-                if (!swept && RuleReads.TryIndexKey(index: body, key: out var key, keys: keys)) {
+                if (!swept && keys.TryResolveIndex(index: body, key: out var key)) {
                     latch.Forget(binding: new LatchKey(Left: key.Ordinal, Right: -1), journal: journal, state: state);
                 }
                 if (!gathered) {

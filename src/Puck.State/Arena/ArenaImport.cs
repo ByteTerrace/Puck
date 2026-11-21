@@ -1,4 +1,4 @@
-using System.Globalization;
+using Puck.Abstractions;
 
 namespace Puck.State;
 
@@ -529,22 +529,9 @@ public sealed partial class StateArena {
             ? 0
             : -1
         ),
-        RowShape.Lattice => (layout.Topology!.TryCell(
-        cell: out var ordinal,
-        key: cell.Key.Value
-    )
-            ? ordinal
-            : -1
-        ),
-        RowShape.Ring => ((int.TryParse(
-        provider: CultureInfo.InvariantCulture,
-        result: out var index,
-        s: cell.Key.Value,
-        style: NumberStyles.None
-    ) && (((uint)index) < ((uint)layout.CellCapacity)))
-            ? index
-            : -1
-        ),
+        RowShape.Lattice => (layout.Topology!.TryCell(cell: out var ordinal, key: cell.Key.Value) ? ordinal : -1),
+        RowShape.Ring => ((CanonicalDecimal.TryParse(text: cell.Key.Value, value: out var index) &&
+            (((ulong)index) < ((ulong)layout.CellCapacity))) ? ((int)index) : -1),
         _ => 0,
     });
     // Validates without interning: a name the table already holds costs nothing, and every distinct new name is

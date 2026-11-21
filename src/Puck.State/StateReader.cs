@@ -109,22 +109,5 @@ public static partial class StateReader {
             relative[index] = rank;
         }
     }
-    public static bool TryParseCandidateIndex(string key, out int index) {
-        if (
-            int.TryParse(
-            s: key,
-            style: System.Globalization.NumberStyles.Integer,
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            result: out index
-        ) &&
-            (index >= 0)
-        ) {
-            return true;
-        }
-
-        index = -1;
-
-        return false;
-    }
     public const int MaxArrangementTokens = 20;
 }

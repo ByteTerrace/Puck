@@ -66,6 +66,30 @@ public static partial class WorldDefinitionFileSource {
         Member[] Composed
     );
 
+    // Each document's root members by the array holding its bytes, read once per array: a held composition's image is
+    // one array every read shares and none writes, so a source reading one member of its basis on every edit slices
+    // the image once rather than scanning it each time.
+    private static readonly Puck.Abstractions.CodeDerivedTable<byte[], Member[]> HeldMembers = new();
+
+    /// <summary>Parses one root member of a JSON document, such as a composed image's <c>state</c>, without parsing
+    /// the rest of it. The document's root members are found once per array and kept beside it, so the array must not
+    /// be written after it is read here, as a held composition's image never is.</summary>
+    /// <param name="json">The document's UTF-8 JSON.</param>
+    /// <param name="name">The member's JSON name.</param>
+    /// <returns>A fresh tree of the member's value, owned by the caller, or <see langword="null"/> when the document
+    /// has no such member, its value is <c>null</c>, or the bytes are not one JSON object.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="json"/> is <see langword="null"/>.</exception>
+    public static JsonNode? MemberTree(byte[] json, string name) {
+        ArgumentNullException.ThrowIfNull(argument: json);
+
+        foreach (var member in HeldMembers.GetValue(key: json, derive: static bytes => (MembersOf(json: bytes) ?? []))) {
+            if (string.Equals(a: member.Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                return JsonNode.Parse(utf8Json: json.AsSpan(start: member.Start, length: member.Length));
+            }
+        }
+
+        return null;
+    }
     // The root members of a compact JSON object, in order. Null when the bytes are not one JSON object. The one reader
     // of a document's root members by their bytes: a held composition's layers and a definition's member slices
     // (WorldDefinitionMembers) both read through it.

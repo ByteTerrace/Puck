@@ -70,13 +70,14 @@ public sealed class WorldDirectoryClaims {
 /// read their bases in turn. The compile session's composition (<see cref="WorldCompileSession"/>), and through it a tree compile
 /// and the official build, read names through here and nowhere else.
 /// <para>
-/// Every read goes through <see cref="CompileInputs"/>: the directory's listing
-/// (<see cref="CompileInputKind.Listing"/>) and what each source declares (<see cref="CompileInputKind.Declaration"/>,
-/// which the index answers as the declarer it registers when its assembly loads). A compile that resolves a name here
-/// therefore rests on both, and the compile cache serves it again only while both hold: a file added beside it,
-/// removed, or renamed in any letter case moves the listing, and an edit that changes whether a source there is a
-/// world source, whether it parses, or which names it emits moves that source's declaration. An edit to anything else
-/// in a sibling (a value, a row) leaves every compile that only resolved a name beside it standing. What a source
+/// Every read goes through <see cref="CompileInputs"/>, and a compile that reads a directory's claims here rests on one
+/// fact for it (<see cref="CompileInputKind.Claims"/>, which the index answers as the claimer it registers when its
+/// assembly loads): the claiming files' names and what each claims. The compile cache serves it again only while that
+/// holds: a claiming file added beside it, removed, or renamed in any letter case, and an edit that changes whether a
+/// source there is a world source, whether it parses, or which names it emits, moves it. An edit to anything else in a
+/// sibling (a value, a row), or a file beside it that claims nothing, leaves every compile that only resolved a name
+/// beside it standing. Within one <see cref="CompileInputs.Pass"/> a directory's claims are built once however many
+/// names resolve there. What a source
 /// declares, and whether it is a world source at all, is held by the digest of its bytes, so an unchanged source is
 /// parsed once per process however often the index is read; and a directory's claims are held while its listing and
 /// every source's digest are the ones they were built from. The door answers a listing and a digest from each path's
@@ -102,8 +103,8 @@ public static class WorldSourceIndex {
     private static readonly CodeDerivedCache<string, HeldClaims> HeldDirectories = new(capacity: MaxHeldDirectories);
 
     // The claims a directory's files made: the files listed, each source's digest in listing order (null for one that
-    // could not be read), and the claims built from them, indexed by name.
-    private sealed record HeldClaims(IReadOnlyList<string> Files, string?[] Digests, WorldDirectoryClaims Claims);
+    // could not be read), the claims built from them, indexed by name, and their canonical text.
+    private sealed record HeldClaims(IReadOnlyList<string> Files, string?[] Digests, WorldDirectoryClaims Claims, string Canonical);
 
     /// <summary>Returns the names every carrying file directly in <paramref name="directory"/> claims, one entry per
     /// file in ordinal order of its path. A source that cannot be read or does not parse cannot say what it emits, so
@@ -116,8 +117,8 @@ public static class WorldSourceIndex {
     public static IReadOnlyList<WorldDocumentClaims> Claims(string directory) => Index(directory: directory).Files;
     /// <summary>Returns the claims every carrying file directly in <paramref name="directory"/> makes, as
     /// <see cref="Claims"/> reads them, indexed by the names they claim. The index is held while the directory's
-    /// listing and every source's declaration are the ones it was built from, and reading it records both, exactly as
-    /// <see cref="Claims"/> does.</summary>
+    /// listing and every source's declaration are the ones it was built from, and reading it records one claims fact
+    /// (<see cref="CompileInputKind.Claims"/>), exactly as <see cref="Claims"/> does.</summary>
     /// <param name="directory">The directory. One that does not exist carries nothing.</param>
     /// <returns>The directory's claims.</returns>
     /// <exception cref="IOException">The directory could not be listed.</exception>
@@ -125,6 +126,16 @@ public static class WorldSourceIndex {
     public static WorldDirectoryClaims Index(string directory) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
 
+        return CompileInputs.Claim(build: static listed => {
+            var held = Build(directory: listed);
+
+            return (held.Claims, held.Canonical);
+        }, claimer: DeclarerName, directory: directory);
+    }
+    // A directory's claims, built from its listing and what each source there declares, read through the door, or the
+    // claims held for the same listing and digests. The one function behind both a claims fact's recording (Index) and
+    // its answer (the claimer RegisterDeclarer registers), so the two cannot disagree.
+    private static HeldClaims Build(string directory) {
         var files = CompileInputs.List(directory: directory);
         var digests = new string?[files.Count];
         var known = new Known?[files.Count];
@@ -138,7 +149,7 @@ public static class WorldSourceIndex {
         if (HeldDirectories.TryGetValue(key: directory, value: out var held) &&
             held.Files.SequenceEqual(second: files, comparer: StringComparer.Ordinal) &&
             held.Digests.AsSpan().SequenceEqual(other: digests)) {
-            return held.Claims;
+            return held;
         }
 
         var claims = new List<WorldDocumentClaims>();
@@ -163,11 +174,27 @@ public static class WorldSourceIndex {
             }
         }
 
-        var indexed = new WorldDirectoryClaims(files: claims);
+        var built = new HeldClaims(Canonical: Canonical(claims: claims), Claims: new WorldDirectoryClaims(files: claims), Digests: digests, Files: files);
 
-        HeldDirectories.Set(key: directory, value: new HeldClaims(Claims: indexed, Digests: digests, Files: files));
+        HeldDirectories.Set(key: directory, value: built);
 
-        return indexed;
+        return built;
+    }
+    // The canonical text of a directory's claims: each claiming file's name, then the names it claims, length-prefixed.
+    // File names alone, never the directory, so the same directory spelled another way claims the same.
+    private static string Canonical(List<WorldDocumentClaims> claims) {
+        var text = new StringBuilder();
+
+        foreach (var file in claims) {
+            var name = System.IO.Path.GetFileName(path: file.Path);
+
+            _ = text.Append(value: name.Length).Append(value: ':').Append(value: name).Append(value: '=').Append(value: file.Names.Count).Append(value: '\n');
+            foreach (var claimed in file.Names) {
+                _ = text.Append(value: claimed.Length).Append(value: ':').Append(value: claimed).Append(value: '\n');
+            }
+        }
+
+        return text.ToString();
     }
     // What one source's bytes declare: whether it is a world source, and the names it emits when it is (null for one
     // that does not parse).
@@ -184,10 +211,16 @@ public static class WorldSourceIndex {
         checkId: "CA2255",
         Justification = "A persisted compile's declaration facts are checked through CompileInputs, which this assembly does not own, before any type here need run; registering when the module loads is the one point every such check follows."
     )]
-    internal static void RegisterDeclarer() => CompileInputs.RegisterDeclarer(
-        declare: static (digest, read) => Canonical(known: Know(digest: digest, read: read)),
-        name: DeclarerName
-    );
+    internal static void RegisterDeclarer() {
+        CompileInputs.RegisterDeclarer(
+            declare: static (digest, read) => Canonical(known: Know(digest: digest, read: read)),
+            name: DeclarerName
+        );
+        CompileInputs.RegisterClaimer(
+            claim: static directory => Build(directory: directory).Canonical,
+            name: DeclarerName
+        );
+    }
 
     // A source's declaration through the door, recorded as a declaration fact: the compile rests on what the source
     // declares, not on its bytes, so a value edit there leaves it standing. Null for a source that is absent or cannot

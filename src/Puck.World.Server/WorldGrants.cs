@@ -1811,10 +1811,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             if (arena.Rows[ordinal] is not WorldStateRow { GatesDrive: true } row) { continue; }
             var cursor = 0;
 
-            while (arena.TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: ordinal)) {
-                if (!int.TryParse(arena.Keys[key].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var body) ||
-                    (body < 0) || m_driveGates.ContainsKey(key: body)) { continue; }
-                if (arena.TryReadLiveNumber(key: key, rowOrdinal: ordinal, time: in time, value: out var raw) && (raw != 0L)) { m_driveGates[body] = row.Name; }
+            while (arena.TryNextLiveNumber(rowOrdinal: ordinal, cursor: ref cursor, time: in time, key: out var key, value: out var raw)) {
+                if ((raw != 0L) && arena.Keys.TryCandidateIndex(key: key, index: out var body)) { _ = m_driveGates.TryAdd(key: body, value: row.Name); }
             }
         }
     }

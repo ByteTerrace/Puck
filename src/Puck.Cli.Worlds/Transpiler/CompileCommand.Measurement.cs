@@ -33,11 +33,16 @@ public static partial class CompileCommand {
         private readonly long m_allocated = GC.GetTotalAllocatedBytes(precise: true);
         private readonly long m_contentReads = CompileInputs.ContentReads;
         private readonly long m_stampReads = CompileInputs.StampReads;
+        private readonly long m_recordedFacts = CompileInputs.RecordedFacts;
         private readonly long[] m_sessionWork = [.. SessionWork.Select(selector: static kind => WorldBootWork.Process.Read(kind: kind))];
         private readonly List<(string Path, long Work)> m_work = [];
+        // Every distinct fact the invocation's compiles read, so the measure says what they rest on by kind.
+        private readonly CompileInputLog m_facts = new();
+        private readonly CompileInputs.Scope m_recording;
 
         public CompilationMeasurement() {
             lock (Gate) { Active = this; }
+            m_recording = CompileInputs.Record(log: m_facts);
         }
 
         /// <summary>Records the work units one source's compilation charged its evaluation budget; a no-op without --measure.</summary>
@@ -46,6 +51,7 @@ public static partial class CompileCommand {
         }
 
         public void Dispose() {
+            m_recording.Dispose();
             lock (Gate) {
                 if (ReferenceEquals(objA: Active, objB: this)) { Active = null; }
             }
@@ -56,6 +62,11 @@ public static partial class CompileCommand {
             // an answer without one, and the distinct files and directories those answers cover.
             Console.Error.WriteLine(string.Create(CultureInfo.InvariantCulture,
                 $"compile measure: file-content-reads={CompileInputs.ContentReads - m_contentReads} file-stamp-reads={CompileInputs.StampReads - m_stampReads} files-known={CompileInputs.RememberedPaths}"));
+            // The facts the compiles rest on: recorded counts each once per log that holds it (every held compile and
+            // composition its own), and the distinct facts by kind.
+            Console.Error.WriteLine(value: ("compile measure: facts-recorded=" + (CompileInputs.RecordedFacts - m_recordedFacts).ToString(provider: CultureInfo.InvariantCulture) + " " +
+                string.Join(separator: ' ', values: Enum.GetValues<CompileInputKind>().Select(selector: kind => string.Create(CultureInfo.InvariantCulture,
+                    $"{kind.ToString().ToLowerInvariant()}={m_facts.Inputs.Count(predicate: input => (input.Kind == kind))}")))));
             Console.Error.WriteLine(value: ("compile measure: " + string.Join(separator: ' ', values: SessionWork.Select(selector: (kind, index) => string.Create(CultureInfo.InvariantCulture,
                 $"{kind.Name["world.boot.".Length..]}={WorldBootWork.Process.Read(kind: kind) - m_sessionWork[index]}")))));
             foreach (var (path, work) in m_work.OrderByDescending(keySelector: static entry => entry.Work).Take(count: LargestShown)) {

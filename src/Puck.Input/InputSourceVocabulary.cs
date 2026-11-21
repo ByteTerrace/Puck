@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
+using Puck.Abstractions;
 using Puck.Commands;
 
 namespace Puck.Input;
@@ -130,36 +131,14 @@ public static class InputSourceVocabulary {
             }
         }
     }
-    // Accepts exactly the canonical digit forms "1".."12" (or "1".."65535" for mouse buttons) — digits only, no
-    // sign, no leading/trailing whitespace, no leading zero, culture-invariant. int.TryParse's default
-    // NumberStyles.Integer permits AllowLeadingSign (so "keyboard.f+1" resolved) and is
-    // CultureInfo.CurrentCulture-dependent; a hand-rolled digit walk is the only way to accept the canonical range
-    // and nothing else regardless of the host's culture.
+    // Accepts exactly the canonical digit forms "1".."12" (or "1".."65535" for mouse buttons), so "keyboard.f+1" and
+    // "keyboard.f01" are malformed whatever the host's culture.
     private static bool TryParseCanonicalPositiveNumber(ReadOnlySpan<char> digits, int maximum, out int number) {
-        number = 0;
+        var canonical = (CanonicalDecimal.TryParse(text: digits, value: out var value) && (value > 0L) && (value <= maximum));
 
-        if (
-            digits.IsEmpty ||
-            (digits[0] == '0')
-        ) {
-            return false;
-        }
+        number = (canonical ? ((int)value) : 0);
 
-        foreach (var digit in digits) {
-            if (!char.IsAsciiDigit(c: digit)) {
-                return false;
-            }
-
-            var next = ((number * 10) + (digit - '0'));
-
-            if (next > maximum) {
-                return false;
-            }
-
-            number = next;
-        }
-
-        return (number > 0);
+        return canonical;
     }
     // Open-ended families mint source ids rather than declaring one constant each: keyboard letters/functions and
     // numbered mouse buttons. Recognize exactly the same canonical range each public factory accepts. Every id

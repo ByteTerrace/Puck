@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Abstractions;
 using Puck.Maths;
 
 namespace Puck.State;
@@ -443,21 +444,18 @@ public sealed partial class CompiledTopology {
     /// <param name="cell">The cell ordinal.</param>
     /// <returns>The decimal key.</returns>
     public string Key(int cell) => m_keys[cell];
-    /// <summary>Resolves a canonical decimal cell key without allocation.</summary>
+    /// <summary>Resolves a cell key, the <see cref="CanonicalDecimal"/> spelling of its ordinal, without
+    /// allocation.</summary>
     /// <param name="key">The key.</param>
-    /// <param name="cell">The ordinal.</param>
+    /// <param name="cell">The ordinal on success; otherwise <c>-1</c>.</param>
     /// <returns>Whether the key names a cell.</returns>
-    public bool TryCell(string key, out int cell) => (int.TryParse(
-        key,
-        NumberStyles.None,
-        CultureInfo.InvariantCulture,
-        out cell
-    )
-        && (((uint)cell) < CellCount) && string.Equals(
-        a: key,
-        b: m_keys[cell],
-        comparisonType: StringComparison.Ordinal
-    ));
+    public bool TryCell(ReadOnlySpan<char> key, out int cell) {
+        var named = (CanonicalDecimal.TryParse(text: key, value: out var ordinal) && (((ulong)ordinal) < ((ulong)CellCount)));
+
+        cell = (named ? ((int)ordinal) : -1);
+
+        return named;
+    }
     /// <summary>Resolves a direction token for this topology — this topology's own authored names when
     /// <see cref="IDiscreteLatticeTopology.Directions"/> was declared, its kind's default names otherwise.</summary>
     /// <param name="token">The case-sensitive direction name.</param>

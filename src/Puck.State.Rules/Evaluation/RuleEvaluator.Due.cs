@@ -120,7 +120,7 @@ public sealed partial class RuleEvaluator {
 
             list.ClearBody(body: body, index: index);
 
-            if (!RuleReads.TryIndexKey(index: body, key: out var key, keys: keys)) {
+            if (!keys.TryResolveIndex(index: body, key: out var key)) {
                 continue;
             }
 

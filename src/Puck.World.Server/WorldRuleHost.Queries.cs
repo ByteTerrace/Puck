@@ -207,10 +207,11 @@ public sealed partial class WorldRuleHost {
         var bestOffset = FixedVector3.Zero;
         var cursor = 0;
         var walked = 0L;
+        var time = Time;
 
-        while (Host.Arena.TryNextCell(rowOrdinal: tagRowOrdinal, cursor: ref cursor, key: out var key)) {
+        while (Host.Arena.TryNextLiveNumber(rowOrdinal: tagRowOrdinal, cursor: ref cursor, time: in time, key: out var key, value: out var value)) {
             walked++;
-            if (!TryTaggedBody(rowOrdinal: tagRowOrdinal, key: key, index: out var index, body: out var candidate) || (index == origin)) {
+            if (!TryTaggedBody(key: key, value: value, index: out var index, body: out var candidate) || (index == origin)) {
                 continue;
             }
 
