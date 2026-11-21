@@ -15,6 +15,9 @@ public interface IWorldScreenPresenter {
     /// <param name="instance">The declared machine instance name.</param>
     /// <param name="output">The provider audio output name.</param>
     IAudioMachine? AudioOutput(string instance, string output);
+    /// <summary>Raised when a machine instance is added, replaced, removed, restored or disposed, so audio consumers
+    /// rebind on change instead of polling every frame.</summary>
+    event Action? MachinesChanged { add { } remove { } }
     /// <summary>Drops every device-owned upload while preserving CPU sessions, machine simulation, declarations, and view
     /// registrations.</summary>
     void NotifyDeviceLost();

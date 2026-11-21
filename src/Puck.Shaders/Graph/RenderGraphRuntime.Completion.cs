@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Puck.Abstractions.Collections;
 using Puck.Hosting;
 using Puck.Abstractions.Presentation;
@@ -49,30 +50,21 @@ public sealed partial class RenderGraphRuntime {
     /// changes; with the reason, naming the instance and its state, when it is not rendered.</summary>
     public FrameRender Render { get; private set; } = FrameRender.Waiting(reason: "the runtime has produced no frame");
 
-    // The names of the instances whose latest render did not show its frame, the frame's Stale list.
-    private readonly List<string> m_staleNames = [];
+    // Sparse list of currently stale instance ordinals and each ordinal's slot in that list (-1 when current),
+    // maintained in MarkStale/MarkCurrent/ResetStale so steady frames with zero stale instances cost O(1).
+    private readonly List<int> m_staleIndices = [];
+    private int[] m_staleSlot = [];
 
-    // The frame the scheduler reads with every instance whose latest render did not show its frame named stale, so a
-    // floor refresh never holds it (RenderGraphFrame.Stale): a view waiting on its bake renders again on a frame that
-    // presents no new time, as lockstep's held tick does, instead of holding the incomplete render that holds the tick.
-    private RenderGraphFrame WithStale(in RenderGraphFrame frame) {
-        m_staleNames.Clear();
+    private ReadOnlySpan<int> StaleOrdinals => CollectionsMarshal.AsSpan(list: m_staleIndices);
 
-        for (var index = 0; (index < m_stale.Length); index++) {
-            if (m_stale[index] is not null) {
-                m_staleNames.Add(item: m_set.Instances[index].Name);
-            }
-        }
-
-        return ((m_staleNames.Count == 0)
-            ? frame
-            : (frame with { Stale = m_staleNames }));
-    }
     // Sizes the per-instance standing to a set of instances, every one current until it renders.
     private void ResetStale(int count) {
         m_stale = new string?[count];
         m_staleRefused = new bool[count];
         m_staleFrames = new int[count];
+        m_staleIndices.Clear();
+        m_staleSlot = new int[count];
+        Array.Fill(array: m_staleSlot, value: -1);
         m_productionReasons = new string?[count];
         m_productionMessages = new string?[count];
         m_historySucceeded = new bool[count];
@@ -85,6 +77,7 @@ public sealed partial class RenderGraphRuntime {
             var index = schedule.Renders[position];
 
             if (!m_historySucceeded[index]) { schedule.Next.Withdraw(index: index, previous: prior); }
+            m_historySucceeded[index] = false;
         }
         m_historySchedule = null;
         m_historyPrior = null;
@@ -98,6 +91,7 @@ public sealed partial class RenderGraphRuntime {
 
         var buffer = node.LatestOutputBuffer();
         var buffers = node.LatestOutputBuffers(reuse: m_previous[index].Buffers);
+        var standsFor = StandingOf(index: index, node: node, schedule: schedule, surface: in surface);
 
         m_previous[index] = m_current[index];
         m_current[index] = new Output(
@@ -106,10 +100,25 @@ public sealed partial class RenderGraphRuntime {
             BufferPublication: buffer.Publication,
             StateTick: node.PublishedStateTick,
             Publication: publication,
-            StandsFor: StandingOf(index: index, node: node, schedule: schedule, surface: in surface),
+            StandsFor: standsFor,
             Tainted: (m_taintedReads[index] is not null));
+        if (!standsFor.IsOwn) {
+            TrackStandingCandidate(index: index);
+        }
     }
     private void MarkCurrent(int index) {
+        var slot = m_staleSlot[index];
+
+        if (slot >= 0) {
+            var last = (m_staleIndices.Count - 1);
+            var moved = m_staleIndices[last];
+
+            m_staleIndices[slot] = moved;
+            m_staleSlot[moved] = slot;
+            m_staleIndices.RemoveAt(index: last);
+            m_staleSlot[index] = -1;
+        }
+
         m_stale[index] = null;
         m_staleRefused[index] = false;
         m_staleFrames[index] = 0;
@@ -127,6 +136,11 @@ public sealed partial class RenderGraphRuntime {
     // Drops the narrations of instances the set no longer holds; nothing renders them, so nothing would clear them.
     private void ForgetRemovedNarrations() => m_narrated.ClearWhere(gone: name => (m_set.IndexOf(name: name) < 0));
     private void MarkStale(int index, string reason, bool refused = false) {
+        if (m_staleSlot[index] < 0) {
+            m_staleSlot[index] = m_staleIndices.Count;
+            m_staleIndices.Add(item: index);
+        }
+
         m_stale[index] = reason;
         m_staleRefused[index] = refused;
 
@@ -203,20 +217,18 @@ public sealed partial class RenderGraphRuntime {
 
     // The first reason of one kind a package of the instance's graph states for it.
     private string? PackageReasonOf(int index, PackageReason kind) {
-        if (m_graphs[index] is not { } graph) {
+        var factories = m_instanceFactories[index];
+
+        if (factories.Length == 0) {
             return null;
         }
 
         var name = m_set.Instances[index].Name;
-        var passes = graph.Pipeline.Plan.Passes;
 
-        for (var position = 0; (position < passes.Count); position++) {
+        for (var position = 0; (position < factories.Length); position++) {
+            var factory = factories[position];
+
             if (
-                (passes[position].Package is { } step) &&
-                m_packages.TryGetFactory(
-                    factory: out var factory,
-                    package: step.Package
-                ) &&
                 ((kind switch {
                     PackageReason.Refusal => factory.RefusalOf(instance: name),
                     PackageReason.Waiting => factory.WaitingOf(instance: name),
@@ -257,23 +269,27 @@ public sealed partial class RenderGraphRuntime {
     // Only reads the schedule shows can affect completion. External producers and screen-sampling packages read
     // edges without graph input bindings; an unshown bound image has no bearing on the displayed frame.
     private bool MarkReadStale(int index, RenderGraphSchedule schedule) {
+        schedule.ConsumerReads(consumer: index, count: out var readCount, start: out var readStart);
+        if (readCount == 0) {
+            return false;
+        }
+
         var name = m_set.Instances[index].Name;
         string? waiting = null;
-
-        // An indexed loop: an interface enumerator would allocate on every frame.
         var reads = schedule.Reads;
+        var readEnd = (readStart + readCount);
 
-        for (var position = 0; (position < reads.Count); position++) {
+        for (var position = readStart; (position < readEnd); position++) {
             var read = reads[position];
 
-            if ((read.Consumer != name) || read.PreviousFrame) {
+            if (read.PreviousFrame) {
                 continue;
             }
-            var producer = m_set.IndexOf(name: read.Producer);
+            var producer = schedule.ReadProducer(readIndex: position);
 
             if ((m_producers[index] is null) &&
                 !BindsProducer(index: index, producer: producer) &&
-                !SamplesReads(graph: m_graphs[index])) {
+                !SamplesReads(index: index)) {
                 continue;
             }
             if (m_stale[producer] is { } reason) {

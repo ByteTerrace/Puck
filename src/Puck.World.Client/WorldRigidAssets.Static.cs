@@ -139,6 +139,7 @@ public sealed partial class WorldRigidAssets {
                 WorldPlacementStamper.AppendStaticVolumes(asset.Creation.EngineDocument, occurrence.Position, occurrence.Orientation, occurrence.Placement.Scale, m_staticVolumes, hidden);
             }
         }
+        m_volumesDirty = true;
         WorldCreationWork.ProcessWork.Add(WorldCreationWork.StaticCopies, m_staticCopies.Count);
     }
 }

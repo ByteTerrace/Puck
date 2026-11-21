@@ -74,9 +74,27 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         return reseeded;
     }
 
-    // The bounded volumes every live registration's creation authors (CreationDocument.Volumes), rebuilt by
-    // PackTransforms each frame and riding the registration's root or a named shape's dynamic slot.
+    // The bounded volumes every live registration's creation authors (CreationDocument.Volumes), rebuilt in
+    // PackTransforms only when a volume-bearing registration's membership, slot base, isolation or scale moves.
     private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
+    private bool m_volumesDirty = true;
+    private bool m_hasAnyVolumes;
+    private int m_volumesSlotBase = -1;
+    private bool[] m_volumeActive = [];
+    private float[] m_volumeScale = [];
+    private bool[]?[] m_volumeHidden = [];
+
+    /// <summary>Gets a monotonic revision bumped whenever <see cref="Volumes"/> is rebuilt.</summary>
+    public long VolumesRevision { get; private set; }
+    /// <summary>Gets a monotonic revision bumped whenever <see cref="RigidVolumes"/> is rebuilt.</summary>
+    public long RigidVolumesRevision => Rigid.VolumesRevision;
+    /// <summary>Gets a monotonic revision bumped whenever pool registrations reconcile or any live registration's
+    /// active carry pose frame changes.</summary>
+    public long CarryRevision { get; private set; }
+    /// <summary>Gets a monotonic revision bumped whenever pool registrations reconcile or any packed transform moves.</summary>
+    public long PoseRevision { get; private set; }
+    /// <summary>Returns whether the pool holds a live registration (animated or attached) for <paramref name="placementId"/>.</summary>
+    public bool HasPlacementRegistration(string placementId) => m_rowSlots.ContainsKey(key: placementId);
 
     // Latched by Tick, consumed once by the next PackTransforms — the frame delta the pool's root/part followers
     // step by (accumulates across a Tick called more than once before a pack, mirroring the replay clock above).
@@ -815,6 +833,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
             picks?.Instances(first: firstInstance, end: builder.InstanceCount, target: live.PickTarget);
         }
         Rigid.Emit(builder, colors, (slotBase + ArticulatedSlotCount), textCatalog, (picks ?? new WorldPickMapBuilder()), Isolation);
+        m_volumesDirty = true;
     }
     /// <summary>Whether a live body-rooted creation look owns the entity's part namespace.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
@@ -1136,6 +1155,17 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         }
 
         RefillRootSlotOffsets();
+        var hasVolumes = false;
+        for (var index = 0; (index < m_poolCount); index++) {
+            if (m_pool[index]?.Creation.EngineDocument.Volumes is { Count: > 0 }) {
+                hasVolumes = true;
+                break;
+            }
+        }
+        m_hasAnyVolumes = hasVolumes;
+        m_volumesDirty = true;
+        CarryRevision++;
+        PoseRevision++;
     }
 
     /// <summary>Advances every live replay cursor on the render clock (hold-style: each frame holds

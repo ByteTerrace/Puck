@@ -215,7 +215,13 @@ public sealed class RenderGraphHistory {
 public sealed class RenderGraphSchedule {
     private readonly RenderGraphInstanceSchedule[] m_instances;
     private readonly List<RenderGraphReadSchedule> m_reads;
+    private readonly List<int> m_readProducers;
+    private readonly int[] m_consumerReadStart;
+    private readonly int[] m_consumerReadCount;
+    private readonly List<int> m_consumersWithReads;
     private readonly List<int> m_renders;
+    private readonly List<int> m_unread;
+    private readonly List<int> m_unnamed;
 
     /// <summary>Initializes a new instance of the <see cref="RenderGraphSchedule"/> class: an empty schedule for a set's
     /// instances, whose <see cref="Frame"/> is -1 and whose <see cref="Next"/> is the history of a set that has not
@@ -229,12 +235,20 @@ public sealed class RenderGraphSchedule {
 
         m_instances = new RenderGraphInstanceSchedule[count];
         m_reads = [];
+        m_readProducers = [];
+        m_consumerReadStart = new int[count];
+        m_consumerReadCount = new int[count];
+        m_consumersWithReads = [];
         m_renders = new List<int>(capacity: count);
+        m_unread = [];
+        m_unnamed = [];
         Frame = -1;
         Instances = Array.AsReadOnly(array: m_instances);
         Next = RenderGraphHistory.Of(count: count);
         Reads = new ReadOnlyCollection<RenderGraphReadSchedule>(list: m_reads);
         Renders = new ReadOnlyCollection<int>(list: m_renders);
+        Unread = new ReadOnlyCollection<int>(list: m_unread);
+        Unnamed = new ReadOnlyCollection<int>(list: m_unnamed);
         Work = new RenderGraphScheduler.Scratch(count: count);
     }
 
@@ -257,13 +271,81 @@ public sealed class RenderGraphSchedule {
     /// same-frame producer before its consumers. Each instance appears at most once however many consumers read
     /// it.</summary>
     public IReadOnlyList<int> Renders { get; }
+    /// <summary>Gets the instances whose status is <see cref="RenderGraphInstanceStatus.Unread"/>, as indices into
+    /// <see cref="Instances"/>.</summary>
+    public IReadOnlyList<int> Unread { get; }
+    /// <summary>Gets the instances whose status is <see cref="RenderGraphInstanceStatus.Unnamed"/>, as indices into
+    /// <see cref="Instances"/>.</summary>
+    public IReadOnlyList<int> Unnamed { get; }
+
+    /// <summary>Returns the frame of <paramref name="producer"/>'s output that <paramref name="consumer"/> reads this
+    /// frame, or -1 when <paramref name="consumer"/> does not render or reads no output of
+    /// <paramref name="producer"/>.</summary>
+    /// <param name="consumer">The reading instance's ordinal.</param>
+    /// <param name="producer">The read instance's ordinal.</param>
+    /// <returns>The scheduled producer frame, or -1.</returns>
+    public long ReadFrame(int consumer, int producer) {
+        var count = m_consumerReadCount[consumer];
+
+        if (count == 0) {
+            return -1L;
+        }
+
+        var start = m_consumerReadStart[consumer];
+        var end = (start + count);
+
+        for (var position = start; (position < end); position++) {
+            if (m_readProducers[position] == producer) {
+                return m_reads[position].Frame;
+            }
+        }
+
+        return -1L;
+    }
+    /// <summary>Returns the contiguous range of <see cref="Reads"/> belonging to <paramref name="consumer"/>.</summary>
+    /// <param name="consumer">The reading instance's ordinal.</param>
+    /// <param name="start">The first index in <see cref="Reads"/>.</param>
+    /// <param name="count">The number of reads for <paramref name="consumer"/>; zero when none.</param>
+    public void ConsumerReads(int consumer, out int start, out int count) {
+        start = m_consumerReadStart[consumer];
+        count = m_consumerReadCount[consumer];
+    }
+    /// <summary>Returns the producer's set ordinal for the read at <paramref name="readIndex"/> in
+    /// <see cref="Reads"/>.</summary>
+    /// <param name="readIndex">The index in <see cref="Reads"/>.</param>
+    /// <returns>The producer's ordinal.</returns>
+    public int ReadProducer(int readIndex) => m_readProducers[readIndex];
 
     internal int Count => m_instances.Length;
     internal RenderGraphInstanceSchedule[] InstanceRows => m_instances;
-    internal List<RenderGraphReadSchedule> ReadRows => m_reads;
     internal List<int> RenderRows => m_renders;
+    internal List<int> UnreadRows => m_unread;
+    internal List<int> UnnamedRows => m_unnamed;
     internal RenderGraphScheduler.Scratch Work { get; }
 
+    internal void ClearReads() {
+        m_reads.Clear();
+        m_readProducers.Clear();
+        for (var position = 0; (position < m_consumersWithReads.Count); position++) {
+            m_consumerReadCount[m_consumersWithReads[position]] = 0;
+        }
+        m_consumersWithReads.Clear();
+    }
+    internal int AddRead(int producer, in RenderGraphReadSchedule row) {
+        var position = m_reads.Count;
+
+        m_reads.Add(item: row);
+        m_readProducers.Add(item: producer);
+
+        return position;
+    }
+    internal void SetConsumerReads(int consumer, int start, int count) {
+        if (count > 0) {
+            m_consumerReadStart[consumer] = start;
+            m_consumerReadCount[consumer] = count;
+            m_consumersWithReads.Add(item: consumer);
+        }
+    }
     internal void Publish(long frame, long passPixels, ulong presentedTicks) {
         Frame = frame;
         PassPixels = passPixels;

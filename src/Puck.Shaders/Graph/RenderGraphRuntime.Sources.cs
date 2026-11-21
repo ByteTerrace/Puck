@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
@@ -15,8 +16,8 @@ public sealed partial class RenderGraphRuntime {
     // Each instance's upload, or null for an instance that renders a graph the host gave or through an external producer.
     private SourceGraph?[] m_sources = [];
 
-    // What the scheduler reads for the frame being scheduled: the host's source states, then each upload's own.
-    private readonly List<RenderGraphSourceState> m_sourceStates = [];
+    // Ordinal source declarations built for the frame being scheduled (uploads and source producers), reused frame to frame.
+    private readonly List<RenderGraphOrdinalSource> m_ordinalSources = [];
 
     /// <summary>The name of the one pass of an uploaded source's graph, which its node's counted work reports.</summary>
     public const string SourceConversionPass = "convert";
@@ -338,6 +339,7 @@ public sealed partial class RenderGraphRuntime {
         }
 
         m_capture.Forward(target: node);
+        m_forwardedCaptureIndex = index;
 
         var submitted = node.FrameCounter;
         var surface = node.ProduceFrame(context: in context);
@@ -365,58 +367,33 @@ public sealed partial class RenderGraphRuntime {
             source?.Dispose();
         }
     }
-    // The frame the scheduler reads: the host's frame, with each upload's and each source producer's cadence and extent
-    // after the host's source states, unless the host declares that source itself.
-    private RenderGraphFrame WithSourceStates(in RenderGraphFrame frame) {
-        var uploads = false;
-
-        foreach (var source in m_sources) {
-            uploads |= (source?.State is not null);
-        }
-
+    // Collects each active upload's and source producer's cadence and extent by ordinal. Host declarations in
+    // frame.Sources take precedence inside RenderGraphScheduler.SourceStates without string comparisons here.
+    private ReadOnlySpan<RenderGraphOrdinalSource> CollectSourceStates() {
         if (
-            !uploads &&
-            !HasSourceProducers()
+            (m_activeUploadSourceIndices.Length == 0) &&
+            (m_sourceProducerIndices.Length == 0)
         ) {
-            return frame;
+            return [];
         }
 
-        m_sourceStates.Clear();
+        m_ordinalSources.Clear();
 
-        if (frame.Sources is { } declared) {
-            for (var index = 0; (index < declared.Count); index++) {
-                m_sourceStates.Add(item: declared[index]);
-            }
-        }
-
-        for (var index = 0; (index < m_sources.Length); index++) {
-            if (m_sources[index] is not { State: { } declaredState } source) {
-                continue;
-            }
-
+        for (var position = 0; (position < m_activeUploadSourceIndices.Length); position++) {
+            var index = m_activeUploadSourceIndices[position];
+            var source = m_sources[index]!;
             // A producer that knows whether it has a new image says so for this frame, before the frame schedules.
-            var state = (declaredState with { HasNewImage = source.Upload.HasNewImage });
+            var state = (source.State!.Value with { HasNewImage = source.Upload.HasNewImage });
 
-            var named = false;
-
-            for (var position = 0; (position < m_sourceStates.Count); position++) {
-                named |= string.Equals(
-                    a: m_sourceStates[position].Instance,
-                    b: state.Instance,
-                    comparisonType: StringComparison.Ordinal
-                );
-            }
-
-            if (!named) {
-                m_sourceStates.Add(item: state);
-            }
+            m_ordinalSources.Add(item: new RenderGraphOrdinalSource(
+                Index: index,
+                State: state
+            ));
         }
 
-        AddProducerSourceStates();
+        AddOrdinalProducerSourceStates();
 
-        return (frame with {
-            Sources = m_sourceStates,
-        });
+        return CollectionsMarshal.AsSpan(list: m_ordinalSources);
     }
     // Rebuilds every uploaded source whose upload now declares another descriptor than its graph was made for, before the
     // frame schedules: the running set reconfigured onto itself, which keeps every other instance and makes the drifted
@@ -425,8 +402,8 @@ public sealed partial class RenderGraphRuntime {
     private void RebuildDriftedSources() {
         var drifted = false;
 
-        foreach (var source in m_sources) {
-            drifted |= (source?.Drifted ?? false);
+        for (var position = 0; (position < m_uploadSourceIndices.Length); position++) {
+            drifted |= m_sources[m_uploadSourceIndices[position]]!.Drifted;
         }
 
         if (!drifted) {

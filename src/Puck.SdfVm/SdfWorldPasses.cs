@@ -537,7 +537,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     internal SdfShadeDispatch CommitShadePlan(string instance, SdfFrame frame, uint width, uint height, uint screens) {
         var entry = Refresh(instance: instance);
         var residency = entry.View?.Residency;
-        var plan = SdfShadeDispatch.For(previous: entry.ShadePlan, frame: frame, view: (entry.View?.View ?? 0), glass: false, height: height, screens: screens,
+        var plan = SdfShadeDispatch.For(previous: entry.ShadePlan, frame: frame, glass: false, height: height, screens: screens,
             width: width, tier: (residency?.ShadeTier ?? SdfShadeTier.Neutral), binned: (residency?.ShadesInBins ?? false));
 
         entry.ShadePlan = plan;

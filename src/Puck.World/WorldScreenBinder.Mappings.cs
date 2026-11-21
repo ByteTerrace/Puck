@@ -1,4 +1,5 @@
 using Puck.Abstractions.Machines;
+using Puck.Hosting;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -9,12 +10,21 @@ public sealed partial class WorldScreenBinder : IWorldScreenImages {
     private readonly Dictionary<int, WorldScreenSource> m_live = [];
     // The rows ReconcileScreens last applied.
     private IReadOnlyList<WorldScreen> m_rows = [];
+    // Bumped whenever a screen image's extent may have changed (machine swap/boot/eject, render-graph instance change,
+    // probe ring provisioning/release, or active camera feed).
+    private long m_extentRevision;
+    private RenderGraphInstanceSet? m_lastRuntimeInstances;
 
     /// <summary>Gets the mapping every screen publishes for the source it shows, keyed by its source instance's handle and
     /// rebuilt from the rows <see cref="ReconcileScreens"/> last applied and the live binds over them;
     /// <see cref="Publish"/> publishes it each frame. Its <see cref="WorldScreenMappingSet.Sources"/> are the source
     /// instances the render graph runs for the screens.</summary>
     public WorldScreenMappingSet Mappings { get; } = new(world: WorldInstanceHost.BootInstanceName);
+
+    /// <inheritdoc/>
+    long? IWorldScreenImages.ExtentRevision => m_extentRevision;
+
+    private void OnMachinesChanged() => m_extentRevision++;
 
     /// <inheritdoc/>
     /// <remarks>A machine output's extent is its framebuffer's, and a producer's or a probe output's its feed's descriptor's

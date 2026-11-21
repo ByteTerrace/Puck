@@ -364,6 +364,7 @@ public sealed partial class WorldScreenBinder {
             )
             : "the render adapter reports no LUID");
         feed.Refusal = feed.Fault;
+        m_extentRevision++;
     }
     // Retires every probe's ring on the current device and keeps each feed's request, so after a device loss the next
     // publish provisions a fresh ring (a new generation) on the replacement. The render adapter's kernel host goes first,
@@ -374,6 +375,9 @@ public sealed partial class WorldScreenBinder {
 
         foreach (var feed in m_probeFeeds.Values) {
             feed.Release();
+        }
+        if (m_probeFeeds.Count > 0) {
+            m_extentRevision++;
         }
     }
     // No GPU teardown of its own — every export's image is owned by its view's node, which the render graph disposes.

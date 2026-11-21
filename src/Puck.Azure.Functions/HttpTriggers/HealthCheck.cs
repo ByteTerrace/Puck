@@ -6,18 +6,10 @@ using Puck.Azure.Functions.Middleware;
 
 namespace Puck.Azure.Functions.HttpTriggers;
 
-public sealed record class HealthCheckEntry(
-    IReadOnlyDictionary<string, object> Data,
-    string? Description,
-    TimeSpan Duration,
-    string? Exception,
-    string Status,
-    IEnumerable<string> Tags
-);
+/// <summary>Public dependency readiness summary returned to anonymous probes without backend diagnostic metadata.</summary>
+/// <param name="Status">Aggregate health status (<c>Healthy</c>, <c>Degraded</c>, or <c>Unhealthy</c>).</param>
 public sealed record class HealthCheckResponse(
-    IDictionary<string, HealthCheckEntry> Entries,
-    string Status,
-    TimeSpan TotalDuration
+    string Status
 );
 public sealed class HealthCheck(HealthCheckService healthCheckService, ILogger<HealthCheck> logger) {
     private const string UnhandledExceptionMessage = "Unhandled exception while executing health check.";
@@ -29,10 +21,10 @@ public sealed class HealthCheck(HealthCheckService healthCheckService, ILogger<H
             authLevel: AuthorizationLevel.Anonymous,
             methods: "get",
             Route = "health-check"
-        )] HttpRequest _,
+        )] HttpRequest request,
         FunctionContext functionContext
     ) {
-        var cancellationToken = functionContext.CancellationToken;
+        var cancellationToken = (functionContext?.CancellationToken ?? request.HttpContext.RequestAborted);
         var healthReport = await healthCheckService.CheckHealthAsync(cancellationToken: cancellationToken);
 
         if (logger.IsEnabled(logLevel: LogLevel.Error)) {
@@ -47,19 +39,7 @@ public sealed class HealthCheck(HealthCheckService healthCheckService, ILogger<H
         }
 
         return new OkObjectResult(value: new HealthCheckResponse(
-            Entries: healthReport.Entries.ToDictionary(
-                elementSelector: entry => new HealthCheckEntry(
-                    Data: entry.Value.Data,
-                    Description: entry.Value.Description,
-                    Duration: entry.Value.Duration,
-                    Exception: entry.Value.Exception?.Message,
-                    Status: entry.Value.Status.ToString(),
-                    Tags: entry.Value.Tags
-                ),
-                keySelector: entry => entry.Key
-            ),
-            Status: healthReport.Status.ToString(),
-            TotalDuration: healthReport.TotalDuration
+            Status: healthReport.Status.ToString()
         ));
     }
 }

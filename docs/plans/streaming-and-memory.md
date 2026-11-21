@@ -840,7 +840,7 @@ same thread. Produce calls `PackagesBeginFrame` before
 `RenderGraphScheduler.Schedule`, so `SdfWorldPasses.BeginFrame` prepares every
 residency it holds whether or not anything shows it (capturing render poses,
 mirroring simulation state, running CPU foot/camera field queries and packing
-GPU tables). `RenderGraphRuntime.WithUnchanged` then asks every package whether
+GPU tables). `RenderGraphRuntime.CollectUnchanged` then asks every package whether
 each view still stands, and `SdfWorldResidency.IsUnchanged` answers by
 preparing again and hashing `SdfWorldTables.ViewSignature`. Meanwhile, only a
 scheduled render stages a residency (`SdfWorldPasses.PrepareRender` ->
@@ -902,7 +902,7 @@ staging and capture to demand in this order:
    a buffer needs no footprint at all. Derive
    candidates from current roots and admitted consumer minimums through the
    scheduler's reach, refresh and extent rules. Ask packages for freshness
-   (`RenderGraphRuntime.WithUnchanged`) only where the answer can change a
+   (`RenderGraphRuntime.CollectUnchanged`) only where the answer can change a
    scheduling decision, across *every* package (including the environment
    package), staying conservative for forced renders and size changes. Make
    `SdfWorldPasses.BeginFrame`'s trailing refresh side-effect-free (or scoped
@@ -1045,7 +1045,7 @@ roots after the captures, closing step 2's stale filming-camera list) and
 prepares only what the frame reads (`RenderGraphRuntime.PrepareReaders` over
 `RenderGraphScheduler.Readers`, then `IRenderGraphPackageFactory.PrepareRead`),
 in rounds until a round prepares nothing new; the freshness question
-(`RenderGraphRuntime.WithUnchanged`) is asked only of instances read. A residency
+(`RenderGraphRuntime.CollectUnchanged`) is asked only of instances read. A residency
 read again after frames nothing read advances its source by those frames
 (`SdfWorldResidency.BeginFrame`'s carried interval, step 7's time-keyed part).
 Exposure readings carry the slot's generation, which moves when another view
@@ -1109,7 +1109,7 @@ reduced mode. After consumer minimums and pixel-share demand are in place:
    covers a point ([illumination](illumination.md#direct-light-roles-the-probe-fallback-and-one-cascade-set)),
    add smooth transitions across the thresholds.
 3. **Let still feeds stand.** Diagnose why a named still feed renders today
-   despite `RenderGraphRuntime.WithUnchanged`, fix that cause and count
+   despite `RenderGraphRuntime.CollectUnchanged`, fix that cause and count
    renders, verifying that an external frame, an exposure change and
    re-converging lighting still wake the feed.
 
