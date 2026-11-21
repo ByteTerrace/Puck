@@ -21,6 +21,17 @@ public class LinterTests {
         PuckLinter.Lint(PuckParser.ParseDocument($"rule \"guarded\" {{\nlocal value = {expression}\na = value\n}}"), diagnostics);
         Assert.Equal(warns, diagnostics.Any(diagnostic => diagnostic.Code == PuckDiagnosticCodes.EagerConditionalArithmetic));
     }
+    // Every child a node declares is walked, so a constant read only where an effect takes a value is a use.
+    [InlineData("schedule due in cooldown")]
+    [InlineData("deal cooldown from deck to hand")]
+    [Theory]
+    public void AConstantReadOnlyInAnEffectsValueIsAUse(string effect) {
+        var diagnostics = new DiagnosticBag();
+
+        PuckLinter.Lint(PuckParser.ParseDocument($"let cooldown = 2\nrule \"r\" {{\n{effect}\n}}"), diagnostics);
+
+        Assert.DoesNotContain(collection: diagnostics, filter: diagnostic => (diagnostic.Code == PuckDiagnosticCodes.LintUnusedLet));
+    }
     [Fact]
     public void CompositionReferencesCountAsUses() {
         var source = """

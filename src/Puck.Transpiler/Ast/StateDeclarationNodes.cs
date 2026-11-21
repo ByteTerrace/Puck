@@ -11,7 +11,7 @@ namespace Puck.Transpiler.Ast;
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record FamilyMemberNode(
+public sealed partial record FamilyMemberNode(
     ExpressionNode? First = null,
     ExpressionNode? Last = null,
     string? Row = null,
@@ -39,7 +39,7 @@ public sealed record FamilyMemberNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record StateModifierNode(
+public sealed partial record StateModifierNode(
     string Name,
     IReadOnlyList<ArgumentNode> Arguments,
     int Offset = 0,
@@ -62,7 +62,7 @@ public sealed record StateModifierNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record StateCellEntryNode(
+public sealed partial record StateCellEntryNode(
     string Key,
     ExpressionNode Value,
     IReadOnlyList<StateModifierNode> Modifiers,
@@ -93,7 +93,7 @@ public sealed record StateCellEntryNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record StateTableDeclarationNode(
+public sealed partial record StateTableDeclarationNode(
     string Name,
     string Kind,
     IReadOnlyList<StateModifierNode> Modifiers,
@@ -132,7 +132,7 @@ public sealed record StateTableDeclarationNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record StateSlotDeclarationNode(
+public sealed partial record StateSlotDeclarationNode(
     string Name,
     string Kind,
     ExpressionNode? Value,
@@ -162,7 +162,7 @@ public sealed record StateSlotDeclarationNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record StatePileTokenNode(
+public sealed partial record StatePileTokenNode(
     string Key,
     int Offset = 0,
     int Length = 0,
@@ -191,7 +191,7 @@ public sealed record StatePileTokenNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record StatePileDeclarationNode(
+public sealed partial record StatePileDeclarationNode(
     string Name,
     string TokenRow,
     IReadOnlyList<StateModifierNode> Modifiers,
@@ -230,7 +230,7 @@ public sealed record StatePileDeclarationNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record StateGridDeclarationNode(
+public sealed partial record StateGridDeclarationNode(
     string Name,
     string Kind,
     IReadOnlyList<StateModifierNode> Modifiers,
@@ -259,7 +259,7 @@ public sealed record StateGridDeclarationNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record EnumMemberNode(
+public sealed partial record EnumMemberNode(
     string Name,
     int Offset = 0,
     int Length = 0,
@@ -272,7 +272,7 @@ public sealed record EnumMemberNode(
     Column
 );
 /// <summary><c>enum Name { Member1, Member2, ... }</c>. Lowers to integer constants and validation bounds.</summary>
-public sealed record EnumDeclarationNode(
+public sealed partial record EnumDeclarationNode(
     string Name,
     IReadOnlyList<EnumMemberNode> Members,
     int Offset = 0,
@@ -286,7 +286,7 @@ public sealed record EnumDeclarationNode(
     Column
 );
 /// <summary>A typed field inside a record declaration.</summary>
-public sealed record RecordFieldNode(
+public sealed partial record RecordFieldNode(
     string Name,
     string TypeName,
     IReadOnlyList<StateModifierNode> Modifiers,
@@ -311,7 +311,7 @@ public sealed record RecordFieldNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record StatePoolDeclarationNode(
+public sealed partial record StatePoolDeclarationNode(
     string Name,
     string RecordName,
     ExpressionNode? Capacity,
@@ -327,7 +327,7 @@ public sealed record StatePoolDeclarationNode(
     Column
 );
 /// <summary>A bounded pool of relationships between instances from two ordinary pools.</summary>
-public sealed record StatePairPoolDeclarationNode(
+public sealed partial record StatePairPoolDeclarationNode(
     string Name,
     string RecordName,
     string LeftPool,
@@ -341,7 +341,7 @@ public sealed record StatePairPoolDeclarationNode(
     int Column = 1
 ) : StatementNode(Offset, Length, Line, Column);
 /// <summary><c>record Name { field1: Type1 ... }</c>. Lowers to columnar state row sets (Structure of Arrays).</summary>
-public sealed record RecordDeclarationNode(
+public sealed partial record RecordDeclarationNode(
     string Name,
     IReadOnlyList<RecordFieldNode> Fields,
     int Offset = 0,
@@ -356,7 +356,7 @@ public sealed record RecordDeclarationNode(
 );
 /// <summary><c>derive name = expression</c>: a compile-time name for operand text, expanded wherever an operand
 /// reads it; the document carries the expansion, never the name.</summary>
-public sealed record DerivedStateNode(
+public sealed partial record DerivedStateNode(
     string Name,
     OperandExpressionNode Expression,
     int Offset = 0,

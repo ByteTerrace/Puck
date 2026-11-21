@@ -61,47 +61,18 @@ public static partial class WorldDecompiler {
         }
 
         for (var index = 0; (index < text.Length); index++) {
-            var character = text[index];
+            var end = SourceLexemes.End(offset: index, source: text);
 
-            if (character == '"') {
-                var close = (index + 1);
-
-                while ((close < text.Length) && (text[close] != '"') && (text[close] != '\n')) {
-                    close += ((text[close] == '\\')
-                        ? 2
-                        : 1
-                    );
-                }
-
-                close = Math.Min(
-                    val1: close,
-                    val2: (text.Length - 1)
-                );
-                // The `$` of an interpolated string belongs to the literal, not to the code before it.
-                var open = (((index > 0) && (text[(index - 1)] == '$'))
-                    ? (index - 1)
-                    : index
-                );
-
-                Flush(end: open);
-                into.Append(value: text[open..(close + 1)]);
-                index = close;
-                code = (close + 1);
-            } else if ((character == '/') && ((index + 1) < text.Length) && (text[(index + 1)] == '/')) {
-                var end = text.IndexOf(
-                    startIndex: index,
-                    value: '\n'
-                );
-
-                end = ((end < 0)
-                    ? text.Length
-                    : end
-                );
+            if (end <= index) {
+                continue;
+            }
+            // A backquoted name is code: a reserved spelling inside one is respelled with the rest.
+            if (text[index] != '`') {
                 Flush(end: index);
                 into.Append(value: text[index..end]);
-                index = (end - 1);
                 code = end;
             }
+            index = (end - 1);
         }
 
         Flush(end: text.Length);

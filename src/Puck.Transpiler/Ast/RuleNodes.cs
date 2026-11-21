@@ -9,7 +9,7 @@ namespace Puck.Transpiler.Ast;
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record RuleScopeNode(
+public sealed partial record RuleScopeNode(
     string Name,
     WhenStatementNode? HeaderWhen,
     IReadOnlyList<StatementNode> Statements,
@@ -24,7 +24,7 @@ public sealed record RuleScopeNode(
     Column
 );
 /// <summary><c>stabilize name [maxPasses(N)] [until gate] { ... }</c>. A group of rules evaluated until convergence or pass ceiling.</summary>
-public sealed record StabilizeGroupNode(
+public sealed partial record StabilizeGroupNode(
     string Name,
     ExpressionNode? MaxPasses,
     PredicateNode? UntilCondition,
@@ -47,7 +47,7 @@ public enum WorkflowStepKind {
 }
 /// <summary>A step inside a <c>workflow</c> block. <see cref="Skip"/> is the authored <c>skip</c> word after the
 /// step's name: the staged cursor advances past the step's own refusal instead of stalling on it.</summary>
-public sealed record WorkflowStepNode(
+public sealed partial record WorkflowStepNode(
     string Name,
     WorkflowStepKind Kind,
     PredicateNode? UntilCondition,
@@ -66,7 +66,7 @@ public sealed record WorkflowStepNode(
     Column
 );
 /// <summary><c>workflow name { step ... repeatStep ... forEachStep ... }</c>. A declarative staged workflow.</summary>
-public sealed record WorkflowNode(
+public sealed partial record WorkflowNode(
     string Name,
     IReadOnlyList<WorkflowStepNode> Steps,
     int Offset = 0,
@@ -95,7 +95,7 @@ public sealed record WorkflowNode(
 /// lowering scope can resolve it, so <see cref="Name"/> stays empty until then.</param>
 /// <param name="PoolForEach">The pool named by a whole-rule <c>for each</c> header, or none.</param>
 /// <param name="PoolBinding">The lexical instance binding named by a whole-rule <c>for each</c> header, or none.</param>
-public sealed record RuleBlockNode(
+public sealed partial record RuleBlockNode(
     string Name,
     IReadOnlyList<StatementNode> Statements,
     int Offset = 0,
@@ -124,7 +124,7 @@ public sealed record RuleBlockNode(
 /// <param name="Column">The 1-based column number in source text.</param>
 /// <param name="NameExpression">An interpolated name, when the statement wrote one instead of an identifier; only a
 /// lowering scope can resolve it, so <see cref="Name"/> stays empty until then.</param>
-public sealed record LocalStatementNode(
+public sealed partial record LocalStatementNode(
     string Name,
     OperandExpressionNode Expression,
     int Offset = 0,
@@ -142,7 +142,7 @@ public sealed record LocalStatementNode(
 /// (<c>periodSeconds</c>, required; <c>mode</c>/<c>scoreKind</c>/<c>commitmentSeconds</c>/<c>incumbentBonus</c>/
 /// <c>seed</c>, elided by the lowering stage on their C# default), at most one <see cref="InterruptStatementNode"/>,
 /// at most one <see cref="OnNoChoiceBlockNode"/>, and one or more <see cref="OptionBlockNode"/> entries.</summary>
-public sealed record DecisionBlockNode(
+public sealed partial record DecisionBlockNode(
     IReadOnlyList<StatementNode> Statements,
     int Offset = 0,
     int Length = 0,
@@ -163,7 +163,7 @@ public sealed record DecisionBlockNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record OptionBlockNode(
+public sealed partial record OptionBlockNode(
     string Name,
     IReadOnlyList<StatementNode> Statements,
     int Offset = 0,
@@ -182,7 +182,7 @@ public sealed record OptionBlockNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record ScoreStatementNode(
+public sealed partial record ScoreStatementNode(
     OperandExpressionNode Expression,
     int Offset = 0,
     int Length = 0,
@@ -200,7 +200,7 @@ public sealed record ScoreStatementNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record InterruptStatementNode(
+public sealed partial record InterruptStatementNode(
     PredicateNode Predicate,
     int Offset = 0,
     int Length = 0,
@@ -218,7 +218,7 @@ public sealed record InterruptStatementNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record OnNoChoiceBlockNode(
+public sealed partial record OnNoChoiceBlockNode(
     IReadOnlyList<StatementNode> Effects,
     int Offset = 0,
     int Length = 0,
@@ -237,7 +237,7 @@ public sealed record OnNoChoiceBlockNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record FlagStatementNode(
+public sealed partial record FlagStatementNode(
     string Name,
     int Offset = 0,
     int Length = 0,

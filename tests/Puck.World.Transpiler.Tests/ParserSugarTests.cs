@@ -460,7 +460,7 @@ public class ParserSugarTests {
 
         Assert.Equal(
             "queue",
-            push.RowName
+            push.Target.Name
         );
         Assert.IsType<RhsOperandNode>(@object: push.Rhs);
 
@@ -699,18 +699,18 @@ public class ParserSugarTests {
 
         var draw = Assert.IsType<DrawStatementNode>(@object: rule.Statements[0]);
 
-        Assert.Equal("deck", draw.From);
-        Assert.Equal("hand", draw.To);
+        Assert.Equal("deck", draw.From.Name);
+        Assert.Equal("hand", draw.To.Name);
 
         var deal = Assert.IsType<DealStatementNode>(@object: rule.Statements[1]);
 
-        Assert.Equal(5, deal.Count);
-        Assert.Equal("deck", deal.From);
-        Assert.Equal("hand", deal.To);
+        Assert.Equal(5L, Assert.IsType<LiteralExpressionNode>(@object: deal.Count).Value);
+        Assert.Equal("deck", deal.From.Name);
+        Assert.Equal("hand", deal.To.Name);
 
         var shuffle = Assert.IsType<ShuffleStatementNode>(@object: rule.Statements[2]);
 
-        Assert.Equal("deck", shuffle.Row);
-        Assert.Equal("rng", shuffle.Draw);
+        Assert.Equal("deck", shuffle.Row.Name);
+        Assert.Equal("rng", shuffle.Draw.Name);
     }
 }

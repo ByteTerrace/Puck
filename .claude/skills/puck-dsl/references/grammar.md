@@ -53,9 +53,11 @@ grammar, expression spelling, pattern/cell-set/state spellings):
   (`template: "…"`, `when ["Grounded"]`, `local: 0.5`): the document reader's
   keyword readers (`let`, `for`, `use`, `import`, `export`, `module`,
   `template`, `rule`, `request`, `watchMemory`) decline before `:`, `{` or
-  `[`. Only a construct body (rule, scope, decision, option, test, workflow,
-  effect) reserves its keywords, `PuckPrinter.PropertyKeywords`, which a
-  property there prints quoted (`PrintPropertyName(construct: true)`).
+  `[`. A construct body (rule, scope, decision, option, effect) opens a
+  statement with a keyword only from `PuckParser.ConstructBodyKeywords`, and
+  reads `name:` as a member whatever the name spells; a member written as a
+  block there (`name {`, `name [`) spelling one prints quoted
+  (`PrintPropertyName(construct: true)`).
 - Every printer prints a name bare exactly when the bare spelling reads back as
   that name and the position doesn't reserve it. `IdentifierSpellingLawTests`
   (State) and `IdentifierAgreementLawTests` (World.Transpiler) gate it, over

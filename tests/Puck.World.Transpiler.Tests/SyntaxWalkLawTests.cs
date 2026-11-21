@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary>The walk laws: <see cref="SyntaxWalk.Children"/> names every syntax-node child a node declares, and
+/// <summary>The walk laws: <see cref="SyntaxNode.Children"/> names every syntax-node child a node declares, and
 /// <see cref="SyntaxWalk.PathAt"/> descends through every construct a position can stand in, so an editor service
 /// that reads the path answers for a name wherever it is written.</summary>
 public class SyntaxWalkLawTests {
@@ -36,7 +36,7 @@ public class SyntaxWalkLawTests {
 
             ++carriers;
 
-            var children = SyntaxWalk.Children(node: root);
+            var children = root.Children();
 
             foreach (var child in planted) {
                 if (!children.Any(predicate: seen => ReferenceEquals(objA: seen, objB: child))) {

@@ -1,0 +1,11 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+import "outer"
+
+state {
+  world {
+    slot sum = z
+    slot leaf = x
+  }
+}
