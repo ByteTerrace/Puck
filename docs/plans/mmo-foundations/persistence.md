@@ -476,8 +476,7 @@ Lane E owns the code; these are the facts this lane read.
   crossings within one process and deferred, not closed, across federation.
 - **No authored reset epoch exists.** A search of `src/` for reset-epoch names
   finds only session epochs restored with grants
-  (`WorldPersistence.RestoreCheckpointCore`'s `resetSessionEpochs`,
-  `src/Puck.World.Server/WorldPersistence.Checkpoint.cs:800`) [opened].
+  (`WorldPersistence.RestoreCheckpointCore`'s `resetSessionEpochs`) [opened].
 
 ### Round question 2: player state across author edits
 
