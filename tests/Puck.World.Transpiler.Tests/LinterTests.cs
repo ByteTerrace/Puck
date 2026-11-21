@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Validation;
@@ -31,7 +32,7 @@ public class LinterTests {
         var use = new PuckLibraryUse();
 
         foreach (var path in (ReadOnlySpan<string>)[library, world]) {
-            _ = WorldSourceDiagnostics.Diagnose(libraries: use, source: File.ReadAllText(path: path), sourcePath: path);
+            _ = WorldSourceDiagnostics.Diagnose(cancellationToken: TestContext.Current.CancellationToken, libraries: use, source: File.ReadAllText(path: path), sourcePath: path);
         }
 
         Assert.Equal(

@@ -51,8 +51,8 @@ public sealed class WorldCompositionMergeLawTests {
     [Fact]
     public void An_effect_list_is_an_ordered_program_the_layer_replaces_whole() {
         // Two effects writing cell 0 of two rows share their `key`; an effect's key names a cell, never the row.
-        const string effects = """[{"$type":"setState","state":"boneHolder","key":"0","value":-1},{"$type":"setState","state":"reporter","key":"0","value":-1}]""";
-        var basis = JsonNode.Parse($$"""{"rules":[{"name":"claim-expire","effects":{{effects}}}]}""")!.AsObject();
+        const string Effects = """[{"$type":"setState","state":"boneHolder","key":"0","value":-1},{"$type":"setState","state":"reporter","key":"0","value":-1}]""";
+        var basis = JsonNode.Parse($$"""{"rules":[{"name":"claim-expire","effects":{{Effects}}}]}""")!.AsObject();
         var overlay = JsonNode.Parse("""{"rules":[{"name":"claim-expire","effects":[{"$type":"setState","state":"reporter","key":"0","value":2},{"$type":"setState","state":"reporter","key":"0","value":3}]}]}""")!.AsObject();
 
         Assert.True(WorldDocumentBasis.TryMerge(basis, JsonNode.Parse(basis.ToJsonString())!.AsObject(), out var restated, out var reason), reason);

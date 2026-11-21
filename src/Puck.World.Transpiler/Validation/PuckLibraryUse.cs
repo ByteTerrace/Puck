@@ -1,3 +1,4 @@
+using Puck.Abstractions;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 
@@ -8,10 +9,9 @@ namespace Puck.World.Transpiler.Validation;
 /// unused inside the library, and a directory lint reports the ones no source of the directory reads
 /// (<see cref="PuckDiagnosticCodes.LintUnusedLet"/>).</summary>
 public sealed class PuckLibraryUse {
-    private readonly Dictionary<(string Path, string Name), (SourceSpan Span, bool Template)> m_declared = [];
-    private readonly HashSet<(string Path, string Name)> m_read = [];
-
-    private static string Key(string path) => Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: path));
+    // Keyed by the library's path key (PuckPaths.Key), so two spellings of one file are one library.
+    private readonly Dictionary<(string Library, string Name), (string Path, SourceSpan Span, bool Template)> m_declared = [];
+    private readonly HashSet<(string Library, string Name)> m_read = [];
 
     /// <summary>Adds one source: a library's own declarations, and every library declaration the source reads, its own
     /// declarations reading one another included.</summary>
@@ -24,28 +24,27 @@ public sealed class PuckLibraryUse {
         ArgumentNullException.ThrowIfNull(argument: document);
         ArgumentNullException.ThrowIfNull(argument: sourcePath);
 
-        var own = Key(path: sourcePath);
+        var own = PuckPaths.Key(path: sourcePath);
         var read = PuckLinter.ReferencedNames(document: document);
 
         foreach (var statement in document.Statements) {
-            var (name, template) = statement switch {
-                LetNode let => (let.Name, false),
-                TemplateNode declared => (declared.Name, true),
-                _ => ((string?)null, false),
+            var (name, template, definedIn) = statement switch {
+                LetNode let => (let.Name, false, let.DefinitionPath),
+                TemplateNode declared => (declared.Name, true, declared.DefinitionPath),
+                _ => ((string?)null, false, null),
             };
 
             if (name is null) {
                 continue;
             }
-            var path = ((statement is LetNode { DefinitionPath: { } letPath }) ? Key(path: letPath)
-                : ((statement is TemplateNode { DefinitionPath: { } templatePath }) ? Key(path: templatePath) : own));
+            var key = ((definedIn is null) ? own : PuckPaths.Key(path: definedIn));
 
             // An aliased import names a declaration `alias.name`; the library declares the last segment.
             if (read.Contains(item: name)) {
-                _ = m_read.Add(item: (path, QualifiedName.Parse(text: name).Last));
+                _ = m_read.Add(item: (key, QualifiedName.Parse(text: name).Last));
             }
-            if (library && (path == own)) {
-                _ = m_declared.TryAdd(key: (path, name), value: (statement.Span, template));
+            if (library && (definedIn is null)) {
+                _ = m_declared.TryAdd(key: (key, name), value: (PuckPaths.Normalize(path: sourcePath), statement.Span, template));
             }
         }
     }
@@ -55,7 +54,7 @@ public sealed class PuckLibraryUse {
     public IEnumerable<Diagnostic> Unused() =>
         m_declared
             .Where(predicate: entry => !m_read.Contains(item: entry.Key))
-            .OrderBy(keySelector: static entry => entry.Key.Path, comparer: StringComparer.Ordinal)
+            .OrderBy(keySelector: static entry => entry.Key.Library, comparer: StringComparer.Ordinal)
             .ThenBy(keySelector: static entry => entry.Value.Span.Offset)
             .Select(selector: static entry => new Diagnostic(
                 Code: PuckDiagnosticCodes.LintUnusedLet,
@@ -64,5 +63,5 @@ public sealed class PuckLibraryUse {
                     : $"Constant '{entry.Key.Name}' is declared by this library but no source linted with it reads it"),
                 Severity: DiagnosticSeverity.Information,
                 Span: entry.Value.Span
-            ) { SourcePath = entry.Key.Path });
+            ) { SourcePath = entry.Value.Path });
 }

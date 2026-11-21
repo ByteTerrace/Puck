@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
+using Puck.Testing;
 using Puck.Transpiler.Diagnostics;
 using Xunit;
 
@@ -317,7 +318,7 @@ public class TestLoweringLawTests {
         _ = files.WriteText(name: "beyond.puck", text: $"schema: \"puck.world.definition.v1\"\ndocumentId: \"beyond\"\n\n{Probe}");
         var home = files.WriteText(name: "home.puck", text: $"schema: \"puck.world.definition.v1\"\ndocumentId: \"home\"\n\nreferences [\n  {{ document: \"away\", name: \"away\" }}\n]\n\n{Probe}\ntest \"t\" {{\n  expect {{\n    beyond {{\n      probe[0] == 1\n    }}\n    nowhere {{\n      probe[0] == 1\n    }}\n  }}\n}}\n");
         var compilation = WorldCompileSession.Shared.CompileFile(cancellationToken: TestContext.Current.CancellationToken, path: home);
-        var refusal = Assert.Single(collection: compilation.Diagnostics, filter: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
+        var refusal = Assert.Single(collection: compilation.Diagnostics, predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
         Assert.Equal(expected: PuckDiagnosticCodes.TestStepInadmissible, actual: refusal.Code);
         Assert.Contains(expectedSubstring: "'nowhere'", actualString: refusal.Message, comparisonType: StringComparison.Ordinal);
