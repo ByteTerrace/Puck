@@ -22,8 +22,15 @@ public readonly record struct WorldStreamSpan(ulong Stream, long Generation, lon
 /// <remarks>Records of one stream arrive from one thread at a time, in the order that stream sends them; the gate makes
 /// each decision whole against a <see cref="Close"/> raised from another thread. Every stream that closed is
 /// remembered for the reader's life: a reader is bound once per admission, so the set grows by one per admitted
-/// stream.</remarks>
-public sealed class WorldStreamIngress {
+/// stream.
+/// <para>Invariant: content a reader held under one delivery span never carries a later one. Every move of the span (a
+/// cut, a generation step, a first bind, a close) ends the span the reader held, runs the reader's withdrawal, and only
+/// then opens the next span, all inside the gate, so a presentation that reads <see cref="DeliverySpan"/> between the
+/// two reads an ended span and shows nothing rather than pairing the old content with the new span.</para></remarks>
+/// <param name="withdraw">Drops everything the reader holds of the span that just ended, or <see langword="null"/> for
+/// a reader whose caller drops it itself on a <see langword="true"/> answer. Runs on the delivering thread inside the
+/// ingress, after the span ended and before the next one opens.</param>
+public sealed class WorldStreamIngress(Action? withdraw = null) {
     private readonly Lock m_gate = new();
     private readonly DeliverySpanSource m_deliverySpans = new();
     private WorldStreamSpan m_span;
@@ -33,7 +40,9 @@ public sealed class WorldStreamIngress {
 
     /// <summary>Gets the stream the reader is bound to and the span it holds.</summary>
     public WorldStreamSpan Span { get { lock (m_gate) { return m_span; } } }
-    /// <summary>Gets the current delivery span of this ingress, ended on every accepted cut or close.</summary>
+    /// <summary>Gets the delivery span of what the reader holds now: ended from the moment a cut, a generation step, a
+    /// first bind or a close is accepted until the reader's withdrawal has run, and ended for good once the span
+    /// closes.</summary>
     public DeliverySpan DeliverySpan => m_deliverySpans.Span;
     /// <summary>Gets the number of records dropped.</summary>
     public long Refusals => Interlocked.Read(location: ref m_refusals);
@@ -62,7 +71,7 @@ public sealed class WorldStreamIngress {
             if (terminal) {
                 CloseLocked();
             } else if (!stepped) {
-                _ = m_deliverySpans.Advance();
+                MoveSpan(withdraws: true);
             }
             return true;
         }
@@ -84,6 +93,15 @@ public sealed class WorldStreamIngress {
         _ = m_closed.Add(item: m_span.Stream);
         m_span = m_span with { Closed = true };
         m_deliverySpans.Close();
+        withdraw?.Invoke();
+    }
+    // Ends the span the reader held, drops what it held of it when it may hold anything, and opens the next span.
+    private void MoveSpan(bool withdraws) {
+        m_deliverySpans.Close();
+        if (withdraws) {
+            withdraw?.Invoke();
+        }
+        _ = m_deliverySpans.Advance();
     }
     private bool Take(in WorldStreamStamp stream, out bool stepped) {
         if (!stream.IsSpanned) {
@@ -98,8 +116,11 @@ public sealed class WorldStreamIngress {
                 Refuse();
                 return false;
             }
+            // A reader that closed dropped what it held then; one never bound may hold unspanned records.
+            var held = !m_span.Closed;
+
             m_span = new WorldStreamSpan(Closed: false, Generation: stream.Generation, Ordinal: stream.Ordinal, Stream: stream.Stream);
-            _ = m_deliverySpans.Advance();
+            MoveSpan(withdraws: held);
             stepped = true;
             return true;
         }
@@ -111,7 +132,7 @@ public sealed class WorldStreamIngress {
         stepped = (stream.Generation > m_span.Generation);
         m_span = m_span with { Generation = stream.Generation, Ordinal = stream.Ordinal };
         if (stepped) {
-            _ = m_deliverySpans.Advance();
+            MoveSpan(withdraws: true);
         }
         return true;
     }

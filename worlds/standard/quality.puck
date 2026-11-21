@@ -13,22 +13,25 @@
 // worked out on the machines that need them. `standard.puck` imports this table, so every world importing the standard
 // answers each tier, and a world without the standard imports it by name.
 render {
-  // The irradiance volume's budget, the same at every tier: each second relights at most `relightPerSecond` probes from
-  // their cached hits (a light or sky change) and traces at most `tracePerSecond` probes' hits (a scene change or a
-  // window move), whatever the frame rate, and a relight cycle whose oldest lighting is older than `age` seconds prints
-  // `[sdf.mesh-gi] behind`. The rates are 2,048 probes a frame at 60 Hz. The GPU time they cost comes from the one
-  // background share, which follows what the frame leaves free, so a higher rate lowers the lighting's age only while
-  // the frame has time to spare. The standard's day turns the sun a quarter of a degree a second, so an eight-second age
-  // lags it two degrees; a world with a faster day or more probes in view raises `relightPerSecond` and reads the
-  // lighting's age move in `world.budget`.
+  // The irradiance volume's budget: each presented frame relights at most `relightPerFrame` probes from their cached hits
+  // (a light or sky change) and traces at most `tracePerFrame` probes' hits (a scene change or a window move), and a
+  // relight cycle whose oldest lighting is older than `age` seconds prints `[sdf.mesh-gi] behind`. The grant is a count a
+  // frame, never a rate of wall time, so a frame that runs long owes no more probe work than a short one: a device that
+  // holds fewer frames a second does less lighting work a second, which is the direction that lets it catch up. This is
+  // the world's own budget, what a tier or device row that authors none runs; each quality table below carries its own
+  // `indirectBudget`, which replaces it, because what a frame may spend on lighting is the device's cost. The GPU time the
+  // work costs comes from the one background share, which follows what the frame leaves free, so a higher count lowers
+  // the lighting's age only while the frame has time to spare. The standard's day turns the sun a quarter of a degree a
+  // second, so an eight-second age lags it two degrees; a world with a faster day or more probes in view raises
+  // `relightPerFrame` and reads the lighting's age move in `world.budget`.
   indirect {
     lightingGrid {
       directionDegrees: 0.5
       radiance: 0.015625
     }
     budget {
-      relightPerSecond: 122880
-      tracePerSecond: 122880
+      relightPerFrame: 2048
+      tracePerFrame: 2048
       age: 8
     }
   }
@@ -48,7 +51,9 @@ render {
   // side (a texel about 2.3 m across the 1200 m reach) and holds through a fifth of a degree of the sun's turn, so the
   // standard's day redraws it a little over once a second, each step about one of its texels, and spreads each redraw
   // over four frames, so no frame pays a whole one; its far cascade refreshes 15 times a second, the medium tier's rate,
-  // so three of every four 60 Hz frames stand where the high tier's stand every other frame. Its bloom scatters from the
+  // so three of every four 60 Hz frames stand where the high tier's stand every other frame. It relights and traces half
+  // the probes a frame the high tier does, over the medium volume's two thirds of the probes, so a frame it fills
+  // takes less of the one background share for lighting and the lighting's age grows before the frame does. Its bloom scatters from the
   // low pyramid and its sky field shades at half the grid, each a soft term whose full grid the 2060 cannot afford. It
   // keeps the second shadow slot: that cascade draws only while a second shadowed light (a hearth, a lantern) is in reach,
   // and dropping it would drop that light's shadow. Every nested view takes the 2060's render scale as its ceiling, and
@@ -67,6 +72,7 @@ render {
         viewsRate { maxRate: 2, tileSize: 4 }
         distantShadows { reach: 1200, texels: 1024, turnDegrees: 0.2, frames: 4 }
         farShadows { hertz: 15, turnDegrees: 0.1 }
+        indirectBudget { relightPerFrame: 1024, tracePerFrame: 1024, age: 8 }
         bloom: Low
         indirect: Medium
         sky: high
@@ -107,6 +113,7 @@ render {
     { share: 0.5, indirectLevels: 2 }
   ]
   low {
+    indirectBudget { relightPerFrame: 1024, tracePerFrame: 1024, age: 8 }
     bloom: Off
     indirect: Medium
     sky: low
@@ -145,6 +152,7 @@ render {
       hertz: 15
       turnDegrees: 0.1
     }
+    indirectBudget { relightPerFrame: 1536, tracePerFrame: 1536, age: 8 }
     bloom: Low
     indirect: Medium
     sky: medium
@@ -175,6 +183,7 @@ render {
       hertz: 30
       turnDegrees: 0.05
     }
+    indirectBudget { relightPerFrame: 2048, tracePerFrame: 2048, age: 8 }
     bloom: High
     indirect: High
     sky: high

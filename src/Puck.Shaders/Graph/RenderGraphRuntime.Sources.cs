@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
 
@@ -353,7 +352,6 @@ public sealed partial class RenderGraphRuntime {
             return;
         }
 
-        m_boundLabels[index] = DeliveryLabel.ForSource(source: DeliveryPublicSource.Upload);
         m_taintedReads[index] = null;
         RememberOutput(
             frame: frame,

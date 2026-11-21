@@ -14,16 +14,14 @@
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
-    if (any(id.xy >= passGroup.extent)) {
-        return;
+    if (all(id.xy < passGroup.extent)) {
+        uint texel = id.y * (uint)SDF_SKY_ENVIRONMENT_SIZE + id.x;
+        float3 reflection;
+        float3 color = sdfSkyEnvironmentColor(sdfSkyEnvironmentDirection(id.xy), reflection);
+        sdfSkyEnvironmentRW[texel] = sdfSkyEnvironmentPack(color);
+        sdfSkyEnvironmentRW[texel + (uint)(SDF_SKY_ENVIRONMENT_SIZE * SDF_SKY_ENVIRONMENT_SIZE)] = sdfSkyEnvironmentPack(reflection);
+        sdfWorkTexels = 2u;
     }
-
-    uint texel = id.y * (uint)SDF_SKY_ENVIRONMENT_SIZE + id.x;
-    float3 reflection;
-    float3 color = sdfSkyEnvironmentColor(sdfSkyEnvironmentDirection(id.xy), reflection);
-    sdfSkyEnvironmentRW[texel] = sdfSkyEnvironmentPack(color);
-    sdfSkyEnvironmentRW[texel + (uint)(SDF_SKY_ENVIRONMENT_SIZE * SDF_SKY_ENVIRONMENT_SIZE)] = sdfSkyEnvironmentPack(reflection);
-    sdfWorkTexels = 2u;
 
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

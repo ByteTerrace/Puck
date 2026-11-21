@@ -204,13 +204,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         rig.Rebuild();
         rig.Render(time: 0f);
 
-        // The rebuilt engine's first frame stages the whole dynamic table as one run, into one ring slot's buffer.
-        Assert.Equal(
-            expected: (((40L * DynamicTransformBytes) + HeaderBytes) + RunEntryBytes),
-            actual: rig.Gpu.HostWrites()
-                .Where(predicate: write => (write.SizeBytes == ((ulong)(StagingReserveBytes + (40 * DynamicTransformBytes)))))
-                .Sum(selector: write => write.Written)
-        );
+        // The rebuilt engine's new tables start cleared on the GPU and stage only the words that differ from zero, and the
+        // device reads back every transform exact.
         rig.AssertDeviceTransforms();
     }
     [Fact]
@@ -269,12 +264,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         node.OnDeviceLost();
         gpu.ResetTallies();
         node.ProduceFirstFrame(context: in context);
-        Assert.Equal(
-            expected: (((((long)Slots) * DynamicTransformBytes) + HeaderBytes) + RunEntryBytes),
-            actual: gpu.HostWrites()
-                .Where(predicate: write => (write.SizeBytes == ((ulong)(StagingReserveBytes + (Slots * DynamicTransformBytes)))))
-                .Sum(selector: write => write.Written)
-        );
+        // The rebuilt tables start cleared on the GPU and owe what differs from zero; the device holds every transform.
+        Assert.NotEqual(expected: 0L, actual: gpu.HostBytes());
         Assert.Equal(
             expected: Packed(transforms: transforms),
             actual: gpu.DeviceLocal(part: "dynamic-transforms", sizeBytes: ((ulong)(Slots * DynamicTransformBytes)))

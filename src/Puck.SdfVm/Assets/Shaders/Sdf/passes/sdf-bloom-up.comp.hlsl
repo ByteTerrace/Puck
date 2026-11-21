@@ -4,13 +4,16 @@
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     uint2 extent, sourceExtent;
+    uint texels = 0u;
     bloomOutput.GetDimensions(extent.x, extent.y);
-    if (any(id.xy >= extent)) { return; }
-    bloomSource.GetDimensions(sourceExtent.x, sourceExtent.y);
-    float3 color = bloomTent(bloomSource, bloomSampler,
-        bloomLinearAxis(id.x, sourceExtent.x, extent.x), bloomLinearAxis(id.y, sourceExtent.y, extent.y),
-        sourceExtent, passGroup.bloomRadius);
-    float3 fine = bloomFine.Load(int3(id.xy, 0)).rgb;
-    bloomOutput[id.xy] = float4(lerp(fine, color, passGroup.bloomMix), passGroup.bloomScatter);
-    puckCountWork(0u, 1u);
+    if (all(id.xy < extent)) {
+        bloomSource.GetDimensions(sourceExtent.x, sourceExtent.y);
+        float3 color = bloomTent(bloomSource, bloomSampler,
+            bloomLinearAxis(id.x, sourceExtent.x, extent.x), bloomLinearAxis(id.y, sourceExtent.y, extent.y),
+            sourceExtent, passGroup.bloomRadius);
+        float3 fine = bloomFine.Load(int3(id.xy, 0)).rgb;
+        bloomOutput[id.xy] = float4(lerp(fine, color, passGroup.bloomMix), passGroup.bloomScatter);
+        texels = 1u;
+    }
+    puckCountWork(0u, texels);
 }

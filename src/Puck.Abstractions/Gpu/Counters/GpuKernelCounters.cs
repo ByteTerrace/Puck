@@ -38,6 +38,9 @@ public sealed partial class GpuKernelCounters : IGpuWorkReadback, IDisposable {
     /// <summary>The 32-bit words one row's drawn counts take past every row: the draws a pass's kernels issued as indirect
     /// draw commands, then those commands' vertices, each a 64-bit count.</summary>
     public const int DrawnWords = (2 * CountWords);
+    /// <summary>The pass-row sentinel written when kernel work counting is disabled for a pass (<c>0xFFFFFFFFu</c> in HLSL):
+    /// every generated counting function branches out uniformly without wave, groupshared or atomic work.</summary>
+    public const uint DisabledRow = uint.MaxValue;
 
     private readonly IGpuBuffer[] m_counters;
     private readonly IGpuReadbackBuffer[] m_readbacks;
@@ -156,6 +159,15 @@ public sealed partial class GpuKernelCounters : IGpuWorkReadback, IDisposable {
             Row: ((uint)row)
         );
     }
+    /// <summary>Gets a disabled counter row for a frame slot: binds the slot's valid counter buffer while signaling every
+    /// kernel to skip counting (<see cref="DisabledRow"/>).</summary>
+    /// <param name="slot">The frame slot.</param>
+    /// <returns>The slot's counter buffer paired with <see cref="DisabledRow"/>.</returns>
+    /// <exception cref="IndexOutOfRangeException"><paramref name="slot"/> is not a frame slot.</exception>
+    public GpuKernelCounterRow DisabledOf(int slot) => new(
+        Buffer: m_counters[slot],
+        Row: DisabledRow
+    );
 
     /// <summary>Gets the stages that add to a counter buffer: a compute pass's kernel and a graphics pass's fragment
     /// stage, which the barriers around the passes order against the clear and the copy.</summary>

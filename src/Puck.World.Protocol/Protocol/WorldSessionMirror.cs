@@ -349,12 +349,15 @@ public sealed class WorldSessionMirror : IClientSink {
     private int m_arrivalCount;
 
     private readonly bool m_unread;
-    private readonly WorldStreamIngress m_ingress = new();
+    // Withdraws the mirror itself on every span move, between ending the old span and opening the next.
+    private readonly WorldStreamIngress m_ingress;
 
     /// <summary>Gets the stream this mirror is bound to and the span it holds: what its ingress accepts records
     /// from.</summary>
     public WorldStreamSpan Span => m_ingress.Span;
-    /// <summary>Gets the mirror's current delivery span, ended whenever its ingress cuts or closes.</summary>
+    /// <summary>Gets the delivery span of what the mirror holds now (<see cref="WorldStreamIngress.DeliverySpan"/>):
+    /// ended from an accepted cut, generation step, first bind or close until the mirror has dropped what it held, and
+    /// after a close.</summary>
     public Puck.Abstractions.Presentation.DeliverySpan DeliverySpan => m_ingress.DeliverySpan;
     /// <summary>Gets the number of records the mirror's ingress dropped: a record of another stream, of an earlier
     /// generation, or not ahead of the last record it took.</summary>
@@ -372,12 +375,13 @@ public sealed class WorldSessionMirror : IClientSink {
         ArgumentNullException.ThrowIfNull(argument: placeholder);
 
         m_unread = unread;
+        m_stateView = new WorldDocumentStateView(clock: () => (Tick, EngineTick), delivered: placeholder, gate: m_followGate);
+        m_ingress = new WorldStreamIngress(withdraw: Withdraw);
         m_document = new WorldDeliveredDocument(
-            Definition: placeholder,
+            Definition: m_stateView.Definition,
             Lifetime: 0,
             Version: default
         );
-        m_stateView = new WorldDocumentStateView(definition: () => Definition);
         m_synchronizedStateView = new SynchronizedStateView(owner: this);
         m_kitColliders = CompileColliders(definition: placeholder);
         m_kitBodyContacts = CompileBodyContacts(definition: placeholder);
@@ -626,24 +630,28 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 CurrentPosition(int index) => m_poses.CurrentPosition(index: index);
 
-    // Publishes a delivered definition and its version as one pair; the same pair delivered again is kept, so a
-    // repeated delivery allocates nothing.
-    private void Publish(WorldDefinition definition, WorldDocumentVersion version) {
+    // Adopts a delivered definition through the state view, the mirror's one door for documents, and publishes it with
+    // its version as one pair; the same pair delivered again is kept, so a repeated delivery allocates nothing. Returns
+    // the published definition.
+    private WorldDefinition Publish(WorldDefinition definition, WorldDocumentVersion version) {
         lock (m_followGate) {
+            var adopted = m_stateView.Adopt(delivered: definition);
             var current = Volatile.Read(location: ref m_document);
 
-            if (ReferenceEquals(objA: current.Definition, objB: definition) && (current.Version == version)) {
-                return;
+            if (ReferenceEquals(objA: current.Definition, objB: adopted) && (current.Version == version)) {
+                return adopted;
             }
 
             Volatile.Write(
                 location: ref m_document,
                 value: new WorldDeliveredDocument(
-                    Definition: definition,
+                    Definition: adopted,
                     Lifetime: (current.Lifetime + ((current.Version.Activation != version.Activation) ? 1 : 0)),
                     Version: version
                 )
             );
+
+            return adopted;
         }
     }
 
@@ -672,7 +680,7 @@ public sealed class WorldSessionMirror : IClientSink {
         lock (m_snapshotWriteGate) {
             lock (m_followGate) {
                 if (!rows.TryApply(Document.Definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the mirror's creation roster."); }
-                Publish(changed, version);
+                _ = Publish(changed, version);
                 _ = Interlocked.Increment(ref m_definitionRevision);
             }
         }
@@ -686,19 +694,20 @@ public sealed class WorldSessionMirror : IClientSink {
             m_stateTime = null;
         }
 
-        Volatile.Write(
-            location: ref m_kitColliders,
-            value: CompileColliders(definition: definition)
-        );
-        Volatile.Write(
-            location: ref m_kitBodyContacts,
-            value: CompileBodyContacts(definition: definition)
-        );
         lock (m_snapshotWriteGate) {
             lock (m_followGate) {
-                Publish(
+                var adopted = Publish(
                     definition: definition,
                     version: version
+                );
+
+                Volatile.Write(
+                    location: ref m_kitColliders,
+                    value: CompileColliders(definition: adopted)
+                );
+                Volatile.Write(
+                    location: ref m_kitBodyContacts,
+                    value: CompileBodyContacts(definition: adopted)
                 );
                 _ = Interlocked.Increment(location: ref m_definitionRevision);
                 m_observedSnapshotInstall = true;
@@ -719,19 +728,16 @@ public sealed class WorldSessionMirror : IClientSink {
     /// showable, and the whole document and primer the stream owes the new generation fill it again from empty (its
     /// first snapshot seeds both pose endpoints of every body). A terminal record also closes the span, after which only
     /// a stream that never closed on this mirror binds it. A record of any other stream changes nothing.</remarks>
-    public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
-        if (m_ingress.Cut(stream: in stream, terminal: terminal)) { Withdraw(); }
-    }
+    public void DeliverCut(in WorldStreamStamp stream, bool terminal) => _ = m_ingress.Cut(stream: in stream, terminal: terminal);
     /// <inheritdoc/>
     /// <remarks>The mirror drops what it held exactly as for a terminal record, and takes records again only from a
     /// stream that never closed on it.</remarks>
-    public void CloseSpan(ulong stream) {
-        if (m_ingress.Close(stream: stream)) { Withdraw(); }
-    }
+    public void CloseSpan(ulong stream) => _ = m_ingress.Close(stream: stream);
     // Drops everything an ended span delivered: the undisclosed document in place of the delivered one, an empty table
     // in place of its bodies, and no route seed or queued cue, applied through the ordinary delivery paths so every
     // reader follows it. The undisclosed document, never the construction placeholder, which can be a delivered
-    // document (a route's, or the authority's last).
+    // document (a route's, or the authority's last). The ingress runs it on every span move, after the old span ended
+    // and before the next opens (WorldStreamIngress).
     private void Withdraw() {
         lock (m_snapshotWriteGate) { m_seededRouteEntity = null; }
         CueFrames.Clear();
@@ -937,16 +943,17 @@ public sealed class WorldSessionMirror : IClientSink {
         // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
         // Publish the definition and its stamped clock together with respect to followers, including event readers.
         lock (m_followGate) {
-            // A delivery that moved placement rows is a scene change to this mirror's readers, which watch the definition
-            // revision alone.
-            if (WorldPlacementResponse.ComparePlacements(after: definition, before: Volatile.Read(location: ref m_document).Definition, solid: out _) != WorldPlacementChange.None) {
-                _ = Interlocked.Increment(location: ref m_definitionRevision);
-            }
-
-            Publish(
+            var previous = Volatile.Read(location: ref m_document).Definition;
+            var adopted = Publish(
                 definition: definition,
                 version: version
             );
+
+            // A delivery that moved placement rows is a scene change to this mirror's readers, which watch the definition
+            // revision alone.
+            if (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, solid: out _) != WorldPlacementChange.None) {
+                _ = Interlocked.Increment(location: ref m_definitionRevision);
+            }
 
             lock (m_stampGate) {
                 // Anchor and observation deltas arrive at unsampled ticks too. Their values stand at the delivery's

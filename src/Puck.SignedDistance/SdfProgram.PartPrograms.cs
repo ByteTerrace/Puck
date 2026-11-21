@@ -222,33 +222,58 @@ public sealed partial class SdfProgram {
         key.Add(item: BitConverter.SingleToUInt32Bits(value: value.Z));
         key.Add(item: BitConverter.SingleToUInt32Bits(value: value.W));
     }
-    private bool CanTracePartsIndependently() {
+    // Whether the root of the stream is a hard union: every shape outside a scope and every scope's pop joins by Union,
+    // and nothing outside a scope edits the accumulator. Then the answer is the least of the root's candidates, and a
+    // reader may take a whole instance apart from the stream. The one certificate both readers' whole-instance skips
+    // rest on, read two ways. The kernels' part walk (parts) evaluates an instance on its own, detail shapes included,
+    // so every other op at the root must be a pose prefix: any other can carry state across the root. The CPU
+    // evaluator's primer walks the stream itself and omits detail shapes, so any op that leaves the accumulator alone
+    // may stand at the root.
+    // Scope validation bounds nesting and forbids crossing instance ownership, so each scope is a complete root operand;
+    // cuts and field edits inside one stay inside it.
+    internal bool ComposesByHardUnion(bool parts) {
         var depth = 0;
 
         foreach (var instruction in m_instructions) {
-            if (instruction.Op == SdfOp.PushField) {
-                depth++;
-            } else if (instruction.Op == SdfOp.PopField) {
-                if (
-                    (depth <= 0) ||
-                    ((depth == 1) && (instruction.Blend != ((uint)SdfBlendOp.Union)))
-                ) {
-                    return false;
-                }
-                depth--;
-            } else if (depth == 0) {
-                if (instruction.Op == SdfOp.ShapeBlend) {
-                    if (instruction.Blend != ((uint)SdfBlendOp.Union)) {
-                        return false;
+            switch (SdfFieldOps.CullInstancesOf(value: instruction.Op)) {
+                case SdfCullInstancesAction.PushField: {
+                        depth++;
+                        break;
                     }
-                } else if (!SdfFieldOps.PartPosePrefixOf(value: instruction.Op)) {
-                    // Other root operations can carry state or alter the accumulated field. Keep the full march.
-                    return false;
-                }
+                case SdfCullInstancesAction.PopField: {
+                        if ((depth <= 0) || ((depth == 1) && (instruction.Blend != ((uint)SdfBlendOp.Union)))) {
+                            return false;
+                        }
+
+                        depth--;
+                        break;
+                    }
+                case SdfCullInstancesAction.ShapeBlend: {
+                        if ((depth == 0) && (parts || !instruction.Detail) && (instruction.Blend != ((uint)SdfBlendOp.Union))) {
+                            return false;
+                        }
+
+                        break;
+                    }
+                case SdfCullInstancesAction.EditsField: {
+                        if (depth == 0) {
+                            return false;
+                        }
+
+                        break;
+                    }
+                case SdfCullInstancesAction.Ignore: {
+                        if (parts && (depth == 0) && !SdfFieldOps.PartPosePrefixOf(value: instruction.Op)) {
+                            return false;
+                        }
+
+                        break;
+                    }
+                default:
+                    throw new InvalidOperationException(message: "Invalid CullInstances action.");
             }
         }
-        // Scope validation bounds nesting and forbids crossing instance ownership, so each compiled scope
-        // is a complete root operand. Internal cuts and field modifiers remain inside their owning scope.
+
         return (depth == 0);
     }
     private void PackPartPrograms(int offset, int instanceOffset, PartProgramPlan plan) {

@@ -210,7 +210,7 @@ public sealed partial class SdfProgram {
         );
         m_rootFrames = FindRootFrames(instructionOwners: instructionOwners, ranges: ranges);
 
-        InstancesComposable = CanTracePartsIndependently();
+        InstancesComposable = ComposesByHardUnion(parts: true);
 
         RequiredDynamicTransformCapacity = CalculateRequiredDynamicTransformCapacity(
             instances: m_instances,

@@ -96,6 +96,7 @@ public static class WorldApplicationDefaults {
 /// <param name="Nested">The nested-view table the preset runs (<see cref="WorldNestedViewQuality"/>), in place of the
 /// world's <c>render.nested</c>, so each device chooses what its windows, portals and filmed screens give up at each size.
 /// Absent runs the world's table.</param>
+/// <param name="IndirectBudget">The irradiance work each presented frame grants the volume on this device (<see cref="WorldRenderIndirectBudget"/>), in place of the world's <c>render.indirect.budget</c>, so each device chooses how much lighting work it affords a frame. Absent runs the world's budget.</param>
 [method: JsonConstructor]
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
@@ -116,7 +117,8 @@ public readonly record struct WorldQualityPreset(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDistantShadows? DistantShadows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarShadows? FarShadows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfViewsRate? ViewsRate = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNestedViewQuality>? Nested = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNestedViewQuality>? Nested = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectBudget? IndirectBudget = null
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -532,15 +534,29 @@ public sealed record WorldRenderIndirectLightingGrid(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? DirectionDegrees = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Radiance = null);
 /// <summary>The irradiance volume's budget: a light change costs a relight of the probes' cached hits and a geometry
-/// change costs a trace, each granted for each second of wall time whatever the frame rate, and overload lengthens the
-/// lighting's age rather than the frame. Every member is optional; an absent one leaves that part unbounded.</summary>
-/// <param name="RelightPerSecond">The probes relit each second, at least one.</param>
-/// <param name="TracePerSecond">The probes whose hits are traced each second, at least one.</param>
+/// change costs a trace, each granted a count for each presented frame (never a rate of wall time, so a slow frame owes no
+/// more probe work than a fast one), and overload lengthens the lighting's age rather than the frame. A device's quality
+/// row (<see cref="WorldQualityPreset.IndirectBudget"/>) chooses its own. Every member is optional; an absent one leaves
+/// that part unbounded.</summary>
+/// <param name="RelightPerFrame">The probes relit each presented frame, at least one.</param>
+/// <param name="TracePerFrame">The probes whose hits are traced each presented frame, at least one.</param>
 /// <param name="Age">The lighting age, in seconds, past which the volume reports it is behind; positive.</param>
 public sealed record WorldRenderIndirectBudget(
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? RelightPerSecond = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? TracePerSecond = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Age = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? RelightPerFrame = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? TracePerFrame = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Age = null) {
+    /// <summary>Returns why the budget cannot be run, or <see langword="null"/> when it can: a count under one probe or a
+    /// non-positive or non-finite age. Judges an authored world's budget, and a device row's, by one rule.</summary>
+    /// <param name="path">The authored path the refusal names.</param>
+    /// <returns>The refusal, or <see langword="null"/>.</returns>
+    public string? Refusal(string path) {
+        if (RelightPerFrame is < 1) { return $"{path}.relightPerFrame must be at least one probe a frame; omit it to leave relighting unbounded."; }
+        if (TracePerFrame is < 1) { return $"{path}.tracePerFrame must be at least one probe a frame; omit it to leave tracing unbounded."; }
+        if ((Age is { } age) && (!float.IsFinite(f: age) || (age <= 0f))) { return $"{path}.age must be a positive number of seconds."; }
+
+        return null;
+    }
+}
 /// <summary>Gains applied once where each source enters the traced light.</summary>
 /// <param name="Lights">Explicit diffuse light gain.</param>
 /// <param name="Emission">Material emission gain.</param>

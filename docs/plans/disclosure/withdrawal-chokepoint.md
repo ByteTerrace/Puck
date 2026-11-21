@@ -158,7 +158,7 @@ keeps showing it.
 Confirmed in the code. The epoch moves when the observation object changes, but
 the residency's guard is not told about the observation at all:
 
-`src/Puck.World/WorldScreenBinder.Availability.cs:257`
+`src/Puck.World/WorldScreenBinder.Availability.cs:268`
 
 ```csharp
             return ((access != WorldSessionAccess.None) && (access < Source));
@@ -249,7 +249,7 @@ contract says "An anchored light and the screens are no part of the sample"
 Partly true as stated. The root's image is read from its latest output, which a
 withdrawal clears,
 
-`src/Puck.Shaders/Graph/RenderGraphRuntime.cs:1694-1697`
+`src/Puck.Shaders/Graph/RenderGraphRuntime.cs:1686-1689`
 
 ```csharp
     private Surface RootImage() {
@@ -956,31 +956,58 @@ for the display. The second and third kinds are GPU legs the lead schedules.
    `RenderGraphExternalInput`, `ShaderPipelineExternalImage` (bindings and
    holds) and `ShaderPipelineExternalBuffer`. Binding an unclassified value
    throws, and an unclassified producer output reads as nothing, so its
-   readers bind the stand-in. The runtime's output records are private to its `OutputRecords`,
-   every read of them takes the latch, and `RememberOutput` is their one
-   writer, the capture conversion of an uploaded source included
-   (`ConvertForCapture`). A record's label is the instance's route, every
-   label it bound and its node's published label. `RenderGraphRuntimeNode`
+   readers bind the stand-in. The runtime's output records are private to its
+   `OutputRecords`, every read of them takes the latch, and `RememberOutput`
+   is their one writer, the capture conversion of an uploaded source included
+   (`ConvertForCapture`). A node is given the instance's route before it
+   records, and the label it publishes with a frame is that route and every
+   label it bound (`ShaderPipelineRenderNode.FrameBindingLabel`). A record of
+   a rendered frame carries that label; a frame presented again without
+   rendering (a paused node, an output selection) keeps the label it was made
+   under, never the route the instance has now, and a node whose published
+   label ended unpublishes before it presents anything. `RenderGraphRuntimeNode`
    captures one latch per frame before the host prepares it (`FrameContext.Latch`,
    `RenderGraphPackageRecording.Latch`), and the runtime, its nodes, held
    reconfiguration plans and package reads decide against it. A node checks
    every external binding against the latch each time it records
    (`ShaderPipelineRenderNode.ValidateBindingsForRecord`): an ended image
    binding is replaced by the stand-in and its hold released, and an ended
-   buffer binding withholds the render. An output whose label ended renders
-   again to stay shown. A session view's route is the span of every
-   `WorldViewerAccess` and every mirror ingress (`WorldStreamIngress`) on its
-   chain: the access advances its span where its epoch moves and closes it when
-   the session or layer is released, and the ingress advances on every cut and
-   generation and closes with the stream. `WorldViewGraphHost.BindAccess` hands
+   buffer binding withholds the render until the buffer is bound again. An
+   output whose label ended renders again to stay shown, unless its route has
+   ended too. A session view's route is the span of every `WorldViewerAccess`
+   and every mirror ingress (`WorldStreamIngress`) on its chain: the access
+   advances its span where its epoch moves and closes it when the session or
+   layer is released. The ingress moves its span on every cut, generation step,
+   first bind and close in one step under its gate: it ends the old span, runs
+   the mirror's withdrawal, and only then opens the next, so no frame pairs
+   pre-cut content with the post-cut span. A view any of whose spans has ended
+   is unavailable, so its node pauses. `WorldViewGraphHost.BindAccess` hands
    each view its route (`IRenderGraphInstances.SetRoute`) beside
    `IRenderGraphInstances.Withdraw`, its edge walk and
-   `IRenderGraphPackageFactory.OnOutputsForgotten`, which all stay. The four
-   checks are `RenderGraphRuntimeLawTests` in
-   `tests/Puck.Shaders.Tests/RenderGraphRuntimeLawTests.Withdrawal.cs`. What
-   holds only by review: a source minting a public label for content that is
-   not public (review-only item 1), and code that reads content through the
-   latch and wraps the raw handle again under another label (item 5).
+   `IRenderGraphPackageFactory.OnOutputsForgotten`, which all stay. The checks
+   are `RenderGraphRuntimeLawTests` in
+   `tests/Puck.Shaders.Tests/RenderGraphRuntimeLawTests.Withdrawal.cs` (the
+   four above, and a paused view whose route moves) and
+   `StreamGenerationLawTests` (the mirror's span stays ended while its cut
+   withdraws). What holds only by review: a source minting a public label for
+   content that is not public (review-only item 1), and code that reads
+   content through the latch and wraps the raw handle again under another
+   label (item 5).
+   *Not closed by step 2.* Step 2 labels pictures; it does not make retained
+   state or copies follow the label. These stay with their steps:
+   - A re-render after a cut reuses the node's temporal history, the view's
+     residency and the binder's settle state, so a picture rendered under the
+     new span can still blend content from before it. Steps 3 (the withdrawal
+     reset and generation-owned cells) and 4 (the holder per route), with the
+     withdrawal guard covering it until then.
+   - A probe that samples a camera's export mints a public label, though the
+     camera may film a screen that shows a session. Labelling the exact
+     exported slot is step 3's; until then the debug world's probe exhibit
+     keeps showing, which an unclassified probe label would black out.
+   - A view that shares another session's scene carries only its own spans,
+     not those of the mirror it draws from. Sharing is checked by proof at each
+     frame (step 6), and a span on the shared scene is step 4's holder per
+     route; the mesh reuse a shared scene draws on is step 7's fence.
 3. **The withdrawal reset, generation-owned cells and labelled publications.**
    The reset of part 5; the owners of part 6 moved as its table lists; exports,
    probes and comparison holds labelled and checked at each read. Only now are

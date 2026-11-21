@@ -60,11 +60,13 @@ public sealed partial class SdfWorldTables {
     }
     // A staged region of the probe service's (the trace scene, the feedback volume), named by its part so the memory reports
     // attribute each apart. A mapped region (GpuRegion.Mapped) grows in place; only one no kernel sizes by its buffer's
-    // length may be one, since a mapped buffer's length is the range it reserves.
-    internal GpuRegion CreateProbeRegion(string part, int bytes, int slots = 1, bool mapped = false) => new(
+    // length may be one, since a mapped buffer's length is the range it reserves. A region whose words come from a source
+    // states the host copy it keeps (hostCopyBytes), so it never allocates a whole one to give up.
+    internal GpuRegion CreateProbeRegion(string part, int bytes, int slots = 1, bool mapped = false, long? hostCopyBytes = null) => new(
         policy: GpuResidencyPolicy.Staged, memory: GpuResidency.RingMemory(profile: m_deviceContext.MemoryProfile),
         byteCount: bytes, slotCount: slots, buffers: m_gpu.BufferFactory, bindings: m_gpu.Bindings,
-        recorder: m_gpu.Recorder, copyPipeline: m_regionCopyPipeline, name: NameOf(part), mapped: mapped, hostCopies: m_regionHostCopies);
+        recorder: m_gpu.Recorder, copyPipeline: m_regionCopyPipeline, name: NameOf(part), mapped: mapped, hostCopies: m_regionHostCopies,
+        hostCopyBytes: hostCopyBytes);
 
     private SdfMeshClaims? m_meshClaims;
     private bool m_meshTrimListening;
