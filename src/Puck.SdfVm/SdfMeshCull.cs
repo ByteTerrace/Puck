@@ -39,6 +39,16 @@ public readonly record struct SdfMeshCull {
     /// <summary>Gets the cull that keeps every draw.</summary>
     public static SdfMeshCull None => default;
 
+    /// <summary>Returns what the cull keeps by, for a report: the view's frustum, a cascade's casters, a light's box, or
+    /// every draw.</summary>
+    /// <returns>The name.</returns>
+    public override string ToString() => (m_kind switch {
+        1 => "view",
+        2 => "cascade",
+        3 => "light-box",
+        _ => "every-draw",
+    });
+
     // GPU selection's pass controls; KEEP IN SYNC with sdf-mesh-selection.hlsli. The camera here is the unjittered
     // camera used by the host cull, including NearKeeps, rather than the raster projection's temporal sample.
     internal void WriteGpu(Span<System.Numerics.Vector4> rows) {

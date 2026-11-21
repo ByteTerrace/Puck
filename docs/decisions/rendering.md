@@ -467,6 +467,47 @@ light-space entry depth; exit and optical lists remain independent of entry
 visibility. `world.cull camera` isolates cascade culling while keeping camera
 occlusion, and `world.cull frustum` keeps the box cull alone for comparison.
 
+## A pass stands on what it can show
+
+A pass's signature folds the changes its own draws can show, not the
+residency's. Each raster pass of a view holds a motion scope
+(`SdfMotionScope`): the cull the pass draws under and a revision that moves when
+a draw that cull keeps changes. The passes that shade what a raster pass drew
+sign with its scope.
+
+- **What it replaced.** Every pass folded two residency-wide revisions, one for
+  the transform table and one for the draw records. On the debug world a few
+  thousand records move every frame (grass, the standing body's breath), all
+  presentation-clock motion that a paused simulation does not stop, so no pass of
+  any view stood on any frame.
+- **Options weighed.** Keep the residency-wide revisions and reduce the motion
+  (it is authored, and real); hash each view's visible records (a cost on every
+  frame for every view, and it cannot see a draw leaving); or judge each change
+  once, when it is staged, against the culls the passes already draw under. The
+  third costs nothing when nothing moves, and one box test a scope while
+  something does.
+- **What keeps it honest.** A scope's cull is the cull the pass's latest
+  recording drew under, built by the same function for both
+  (`SdfWorldPasses.CullOf`), and a draw is judged by the box in its record, which
+  is the box every pass selects it by. A change is judged by the box before it
+  and the box after it, so a draw leaving a view moves the scope as a draw
+  entering does. A cull other than the one the scope held moves the revision,
+  and no revision is ever reused, so a camera that returns to an earlier pose
+  never returns to an earlier signature. What no draw's box bounds is named in
+  one place (`SdfWorldTables`' motion scopes): a skinned draw takes a host bound,
+  a light, a medium and a paint riding a slot take the box they reach, and a
+  whole-table seed moves every scope.
+- **Where the guarantee stops.** A kernel that starts reading a transform slot
+  for something that list does not name leaves a pass standing on a stale image,
+  and nothing but that list catches it. The whole-view signature still folds the
+  residency-wide revisions, which is conservative. A scope bounds a skinned draw
+  on the host only: the selection kernel still draws every skinned draw in every
+  pass ([open](../plans/open-items.md#standing-passes)).
+- **At scale.** A zone is a world with its own residency, so a view pays for the
+  movers some view of its own zone can show: a body no view or cascade can show
+  already holds its pose (`SdfUpdateRates.Bodies`), and each one that moves is
+  judged against each scope until the scope's first change of the frame.
+
 Anything that trades a visible change for cost, such as a level of detail, an
 unloaded residency ring or a culled small object, switches only beyond the
 distance at which the switch is barely perceptible (the owner's ruling). The

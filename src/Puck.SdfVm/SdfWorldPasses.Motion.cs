@@ -9,7 +9,8 @@ namespace Puck.SdfVm;
 //                         the resolve, the sky and the composite, the optical tail). The instance's temporal history
 //                         follows this scope's poses.
 //   - the glass pass's  : the glass clear, raster and shading, judged by glass draws alone.
-//   - each cascade's    : the near, far and second cascades, each under its own caster cull. The distant map holds the
+//   - each cascade's    : the near, far and second cascades, each under its own caster cull, judged by draws alone: a
+//                         cascade holds depths, which no light, medium or paint changes. The distant map holds the
 //                         static scene alone and signs with the static revision instead (SdfWorldPasses.Distant).
 // One function builds a pass's cull for both its recording and its scope (CullOf). The scope's is built from the
 // extent the pass's latest recording noted (NoteDrawn), so while the frame's camera and that extent stand it is the
@@ -147,7 +148,11 @@ public sealed partial class SdfWorldPasses {
 
             if ((drawn.Tables is null) || !drawn.Tables.TryGetTarget(target: out var held) || !ReferenceEquals(objA: held, objB: tables)) {
                 drawn.Tables = new WeakReference<SdfWorldTables>(target: tables);
-                drawn.Motion = new SdfMotionScope(glass: (scope == DrawScope.Glass));
+                drawn.Motion = new SdfMotionScope(reader: (scope switch {
+                    DrawScope.Mesh => SdfMotionReader.Shading,
+                    DrawScope.Glass => SdfMotionReader.Glass,
+                    _ => SdfMotionReader.Caster,
+                }));
                 drawn.Frame = -1;
             }
 
