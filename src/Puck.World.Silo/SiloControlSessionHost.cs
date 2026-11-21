@@ -55,7 +55,9 @@ public sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRoutin
                     verdict: verdict
                 )) { throw new UnauthorizedAccessException(message: refusal); }
                 IControlSession? session = null;
-                void Close(Principal principal) { if (principal == peer.Identity) { session?.Dispose(); } }
+                // Both run on the world's tick thread, which must not run the session's cancellation callbacks inline.
+                void CloseOffTickThread() { if (session is { } closing) { _ = Task.Run(closing.Dispose); } }
+                void Close(Principal principal) { if (principal == peer.Identity) { CloseOffTickThread(); } }
                 void RevalidateAdmission() {
                     if (
                         !WorldAdmissionDoor.TryMatchOAuthEntry(
@@ -66,7 +68,7 @@ public sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRoutin
                     ) ||
                         (current.Tier != WorldDisclosureTier.Replica)
                     ) {
-                        session?.Dispose();
+                        CloseOffTickThread();
                     }
                 }
                 try {
