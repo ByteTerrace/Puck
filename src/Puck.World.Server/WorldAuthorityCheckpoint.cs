@@ -14,8 +14,8 @@ public abstract record WorldPendingOpCheckpoint {
     public sealed record Mutate(WorldMutation Mutation, int ConnectionId, long CorrelationId, long SourceAddonInstanceId, ushort ActOrdinal) : WorldPendingOpCheckpoint;
     /// <summary>A buffered whole-document rebuild-and-swap.</summary>
     public sealed record Rebuild(WorldRebuildRequest Request, Principal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash, string? PreparationFailure) : WorldPendingOpCheckpoint;
-    /// <summary>A buffered journal undo.</summary>
-    public sealed record Undo(int Count, Principal Principal, int ConnectionId, long CorrelationId) : WorldPendingOpCheckpoint;
+    /// <summary>A buffered journal undo or redo.</summary>
+    public sealed record Undo(int Count, Principal Principal, int ConnectionId, long CorrelationId, bool Redo = false) : WorldPendingOpCheckpoint;
 }
 /// <summary>One landed member's checkpointed state — the subset of the host engine's own private
 /// <c>WorldInstanceHost.LandedMember</c> that a co-hosted <c>Committed</c> resolution

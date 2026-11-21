@@ -54,8 +54,9 @@ public sealed class DeferredVerbAnswerLawTests {
 
         Assert.False(condition: submitted.IsError, userMessage: submitted.Output);
         fixture.Step();
-        Assert.Equal(actual: verdict, expected: "[world.undo: dropped 1 (UpsertStateRow 'undoProbe'), 0 remaining, full install, changed state.world]");
-        Assert.Equal(actual: fixture.Server.JournalLength, expected: 0);
+        Assert.Equal(actual: verdict, expected: "[world.undo: undid 1 (UpsertStateRow 'undoProbe'), 0 left to undo, 1 to redo, full install, changed state.world]");
+        // The undone edit keeps its place, for world.redo.
+        Assert.Equal(actual: fixture.Server.JournalLength, expected: 1);
     }
 
     // A narration sink that keeps each line, standing in for the console sink every composition root binds.
@@ -92,7 +93,7 @@ public sealed class DeferredVerbAnswerLawTests {
         Assert.Equal(
             actual: verdicts,
             expected: [
-                new WorldDeferredVerbAnswer(Counts: false, IsError: false, Line: "[world.undo: dropped 1 (UpsertStateRow 'undoProbe'), 0 remaining, full install, changed state.world]"),
+                new WorldDeferredVerbAnswer(Counts: false, IsError: false, Line: "[world.undo: undid 1 (UpsertStateRow 'undoProbe'), 0 left to undo, 1 to redo, full install, changed state.world]"),
                 new WorldDeferredVerbAnswer(Counts: true, IsError: true, Line: "[world.undo: undo refused: nothing to undo]"),
             ]
         );

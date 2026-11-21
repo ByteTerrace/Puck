@@ -36,9 +36,11 @@ public abstract record WorldSubmissionPayload {
     /// <param name="ExpectedActivation">The activation of the world whose document the mutation was composed on, or
     /// <see langword="null"/> for none.</param>
     public sealed record Mutation(WorldMutation Value, Guid? ExpectedActivation = null) : WorldSubmissionPayload;
-    /// <summary>A journal undo request (<c>world.undo</c>).</summary>
-    /// <param name="Count">How many trailing mutations to undo (at least 1).</param>
-    public sealed record Undo(int Count) : WorldSubmissionPayload;
+    /// <summary>A journal undo request (<c>world.undo</c>), or with <paramref name="Redo"/> a redo (<c>world.redo</c>):
+    /// either acts on the submitting principal's own entries.</summary>
+    /// <param name="Count">How many of the principal's entries to undo or redo (at least 1).</param>
+    /// <param name="Redo">Whether the request takes back what the principal's undos removed.</param>
+    public sealed record Undo(int Count, bool Redo = false) : WorldSubmissionPayload;
     /// <summary>A live window-composition override (<c>view.override layout</c>/<c>view.override camera</c>).</summary>
     /// <param name="Value">The composition override.</param>
     public sealed record Composition(WorldComposition Value) : WorldSubmissionPayload;

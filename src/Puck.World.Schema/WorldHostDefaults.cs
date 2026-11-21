@@ -254,8 +254,9 @@ public enum WorldHostPresentation : byte {
 /// trailing entries. Omission uses the bounded <see cref="DefaultJournalDepth"/>. Explicit <c>0</c> opts into
 /// unbounded history. At a positive depth, once the journal holds more than this
 /// many entries, the oldest ones fold forward into the base the journal already keeps (the same document-level
-/// replay <c>WorldServer.ApplyUndo</c> performs, run forward), so a checkpoint restore and a replay from the new base
-/// plus the retained tail still reproduce the live definition bit-identically. <c>world.status</c> echoes the
+/// replay <c>world.undo</c> performs, run forward), so a checkpoint restore and a replay from the new base
+/// plus the retained tail still reproduce the live definition bit-identically. The World's own entries ahead of the
+/// journal's first edit fold into the base at the end of the tick that edit lands on. <c>world.status</c> echoes the
 /// authored value; <c>world.undo</c> names it when a requested count reaches past what the horizon has kept.</param>
 /// <param name="ColorSpace">The color space the swapchain asks the display for (boot-only):
 /// <see cref="DisplayColorSpace.Srgb"/>, the default, or an HDR one (<see cref="DisplayColorSpace.Hdr10"/>,

@@ -64,7 +64,7 @@ public sealed partial class WorldDocument {
                         ConnectionId: undo.ConnectionId,
                         CorrelationId: undo.CorrelationId,
                         Kind: WorldEditEchoKind.Mutation,
-                        Message: $"undo refused: {reason}",
+                        Message: $"{(undo.Redo ? "redo" : "undo")} refused: {reason}",
                         Rejected: true
                     ));
 

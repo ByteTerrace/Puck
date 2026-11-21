@@ -752,13 +752,17 @@ candidate document, revalidating the WHOLE document through
 `WorldDefinitionValidator`, and only then swapping, journaling, and rebuilding
 the changed section's derived state; a failure rejects loudly and changes
 nothing. The journal is the document's edit history over its base and the undo
-engine: `world.undo` drops the last entries a principal authored (source edits
-and mutations a session submitted, `WorldJournalEntry.Authored`), restores the
-loaded base definition and deterministically replays every other entry through
-the same apply path—no per-mutation inverse exists. An entry the World applied
-itself (`Principal.World`'s sweeps, searches, field writes and rule effects, or a
-scoped replay or addon guest acting in a principal's name) is replayed, never
-undone.
+engine: `world.undo` marks the acting principal's own last edits undone (source
+edits whose reload it submitted and mutations it submitted,
+`WorldJournalEntry.Authored` and `Author`), restores the loaded base definition
+and deterministically replays every entry not undone—no per-mutation inverse
+exists. `world.redo` clears the mark in place, and the principal's next edit
+discards what it could redo. Either is refused by name, naming the row and the
+other principal, when a later edit by another principal changed a row it would
+change. An entry the World applied itself (`Principal.World`'s sweeps,
+searches, field writes and rule effects, or a scoped replay or addon guest
+acting in a principal's name) is replayed, never undone, and folds into the base
+once no undo can reach it (`WorldPersistence.FoldJournal`).
 `world.save` writes the authored document with the session's own changes folded
 in, and compacts the journal (the saved definition becomes the new base).
 `WorldSessionCapture` folds what the server owns: the peer-source default into
@@ -830,9 +834,9 @@ the change also alters what the recipient's scene discloses.
 
 By default, `WorldHostDefaults.DefaultJournalDepth` bounds the document
 edits available to `world.undo`. Explicit zero retains unbounded history.
-`WorldServer.EnforceJournalDepth` folds older entries into the document
-base on each completed tick. A request past the retained horizon reports the
-depth. Arena turn undo keeps its own byte limit in `StateArena.ConfigureUndo`.
+`WorldServer.FoldJournal` folds older entries into the document
+base on each completed tick, with the World's own entries ahead of the first
+edit it leaves. A request past the retained horizon reports the depth. Arena turn undo keeps its own byte limit in `StateArena.ConfigureUndo`.
 The document edit journal contributes to the checkpoint's server section
 and overall byte limits.
 
@@ -2206,7 +2210,7 @@ table" above.
 undo and its depth horizon, the authority checkpoint's capture and restore, the
 simulation state hash, and the replay timeline gate. It walks the other facades
 through its own private back-reference, which is exactly why it holds nothing.
-`WorldServer.Persistence` reaches it, and `EnqueueUndo`, `EnforceJournalDepth`,
+`WorldServer.Persistence` reaches it, and `EnqueueUndo`, `FoldJournal`,
 `FromCheckpoint`, `TryCaptureCheckpoint`, `RestoreCheckpoint` and
 `TryApplyJournalTailMutation` stay on the server as forwarders.
 
@@ -2846,7 +2850,7 @@ counted as deferred and retried at the next tick.
 `TrySeek` restores the latest keyframe at or before its target, or keeps the
 live state when the target lies ahead of the cursor in the same span, and
 re-simulates the recorded ticks through `WorldReplaySnapshot.ApplyRecordedTick`,
-`WorldServer.Advance`, and `EnforceJournalDepth`, the order the step shell takes.
+`WorldServer.Advance`, and `FoldJournal`, the order the step shell takes.
 The restore's own proof is the keyframe tick's recorded hash; each re-simulated
 tick is proved against its recorded hash and mutation outcomes, and the first
 disagreement is reported by tick. A keyframe whose base, journal, and solid

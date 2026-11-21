@@ -69,7 +69,7 @@ public static class WorldServerStepShell {
                     }
                 }
                 server.FlushMutationJournal?.Invoke();
-                server.EnforceJournalDepth();
+                server.FoldJournal();
                 // Close this tick's captured server-input group for an armed recording or an in-session history, or
                 // compare and advance a drive (a no-op otherwise): the whole tick's intent and command stream has
                 // reached the loopback taps by now, submitted during ApplySnapshot before this step.

@@ -41,10 +41,11 @@ public abstract record WorldPendingOp {
         /// preparation measured off the tick; zero for a request with no delta.</summary>
         public int RequestBytes { get; init; }
     }
-    /// <summary>One buffered journal undo.</summary>
-    /// <param name="Count">How many journal entries to drop from the tail.</param>
-    /// <param name="Principal">The acting principal.</param>
+    /// <summary>One buffered journal undo or redo.</summary>
+    /// <param name="Count">How many of the principal's entries to undo or redo.</param>
+    /// <param name="Principal">The acting principal, whose entries it acts on.</param>
     /// <param name="ConnectionId">The submitting envelope's connection id.</param>
     /// <param name="CorrelationId">The submitting envelope's correlation id.</param>
-    public sealed record Undo(int Count, Principal Principal, int ConnectionId, long CorrelationId) : WorldPendingOp;
+    /// <param name="Redo">Whether it redoes the principal's undone entries.</param>
+    public sealed record Undo(int Count, Principal Principal, int ConnectionId, long CorrelationId, bool Redo = false) : WorldPendingOp;
 }

@@ -54,7 +54,7 @@ public sealed class ReplayMachineDriveLawTests {
     // One live tick the way WorldServerStepShell drives it: recorded input into the doors, the step, the close.
     private static int ShellStep(WorldHistoryHarness harness) {
         harness.Tape.DriveStep(() => harness.Fixture.Step());
-        harness.Fixture.Server.EnforceJournalDepth();
+        harness.Fixture.Server.FoldJournal();
 
         var diverged = (harness.Tape.DriveProgress?.DivergedAt ?? -1);
 

@@ -33,10 +33,9 @@ Build mode (E1), the inspector (E5), cost per object and GPU pass timing (E9),
 and deterministic time travel (`world.history`) are in place; the
 [World guide](../../src/Puck.World/README.md#build-mode) and the
 [state reference](../reference/state/worlds.md#travel-through-recorded-time)
-describe them. `world.undo` drops the last entries any principal authored (never
-the World's own, which it replays), not the acting principal's alone, and is
-unbindable; there is no redo anywhere except the forge draft's one-level swap
-(`CartridgeDraft.Undo`). There are no gizmos, no selection, no copy or paste,
+describe them. `world.undo` and `world.redo` act on the acting principal's own
+edits (never the World's own entries, which they replay) and are unbindable.
+There are no gizmos, no selection, no copy or paste,
 and no measurement. GPU hover identifies a placement but does not select it.
 The inspector's `selection=` field reads the placement the seat last put down
 or moved until E2 gives a seat a selection.
@@ -203,17 +202,15 @@ what they made, and cannot tell how far apart two things are.
 
 **Delivers:**
 
-1. **Undo and redo per principal.** `world.undo [n]` undoes the acting
-   principal's own last n edits, not whoever edited last, so two people
-   building one world never undo each other's work. `world.redo [n]` re-applies
-   what that principal's undo removed. Both run through the same apply path.
-   An undo or redo is refused by name, naming the row and the other principal,
-   when a later edit by someone else touched a row it would change; nothing is
-   partly applied. A principal's redo tail is cleared by that principal's next
-   edit, bounded by `host.journalDepth`, and cleared by a load or reload.
-   `world.undo` and `world.redo` become bindable, checked at dispatch under the
-   pressing seat's principal as `world.reload` is, and `world.status` echoes the
-   acting principal's undo and redo depths.
+1. **Undo and redo per principal.** Built: `world.undo [n]` undoes the acting
+   principal's own last n edits and `world.redo [n]` takes back, in place, what
+   its undos removed, both through one replay (`WorldPersistence.ApplyUndo`);
+   the conflict rule is the
+   [authoring-loop plan's](iteration/authoring-loop.md#several-authors-at-once).
+   The verdict echoes the principal's undo and redo depths. Left: `world.undo`
+   and `world.redo` become bindable, checked at dispatch under the pressing
+   seat's principal as `world.reload` is (today both need the operator), and
+   `world.status` echoes the acting principal's depths.
 2. **One gesture, one step.** Every editor gesture is one journal entry: a
    gesture over several rows submits one `WorldMutation.Batch`, and a drag
    ([E7](#e7--gizmos-and-pointer-dragging)) commits once on release.
@@ -233,13 +230,9 @@ what they made, and cannot tell how far apart two things are.
 `WorldJournalEntry`), `Puck.World.Protocol` (`IServerLink`), the mutation
 command module, the editor command module.
 
-**Check:** `WorldUndoRedoLawTests` (undo n then redo n restores the pre-undo
-document hash; the principal's own edit after an undo leaves nothing to redo,
-refused by name; the journal horizon refuses by name). Two principals, A and B,
-edit different rows, and A's undo reverts only A's edit (red leg: the
-whoever-edited-last undo reverts B's); B then edits a row A's next undo would
-change, and A's undo is refused by name, naming the row and B, with the
-document unchanged. `WorldEditorDuplicateLawTests` (one batch, one undo removes
+**Check:** `UndoRedoLawTests` holds the per-principal undo, the in-place redo,
+the refusal naming the row and the other principal, and the principal's own
+edit leaving nothing to redo. `WorldEditorDuplicateLawTests` (one batch, one undo removes
 every copy, ids stay unique, an unnamed copy's id is a `GeneratedName`, and
 `world.rename` rewrites every row that names it); a measure law over two
 fixture placements (red leg: one hit measures nothing).

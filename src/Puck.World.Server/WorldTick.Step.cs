@@ -139,7 +139,8 @@ public sealed partial class WorldTick {
             count: undo.Count,
             principal: undo.Principal,
             connectionId: undo.ConnectionId,
-            correlationId: undo.CorrelationId
+            correlationId: undo.CorrelationId,
+            redo: undo.Redo
         ),
             _ => false,
         };

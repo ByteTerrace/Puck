@@ -1464,10 +1464,10 @@ public static partial class WorldSubmissionCodec {
             case WorldSubmissionKind.Undo:
                 if (TryDecodeUndo(
                     bytes: bytes,
-                    count: out var count,
+                    undo: out var undo,
                     failure: out failure
                 )) {
-                    payload = new WorldSubmissionPayload.Undo(Count: count);
+                    payload = undo;
                     return true;
                 }
                 return false;
@@ -1675,19 +1675,25 @@ public static partial class WorldSubmissionCodec {
         }
         return true;
     }
+    /// <summary>The undo leaf's size, in bytes: the count, then whether it is a redo.</summary>
+    public const int UndoLeafBytes = (sizeof(int) + sizeof(byte));
     /// <summary>Decodes the undo leaf.</summary>
-    public static bool TryDecodeUndo(ReadOnlySpan<byte> bytes, out int count, out WorldCodecFailure failure) {
-        if (bytes.Length != sizeof(int)) {
-            count = 0;
+    public static bool TryDecodeUndo(ReadOnlySpan<byte> bytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldSubmissionPayload.Undo? undo, out WorldCodecFailure failure) {
+        undo = null;
+        if (bytes.Length != UndoLeafBytes) {
             failure = Fail(
-                ((bytes.Length < sizeof(int))
+                ((bytes.Length < UndoLeafBytes)
                 ? WorldCodecRefusal.PayloadTruncated
                 : WorldCodecRefusal.PayloadTrailingBytes),
-                $"undo payload is {bytes.Length} bytes; exactly 4 are required"
+                $"undo payload is {bytes.Length} bytes; exactly {UndoLeafBytes} are required"
             );
             return false;
         }
-        count = BinaryPrimitives.ReadInt32LittleEndian(source: bytes);
+        if (bytes[sizeof(int)] > 1) {
+            failure = Fail(WorldCodecRefusal.PayloadMalformed, $"undo payload's redo flag is {bytes[sizeof(int)]}; 0 or 1 is required");
+            return false;
+        }
+        undo = new WorldSubmissionPayload.Undo(Count: BinaryPrimitives.ReadInt32LittleEndian(source: bytes), Redo: (bytes[sizeof(int)] == 1));
         failure = default;
         return true;
     }
@@ -1750,7 +1756,7 @@ public static partial class WorldSubmissionCodec {
             case WorldSubmissionPayload.Undo undo:
                 kind = WorldSubmissionKind.Undo;
                 return TryEncodeUndo(
-                    undo.Count,
+                    undo,
                     out bytes,
                     out failure
                 );
@@ -1979,12 +1985,14 @@ public static partial class WorldSubmissionCodec {
         );
     }
     /// <summary>Encodes the undo leaf.</summary>
-    public static bool TryEncodeUndo(int count, out byte[] bytes, out WorldCodecFailure failure) {
-        bytes = new byte[sizeof(int)];
+    public static bool TryEncodeUndo(WorldSubmissionPayload.Undo undo, out byte[] bytes, out WorldCodecFailure failure) {
+        ArgumentNullException.ThrowIfNull(argument: undo);
+        bytes = new byte[UndoLeafBytes];
         BinaryPrimitives.WriteInt32LittleEndian(
             destination: bytes,
-            value: count
+            value: undo.Count
         );
+        bytes[sizeof(int)] = (undo.Redo ? (byte)1 : (byte)0);
         failure = default;
         return true;
     }

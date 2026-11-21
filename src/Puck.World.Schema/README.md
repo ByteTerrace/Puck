@@ -1608,8 +1608,9 @@ can see.
 
 **`host.journalDepth`** sets the number of document edits available to undo.
 Omission uses `WorldHostDefaults.DefaultJournalDepth`. Explicit zero keeps
-unbounded history. `WorldServer.EnforceJournalDepth` folds older edits into
-the document base.
+unbounded history. `WorldServer.FoldJournal` folds older entries into
+the document base, with the World's own entries ahead of the first edit it
+leaves.
 
 **A row's trait is the default behavior of every cell it carries, including a
 key a later write mints; a cell replaces that default wholesale, or opts out
