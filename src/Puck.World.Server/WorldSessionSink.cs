@@ -185,7 +185,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             tick: time.Tick,
             version: Version
         );
-        if (cut) { PrimeSnapshot(); }
+        if (cut) { WorldBootWork.Count(WorldBootWork.TmpWhy[0]); PrimeSnapshot(); }
     }
     // Composes what the observer's projection owes; after a cut, its whole projection under the new generation, which
     // the primer snapshot completes once it is presented (cut).
@@ -294,7 +294,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         if (delivered is not null) {
             _ = AnnounceCut();
             HandReplica(document: delivered);
-            PrimeReplica();
+            WorldBootWork.Count(WorldBootWork.TmpWhy[1]); PrimeReplica();
         } else if (m_cursor.TakeCut()) {
             Reprime();
         }
@@ -305,7 +305,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         m_cursor.ForgetDocument();
         if (m_cursor.DeliverDefinition(view: m_view) is { } whole) {
             HandReplica(document: whole);
-            PrimeReplica();
+            WorldBootWork.Count(WorldBootWork.TmpWhy[2]); PrimeReplica();
         }
     }
     // Hands the observer a whole replica document.
@@ -322,7 +322,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     private void CompleteReplacement() {
         if (!m_cursor.OwesRows || server.Document.SnapshotFollows || m_deliveringSnapshot) { return; }
         FollowObserverDetach();
-        if (DetachReason is null) { DeliverSnapshot(snapshot: server.Document.BuildPrimerSnapshot(cells: false), stream: WorldStreamStamp.Unspanned); }
+        if (DetachReason is null) { WorldBootWork.Count(WorldBootWork.TmpWhy[3]); DeliverSnapshot(snapshot: server.Document.BuildPrimerSnapshot(cells: false), stream: WorldStreamStamp.Unspanned); }
     }
     // Replacing a replica document replaces its state arena and observation metadata together, and a document a cut,
     // a resumed span or a shape change delivered also replaces what its fields and bodies hold. Complete that delivery
@@ -443,7 +443,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             if (Tier != WorldDisclosureTier.Replica) {
                 var time = server.DeliveryTime;
                 Present(ComposeProjection(out var cut, rows), Version, time.Tick, time.EngineTick);
-                if (cut) { PrimeSnapshot(); }
+                if (cut) { WorldBootWork.Count(WorldBootWork.TmpWhy[0]); PrimeSnapshot(); }
                 FollowObserverDetach();
             } else if (!m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
                 DeliverDefinition(definition, version, in stream);
@@ -551,7 +551,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                     tick: stamp.Tick,
                     version: Version
                 );
-                if (cut) { PrimeSnapshot(); }
+                if (cut) { WorldBootWork.Count(WorldBootWork.TmpWhy[0]); PrimeSnapshot(); }
                 FollowObserverDetach();
 
                 return;
@@ -576,7 +576,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 var held = m_replicaDocument;
                 m_replicaDocument = delivered;
                 inner.DeliverState(delivered, Version, stamp with { Everything = true, MovedRows = default, ArenaValues = false }, m_cursor.Stamp());
-                if (cut || (held is null) || !Puck.World.Client.WorldDocumentStateView.KeepsFieldCells(previous: held, next: delivered)) { PrimeReplica(); } else { CompleteReplacement(); }
+                if (cut || (held is null) || !Puck.World.Client.WorldDocumentStateView.KeepsFieldCells(previous: held, next: delivered)) { WorldBootWork.Count(cut ? WorldBootWork.TmpWhy[4] : (held is null) ? WorldBootWork.TmpWhy[5] : WorldBootWork.TmpWhy[6]); PrimeReplica(); } else { CompleteReplacement(); }
             } else if (m_cursor.TakeCut()) {
                 Reprime();
             }
