@@ -185,7 +185,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// start, near the primary seat's eye and everywhere (<see cref="SdfMeshPathBake.DescribeResidency"/>), its floors
     /// (<see cref="SdfMeshPathBake.DescribeFloors"/>), the store's reads, the mesh region's landing
     /// (<see cref="SdfWorldTables.DescribeLanding"/>), what the raster passes selected of it
-    /// (<see cref="SdfWorldTables.DescribeSelection"/>), its presentation's selector
+    /// (<see cref="SdfWorldTables.DescribeSelection"/>), the motion scopes its passes sign with and why each last moved
+    /// (<see cref="SdfWorldTables.DescribeMotion"/>), its presentation's selector
     /// (<see cref="SdfResidencySelector.Describe"/>) with the background work's one budget, the tables' fixed cost (<see cref="SdfWorldTables.DescribeFixedCost"/>), the background GPU work's buffers
     /// (<see cref="SdfGpuWork.DescribeBytes"/>), the frame's sampled table (<see cref="SdfWorldTables.DescribeFrameSampled"/>),
     /// the latest program's emission, build and size, and the irradiance
@@ -204,6 +205,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             $"{(MeshPathBake.Library.Disk?.DescribeReads() ?? "store=none")} {SdfMesh.DescribeRestores()}",
             (m_tables?.DescribeLanding() ?? "region=none"),
             (m_tables?.DescribeSelection() ?? "selection=none"),
+            (m_tables?.DescribeMotion() ?? "motion-scopes=none"),
             ((m_tables is { } tables) ? $"{tables.Grant.Selector.Describe()}{tables.Grant.Selector.Work.Describe()}" : "selector=none"),
             (m_tables?.DescribeFixedCost() ?? "fixed-cost=none"),
             $"{(m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none")} late-stagings={LateStagings}{(m_tables?.GpuWork.Describe() ?? string.Empty)}",
@@ -837,6 +839,41 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_boundScreenSources[screen] = handle;
 
         return handle;
+    }
+    /// <summary>Writes into a pass set's screen array the image (<see cref="ScreenImage"/>) of each screen a filter marks,
+    /// and the filler at every other screen: a host's image on every call, since its handle is unique only among live
+    /// objects, and the filler only where the set does not already hold it.</summary>
+    /// <param name="view">The view's index in the residency's frame.</param>
+    /// <param name="shown">The screens whose images the pass samples, one flag per screen index; a screen past its end
+    /// samples the filler.</param>
+    /// <param name="recording">The recording whose reads and lease list the images come from.</param>
+    /// <param name="bindings">The writer of the set's descriptors.</param>
+    /// <param name="binding">The screen array's binding in <paramref name="set"/>.</param>
+    /// <param name="set">The pass set.</param>
+    /// <param name="filler">The image view a screen that shows nothing samples.</param>
+    /// <param name="bound">The image view the set holds at each screen, which this updates, or empty for a set whose
+    /// holdings are not tracked, which is written at every screen.</param>
+    /// <returns>The screens bound an image, one bit per screen index.</returns>
+    internal uint BindScreenImages(int view, ReadOnlySpan<bool> shown, in RenderGraphPackageRecording recording, IGpuBindings bindings,
+        uint binding, nint set, nint filler, Span<nint> bound) {
+        var imaged = 0u;
+
+        for (var screen = 0; (screen < SdfWorldTables.MaxScreenSurfaces); screen++) {
+            var image = (((screen < shown.Length) && shown[screen])
+                ? ScreenImage(leases: recording.Leases, reads: recording.Reads, screen: screen, view: view)
+                : 0);
+
+            if (image != 0) {
+                imaged |= (1u << screen);
+            } else if (!bound.IsEmpty && (bound[screen] == filler)) {
+                continue;
+            } else {
+                image = filler;
+            }
+            bindings.WriteSampledImage(arrayElement: ((uint)screen), binding: binding, descriptorSetHandle: set, imageViewHandle: image);
+            if (!bound.IsEmpty) { bound[screen] = image; }
+        }
+        return imaged;
     }
     /// <summary>Returns where the read a screen samples in one view lies among the images a view's render graph hands
     /// its pass: the instance the screen shows in that view (<see cref="ISdfScreenSources.ReadOf"/>). The image, its

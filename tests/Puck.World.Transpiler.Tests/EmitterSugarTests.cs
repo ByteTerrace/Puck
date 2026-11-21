@@ -1025,7 +1025,7 @@ public class EmitterSugarTests {
         Assert.Equal("deck", dealTransform["from"]?.ToString());
         Assert.Equal("hand", dealTransform["to"]?.ToString());
         Assert.Equal("First", dealTransform["selector"]?.ToString());
-        Assert.Equal(5, dealTransform["count"]?.GetValue<int>());
+        Assert.Equal("5", dealTransform["count"]?.ToJsonString());
 
         var shuffle = Assert.IsType<JsonObject>(@object: effects[2]);
 

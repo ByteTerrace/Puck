@@ -142,7 +142,10 @@ public sealed partial class SdfWorldTables {
     }
     // Writes one packed slot into the dynamic-transform region, which owes the words of it that changed.
     private bool WriteDynamicTransform(ReadOnlySpan<float> floats, int slot) {
+        var read = TryReadReaderSlot(held: out var held, slot: slot);
+
         if (m_dynamicTransformRegion.Write(bytes: MemoryMarshal.AsBytes(span: floats), offset: (slot * DynamicTransformByteLength))) {
+            if (read) { NoteReaderSlotWritten(held: in held, slot: slot); }
             m_changedTransforms.Add(length: 1, start: slot);
             return true;
         }
@@ -308,6 +311,8 @@ public sealed partial class SdfWorldTables {
             );
         }
 
+        BeginMotionStaging(frame: frame);
+        CollectReaders(frame: frame);
         _ = PackDynamicTransforms(frame: frame);
         PackSlotRateCodes(frame: frame);
 

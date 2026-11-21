@@ -28,30 +28,16 @@ public static partial class PuckParser {
         var depth = 0;
 
         for (var index = offset; (index < buffer.Length); index++) {
+            var lexeme = SourceLexemes.End(offset: index, source: buffer);
+
+            if (lexeme > index) {
+                index = (lexeme - 1);
+
+                continue;
+            }
             var character = buffer[index];
 
-            if (character == '"') {
-                for (index++; ((index < buffer.Length) && (buffer[index] != '"')); index++) {
-                    if (buffer[index] == '\\') {
-                        index++;
-                    }
-                }
-            } else if ((character == '/') && ((index + 1) < buffer.Length) && (buffer[(index + 1)] == '/')) {
-                while ((index < buffer.Length) && (buffer[index] != '\n')) {
-                    index++;
-                }
-            } else if ((character == '/') && ((index + 1) < buffer.Length) && (buffer[(index + 1)] == '*')) {
-                var close = buffer.IndexOf(
-                    comparisonType: StringComparison.Ordinal,
-                    startIndex: (index + 2),
-                    value: "*/"
-                );
-
-                index = ((close < 0)
-                    ? buffer.Length
-                    : (close + 1)
-                );
-            } else if (character == '{') {
+            if (character == '{') {
                 depth++;
             } else if (character == '}') {
                 if (--depth <= 0) {
@@ -284,6 +270,39 @@ public static partial class PuckParser {
         "name", "gate", "mode", "forEach", "poolForEach", "maxFirings", "zones", "locals", "effects", "decision",
     };
 
+    /// <summary>Gets the words a construct body's reader (a rule, scope, decision, option or effect body) takes for
+    /// the keyword that opens a statement. A reader matches one only through this set, so a printer that quotes a
+    /// member spelling one of them quotes exactly the names a reader would otherwise take.</summary>
+    /// <remarks>A word followed by <c>:</c> is a member's name whatever it spells, except <c>score</c>, whose own
+    /// statement is written <c>score: operand</c>; so beyond a member named <c>score</c>, only one written as a block
+    /// (<c>name { }</c>, <c>name [ ]</c>) needs the quotes.</remarks>
+    public static IReadOnlySet<string> ConstructBodyKeywords => BodyKeywords;
+
+    private static readonly System.Collections.Frozen.FrozenSet<string> BodyKeywords = System.Collections.Frozen.FrozenSet.ToFrozenSet(
+        comparer: StringComparer.Ordinal,
+        source: ["break", "claim", "deal", "decision", "draw", "for", "if", "interrupt", "local", "onNoChoice", "option", "push", "release", "remove", "repeat", "schedule", "score", "shuffle", "transaction", "transform", "when"]
+    );
+
+    // The listed keyword the statement at the cursor opens with, or null.
+    private static string? BodyKeywordAt(ParseContext context) {
+        var buffer = context.Scanner.Buffer;
+        var start = context.Scanner.Cursor.Offset;
+        var end = start;
+
+        while ((end < buffer.Length) && IdentifierSpelling.IsPart(character: buffer[end])) {
+            end++;
+        }
+        if (!BodyKeywords.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(equalValue: buffer.AsSpan(start: start, length: (end - start)), actualValue: out var keyword)) {
+            return null;
+        }
+        while ((end < buffer.Length) && (buffer[end] is ' ' or '\t')) {
+            end++;
+        }
+
+        return (((end < buffer.Length) && (buffer[end] == ':') && !string.Equals(a: keyword, b: "score", comparisonType: StringComparison.Ordinal)) ? null : keyword);
+    }
+    private static bool TryMatchBodyKeyword(ParseContext context, string? opening, string keyword) =>
+        (string.Equals(a: opening, b: keyword, comparisonType: StringComparison.Ordinal) && TryMatchKeyword(context: context, keyword: keyword));
     // Whether the next token is one of `names` used as a property (followed by ':', '=', '{' or '[').
     private static bool AtPropertyNamed(ParseContext context, IReadOnlySet<string> names) {
         var cursor = context.Scanner.Cursor;
@@ -308,6 +327,8 @@ public static partial class PuckParser {
     private static StatementNode ParseRuleBodyStatementCore(ParseContext context, DiagnosticBag? diagnostics, int col, int line, int startOffset) {
         var cursor = context.Scanner.Cursor;
 
+        var opening = BodyKeywordAt(context: context);
+
         if (AtPropertyNamed(
             context: context,
             names: RuleBodyPropertyNames
@@ -322,10 +343,7 @@ public static partial class PuckParser {
             }
         }
 
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "when"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "when", opening: opening)) {
             return ParseWhenStatement(
                 col: col,
                 context: context,
@@ -334,10 +352,7 @@ public static partial class PuckParser {
                 startOffset: startOffset
             );
         }
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "local"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "local", opening: opening)) {
             return ParseLocalStatement(
                 col: col,
                 context: context,
@@ -346,10 +361,7 @@ public static partial class PuckParser {
                 startOffset: startOffset
             );
         }
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "decision"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "decision", opening: opening)) {
             return ParseDecisionBlock(
                 col: col,
                 context: context,
@@ -363,7 +375,7 @@ public static partial class PuckParser {
         // body's; `for each` is the pool iteration an effect statement spells.
         var beforeFor = cursor.Position;
 
-        if (TryMatchKeyword(context: context, keyword: "for")) {
+        if (TryMatchBodyKeyword(context: context, keyword: "for", opening: opening)) {
             SkipWhiteSpace(context: context);
             if (!TryMatchKeyword(context: context, keyword: "each")) {
                 return ParseForStatement(
@@ -620,10 +632,9 @@ public static partial class PuckParser {
             offset: startOffset
         );
 
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "option"
-        )) {
+        var opening = BodyKeywordAt(context: context);
+
+        if (TryMatchBodyKeyword(context: context, keyword: "option", opening: opening)) {
             return ParseOptionBlock(
                 col: col,
                 context: context,
@@ -632,10 +643,7 @@ public static partial class PuckParser {
                 startOffset: startOffset
             );
         }
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "interrupt"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "interrupt", opening: opening)) {
             SkipWhiteSpace(context: context);
             // `interrupt: <call-form>` is the spelling a predicate the gate grammar cannot carry decompiles to.
             if (cursor.Current is ':' or '=') {
@@ -666,10 +674,7 @@ public static partial class PuckParser {
                 Predicate: predicate
             );
         }
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "onNoChoice"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "onNoChoice", opening: opening)) {
             SkipWhiteSpace(context: context);
             if (!TryConsume(
                 c: '{',
@@ -824,6 +829,8 @@ public static partial class PuckParser {
             offset: startOffset
         );
 
+        var opening = BodyKeywordAt(context: context);
+
         if (AtPropertyNamed(
             context: context,
             names: OptionBodyPropertyNames
@@ -838,10 +845,7 @@ public static partial class PuckParser {
             }
         }
 
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "when"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "when", opening: opening)) {
             return ParseWhenStatement(
                 col: col,
                 context: context,
@@ -850,10 +854,7 @@ public static partial class PuckParser {
                 startOffset: startOffset
             );
         }
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "score"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "score", opening: opening)) {
             SkipWhiteSpace(context: context);
             TryConsume(
                 c: ':',
@@ -928,7 +929,9 @@ public static partial class PuckParser {
             offset: startOffset
         );
 
-        if (TryMatchKeyword(context: context, keyword: "claim")) {
+        var opening = BodyKeywordAt(context: context);
+
+        if (TryMatchBodyKeyword(context: context, keyword: "claim", opening: opening)) {
             SkipWhiteSpace(context: context);
             if (TryMatchKeyword(context: context, keyword: "pair")) {
                 SkipWhiteSpace(context: context);
@@ -1009,7 +1012,7 @@ public static partial class PuckParser {
             return new ClaimStatementNode(pool, alias, body, startOffset, (cursor.Offset - startOffset), line, col);
         }
 
-        if (TryMatchKeyword(context: context, keyword: "release")) {
+        if (TryMatchBodyKeyword(context: context, keyword: "release", opening: opening)) {
             SkipWhiteSpace(context: context);
             if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var alias)) {
                 throw CreateException(context: context, message: "Expected an alias after 'release'");
@@ -1017,7 +1020,7 @@ public static partial class PuckParser {
             return new ReleaseStatementNode(alias, startOffset, (cursor.Offset - startOffset), line, col);
         }
 
-        if (TryMatchKeyword(context: context, keyword: "for")) {
+        if (TryMatchBodyKeyword(context: context, keyword: "for", opening: opening)) {
             SkipWhiteSpace(context: context);
             if (!TryMatchKeyword(context: context, keyword: "each")) {
                 // A compile-time `for` among effects repeats its effects once per element; `for each` is the pool
@@ -1059,17 +1062,9 @@ public static partial class PuckParser {
             }
         }
 
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "push"
-        )) {
-            SkipWhiteSpace(context: context);
-            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var rowName)) {
-                throw CreateException(
-                    context: context,
-                    message: "Expected a row name after 'push'"
-                );
-            }
+        if (TryMatchBodyKeyword(context: context, keyword: "push", opening: opening)) {
+            var target = RequireEffectRow(context: context, diagnostics: diagnostics, message: "Expected a row name after 'push'");
+
             SkipWhiteSpace(context: context);
             if (!TryConsume(
                 c: '=',
@@ -1077,7 +1072,7 @@ public static partial class PuckParser {
             )) {
                 throw CreateException(
                     context: context,
-                    message: $"Expected '=' after 'push {rowName}'"
+                    message: $"Expected '=' after 'push {context.Scanner.Buffer.Substring(length: target.Length, startIndex: target.Offset)}'"
                 );
             }
             var rhs = ParseRhs(
@@ -1095,14 +1090,11 @@ public static partial class PuckParser {
                 Line: line,
                 Offset: startOffset,
                 Rhs: rhs,
-                RowName: rowName
+                Target: target
             );
         }
 
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "remove"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "remove", opening: opening)) {
             if (
                 !TryReadRowRefOperand(
                 context,
@@ -1128,10 +1120,7 @@ public static partial class PuckParser {
             );
         }
 
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "schedule"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "schedule", opening: opening)) {
             if (
                 !TryReadRowRefOperand(
                 context: context,
@@ -1171,10 +1160,7 @@ public static partial class PuckParser {
             );
         }
 
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "transform"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "transform", opening: opening)) {
             SkipWhiteSpace(context: context);
             var callStart = cursor.Offset;
 
@@ -1225,10 +1211,7 @@ public static partial class PuckParser {
             );
         }
 
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "transaction"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "transaction", opening: opening)) {
             return ParseTransactionStatement(
                 col: col,
                 context: context,
@@ -1239,10 +1222,7 @@ public static partial class PuckParser {
             );
         }
 
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "if"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "if", opening: opening)) {
             return ParseIfStatement(
                 col: col,
                 context: context,
@@ -1253,10 +1233,7 @@ public static partial class PuckParser {
             );
         }
 
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "repeat"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "repeat", opening: opening)) {
             return ParseRepeatStatement(
                 col: col,
                 context: context,
@@ -1267,10 +1244,7 @@ public static partial class PuckParser {
             );
         }
 
-        if (TryMatchKeyword(
-            context: context,
-            keyword: "break"
-        )) {
+        if (TryMatchBodyKeyword(context: context, keyword: "break", opening: opening)) {
             return new BreakStatementNode(
                 startOffset,
                 (cursor.Offset - startOffset),
@@ -1279,9 +1253,9 @@ public static partial class PuckParser {
             );
         }
 
-        if (TryMatchKeyword(context: context, keyword: "draw")) {
-            var from = RequirePileOperand(context: context, message: "Expected a source pile name after 'draw'");
-            var to = RequireKeywordPileOperand(context: context, keyword: "to", message: "Expected a destination pile name after 'draw'");
+        if (TryMatchBodyKeyword(context: context, keyword: "draw", opening: opening)) {
+            var from = RequireEffectRow(context: context, diagnostics: diagnostics, message: "Expected a source pile name after 'draw'");
+            var to = RequireEffectRow(context: context, diagnostics: diagnostics, keyword: "to", message: "Expected a destination pile name after 'draw'");
 
             return new DrawStatementNode(
                 Column: col,
@@ -1293,12 +1267,12 @@ public static partial class PuckParser {
             );
         }
 
-        if (TryMatchKeyword(context: context, keyword: "deal")) {
+        if (TryMatchBodyKeyword(context: context, keyword: "deal", opening: opening)) {
+            // The count is the value `transfer(count: ...)` takes: a literal, a name or arithmetic.
             SkipWhiteSpace(context: context);
-            var numLiteral = ParseNumberWithOptionalUnit(context: context);
-            var count = Convert.ToInt32(value: numLiteral.Value);
-            var from = RequireKeywordPileOperand(context: context, keyword: "from", message: "Expected a source pile name after 'deal'");
-            var to = RequireKeywordPileOperand(context: context, keyword: "to", message: "Expected a destination pile name after 'deal'");
+            var count = ParseExpression(context: context);
+            var from = RequireEffectRow(context: context, diagnostics: diagnostics, keyword: "from", message: "Expected a source pile name after 'deal'");
+            var to = RequireEffectRow(context: context, diagnostics: diagnostics, keyword: "to", message: "Expected a destination pile name after 'deal'");
 
             return new DealStatementNode(
                 Column: col,
@@ -1311,9 +1285,9 @@ public static partial class PuckParser {
             );
         }
 
-        if (TryMatchKeyword(context: context, keyword: "shuffle")) {
-            var pile = RequirePileOperand(context: context, message: "Expected a pile name after 'shuffle'");
-            var draw = RequireKeywordPileOperand(context: context, keyword: "with", message: "Expected a draw stream name after 'shuffle'");
+        if (TryMatchBodyKeyword(context: context, keyword: "shuffle", opening: opening)) {
+            var pile = RequireEffectRow(context: context, diagnostics: diagnostics, message: "Expected a pile name after 'shuffle'");
+            var draw = RequireEffectRow(context: context, diagnostics: diagnostics, keyword: "with", message: "Expected a draw stream name after 'shuffle'");
 
             return new ShuffleStatementNode(
                 Column: col,
@@ -2008,25 +1982,36 @@ public static partial class PuckParser {
             Value: value
         );
     }
-    private static bool TryReadPileOperand(ParseContext context, out string text) {
+    // The row a whole-row effect names (`push`, `draw`, `deal`, `shuffle`), after the optional keyword that
+    // introduces it: read as an assignment's target is and resolved by the same reader, so a binding, an
+    // interpolated name and a module instance's row mean here what they mean there. A name the bare form cannot
+    // carry, backquoted or quoted, is the operand grammar's backquoted name.
+    private static RowRefNode RequireEffectRow(ParseContext context, DiagnosticBag? diagnostics, string message, string? keyword = null) {
+        var cursor = context.Scanner.Cursor;
+
         SkipWhiteSpace(context: context);
-        if (TryReadRowRefSpanRaw(context: context, span: out _, text: out text)) {
-            return true;
+        if (keyword is not null) {
+            _ = TryMatchKeyword(context: context, keyword: keyword);
+            SkipWhiteSpace(context: context);
         }
-        if (TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out text)) {
-            return true;
+        var start = cursor.Offset;
+        var (line, column) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: start);
+
+        if (TryReadRowRefSpanRaw(context: context, span: out var span, text: out var text)) {
+            return ResolveRowRef(diagnostics: diagnostics, span: span, text: text);
         }
-        return TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out text);
-    }
-    private static string RequirePileOperand(ParseContext context, string message) {
-        if (!TryReadPileOperand(context: context, text: out var text)) {
+        if (!TryReadBackquotedName(context: context, name: out var name) && !TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out name)) {
             throw CreateException(context: context, message: message);
         }
-        return text;
-    }
-    private static string RequireKeywordPileOperand(ParseContext context, string keyword, string message) {
-        SkipWhiteSpace(context: context);
-        _ = TryMatchKeyword(context: context, keyword: keyword);
-        return RequirePileOperand(context: context, message: message);
+
+        return new RowRefNode(
+            name,
+            null,
+            start,
+            (cursor.Offset - start),
+            line,
+            column,
+            Operand: CreateOperand(column: column, form: DocumentValueForm.Expression, length: (cursor.Offset - start), line: line, offset: start, text: ExpressionSpelling.PrintName(name: name, quoted: true))
+        );
     }
 }

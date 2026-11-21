@@ -107,19 +107,6 @@ public static partial class PuckPrinter {
         );
     }
 
-    /// <summary>Gets the words a construct body's reader (a rule, scope, decision, option, test, workflow or effect
-    /// body) takes for the keyword it spells when one opens a line, because nothing in <c>name:</c> defeats the
-    /// match there, so a property in such a body spelling one prints quoted. The document and every plain block or
-    /// object read <c>name:</c>, <c>name {</c> and <c>name [</c> as a member whatever the name, so a member there
-    /// prints bare.</summary>
-    public static IReadOnlySet<string> PropertyKeywords { get; } = System.Collections.Frozen.FrozenSet.ToFrozenSet(
-        comparer: StringComparer.Ordinal,
-        source: [
-            "break", "deal", "decision", "draw", "export", "for", "if", "import", "interrupt", "let",
-            "local", "onNoChoice", "option", "push", "remove", "repeat", "request", "rule", "schedule", "score",
-            "shuffle", "template", "transaction", "transform", "watchMemory", "when",
-        ]
-    );
     /// <summary>Gets the document's own headers, <c>schema</c> and <c>basis</c>, which a property at the top level
     /// spelling one prints quoted. Inside any block they are ordinary properties.</summary>
     public static IReadOnlySet<string> DocumentHeaders { get; } = System.Collections.Frozen.FrozenSet.ToFrozenSet(
@@ -144,18 +131,18 @@ public static partial class PuckPrinter {
     /// <returns>The spelling.</returns>
     public static string PrintExportName(string name) => QualifiedName.Parse(text: name).Print(segment: static segment => (IdentifierSpelling.IsName(text: segment) ? segment : $"`{segment}`"));
     /// <summary>Returns a property name as a statement reader takes it back: bare when it is one name that opens no
-    /// other production where it stands — in a construct body one of <see cref="PropertyKeywords"/>, at the top level
-    /// one of <see cref="DocumentHeaders"/> — and a quoted string otherwise.</summary>
+    /// other production where it stands — in a construct body one of
+    /// <see cref="Parsing.PuckParser.ConstructBodyKeywords"/>, at the top level one of <see cref="DocumentHeaders"/>
+    /// — and otherwise in the escape that reader reads: a backquoted name in a construct body, whose reader takes a
+    /// member's name bare or backquoted and never as a string, and a quoted string everywhere else.</summary>
     /// <param name="name">The property name.</param>
     /// <param name="level">The nesting depth the property stands at; 0 is the document's top level.</param>
     /// <param name="construct">Whether the property stands directly in a construct body rather than in the document,
     /// a plain block or an object.</param>
     /// <returns>The property name's spelling.</returns>
-    public static string PrintPropertyName(string name, int level, bool construct = false) => ((IdentifierSpelling.IsName(text: name) &&
-        !(construct && PropertyKeywords.Contains(item: name)) &&
-        ((level > 0) || !DocumentHeaders.Contains(item: name)))
-        ? name
-        : Quote(text: name)
+    public static string PrintPropertyName(string name, int level, bool construct = false) => (construct
+        ? ((IdentifierSpelling.IsName(text: name) && !Parsing.PuckParser.ConstructBodyKeywords.Contains(item: name)) ? name : ExpressionSpelling.PrintName(name: name, quoted: true))
+        : ((IdentifierSpelling.IsName(text: name) && ((level > 0) || !DocumentHeaders.Contains(item: name))) ? name : Quote(text: name))
     );
 
     private sealed partial class Writer {
@@ -460,7 +447,8 @@ public static partial class PuckPrinter {
         }
 
         // Whether the statements printing now are read by a construct body's reader, where a property spelling one
-        // of PropertyKeywords prints quoted; the document, a plain block and an object read every name as a member.
+        // of PuckParser.ConstructBodyKeywords prints quoted; the document, a plain block and an object read every name as
+        // a member.
         private bool m_construct;
 
         // The body of a braced construct, opened on the line the caller has already begun. `construct` is false for
@@ -1278,7 +1266,9 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case PushStatementNode push: {
-                        m_builder.Append(value: "push ").Append(value: push.RowName).Append(value: " = ");
+                        m_builder.Append(value: "push ");
+                        Row(row: push.Target);
+                        m_builder.Append(value: " = ");
                         Rhs(
                             level: level,
                             rhs: push.Rhs
@@ -1412,20 +1402,28 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case DrawStatementNode draw: {
-                        m_builder.Append(value: "draw ").Append(value: draw.From).Append(value: " to ").Append(value: draw.To);
+                        m_builder.Append(value: "draw ");
+                        Row(row: draw.From);
+                        m_builder.Append(value: " to ");
+                        Row(row: draw.To);
 
                         break;
                     }
                 case DealStatementNode deal: {
-                        m_builder
-                            .Append(value: "deal ").Append(value: deal.Count.ToString(provider: CultureInfo.InvariantCulture))
-                            .Append(value: " from ").Append(value: deal.From)
-                            .Append(value: " to ").Append(value: deal.To);
+                        m_builder.Append(value: "deal ");
+                        Expression(expression: deal.Count, level: level);
+                        m_builder.Append(value: " from ");
+                        Row(row: deal.From);
+                        m_builder.Append(value: " to ");
+                        Row(row: deal.To);
 
                         break;
                     }
                 case ShuffleStatementNode shuffle: {
-                        m_builder.Append(value: "shuffle ").Append(value: shuffle.Row).Append(value: " with ").Append(value: shuffle.Draw);
+                        m_builder.Append(value: "shuffle ");
+                        Row(row: shuffle.Row);
+                        m_builder.Append(value: " with ");
+                        Row(row: shuffle.Draw);
 
                         break;
                     }

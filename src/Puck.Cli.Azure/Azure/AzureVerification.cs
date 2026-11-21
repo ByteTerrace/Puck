@@ -568,6 +568,46 @@ public static partial class AzureCommand {
             ),
             value: silo
         );
+        // The second boot runs the image the way a deployment with MCP enabled does, so this document has the shape the
+        // deployment's worldMcpConfiguration output renders: a tenant issuer, oid subjects and an inventory observation,
+        // which makes the Azure MCP host construct its ARM pipeline at startup. Nothing here reaches the network before
+        // a caller arrives.
+        const string Tenant = "5b1e4c3a-9d2f-4e8b-a6c1-0f7d2e3b4a59";
+        const string Audience = "8f2d6a41-3c7e-4b95-9a0d-e1c6b7f45a23";
+
+        CliFiles.WriteJson(
+            path: Path.Combine(
+                path1: fixture,
+                path2: "mcp.json"
+            ),
+            value: new JsonObject {
+                ["target"] = HostedWorldName,
+                ["publicUrl"] = "https://world.invalid/mcp",
+                ["listenUrl"] = "http://127.0.0.1:8082",
+                ["issuer"] = $"https://login.microsoftonline.com/{Tenant}/v2.0",
+                ["audience"] = Audience,
+                ["scope"] = "user_impersonation",
+                ["authorizationScope"] = $"api://{Audience}/user_impersonation",
+                ["subjectClaim"] = "oid",
+                ["tenantId"] = Tenant,
+                ["allowedSubjects"] = new JsonArray(Owner),
+                ["services"] = new JsonObject {
+                    ["managedIdentityClientId"] = "0d4c8e2f-6a1b-4f37-b5e9-2c8a7d3f1e60",
+                    ["onboardingUrl"] = "https://world.invalid/api/self-onboard",
+                    ["observations"] = new JsonArray(new JsonObject {
+                        ["name"] = "storage-inventory",
+                        ["kind"] = "inventory",
+                        ["subjects"] = new JsonArray(Owner),
+                        ["settings"] = new JsonObject {
+                            ["resourceGroup"] = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/silo-smoke",
+                            ["apiVersion"] = "2021-04-01",
+                            ["resourceType"] = "Microsoft.Storage/storageAccounts",
+                            ["fields"] = new JsonObject { ["name"] = "/name" },
+                        },
+                    }),
+                },
+            }
+        );
         await DockerAsync(
             "run",
             "--rm",
@@ -586,7 +626,13 @@ public static partial class AzureCommand {
         var previous = "";
 
         for (var boot = 1; (boot <= 2); boot++) {
-            await DockerAsync(
+            // Boot 1 runs the image's own entry point, the deployment's shape without MCP; boot 2 runs the deployment's
+            // MCP shape, the image's CLI composing the installed extensions over the silo it hosts.
+            string[] command = ((boot == 1)
+                ? [image, "--silo", "/fixture/silo.json"]
+                : ["--entrypoint", "dotnet", image, .. WorldSiloImageLayout.McpArguments(silo: "/fixture/silo.json", http: "/fixture/mcp.json")]);
+
+            await DockerAsync(args: [
                 "run",
                 "-d",
                 "--name",
@@ -614,10 +660,10 @@ public static partial class AzureCommand {
                 $"127.0.0.1:{Port}:{Port}/udp",
                 "-p",
                 "127.0.0.1:8081:8081",
-                image,
-                "--silo",
-                "/fixture/silo.json"
-            );
+                "--env",
+                "ASPNETCORE_HTTP_PORTS=",
+                .. command,
+            ]);
             try {
                 var checkpoint = "";
                 var ready = false;

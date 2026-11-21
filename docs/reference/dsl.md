@@ -541,20 +541,22 @@ private sealed class CountsBecomeCalls : PuckSyntaxRewriter {
 ```
 
 The base hooks do nothing but descend, so a rewriter that overrides nothing is
-the identity and prints its input back byte for byte. Every node is rebuilt with
-the record `with` operator, so a node the rewrite did not touch keeps its own
-`SyntaxTrivia`—its author's comments, blank-line runs, and line breaks. Because
+the identity and answers the tree it was handed. A node whose children all come
+back unchanged is kept as it stands, and a changed node is rebuilt with the
+record `with` operator, so either way it keeps its own `SyntaxTrivia`—its
+author's comments, blank-line runs, and line breaks. Because
 the walk is over source rather than a lowered document, `let`, `template`,
 `for`, `import` and units survive as themselves instead of as their
 expansion; the printer writes the surviving `for` loop, not the rows it would
 produce.
 
 Two things raise `PuckRewriteException` rather than a diagnostic, because both
-are defects in the rewrite instead of refusals about a source: a node kind the
-descent has no arm for, which is how a newly added syntax node announces that
-the rewriter has fallen behind the tree; and a hook that answers a typed
-position—a `template`'s body, a `transform`'s call—with a node that position
-cannot hold.
+are defects in the rewrite instead of refusals about a source: a hook that
+answers a typed position—a `template`'s body, a `transform`'s call—with a node
+that position cannot hold; and a rewrite that replaces a value while keeping the
+author's own text beside it. The descent cannot fall behind the tree: it is each
+node's own `SyntaxNode.MapChildren`, generated from the node's declaration, and
+a node without one does not build.
 
 A `PuckMigration` wraps such a rewriter with the name `migrate` selects it by,
 a one-line summary, and `ReshapedMembers`: the `/`-separated document member
@@ -597,8 +599,13 @@ The following members still carry their own text grammar and are handed over who
 `PatternDeclarationNode.Match` is the one child that is not a syntax node at all
 (it is a `Puck.State.PatternNode`), so the descent has no hook for the match
 algebra; a rewrite reshapes it by replacing the whole `Match` on the declaration
-the statement hook hands it. Should any of these become a syntax node, the child
-law fails under its node's name until the arm rewrites it.
+the statement hook hands it. Should any of these become a syntax node, the
+descent reaches it from then on.
+
+A rewrite that reads names takes scope from `SyntaxScopes.Binds`, which says what
+each node binds for each of its children: override `PuckSyntaxRewriter.Within` to
+rewrite a child differently from what encloses it, as the import rewriter does to
+leave a parameter or a loop variable alone where it hides a library constant.
 
 ## Verification
 

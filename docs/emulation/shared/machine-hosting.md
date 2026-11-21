@@ -233,7 +233,17 @@ The worker applies these policies:
   checkpoint persists it with its scale and refuses a runtime whose clock has a
   different one.
 - Pixels are repacked only when a new native frame completes for queued calls.
-  The synchronous path forces a stage to preserve its contract.
+  The synchronous path forces a stage to preserve its contract. A segment
+  stages only the last native frame it completed, and a machine's video source
+  takes at most one image per completed tick, so a machine whose native rate is
+  above the world's tick rate shows a subset of its frames: in a 30 Hz world a
+  60 Hz machine completes about two native frames per segment and shows one.
+- The lifecycle charges the host time from `TakeWork` returning a step to its
+  `CompleteStep` to `StepBusyTime` (on `IQueuedMachineRuntime`); a lent core's
+  step is charged to the link thread's lifecycle instead. `machine.state`
+  echoes it as `busyMs`, beside `nativeFrames` and `backpressure`: `busyMs`
+  over the wall time between two reads is the share of real time the machine
+  needs to keep pace. It is host diagnostics, never machine state.
 - GPU publication serializes uploads but does not hold the frame lock during
   the upload. The leased array stays outside the worker's write rotation until
   the upload returns.

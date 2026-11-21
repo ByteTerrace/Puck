@@ -18,21 +18,8 @@ public static partial class ArenaTransforms {
         )) {
             return false;
         }
-        // A literal origin was resolved to its topology cell once, at compile time; only a dynamic key, which spells
-        // a fresh cell each firing, reads a name here.
-        var origin = ray.Origin;
-
         if (
-            (binding.BindsKey &&
-            (!context.Arena.Keys.TryGetName(
-                key: binding.Key,
-                name: out var name
-            ) ||
-                !topology.TryCell(
-                cell: out origin,
-                key: name.Value
-            ))) ||
-            (((uint)origin) >= ((uint)topology.CellCount)) ||
+            !TryBoardOrigin(context.Arena, topology, in binding, ray.Origin, out var origin) ||
             (((uint)ray.Direction) >= ((uint)topology.DirectionCount))
         ) {
             return Refuse(
@@ -42,49 +29,15 @@ public static partial class ArenaTransforms {
             );
         }
 
-        using var valuesLease = context.Arena.Scratch.Rent<long>(length: topology.CellCount);
-
-        var values = valuesLease.Span;
-        using var wordLease = context.Arena.Scratch.Rent<long>(length: topology.CellCount);
-        var word = wordLease.Span;
-        using var affectedLease = context.Arena.Scratch.Rent<int>(length: topology.CellCount);
+        var capacity = topology.LongestRay(ray.Direction);
+        using var word = context.Arena.Scratch.Rent<long>(capacity);
+        using var affectedLease = context.Arena.Scratch.Rent<int>(capacity);
         var affected = affectedLease.Span;
-
-        if (!context.Arena.TryReadBoard(
-            rowOrdinal: ray.RowOrdinal,
-            values: values
-        )) {
-            return Refuse(
-                code: TransformRefusal.SetRayAddressing,
-                reason: $"row '{RowName(
-                    context: in context,
-                    rowOrdinal: ray.RowOrdinal
-                )}' holds no board the arena can read",
-                refusal: out refusal
-            );
+        if (!ArenaBoards.TryReadRay(context.Arena, ray.RowOrdinal, origin, ray.Direction, word.Span, out var values, out var readReason, affected)) {
+            return Refuse(code: TransformRefusal.SetRayAddressing, reason: readReason, refusal: out refusal);
         }
 
-        var length = 0;
-        var cell = origin;
-
-        for (var visited = 1; (visited < topology.CellCount); visited++) {
-            cell = topology.Neighbour(
-                cell: cell,
-                direction: ray.Direction
-            );
-            if (
-                (cell < 0) ||
-                (cell == origin)
-            ) {
-                break;
-            }
-
-            word[length] = values[cell];
-            affected[length] = cell;
-            length++;
-        }
-
-        var prefix = ray.Pattern.LongestAcceptedPrefix(values: word[..length]);
+        var prefix = ray.Pattern.LongestAcceptedPrefix(values);
 
         if (prefix <= 0L) {
             return Refuse(

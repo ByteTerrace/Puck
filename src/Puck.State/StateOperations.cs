@@ -115,56 +115,8 @@ public abstract record StateTransform {
         ? []
         : [name.Trim()]
     );
-    // A vector operand spells its row as a row name or as "<row>[<key>]"; a literal vector names no row.
-    private static IEnumerable<string> VectorSubject(string? spelling) {
-        if (string.IsNullOrWhiteSpace(value: spelling)) {
-            return [];
-        }
-
-        var trimmed = spelling.Trim();
-
-        while (
-            (trimmed.Length >= 2) &&
-            (trimmed[0] == '(') &&
-            (trimmed[^1] == ')')
-        ) {
-            var depth = 0;
-            var enclosesAll = true;
-
-            for (var index = 0; index < (trimmed.Length - 1); index++) {
-                if (trimmed[index] == '(') {
-                    depth++;
-                } else if ((trimmed[index] == ')') && (--depth == 0)) {
-                    enclosesAll = false;
-                    break;
-                }
-            }
-
-            if (!enclosesAll || (depth != 1)) {
-                break;
-            }
-
-            trimmed = trimmed[1..^1].Trim();
-        }
-
-        if (trimmed.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: "vector("
-        )) {
-            return [];
-        }
-
-        var bracket = trimmed.IndexOf(value: '[');
-
-        if (
-            (bracket > 0) &&
-            trimmed.EndsWith(value: ']')
-        ) {
-            return Named(name: trimmed[..bracket]);
-        }
-
-        return [trimmed];
-    }
+    private static IEnumerable<string> VectorSubject(string? spelling) =>
+        VectorOperand.CellOf(spelling) is { } cell ? [cell.Name.Spelling] : [];
 
     /// <summary>Refreshes a knowledge board from its declared source and visibility mask; authority only.</summary>
     public sealed record Observe([property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Row) : StateTransform {
@@ -347,17 +299,21 @@ public abstract record StateTransform {
         );
     }
     /// <summary>Clears every group of cells valued <see cref="Lower"/>..<see cref="Upper"/> beside the cell
-    /// <see cref="From"/> names that has no empty cell beside it, writing the board's empty value over their members.
+    /// <see cref="From"/> names that has no liberty in the boundary range, writing the board's empty value over its members.
     /// The write-path twin of <c>$board:enclosedAt</c>, applied after the value lands.</summary>
     /// <param name="Row">The board.</param>
     /// <param name="From">The placed value's cell: a literal cell key, or any dynamic key spelling a write accepts.</param>
     /// <param name="Lower">The enclosed range's inclusive low end; the board's empty value lies outside it.</param>
     /// <param name="Upper">The enclosed range's inclusive high end.</param>
+    /// <param name="BoundaryLower">The liberty range's inclusive low end. Defaults to the board's empty value.</param>
+    /// <param name="BoundaryUpper">The liberty range's inclusive high end. Defaults to the board's empty value.</param>
     public sealed record ClearEnclosed(
         [property: DocumentName(WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action)] StateChannelRef Row,
         [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef From,
         long Lower,
-        long Upper
+        long Upper,
+        long? BoundaryLower = null,
+        long? BoundaryUpper = null
     ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(writes: [Row.Spelling]);
@@ -383,7 +339,7 @@ public abstract record StateTransform {
     ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
-            reads: [.. Named(name: From), .. Named(name: Where?.Spelling)],
+            reads: [.. VectorSubject(spelling: From), .. Named(name: Where?.Spelling)],
             writes: VectorSubject(spelling: Into)
         );
     }
@@ -408,8 +364,8 @@ public abstract record StateTransform {
     ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
-            reads: [.. Named(name: From), .. VectorSubject(spelling: Query), .. Named(name: Where?.Spelling)],
-            writes: VectorSubject(spelling: Into.Spelling)
+            reads: [.. VectorSubject(spelling: From), .. VectorSubject(spelling: Query), .. Named(name: Where?.Spelling)],
+            writes: [Into.Spelling]
         );
     }
     /// <summary>Stores a vector unless the table already holds a near-duplicate.</summary>
@@ -426,7 +382,7 @@ public abstract record StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
             reads: VectorSubject(spelling: From),
-            writes: VectorSubject(spelling: Into.Spelling)
+            writes: [Into.Spelling]
         );
     }
 }

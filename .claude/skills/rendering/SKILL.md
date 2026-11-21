@@ -69,6 +69,21 @@ screen), and the rest stand on their own inputs. A screen is never a reason to
 force every pass. Only the whole view, which sees no publication, renders while a
 screen shows a source (`SdfWorldTables.ForcesRender`).
 
+A pass signs with its motion scope's revision, not the residency's
+(`SdfMotionScope`, [decision](../../../docs/decisions/rendering.md#a-pass-stands-on-what-it-can-show)):
+the mesh pass's scope for it and everything that shades what it drew, the glass
+pass's for the glass passes, one for each cascade (`SdfWorldPasses.MotionOf`).
+`SdfWorldTables`' motion scopes are the one place a staged change is judged, and
+the list of what reads a transform slot lives in that file's header: a draw's
+record, its frame slot, a skin's members, and a light, a medium or a paint riding
+a slot. Add a kernel read of `sdfDynamicTransforms` for anything else and you must
+name it there, or a pass stands on a stale image; nothing else catches it. Build a
+pass's cull through `SdfWorldPasses.CullOf` and note its extent (`NoteDrawn`), so
+the scope judges by the cull the image was drawn under. `world.residency` prints
+each scope and why it last moved (`motion-scopes=`); `sdf.cadence.scopes` against
+`scopes.met` is how many stood. A scope that never stands names its cause there:
+on the debug world the standing body's breath meets every scope that can show it.
+
 `Shared/bloom-filter.hlsli` uses cell-edge reflection and conservative cell
 integration. Unit-sum taps alone only preserve constants: edge clamping duplicated
 a corner impulse's energy, and point resampling odd levels changed their mean.
@@ -118,7 +133,12 @@ wall clock in a World, and in a device-free law a `VirtualClock` the rig steps o
 display period for each frame it drives (`VirtualClock.Frame`), so the frames the
 law drives decide when background work lands. A wait for work running on the
 thread pool (a build, a trace's worker) stays real time and is bounded by
-`TestLiveness`; never meter it with the device clock.
+`TestLiveness`; never meter it with the device clock. A rig that settles the
+irradiance volume within a count of frames waits out `SdfMeshIrradiance.HostWorking`
+after each one (the worker computing on the host, not blocked on a probe job), so
+the frames count device round trips, not how fast the pool runs. A frame's default
+`Lights` and `Sky` are written into its content on first read, so a residency's copy
+carries a rig's edits to them.
 Waiting on every allocated residency
 deadlocks on hidden routed scenes whose GPU work correctly never starts.
 

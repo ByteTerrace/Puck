@@ -773,6 +773,11 @@ public static partial class RuleCompiler {
                     }
 
                     var enclosedOrigin = -1;
+                    var boundaryLower = enclosed.BoundaryLower ?? enclosedBoard.Empty;
+                    var boundaryUpper = enclosed.BoundaryUpper ?? enclosedBoard.Empty;
+                    if (boundaryLower > boundaryUpper) {
+                        throw Invalid(message: "clearEnclosed requires an ordered boundary range");
+                    }
 
                     reads.Add(item: Ordinal(name: enclosedRowName));
                     writes.Add(item: Ordinal(name: enclosedRowName));
@@ -793,6 +798,8 @@ public static partial class RuleCompiler {
                     }
 
                     resolved = new ArenaTransform.ClearEnclosed(
+                        BoundaryLower: boundaryLower,
+                        BoundaryUpper: boundaryUpper,
                         From: ((keyRef is null)
                         ? InternKey(
                             context: context,
@@ -967,9 +974,9 @@ public static partial class RuleCompiler {
         var board = TransformWork.BoardWrite;
         var door = TransformWork.Door;
         var work = arena switch {
-            // Three leases, the board read, the walk (a step and two copies a cell), the accepted prefix, and a store
-            // per cell of it.
-            ArenaTransform.SetRay ray => RuleWork.Known(units: (Cells(rowOrdinal: ray.RowOrdinal) * ((7L + TransformWork.PatternStep(pattern: ray.Pattern)) + board))),
+            ArenaTransform.SetRay ray => RuleWork.Known(units: (context.FindRowAt(ray.RowOrdinal)?.EffectiveDomain is StateDomain.CellsOf rayBoard
+                ? (context.FindTopology(rayBoard.Topology)?.LongestRay(ray.Direction) ?? 0)
+                : 0) * (7L + TransformWork.PatternStep(pattern: ray.Pattern) + board)),
             ArenaTransform.PushRay push => PushRayWork(
                 context: context,
                 push: push
@@ -1085,8 +1092,7 @@ public static partial class RuleCompiler {
             rowOrdinal: observe.RowOrdinal
         )) + stamp))));
     }
-    // A lease and the board read; the flood clears its marks, seeds one group per direction, visits each cell once and
-    // tests its neighbours, and empties each enclosed member; then every cell is read back and each cleared one stored.
+    // The flood reads the board once. It visits each cell at most once, then sorts and writes only the cleared cells.
     private static long ClearEnclosedWork(RuleCompileContext context, ArenaTransform.ClearEnclosed enclosed) {
         var topology = ((context.FindRowAt(rowOrdinal: enclosed.RowOrdinal)?.EffectiveDomain is StateDomain.CellsOf board)
             ? context.FindTopology(name: board.Topology)
@@ -1094,9 +1100,8 @@ public static partial class RuleCompiler {
         );
         var cells = ((long)(topology?.CellCount ?? 0));
         var directions = ((long)(topology?.DirectionCount ?? 0));
-        var flood = (((cells + directions) + (cells * (2L + (3L * directions)))) + cells);
-
-        return (((2L * cells) + flood) + (cells * (TransformWork.Door + TransformWork.BoardWrite)));
+        var sort = 2L * System.Numerics.BitOperations.Log2((uint)cells + 1U);
+        return directions + (cells * (7L + (3L * directions) + sort + TransformWork.BoardWrite));
     }
     private static long ArrangeWork(RuleCompileContext context, ArenaTransform.Arrange arrange) {
         var tokens = Math.Min(

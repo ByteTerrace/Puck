@@ -34,48 +34,6 @@ public static class WorldDrawBootResolver {
 
     private static void Narrate(string site, string instanceIdentity, string settled) =>
         Console.Error.WriteLine(value: $"[world.draw: settled {site} instance={instanceIdentity} -> {settled}]");
-    private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, Draw draw, PrivateDrawAuthority? authority, CellKind targetKind, out GeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? masks = null) {
-        fired = default;
-
-        if (!GeneratorEngine.TryResolveExecutableSource(
-            authority: authority,
-            sample: out var sample,
-            generators: definition.Generators,
-            draw: draw,
-            generator: out var generator,
-            reason: out var resolveReason
-        )) {
-            reason = $"{site} {resolveReason}";
-
-            return false;
-        }
-
-        if (!GeneratorEngine.TryFire(
-            generator: generator,
-            targetKind: targetKind,
-            seedState: GeneratorEngine.ComputeSeedState(
-                documentSeed: worldSeed,
-                instanceIdentity: instanceIdentity,
-                site: site
-            ),
-            stream: GeneratorEngine.ComputeStreamId(site: site),
-            cursor: cursor,
-            masks: masks,
-            result: out fired,
-            secret: sample,
-            reason: out var fireReason,
-            skip: draw.Skip
-        )) {
-            reason = $"{site} {fireReason}";
-
-            return false;
-        }
-
-        reason = string.Empty;
-
-        return true;
-    }
-
     /// <summary>Runs one whole-field pass of a lattice row's draw fill without keeping its values: the one admission
     /// of "this row's source can draw a pass at this position" that boot admission, the <c>generate</c> compose and
     /// the live paint all rest on, so the paint never meets a refusal the others did not.</summary>
@@ -129,12 +87,11 @@ public static class WorldDrawBootResolver {
         if (!GeneratorEngine.TryAdvanceBatch(
             generator: generator,
             targetKind: CellKind.Fixed,
-            seedState: GeneratorEngine.ComputeSeedState(
+            seed: GeneratorEngine.ComputeDrawSeed(
                 documentSeed: (definition.Generation?.WorldSeed ?? 0UL),
                 instanceIdentity: instanceIdentity,
                 site: site
             ),
-            stream: GeneratorEngine.ComputeStreamId(site: site),
             cursor: cursor,
             masks: masks,
             sampleCount: ((shape.Width * shape.Layers) * shape.Depth),
@@ -156,121 +113,68 @@ public static class WorldDrawBootResolver {
 
         return true;
     }
-    /// <summary>Draws one numeric sample per selected cell of a keyed draw site, in cell order, advancing the site's
-    /// cursor by the raw words actually consumed — the whole-row roll of a dice tray, or a re-roll of the named <paramref name="keys"/>
-    /// alone with every other cell held.</summary>
-    /// <param name="definition">The document the site's source resolves against.</param>
-    /// <param name="worldSeed">The document's world seed.</param>
-    /// <param name="instanceIdentity">The running instance identity.</param>
-    /// <param name="row">The keyed draw site.</param>
-    /// <param name="keys">The cells to redraw, or <see langword="null"/> for every cell.</param>
-    /// <param name="filled">The row with its drawn values, cursor, and drawn masks.</param>
-    /// <param name="reason">Why the fill refused, on failure.</param>
-    /// <returns><see langword="true"/> when every selected cell drew.</returns>
-    /// <param name="authority">The credential for a private site.</param>
-    public static bool TryFillKeyedSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, WorldStateRow row, IReadOnlyList<string>? keys, out WorldStateRow filled, out string reason, PrivateDrawAuthority? authority = null) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-        ArgumentNullException.ThrowIfNull(argument: row);
+    /// <summary>Stores one emission in its target cell inside the caller's transaction.</summary>
+    public delegate bool StoreDraw<T>(T cell, CellValue value, out string reason);
 
+    /// <summary>Fills a slot or the selected keyed cells and returns the continuation to persist with them.
+    /// Keyed samples are assigned in ordinal key-name order in every store.</summary>
+    public static bool TryGenerate<T>(WorldDefinition definition, string instanceIdentity, StateRow row, PrivateDrawAuthority? authority,
+        long cursor, IReadOnlyList<ClosedBitset256>? masks, IReadOnlyList<string>? keys, T slot,
+        IEnumerable<T> cells, Func<T, string> name, StoreDraw<T> store, out long next, out IReadOnlyList<ClosedBitset256>? nextMasks, out string reason) {
+        next = cursor;
+        nextMasks = masks;
+        if (row.Draw is not { } draw) { reason = $"state row '{row.Name}' declares no draw"; return false; }
+        if (!GeneratorEngine.TryResolveExecutableSource(definition.Generators, draw, authority, out var sample, out var generator, out reason)) { return false; }
+        var seed = GeneratorEngine.ComputeDrawSeed(definition.Generation?.WorldSeed ?? 0UL, instanceIdentity, WorldDrawSites.StateRow(row.Name));
+
+        if (!row.IsKeyed) {
+            if (keys is not null) { reason = "keys select cells of a keyed draw site alone"; return false; }
+            if (!GeneratorEngine.TryFire(generator, row.Kind, seed, cursor, masks, out var fired, out reason, sample, draw.Skip)) { return false; }
+            var value = fired.Text is { } text ? CellValue.Text(text) : CellValue.FromNumber(row.Kind, fired.Numeric!.Value);
+            next = checked(cursor + fired.Advances);
+            nextMasks = GeneratorEngine.MasksAfter(generator: generator, fired: fired.Masks, previous: masks);
+            return store(slot, value, out reason);
+        }
+
+        var requested = keys?.ToHashSet(StringComparer.Ordinal);
+        var selected = cells.Select(cell => (Cell: cell, Name: name(cell)))
+            .Where(entry => requested is null || requested.Contains(entry.Name))
+            .OrderBy(static entry => entry.Name, StringComparer.Ordinal).ToArray();
+        if (keys is not null && selected.Length != keys.Count) { reason = "generate names an absent or repeated cell"; return false; }
+        if (selected.Length == 0) { reason = string.Empty; return true; }
+        if (!GeneratorEngine.DrawStream.TryOpen(generator, row.Kind, seed, cursor, masks, out var stream, out reason, sample, draw.Skip)) { return false; }
+        foreach (var entry in selected) {
+            if (!stream.TryNext(out var raw, out reason) || !store(entry.Cell, CellValue.FromNumber(row.Kind, raw), out reason)) { return false; }
+        }
+        next = stream.Cursor;
+        nextMasks = GeneratorEngine.MasksAfter(generator: generator, fired: stream.MasksAfter, previous: masks);
+        return true;
+    }
+
+    /// <summary>Fills a document draw site and retains the written cells and their continuation together.</summary>
+    public static bool TryFillSite(WorldDefinition definition, string instanceIdentity, WorldStateRow row, IReadOnlyList<string>? keys,
+        PrivateDrawAuthority? authority, out WorldStateRow filled, out string reason) {
         filled = row;
-        var site = WorldDrawSites.StateRow(rowName: row.Name);
-
-        if (
-            (row.Draw is not { } draw) ||
-            !row.IsKeyed
-        ) {
-            reason = $"{site} is not a keyed draw site";
-
+        var previous = row.Cells;
+        StateCell[]? written = null;
+        if (!TryGenerate(definition, instanceIdentity, row, authority, row.DrawCursor, row.DrawnMasks, keys, 0,
+            Enumerable.Range(0, previous?.Count ?? 0), index => previous![index].Key.Value, Write, out var next, out var masks, out reason)) {
+            reason = $"state row '{row.Name}' {reason}";
             return false;
         }
+        if (written is not null) { filled = row with { Cells = written, DrawCursor = next, DrawnMasks = masks }; }
+        return true;
 
-        if (!GeneratorEngine.TryResolveExecutableSource(
-            authority: authority,
-            sample: out var sample,
-            generators: definition.Generators,
-            draw: draw,
-            generator: out var generator,
-            reason: out var resolveReason
-        )) {
-            reason = $"{site} {resolveReason}";
-
-            return false;
-        }
-
-        var cells = (row.Cells ?? []).ToArray();
-        var selected = new List<int>(capacity: cells.Length);
-
-        if (keys is null) {
-            for (var index = 0; (index < cells.Length); index++) { selected.Add(item: index); }
-        } else {
-            foreach (var key in keys) {
-                var index = Array.FindIndex(
-                    array: cells,
-                    match: cell => (cell.Key.Value == key)
-                );
-
-                if (
-                    (index < 0) ||
-                    selected.Contains(item: index)
-                ) {
-                    reason = $"{site} names no distinct cell '{key}' to redraw";
-
-                    return false;
-                }
-
-                selected.Add(item: index);
+        bool Write(int index, CellValue value, out string refusal) {
+            if (row.IsKeyed) {
+                written ??= previous!.ToArray();
+                written[index] = written[index] with { Value = value };
+            } else {
+                written = [previous is [{ } held] ? held with { Value = value } : new StateCell(Key: StateRow.SlotKey, Value: value)];
             }
-
-            selected.Sort();
-        }
-
-        if (selected.Count == 0) {
-            reason = string.Empty;
-
+            refusal = string.Empty;
             return true;
         }
-
-        var values = new long[selected.Count];
-
-        if (!GeneratorEngine.TryFireBatch(
-            generator: generator,
-            targetKind: row.Kind,
-            seedState: GeneratorEngine.ComputeSeedState(
-                documentSeed: worldSeed,
-                instanceIdentity: instanceIdentity,
-                site: site
-            ),
-            stream: GeneratorEngine.ComputeStreamId(site: site),
-            cursor: row.DrawCursor,
-            masks: row.DrawnMasks,
-            values: values,
-            masksAfter: out var masksAfter,
-                advances: out var advances,
-            reason: out var fireReason,
-            skip: draw.Skip,
-            secret: sample
-        )) {
-            reason = $"{site} {fireReason}";
-
-            return false;
-        }
-
-        for (var slot = 0; (slot < selected.Count); slot++) {
-            cells[selected[slot]] = cells[selected[slot]] with { Value = CellValue.FromNumber(kind: row.Kind, raw: values[slot]) };
-        }
-
-        filled = row with {
-            Cells = cells,
-            DrawCursor = checked((row.DrawCursor + advances)),
-            DrawnMasks = GeneratorEngine.MasksAfter(
-            generator: generator,
-            fired: masksAfter,
-            previous: row.DrawnMasks
-        ),
-        };
-        reason = string.Empty;
-
-        return true;
     }
     /// <summary>Resolves every first-fill draw site in <paramref name="definition"/>.</summary>
     /// <param name="definition">The freshly parsed document after validation of its boot draw inputs.</param>
@@ -302,7 +206,6 @@ public static class WorldDrawBootResolver {
         resolved = definition;
         reason = string.Empty;
 
-        var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var population = definition.Population;
         var host = definition.Host;
         var changed = false;
@@ -317,76 +220,10 @@ public static class WorldDrawBootResolver {
             if (!NeedsFirstFill(row: row)) {
                 continue;
             }
-            var draw = row.Draw!;
-
-            if (row.IsKeyed) {
-                if (!TryFillKeyedSite(
-                    authority: Authority(),
-                    definition: definition,
-                    filled: out var filledRow,
-                    instanceIdentity: instanceIdentity,
-                    keys: null,
-                    reason: out reason,
-                    row: row,
-                    worldSeed: worldSeed
-                )) {
-                    return false;
-                }
-
-                state ??= new List<WorldStateRow>(collection: authored);
-                state[index] = Authority().IsPreview && draw.PrivateStream ? filledRow with { BeforePrivatePreview = row } : filledRow;
-                changed = true;
-
-                continue;
-            }
-
-            if (!TryDrawSite(
-                authority: Authority(),
-                definition: definition,
-                worldSeed: worldSeed,
-                instanceIdentity: instanceIdentity,
-                site: WorldDrawSites.StateRow(rowName: row.Name),
-                draw: draw,
-                targetKind: row.Kind,
-                fired: out var fired,
-                reason: out reason,
-                cursor: row.DrawCursor,
-                masks: row.DrawnMasks
-            )) {
-                return false;
-            }
-
-            var cell = ((fired.Text is { } text)
-                ? new StateCell(
-                    Key: WorldStateRow.SlotKey,
-                    Value: CellValue.Text(value: text)
-                )
-                : new StateCell(
-                    Key: WorldStateRow.SlotKey,
-                    // A numeric draw is already in the site's own encoding — raw FixedQ4816 bits on a fixed row — the
-                    // contract the source's range/outcome values, the validator's domain narrowing and a lattice fill
-                    // all share.
-                    Value: CellValue.FromNumber(kind: row.Kind, raw: fired.Numeric!.Value)
-                )
-            );
-
-            _ = GeneratorEngine.TryResolveSource(
-                generators: definition.Generators,
-                draw: draw,
-                generator: out var generator,
-                reason: out _
-            );
+            var authority = Authority();
+            if (!TryFillSite(definition, instanceIdentity, row, null, authority, out var filled, out reason)) { return false; }
             state ??= new List<WorldStateRow>(collection: authored);
-            state[index] = row with {
-                BeforePrivatePreview = Authority().IsPreview && draw.PrivateStream ? row : null,
-                Cells = [cell],
-                DrawCursor = (row.DrawCursor + fired.Advances),
-                DrawnMasks = GeneratorEngine.MasksAfter(
-                generator: generator,
-                fired: fired.Masks,
-                previous: row.DrawnMasks
-            ),
-            };
+            state[index] = authority.IsPreview && row.Draw!.PrivateStream ? filled with { BeforePrivatePreview = row } : filled;
             changed = true;
         }
 

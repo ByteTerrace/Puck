@@ -62,7 +62,7 @@ internal static class ConstructCorpus {
         ["transform/writeSet"] = Transform(call: "writeSet(row: deck, set: s, value: 1)"),
         ["transform/boardCombine"] = Transform(call: "boardCombine(row: deck, operation: Or, left: deck, right: bag)"),
         ["transform/arrange"] = Transform(call: "arrange(row: deck, from: bag)"),
-        ["transform/clearEnclosed"] = Transform(call: "clearEnclosed(row: deck, from: a, lower: 0, upper: 1)"),
+        ["transform/clearEnclosed"] = Transform(call: "clearEnclosed(row: deck, from: a, lower: 0, upper: 1, boundaryLower: 2, boundaryUpper: 3)"),
         ["transform/mix"] = Transform(call: "mix(into: deck, terms: [{ from: bag, weight: 1 }])"),
         ["transform/mean"] = Transform(call: "mean(from: bag, into: deck)"),
         ["transform/nearest"] = Transform(call: "nearest(from: bag, query: deck, into: hp, k: 3)"),

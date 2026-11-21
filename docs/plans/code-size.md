@@ -276,7 +276,10 @@ entity whole when any field changed and sends raw floats. A generator is the
 one place to add a changed-field mask and an exact quantised form of
 fixed-point values, so every record gets deltas that still hash and verify.
 The same record form carries a seat's own-body continuation, which client
-prediction needs.
+prediction needs. [Replication and the wire](replication.md#decision-1-one-definition-generates-every-codec)
+settles what a definition states for each member (sent, derived or local; its
+wire form and cap; its mask bit and delta form) and holds
+[the first lane's brief](replication.md#the-first-step-as-a-brief).
 
 **Escapes.** A record whose layout an external format fixes (the attestation
 CBOR, the Matroska muxer) stays hand-written.
@@ -590,7 +593,11 @@ checkpoint form re-records what it invalidates in the same change.
    before.
 
 3. **Wire records, the checkpoint first (`wire-records`).** Build the
-   generator and convert `WorldAuthorityCheckpointCodec`.
+   generator and convert `WorldAuthorityCheckpointCodec`. The replication
+   plan splits this in two: [its first step](replication.md#the-first-step-as-a-brief)
+   builds the generator with masks and exact deltas already in the definition
+   and converts the body's continuation sections, and its second converts the
+   rest of the checkpoint.
    *Check:* the count of field reads and writes in `Puck.World.Server`, taken
    as this page took it, falls by at least half; the converted files lose at
    least 3,500 lines; a checkpoint taken and restored on the debug world gives
@@ -598,7 +605,10 @@ checkpoint form re-records what it invalidates in the same change.
 
 4. **Wire records, the links (`wire-links`).** Convert the submission,
    federation, replay and peer forms, and add the changed-field mask and the
-   exact quantised form.
+   exact quantised form. The mask and the exact form are built with the
+   generator in step 3 and reach the body wire in
+   [replication's step 3](replication.md#the-build-order); this step is that
+   plan's step 7.
    *Check:* no hand-written `Write…` or `Read…` method over the wire types
    remains outside the declared escapes; bytes per entity per tick on a
    federation link, read from the counters before and after, fall; state

@@ -87,6 +87,8 @@ public static class ModuleResolver {
         val1: (DocumentEvaluationBudget.WorkLimit + 1L),
         val2: (left + right)
     );
+    // Renames a module's own declarations, which are exactly its top-level `let`s and templates, and every read of
+    // them, to the names its importer sees.
     private static IReadOnlyList<StatementNode> PrefixModuleSymbols(IReadOnlyList<StatementNode> statements, string alias) {
         var symbols = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
@@ -96,22 +98,31 @@ public static class ModuleResolver {
             if (name is not null) { symbols.TryAdd(key: name, value: QualifiedName.Parse(text: alias).Append(member: name).ToString()); }
         }
 
-        return new ImportedSymbolRewriter(symbols: symbols).RewriteStatements(statements: statements);
+        return [.. new ImportedSymbolRewriter(symbols: symbols).Rewrite(document: new DocumentNode(null, null, statements)).Statements.Select(selector: statement => (statement switch {
+            LetNode let => let with { Name = symbols[let.Name] },
+            TemplateNode template => template with { Name = symbols[template.Name] },
+            _ => statement,
+        }))];
     }
 
+    // Rewrites each read of a module declaration to its imported name. A name a node binds for a child
+    // (SyntaxScopes.Binds) is that binding there, as it is when lowered, so the child is rewritten without it.
     private sealed class ImportedSymbolRewriter(IReadOnlyDictionary<string, string> symbols) : PuckSyntaxRewriter {
-        public IReadOnlyList<StatementNode> RewriteStatements(IReadOnlyList<StatementNode> statements) =>
-            Rewrite(document: new DocumentNode(null, null, statements)).Statements;
+        private ImportedSymbolRewriter Without(IEnumerable<string> names) {
+            Dictionary<string, string>? visible = null;
 
-        private ExpressionNode RewriteOne(ExpressionNode expression) =>
-            ((LetNode)RewriteStatements(statements: [new LetNode("__value", expression)])[0]).Value;
-        private ImportedSymbolRewriter Without(IEnumerable<string?> names) {
-            var hidden = names.Where(predicate: static name => (name is not null)).ToHashSet(comparer: StringComparer.Ordinal);
+            foreach (var name in names) {
+                if ((visible ?? symbols).ContainsKey(key: name)) {
+                    visible ??= new Dictionary<string, string>(collection: symbols, comparer: StringComparer.Ordinal);
+                    visible.Remove(key: name);
+                }
+            }
 
-            return new ImportedSymbolRewriter(symbols: symbols.Where(predicate: pair => !hidden.Contains(item: pair.Key))
-                .ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal));
+            return ((visible is null) ? this : new ImportedSymbolRewriter(symbols: visible));
         }
 
+        protected override PuckSyntaxRewriter Within(SyntaxNode parent, SyntaxNode child) =>
+            Without(names: SyntaxScopes.Binds(child: child, node: parent).Where(predicate: static binder => binder.Shadows).Select(selector: static binder => binder.Name));
         protected override Puck.State.ExpressionSpelling.SyntaxNode RewriteOperandSyntax(Puck.State.ExpressionSpelling.SyntaxNode node, DocumentValueForm form) {
             if (node is Puck.State.ExpressionSpelling.SourceLambda lambda) {
                 return lambda with { Body = Without(names: [lambda.Binder]).RewriteOperandSyntax(lambda.Body, DocumentValueForm.Expression) };
@@ -122,51 +133,11 @@ public static class ModuleResolver {
                 (form != DocumentValueForm.Key) && symbols.TryGetValue(key: name.Name, value: out var replacement))
                 ? name with { Name = replacement } : rewritten);
         }
-        protected override ExpressionNode RewriteExpression(ExpressionNode expression) {
-            if (expression is LambdaExpressionNode lambda) {
-                return lambda with { Body = Without(names: lambda.Parameters).RewriteOne(expression: lambda.Body) };
-            }
-            var rewritten = base.RewriteExpression(expression: expression);
-
-            return rewritten switch {
-                IdentifierExpressionNode identifier when symbols.TryGetValue(key: identifier.Name, value: out var replacement) => identifier with { Name = replacement },
-                CallExpressionNode call when symbols.TryGetValue(key: call.Name, value: out var replacement) => call with { Name = replacement },
-                _ => rewritten,
-            };
-        }
-        protected override StatementNode? RewriteStatement(StatementNode statement) {
-            if (statement is TemplateNode template) {
-                var nested = Without(names: template.Parameters.Select(selector: static parameter => parameter.Name));
-                var earlierParameters = new List<string>();
-                var rewritten = template with {
-                    Body = template.Body with { Statements = nested.RewriteStatements(statements: template.Body.Statements) },
-                    Parameters = [.. template.Parameters.Select(selector: parameter => {
-                        var defaultValue = ((parameter.DefaultValue is null)
-                            ? null
-                            : Without(names: earlierParameters).RewriteOne(expression: parameter.DefaultValue)
-                        );
-
-                        earlierParameters.Add(item: parameter.Name);
-                        return parameter with { DefaultValue = defaultValue };
-                    })],
-                };
-
-                return (symbols.TryGetValue(key: template.Name, value: out var templateName)
-                    ? rewritten with { Name = templateName }
-                    : rewritten);
-            }
-            if (statement is ForStatementNode loop) {
-                return loop with {
-                    Body = Without(names: [loop.Item, loop.Index]).RewriteStatements(statements: loop.Body),
-                    Sequence = RewriteOne(expression: loop.Sequence),
-                };
-            }
-            var descended = base.RewriteStatement(statement: statement);
-
-            return (((descended is LetNode let) && symbols.TryGetValue(key: let.Name, value: out var letName))
-                ? let with { Name = letName }
-                : descended);
-        }
+        protected override ExpressionNode RewriteExpression(ExpressionNode expression) => (base.RewriteExpression(expression: expression) switch {
+            IdentifierExpressionNode identifier when symbols.TryGetValue(key: identifier.Name, value: out var replacement) => identifier with { Name = replacement },
+            CallExpressionNode call when symbols.TryGetValue(key: call.Name, value: out var replacement) => call with { Name = replacement },
+            var rewritten => rewritten,
+        });
     }
 
     private static bool TraverseImports(
@@ -353,13 +324,10 @@ public static class ModuleResolver {
             diagnostics.Report(diagnostic: ex.ToDiagnostic());
             return null;
         }
-        var collected = new List<StatementNode>();
-
-        CollectModules(rootDoc, rootDir, "", new(comparer: ModuleImportIdentityComparer.Instance), collected, context);
         // A library's import is spent once its declarations are in, so the imports left each name a document.
         return rootDoc with {
             Statements = [
-                .. collected,
+                .. CollectModules(context: context, rootDoc: rootDoc, rootPath: rootPath),
                 .. rootDoc.Statements.Where(predicate: statement => !((statement is ImportNode import) && (context.Library(directory: rootDir, import: import) is not null))),
             ],
         };
@@ -424,25 +392,71 @@ public static class ModuleResolver {
         }
         return new ImportCost(Declarations: declarations, Depth: depth, RewriteWork: rewriteWork, Work: work);
     }
-    private static void CollectModules(DocumentNode document, string currentDir, string namespacePath, HashSet<ModuleImportIdentity> loaded, List<StatementNode> output, ImportContext context) {
-        context.CancellationToken.ThrowIfCancellationRequested();
+    /// <summary>Returns the <c>let</c> and template declarations the libraries <paramref name="rootDoc"/> imports hand
+    /// it, named as its compile names them: each under the aliases it was imported through, and carrying the path of
+    /// the library that declares it.</summary>
+    /// <param name="rootDoc">The importing source's parsed tree.</param>
+    /// <param name="rootPath">The importing source's path; its imports resolve beside it.</param>
+    /// <param name="sources">The compile session's parses, which every library the walk reads comes through.</param>
+    /// <param name="vocabulary">The vocabulary that resolves an import's name; names are libraries when omitted.</param>
+    /// <param name="cancellationToken">Stops the walk.</param>
+    /// <returns>The declarations, a library's own imports' ahead of its own. An import that names nothing, a library
+    /// that does not parse and an import that would close a cycle hand over nothing, so an editor still reads the rest
+    /// of a graph a compile refuses.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="rootDoc"/>, <paramref name="rootPath"/> or
+    /// <paramref name="sources"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<StatementNode> ImportedDeclarations(
+        DocumentNode rootDoc,
+        string rootPath,
+        PuckSourceTable sources,
+        IDocumentVocabulary? vocabulary = null,
+        CancellationToken cancellationToken = default
+    ) {
+        ArgumentNullException.ThrowIfNull(rootDoc);
+        ArgumentNullException.ThrowIfNull(rootPath);
+        ArgumentNullException.ThrowIfNull(sources);
+
+        return CollectModules(context: new ImportContext(cancellationToken: cancellationToken, sources: sources, vocabulary: vocabulary), rootDoc: rootDoc, rootPath: rootPath);
+    }
+
+    private static List<StatementNode> CollectModules(DocumentNode rootDoc, string rootPath, ImportContext context) {
+        var fullPath = Path.GetFullPath(path: rootPath);
+        var collected = new List<StatementNode>();
+
+        CollectModules(rootDoc, (Path.GetDirectoryName(path: fullPath) ?? ""), "", new(comparer: ModuleImportIdentityComparer.Instance), collected, context, [fullPath]);
+
+        return collected;
+    }
+    // A library is loaded once per namespace, which is the chain of aliases it was imported through: an import
+    // without one adds nothing to the chain, so two unaliased routes to one library under one alias are one load.
+    private static void CollectModules(DocumentNode document, string currentDir, string namespacePath, HashSet<ModuleImportIdentity> loaded, List<StatementNode> output, ImportContext context, List<string> chain) {
         foreach (var import in document.Statements.OfType<ImportNode>()) {
             context.CancellationToken.ThrowIfCancellationRequested();
             if (context.Library(directory: currentDir, import: import) is not { } path) { continue; }
-            var nextNamespace = (string.IsNullOrEmpty(value: namespacePath) ? (import.Alias ?? "") : QualifiedName.Parse(text: namespacePath).Append(member: (import.Alias ?? "")).ToString());
+            // A compile validates its graph first; an editor's walk of a refused one stops where it would recur.
+            if ((chain.Count >= DocumentEvaluationBudget.DepthLimit) || chain.Contains(path, Puck.Abstractions.PuckPaths.Comparer)) { continue; }
+            var nextNamespace = ((import.Alias is not { } alias) ? namespacePath : ((namespacePath.Length == 0) ? alias : QualifiedName.Parse(text: namespacePath).Append(member: alias).ToString()));
 
             if (!loaded.Add(item: new ModuleImportIdentity(Namespace: nextNamespace, Path: path))) { continue; }
-            var imported = context.Read(path: path);
+            DocumentNode imported;
+
+            try {
+                imported = context.Read(path: path);
+            } catch (Exception exception) when ((exception is not OperationCanceledException)) {
+                continue;
+            }
             var nested = new List<StatementNode>();
 
-            CollectModules(imported, (Path.GetDirectoryName(path: path) ?? ""), nextNamespace, loaded, nested, context);
+            chain.Add(item: path);
+            CollectModules(imported, (Path.GetDirectoryName(path: path) ?? ""), nextNamespace, loaded, nested, context, chain);
+            chain.RemoveAt(index: (chain.Count - 1));
             nested.AddRange(collection: imported.Statements.Where(predicate: static statement => (statement is LetNode or TemplateNode))
                 .Select(selector: statement => (statement switch {
                     TemplateNode template => template with { DefinitionPath = path },
                     LetNode let => let with { DefinitionPath = path },
                     _ => statement,
                 })));
-            output.AddRange(collection: ((import.Alias is { } alias) ? PrefixModuleSymbols(alias: alias, statements: nested) : nested));
+            output.AddRange(collection: ((import.Alias is null) ? nested : PrefixModuleSymbols(alias: import.Alias, statements: nested)));
         }
     }
 

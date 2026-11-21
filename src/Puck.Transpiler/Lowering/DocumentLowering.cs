@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Puck.Assets.Documents;
@@ -497,11 +498,13 @@ public static partial class DocumentLowering {
         string? refusal = null;
 
         for (var index = 0; ((index < argumentNames.Count) && (refusal is null)); index++) {
-            var at = ((argumentNames[index] is { } named)
-                ? function.Parameters.ToList().FindIndex(match: parameter => (parameter.Name == named))
-                : index);
+            var at = index;
+            if (argumentNames[index] is { } named) {
+                at = 0;
+                while ((at < function.Parameters.Count) && (function.Parameters[at].Name != named)) { at++; }
+            }
 
-            refusal = (((at < 0) || (at >= bound.Length))
+            refusal = ((at >= bound.Length)
                 ? ((argumentNames[index] is { } unknown)
                     ? $"function '{name}' has no parameter '{unknown}'{DocumentNearestNames.Suggestion(candidates: function.Parameters.Select(selector: static parameter => parameter.Name), name: unknown)}"
                     : $"function '{name}' takes {bound.Length} argument(s)")
@@ -1867,7 +1870,7 @@ public static partial class DocumentLowering {
     }
     private static bool IsDeclaredReference(JsonNode? lowered, DocumentScope scope, string catalogName) =>
         ((lowered is JsonValue value) && value.TryGetValue<string>(value: out var name) &&
-        scope.Annotations.TryGetValue(key: catalogName, value: out var catalog) && ((HashSet<string>)catalog!).Contains(item: name));
+        scope.Annotations.TryGetValue(key: catalogName, value: out var catalog) && ((ImmutableHashSet<string>.Builder)catalog!).Contains(item: name));
     private static bool ValidateModuleSurface(TemplateParameterNode parameter, JsonNode? lowered, DocumentScope scope) {
         if ((lowered is not JsonValue value) || !value.TryGetValue<string>(value: out var name) || !scope.Templates.TryGetValue(key: name, value: out var module) || !module.IsModule) {
             return false;

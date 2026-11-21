@@ -220,7 +220,7 @@ public sealed class TransformDisclosureLawTests {
 
     [Fact]
     public void ParenthesizedVectorCellOperandListsUnderlyingRowAsReadSubject() {
-        var remember = new StateTransform.Remember(Into: "dest", Key: "k", From: "(secretVec[a])", UnlessWithin: "0.5");
-        Assert.Contains(new StateSubject(Name: "secretVec", Access: StateAccess.Read), remember.Subjects());
+        var remember = new StateTransform.Remember(Into: "dest", Key: "k", From: "(`pack$secretVec`[a])", UnlessWithin: "0.5");
+        Assert.Contains(new StateSubject(Name: "pack$secretVec", Access: StateAccess.Read), remember.Subjects());
     }
 }

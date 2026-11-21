@@ -47,6 +47,9 @@ public sealed record WorldConstruct(
 
     /// <summary>Gets every member the construct describes.</summary>
     public IReadOnlyList<WorldConstructMember> Members { get; init; } = (Members ?? []);
+    /// <summary>Gets a value indicating whether the construct's body holds effect statements, as its
+    /// <see cref="Grammar"/> states, so what may stand in it is what may stand in a rule's body.</summary>
+    public bool HoldsEffects => Grammar.Contains(comparisonType: StringComparison.Ordinal, value: "<effect>");
     /// <summary>Gets every key the spelling can carry on the construct's own document node: the described members'
     /// keys and the keys the emitter adds.</summary>
     /// <remarks>A node carrying a key outside this set has no spelling and takes

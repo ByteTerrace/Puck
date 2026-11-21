@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Puck.Assets.Documents;
 using Puck.Assets;
 using System.Text;
@@ -1127,7 +1128,7 @@ public static partial class WorldDocumentEmitter {
             }
             // `alias.name` reads the instance, so the alias cannot also be a row or constant the scope reads by name.
             if (
-                (scope.Annotations.TryGetValue(key: "DeclaredRows", value: out var declaredRows) && (declaredRows is HashSet<string> rows) && rows.Contains(item: alias)) ||
+                (scope.Annotations.TryGetValue(key: "DeclaredRows", value: out var declaredRows) && (declaredRows is ImmutableHashSet<string>.Builder rows) && rows.Contains(item: alias)) ||
                 scope.Constants.ContainsKey(key: alias)
             ) {
                 scope.Diagnostics.ReportError(
@@ -1169,9 +1170,9 @@ public static partial class WorldDocumentEmitter {
         if ((state["world"] is JsonArray rows) && scope.Annotations.TryGetValue(key: "DeclaredRows", value: out var rowsValue)) {
             foreach (var row in rows.OfType<JsonObject>()) {
                 if (row["name"]?.GetValue<string>() is { } name) {
-                    ((HashSet<string>)rowsValue!).Add(item: name);
+                    ((ImmutableHashSet<string>.Builder)rowsValue!).Add(item: name);
                     if (string.Equals(a: row["kind"]?.GetValue<string>(), b: "Bool", comparisonType: StringComparison.OrdinalIgnoreCase) && scope.Annotations.TryGetValue(key: "DeclaredGates", value: out var gatesValue)) {
-                        ((HashSet<string>)gatesValue!).Add(item: name);
+                        ((ImmutableHashSet<string>.Builder)gatesValue!).Add(item: name);
                     }
                 }
             }
@@ -1179,8 +1180,8 @@ public static partial class WorldDocumentEmitter {
         if ((state["pools"] is JsonArray pools) && scope.Annotations.TryGetValue(key: "DeclaredPools", value: out var poolsValue)) {
             foreach (var pool in pools.OfType<JsonObject>()) {
                 if (pool["name"]?.GetValue<string>() is { } name) {
-                    ((HashSet<string>)poolsValue!).Add(item: name);
-                    if (scope.Annotations.TryGetValue(key: "DeclaredRows", value: out var declaredRows)) { ((HashSet<string>)declaredRows!).Add(item: name); }
+                    ((ImmutableHashSet<string>.Builder)poolsValue!).Add(item: name);
+                    if (scope.Annotations.TryGetValue(key: "DeclaredRows", value: out var declaredRows)) { ((ImmutableHashSet<string>.Builder)declaredRows!).Add(item: name); }
                 }
             }
         }
@@ -1191,8 +1192,8 @@ public static partial class WorldDocumentEmitter {
         };
 
         foreach (var catalogName in new[] { "DeclaredRows", "DeclaredPools", "DeclaredGates" }) {
-            if (scope.Annotations.TryGetValue(key: catalogName, value: out var value) && (value is HashSet<string> catalog)) {
-                annotations[catalogName] = new HashSet<string>(collection: catalog, comparer: StringComparer.Ordinal);
+            if (scope.Annotations.TryGetValue(key: catalogName, value: out var value) && (value is ImmutableHashSet<string>.Builder catalog)) {
+                annotations[catalogName] = catalog.ToImmutable().ToBuilder();
             }
         }
         foreach (var sharedName in new[] { "IncludeTests", "EmbeddingLock", "DiscoveredEmbeddings", "AssetContext", WorldDocumentVocabulary.DocumentDirectoryAnnotation, GeneratedNamesAnnotation, "ModuleAliases" }) {
@@ -1216,25 +1217,19 @@ public static partial class WorldDocumentEmitter {
 
         // The placeholder is a generated name, `arg$<n>`, so no name a document declares can be one; the only names
         // it must step around are the placeholders an enclosing expansion already stands in the catalogs.
-        var occupied = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        foreach (var catalogName in new[] { "DeclaredRows", "DeclaredPools", "DeclaredGates" }) {
-            if (scope.Annotations.TryGetValue(key: catalogName, value: out var catalogValue) && (catalogValue is HashSet<string> catalog)) {
-                occupied.UnionWith(other: catalog);
-            }
-        }
+        var occupied = scope.Annotations.GetValueOrDefault("DeclaredRows") as ImmutableHashSet<string>.Builder;
 
         string placeholder;
         var ordinal = replacements.Count;
 
-        do { placeholder = GeneratedName.Join("arg", (ordinal++).ToString(provider: System.Globalization.CultureInfo.InvariantCulture)); } while (occupied.Contains(item: placeholder) || replacements.ContainsKey(key: placeholder));
+        do { placeholder = GeneratedName.Join("arg", (ordinal++).ToString(provider: System.Globalization.CultureInfo.InvariantCulture)); } while ((occupied?.Contains(item: placeholder) == true) || replacements.ContainsKey(key: placeholder));
         replacements.Add(key: placeholder, value: externalName);
-        if (parameter.Kind is "Row" or "Gate") { ((HashSet<string>)invocationAnnotations["DeclaredRows"]!).Add(item: placeholder); }
+        if (parameter.Kind is "Row" or "Gate") { ((ImmutableHashSet<string>.Builder)invocationAnnotations["DeclaredRows"]!).Add(item: placeholder); }
         if (parameter.Kind == "Pool") {
-            ((HashSet<string>)invocationAnnotations["DeclaredPools"]!).Add(item: placeholder);
-            ((HashSet<string>)invocationAnnotations["DeclaredRows"]!).Add(item: placeholder);
+            ((ImmutableHashSet<string>.Builder)invocationAnnotations["DeclaredPools"]!).Add(item: placeholder);
+            ((ImmutableHashSet<string>.Builder)invocationAnnotations["DeclaredRows"]!).Add(item: placeholder);
         }
-        if (parameter.Kind == "Gate") { ((HashSet<string>)invocationAnnotations["DeclaredGates"]!).Add(item: placeholder); }
+        if (parameter.Kind == "Gate") { ((ImmutableHashSet<string>.Builder)invocationAnnotations["DeclaredGates"]!).Add(item: placeholder); }
         return new LiteralExpressionNode(
             Value: placeholder,
             Offset: value.Offset,
@@ -1263,10 +1258,11 @@ public static partial class WorldDocumentEmitter {
             if ((target[entry.Key] is JsonArray targetArray) && (entry.Value is JsonArray expandedArray)) {
                 var sourceIndex = 0;
 
-                foreach (var item in expandedArray.ToList()) {
+                var items = expandedArray.ToArray();
+                expandedArray.Clear();
+                foreach (var item in items) {
                     var targetIndex = targetArray.Count;
 
-                    expandedArray.Remove(item: item);
                     targetArray.AppendNode(item: item);
                     RegisterTree(node: item, sourcePointer: DocumentJsonPointer.Child(index: sourceIndex, pointer: DocumentJsonPointer.Child(name: entry.Key, pointer: pointer)), targetPointer: DocumentJsonPointer.Child(index: targetIndex, pointer: DocumentJsonPointer.Child(name: entry.Key, pointer: pointer)));
                     sourceIndex++;
@@ -1276,7 +1272,8 @@ public static partial class WorldDocumentEmitter {
             } else if (target.ContainsKey(propertyName: entry.Key)) {
                 scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: $"Expanded module writes document member '{entry.Key}' more than once.", span: origin.Span);
             } else {
-                target[entry.Key] = entry.Value?.DeepClone();
+                expanded.Remove(propertyName: entry.Key);
+                target[entry.Key] = entry.Value;
                 if (entry.Value is { } value) { RegisterTree(node: value, sourcePointer: DocumentJsonPointer.Child(name: entry.Key, pointer: pointer), targetPointer: DocumentJsonPointer.Child(name: entry.Key, pointer: pointer)); }
             }
         }

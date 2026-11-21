@@ -49,6 +49,10 @@ public interface IQueuedMachineRuntime {
     /// <summary>Gets the number of submissions that encountered a full pending-segment window and waited for capacity
     /// since the current content was loaded.</summary>
     long BackpressureEvents { get; }
+    /// <summary>Gets the host time the worker has spent running accepted segments since the current content was loaded.
+    /// It is host diagnostics, never machine state: over a wall-clock span it is the share of real time the machine
+    /// needs to keep pace, so its reciprocal is how many times faster than real time the machine could run.</summary>
+    TimeSpan StepBusyTime { get; }
     /// <summary>Gets a worker fault description, or <see langword="null"/> while the queue is healthy.</summary>
     string? QueueFault { get; }
 

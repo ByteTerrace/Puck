@@ -9,41 +9,23 @@ public sealed partial class WorldDocument {
 
         reason = string.Empty;
         if (!arena.Catalog.TryResolve(StateLane.Document, mutation.Row, out var row) ||
-            (arena.Rows[row.Ordinal].Draw is not { Timing: not DrawTiming.Boot } draw)) {
+            (arena.Rows[row.Ordinal].Draw is not { Timing: not DrawTiming.Boot })) {
             reason = "generate requires a redrawable draw site"; return false;
         }
-        if (!GeneratorEngine.TryResolveExecutableSource(m_definition.Generators, draw, Host.DrawKeys, out var sample, out var generator, out reason)) { return false; }
-        var site = WorldDrawSites.StateRow(rowName: arena.Rows[row.Ordinal].Name);
-        var seed = new DrawSeed(State: GeneratorEngine.ComputeSeedState(documentSeed: (m_definition.Generation?.WorldSeed ?? 0UL), instanceIdentity: Host.InstanceIdentity, site: site), Stream: GeneratorEngine.ComputeStreamId(site: site));
+        var clock = time;
+        var declaration = arena.Rows[row.Ordinal];
+        if (!WorldDrawBootResolver.TryGenerate(m_definition, Host.InstanceIdentity, declaration, Host.DrawKeys, arena.DrawCursor(row.Ordinal),
+            ArenaDraws.ReadMasks(arena, row.Ordinal), mutation.Keys, arena.Keys.Intern(StateRow.SlotKey), Cells(),
+            key => arena.Keys[key].Value, Write, out var next, out var masks, out reason)) { return false; }
+        return ArenaDraws.TryWrite(arena, row.Ordinal, next, masks, out reason);
 
-        if (!arena.Rows[row.Ordinal].IsKeyed) {
-            if (mutation.Keys is not null) { reason = "keys select cells of a keyed draw site alone"; return false; }
-            if (!ArenaDraws.TryFire(arena, row.Ordinal, generator, seed, out var fired, out reason, sample, draw.Skip)) { return false; }
-            var key = arena.Keys.Intern(name: StateRow.SlotKey);
+        IEnumerable<CellKey> Cells() {
+            var cursor = 0;
+            while (arena.TryNextCell(row.Ordinal, ref cursor, out var key)) { yield return key; }
+        }
 
-            return ((fired.Text is { } text) ? arena.TryWriteText(row.Ordinal, key, text, out reason)
-                : arena.TryWriteLive(row.Ordinal, key, fired.Numeric!.Value, StateWriteKind.Set, time, out reason));
-        }
-        var selected = new List<CellKey>();
-        var cursor = 0;
-
-        while (arena.TryNextCell(row.Ordinal, ref cursor, out var key)) {
-            if ((mutation.Keys is null) || mutation.Keys.Contains(arena.Keys[key].Value, StringComparer.Ordinal)) { selected.Add(item: key); }
-        }
-        if ((mutation.Keys is { } keys) && ((selected.Count != keys.Count) || (keys.Distinct(comparer: StringComparer.Ordinal).Count() != keys.Count))) {
-            reason = "generate names an absent or repeated cell"; return false;
-        }
-        if (selected.Count == 0) { return true; }
-        var before = arena.DrawCursor(rowOrdinal: row.Ordinal);
-        var masks = ArenaDraws.ReadMasks(arena: arena, rowOrdinal: row.Ordinal);
-        var values = new long[selected.Count];
-
-        if (!GeneratorEngine.TryFireBatch(generator, arena.Layout[row.Ordinal].Kind, seed.State, seed.Stream, before, masks,
-            values, out var after, out var advances, out reason, draw.Skip, sample)) { return false; }
-        if (!ArenaDraws.TryWrite(arena, row.Ordinal, checked((before + advances)), GeneratorEngine.MasksAfter(fired: after, generator: generator, previous: masks), out reason)) { return false; }
-        for (var i = 0; (i < selected.Count); i++) {
-            if (!arena.TryWriteLive(row.Ordinal, selected[i], values[i], StateWriteKind.Set, time, out reason)) { return false; }
-        }
-        return true;
+        bool Write(CellKey key, CellValue value, out string refusal) =>
+            value.Kind == CellKind.Text ? arena.TryWriteText(row.Ordinal, key, value.AsText!, out refusal)
+            : arena.TryWriteLive(row.Ordinal, key, value.Raw, StateWriteKind.Set, clock, out refusal);
     }
 }

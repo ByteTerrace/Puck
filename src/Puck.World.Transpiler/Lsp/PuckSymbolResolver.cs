@@ -1,4 +1,3 @@
-using Puck.Abstractions;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -14,10 +13,10 @@ namespace Puck.World.Transpiler.Lsp;
 internal static class PuckSymbolResolver {
     /// <summary>A declaration brought in through one or more library <c>import</c> statements.</summary>
     /// <param name="Name">The name in the importer's scope (prefixed with <c>alias.</c> when aliased).</param>
-    /// <param name="OriginalName">The declaration's own name in <paramref name="SourcePath"/>.</param>
     /// <param name="SourcePath">The full path of the library file that defines <paramref name="Node"/>.</param>
-    /// <param name="Node">The defining <see cref="LetNode"/> or <see cref="TemplateNode"/>, carrying its original span.</param>
-    internal sealed record ImportedSymbol(string Name, string OriginalName, string SourcePath, StatementNode Node);
+    /// <param name="Node">The defining <see cref="LetNode"/> or <see cref="TemplateNode"/>, carrying its span in
+    /// <paramref name="SourcePath"/>.</param>
+    internal sealed record ImportedSymbol(string Name, string SourcePath, StatementNode Node);
 
     /// <summary>The word and optional dotted qualified name under a cursor position.</summary>
     /// <param name="Word">The bare identifier under the cursor, or <see langword="null"/> when preceded by <c>.</c> or inside a comment/string.</param>
@@ -37,8 +36,9 @@ internal static class PuckSymbolResolver {
     /// <param name="Keys">The row's authored cell keys or enum members.</param>
     internal sealed record AstStateRow(string Kind, IReadOnlyList<string> Keys);
 
-    /// <summary>Collects every <c>let</c> and <c>template</c> declaration reachable from <paramref name="document"/>'s
-    /// library <c>import</c>s through <paramref name="sources"/> (<see cref="PuckSourceTable"/>).</summary>
+    /// <summary>Collects every <c>let</c> and <c>template</c> declaration <paramref name="document"/>'s library
+    /// <c>import</c>s hand it, under the names its compile gives them
+    /// (<see cref="ModuleResolver.ImportedDeclarations"/>).</summary>
     public static IReadOnlyList<ImportedSymbol> CollectImportedDeclarations(
         DocumentNode? document,
         string? sourcePath,
@@ -49,105 +49,10 @@ internal static class PuckSymbolResolver {
             return [];
         }
 
-        var fullRoot = Path.GetFullPath(path: sourcePath);
-        var rootDir = (Path.GetDirectoryName(path: fullRoot) ?? string.Empty);
-        var visited = new HashSet<(string Path, string Prefix)>();
-        var results = new List<ImportedSymbol>();
-
-        WalkImports(
-            currentDir: rootDir,
-            document: document,
-            prefix: string.Empty,
-            results: results,
-            sources: sources,
-            visited: visited,
-            vocabulary: vocabulary
-        );
-
-        return results;
-    }
-
-    private static void WalkImports(
-        DocumentNode document,
-        string currentDir,
-        string prefix,
-        PuckSourceTable sources,
-        IDocumentVocabulary vocabulary,
-        HashSet<(string Path, string Prefix)> visited,
-        List<ImportedSymbol> results
-    ) {
-        foreach (var import in document.Statements.OfType<ImportNode>()) {
-            if (import.NamesFile) {
-                continue;
-            }
-            if (
-                !vocabulary.TryResolveImport(
-                    directory: currentDir,
-                    library: out var library,
-                    name: import.Path,
-                    reason: out _
-                ) ||
-                (library is null)
-            ) {
-                continue;
-            }
-
-            var fullPath = Path.GetFullPath(path: library);
-            var nextPrefix = (string.IsNullOrEmpty(value: prefix)
-                ? (import.Alias ?? string.Empty)
-                : (string.IsNullOrEmpty(value: import.Alias) ? prefix : $"{prefix}.{import.Alias}"));
-
-            if (!visited.Add(item: (PuckPaths.Key(path: fullPath), nextPrefix))) {
-                continue;
-            }
-
-            DocumentNode importedDoc;
-
-            try {
-                importedDoc = sources.Read(
-                    parsed: out _,
-                    path: fullPath,
-                    vocabulary: vocabulary
-                ).Document;
-            } catch {
-                continue;
-            }
-
-            var nextDir = (Path.GetDirectoryName(path: fullPath) ?? string.Empty);
-
-            WalkImports(
-                currentDir: nextDir,
-                document: importedDoc,
-                prefix: nextPrefix,
-                results: results,
-                sources: sources,
-                visited: visited,
-                vocabulary: vocabulary
-            );
-
-            foreach (var statement in importedDoc.Statements) {
-                var originalName = (statement switch {
-                    LetNode letNode => letNode.Name,
-                    TemplateNode templateNode => templateNode.Name,
-                    _ => null,
-                });
-
-                if (originalName is null) {
-                    continue;
-                }
-
-                var exposedName = (string.IsNullOrEmpty(value: nextPrefix)
-                    ? originalName
-                    : $"{nextPrefix}.{originalName}");
-
-                results.Add(item: new ImportedSymbol(
-                    Name: exposedName,
-                    Node: statement,
-                    OriginalName: originalName,
-                    SourcePath: fullPath
-                ));
-            }
-        }
+        return [.. ModuleResolver.ImportedDeclarations(rootDoc: document, rootPath: sourcePath, sources: sources, vocabulary: vocabulary).Select(selector: static statement => (statement switch {
+            LetNode constant => new ImportedSymbol(Name: constant.Name, Node: constant, SourcePath: constant.DefinitionPath!),
+            var declaration => new ImportedSymbol(Name: ((TemplateNode)declaration).Name, Node: declaration, SourcePath: ((TemplateNode)declaration).DefinitionPath!),
+        }))];
     }
 
     /// <summary>Resolves an <c>import</c> or <c>basis</c> name beside <paramref name="directory"/> to a source file
@@ -330,67 +235,12 @@ internal static class PuckSymbolResolver {
             vocabulary: vocabulary
         );
 
-        // 2. Lexical scopes walking outward from the cursor.
-        if (word is not null) {
-            for (var index = (path.Count - 1); (index >= 0); --index) {
-                switch (path[index]) {
-                    case LambdaExpressionNode lambda when lambda.Parameters.Contains(value: word):
-                        return new DefinitionTarget(SourceText: source, Span: lambda.Span, Uri: uri);
-
-                    case TemplateNode template:
-                        if (template.Parameters.FirstOrDefault(predicate: item => (item.Name == word)) is { } param) {
-                            return new DefinitionTarget(SourceText: source, Span: param.Span, Uri: uri);
-                        }
-                        if (template.Body.Statements.OfType<LetNode>().FirstOrDefault(predicate: item => (item.Name == word)) is { } templateLet) {
-                            return new DefinitionTarget(SourceText: source, Span: templateLet.Span, Uri: uri);
-                        }
-                        break;
-
-                    case ForStatementNode loop when (((loop.Item == word) || (loop.Index == word)) && !SyntaxWalk.Spans(node: loop.Sequence, offset: offset)):
-                        return new DefinitionTarget(SourceText: source, Span: loop.Span, Uri: uri);
-
-                    case ForStatementNode loop:
-                        if (loop.Body.OfType<LetNode>().FirstOrDefault(predicate: item => (item.Name == word)) is { } loopLet) {
-                            return new DefinitionTarget(SourceText: source, Span: loopLet.Span, Uri: uri);
-                        }
-                        break;
-
-                    case RepeatStatementNode repeat when ((repeat.Index == word) && !SyntaxWalk.Spans(node: repeat.Count, offset: offset)):
-                        return new DefinitionTarget(SourceText: source, Span: repeat.Span, Uri: uri);
-
-                    case RuleBlockNode rule:
-                        if (rule.Statements.OfType<LocalStatementNode>().FirstOrDefault(predicate: item => (item.Name == word)) is { } local) {
-                            return new DefinitionTarget(SourceText: source, Span: local.Span, Uri: uri);
-                        }
-                        break;
-
-                    case BlockNode block:
-                        if (block.Statements.OfType<LetNode>().FirstOrDefault(predicate: item => (item.Name == word)) is { } blockLet) {
-                            return new DefinitionTarget(SourceText: source, Span: blockLet.Span, Uri: uri);
-                        }
-                        break;
-
-                    case CallExpressionNode call: {
-                            var argument = call.Arguments.FirstOrDefault(predicate: item => ((item.Name == word) && SyntaxWalk.Spans(node: item, offset: offset) && (offset < item.Value.Offset)));
-
-                            if (argument is not null) {
-                                if (document.Statements.OfType<TemplateNode>().FirstOrDefault(predicate: item => (item.Name == call.Name)) is { } localTemplate &&
-                                    localTemplate.Parameters.FirstOrDefault(predicate: item => (item.Name == argument.Name)) is { } localParam) {
-                                    return new DefinitionTarget(SourceText: source, Span: localParam.Span, Uri: uri);
-                                }
-                                if (imported.FirstOrDefault(predicate: item => ((item.Name == call.Name) && (item.Node is TemplateNode))) is { Node: TemplateNode importedTemplate } symbol &&
-                                    importedTemplate.Parameters.FirstOrDefault(predicate: item => (item.Name == argument.Name)) is { } importedParam) {
-                                    return new DefinitionTarget(
-                                        SourceText: readSource(arg: symbol.SourcePath),
-                                        Span: importedParam.Span,
-                                        Uri: pathToUri(arg: symbol.SourcePath)
-                                    );
-                                }
-                            }
-                            break;
-                        }
-                }
-            }
+        // 2. A name some enclosing node binds, or the parameter a call's named argument fills.
+        if ((word is not null) && (ResolveLexical(document: document, imported: imported, offset: offset, path: path, word: word) is { } lexical)) {
+            return ((lexical.Origin is { } origin)
+                ? new DefinitionTarget(SourceText: readSource(arg: origin.SourcePath), Span: lexical.Binder.Declaration.Span, Uri: pathToUri(arg: origin.SourcePath))
+                : new DefinitionTarget(SourceText: source, Span: lexical.Binder.Declaration.Span, Uri: uri)
+            );
         }
 
         // 3. Top-level local declarations (`let`, `template`, `import` alias, `enum`, `record`, state rows, named blocks).
@@ -442,6 +292,47 @@ internal static class PuckSymbolResolver {
         }
 
         return null;
+    }
+
+    /// <summary>Resolves a bare word read at the innermost position of <paramref name="path"/> to the declaration
+    /// inside the tree it names: a name an enclosing node binds (<see cref="SyntaxScopes.Resolve"/>), or, on a call's
+    /// named argument, the called template's parameter. Hover and go-to-definition both answer from it, so they agree
+    /// with each other and with what lowering binds.</summary>
+    /// <param name="document">The parsed document.</param>
+    /// <param name="path">The nodes the position stands in, outermost first.</param>
+    /// <param name="word">The word under the cursor.</param>
+    /// <param name="offset">The 0-based source offset of the cursor.</param>
+    /// <param name="imported">The declarations the document's library imports hand it.</param>
+    /// <returns>The binder, with the imported template that declares it when it is another file's; otherwise
+    /// <see langword="null"/>, including for a rule local a document constant of the same name outranks.</returns>
+    internal static (SyntaxBinder Binder, ImportedSymbol? Origin)? ResolveLexical(
+        DocumentNode document,
+        IReadOnlyList<SyntaxNode> path,
+        string word,
+        int offset,
+        IReadOnlyList<ImportedSymbol>? imported
+    ) {
+        if ((path.Count >= 2) && (path[^1] is ArgumentNode argument) && (argument.Name == word) && (offset < argument.Value.Offset) && (path[^2] is CallExpressionNode call)) {
+            var origin = ((document.Statements.OfType<TemplateNode>().Any(predicate: item => (item.Name == call.Name)))
+                ? null
+                : imported?.FirstOrDefault(predicate: item => ((item.Name == call.Name) && (item.Node is TemplateNode))));
+            var called = (((TemplateNode?)origin?.Node) ?? document.Statements.OfType<TemplateNode>().FirstOrDefault(predicate: item => (item.Name == call.Name)));
+
+            if (called?.Parameters.FirstOrDefault(predicate: item => (item.Name == word)) is { } formal) {
+                return (new SyntaxBinder(Declaration: formal, Kind: SyntaxBinderKind.Parameter, Name: word), origin);
+            }
+        }
+        if (SyntaxScopes.Resolve(name: word, path: path) is not { } binder) {
+            return null;
+        }
+        if (!binder.Shadows && (
+            document.Statements.Any(predicate: statement => ((statement is LetNode constant) && (constant.Name == word))) ||
+            (imported?.Any(predicate: item => (item.Name == word)) == true)
+        )) {
+            return null;
+        }
+
+        return (binder, null);
     }
 
     /// <summary>Finds a declared state row or enum directly in the parsed AST without running a compile.</summary>

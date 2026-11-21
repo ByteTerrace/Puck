@@ -423,9 +423,10 @@ The Humble Gaming Deck's packages are in [its plan](humble-gaming-deck.md#open-i
   a 60 Hz scrolling cartridge's rate) and `MachineVideoSourceUpload.Write`
   checks only whether `IMachineVideoOutput.WriteFrame` returned a positive
   sequence number while advancing its own stamp, re-uploading unchanged frames.
-  First trace a scrolling test cartridge (frames produced by the machine,
-  uploads requested, uploads accepted, frames shown) to confirm where frames are
-  lost. Then declare the machine's own cadence instead of tick cadence, and put
+  Frames are lost: in the 30 Hz debug world `machine.state` counts about two
+  native frames per segment for every 60 Hz machine (the Deck 601 over 300
+  segments), and the worker stages only a segment's last frame, so every other
+  frame is emulated and never shown. Declare the machine's own cadence instead of tick cadence, and put
   a short queue of complete frames — each stamped with the machine's own
   sequence number — between the machine and the display so that sequence (plus
   source replacement or reset) drives every downstream refresh. Check: a
@@ -437,8 +438,7 @@ The Humble Gaming Deck's packages are in [its plan](humble-gaming-deck.md#open-i
   one), which is why the contract is the latest eligible frame, and audio
   follows the same clock. Which frame is shown is a presentation matter: under
   the machines decision neither visibility nor presentation rate controls how
-  a machine advances. If the trace shows no frames are dropped at the debug
-  world's tick rate, the work shrinks to not uploading unchanged frames.
+  a machine advances.
 
 ---
 

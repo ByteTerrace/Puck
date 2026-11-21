@@ -202,7 +202,8 @@ public sealed class ModuleExpansionTests {
         var rootPath = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
         File.WriteAllText(contents: "state { world { slot composed = 9 } }", path: Path.Combine(path1: directory.RootPath, path2: "document.puck"));
-        File.WriteAllText(contents: "import \"document\"", path: Path.Combine(path1: directory.RootPath, path2: "fragment.puck"));
+        File.WriteAllText(contents: "let supplied = 2", path: Path.Combine(path1: directory.RootPath, path2: "constants.puck"));
+        File.WriteAllText(contents: "import \"document\"\nimport \"constants\"", path: Path.Combine(path1: directory.RootPath, path2: "fragment.puck"));
         File.WriteAllText(contents: "import \"document\"\nlet unused = 1", path: Path.Combine(path1: directory.RootPath, path2: "library.puck"));
         File.WriteAllText(contents: "import \"fragment\"", path: rootPath);
 

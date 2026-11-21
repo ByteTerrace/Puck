@@ -88,11 +88,11 @@ public sealed class SdfMeshHistory {
     public static WorkKind RowsOwnedChanged { get; } = Registry.Declare(name: "sdf.instances.rows.owned.changed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts live rows yielded by the table's whole-table enumeration.</summary>
     public static WorkKind RowsWalkedWhole { get; } = Registry.Declare(name: "sdf.instances.rows.walked-whole", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Counts the passes that resolve hits from a target recorded under another revision of the draw records
-    /// than the tables now hold (<see cref="SdfWorldTables.MeshRevision"/>): a surface pass reading a mesh target, a
-    /// views or resolve pass reading visibility records, a glass shading pass reading a glass target. Zero on a correct
-    /// run; the hit door bounds such a read, but cannot tell an occupant that is in bounds from the one the target
-    /// named.</summary>
+    /// <summary>Counts the passes that resolve hits from a target recorded under another revision of its writer's
+    /// motion scope than the scope now holds (<see cref="SdfMotionScope.Revision"/>), so a record the target may name
+    /// changed since: a surface pass reading a mesh target, a views or resolve pass reading visibility records, a glass
+    /// shading pass reading a glass target. Zero on a correct run; the hit door bounds such a read, but cannot tell an
+    /// occupant that is in bounds from the one the target named.</summary>
     public static WorkKind TargetsStale { get; } = Registry.Declare(name: "sdf.instances.targets.stale", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the most rows one staging submitted to the mesh placement planner since the peaks were last
     /// cleared.</summary>

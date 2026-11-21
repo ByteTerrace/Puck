@@ -1,0 +1,63 @@
+// A whole-row effect (`push`, `draw`, `deal`, `shuffle`) and a pool effect (`claim`, `for each`) name their row or pool
+// as an assignment names its target: a template parameter that holds the name, or a name an interpolated string
+// computes, is that row; and `deal` takes its count as any value.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  record Player {
+    score: Int
+  }
+  pool players of Player capacity(2)
+  world {
+    row {
+      name: "cards"
+      kind: "Int"
+      capacity: 4
+      cells: map(range(0, 4), i => { key: $"{i}", value: i })
+    }
+    pile deck0 of cards capacity(4) {
+      "0"
+      "1"
+      "2"
+      "3"
+    }
+    pile hand of cards capacity(4)
+    row {
+      name: "history"
+      kind: "Int"
+      domain: ring(capacity: 4, empty: 0)
+    }
+    row {
+      name: "stream"
+      kind: "Int"
+      draw {
+        generator {
+          source: "StreamDraw"
+        }
+        timing: "Event"
+      }
+    }
+    slot go = 0
+  }
+}
+
+let handSize = 2
+
+template table(index, target, log, shuffler, pool) {
+  rule "moves" {
+    when go == 1
+    draw $"deck{index}" to target
+    deal handSize from $"deck{index}" to target
+    shuffle target with shuffler
+    push log = 1
+    claim pool as seated {
+      seated.score = 1
+    }
+    for each member in pool {
+      member.score = 0
+    }
+  }
+}
+
+table(index: 0, target: "hand", log: "history", shuffler: "stream", pool: "players")

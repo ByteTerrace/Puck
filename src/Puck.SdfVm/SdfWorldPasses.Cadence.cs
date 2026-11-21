@@ -20,6 +20,9 @@ public sealed partial class SdfWorldPasses {
 
             return ((entry.DistantDecided == m_frame) ? DistantSignatureOf(entry: entry, frame: frame, tables: tables) : null);
         }
+        // Asked ahead of every early answer below, so a held or forced pass keeps its scope held.
+        var motion = MotionOf(entry: entry, instance: instance, part: part, tables: tables, view: view);
+
         // A held far cascade stands whatever forces the frame's other passes (SdfWorldPasses.Rates).
         if ((part == SdfWorldPackage.Parts.ShadowFar) && HoldsFar(frame: frame, instance: instance, tables: tables, view: view.View)) {
             return FarSignatureOf(entry: entry, signature: null);
@@ -29,28 +32,39 @@ public sealed partial class SdfWorldPasses {
             SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Forced);
             return ((part == SdfWorldPackage.Parts.ShadowFar) ? FarSignatureOf(entry: entry, signature: null) : null);
         }
-        UpdateSurfaceInputs(entry: entry, tables: tables, view: view);
+        UpdateSurfaceInputs(entry: entry, instance: instance, tables: tables, view: view);
         if (entry.CadenceFrame != m_frame) {
             entry.CadenceFrame = m_frame;
+            // The upload has run, so the scope's poses are the ones this frame's tables hold: the history continues
+            // only while they are the poses its latest render read, which a draw moving outside the view leaves so.
             if (!entry.Temporal.Stands(epoch: EpochOf(entry: entry, view: view, width: entry.Temporal.Epoch.Width,
                 height: entry.Temporal.Epoch.Height, debug: tables.PassValues.DebugMode, temporal: temporal,
-                unread: entry.UnreadFrames), previousPoses: tables.PoseRevision)) {
+                unread: entry.UnreadFrames), previousPoses: PosesOf(entry: entry, tables: tables).Poses)) {
                 entry.SampleRevision++;
                 SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.Resampled);
             }
         }
         var hash = Fnv1aHash.Create();
 
-        hash.Add(value: tables.PassSignature(frame: frame, view: Math.Min(val1: view.View, val2: (frame.Views.Count - 1)), part: part));
+        hash.Add(value: tables.PassSignature(frame: frame, motion: motion, part: part, view: Math.Min(val1: view.View, val2: (frame.Views.Count - 1))));
         hash.Add(value: entry.Bindings);
-        hash.Add(value: entry.SampleRevision);
+        // A cascade is drawn from its light's camera, which no sample of the view's jitter moves, so a cascade stands
+        // through the samples a temporal view takes of a still scene.
+        if (DrawScopeOf(part: part) is not (DrawScope.ShadowNear or DrawScope.ShadowFar or DrawScope.ShadowSecond)) {
+            hash.Add(value: entry.SampleRevision);
+        }
         hash.Add(value: images);
         return ((part == SdfWorldPackage.Parts.ShadowFar) ? FarSignatureOf(entry: entry, signature: hash.Value) : hash.Value);
     }
 
-    private static void UpdateSurfaceInputs(Entry entry, SdfWorldView view, SdfWorldTables tables) {
+    private void UpdateSurfaceInputs(Entry entry, string instance, SdfWorldView view, SdfWorldTables tables) {
         var frame = view.Residency.Frame!;
-        var signature = tables.PassSignature(frame: frame, view: Math.Min(val1: view.View, val2: (frame.Views.Count - 1)), part: SdfWorldPackage.Parts.Views);
+        var signature = tables.PassSignature(
+            frame: frame,
+            motion: MotionOf(entry: entry, instance: instance, part: SdfWorldPackage.Parts.Views, tables: tables, view: view),
+            part: SdfWorldPackage.Parts.Views,
+            view: Math.Min(val1: view.View, val2: (frame.Views.Count - 1))
+        );
 
         if ((entry.SurfaceSignature != signature) || (entry.RenderedScale != entry.CurrentScale)) {
             entry.SurfaceSignature = signature;

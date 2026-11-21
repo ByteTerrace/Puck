@@ -1,0 +1,14 @@
+let size = 2
+
+function scaled(size) = size * 3
+
+function based(extra = size) = extra + 1
+
+let doubled = [for size in [4, 5] { size * 2 }]
+
+let mapped = map([7], size => size + 1)
+
+let nested = [for item in [1, 2] {
+  let size = item * 5
+  size + 1
+}]

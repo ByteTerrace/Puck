@@ -158,30 +158,11 @@ public sealed class ArenaWordLawTests {
             expected: scratch
         );
 
-        var direction = 0;
-        var expected = new long[TopologyArenaFixture.BoardCells];
-        var expectedLength = BoardQueries.ReadRay(
-            direction: direction,
-            origin: 0,
-            topology: topology!,
-            values: scratch,
-            word: expected
-        );
-
-        Assert.True(condition: ArenaBoards.TryReadRay(
-            arena: arena,
-            direction: direction,
-            origin: 0,
-            ray: out var ray,
-            reason: out var reason,
-            rowOrdinal: TopologyArenaFixture.Board,
-            values: new long[TopologyArenaFixture.BoardCells],
-            word: buffer
-        ), userMessage: reason);
-        Assert.Equal(
-            actual: ray.ToArray(),
-            expected: expected[..expectedLength]
-        );
+        var direction = topology!.Direction("E");
+        var cells = new int[TopologyArenaFixture.BoardCells];
+        Assert.True(ArenaBoards.TryReadRay(arena, TopologyArenaFixture.Board, 0, direction, buffer, out var ray, out var reason, cells), reason);
+        Assert.Equal(new[] { 1, 2, 3 }, cells[..ray.Length]);
+        Assert.Equal(new[] { 1L, 2L, 0L }, ray.ToArray());
 
         // A ray steps in one of the topology's directions, so no ray reads the word a row read answers.
         Assert.False(condition: ArenaBoards.TryReadRay(
@@ -191,13 +172,26 @@ public sealed class ArenaWordLawTests {
             ray: out _,
             reason: out var refusal,
             rowOrdinal: TopologyArenaFixture.Board,
-            values: new long[TopologyArenaFixture.BoardCells],
             word: buffer
         ));
         Assert.Contains(
             actualString: refusal,
             expectedSubstring: "direction ordinal"
         );
+    }
+    [Fact]
+    public void ArenaRaysRefuseHostOwnedLattices() {
+        var section = TopologyArenaFixture.Section();
+        var rows = section.Rows!.ToArray();
+        var board = TopologyArenaFixture.Board;
+        rows[board] = rows[board] with { HostOwned = true };
+        var (_, arena) = TopologyArenaFixture.Build(section with { Rows = rows });
+        var topology = arena.Layout[board].Topology!;
+        var east = topology.Direction("E");
+        var attacks = new BoardAttacksQuery(topology, 1L, 2L, [east]);
+
+        Assert.False(ArenaBoards.TryReadRay(arena, board, 0, east, new long[topology.CellCount], out _, out _));
+        Assert.False(ArenaBoards.TryQuery(arena, board, attacks, 0, default, out _, out _));
     }
     [Fact]
     public void ABoardQueryOverAnArenaRowAnswersWhatTheSpanKernelAnswers() {

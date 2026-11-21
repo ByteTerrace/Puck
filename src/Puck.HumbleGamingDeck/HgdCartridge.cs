@@ -19,6 +19,13 @@ public sealed class HgdCartridge {
     public HgdCartridgeHeader Header {
         get;
     }
+    /// <summary>Gets the backing array of <see cref="Image"/>, which boards read through cached bank windows and never
+    /// write.</summary>
+    internal byte[] ImageBytes => m_image;
+    /// <summary>Gets the offset of the first PRG-ROM byte within <see cref="ImageBytes"/>.</summary>
+    internal int PrgRomOffset => m_prgOffset;
+    /// <summary>Gets the offset of the first CHR-ROM byte within <see cref="ImageBytes"/>.</summary>
+    internal int ChrRomOffset => m_chrOffset;
     /// <summary>Gets the immutable PRG bytes.</summary>
     public ReadOnlySpan<byte> PrgRom => m_image.AsSpan(start: m_prgOffset, length: ((int)Header.PrgRomSize));
     /// <summary>Gets the immutable CHR bytes.</summary>

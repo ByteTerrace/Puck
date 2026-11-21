@@ -352,13 +352,34 @@ package above is not started. One item belongs to no package:
 - Emulation rate. A Deck takes several times longer per world tick than the
   World's own tick CPU (`puck bench world` prints each machine's tick alone), and
   a headless unpaced run (`puck test`, replay catch-up, `--unpaced`) waits on the
-  slowest machine's pending window, which is a Deck in the debug world. With
-  quiet master ticks skipped, the per-dot PPU (`HgdPpu.StepDot`: the range tests
-  in `StepRenderingDot` and `StepSprites`, `EmitPixel`) and the CPU's per-cycle
-  `Transfer` are most of what is left. Cutting them, for example by deciding
-  each dot's work from a per-dot table rather than a cascade of range tests,
-  must leave every state `QuietTickEquivalenceLawTests` and the battery compare
-  unchanged.
+  slowest machine's pending window, which is a Deck in the debug world (four of
+  them: the device row's and the range's three televisions). `machine.state`'s
+  `busyMs` over wall time reads each one's share of real time on any machine.
+  The core allocates nothing per frame. Its cost is the reference execution
+  mode itself: an NTSC frame steps `HgdMachine.StepMasterTick` about 119,100
+  times (4.07 per CPU cycle, 238,200 quiet ticks skipped), 89,330 dots and
+  29,270 CPU cycles. A board that times on edges (MMC1, MMC3) pays about
+  190,000 `IHgdMapper` interface calls a frame: three per CPU cycle (`ObserveM2`
+  twice, `Irq`) plus the cartridge reads, and about 340 per rendering line from
+  the PPU's fetches (`ObservePpuAddress` and `PpuRead`); NROM pays about 65,000
+  (`CpuRead` and `PpuRead`). The work, largest first:
+  1. The catch-up mode [Clock and scheduling](#clock-and-scheduling) allows: run
+     the CPU and the PPU in spans up to the next observable edge (a PPU register
+     access, the NMI edge, a board's IRQ deadline, DMA, the APU's IRQ), the
+     scheduler the Advanced Gaming Brick already has (`AgbScheduler`), gated by
+     the chunk-partition equivalence stage.
+  2. The bus and the PPU still reach the board's cached windows through an
+     `IHgdMapper` call per PRG and CHR read (about 65,000 a frame on NROM).
+     Handing the bus and the PPU the board's window tables, as the Humble
+     Gaming Brick's `SystemBus` holds its ROM windows, removes them.
+  3. The presentation path moves about 1.2 MB per shown frame for 61,440
+     nine-bit pixels: `HgdPalette.Convert` to `0x00RRGGBB`, the worker's
+     `RepackFramebuffer` to RGBA8 (a second pass every core pays), the copy
+     under the frame lock in `WriteFrame`, and the upload. The engine's
+     `Indexed8` source format, which no machine uses, converts on the GPU, but
+     a 512-entry palette needs a wider index.
+  Each must leave every state `QuietTickEquivalenceLawTests` and the battery
+  compare unchanged.
 
 ---
 
