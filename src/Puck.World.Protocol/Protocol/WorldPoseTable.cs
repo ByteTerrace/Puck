@@ -84,6 +84,14 @@ public sealed class WorldPoseTable {
     /// <summary>Gets the slots the delivery in progress has admitted, in admission order; valid until the next
     /// <see cref="Begin"/> or <see cref="TryAdmit"/>.</summary>
     public ReadOnlySpan<int> Seen => m_seen.Members;
+    /// <summary>Gets every slot that can be active once a delivery has completed: the slots the last
+    /// <see cref="Complete"/> left live and those <see cref="Seed"/> published since. A consumer that resolves a pose
+    /// for each active entity walks these and never the whole <see cref="Capacity"/>; valid until the next
+    /// <see cref="Complete"/> or <see cref="Seed"/>.</summary>
+    public ReadOnlySpan<int> Live => m_live.Members;
+    /// <summary>Gets whether the last <see cref="Complete"/> changed which slots are active: it admitted a slot the
+    /// delivery before had not left live, or it left one inactive.</summary>
+    public bool ActiveChanged { get; private set; }
 
     /// <summary>Returns whether the delivery in progress has admitted a slot.</summary>
     /// <param name="index">The 0-based entity index; one outside <see cref="Capacity"/> was never admitted.</param>
@@ -102,6 +110,8 @@ public sealed class WorldPoseTable {
     /// <param name="preserved">A slot to keep live and active though this delivery did not admit it (a seeded
     /// route not yet in an ordinary snapshot), or a negative index for none.</param>
     public void Complete(int preserved = -1) {
+        var activeChanged = false;
+
         foreach (var index in m_live.Members) {
             if (!m_seen.Contains(index: index) && (index != preserved)) {
                 Volatile.Write(
@@ -110,9 +120,14 @@ public sealed class WorldPoseTable {
                 );
                 m_inhabitantsMoved |= (m_placementId[index] is not null);
                 m_placementId[index] = null;
+                activeChanged = true;
             }
         }
+        foreach (var index in m_seen.Members) {
+            activeChanged |= !m_live.Contains(index: index);
+        }
 
+        ActiveChanged = activeChanged;
         m_live.Clear();
         foreach (var index in m_seen.Members) { _ = m_live.Add(index: index); }
         if (preserved >= 0) { _ = m_live.Add(index: preserved); }

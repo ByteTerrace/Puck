@@ -460,16 +460,19 @@ public sealed partial class RenderGraphRuntimeLawTests {
             var image = (filling ? fill : camera);
 
             output = new RenderGraphExternalOutput(
-                Image: Surface.SameDeviceImage(
+                image: Surface.SameDeviceImage(
                     format: GpuPixelFormat.R8G8B8A8Unorm,
                     height: image.Height,
                     imageHandle: image.ImageHandle,
                     imageViewHandle: image.ImageViewHandle,
                     width: image.Width
                 ),
-                Layout: GpuImageLayout.ShaderReadOnly,
-                Lease: image.ImageViewHandle,
-                Tainted: !filling
+                label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(
+                    external: !filling,
+                    source: Puck.Abstractions.Presentation.DeliveryPublicSource.DeviceOrCapture
+                ),
+                layout: GpuImageLayout.ShaderReadOnly,
+                lease: image.ImageViewHandle
             );
 
             return true;

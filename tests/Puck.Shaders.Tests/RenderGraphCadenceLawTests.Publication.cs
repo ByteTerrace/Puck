@@ -77,7 +77,8 @@ public sealed partial class RenderGraphCadenceLawTests {
             public void Dispose() { }
             public ulong? Signature(in Puck.Hosting.FrameContext context, Puck.Hosting.RenderGraphExternalReads? reads) => 1;
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-                owner.Images[pass] = recording.Outputs[0].Image.ImageHandle;
+                _ = recording.Outputs[0].Image.TryRead(latch: recording.Latch, image: out var output);
+                owner.Images[pass] = output.ImageHandle;
                 return RenderGraphPackageOutcome.Drew;
             }
         }

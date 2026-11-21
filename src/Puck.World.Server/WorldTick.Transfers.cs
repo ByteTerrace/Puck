@@ -35,33 +35,76 @@ public sealed partial class WorldTick {
         m_transferAuthorityAllowed = allowed;
     }
 
-    // Admits every queued packet exactly once, then republishes only the accepted held image. A row is
+    // Admits every queued packet exactly once, in order, then republishes only the accepted held image. A row is
     // accepted only while the same peer principal still occupies its slot; an onward transfer leaves the old row
     // inert, and slot reuse can never inherit it. ApplyIntentSubmission remains the one Drive/grant/input-hold door.
+    // Every event of the owner's current epoch is applied or the owner's input is restarted, which the authority
+    // publishes: a packet is never skipped while later ones are applied over it, since each rests on the one before.
     private void ApplyFederatedIntents() {
         for (var index = 0; (index < m_federatedIntents.Length); index++) {
             ref var state = ref m_federatedIntents[index];
 
-            if (
-                !state.Active ||
-                (Host.Body(index: index) is not { } body) ||
-                !Host.Population.IsAdmittedPeer(bodyIndex: index) ||
-                (Host.Population.PeerPrincipal(index: index) != state.Principal)
-            ) {
+            if (!state.Active) { continue; }
+            if (Host.Body(index: index) is not { } body) {
+                NoteFederatedDrop(bodyIndex: index, reason: "its slot holds no body");
+                continue;
+            }
+            if (!Host.Population.IsAdmittedPeer(bodyIndex: index)) {
+                NoteFederatedDrop(bodyIndex: index, reason: "its body is not an admitted peer's");
+                continue;
+            }
+            if (Host.Population.PeerPrincipal(index: index) != state.Principal) {
+                NoteFederatedDrop(bodyIndex: index, reason: $"its slot belongs to {Host.Population.PeerPrincipal(index: index).Describe()}, not {state.Principal.Describe()}");
                 continue;
             }
 
             var admitted = false;
+            var restarted = false;
 
             foreach (var packet in state.Pending.Span) {
+                WorldTickWork.Process.Add(WorldTickWork.FederatedBatches, 1);
+                if (LeftEpoch(principal: state.Principal, batch: packet.Input, held: out var owner)) {
+                    // The ordinary state of a stream for a moment after any epoch change: its sender has not yet taken
+                    // the epoch this authority published. Restarting for it would restart again for every packet in
+                    // flight.
+                    WorldTickWork.Process.Add(WorldTickWork.FederatedStale, 1);
+                    NoteFederatedDrop(bodyIndex: index, reason: $"its batches name input epoch {packet.Input.Epoch} of revision {packet.Input.Revision}; this authority holds epoch {owner!.Epoch} of revision {owner.Revision}");
+                    continue;
+                }
+
                 var submission = packet with {
                     Tick = Host.Input.Interval.Tick,
                     EntityIndex = index,
                     Principal = state.Principal,
                     Input = packet.Input with { Tick = Host.Input.Interval.Tick },
                 };
+                var epoch = (owner?.Epoch ?? 0UL);
+                var retimed = (owner?.RetimedEvents ?? 0L);
+                var admission = ApplyIntentSubmission(body: body, remote: true, submission: submission);
 
-                if (!ApplyIntentSubmission(body: body, submission: submission).IsAccepted) { continue; }
+                if (owner is not null) { WorldTickWork.Process.Add(WorldTickWork.FederatedRetimed, (owner.RetimedEvents - retimed)); }
+                if (!admission.IsAccepted) {
+                    var refusal = (admission.InputRefusal ?? admission.Permission.DescribeRefusal(
+                        actor: state.Principal,
+                        subject: $"body:{index}",
+                        verb: "drive"
+                    ));
+
+                    if (!admission.Permission.IsAllowed || refusal.StartsWith(value: "input.permission", comparisonType: StringComparison.Ordinal) || refusal.StartsWith(value: "input.owner", comparisonType: StringComparison.Ordinal)) {
+                        // Authority, not input: the same packet is taken again once the grant returns.
+                        NoteFederatedDrop(bodyIndex: index, reason: refusal);
+                        continue;
+                    }
+                    // A refused packet of the current epoch leaves every later one resting on input this authority
+                    // never took, so the owner's input starts again; an admission that reset the owner itself (a lost
+                    // capture, an overflow) has already moved the epoch.
+                    if ((owner is not null) && (owner.Epoch == epoch)) { Host.Input.Reset(state.Principal); }
+                    WorldTickWork.Process.Add(WorldTickWork.FederatedRestarts, 1);
+                    NoteFederatedDrop(bodyIndex: index, reason: $"its input was restarted: {refusal}");
+                    restarted = true;
+                    break;
+                }
+                NoteFederatedDrop(bodyIndex: index, reason: null);
                 admitted = true;
                 var held = submission.Input.Image;
                 var projected = submission.Intent;
@@ -74,29 +117,75 @@ public sealed partial class WorldTick {
                     held = held.WithRelative(ordinal: address, value: default);
                     projected = projected.WithRelative(ordinal: address, value: default);
                 }
-                var contributions = submission.Input.Contributions.ToArray();
-
-                for (var source = 0; (source < contributions.Length); source++) {
-                    if (contributions[source].Kind == WorldInputContributionKind.Relative) {
-                        contributions[source] = contributions[source] with { RawValue = 0 };
-                    }
-                }
                 state = state with {
                     Submission = submission with {
                         Intent = projected,
-                        Input = submission.Input with { Image = held, Events = default, Contributions = contributions },
+                        Input = submission.Input with { Image = held, Events = default, Contributions = WithoutRelative(contributions: submission.Input.Contributions) },
                     },
                 };
             }
             state = state with { Pending = default };
+            if (restarted) {
+                state = state with { Submission = null };
+                continue;
+            }
             if (admitted) { continue; }
             if (state.Submission is not { } current) { continue; }
+            if (LeftEpoch(principal: state.Principal, batch: current.Input, held: out _)) {
+                // The held image belongs to an epoch this authority left; its sender republishes it in the new one.
+                state = state with { Submission = null };
+                continue;
+            }
             var repeated = current with {
                 Tick = Host.Input.Interval.Tick,
                 Input = current.Input with { Tick = Host.Input.Interval.Tick },
             };
 
-            _ = ApplyIntentSubmission(body: body, submission: repeated);
+            _ = ApplyIntentSubmission(body: body, remote: true, submission: repeated);
+        }
+    }
+    // Whether a batch names an input epoch its owner has left; an owner this authority has not admitted leaves none.
+    private bool LeftEpoch(Principal principal, in WorldInputBatch batch, out WorldInputOwner? held) =>
+        (Host.Input.TryGet(input: out held, principal: principal) && ((batch.Revision != held!.Revision) || (batch.Epoch != held.Epoch)));
+    // The held image's sources with every relative source at rest: a relative source reports movement since the last
+    // batch, which a republished image must not repeat. Copies only when one moved.
+    private static ReadOnlyMemory<WorldInputContribution> WithoutRelative(ReadOnlyMemory<WorldInputContribution> contributions) {
+        var moved = false;
+
+        foreach (var contribution in contributions.Span) {
+            if ((contribution.Kind == WorldInputContributionKind.Relative) && (contribution.RawValue != 0)) {
+                moved = true;
+                break;
+            }
+        }
+        if (!moved) { return contributions; }
+
+        var copy = contributions.ToArray();
+
+        for (var source = 0; (source < copy.Length); source++) {
+            if (copy[source].Kind == WorldInputContributionKind.Relative) { copy[source] = copy[source] with { RawValue = 0 }; }
+        }
+
+        return copy;
+    }
+    /// <summary>Names a federated input this authority did not apply, once when the reason starts or changes, so a
+    /// remote seat whose body stands still says why. A <see langword="null"/> reason marks the body as taking input
+    /// again.</summary>
+    /// <param name="bodyIndex">The body the input names; an input that names none shares one key.</param>
+    /// <param name="reason">Why the input was dropped, or <see langword="null"/>.</param>
+    internal void NoteFederatedDrop(int bodyIndex, string? reason) {
+        var key = ((((uint)bodyIndex) < ((uint)m_federatedIntents.Length)) ? bodyIndex : -1);
+
+        if (reason is null) {
+            _ = m_federatedDrops.Clear(key: key);
+
+            return;
+        }
+        if (m_federatedDrops.Set(key: key, reason: reason) && Host.Output.HasNarrationSink) {
+            Host.Output.Narrate(
+                channel: "world.input.federated",
+                text: $"[world.input.federated: body:{bodyIndex} input dropped: {reason}]"
+            );
         }
     }
     // Hands the tape the federated device images this step is about to apply — a forwarded or federated traveler's
@@ -244,6 +333,7 @@ public sealed partial class WorldTick {
             (leaseId <= 0) ||
             (((uint)submission.EntityIndex) >= ((uint)m_federatedIntents.Length))
         ) {
+            NoteFederatedDrop(bodyIndex: submission.EntityIndex, reason: $"lease {leaseId} or body index {submission.EntityIndex} names no held-input row");
             return;
         }
 

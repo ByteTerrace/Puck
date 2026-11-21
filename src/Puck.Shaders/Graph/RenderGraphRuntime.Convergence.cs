@@ -88,7 +88,7 @@ public sealed partial class RenderGraphRuntime {
             return context;
         }
         m_convergenceContext ??= context with { FrameDeltaTicks = 0, DeltaTicks = 0 };
-        return m_convergenceContext.Value;
+        return (m_convergenceContext.Value with { Latch = context.Latch });
     }
     private bool IsConverging(int index) =>
         ((m_convergence is { IsActive: true }) && m_convergenceInstances.Contains(item: index));

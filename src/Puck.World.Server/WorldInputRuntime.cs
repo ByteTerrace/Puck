@@ -332,7 +332,7 @@ public sealed partial class WorldInputRuntime {
         if (answered != 0U) { owner.Answer = new WorldInputAnswer(Epoch: batch.Epoch, Owner: principal, Sequence: answered, Tick: Interval.Tick); }
     }
     /// <summary>Accepts a timing-bearing batch only for its admitted identity and current authoritative tuple.</summary>
-    public bool TryAdmit(Principal principal, in WorldInputBatch batch, out string reason, int? bodyIndex = null) {
+    public bool TryAdmit(Principal principal, in WorldInputBatch batch, out string reason, int? bodyIndex = null, bool retime = false) {
         if (!m_owners.TryGetValue(key: principal, value: out var owner)) { reason = "input.owner: no admitted source profile"; return false; }
         if ((bodyIndex is { } body) && (body != owner.Body)) { reason = "input.owner: the submitted target differs from the admitted route"; return false; }
         if (!TrySynchronize(activation: 0, owner: owner, reason: out reason)) { return false; }
@@ -364,7 +364,7 @@ public sealed partial class WorldInputRuntime {
                     m_host.Population.TryCandidateInputState(bodyIndex: owner.Body, definition: owner.Definition, name: state, value: out var value)) ? Math.Sign(value: value.Value) : 0);
             }
         }
-        var admitted = owner.Input.TryAdmit(batch, Interval, m_intervals.AsSpan(length: m_intervalCount, start: 0), out reason, owner.Facing);
+        var admitted = owner.Input.TryAdmit(batch, Interval, m_intervals.AsSpan(length: m_intervalCount, start: 0), out reason, owner.Facing, retime);
 
         if (owner.Input.Epoch != priorEpoch) {
             InstallBodyMapping(owner, priorMapping, reset: true);

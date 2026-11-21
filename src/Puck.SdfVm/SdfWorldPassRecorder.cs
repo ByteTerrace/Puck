@@ -734,7 +734,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
 
         if (m_part == SdfWorldPackage.Parts.Views) {
-            m_sourceTaint = (SdfWorldPasses.SourceTaintOf(frame: frame, tables: tables) ?? SdfWorldPasses.ReadTaintOf(reads: recording.Reads));
+            m_sourceTaint = (SdfWorldPasses.SourceTaintOf(frame: frame, tables: tables) ?? SdfWorldPasses.ReadTaintOf(latch: recording.Latch, reads: recording.Reads));
             m_readsHistory = (m_temporal && temporal.HasPreviousView);
         }
 
@@ -902,12 +902,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private int? BoundCascadeTexels(in RenderGraphPackageRecording recording, bool distant) {
         for (var port = 0; (port < m_outputs.Length); port++) {
             if (IsCascadeDepth(version: m_outputs[port], distant: distant)) {
-                return ((int)recording.Outputs[port].Image.Width);
+                return ((int)recording.Outputs[port].ReadImage(latch: recording.Latch).Width);
             }
         }
         for (var port = 0; (port < m_inputs.Length); port++) {
             if (IsCascadeDepth(version: m_inputs[port], distant: distant)) {
-                return ((int)recording.Inputs[port].Image.Width);
+                return ((int)recording.Inputs[port].ReadImage(latch: recording.Latch).Width);
             }
         }
 
@@ -1280,11 +1280,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         var frame = m_view.Residency.Frame!;
         var slot = recording.Slot;
+        var shadowReceiver = ((IsShadowCascade && twoPhase) ? recording.Inputs[0].ReadImage(latch: recording.Latch) : default);
 
         occlusion.Stage(tables: tables, count: tables.MeshDrawCount, height: (IsShadowCascade ? (uint)cascadeTexels : recording.RenderHeight), width: (IsShadowCascade ? (uint)cascadeTexels : recording.RenderWidth), slot: slot, cull: in cull, detail: in detail, held: tables.HoldsFrame, glass: IsGlass, occlude: twoPhase, splitExit: IsShadowCascade, skipsDepth: !drawsDepth, skipsExit: (IsShadowCascade && !drawsExit),
             camera: frame.Views[Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1))].Camera,
-            receiverWidth: ((IsShadowCascade && twoPhase) ? recording.Inputs[0].Image.Width : 0),
-            receiverHeight: ((IsShadowCascade && twoPhase) ? recording.Inputs[0].Image.Height : 0), jitter: jitter, motion: motion,
+            receiverWidth: shadowReceiver.Width,
+            receiverHeight: shadowReceiver.Height, jitter: jitter, motion: motion,
             slice: Math.Max(val1: (share?.Slice ?? 0), val2: 0), slices: (share?.Slices ?? 1));
         occlusion.BindDraws(tables: tables, set: set, bound: m_meshSetOcclusion[meshSet]);
         for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
@@ -1298,7 +1299,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: (phase == 0 ? optical : null) ?? tables.DummyBuffer, member: SdfWorldPackage.GlassSumsWritten, set: occlusionSet);
             occlusion.Bind(bound: bound, boundTarget: ref m_occlusionSetTargets[index], first: MeshSetBuffers, set: occlusionSet, tables: tables,
                 target: (!twoPhase ? tables.SampledFiller.ImageViewHandle : ((phase != 0) ? target.ImageViewHandle :
-                    (IsShadowCascade ? recording.Inputs[0].Image.ImageViewHandle : tables.SampledFiller.ImageViewHandle))));
+                    (IsShadowCascade ? shadowReceiver.ImageViewHandle : tables.SampledFiller.ImageViewHandle))));
         }
         occlusion.RecordEarly(commandBuffer: recording.CommandBuffer, pipeline: tables.OcclusionPipeline, recorder: recording.Recorder, set: m_occlusionSets[(meshSet * OcclusionSetsPerMesh)]);
     }
@@ -1434,9 +1435,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 b: SdfWorldPackage.Parts.MeshTarget,
                 comparisonType: StringComparison.Ordinal
             )) {
-                meshVisibility = bound.Image.ImageViewHandle;
+                meshVisibility = bound.ReadImage(latch: recording.Latch).ImageViewHandle;
             } else if (CascadeIndexOf(version: name) is var cascade and >= 0) {
-                cascades[cascade] = bound.Image.ImageViewHandle;
+                cascades[cascade] = bound.ReadImage(latch: recording.Latch).ImageViewHandle;
             }
         }
         for (var port = 0; (port < m_outputs.Length); port++) {
@@ -1448,7 +1449,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     tables.WriteInterfaceBuffer(buffer: buffer, layout: layout, member: member, set: set);
                 }
             } else if (bound.Kind == ShaderPipelineResourceKind.Image) {
-                output = bound.Image.ImageViewHandle;
+                output = bound.ReadImage(latch: recording.Latch).ImageViewHandle;
             }
         }
 

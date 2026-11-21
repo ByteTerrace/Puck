@@ -117,11 +117,11 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
         var bindings = m_context.Services.Bindings;
         var layout = SdfWorldInterfaces.GlassParameters.Layout;
 
-        bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.LitImage), descriptorSetHandle: set, imageViewHandle: recording.Inputs[LitInput].Image.ImageViewHandle);
+        bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.LitImage), descriptorSetHandle: set, imageViewHandle: recording.Inputs[LitInput].ReadImage(latch: recording.Latch).ImageViewHandle);
         tables.WriteInterfaceBuffer(buffer: recording.Inputs[VisibilityInput].Buffer!, layout: layout, member: SdfWorldPackage.VisibilityRecords, set: set);
-        bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.GlassVisibility), descriptorSetHandle: set, imageViewHandle: recording.Inputs[GlassTargetInput].Image.ImageViewHandle);
+        bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.GlassVisibility), descriptorSetHandle: set, imageViewHandle: recording.Inputs[GlassTargetInput].ReadImage(latch: recording.Latch).ImageViewHandle);
         tables.WriteInterfaceBuffer(buffer: recording.Inputs[GlassSumsInput].Buffer!, layout: layout, member: SdfWorldPackage.GlassSums, set: set);
-        bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.Output), descriptorSetHandle: set, imageViewHandle: recording.Outputs[0].Image.ImageViewHandle);
+        bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.Output), descriptorSetHandle: set, imageViewHandle: recording.Outputs[0].ReadImage(latch: recording.Latch).ImageViewHandle);
         tables.WriteInterfaceBuffer(buffer: ((m_temporal ? recording.Outputs[1].Buffer : null) ?? tables.DummyBuffer), layout: layout, member: SdfWorldPackage.ReactivityWritten, set: set);
         m_portTables[slot] = tables;
     }

@@ -102,14 +102,18 @@ internal static class WorldTravelerProjection {
             }
 
             using var forwardLifetime = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
-            var guardedOutput = new PolicyGuardedProjectionOutput(inner: output, outerToken: ct, forwardToken: forwardLifetime.Token);
+            // The live policy at this instant, whatever replaced the admission section. The guarded output asks it
+            // before every frame, so the cut never depends on an AdmissionChanged notification having arrived.
+            bool StillAdmitted() => (
+                (WorldAdmissionDoor.TryAdmitArrival(server.Definition.Admission, request.SourceAuthority, out var liveAdmission) is null) &&
+                (liveAdmission!.Tier >= request.Ceiling)
+            );
+            var guardedOutput = new PolicyGuardedProjectionOutput(inner: output, outerToken: ct, forwardToken: forwardLifetime.Token, stillAdmitted: StillAdmitted);
+            // Wakes a relay stalled between frames; the per-frame check is what enforces the policy.
             void CheckForwardPolicy() {
-                if (
-                    (WorldAdmissionDoor.TryAdmitArrival(server.Definition.Admission, request.SourceAuthority, out var liveAdmission) is not null) ||
-                    (liveAdmission!.Tier < request.Ceiling)
-                ) {
+                if (!StillAdmitted()) {
                     guardedOutput.Invalidate();
-                    try { forwardLifetime.Cancel(); } catch (ObjectDisposedException) { }
+                    try { _ = forwardLifetime.CancelAsync(); } catch (ObjectDisposedException) { }
                 }
             }
 
@@ -160,8 +164,9 @@ internal static class WorldTravelerProjection {
     }
 
     // Completes any already-started downstream frame write on outerToken before observing forwardToken cancellation,
-    // so ProjectionInvalidated never lands after a partial frame.
-    private sealed class PolicyGuardedProjectionOutput(Stream inner, CancellationToken outerToken, CancellationToken forwardToken) : Stream {
+    // so ProjectionInvalidated never lands after a partial frame. A frame's first write asks stillAdmitted, so the
+    // relay holds the live policy at every frame boundary.
+    private sealed class PolicyGuardedProjectionOutput(Stream inner, CancellationToken outerToken, CancellationToken forwardToken, Func<bool> stillAdmitted) : Stream {
         private int m_invalidated;
         private bool m_midFrame;
 
@@ -190,9 +195,12 @@ internal static class WorldTravelerProjection {
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer: buffer, offset: offset, count: count);
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            WriteAsync(buffer: buffer.AsMemory(start: offset, length: count), cancellationToken: cancellationToken).AsTask();
         public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) {
-            if (!m_midFrame && IsInvalidated) {
-                throw new OperationCanceledException(token: forwardToken);
+            if (!m_midFrame) {
+                if (!IsInvalidated && !stillAdmitted()) { Invalidate(); }
+                if (IsInvalidated) { throw new OperationCanceledException(token: forwardToken); }
             }
             m_midFrame = true;
             await inner.WriteAsync(buffer: buffer, cancellationToken: outerToken).ConfigureAwait(continueOnCapturedContext: false);

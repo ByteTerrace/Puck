@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
@@ -16,11 +17,15 @@ namespace Puck.Shaders.Tests;
 /// declares.
 /// </summary>
 public sealed class PlacePackageLawTests {
+    private const nint BaseHandle = 0x7000;
+    private const nint BaseView = 0x7001;
     private const uint Extent = 64;
     private const string Pass = "pane";
+    private const nint SourceHandle = 0x8000;
+    private const nint SourceView = 0x8001;
 
-    private static readonly ShaderPipelineExternalImage Base = Image(handle: 0x7000);
-    private static readonly ShaderPipelineExternalImage Source = Image(handle: 0x8000);
+    private static readonly ShaderPipelineExternalImage Base = Image(handle: BaseHandle);
+    private static readonly ShaderPipelineExternalImage Source = Image(handle: SourceHandle);
     // The layout the catalog declares for the package, which the plan lays every place pass out by.
     private static readonly ShaderPipelineParameterLayout Layout = ShaderPipelineParameterLayout.ForPackage(
         config: RenderGraphPackageCatalog.PlaceConfig,
@@ -33,6 +38,7 @@ public sealed class PlacePackageLawTests {
         Height: Extent,
         ImageHandle: handle,
         ImageViewHandle: (handle + 1),
+        Label: DeliveryLabel.ForSource(source: DeliveryPublicSource.Host),
         Layout: GpuImageLayout.ShaderReadOnly,
         Width: Extent
     );
@@ -156,11 +162,11 @@ public sealed class PlacePackageLawTests {
         );
         Assert.Contains(
             collection: gpu.DescriptorWrites,
-            filter: static write => ((write.Binding == BindingOf(member: RenderGraphPackageCatalog.PlaceBase)) && (write.Handle == Base.ImageViewHandle))
+            filter: static write => ((write.Binding == BindingOf(member: RenderGraphPackageCatalog.PlaceBase)) && (write.Handle == BaseView))
         );
         Assert.Contains(
             collection: gpu.DescriptorWrites,
-            filter: static write => ((write.Binding == BindingOf(member: RenderGraphPackageCatalog.PlaceSource)) && (write.Handle == Source.ImageViewHandle))
+            filter: static write => ((write.Binding == BindingOf(member: RenderGraphPackageCatalog.PlaceSource)) && (write.Handle == SourceView))
         );
         Assert.Equal(
             actual: placements.Asked,
@@ -203,7 +209,7 @@ public sealed class PlacePackageLawTests {
         Assert.Empty(collection: gpu.Dispatches);
         Assert.Equal(
             actual: shown.ImageHandle,
-            expected: Base.ImageHandle
+            expected: BaseHandle
         );
     }
     // A letterboxing pass whose source is not shown writes the letterbox color everywhere, its rect empty, while part of
@@ -238,7 +244,7 @@ public sealed class PlacePackageLawTests {
                 Assert.Empty(collection: gpu.Dispatches);
                 Assert.Equal(
                     actual: shown.ImageHandle,
-                    expected: Base.ImageHandle
+                    expected: BaseHandle
                 );
 
                 continue;
@@ -258,7 +264,7 @@ public sealed class PlacePackageLawTests {
             );
             Assert.NotEqual(
                 actual: shown.ImageHandle,
-                expected: Base.ImageHandle
+                expected: BaseHandle
             );
         }
     }

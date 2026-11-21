@@ -427,7 +427,7 @@ public sealed partial class ShaderPipelineRenderNode {
         // sampled; the preview's own targets are private to it and are tracked here. The recording states the target's
         // old layout from what the last submitted recording left it in, so a slot counts as drawn only once its list is
         // submitted (Submitted).
-        public void Record(ShaderPipelineBarrier sourceBarrier, ShaderPipelineExternalImage image, int slot, nint command) {
+        public void Record(ShaderPipelineBarrier sourceBarrier, ShaderPipelineResolvedImage image, int slot, nint command) {
             var sourceImageHandle = image.ImageHandle;
             var sourceImageView = image.ImageViewHandle;
 

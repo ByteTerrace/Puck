@@ -42,7 +42,7 @@ public sealed partial class RenderGraphRuntime {
             return;
         }
 
-        var latest = LatestOf(index: index);
+        var latest = LatestOf(index: index, latch: in m_latch);
 
         if (
             (latest.Frame < 0) ||
@@ -57,6 +57,7 @@ public sealed partial class RenderGraphRuntime {
                 Height: latest.Image.Height,
                 ImageHandle: latest.Image.ImageHandle,
                 ImageViewHandle: latest.Image.ImageViewHandle,
+                Label: latest.Label,
                 Layout: latest.Layout,
                 Width: latest.Image.Width
             ),

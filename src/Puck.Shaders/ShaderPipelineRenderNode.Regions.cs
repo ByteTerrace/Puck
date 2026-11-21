@@ -1,5 +1,6 @@
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -135,7 +136,12 @@ public sealed partial class ShaderPipelineRenderNode {
             key: name,
             value: region
         );
-        m_externalBuffers[name] = new ExternalBuffer(Buffer: region.Buffer(slot: 0));
+        m_externalBuffers[name] = new ExternalBuffer(
+            Binding: new ShaderPipelineExternalBuffer(
+                buffer: region.Buffer(slot: 0),
+                label: DeliveryLabel.ForSource(source: DeliveryPublicSource.Upload)
+            )
+        );
 
         return region;
     }
@@ -291,7 +297,12 @@ public sealed partial class ShaderPipelineRenderNode {
     // Binds each host buffer port's buffer for the slot, before the frame's passes write their descriptors.
     private void BindRegionBuffers(int slot) {
         foreach (var (name, region) in m_externalRegions) {
-            m_externalBuffers[name] = new ExternalBuffer(Buffer: region.Buffer(slot: slot));
+            m_externalBuffers[name] = new ExternalBuffer(
+                Binding: new ShaderPipelineExternalBuffer(
+                    buffer: region.Buffer(slot: slot),
+                    label: DeliveryLabel.ForSource(source: DeliveryPublicSource.Upload)
+                )
+            );
         }
     }
     // Creates the regions a package pass's package states, in its order, each staged one taking the next share of the
