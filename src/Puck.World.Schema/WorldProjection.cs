@@ -1041,6 +1041,10 @@ public static class WorldProjectionContent {
     /// again through the authorized door.</summary>
     public static readonly CacheBound Retention = new(MaxBytes: (256L << 20), MaxEntries: 4096);
 
+    /// <summary>Gets the process's one resolver of content by pin: the files its loaded worlds registered, then
+    /// <see cref="Shared"/>. A document another process delivered has no directory, so its content is read here.</summary>
+    public static ContentResolver Resolver { get; } = new(store: static () => Shared);
+
     /// <summary>Gets the recipient cache shared across worlds and observation lifetimes.</summary>
     public static ContentAddressedStore Shared {
         get {

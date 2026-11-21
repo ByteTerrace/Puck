@@ -19,14 +19,20 @@ namespace Puck.Text;
 /// <param name="fontAtlasGenerator">The generator invoked to produce an atlas on a cache miss.</param>
 /// <param name="assetSource">The source from which font bytes are read.</param>
 /// <param name="maxCachedPixelBytes">The maximum retained decoded pixel bytes. Oversized atlases are returned without caching. Zero disables pixel retention.</param>
+/// <param name="pinned">Where a hash-pinned font's bytes are looked for by pin before its path is read, and where a
+/// font read by path is registered under its pin; <see langword="null"/> reads by path alone.</param>
 /// <exception cref="ArgumentNullException"><paramref name="fontAtlasGenerator"/> or <paramref name="assetSource"/> is <see langword="null"/>.</exception>
 /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxCachedPixelBytes"/> is negative.</exception>
 public sealed class FontAtlasSourceResolver(
     IFontAtlasGenerator fontAtlasGenerator,
     IAssetSource assetSource,
-    long maxCachedPixelBytes = ((64L * 1024) * 1024)
+    long maxCachedPixelBytes = ((64L * 1024) * 1024),
+    ContentResolver? pinned = null
 )
     : IFontAtlasSourceResolver {
+    /// <summary>The most bytes a font read by its pin may hold; a larger one reads as not held.</summary>
+    public const int MaxPinnedFontBytes = ((64 * 1024) * 1024);
+
     private const int MaxCachedFonts = 256;
 
     private readonly IAssetSource m_assetSource = (assetSource ?? throw new ArgumentNullException(paramName: nameof(assetSource)));
@@ -42,10 +48,12 @@ public sealed class FontAtlasSourceResolver(
 
     /// <summary>Initializes a resolver with Puck's in-process font generator.</summary>
     /// <param name="assetSource">The source from which font bytes are read.</param>
-    public FontAtlasSourceResolver(IAssetSource assetSource)
+    /// <param name="pinned">Where a hash-pinned font's bytes are looked for by pin, or <see langword="null"/>.</param>
+    public FontAtlasSourceResolver(IAssetSource assetSource, ContentResolver? pinned = null)
         : this(
         fontAtlasGenerator: new ManagedFontAtlasGenerator(),
-        assetSource: assetSource
+        assetSource: assetSource,
+        pinned: pinned
     ) { }
 
     private static IReadOnlyList<string> BuildCanonicalRangeTokens(HashSet<int> codePoints) {
@@ -212,8 +220,13 @@ public sealed class FontAtlasSourceResolver(
             generationOptions: generationOptions
         );
     }
-    /// <summary>Resolves and packs an entire hash-pinned font catalog beside one document directory.</summary>
-    public PackedFontAtlasCatalog ResolveCatalog(TextFontCatalogDefinition definition, string basePath) {
+    /// <summary>Resolves and packs an entire hash-pinned font catalog: beside one document directory, or, for a
+    /// document that has none because another process delivered it, by each font's pin alone.</summary>
+    /// <param name="definition">The catalog.</param>
+    /// <param name="basePath">The containing document directory, or <see langword="null"/> for a delivered
+    /// document.</param>
+    /// <returns>The packed catalog.</returns>
+    public PackedFontAtlasCatalog ResolveCatalog(TextFontCatalogDefinition definition, string? basePath) {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: definition.DefaultFont);
         ArgumentNullException.ThrowIfNull(definition.Fonts);
@@ -252,11 +265,31 @@ public sealed class FontAtlasSourceResolver(
     /// <param name="fontPath">The font asset path, relative to <paramref name="basePath"/> unless rooted.</param>
     /// <param name="expectedHash">The canonical <c>sha256/{64 lowercase hex}</c> content pin.</param>
     /// <param name="generationOptions">The generation options.</param>
-    /// <param name="basePath">The containing document directory.</param>
-    public FontAtlas ResolvePinned(string fontPath, string expectedHash, FontAtlasGenerationOptions generationOptions, string basePath) {
+    /// <param name="basePath">The containing document directory, or <see langword="null"/> for a document another
+    /// process delivered: its path is then a label that is never opened, and the font is read by its pin from what this
+    /// process already holds.</param>
+    /// <returns>The font's atlas.</returns>
+    /// <exception cref="InvalidDataException">The file does not hash to its pin, or the document has no directory and
+    /// this process holds no content under the pin.</exception>
+    public FontAtlas ResolvePinned(string fontPath, string expectedHash, FontAtlasGenerationOptions generationOptions, string? basePath) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: fontPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: expectedHash);
         ArgumentNullException.ThrowIfNull(generationOptions);
+
+        if (basePath is null) {
+            if (
+                (pinned is null) ||
+                !ContentPin.TryParse(pin: out var pin, text: expectedHash) ||
+                !pinned.TryRead(content: out var held, maximumBytes: MaxPinnedFontBytes, pin: pin)
+            ) {
+                throw new InvalidDataException(message: $"Font '{expectedHash}' is not held by this process: no loaded package registered it and the content store does not hold it.");
+            }
+
+            return LoadFromFont(
+                fontBytes: held,
+                generationOptions: generationOptions
+            );
+        }
 
         var resolvedPath = Path.GetFullPath(path: ResolveAgainstBase(
             basePath: basePath,
@@ -271,6 +304,10 @@ public sealed class FontAtlasSourceResolver(
             comparisonType: StringComparison.Ordinal
         )) {
             throw new InvalidDataException(message: $"Font asset '{fontPath}' has content hash '{actualHash}', not its declared '{expectedHash}'.");
+        }
+        // The file now answers its pin for a document that names the same font and has no directory.
+        if ((pinned is not null) && ContentPin.TryParse(pin: out var registered, text: expectedHash)) {
+            pinned.Register(path: resolvedPath, pin: registered);
         }
 
         return LoadFromFont(

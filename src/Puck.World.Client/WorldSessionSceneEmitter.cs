@@ -235,8 +235,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <inheritdoc/>
     /// <remarks>The destination's text screens', drawn through its own font catalog.</remarks>
     public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_decals.Providers;
-    /// <summary>Gets why the destination's font catalog does not resolve, which leaves its text screens blank: a
-    /// document that names no directory its fonts resolve beside (a world delivered from a remote authority), a font
+    /// <summary>Gets why the destination's font catalog does not resolve, which leaves its text screens blank: a font
+    /// of a world delivered from a remote authority that this process does not hold, a font
     /// asset that fails its pin, or text its fonts cannot draw; <see langword="null"/> while it resolves or the
     /// destination declares no text.</summary>
     public string? TextFault { get; private set; }
