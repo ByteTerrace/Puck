@@ -196,10 +196,12 @@ yields an empty, default or stale result that the frame presents as success.
   `RenderGraphRuntimeNode` captures once a frame before the host prepares it
   (`FrameContext.Latch`). Binding an unclassified value throws. Output records
   are private to `RenderGraphRuntime`'s `OutputRecords` and written only by
-  `RememberOutput`; a record carries the instance's route
-  (`IRenderGraphInstances.SetRoute`, which the World sets from each view's
-  access and mirror spans), every label it bound and its node's published
-  label, and no reader is given one whose span ended. A node replaces an ended
+  `RememberOutput`; a record carries its node's published label, which is the
+  instance's route (`IRenderGraphInstances.SetRoute`, which the World sets
+  from each view's access and mirror spans) and every label the node bound
+  when it committed that frame, and no reader is given one whose span ended.
+  A frame presented again without rendering keeps the label it was made
+  under. A node replaces an ended
   binding with the stand-in when it next records
   (`ShaderPipelineRenderNode.ValidateBindingsForRecord`). A new producer or
   recorder that wraps a handle it read in a fresh label, or mints a public
