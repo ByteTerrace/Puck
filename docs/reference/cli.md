@@ -119,7 +119,7 @@ half of these rules on every command, with no exemptions.
 | [`puck landing`](#puck-landingthe-leads-landing-checks) | the lead's checks before landing a lane: `landing loss` refuses a commit that silently drops content its author never worked from, and `landing handback` checks a lane branch's commits against the hand-back contract (the `Brief:` line, subjects, trailers, plumbing and docs links). |
 | [`puck lanes`](#puck-lanesone-line-per-worktree) | prints one line per worktree: branch, commits ahead, changes, last commit, newest write, log, lease and stall state; `--watch` prints only the changes. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
-| [`puck lease`](#puck-leaseexclusive-machine-work) | run a command while exclusively holding the shared GPU, heavy-work or World-build resource, or all three once the machine is idle (`lease quiet`, the settle window for timing measurements); `lease list` prints each lease's holder and queue. |
+| [`puck lease`](#puck-leaseshared-machine-work) | run a command while holding the shared GPU or World-build resource, or a heavy-work slot that other admitted heavy holders share, or all three once the machine is idle (`lease quiet`, the settle window for timing measurements); `lease list` prints each lease's holder and queue. |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
 | [`puck locks`](#puck-locksrestore-lock-files) | re-records the solution's `packages.lock.json` files after a reference change, takes newer packages with `--update`, or with `--check` runs a locked restore and names each project whose lock file drifted, writing nothing. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
@@ -1862,7 +1862,7 @@ development machine; use `--jobs 1` alongside other heavy work.
 
 A run of more than one world (a directory, or a source with several `test`
 blocks) takes the machine's `heavy` lease, the one `puck lease heavy`, `puck gate`
-and `puck affected` use. `WorldLaunch` admits before acquiring it for a worker;
+and `puck affected` use, in a slot of its own beside other admitted heavy holders. `WorldLaunch` admits before acquiring it for a worker;
 parallel workers of the run share the execution hold, which ends with the last
 live worker. Between worker-count legs, the next start waits for admission without
 retaining the previous hold. The lane is the checkout's directory and the holder
@@ -5070,13 +5070,15 @@ can be found. The authoritative asset map and variant rationale live in
 - [Development](../development/README.md)
 - [API reference](../api/index.md)
 
-## puck lease—exclusive machine work
+## puck lease—shared machine work
 
-Run `puck lease gpu --holder <lane> [--lane <lane>] [--wait <seconds>] -- <executable> <arguments...>`, or replace `gpu` with `heavy` for a heavy suite or `build` for a World build (the one the World build store takes itself). Options precede `--`, which the command must follow: a token that reaches the command before `--` (a mistyped option, or a missing separator) is refused at parse time, before any queue wait. The executable receives the remaining argument vector without shell expansion. The child keeps the caller's output streams and exit code. A refused acquisition exits 2; cancellation exits 130 and kills the child tree before releasing the lease.
+Run `puck lease gpu --holder <lane> [--lane <lane>] [--wait <seconds>] [--kind <kind>] -- <executable> <arguments...>`, or replace `gpu` with `heavy` (which also takes `--exclusive`) for a heavy suite or `build` for a World build (the one the World build store takes itself). Options precede `--`, which the command must follow: a token that reaches the command before `--` (a mistyped option, or a missing separator) is refused at parse time, before any queue wait. The executable receives the remaining argument vector without shell expansion. The child keeps the caller's output streams and exit code. A refused acquisition exits 2; cancellation exits 130 and kills the child tree before releasing the lease.
 
 The GPU lease defaults to the `HostStartKind.WindowedWorld` peak. For a bounded small device check that boots no World, add `--kind Step`; other declared `HostStartKind` values select their own expected peak. This changes the child command's memory estimate, while retaining GPU exclusion and the same RAM, commit, disk and idle-device admission. Full CPU/memory-heavy suites still take the heavy lease too. A verb that starts a device World takes this same lease through its World launch, nesting under a `puck lease gpu` it runs beneath.
 
 The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the holder name, UTC acquisition time, process ID and process start ticks on four lines, and the lane on a fifth only when it is not the holder's first word; it is replaced whole, so a reader never sees it half written. The checkout the holder works in is recorded beside it, in `<name>/checkout`, and a ticket's in `<name>.checkouts/<ticket>`, each with its owner's process ID and start ticks, so a file a crashed holder or waiter left is never read for the next one. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
+
+The `build` and `gpu` leases take one holder. The `heavy` lease takes up to `CliLease.SharedSlots` holders at once, one per slot directory (`heavy`, then `heavy.2`, `heavy.3` and on), each with its own guard, holder and sidecars; the queue and rotation stay the lease's, shared by every slot, so lanes rotate through one queue however many holders run. How many run is host admission's decision (below): a heavy start is granted a free slot when admission covers its expected peak beside what every running start and every other admitted hold still has to grow. `puck lease heavy --exclusive` waits until no slot is held, takes the first, and keeps every other slot empty while it runs; a quiet window drains every slot the same way. A heavy hold taken without an admission (a raw `CliLease` acquisition) is exclusive too, since nothing measured whether a second would fit. Each holder records a hold sidecar beside it, `<slot>/hold` (its process ID and start ticks, the `--kind` it was admitted as, whether its work opens a device, and whether it is exclusive), read only for the holder it names. `CliLease.AdmittedHolds` lists those of the gpu lease and the heavy slots for every other process's host admission, and `puck lease list` prints every holder of a lease, with `, exclusive` on an exclusive heavy one.
 
 Admission rotates between lanes and is first come, first served within a lane. A lane is the first word of `--holder` (`example-lane timing run` is lane `example-lane`), or the value of `--lane` when given; `puck_world_start` passes its `lane` argument the same way and names the checkout's directory when it gets neither `holder` nor `lane`. Every acquisition, even `--wait 0`, takes a ticket in the sibling `<name>.queue` directory: a file named by a zero-padded sequence (the highest present plus one, claimed with an exclusive create) holding the same metadata lines as a holder. Each time a lane takes the lease, the sibling `<name>.rotation` directory records it as the most recently served (one file per lane, holding a serial one above every other lane's). The guard goes to the oldest live ticket of the lane served least recently. A lane that has never held the lease takes the serial of the lane served most recently as it first queues (the same file, created whole and never over a serial a holder wrote), so a new lane ranks behind every lane served longer ago and behind a lane served at the same point whose ticket is older, never ahead of a lane that was already waiting. A lane with three queued runs gets one turn per round while other lanes wait. With lane A queued three times ahead of lanes B and C, once each, runs are admitted A1, B1, C1, A2, A3. A holder that exits and immediately acquires again queues behind every other lane already waiting, and a newcomer cannot overtake a lane that has waited, because a newcomer's lane is served after theirs. The wait message names the holder, how many tickets are ahead in this order, and the lane's turn among the queued lanes (`lane a is 2 of 3 in the round`). A ticket is removed when its waiter acquires, times out or is cancelled. A ticket whose process has exited (or whose PID was reused) is deleted by the next waiter that looks, and a ticket whose metadata never became readable is deleted once ten seconds old, so a power trip leaves nothing that blocks admission. The queue lives beside the lease, so a child lease under an ancestor holder queues in `<name>.child.queue`.
 
@@ -5109,7 +5111,8 @@ protocols and the rebuild, withdraws its ticket and grants nothing, instead of
 queuing beside CLIs that read the lease files differently, and `puck lease list`
 prints a `protocol:` line first while the mismatch lasts. The protocol is raised
 in any change to what the lease root's files mean (holders, tickets and their
-sidecars, rotation, the quiet reservation, the child layout, readiness marks)
+sidecars, rotation, the quiet reservation, the child layout, the heavy slots and
+the hold each records, readiness marks)
 or to how host admission classifies the processes it waits on.
 
 Every lease acquisition nests this way, whichever lease it takes: a heavy suite
@@ -5123,11 +5126,17 @@ that takes the same lease waits on a sibling, never on itself.
 and before the command runs, the one `gate`, `affected` and the MCP server's World start wait on
 ([`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s thresholds): free memory
 above the pressure threshold, commit headroom that covers the start's expected peak in private bytes
-(the machine's observed peak for that kind, plus what admitted starts still running have left to grow) and still holds the
+(the machine's observed peak for that kind, plus what admitted starts still running and other processes' admitted holds have left to grow) and still holds the
 commit reserve (10% of the commit limit), free memory that covers the start's expected private working set (measured per kind the same way,
-plus the running starts' private working-set growth) and still sits at the pressure floor, free disk
-over the pressure threshold, and, for `gpu`, an idle GPU (for `heavy`, no other process running a
-heavy test suite). The wait is bounded by what `--wait` has left, so `--wait 0` refuses at once
+plus the same private working-set growth) and still sits at the pressure floor, free disk
+over the pressure threshold, and, for `gpu`, an idle GPU, which a device process or another process's
+device hold holds. A `heavy` start beside another process's running heavy hold also waits while the CPU
+is at or over the capacity threshold (`no CPU headroom: cpu=95% with 1 other heavy holder(s) running ...`);
+a lone one runs under any CPU load, which only slows it. Another process's hold counts its holder's whole
+process tree toward the hold's `--kind` peak from the grant, before any start in it appears, or the growth
+of the tracked starts inside the tree when that is more, never both; it tapers and goes idle as a start
+does. The process's own holds and its ancestors' are left out, so a verb under `puck lease heavy` does not
+reserve its parent's peak again. The wait is bounded by what `--wait` has left, so `--wait 0` refuses at once
 (exit 2, ticket withdrawn) when the machine has no headroom; wait lines go to standard error
 (`gate: waiting for host capacity before lease heavy <holder> (at most N minutes): no memory
 headroom: commit headroom 16.0GB (admission needs at least 24.4GB (18.0GB expected peak of a windowed World plus 0.0GB still to grow in 0 admitted start(s) plus the 6.4GB commit reserve)).`) and a heartbeat repeats them

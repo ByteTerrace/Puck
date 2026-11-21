@@ -6,7 +6,7 @@ namespace Puck.Cli;
 /// <param name="checkout">The checkout whose drive's free disk is judged.</param>
 /// <param name="step">The step's name, for the wait lines.</param>
 /// <param name="device">Whether the step opens a GPU device, and so also waits for an idle GPU.</param>
-/// <param name="heavySuite">Whether the step runs a heavy test suite, and so also waits while another process runs one.</param>
+/// <param name="heavySuite">Whether the step runs heavy work, and so also waits for CPU headroom while another process's heavy hold runs.</param>
 /// <param name="kind">What the start is, which sets the commit it is expected to peak at.</param>
 /// <param name="bound">How long to wait, at most, or <see langword="null"/> for the admission's own bound.</param>
 /// <param name="reserve">Whether an admitted start reserves its expected peak; pre-lease judgements reserve nothing.</param>

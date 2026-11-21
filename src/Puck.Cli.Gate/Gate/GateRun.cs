@@ -26,7 +26,7 @@ public interface IGateRunner {
     /// line the verb writes as it writes it, so a long step can report while it runs.</summary>
     GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments, Action<string>? progress = null);
     /// <summary>Waits for host capacity before a step; a step that opens a device (<see cref="GateStep.Gpu"/>) also waits
-    /// for an idle GPU, and a heavy suite also waits while another process runs one.</summary>
+    /// for an idle GPU, and a heavy suite also waits for CPU headroom while another process's heavy hold runs.</summary>
     bool WaitForCapacity(string repositoryRoot, string step, bool device, bool heavySuite);
 }
 /// <summary>Executes the batch plan serially, recording each step.</summary>

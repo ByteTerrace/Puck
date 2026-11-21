@@ -15,13 +15,14 @@ namespace Puck.Cli.Host;
 /// cover the start's own private working set plus the running starts' private working-set growth and still sit at the
 /// pressure floor
 /// (<see cref="HostLoadThresholds.PhysicalCovers"/>). A start whose own need exceeds the machine's totals is refused by
-/// name at once (<see cref="HostLoadThresholds.NeverFits"/>). A busy CPU only slows a step, so the CPU is
-/// advisory: a step admitted over the CPU threshold runs, and the admission prints the load it ran under. A step that
-/// opens a device also waits for an idle GPU; any other step never waits on a GPU holder. A heavy suite
-/// (<see cref="HostProcesses.IsHeavyTestAssembly"/>) also waits while another process runs one, machine-wide, since two
-/// at once exhaust memory; the waiting process's own runs never hold it back, and neither does a run that has gone idle
-/// (<see cref="HostStartTracker"/>: no CPU use for a window), whose growth admission no longer expects either. A wait is
-/// the host's timed wait on the caller's token, never a spin.</summary>
+/// name at once (<see cref="HostLoadThresholds.NeverFits"/>). The growth of what other processes were admitted under a
+/// lease counts from the grant (<see cref="HostSample.Holds"/>), so heavy holders share the machine by measured headroom
+/// rather than one at a time. A busy CPU only slows a step, so the CPU is advisory for a lone start: a step admitted over
+/// the CPU threshold runs, and the admission prints the load it ran under. A heavy start beside another process's running
+/// heavy hold also waits while the CPU is at or over the capacity threshold, since it would take the cores that work is
+/// using. A step that opens a device also waits for an idle GPU, which a device process or another process's hold for
+/// device work holds; any other step never waits on a GPU holder. A wait is the host's timed wait on the caller's token,
+/// never a spin.</summary>
 public static class HostAdmission {
     /// <summary>How long a step waits before it is refused.</summary>
     public static readonly TimeSpan Timeout = TimeSpan.FromMinutes(minutes: 30);
@@ -73,16 +74,26 @@ public static class HostAdmission {
     }
     // What holds the step back, named so a wait that lasts can be traced to a process or a threshold: the line a wait
     // prints, and the shorter phrase a caller shows as the stage it is in.
-    private static (string Line, string Stage) Reason(string? gpu, string? heavy, HostSample reading, HostLoadThresholds thresholds, HostStartDemand demand) {
+    private static (string Line, string Stage) Reason(string? gpu, string? cpu, HostSample reading, HostLoadThresholds thresholds, HostStartDemand demand) {
         if (gpu is not null) { return ($"the GPU is held by {gpu}", $"the GPU, held by {gpu}"); }
-        if (heavy is not null) { return ($"a heavy test run is held by {heavy}", $"a heavy test run, held by {heavy}"); }
+        if (cpu is not null) { return (cpu, "CPU headroom beside the running heavy work"); }
 
         var shortfalls = Shortfalls(reading: reading, thresholds: thresholds, demand: demand);
 
         return (
-            $"no memory headroom: {string.Join(separator: "; ", values: shortfalls.Select(selector: static shortfall => $"{shortfall.Reading} (admission needs {shortfall.Need})"))}{(demand.GrowthGb > 0 ? "; running starts: " + string.Join(", ", (reading.Starts ?? []).Select(start => $"{start.Kind} PID {start.Id} private={start.PrivateGb:0.0}GB ready={start.Ready}{start.IdleNote}")) : string.Empty)}",
+            $"no memory headroom: {string.Join(separator: "; ", values: shortfalls.Select(selector: static shortfall => $"{shortfall.Reading} (admission needs {shortfall.Need})"))}{(demand.GrowthGb > 0 ? "; running starts: " + string.Join(", ", (reading.Starts ?? []).Select(start => $"{start.Kind} PID {start.Id} private={start.PrivateGb:0.0}GB ready={start.Ready}{start.IdleNote}")) : string.Empty)}{((demand.GrowthGb > 0) && (reading.Holds is { Count: > 0 } holds) ? "; other holds: " + string.Join(", ", holds.Select(hold => $"{hold.Lease} {hold.Holder} ({hold.Kind}) PID {hold.Id} tree private={hold.PrivateGb:0.0}GB")) : string.Empty)}",
             $"memory headroom: {string.Join(separator: ", ", values: shortfalls.Select(selector: static shortfall => shortfall.Reading))}"
         );
+    }
+    // What holds a heavy start back on CPU, or null: another process's heavy hold is running and the CPU is at or over the
+    // capacity threshold. A lone heavy start is never held back on CPU, which only slows it; a further one would take cores
+    // the running heavy work is using.
+    private static string? Crowded(HostSample reading, HostLoadThresholds thresholds) {
+        var running = (reading.Holds ?? []).Where(predicate: static hold => (hold.Lease == "heavy")).ToArray();
+
+        return (((running.Length > 0) && (thresholds.CapacityCpuPercent is { } capacity) && (reading.CpuPercent >= capacity))
+            ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"no CPU headroom: cpu={reading.CpuPercent:0}% with {running.Length} other heavy holder(s) running ({string.Join(separator: ", ", values: running.Select(selector: static hold => $"{hold.Holder} PID {hold.Id}"))}); a further heavy start needs cpu under {capacity:0.#}%")
+            : null);
     }
     private static string Span(TimeSpan span) => ((span >= TimeSpan.FromMinutes(minutes: 1))
         ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"{span.TotalMinutes:0} minutes")
@@ -93,8 +104,8 @@ public static class HostAdmission {
     /// CPU load never holds a step back.</summary>
     /// <param name="step">The step's name, for the wait lines.</param>
     /// <param name="device">Whether the step opens a GPU device, and so must also wait for the GPU to be idle.</param>
-    /// <param name="heavySuite">Whether the step runs a heavy suite, and so must also wait while another process runs
-    /// one.</param>
+    /// <param name="heavySuite">Whether the step runs heavy work, and so must also wait for CPU headroom while another
+    /// process's heavy hold runs.</param>
     /// <param name="sample">Takes one reading.</param>
     /// <param name="clock">The clock the bound is measured on.</param>
     /// <param name="delay">Waits one interval.</param>
@@ -125,9 +136,9 @@ public static class HostAdmission {
             cancellationToken.ThrowIfCancellationRequested();
             var reading = sample();
             var gpu = (device ? reading.GpuHolder : null);
-            var heavy = (heavySuite ? reading.HeavyTestHolder : null);
+            var cpu = (heavySuite ? Crowded(reading: reading, thresholds: thresholds) : null);
             // The peak is judged last: only a start that nothing else holds back reserves its headroom.
-            var held = ((gpu is not null) || (heavy is not null) || Shortfalls(reading: reading, thresholds: thresholds, demand: null).Any());
+            var held = ((gpu is not null) || (cpu is not null) || Shortfalls(reading: reading, thresholds: thresholds, demand: null).Any());
             var demand = starts.Judge(clock: clock, kind: peak, reading: reading, reserve: (reserve && !held), thresholds: thresholds);
 
             // A start the idle machine could not hold is refused by name at once: no wait changes it.
@@ -149,14 +160,14 @@ public static class HostAdmission {
                 }
                 return true;
             }
-            var (now, phrase) = Reason(gpu: gpu, heavy: heavy, reading: reading, thresholds: thresholds, demand: demand);
+            var (now, phrase) = Reason(cpu: cpu, gpu: gpu, reading: reading, thresholds: thresholds, demand: demand);
             var waited = clock.GetElapsedTime(startingTimestamp: started);
 
             stage?.Invoke(obj: $"waiting for {phrase}");
 
             // A holder is named again whenever it changes; a memory reading prints once per wait, not per sample. A wait
             // that has printed nothing for a heartbeat says it is still waiting, and on what.
-            if ((reason is null) || (((gpu ?? heavy) is not null) && (now != reason))) {
+            if ((reason is null) || ((gpu is not null) && (now != reason))) {
                 error.WriteLine(value: $"gate: waiting for host capacity before {step} (at most {Span(span: limit)}): {now}.");
                 error.Flush();
                 reason = now;

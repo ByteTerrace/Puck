@@ -43,6 +43,51 @@ public sealed partial class HostProbe(string checkoutRoot) {
         }
     }
 
+    // The holds other processes were admitted to, each with its holder's process tree measured. A hold of this process or of
+    // one of its ancestors is left out (HostSample.Holds), and so is one whose holder runs inside another counted hold's tree,
+    // which already covers it. Only the processes of a hold's tree pay the handles their CPU time and private working set are
+    // read through.
+    private List<HostLeaseHold> Holds(Dictionary<int, (int Parent, DateTime Started)> tree, Dictionary<int, (double PrivateGb, double WorkingSetGb)> running, int self) {
+        List<HostLeaseHold> holds = [];
+
+        if (LeaseRoot is not { } root) { return holds; }
+
+        IReadOnlyList<CliLease.AdmittedHold> admitted;
+
+        try {
+            admitted = CliLease.AdmittedHolds(now: DateTimeOffset.UtcNow, root: root);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return holds;
+        }
+
+        foreach (var hold in admitted) {
+            if ((hold.ProcessId == self) || !tree.TryGetValue(key: hold.ProcessId, value: out var entry) || (entry.Started.ToUniversalTime().Ticks != hold.StartTicks) || ProcessInspection.IsAncestor(pid: hold.ProcessId, ticks: hold.StartTicks)) { continue; }
+
+            int[] members = [hold.ProcessId, .. HostProcesses.Descendants(processes: tree, root: hold.ProcessId)];
+            double privateGb = 0, residentGb = 0, cpuSeconds = 0;
+            var timed = false;
+
+            foreach (var member in members) {
+                var (memberPrivateGb, memberWorkingSetGb) = running.GetValueOrDefault(key: member);
+                var resident = ((Puck.Hosting.HostMemory.PrivateResidentBytes(processId: member) is { } bytes) ? (bytes / 1073741824.0) : HostRunningStart.ResidentOf(privateGb: memberPrivateGb, privateResidentGb: double.NaN, workingSetGb: memberWorkingSetGb));
+
+                privateGb += memberPrivateGb;
+                residentGb += (double.IsFinite(d: resident) ? resident : 0);
+                try {
+                    using var process = Process.GetProcessById(processId: member);
+
+                    if (CpuSeconds(process: process) is var seconds && double.IsFinite(d: seconds)) {
+                        cpuSeconds += seconds;
+                        timed = true;
+                    }
+                } catch (ArgumentException) { }
+            }
+            holds.Add(item: new HostLeaseHold(CpuSeconds: (timed ? cpuSeconds : double.NaN), Device: hold.Device, Holder: hold.Holder, Id: hold.ProcessId, Kind: hold.Kind, Lease: hold.Lease, Members: members, PrivateGb: privateGb, ResidentGb: residentGb, StartTicks: hold.StartTicks));
+        }
+
+        return [.. holds.Where(predicate: hold => !holds.Any(predicate: other => (other.Id != hold.Id) && other.Members.Contains(value: hold.Id)))];
+    }
+
     [LibraryImport(libraryName: "kernel32.dll", SetLastError = true)]
     [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
     private static partial bool GetSystemTimes(out ulong idle, out ulong kernel, out ulong user);
@@ -186,14 +231,20 @@ public sealed partial class HostProbe(string checkoutRoot) {
             if ((holder is null) && !own.Contains(item: id) && HostProcesses.IsGpuWork(commandLine: commandLine, name: name)) {
                 holder = label;
             }
-            // A heavy test run that has gone idle holds the machine's one heavy slot no longer: it is not running its
-            // suite, and the memory it holds is already counted in the headroom a start is admitted by.
+            // A heavy test run that has gone idle is not running its suite, so a quiet window stops waiting for it.
             if ((heavy is null) && (idleSince is null) && !own.Contains(item: id) && HostProcesses.IsHeavyTest(commandLine: commandLine, name: name)) {
                 heavy = label;
             }
             if (HostProcesses.IsReuseNode(commandLine: commandLine, name: name)) {
                 reuse++;
             }
+        }
+
+        var holds = Holds(running: running.ToDictionary(keySelector: static process => process.Id, elementSelector: static process => (process.PrivateGb, process.WorkingSetGb)), self: self, tree: tree);
+
+        // A hold whose work opens a device holds the GPU from its grant, before its device process appears.
+        if ((holder is null) && (holds.FirstOrDefault(predicate: hold => hold.Device && !own.Contains(item: hold.Id)) is { Holder: not null } device)) {
+            holder = $"{device.Holder} (its {device.Lease} lease, PID {device.Id.ToString(provider: CultureInfo.InvariantCulture)})";
         }
 
         var commit = Puck.Hosting.HostMemory.CommitBytes();
@@ -208,7 +259,8 @@ public sealed partial class HostProbe(string checkoutRoot) {
             GpuHolder: holder,
             ReuseNodes: reuse,
             HeavyTestHolder: heavy,
-            Starts: starts
+            Starts: starts,
+            Holds: holds
         );
         // Existing host samplers (including the benchmark recorder) feed the same tracker while starts run,
         // so a completed/plateaued start teaches later CLI processes its measured peak.

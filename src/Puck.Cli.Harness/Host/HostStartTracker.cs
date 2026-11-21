@@ -67,8 +67,11 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 /// moment ago whose process has not appeared: this tracker holds that start as a reservation of its full peak until a
 /// new live process of its kind appears or <see cref="ReservationHold"/> passes, which is what keeps two starts asked in
 /// a row from both taking the same headroom. Pre-process reservations live in this process's memory only,
-/// so they cover the starts this process admits (an MCP session, the concurrent workers of one verb) and not
-/// those another process admits at the same instant, whose processes are counted once they run.</para>
+/// so they cover the starts this process admits (an MCP session, the concurrent workers of one verb). What another process
+/// admitted under a lease is read from the lease root instead (<see cref="HostSample.Holds"/>, recorded at the grant under
+/// the lease's admission lock): each hold counts its holder's process tree toward the hold's expected peak from the grant
+/// on, or the growth of the tracked starts inside the tree when that is more, so two lanes granted one after the other
+/// never read the same headroom, and several heavy holders share the machine by what each still has to grow.</para>
 /// </summary>
 public sealed class HostStartTracker {
     private sealed record Reservation(HostStartKind Kind, long At, double Gb, double ResidentGb, HashSet<(int Id, long StartTicks)> Known);
@@ -102,6 +105,8 @@ public sealed class HostStartTracker {
     private readonly List<Reservation> m_reservations = [];
     // Keyed by process id and start ticks: a recycled id is another start, and carries none of the last one's peak.
     private readonly Dictionary<(int Id, long StartTicks), Observation> m_seen = [];
+    // The holds other processes admitted, by holder process: an observation of each one's whole process tree.
+    private readonly Dictionary<(int Id, long StartTicks), Observation> m_holds = [];
 
     /// <summary>Gets the tracker of this process's host session, which the admission of a real machine reading uses.</summary>
     public static HostStartTracker Session { get; } = new(leaseRoot: CliLease.RootAsync(Environment.CurrentDirectory).GetAwaiter().GetResult());
@@ -138,6 +143,33 @@ public sealed class HostStartTracker {
     }
     // A live process's peaks as one reading shows them.
     private static HostPeaks Reading(HostRunningStart start) => new(PrivateGb: start.PrivateGb, ResidentGb: start.ResidentGb, WorkingSetGb: start.HeldGb);
+
+    // Folds one reading of a start, or of a hold's process tree, into its observation: its peaks, when its private bytes
+    // last grew materially, and when it last used CPU. A tree's CPU time falls when a busy child exits; the anchor follows
+    // it down without counting the fall as use, so the next child's work is measured from there.
+    private static (Observation Seen, bool Busy) Follow(Observation? seen, HostStartKind kind, HostPeaks peaks, double cpuSeconds, TimeProvider clock) {
+        var now = clock.GetTimestamp();
+
+        seen ??= new Observation(kind, peaks, peaks.PrivateGb, now, now, cpuSeconds, now);
+        var grew = (peaks.PrivateGb >= (seen.AnchorGb + MaterialGrowthGb));
+        var busy = (!double.IsFinite(cpuSeconds) || !double.IsFinite(seen.CpuAnchor) || (cpuSeconds >= (seen.CpuAnchor + BusyCpuSeconds)));
+
+        return (seen with {
+            Peaks = seen.Peaks.Max(other: peaks),
+            AnchorGb = (grew ? peaks.PrivateGb : Math.Min(peaks.PrivateGb, seen.AnchorGb)),
+            GrewAt = (grew ? now : seen.GrewAt),
+            CpuAnchor = ((double.IsFinite(cpuSeconds) && (busy || (cpuSeconds < seen.CpuAnchor))) ? cpuSeconds : seen.CpuAnchor),
+            BusyAt = (busy ? now : seen.BusyAt),
+        }, busy);
+    }
+    // What an observed start or hold still has to grow, in private bytes and in private working set: toward the greater of
+    // its kind's expected peak and its own observed peak, tapering to nothing over a plateau without material growth, and
+    // nothing at all once it is idle.
+    private static (double Commit, double Resident) Left(Observation seen, HostPeaks expected, double privateGb, double residentGb, bool idle, TimeProvider clock) {
+        var remaining = (idle ? 0 : Math.Max(0, (1 - (clock.GetElapsedTime(seen.GrewAt).TotalSeconds / Plateau.TotalSeconds))));
+
+        return (((Math.Max(expected.PrivateGb, seen.Peaks.PrivateGb) - privateGb) * remaining), ((Math.Max(expected.ResidentGb, seen.Peaks.ResidentGb) - residentGb) * remaining));
+    }
 
     // A process is an observation of its kind once it has been seen for a full plateau (live: its growth stopped for one;
     // exited: it was watched for one). Before that it counts only to raise a kind that already has observations, since a
@@ -206,14 +238,8 @@ public sealed class HostStartTracker {
 
             foreach (var start in live) {
                 var id = (start.Id, start.StartTicks);
-                var now = clock.GetTimestamp();
-                var seen = m_seen.GetValueOrDefault(id) ?? new Observation(start.Kind, Reading(start: start), start.PrivateGb, now, now, start.CpuSeconds, now);
-                var grew = start.PrivateGb >= seen.AnchorGb + MaterialGrowthGb;
-                var busy = !double.IsFinite(start.CpuSeconds) || !double.IsFinite(seen.CpuAnchor) || (start.CpuSeconds >= (seen.CpuAnchor + BusyCpuSeconds));
+                var (seen, busy) = Follow(clock: clock, cpuSeconds: start.CpuSeconds, kind: start.Kind, peaks: Reading(start: start), seen: m_seen.GetValueOrDefault(id));
 
-                seen = seen with { Peaks = seen.Peaks.Max(other: Reading(start: start)),
-                    AnchorGb = grew ? start.PrivateGb : Math.Min(start.PrivateGb, seen.AnchorGb), GrewAt = grew ? now : seen.GrewAt,
-                    CpuAnchor = (busy && double.IsFinite(start.CpuSeconds)) ? start.CpuSeconds : seen.CpuAnchor, BusyAt = busy ? now : seen.BusyAt };
                 m_seen[id] = seen;
 
                 // Another observer's mark counts until this tracker sees the process use CPU itself.
@@ -259,22 +285,44 @@ public sealed class HostStartTracker {
             var residentGrowth = 0.0;
             var growing = 0;
 
-            // The one growth sum, in both quantities: ready or plateaued processes count only their actual usage in the
-            // system charge and in free memory.
-            foreach (var start in live) {
-                var seen = m_seen[(start.Id, start.StartTicks)];
-                var remaining = (idleStarts.Contains(item: (start.Id, start.StartTicks)) ? 0 : Math.Max(0, 1 - clock.GetElapsedTime(seen.GrewAt).TotalSeconds / Plateau.TotalSeconds));
-                var expected = Expected(installedRamGb: thresholds.InstalledRamGb, kind: start.Kind);
-                var left = start.Ready ? 0 : (Math.Max(expected.PrivateGb, seen.Peaks.PrivateGb) - start.PrivateGb) * remaining;
-                var residentLeft = start.Ready ? 0 : (Math.Max(expected.ResidentGb, seen.Peaks.ResidentGb) - start.ResidentGb) * remaining;
-
-                if (left > 0) {
-                    growth += left;
+            void Add((double Commit, double Resident) left) {
+                if (left.Commit > 0) {
+                    growth += left.Commit;
                     growing++;
                 }
-                if (residentLeft > 0) {
-                    residentGrowth += residentLeft;
+                if (left.Resident > 0) { residentGrowth += left.Resident; }
+            }
+
+            // The one growth sum, in both quantities: ready or plateaued processes count only their actual usage in the
+            // system charge and in free memory.
+            var startsLeft = new Dictionary<int, (double Commit, double Resident)>();
+
+            foreach (var start in live) {
+                startsLeft[start.Id] = (start.Ready ? (0, 0) : Left(clock: clock, expected: Expected(installedRamGb: thresholds.InstalledRamGb, kind: start.Kind), idle: idleStarts.Contains(item: (start.Id, start.StartTicks)), privateGb: start.PrivateGb, residentGb: start.ResidentGb, seen: m_seen[(start.Id, start.StartTicks)]));
+            }
+            // A hold another process admitted covers its holder's whole process tree from the grant on, before any start in it
+            // appears: the tree still has to grow toward the hold's expected peak, or the tracked starts inside it still have
+            // to grow, whichever is more, so a start inside a hold is never counted twice. It tapers and goes idle as a start
+            // does, by the tree's private bytes and CPU time.
+            HashSet<int> covered = [];
+            HashSet<(int Id, long StartTicks)> holdIds = [];
+
+            foreach (var hold in (reading.Holds ?? [])) {
+                var id = (hold.Id, hold.StartTicks);
+                var (seen, _) = Follow(clock: clock, cpuSeconds: hold.CpuSeconds, kind: hold.Kind, peaks: new HostPeaks(PrivateGb: hold.PrivateGb, ResidentGb: hold.ResidentGb, WorkingSetGb: double.NaN), seen: m_holds.GetValueOrDefault(id));
+                var tree = Left(clock: clock, expected: Expected(installedRamGb: thresholds.InstalledRamGb, kind: hold.Kind), idle: (clock.GetElapsedTime(seen.BusyAt) >= Plateau), privateGb: hold.PrivateGb, residentGb: hold.ResidentGb, seen: seen);
+                var inner = (Commit: 0.0, Resident: 0.0);
+
+                m_holds[id] = seen;
+                _ = holdIds.Add(item: id);
+                foreach (var member in hold.Members) {
+                    if (covered.Add(item: member) && startsLeft.TryGetValue(key: member, value: out var left)) { inner = ((inner.Commit + left.Commit), (inner.Resident + left.Resident)); }
                 }
+                Add(left: (Math.Max(tree.Commit, inner.Commit), Math.Max(tree.Resident, inner.Resident)));
+            }
+            foreach (var gone in m_holds.Keys.Where(predicate: id => !holdIds.Contains(item: id)).ToArray()) { _ = m_holds.Remove(key: gone); }
+            foreach (var (id, left) in startsLeft) {
+                if (!covered.Contains(item: id)) { Add(left: left); }
             }
             foreach (var reservation in m_reservations) {
                 growth += reservation.Gb;

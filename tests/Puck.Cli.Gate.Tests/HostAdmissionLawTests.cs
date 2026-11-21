@@ -17,7 +17,11 @@ public sealed class HostAdmissionLawTests {
 
     // A commit reading is a percentage of a 40 GB commit limit; none is a platform that reports no limit. Free memory
     // defaults to plenty, so a law about commit is not also a law about physical memory.
-    private static HostSample Sample(double cpu = 0, double ram = 64, double disk = 100, string? gpu = null, string? heavy = null, double? commit = null, double limit = 40, HostRunningStart[]? starts = null) => new(At: DateTimeOffset.UnixEpoch, CpuPercent: cpu, FreeDiskGb: disk, FreeRamGb: ram, GpuHolder: gpu, HeavyTestHolder: heavy, ReuseNodes: 42, CommitChargeGb: ((commit is { } percent) ? (percent * limit / 100.0) : double.NaN), CommitLimitGb: ((commit is null) ? double.NaN : limit), Starts: starts);
+    private static HostSample Sample(double cpu = 0, double ram = 64, double disk = 100, string? gpu = null, string? heavy = null, double? commit = null, double limit = 40, HostRunningStart[]? starts = null, HostLeaseHold[]? holds = null) => new(At: DateTimeOffset.UnixEpoch, CpuPercent: cpu, FreeDiskGb: disk, FreeRamGb: ram, GpuHolder: gpu, HeavyTestHolder: heavy, ReuseNodes: 42, CommitChargeGb: ((commit is { } percent) ? (percent * limit / 100.0) : double.NaN), CommitLimitGb: ((commit is null) ? double.NaN : limit), Starts: starts, Holds: holds);
+    // Another lane's heavy hold: `puck lease heavy` PID 41, whose tree holds `privateGb` of commit (resident alike) and has
+    // used `cpuSeconds` of CPU, with the given members beside the holder.
+    private static HostLeaseHold HeavyHold(double privateGb, double cpuSeconds = 0, HostStartKind kind = HostStartKind.HeavySuite, params int[] members) =>
+        new(CpuSeconds: cpuSeconds, Device: false, Holder: "other-lane run", Id: 41, Kind: kind, Lease: "heavy", Members: [41, .. members], PrivateGb: privateGb, ResidentGb: privateGb, StartTicks: 41);
     // A ready heavy suite holding 20 GB of commit and 1 GB resident, in a kind no law here observes: it adds no growth, and
     // headroom would be larger without it, so a start asked beside it is one a wait for it to exit could admit.
     private static readonly HostRunningStart Company = new(Id: 900, Kind: HostStartKind.HeavySuite, PrivateGb: 20, PrivateResidentGb: 1, Ready: true, StartTicks: 900);
@@ -497,45 +501,73 @@ public sealed class HostAdmissionLawTests {
         Assert.DoesNotContain(expectedSubstring: "waiting", actualString: lines[0]);
     }
     [Fact]
-    public void AHeavySuiteWaitsOnAnotherHeavyRunPastTheOrdinaryBoundNamingEachHolderWithHeartbeats() {
+    public void HeavyStartsShareTheMachineByHeadroomAndWaitOnCpuOnlyBesideAnotherHeavyHold() {
         var clock = new GateClock();
         using var error = new StringWriter();
 
-        // Another gate's Puck.World.Tests holds the machine for 35 minutes, a third one's for 15 more, then none.
-        HostSample Reading() => clock.GetElapsedTime(startingTimestamp: 0).TotalMinutes switch {
-            < 35 => Sample(heavy: "Puck.World.Tests 11"),
-            < 50 => Sample(heavy: "Puck.World.Tests 12"),
-            _ => Sample(),
-        };
+        // Another process's heavy test run no longer holds a heavy start back: memory headroom judges it.
+        Assert.True(condition: HostAdmission.Wait("lease heavy b", false, true, () => Sample(heavy: "Puck.World.Tests 11"), clock, _ => Assert.Fail(message: "a heavy start with headroom must not wait on another heavy run"), error, CancellationToken.None, Thresholds, tracker: new HostStartTracker()));
+        // A lone heavy start runs under any CPU load, which only slows it.
+        Assert.True(condition: HostAdmission.Wait("lease heavy b", false, true, () => Sample(cpu: 95), clock, _ => Assert.Fail(message: "CPU load must not hold a lone heavy start back"), error, CancellationToken.None, Thresholds, tracker: new HostStartTracker()));
 
-        Assert.True(condition: HostAdmission.Wait("Puck.World.Tests", false, true, Reading, clock, clock.Advance, error, CancellationToken.None, Thresholds));
-        var lines = error.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n').Select(selector: static line => line.TrimEnd()).ToArray();
+        // Beside another lane's running heavy hold, a further heavy start waits while the CPU is over the capacity threshold
+        // (50% on six threads), naming the holder, for 15 minutes; a light step never waits on it.
+        var hold = HeavyHold(privateGb: 10);
 
-        Assert.Equal(actual: lines, expected: [
-            "gate: waiting for host capacity before Puck.World.Tests (at most 120 minutes): a heavy test run is held by Puck.World.Tests 11.",
-            "gate: still waiting before Puck.World.Tests after 10 minutes: a heavy test run is held by Puck.World.Tests 11.",
-            "gate: still waiting before Puck.World.Tests after 20 minutes: a heavy test run is held by Puck.World.Tests 11.",
-            "gate: still waiting before Puck.World.Tests after 30 minutes: a heavy test run is held by Puck.World.Tests 11.",
-            "gate: waiting for host capacity before Puck.World.Tests (at most 120 minutes): a heavy test run is held by Puck.World.Tests 12.",
-            "gate: still waiting before Puck.World.Tests after 45 minutes: a heavy test run is held by Puck.World.Tests 12.",
-            "gate: capacity returned for Puck.World.Tests.",
+        using var crowded = new StringWriter();
+
+        HostSample Reading() => Sample(cpu: ((clock.GetElapsedTime(startingTimestamp: 0).TotalMinutes < 15) ? 95 : 20), holds: [hold]);
+        var started = clock.GetTimestamp();
+
+        Assert.True(condition: HostAdmission.Wait("lease heavy b", false, true, Reading, clock, clock.Advance, crowded, CancellationToken.None, Thresholds, tracker: new HostStartTracker()));
+        Assert.Equal(actual: crowded.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n').Select(selector: static line => line.TrimEnd()).ToArray(), expected: [
+            "gate: waiting for host capacity before lease heavy b (at most 120 minutes): no CPU headroom: cpu=95% with 1 other heavy holder(s) running (other-lane run PID 41); a further heavy start needs cpu under 50%.",
+            "gate: still waiting before lease heavy b after 10 minutes: no CPU headroom: cpu=95% with 1 other heavy holder(s) running (other-lane run PID 41); a further heavy start needs cpu under 50%.",
+            "gate: capacity returned for lease heavy b.",
         ]);
-        Assert.Equal(expected: TimeSpan.FromMinutes(minutes: 50), actual: clock.GetElapsedTime(startingTimestamp: 0));
-
-        // A step that runs no heavy suite never waits on one.
-        using var light = new StringWriter();
-
-        Assert.True(condition: HostAdmission.Wait("baselines state", false, false, () => Sample(heavy: "Puck.World.Tests 11"), clock, _ => Assert.Fail(message: "a light step must not wait on a heavy run"), light, CancellationToken.None, Thresholds));
-        Assert.Equal(expected: "", actual: light.ToString());
+        Assert.Equal(expected: TimeSpan.FromMinutes(minutes: 15), actual: clock.GetElapsedTime(startingTimestamp: started));
+        Assert.True(condition: HostAdmission.Wait("baselines state", false, false, () => Sample(cpu: 95, holds: [hold]), clock, _ => Assert.Fail(message: "a light step must not wait on CPU"), new StringWriter(), CancellationToken.None, Thresholds, tracker: new HostStartTracker()));
     }
     [Fact]
-    public void AHeavySuiteIsRefusedOnlyAtItsTwoHourBound() {
+    public void AHeavyStartIsRefusedOnlyAtItsTwoHourBound() {
         var clock = new GateClock();
         using var error = new StringWriter();
 
-        Assert.False(condition: HostAdmission.Wait("Puck.World.Tests", false, true, () => Sample(heavy: "Puck.World.Tests 11"), clock, clock.Advance, error, CancellationToken.None, Thresholds));
+        Assert.False(condition: HostAdmission.Wait("lease heavy b", false, true, () => Sample(cpu: 95, holds: [HeavyHold(privateGb: 10)]), clock, clock.Advance, error, CancellationToken.None, Thresholds, tracker: new HostStartTracker()));
         Assert.Equal(expected: TimeSpan.FromHours(hours: 2), actual: clock.GetElapsedTime(startingTimestamp: 0));
         Assert.Equal(expected: CliLease.DefaultWait, actual: TimeSpan.FromHours(hours: 2));
+    }
+    // Another process's hold counts what its process tree still has to grow toward the hold's expected peak from the grant,
+    // before any start in it appears, so a second heavy start is admitted beside a first only while the commit headroom
+    // covers both peaks; a tracked start inside the hold is counted once, by the greater of the two; and the hold tapers to
+    // what it holds once its tree stops growing for a plateau.
+    [Fact]
+    public void AnotherProcesssHoldReservesItsTreesGrowthFromTheGrantAndCountsAStartInsideItOnce() {
+        var clock = new GateClock();
+        var tracker = new HostStartTracker();
+        // 30 GB of commit headroom on a 40 GB limit (25% charged): a heavy suite expects 10 GB.
+        HostSample Reading(double treeGb, params HostRunningStart[] starts) => Sample(commit: 25, holds: [HeavyHold(privateGb: treeGb, cpuSeconds: clock.GetElapsedTime(startingTimestamp: 0).TotalSeconds, members: [.. starts.Select(selector: static start => start.Id)])], starts: starts);
+
+        // The hold was just granted and its tree holds 0.5 GB: 9.5 GB still to grow, beside the start's own 10 GB.
+        var granted = tracker.Judge(clock: clock, kind: HostStartKind.HeavySuite, reading: Reading(treeGb: 0.5), reserve: false, thresholds: Thresholds);
+
+        Assert.Equal(expected: 9.5, actual: granted.GrowthGb, precision: 6);
+        Assert.True(condition: granted.CommitCovered);
+        // A third heavy start beside two such holds would need 10 + 9.5 + 9.5 = 29 GB of the 30: it fits, a fourth does not.
+        var two = Sample(commit: 25, holds: [HeavyHold(privateGb: 0.5), (HeavyHold(privateGb: 0.5) with { Id = 42, StartTicks = 42, Members = [42] })]);
+
+        Assert.True(condition: tracker.Judge(clock: clock, kind: HostStartKind.HeavySuite, reading: two, reserve: false, thresholds: Thresholds).CommitCovered);
+        Assert.False(condition: tracker.Judge(clock: clock, kind: HostStartKind.HeavySuite, reading: (two with { Holds = [.. two.Holds!, (HeavyHold(privateGb: 0.5) with { Id = 43, StartTicks = 43, Members = [43] })] }), reserve: false, thresholds: Thresholds).CommitCovered);
+
+        // A replica appears inside the first hold: the hold's 9.5 GB and the replica's own 8.5 GB still to grow are one
+        // growth, the greater, never 18 GB.
+        var replica = new HostRunningStart(Id: 77, Kind: HostStartKind.ReproduceReplica, PrivateGb: 0.5, PrivateResidentGb: 0.5, StartTicks: 77, CpuSeconds: 0);
+        var inside = tracker.Judge(clock: clock, kind: HostStartKind.HeavySuite, reading: Reading(1.0, replica), reserve: false, thresholds: Thresholds);
+
+        Assert.Equal(expected: 9.0, actual: inside.GrowthGb, precision: 6);
+        // The tree stops growing for a plateau while it keeps using CPU: the hold counts only what it holds.
+        clock.Advance(HostStartTracker.Plateau);
+        Assert.Equal(expected: 0, actual: tracker.Judge(clock: clock, kind: HostStartKind.HeavySuite, reading: Reading(1.0, replica with { CpuSeconds = 60 }), reserve: false, thresholds: Thresholds).GrowthGb, precision: 6);
     }
 
     private static string HostAdmissionReason(double ram) {
@@ -743,13 +775,19 @@ public sealed class HostAdmissionLawTests {
 
             Assert.True(CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).HolderAlive);
 
-            // Another lane's start, short of headroom: it waits the shortage out, then queues behind the lane that holds.
+            // Another lane's start, short of headroom: it waits the shortage out, then queues behind the lane that holds the
+            // GPU, or runs beside it in a heavy slot of its own once headroom covers it.
             tight = true;
 
             var queued = WorldLaunch.AdmitAsync((lane with { Holder = "b", Lane = "b" }), token);
 
             await shortReadings.WaitAsync(token);
-            Assert.False(queued.IsCompleted);
+            if (resource == "gpu") {
+                Assert.False(queued.IsCompleted);
+            } else {
+                _ = await queued.WaitAsync(token);
+                Assert.Equal(["a", "b"], CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).Holders.Select(static held => held.Holder));
+            }
             first.Dispose();
 
             using var second = await queued;
