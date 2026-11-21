@@ -163,20 +163,7 @@ public sealed class WorldAdjacencyBorderColorLawTests {
             Direct: true
         )];
 
-        public void BeginTick(ulong tick) { }
-        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Overlap;
-        public WorldEntityAddress LocalEntityAddress(int index) => default;
-        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
-            neighbour = null;
-
-            return false;
-        }
         public IReadOnlyList<WorldAdjacencyProjection> Visuals() => m_projections;
-        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
-            departedFrom = default;
-
-            return false;
-        }
     }
     // A neighbour whose Definition is the image pinned for the tick, which the law advances by hand.
     private sealed class PinnedNeighbour(WorldDefinition definition, WorldFaceFrame counterpartFrame) : IWorldAdjacencyNeighbour {

@@ -7,23 +7,27 @@ namespace Puck.World.Server;
 /// thing <see cref="WorldServerStepShell.Execute"/> runs. Only <see cref="WorldServerStepShell.Prepare"/> mints one, so
 /// every executed slice names the thread that prepared it as the tick's owner.</summary>
 public readonly struct WorldPreparedTick {
-    internal WorldPreparedTick(WorldServer server, WorldReplayTape? tape, ulong stepTicks, WaitDeadline slice, bool resuming, WaitDeadline stall) {
+    internal WorldPreparedTick(WorldServer server, WorldReplayTape? tape, in WorldTick.PreparedAdvance advance, WaitDeadline slice, bool resuming, bool cancelled) {
         Server = server;
         Tape = tape;
-        StepTicks = stepTicks;
+        Advance = advance;
         Slice = slice;
         Resuming = resuming;
-        Stall = stall;
+        Cancelled = cancelled;
+        Stall = WaitDeadline.Synchronous();
         Owner = WorldTick.SliceOwner;
     }
 
     internal WorldServer? Server { get; }
     internal WorldReplayTape? Tape { get; }
-    internal ulong StepTicks { get; }
+    // The tick's coordinates and the neighbour projections sampled for it on the preparing thread.
+    internal WorldTick.PreparedAdvance Advance { get; }
     // How long the tick's own waits (a machine's drain, a fork's join) may block in this slice.
     internal WaitDeadline Slice { get; }
     // Whether the slice resumes a tick held across wait slices rather than starting one.
     internal bool Resuming { get; }
+    // Whether preparing cancelled a replay drive, so there is nothing to execute.
+    internal bool Cancelled { get; }
     // When the preparing thread stops waiting for another thread to execute the slice: the stall budget from the
     // hand-off. The slice's own waits end by the earlier of Slice and the tick's stall deadline, which freezes the
     // tick, so a slice that has not answered by this is computing, not waiting.
@@ -58,10 +62,14 @@ public readonly struct WorldExecutedTick {
 /// alone, and a hosted row (<c>Puck.World.Silo</c>) steps through it too. One authority tick is three parts, each a
 /// function here, so no boot shape can let them drift.
 /// <para><see cref="Prepare"/>, on the thread that owns the host's tables (the pump), closes the tick's input: it
-/// drains the server's mailbox. <see cref="Execute"/>, on whichever thread runs the tick, takes the authority gate,
-/// feeds a replaying tape's recorded tick into the server's doors, advances the tick, folds its journal and closes its
-/// tape group. <see cref="Collect"/>, on the preparing thread again, publishes the completed tick to the caller's
+/// drains the server's mailbox, feeds a replaying tape's recorded tick into the server's doors, applies the ordered
+/// submissions and samples the neighbour projections the tick reads. <see cref="Execute"/>, on whichever thread runs
+/// the tick, takes the authority gate, advances the tick over that closed input, folds its journal and closes its tape
+/// group. <see cref="Collect"/>, on the preparing thread again, publishes the completed tick to the caller's
 /// hook.</para>
+/// <para>Between a prepare and its execute the tick is held for its preparing thread
+/// (<see cref="WorldTick.HoldPrepared"/>), so no other thread applies anything to the authority after the tick's input
+/// closed and before the tick runs.</para>
 /// <para><see cref="TryStep"/> runs the three in order: all on the calling thread for a caller with no host (a law, a
 /// replay's shadow server), or with the execute handed to a host's <see cref="WorldStepThread"/> while the caller
 /// waits for it. A tape in <see cref="WorldReplayMode.Replaying"/> that fast-forwards steps again inside the same call,
@@ -128,9 +136,11 @@ public static class WorldServerStepShell {
 
             if (thread is null) {
                 prepared = Prepare(server, tape, in current, deadline);
-                executed = Execute(in prepared);
+                executed = (prepared.Cancelled ? WorldExecutedTick.Nothing : Execute(in prepared));
             } else {
-                if (!thread.InFlight) { thread.HandOver(server, tape, in current, deadline); }
+                if (!thread.InFlight && !thread.HandOver(server, tape, in current, deadline)) {
+                    return current.Tick;
+                }
                 if (!thread.TryCollect(server, out prepared, out executed)) {
                     pending = WorldStepThread.ExecuteWait;
                     return current.Tick;
@@ -165,13 +175,18 @@ public static class WorldServerStepShell {
         }
     }
 
-    /// <summary>The first part of a tick, on the thread that owns the host's tables: closes the tick's input by
-    /// draining the server's mailbox, unless the slice resumes a tick already held across wait slices.</summary>
+    /// <summary>The first part of a tick, on the thread that owns the host's tables: closes the tick's input. For a
+    /// tick that starts it drains the server's mailbox, then under the authority gate feeds a replaying tape's recorded
+    /// tick into the server's doors, applies the ordered submissions and samples the neighbour projections
+    /// (<see cref="WorldTick.PrepareAdvance(ulong)"/>, which resolves neighbours through the host). It leaves the tick held for
+    /// the calling thread until its execute takes the gate (<see cref="WorldTick.HoldPrepared"/>). A slice that resumes
+    /// a tick held across wait slices prepares nothing.</summary>
     /// <param name="server">The authoritative server.</param>
     /// <param name="tape">The replay tape, or <see langword="null"/> for a row nothing records.</param>
     /// <param name="context">The tick's coordinates; only the step width reaches the server.</param>
     /// <param name="deadline">How long the tick's own waits may block in this slice.</param>
-    /// <returns>The slice to execute. The calling thread is the owner a held tick names.</returns>
+    /// <returns>The slice to execute, or one marked cancelled when a replay drive could not supply the tick and was
+    /// cancelled. The calling thread is the owner a held tick names.</returns>
     public static WorldPreparedTick Prepare(WorldServer server, WorldReplayTape? tape, in FixedStepContext context, WaitDeadline deadline) {
         ArgumentNullException.ThrowIfNull(server);
 
@@ -180,26 +195,45 @@ public static class WorldServerStepShell {
 
         if (!resuming) { server.DrainMailbox(); }
 
-        return new WorldPreparedTick(
-            resuming: resuming,
-            server: server,
-            slice: deadline,
-            stall: WaitDeadline.Synchronous(),
-            stepTicks: context.StepTicks,
-            tape: tape
-        );
+        lock (server.AuthorityGate) {
+            var injected = false;
+
+            try {
+                if (!resuming) {
+                    server.PendingReplayInputs = tape?.InjectDriveTick();
+                    injected = true;
+                }
+
+                var advance = server.Tick.PrepareAdvance(context.StepTicks);
+
+                if (!resuming) { server.Tick.HoldPrepared(); }
+
+                return new WorldPreparedTick(advance: in advance, cancelled: false, resuming: resuming, server: server, slice: deadline, tape: tape);
+            } catch (Exception error) {
+                // The inputs a drive injected live until the tick they feed completes; a tick that never starts frees
+                // them here.
+                if (injected) {
+                    server.PendingReplayInputs?.Dispose();
+                    server.PendingReplayInputs = null;
+                }
+                if (!LacksPrivateDraw(tape, error)) { throw; }
+                CancelDrive(server, tape!, error);
+
+                return new WorldPreparedTick(advance: default, cancelled: true, resuming: resuming, server: server, slice: deadline, tape: tape);
+            }
+        }
     }
 
-    /// <summary>The second part of a tick, on whichever thread runs it: takes the authority gate, feeds a replaying
-    /// tape's recorded tick into the server's doors, advances the tick, and for a tick that completes flushes and folds
-    /// its journal and closes its tape group. A tick held on a dependency names the thread that prepared the slice as
-    /// its owner (<see cref="WorldTick.SliceOwner"/>), not the thread that executed it.</summary>
+    /// <summary>The second part of a tick, on whichever thread runs it: takes the authority gate, releases the hold its
+    /// prepare left, advances the tick over the input that prepare closed, and for a tick that completes flushes and
+    /// folds its journal and closes its tape group. A tick held on a dependency names the thread that prepared the
+    /// slice as its owner (<see cref="WorldTick.SliceOwner"/>), not the thread that executed it.</summary>
     /// <param name="prepared">The slice <see cref="Prepare"/> closed.</param>
     /// <returns>How the slice ended.</returns>
     /// <exception cref="ArgumentException"><paramref name="prepared"/> is a default value no <see cref="Prepare"/>
-    /// minted.</exception>
+    /// minted, or one whose prepare cancelled its drive.</exception>
     public static WorldExecutedTick Execute(in WorldPreparedTick prepared) {
-        if (prepared.Server is not { } server) {
+        if ((prepared.Server is not { } server) || prepared.Cancelled) {
             throw new ArgumentException(message: "A tick slice executes only what Prepare closed.", paramName: nameof(prepared));
         }
 
@@ -213,13 +247,12 @@ public static class WorldServerStepShell {
             WaitReason? pending = null;
 
             try {
-                if (!prepared.Resuming) { server.PendingReplayInputs = tape?.InjectDriveTick(); }
-                pending = server.Tick.TryAdvance(prepared.StepTicks, prepared.Slice);
+                var advance = prepared.Advance;
+
+                pending = server.Tick.TryAdvance(in advance, prepared.Slice);
                 if (pending is { } reason) { return WorldExecutedTick.Held(reason: reason); }
-            } catch (InvalidDataException error) when (tape?.Mode == WorldReplayMode.Replaying &&
-                ReplayRefusalExtensions.ReasonOf(error) == ReplayRefusal.MissingPrivateDraw) {
-                var name = tape.CancelDrive();
-                server.Output.Narrate("replay.drive", $"[replay.drive {name}: {error.Message}]");
+            } catch (Exception error) when (LacksPrivateDraw(tape, error)) {
+                CancelDrive(server, tape!, error);
                 return WorldExecutedTick.Nothing;
             } finally {
                 if (pending is null) {
@@ -252,5 +285,18 @@ public static class WorldServerStepShell {
 
         publishTick(tick);
         work.Complete();
+    }
+
+    // Whether a replaying drive's tick needs a private draw the tape does not carry: the drive cannot go on.
+    private static bool LacksPrivateDraw(WorldReplayTape? tape, Exception error) => (
+        (error is InvalidDataException) &&
+        (tape?.Mode == WorldReplayMode.Replaying) &&
+        (ReplayRefusalExtensions.ReasonOf(error) == ReplayRefusal.MissingPrivateDraw)
+    );
+    // Cancels the drive and narrates why; the tick it could not supply is not stepped.
+    private static void CancelDrive(WorldServer server, WorldReplayTape tape, Exception error) {
+        var name = tape.CancelDrive();
+
+        server.Output.Narrate("replay.drive", $"[replay.drive {name}: {error.Message}]");
     }
 }

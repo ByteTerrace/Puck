@@ -101,14 +101,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                 ? borderCapacity.ToString(provider: CultureInfo.InvariantCulture)
                 : "destination")} unavailable={adjacency.Unavailable.ToString().ToLowerInvariant()} onUnavailable={(adjacency.OnUnavailable ?? "none")}");
 
-            if (
-                (source is null) ||
-                !source.TryResolve(
-                adjacencyName: adjacency.Name.Value,
-                neighbour: out var neighbour
-            ) ||
-                (neighbour is null)
-            ) {
+            if (source?.Find(adjacencyName: adjacency.Name.Value) is not { } neighbour) {
                 _ = builder.Append(value: " state=CLOSED]");
                 continue;
             }

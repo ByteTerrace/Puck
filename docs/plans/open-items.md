@@ -1125,7 +1125,7 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
 - A remote `WorldSessionMirror`'s per-property pose reads
   (`WorldSessionSceneEmitter`) against its socket thread's in-place delivery
   can compose a frame from two ticks. Use the coherent-copy path the adjacency
-  pin already uses (`CopySnapshotTo`). Owner: federation.
+  pin already uses (`WorldSessionMirror.CaptureBodyImage`). Owner: federation.
 - `LatestSlotPublication.TryAcquireLatest` (the shared GPU texture ring a
   camera or probe kernel publishes into) retries in a loop, where
   `PublishBuffer<T>` enters a slot with one atomic increment and has nothing to

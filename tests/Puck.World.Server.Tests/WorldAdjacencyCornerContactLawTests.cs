@@ -476,23 +476,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
                 )];
         }
 
-        public void BeginTick(ulong tick) { }
-        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Overlap;
-        public WorldEntityAddress LocalEntityAddress(int index) => new(
-            Authority: "source",
-            Generation: 0,
-            Index: index
-        );
-        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
-            neighbour = null;
-            return false;
-        }
         public IReadOnlyList<WorldAdjacencyProjection> Visuals() => m_projections;
-        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
-            departedFrom = default;
-
-            return false;
-        }
     }
     private sealed class SeamNeighbour : IWorldAdjacencyNeighbourContact {
         private readonly WorldSolidField? m_field;
@@ -577,23 +561,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
                 )];
         }
 
-        public void BeginTick(ulong tick) { }
-        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Overlap;
-        public WorldEntityAddress LocalEntityAddress(int index) => new(
-            Authority: "source",
-            Generation: 0,
-            Index: index
-        );
-        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
-            neighbour = null;
-            return false;
-        }
         public IReadOnlyList<WorldAdjacencyProjection> Visuals() => m_projections;
-        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
-            departedFrom = default;
-
-            return false;
-        }
     }
     private sealed class CornerNeighbour : IWorldAdjacencyNeighbourContact {
         private readonly WorldSolidField m_field;

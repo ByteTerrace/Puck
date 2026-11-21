@@ -7,7 +7,7 @@ using Xunit;
 
 namespace Puck.World.Protocol.Tests;
 
-/// <summary>THE LAW: a whole-image read of a session mirror (<see cref="WorldSessionMirror.CopySnapshotTo"/>,
+/// <summary>THE LAW: a whole-image read of a session mirror (<see cref="WorldSessionMirror.CaptureBodyImage"/>,
 /// <see cref="WorldSessionMirror.TryInput"/>, <see cref="WorldSessionMirror.SnapshotArrivalIntervals"/>) never sees a
 /// torn image and never waits on a writer. A delivery or route seed stalled inside its own critical section leaves the
 /// read free to take the last complete image, and a copy racing both writers always reads one image a writer
@@ -15,7 +15,6 @@ namespace Puck.World.Protocol.Tests;
 public sealed class SessionMirrorImageLawTests {
     private const int Bodies = 8;
     private const int SeedIndex = 20;
-    private const int Capacity = WorldBodiesLimits.CapacityCeiling;
 
     // Every body of one snapshot carries the same value in its position, color and generation, so an image mixing two
     // deliveries shows two values.
@@ -55,50 +54,19 @@ public sealed class SessionMirrorImageLawTests {
     );
 
     private sealed class Copy {
-        public readonly bool[] Active = new bool[Capacity];
-        public readonly WorldEntityAddress[] Addresses = new WorldEntityAddress[Capacity];
-        public readonly int[] Epochs = new int[Capacity];
-        public readonly string?[] Placements = new string?[Capacity];
-        public readonly Vector3[] PreviousPositions = new Vector3[Capacity];
-        public readonly Quaternion[] PreviousOrientations = new Quaternion[Capacity];
-        public readonly Vector3[] Positions = new Vector3[Capacity];
-        public readonly Quaternion[] Orientations = new Quaternion[Capacity];
-        public readonly Vector3[] Colors = new Vector3[Capacity];
-        public readonly WorldLook[] Looks = new WorldLook[Capacity];
-        public readonly byte[] Rigs = new byte[Capacity];
-        public readonly FixedWorldCollider?[] Colliders = new FixedWorldCollider?[Capacity];
-        public readonly WorldBodyContactMode[] Contacts = new WorldBodyContactMode[Capacity];
-        public ulong Tick;
-        public int Revision;
+        public WorldSessionMirror.BodyImage Image { get; private set; } = null!;
 
-        public void From(WorldSessionMirror mirror) => mirror.CopySnapshotTo(
-            active: Active,
-            addresses: Addresses,
-            arrivalTimestamp: out _,
-            bodyContacts: Contacts,
-            catalogRigs: Rigs,
-            colliders: Colliders,
-            colors: Colors,
-            currentOrientations: Orientations,
-            currentPositions: Positions,
-            looks: Looks,
-            placementIds: Placements,
-            poseEpochs: Epochs,
-            previousOrientations: PreviousOrientations,
-            previousPositions: PreviousPositions,
-            revision: out Revision,
-            stepSeconds: out _,
-            tick: out Tick
-        );
+        public void From(WorldSessionMirror mirror) => Image = mirror.CaptureBodyImage(Image);
+
         // The value every body of the copied snapshot shares, or a failure naming the first body that disagrees.
         public int CommonValue() {
-            var value = ((int)Positions[0].X);
+            var value = ((int)Image.Entries[0].CurrentPosition.X);
 
             for (var index = 0; (index < Bodies); index++) {
-                Assert.True(condition: Active[index], userMessage: $"body {index} inactive");
-                Assert.Equal(expected: value, actual: ((int)Positions[index].X));
-                Assert.Equal(expected: value, actual: ((int)Colors[index].X));
-                Assert.Equal(expected: value, actual: Addresses[index].Generation);
+                Assert.True(condition: Image.Entries[index].Active, userMessage: $"body {index} inactive");
+                Assert.Equal(expected: value, actual: ((int)Image.Entries[index].CurrentPosition.X));
+                Assert.Equal(expected: value, actual: ((int)Image.Entries[index].Color.X));
+                Assert.Equal(expected: value, actual: Image.Entries[index].Address.Generation);
             }
             return value;
         }
@@ -153,7 +121,7 @@ public sealed class SessionMirrorImageLawTests {
             Assert.True(condition: stalled.Wait(cancellationToken: token, timeout: TimeSpan.FromSeconds(seconds: 30)));
             await CopyWithin(copy: copy, mirror: mirror, token: token);
             Assert.Equal(expected: 2, actual: copy.CommonValue());
-            Assert.False(condition: copy.Active[SeedIndex]);
+            Assert.True(condition: copy.Image.Entries.Length <= SeedIndex);
             Volatile.Write(location: ref stall, value: false);
             release.Set();
             await seed;
@@ -164,9 +132,9 @@ public sealed class SessionMirrorImageLawTests {
         }
 
         copy.From(mirror: mirror);
-        Assert.True(condition: copy.Active[SeedIndex]);
-        Assert.Equal(expected: 3f, actual: copy.Positions[SeedIndex].X);
-        Assert.Equal(expected: 3UL, actual: copy.Tick);
+        Assert.True(condition: copy.Image.Entries[SeedIndex].Active);
+        Assert.Equal(expected: 3f, actual: copy.Image.Entries[SeedIndex].CurrentPosition.X);
+        Assert.Equal(expected: 3UL, actual: copy.Image.Tick);
     }
     [Fact]
     public async Task ACopyRacingBothWritersAlwaysReadsOneFinishedImage() {

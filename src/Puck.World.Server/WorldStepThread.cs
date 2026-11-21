@@ -50,10 +50,11 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null) : IJobLane
     /// <summary>Stops the step thread under the synchronous budget.</summary>
     public void Dispose() => m_lane.Dispose();
 
-    // Prepares one slice of server's tick on the calling thread and hands it to the step thread. The calling thread
-    // must hold no authority gate: the slice takes its server's gate on the step thread, and may enter another
-    // server's, so a caller that held one would wait for a tick that waits for it.
-    internal void HandOver(WorldServer server, WorldReplayTape? tape, in FixedStepContext context, WaitDeadline deadline) {
+    // Prepares one slice of server's tick on the calling thread and hands it to the step thread; false when preparing
+    // cancelled a replay drive and left nothing to execute. The calling thread must hold no authority gate: the slice
+    // takes its server's gate on the step thread, and may enter another server's, so a caller that held one would wait
+    // for a tick that waits for it.
+    internal bool HandOver(WorldServer server, WorldReplayTape? tape, in FixedStepContext context, WaitDeadline deadline) {
         if (server.GateHeldByCallingThread) {
             throw new InvalidOperationException(message: "A thread that holds an authority gate cannot hand a tick to the step thread: the tick takes the gate to run.");
         }
@@ -61,9 +62,24 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null) : IJobLane
             throw new InvalidOperationException(message: "The step thread already holds a tick slice; collect it before handing over the next.");
         }
 
-        m_prepared = WorldServerStepShell.Prepare(server, tape, in context, deadline);
+        var prepared = WorldServerStepShell.Prepare(server, tape, in context, deadline);
+
+        if (prepared.Cancelled) {
+            return false;
+        }
+
+        m_prepared = prepared;
         m_executed = default;
-        m_lane.Post(unit: this);
+        try {
+            m_lane.Post(unit: this);
+        } catch {
+            // The tick's input is closed and nothing will execute it: let the threads its hold keeps out back in.
+            server.Tick.AbandonPrepared();
+            m_prepared = default;
+            throw;
+        }
+
+        return true;
     }
     // Waits for the slice in flight, which must be server's, until the stall budget from its hand-off has passed, and
     // takes it. False while the slice is still executing. What the slice threw is rethrown here.

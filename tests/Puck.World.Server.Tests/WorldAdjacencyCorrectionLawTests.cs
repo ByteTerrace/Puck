@@ -18,6 +18,7 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
     private static WorldDefinition Document() {
         var basis = Fixtures.BuildDocument();
         return basis with {
+            HostRaw = basis.Host with { AuthorityNamespace = LocalAuthority },
             GravityRaw = WorldGravity.Default,
             KitsRaw = basis.KitsRaw! with { Rows = [basis.Kits[0] with {
                 Collider = new WorldCollider.Sphere(Radius: 0.5f), BodyContact = WorldBodyContactMode.Solid,
@@ -87,7 +88,7 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
         var neighbour = new ReportedBodies(1, 0.5f, Remote(localResponds: true));
         var source = new Reports(body, neighbour, 100f, 0f, axis: FixedVector3.UnitX, spacing: 0.875f);
         fixture.Server.Adjacencies = source;
-        source.BeginTick(0);
+        source.UpdateReports();
         var start = body.FixedPosition;
         Assert.True(FixedDynamicBodyContacts.TryCorrection(
             WorldAdjacencyPath.MapPointIntoNeighbour(start, source.Projection.Path), FixedQuaternion.Identity,
@@ -297,13 +298,12 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
         public WorldAdjacencyProjection Projection { get; set; }
         public WorldAdjacencyProjection[] Extra { get; set; } = [];
         public int Pins { get; private set; }
-        public WorldEntityAddress LocalEntityAddress(int index) => new(LocalAuthority, 0, index);
-        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
-        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) { departedFrom = default; return false; }
-        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) { neighbour = Neighbour; return true; }
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [Projection, .. Extra];
-        public void BeginTick(ulong tick) {
+        public IReadOnlyList<WorldAdjacencyProjection> Visuals() {
             Pins++;
+            UpdateReports();
+            return [Projection, .. Extra];
+        }
+        public void UpdateReports() {
             if (Neighbour is not ReportedBodies bodies) { return; }
             bodies.Reissue();
             for (var index = 0; index < bodies.EntityCapacity; index++) {

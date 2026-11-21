@@ -399,7 +399,7 @@ the working precedent. The same cut makes produce read no server state (the job
 system does not need it; the silo and this view do):
 
 - `IWorldAdjacencySource`'s tick-side state, written in
-  `WorldAdjacencyFields.BeginTick` and read in `Pin`, becomes one immutable
+  `WorldAdjacencyFields.Prepare`, becomes one immutable
   record published by a reference write.
 - `WorldScreenBinder` resolves machine video outputs and instance servers once
   per tick (`MachinesOf(world)?.VideoOutput`, `WorldMachineHost.Instances`
