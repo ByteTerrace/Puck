@@ -314,6 +314,10 @@ cards, set type) bakes that geometry on any machine. So does live geometry, a
 mesh that reads an operand's pose or a sampled field that moved, which is a
 feature of the engine and is counted apart from the cache's misses. The guarantee stops at what the authored spawn points
 draw; a residency no such place shows is filled only as far as its frames came.
+The whole ladder ships, though most of its bytes are fine tiers of far
+geometry no player reaches: bounding a ladder's finest tier needs the nearest
+a body can stand to a mesh, and the set is cut to that bound only once
+something computes it.
 
 **Complete means checked as a player runs it.** `puck world player` boots each
 backend and target under the stored policy on the target's device profile,

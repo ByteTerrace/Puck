@@ -72,11 +72,12 @@ lanes, [the release](#the-release), the
     never do. The logs are on `origin/test/2060-local`, under
     `test-results/2060-local/`.
   - The lanes that answered those readings landed after them: `cpu-frame`,
-    `cpu-frame-2`, `memory-bar`, the three hunt 14 GPU lanes, `motion-scope`
-    and `standing-2`. Neither machine has a reading against a hosted
-    authority.
-- **In flight:** one lane, `cache-complete`, on branch
-  `worktree-agent-a726bd8743cbcaaff` with work-in-progress commits
+    `cpu-frame-2`, `memory-bar`, the three hunt 14 GPU lanes, `motion-scope`,
+    `standing-2` and `cache-complete`. Neither machine has a reading against
+    a hosted authority.
+- **In flight:** nothing. The last lane to land, `cache-complete`, makes a
+  shipped mesh cache whole and a player's build draw stored tiers alone; it
+  has run on Direct3D 12 on the RTX 4070 only
   ([the player build never bakes](#the-player-build-never-bakes)).
 - **The RTX 2060 partner session is idle.** It waits for the lead to say the
   release is on the player channel ([the release](#the-release), step 4).
@@ -103,7 +104,7 @@ are in its packet.
    boot a listening World and a `--connect` client, read what the client
    shows of text, machines and session screens, then weigh running them on
    the client from its package against streaming them from the authority.
-   Headless for the reading of `world.nesting`; its captures are a
+   The pair boots headless; the captures need a window and come back as a
    verification request.
 3. **`windowed-admission`, code** · high · a specialist on a mid model.
    [CLI and lease machinery](#cli-and-lease-machinery): windowed admission
@@ -142,10 +143,12 @@ Fixed on `lead/rendering` since, and not yet deployed:
 
 What to do next:
 
-1. Run the bulk window on the head. If `cache-complete` has landed, produce
-   each backend's cache set for the commit being pushed
+1. Run the bulk window on the head, and produce each backend's cache set for
+   the commit being pushed
    ([the player channel](../development/ci.md#the-player-channel) has the two
-   commands). The bake identity has moved since the last set, so without new
+   commands). `puck world player` now fills every tier and checks each
+   target, and it refuses a folder whose check did not settle; Vulkan has not
+   run it yet. The bake identity has moved since the last set, so without new
    sets the `player` job holds its publish and names what to run.
 2. Start the validation run without deploying:
    `gh workflow run azure.yml --ref lead/rendering -f deploy=false`.
@@ -211,7 +214,10 @@ packet; these are the ones owed now, most valuable first.
    words and the seated view frames the bench.
 6. **`memory-bar`.** Its final-head reading is item 2's memory line; the
    checkpoint keys and trace-judge fixes it carries have not run windowed.
-7. **Carried from earlier windows,** each still owed unless a later change
+7. **`cache-complete`.** The Vulkan fill and checks, which
+   [the release](#the-release)'s step 1 runs anyway
+   ([the command](#the-player-build-never-bakes)).
+8. **Carried from earlier windows,** each still owed unless a later change
    removed its subject:
    - `far-shadows`: at the valley rim (`body.pose 0 386 470 0 0 0`) with the
      sun moving, ridge shadows reach the far south walls with no hard
@@ -255,8 +261,8 @@ What this session met on the lead machine; each is true until the named fix.
 - **The Azure verbs are an extension.** Install it after a change to it:
   `dotnet publish src/Puck.Cli.Azure -c Release -o extensions/Puck.Cli.Azure`.
 - **One windowed World at a time.** Windowed admission now expects about 22 GB
-  of headroom, learned from one large start, which blocks a second World
-  beside it, and the GPU lease is exclusive. Lanes waited up to two hours for
+  of headroom, learned from the largest windowed starts, which blocks a
+  second World beside it, and the GPU lease is exclusive. Lanes waited up to two hours for
   a window this session and handed back unverified. Grant no lane a window
   unless seeing is its work, and run the rest in the bulk window
   ([the admission defect](#cli-and-lease-machinery)).
@@ -316,8 +322,9 @@ measured.**
    session screens, and a remote seat's input does not move its body. Until
    both are closed the 2060 would join a debug world whose paintings, press,
    cabinets and chess screens are blank.
-9. [high, M1; in a lane] [The player build never bakes](#the-player-build-never-bakes):
-   `cache-complete`.
+9. [high, M1] [The player build never bakes](#the-player-build-never-bakes):
+   the whole cache and the stored-only draw are built; the Vulkan run and the
+   RTX 2060's own boots are owed.
 10. [high, M2] [A multi-seat client](#a-multi-seat-client): the design memo
     to the owner's direction, before any code.
 11. [high] [The debug world at MMO scale](#the-debug-world-at-mmo-scale): the
@@ -353,7 +360,9 @@ measured.**
 17. [high] [Bake proportional to change](#bake-proportional-to-change): the
     bake samples a dense lattice in about twenty round trips a group. Its
     replacement is sampling in one round trip a stage from one root-search
-    source, with coarse-to-fine pruning; the CPU-stage cuts follow it.
+    source, with coarse-to-fine pruning; the CPU-stage cuts follow it. First,
+    though, the defect that an edit the bake never reads moved its identity
+    and forced a cold set: it taxes every engine edit and every release.
 18. [high, before the hosted world admits players] [Security review](#security-review):
     the write door's remaining leaks, then
     [disclosure](disclosure.md#the-build-order)'s next steps and what
@@ -653,33 +662,48 @@ wait behind them.
 
 ### The player build never bakes
 
-Owner: delivery with rendering · high, M1 · In a lane: `cache-complete`.
-Next: land it, produce a cache set per backend from it
-([the player channel](../development/ci.md#the-player-channel)), and run the
-RTX 2060's local leg again.
+Owner: delivery with rendering · high, M1 · Next: the cache sets for the next
+release ([the release](#the-release), step 1), then the RTX 2060's boots of
+that release, which are the first reading of this on the consumer.
+[The plan](runtime-and-delivery.md#the-player-build-and-its-channel) owns the
+steps; this packet holds what is unread and what the plan does not own.
 
-A consumer build never bakes (AGENTS.md, the bars): the player channel ships
-its caches. The RTX 2060's local run of a prerelease player build baked
-anyway, in three ways.
+A consumer build never bakes (AGENTS.md, the bars). The RTX 2060's local run
+of a prerelease player build baked throughout, because the producer had
+stored one tier of each mesh. The replacement is built: the producer fills
+every tier (`SdfMeshCachePolicy.Ladder`), a player's build draws stored tiers
+alone (`SdfMeshCachePolicy.Stored`), and `puck world player` refuses a folder
+whose check boots did not settle with no tier missed.
 
-- [high] The shipped set is incomplete, and a miss bakes. The first boot
-  baked geometry its set did not hold; later bakes began as the route crossed
-  portals, in routed and session residencies the producer had not planned;
-  and a mesh whose store read found no workspace memory was lost and baked
-  again (`SdfMeshStore.WorkspacePatience`). The replacement is a set that is
-  complete by construction and a player build that cannot bake: the producer
-  plans every residency a route can reach at each target's tiers, and a
-  player build draws a missing tier from the tiers it has stored. Check: on
-  the 2060, every `[sdf.mesh-bake] start` line over the route reads
-  `baking=0` on both backends, and the boot reports its bakes settled.
-- [high] The producer published a set whose own check boots never settled:
-  its record for the 2060's two targets says so, while the RTX 4070's
-  settled at once (`puck world caches produce`, the `check` entries of
-  `player.json`). A check boot that does not settle refuses the set.
-- [medium] At scale a hub of a dozen worlds cannot ship every world's set in
-  one download. A set is fetched by content pin when a door to its world
-  opens, which is the shared product naming of
+- [high] It has run on Direct3D 12 on the RTX 4070 only. Owed first, the
+  Vulkan pass, which also produces Vulkan's set:
+  `puck lease gpu --holder <lane> --wait 7200 -- puck world player worlds/debug --output <folder> --extension src/Puck.World.Azure --backend vulkan --target rtx2060@1920x1080 --target rtx4070@2560x1440`.
+  Expect `player.json` to say `complete`. Then the 2060 itself, at rest and
+  over the route, reading `world.counters sdf.mesh-cache` at the end. Check:
+  `rungs-missed` is zero and every group baked is geometry a rule made.
+- [medium] Not yet run under the stored policy: the benchmark route, and the
+  launcher's install and update of a build that carries a whole set.
+- [medium] A tick-locked fill never settles in a running world: its frame
+  stays withheld for its meshes after every ladder is whole
+  (`SdfWorldResidency.MeshesPending`), so the fill runs at the frame budget's
+  pace, several times slower than a paused, tick-locked bake. Let the fill
+  end when its ladders are whole. Under the ladder policy `world.wait ready`
+  also times out.
+- [medium] A residency no authored spawn point shows gets no ladder, so a
+  player who opens one counts `rungs-missed`. Give such a place a spawn
+  point, or give the fill a door that draws every residency a world can open.
+- [medium] A whole set is several times a demand set's bytes, most of them
+  tiers of far geometry no player reaches. Bounding a ladder's finest tier
+  needs the nearest a body can stand to a mesh, which nothing computes; the
+  whole ladder ships until that bound exists
+  ([the decision](../decisions/runtime-and-delivery.md#the-player-channel)).
+  At scale it decides the answer: a hub of a dozen worlds cannot ship every
+  world's whole set in one download, so a set is fetched by content pin when
+  a door to its world opens, the shared product naming of
   [the bake packet](#bake-proportional-to-change)'s step 4.
+- [low · unconfirmed] A replacement that meshed nothing is dropped without
+  being retired (`SdfMeshPathBake`'s `FinishReplacements`, the branch where
+  the group's mesh is null), so the kept floor it claimed is never released.
 
 ### A hosted world on a client
 
@@ -795,6 +819,9 @@ invariant, what enforces it, a check per step).
   body needs the last answered input sequence per owner on the wire, which
   [replication](replication.md#decision-7-the-seats-own-body)'s continuation
   carries.
+- [medium · unconfirmed] In a seats scenario a second seat's `player.signal`
+  and `body.press` once had no effect. Reproduce it with two local seats
+  before the memo designs input routing per viewport, since M2 rests on it.
 - [Panes](#panes-split-screens-the-player-drives) holds the local split
   views' own open items.
 
@@ -1570,7 +1597,18 @@ Remaining detailed findings and smaller cuts in this area:
   `SdfWorldResidency.PrepareOnce` rules it out; if not, bind both in one step.
   `WorldTextCatalog.Reconcile` also copies the whole packed image into
   `SdfGlyphAtlas`.
-- [low] The bake closure reaches code that decides no content, so editing it
+- [high, iteration] An edit to `SdfMeshPathBake` that the bake's content never
+  reads still moved the mesh bake identity and forced a cold set: the lane
+  that built the cache policy added state only its own `Driven` reads and
+  every stored mesh missed. The mesh-bake reference says a field the closure
+  never reads leaves the identity alone
+  ([the closure](../../.claude/skills/rendering/references/mesh-bake.md#the-library-and-the-store)),
+  so either the closure counts that type whole or the reference is wrong.
+  Reproduce with a scratch field on `SdfMeshPathBake` and
+  `puck mesh identity --against`, then fix whichever is wrong. An engine edit
+  that rebakes the world breaks the edit loop the iteration plan protects, and
+  costs the lead a cold set per backend before every release.
+- [medium] The bake closure reaches code that decides no content, so editing it
   moves the store identity: `WorkCounterSet`, `WorkCount` and `WorkKind`,
   `CameraSnapshot` and `SweptBox`, `CodeDerivedTable`, and a group's `Outcome`
   text literals, which only the done line reads. Make them stop types or
@@ -1863,15 +1901,14 @@ and every memory owner are its steps. This packet holds the defects beside it.
   check is a settled Direct3D 12 debug world reading `region-refused=0` with a
   raised `detail-bias` in `world.residency`, on the RTX 4070 and on the RTX
   2060 with its table applied, and the lake drawn from the `glacier` place.
-- [high] Under the `rtx2060` device profile the debug world's bakes never
-  settle: every bake lands, but `world.wait bakes` answers "still moving to
-  the detail their demand asks" for the whole wait, where the `rtx4070`
-  profile settles at once. The RTX 2060 itself showed the same, and so did
-  the cache producer's check boots
-  ([the player build never bakes](#the-player-build-never-bakes)). Likely the
-  mesh budget under the device bar keeps the tier bias moving
-  (`SdfMeshTier.Biased`); read the bias and the mesh region's budget under
-  that profile. A detail that never settles re-bakes tiers in play.
+- [medium · unconfirmed] Under the `rtx2060` device profile a source build's
+  bakes never settled: every bake landed, but `world.wait bakes` answered
+  "still moving to the detail their demand asks" for the whole wait, where
+  the `rtx4070` profile settles at once. A player's build now settles there,
+  since it draws stored tiers alone
+  ([the player build never bakes](#the-player-build-never-bakes)). Whether a
+  build that may bake still chases a moving tier bias under that profile
+  (`SdfMeshTier.Biased`) is unread; an author on a small card would meet it.
 - [medium] Before sparse external targets are used, retain the exact host-word
   coverage of disjoint writes across remapping. `GpuRegion.StageOwed`
   (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs`) re-owes the known prefix;
@@ -1994,6 +2031,12 @@ in [sweep](#sweep-and-visual-checks).
   (`SdfProgram.WithAppearance`), tens of megabytes for the debug world. Split
   the field from the appearance, so a colour edit or a state-bound look
   shares the field's words.
+- [medium] Under the RTX 2060's profile a player build's check declined well
+  over a hundred stored mesh loads because the host account had no room to
+  read them, and each kept the coarser tier it drew
+  (`world.counters sdf.mesh-cache`'s `loads-declined`). The account's
+  arithmetic still costs a player detail on screen; it is the same shortfall
+  that refused store reads on the 2060's own run.
 - [medium] The camera's clearance keeps a whole CPU field evaluator alive
   (`WorldCameraClearance`, `SdfFieldEvaluator`). It goes with
   [the CPU frame](#the-cpu-frame)'s item 4.
@@ -3205,7 +3248,16 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   tightened whole-replica test, the stream's generation, ordered ingress), all
   but the lease an admission grants after a lost connection. Next: step 2.
   This is decision 14's step 5 (results keyed by what each viewer was
-  delivered) with the withdrawn picture of decision 2.
+  delivered) with the withdrawn picture of decision 2. The lease it leaves
+  unbuilt is built by the lane that next works remote observation, which
+  [a hosted world on a client](#a-hosted-world-on-a-client) is.
+- [medium] The authority's population revision crosses to recipients whose
+  view hides bodies: the session sink and the peer host both stamp their
+  snapshots with `Population.Revision` (`WorldSessionSink`, `WorldPeerHost`),
+  which moves when a hidden body changes, so a redacted recipient reads a bit
+  per hidden change. [Disclosure](disclosure.md) rules that the version a
+  recipient is shown is its own cursor's sequence. The roster's revision
+  (`WorldDeclaredRoster`) is the same kind of door and goes with it.
 
 - [high] Authored search must plan over what its actor is disclosed. Today an
   actor-less job reads true state under the audience check (an AI can read a
