@@ -290,6 +290,21 @@ any section, so undoing one needs the operator and Mutate over every section.
 This is the document's edit history, not K6's rule-scoped journal, whose gate
 stays the author's rule.
 
+**An undo's restored document passes the one install door.** A full undo
+stages the document it restores as a load and a mutation stage theirs
+(`WorldDocument.TryStageInstall`), so it refuses, before live state changes,
+what they refuse: an enabled addon row with no addon host, more derived face
+screens than the boot reserved, a render envelope that does not fit, an input
+mode selection its owners cannot take, and a state section that does not load
+into an arena. Undo once skipped the first four and threw part-way through an
+install on the fifth. Each refusal is right: the document undo restores was
+live once, so one of these holds only when something outside the journal
+changed since (the host lost its addon host, or one of the World's own entries
+replayed differently), and installing that document would leave the world in a
+state no other door allows. The step undoes nothing and says why. A replay that
+fails for a principal who is not the operator is told only that a later edit no
+longer applies, since the entry that failed may be another principal's.
+
 A pending retained segment may span ticks; an ordinary arena journal scope never
 does. Settled passes with no retained writes consume no history. A successful
 rewind suppresses its group for the rest of that tick. Pool reservations count

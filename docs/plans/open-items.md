@@ -239,6 +239,22 @@ packet; these are the ones owed now, most valuable first.
      back and still converges. Direct3D 12 traced about four times slower
      than Vulkan through the same structures; a PIX and an Nsight capture of
      one trace job on each backend is owed before that gap is named.
+   - The edit loops, read with `world.iteration`: a one-colour palette edit
+     begins no bake, builds no program and makes one presentation install; a
+     form edit bakes only that creation's groups, floor first; and
+     `puck test --reproduce` passes over a scenario that reloads mid-run.
+   - The background budget: `world.residency`'s `work-budget` follows the
+     frame, nothing reads `over-deadline`, and lighting converges through a
+     cold bake.
+   - The sun and the moon exchanging the shadow roles, as a presented burst;
+     the Vulkan teal corner and hall, which Direct3D 12 alone has shown
+     clean; and the bard played on a keyboard in a window (hold Y, then I, J,
+     K and L on the beat).
+   - The field programs' device laws on both backends and Vulkan's pipeline
+     statistics for the bake kernel
+     ([the plan](field-programs.md#build-order) names them), and a store
+     audit of the two stretch exhibits
+     (`puck mesh audit --prototype shape-stretch-cut shape-stretch-smooth`).
    - The arrival rows' requests R1a, R1h, R1b and R1c
      ([arrival work](arrival-proportional.md#windowed-r1b-verification-request)),
      `lane/g5`'s recipe, and the moving-blend bursts over a whole cycle on
@@ -350,9 +366,8 @@ measured.**
     look lane that would sculpt around it: the water's gaps 5, 6 and 9
     ([water](#water)), the terrain pass's steps
     ([the valley's terrain](#the-valleys-terrain)), the contour rule and the
-    moving cutter ([bake detail](#bake-detail)). The order among them is
-    [the owner's call](#owner-decisions); until it is made they run in the
-    order written here.
+    moving cutter ([bake detail](#bake-detail)). They compete for the same
+    rendering lanes and run in the order written here (the lead's decision).
 16. [high] [Temporal](#temporal-shimmer-and-cadence-flicker): a still view
     shimmers on an 8-frame cycle. The fix is the reconstruction's
     ([rendering P15](rendering.md#p15--temporal-reconstruction)): a jitter
@@ -417,6 +432,16 @@ landed work in the review-only classes of
   design review before its step H7a.
 - The temporal reconstruction, a cross-family renderer review
   ([sweep](#sweep-and-visual-checks)).
+- What a node commits when it hands a frame over. A deferred submission that
+  never reaches the queue is rolled back at the hand-over's settle
+  (`ShaderPipelineRenderNode.SettleHandOver`); whether every commit a package
+  makes on submission rides that checkpoint (the far cascade's camera, the
+  preview, armed captures, the residency's upload ring) has not been read by
+  another family. The two backends' fenced submit flows are also one flow
+  written twice beside `GpuSubmissionBatch`.
+- The ray-query acceleration structures' lifetimes
+  (`SdfMeshProbeGpuWork`'s ray path): GPU resource lifetimes under a rebuild
+  and a device loss.
 - Area fix passes owed: the dense-landscapes packet's code, and the
   reserved-component packing and pattern filtering in it.
 
@@ -460,7 +485,6 @@ is filed with `puck measure`.
 | `lane/swallow-7` | the swallow rebuilt to a cited reference document | the owner's pair session |
 | `lane/companion-v1` | prior art for the custody protocol's steps 9 and 10 ([transfers](#transfers-federation-and-server)) | step 9 porting it |
 | `test/2060-local` | the RTX 2060's local run of the prerelease player build: its report, logs, `run.json` files and a `gc-verbose` trace | the readings on the head that supersede it |
-| `hunt/12-duplication`, `hunt/13-language`, `hunt/14-gpu`, `research/replication` | the partner session's hunts and the replication research, each filed in its packet or plan | nothing; the lead deletes them |
 
 ## Owner decisions
 
@@ -485,9 +509,7 @@ Owner-only actions:
   ([debug world content](#debug-world-content)).
 - **Restoring test requirements** and the suite's keep-list: which of the
   deleted guards over non-code files return, if any
-  ([tests](#tests-suspended)). One keep-list candidate went with its subject:
-  the music replay law was deleted when the authority's music director was
-  removed.
+  ([tests](#tests-suspended)).
 - **Calling for qualification**, which returns the
   [quarantined gates](#quarantined-gates).
 - **Hardware for the rendering measurements**: a Steam Deck and an HDR
@@ -517,18 +539,6 @@ Sittings, each the owner's eye on a running World:
 
 Open calls, each with its sides:
 
-- **A replication bar.** Whether replication gets a bar with the frame bar's
-  standing, and at what scale the debug world proves it: how many moving
-  bodies one recipient sees at once, and how many recipients one world
-  serves. Set it now, before any measurement, or set it from the plan's step
-  3 measurement, which the plan recommends
-  ([replication](replication.md#owner-questions)). No step waits on it.
-- **The order of the visual bar's engine gaps.** The water's depth, flow and
-  re-carving cutter, the terrain pass's relief and materials, the contour
-  rule that the Moth and the blend exhibits wait on, and the glacier's moving
-  cutter all stand ahead of look work, and they compete for the same
-  rendering lanes. The lead's order is [Next](#next) item 15's; the owner may
-  put the place they most want to see first.
 - **Latency for a tick on its own thread.** [The CPU frame](#the-cpu-frame)'s
   first design may show the world the player acts in a tick later than today.
   The register rules that a frame of latency is never the fix for a missed
@@ -700,7 +710,7 @@ whose check boots did not settle with no tier missed.
   At scale it decides the answer: a hub of a dozen worlds cannot ship every
   world's whole set in one download, so a set is fetched by content pin when
   a door to its world opens, the shared product naming of
-  [the bake packet](#bake-proportional-to-change)'s step 4.
+  [the cold bake's step 4](iteration.md#the-cold-bakes-steps).
 - [low · unconfirmed] A replacement that meshed nothing is dropped without
   being retired (`SdfMeshPathBake`'s `FinishReplacements`, the branch where
   the group's mesh is null), so the kept floor it claimed is never released.
@@ -812,9 +822,11 @@ invariant, what enforces it, a check per step).
   destination scoped to a user or group needs per-viewport bindings or
   distinct passes.
 - [high] No route reads the frame bar with four views. The bar is the RTX
-  4070's own (AGENTS.md), read at 2560 by 1440 with all four panes drawn;
-  [the benchmark](#the-benchmark) needs a four-seat route against a remote
-  authority.
+  4070's own, 60 FPS at 2560 by 1440 with all four panes drawn and each pane
+  on the quality table's nested rows: AGENTS.md names one bar a device, and
+  split screen is a mode of that device, not another device (the lead's
+  decision). [The benchmark](#the-benchmark) needs a four-seat route against a
+  remote authority.
 - [medium] Pose clips are off for a multi-seat client: predicting a seat's own
   body needs the last answered input sequence per owner on the wire, which
   [replication](replication.md#decision-7-the-seats-own-body)'s continuation
@@ -829,7 +841,8 @@ invariant, what enforces it, a check per step).
 
 Owner: the lead, a lane per item; each place under the valley art direction
 ([composition](debug-world-composition.md)) · high · Next: the crowd of bot
-peers, since its counts set [the replication bar](#owner-decisions).
+peers, since its counts set
+[the replication bar](replication.md#owner-questions).
 
 The debug world must stress the idea it proves: many players, many
 inhabitants and many worlds on more than one authority. Each item is a place
@@ -1243,6 +1256,10 @@ The frame thread's CPU work, largest first:
   sphere (`WorldCreationInstances.Shown`), so at flight B the motion gallery's
   exhibits pose every frame behind the stairwell. `lane/g5`'s occlusion-aware
   rate floor is the fix.
+- [low] A routed or session view is rated by the frame-height region it
+  covers, not by its share of the display, and a session screen that stands
+  alone is not rated at all, by the lane's report. With four seats' panes
+  (M2) the share is what a rate should follow.
 - [low] `sdf.creations.registrations.rate-held` counts on every rendered frame,
   so it scales with frames; count it once per tick.
 - [high] The meadow (`debug.go meadow`) is a forcing workload past both bars.
@@ -1275,8 +1292,17 @@ The frame thread's CPU work, largest first:
 - [low] Walks over every row or copy each frame that the arrival memo's row
   table does not absorb: the bake's copy layout (`SdfMeshPathBake`) and two
   walks over the frame's instances in `SdfMeshDresser` outside its topology
-  build (its copy comparison and its input commit); and `Dress`'s
-  `MeshAssetSlots` scan, which grows with the world. Unmeasured.
+  build (its copy comparison and its input commit); `Dress`'s
+  `MeshAssetSlots` scan, which grows with the world; and the clip
+  composition, which walks every copy (`ComposeSlotClips`). Unmeasured.
+- [medium · unconfirmed] The boot scene's revision may never move for a body
+  whose live scale moved. The stamp census answers a move once
+  (`WorldBodyStampCensus.TryTakeMove`), and `WorldSceneEmitter` asks it twice
+  a frame: in `PrepareFrame`, which reconciles the stamps, and then in
+  `WriteRevision`, which would move the revision its consumers key on. If the
+  first call always takes the move, the second never sees one. Read both on
+  a body whose scale eases (Wonderland's doorway), and have one caller take
+  the move and the other read its result.
 - [medium] The portal crossing scan visits every population slot for every
   portal face each tick, with an occupancy dictionary write per pair
   (`WorldInstanceHost.Adjacency.cs`). A body-major loop with a bounds test
@@ -1401,127 +1427,23 @@ Stalls and hitches to attribute:
 
 ### Bake proportional to change
 
-Owner: specialist (rendering) · high · Next: a quiet cold bake per backend on
+Owner: specialist (rendering) · high · Next: the identity defect below, which
+taxes every engine edit and every release; a quiet cold bake per backend on
 the integration head, which the cache sets need anyway
-([verification debts](#verification-debts)); then step 3's first candidate,
-sampling in one round trip a stage, which replaces the bake's shape where the
-CPU-stage cuts only shave it; then the shared cross-backend store (step 4).
-[The iteration plan](iteration.md#order-of-work)
-orders the authoring loop's steps; the stage keys and the edit-loop
-instrument (`world.iteration`) are built, and the cold bake fed is its step 5.
-This packet holds the bake's own readings, the shared store and the defects
-beside them.
+([verification debts](#verification-debts)); then
+[the cold bake's steps](iteration.md#the-cold-bakes-steps), whose step 3
+opens with sampling in one round trip a stage, the change to the bake's shape
+that goes ahead of further cuts to its CPU stages. This packet holds the
+defects beside those steps.
 
-The owner's ruling on waits sets the order: the wait between making a change
-and seeing it breaks flow and comes first, and a cold bake is a long start that
-is tolerated while it stays reasonable. The figure of about a minute per
-backend from an empty store exists to stop that time drifting (bake times once
-grew to nearly an hour); it is not a finish line. What limits a cold bake is
-measured ([where a cold bake's wall time goes](field-programs/research-bake-time.md)):
-a free-running boot waits on the background budget, which an arrival's owed
-allowance now relieves, a lockstep bake is held by the CPU worker pool, its
-collections and its lock, and the bake kernel is a few percent of the wall time
-([the kernel measurement](field-programs/research-measure.md)). The wall-time
-page's ranked fixes are the cold bake's order: fixes 1, 3, 6, 7 and 8 are
-built, with fix 2 (the allocation) and fix 5 (the take's walk) built in part.
-The contour rule (gap 7, [bake detail](#bake-detail)) and
-the triangle removal ([visibility V3a](visibility.md#the-build-order)) stand
-alone. [The bake procedure](../../.claude/skills/rendering/references/mesh-bake.md#reproducing-a-cold-bake)
+A cold bake is a long start that is tolerated while it stays reasonable, and
+the figure of about a minute per backend exists to stop it drifting (AGENTS.md).
+What limits one is measured
+([where a cold bake's wall time goes](field-programs/research-bake-time.md)):
+the kernel is a few percent of the wall time, and the rest is the CPU stages,
+the store and the scheduling between dispatches.
+[The bake procedure](../../.claude/skills/rendering/references/mesh-bake.md#reproducing-a-cold-bake)
 says how one is reproduced and profiled.
-
-1. **Read staged reuse in the windowed debug world.** The stage products
-   resume in a device-free replay; the windowed reading is owed. Start from an
-   empty store, then boot with that store unchanged, with a simplification
-   edit, and with a field-kernel edit. Compare bake time, checkpoint hit and
-   miss counts, GPU sampling dispatches, and disk bytes. A simplification edit
-   should load stored contours and dispatch no sampling. The field-kernel edit
-   should rebake from sampling. The
-   [derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
-   describes where the cache resumes.
-2. **Read the cold bake under the live frame allowance.** Budgeted batches
-   are cut to the allowance at a mean-following rate (`SdfMeshBakeGpuWork`),
-   an arrival's lattices take their own allowance
-   (`SdfGpuWorkBudget.OwedAllowance`), and held frames keep
-   `SdfMeshPathBake.BatchTaps`. Read the cold bake held and free-running, and
-   a cold arrival in play, on a quiet machine; split a lattice only if
-   `over-allowance` shows the unsplit first lattice matters.
-3. **The candidates.** A quiet cold bake recording worker activity, GPU wait
-   per request, GPU timestamps and total time ranks what is left on the
-   critical path. The first candidate changes the bake's shape and goes
-   first; with it,
-   [the audit's](state-of-the-art/audit.md#where-each-finding-went)
-   coarse-to-fine pruning by interval bounds on the GPU. The candidates (GPU
-   contouring is rejected as a second mesher):
-   - *GPU sampling in one round trip per stage* (cutting ~20 round trips per
-     group to ~4 by moving root search and gradients onto GPU with a per-stage
-     sample cap): requires generating or reading `SdfSampledLattice`'s root
-     search (bracket, tolerance, round limit, step) from **one single source**
-     shared by CPU and GPU, verified on bracket, residual and thin-feature
-     checks on both backends. Writing the root search again by hand in shader
-     code would make two copies of one rule, whoever is asked to keep them
-     equal. No source measures a root search on the GPU; Dreams ran a
-     hierarchical GPU evaluator on a console, the nearest precedent.
-   - *The Land stage on the job pool* (check the removed vertex first in
-     `SdfMeshCollapse` before laying out the new fan, since the acceptance
-     search makes about five attempts a collapse and `Measure` refuses half at
-     the removed vertex's own samples, and share one error sample set between
-     `Measure` and `MeasureReverse`, both in bake-cpu's collapse
-     pricing; restrict `SdfSampledLattice.CloseSheets`'s second slit pass,
-     which re-reads every measured fine sample's six neighbours, to neighbours
-     of first-pass closings; schedule chunks on `JobPool` ordered by visibility
-     demand before size, largest first only among chunks of equal priority;
-     and split the serial tail's largest lattices into slabs contoured in
-     parallel, the research's fix 4). A cheaper collapse whose meshes
-     differ but audit as well is a valid cut: judge changed witnesses with the
-     field audit at each rendered level, raw millimetre errors beside threshold
-     counts. Try the cheaper collapse and a different error measure (attribute
-     quadrics) inside `SdfMeshCollapse` before considering a replacement
-     simplifier ([visibility V3b](visibility.md#the-build-order)). Not checked:
-     Kapoulkine's clustering pipeline falling from about 9 minutes to under 3
-     on the same class of fixes.
-   - *Check:* `puck bench startup --bake` under `puck lease quiet` reads about
-     a minute or less on each backend from its own empty store, and turning
-     into a new place during a bake delivers the first visible surface no
-     later than before. If the sampling fix is the one that lands, a group
-     takes about four round trips.
-4. **One shared cross-backend store (last, judged separately from cold bake).**
-   Key meshes by authored inputs rather than backend bytecode, recording which
-   backend derived each entry and accepting cross-backend entries by audit
-   within recorded error (never byte equality; `SdfMeshCpuField.TapSpacing`
-   already differs near creases, and native forest triangle counts differ by
-   backend). This is the first use of
-   [shared product naming and verification](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
-   (with fetch disclosure owned by
-   [disclosure](disclosure.md#presentation-and-derived-product-disclosure)).
-   - *Memo and three-part prototype:* write a memo fixing (a) what goes into a
-     shared product's name (source program, authored parameters, byte-format
-     version), (b) attribute-by-attribute verification against the analytic
-     source at receiver tolerance/coverage and inconclusive handling, (c)
-     format version computed from both writer and reader code so a
-     layout-preserving reader change still moves it, and (d) unified pricing of
-     fetching versus local derivation (keeping local store reuse distinct from
-     machine-to-machine exchange). Prototype over every stored debug-world
-     group at route tiers: (i) one desktop store read by both D3D12 and Vulkan
-     in both directions (verified by audit, materials, seams and motion); (ii)
-     one public gallery mesh fetched from another process beside one refused
-     fetch, one permitted local miss, timing cold bake vs warm read vs fetch
-     on a stated link, plus rejecting tampered products (removed part, swapped
-     material id, flipped normal patch) and a layout-preserving reader-change
-     refusal/recheck; (iii) RTX ↔ Steam Deck cross-vendor exchange in both
-     directions once Deck hardware is on hand (unmeasured until then), because
-     two graphics APIs on one card compare no vendors. Parts (i) and (ii) run on
-     the desktop inside the bet's time box; part (iii) has its own box. Amend
-     the decision register when adopted.
-   - *Judged apart from the cold bake.* The cold-bake figure is each backend's
-     own bake from an empty store with floors on, timed with the other
-     backend's store absent. A shared store has three hazards: the same shader
-     source can compile under different options or generated interfaces;
-     whichever backend writes an entry first can hide which backend derived
-     what is drawn; and a warm hit from the other backend's store is not a cold
-     bake. The stage keys are local cache keys and are not affected.
-   - *What it shows in the debug world:* the second backend's first frame loads
-     the first backend's meshes, which pass verification, and the fetched mesh
-     is ready sooner than it bakes.
 
 Remaining detailed findings and smaller cuts in this area:
 
@@ -1607,7 +1529,13 @@ Remaining detailed findings and smaller cuts in this area:
   Reproduce with a scratch field on `SdfMeshPathBake` and
   `puck mesh identity --against`, then fix whichever is wrong. An engine edit
   that rebakes the world breaks the edit loop the iteration plan protects, and
-  costs the lead a cold set per backend before every release.
+  costs the lead a cold set per backend before every release. Unconfirmed
+  beside it: a kernel reload may move the identity, so the next restart
+  rebakes.
+- [low] Two leads from the bake's lanes, neither reproduced: a change in a
+  group's material order discards an identical bake in flight
+  (`SdfMeshPathBake`'s `Keeps` and `Place`), and the landing stage may judge
+  its error in clamped units, several times more lenient than the field's.
 - [medium] The bake closure reaches code that decides no content, so editing it
   moves the store identity: `WorkCounterSet`, `WorkCount` and `WorkKind`,
   `CameraSnapshot` and `SweptBox`, `CodeDerivedTable`, and a group's `Outcome`
@@ -1639,56 +1567,13 @@ Owner: specialist (rendering, sdf-authoring) · high, it blocks authoring ·
 Next: fill the engine gaps first
 ([rendering research](rendering-research.md#engine-gaps-filled-first)):
 
-1. **Contour rule for unresolvable cells (gap 7): a feature thinner than a bake
-   cell is lost or faceted.** The count is in: `puck mesh audit --cpu` prints
-   each failing shape's defect class (vertex off the surface at a crease,
-   sliver beside a crease, face narrower than the cell, or thin tip stopping
-   short) and whether its cell was flagged for finer sampling
-   (`SdfSampledLattice.Refine`). The failing cells of the blend exhibits and
-   nearly all of the Moth's were flagged and measured, so the fix is the
-   contour rule, not a trigger. Built: a near-crease row takes the crease's
-   vertices, and so does the crowd where creases meet (`SdfContour.Weld`, in
-   `SdfContour.Finished`); a material boundary beside a crease vertex lies at
-   the vertex (`SdfMeshMaterialCut.Boundary`), which closed most of the hard
-   blends' rim folds; the audit counts a fold the field's own crease explains
-   apart (a carve's rim meets a face at up to 125 degrees); and a lattice at its
-   tier's floor still refines the cells it cannot resolve at all
-   (`SdfMeshPathBake.FactorOf`), so the swallow's streamer tips are no longer
-   lost. A broad sheet can also take an extra split when the ordinary
-   refinement would still leave a coarse cell (`SdfMeshPathBake.ThinSplit`), and
-   so do the measured cells beside it (`SdfSampledLattice.Refine`), which closed
-   the range windows' flips, folds and off-surface vertices.
-   Still open, each read in the exhibit's own vertices: the junction
-   where a groove's lips meet a box edge (`shape-groove-union`) and where a
-   rounded rim fades into a sharp edge (`shape-smooth-subtraction`), where the
-   field check moves solved vertices up to half a cell or refuses a kinked one;
-   the Moth's shin blades (below); and closed thin sheets (the lawn's blades,
-   the swallow's streamers), whose rims fold against a field the closing
-   deliberately thickens. A crossing whose gradient blends two faces
-   contributing no plane, and a sub-cell face closing to one crease, are the
-   steps left for those.
-   - *Whole-world stored-mesh audit check:* audit every stored mesh of the
-     world at the tier each group was stored at on both backends (fixing the
-     238-of-6544 tier-0 audit gap below). Count groups the audit cannot judge
-     (glyphs and sampled regions) and unsampled groups apart from passed
-     groups. Require no defect class worse than before, zero wrongly facing
-     triangles on the fourteen blend exhibits, every audited group non-empty,
-     `open` and `uncovered` no higher than before, blend seams and the Moth's
-     rim captured in motion from failing sides, and cold-bake time reported
-     beside each fix. State the audit's blind spot: it samples around the
-     output mesh box, so vanished parts are caught only by authored-bounds
-     deviation ([virtual geometry](virtual-geometry.md#the-build-order)).
-     The fourteen exhibits are not enough because the rule reaches every
-     bake: an earlier attempt that narrowed the lattice along one axis was
-     worse over the whole world, and an empty or missing patch also lowers
-     the wrongly-facing count. Whether the rule holds where a surface folds
-     or a feature disappears is evidence Puck produces itself: no source
-     covers those, or two creases in one cell (Ju and others chose their
-     singular-value cut-off by experiment, which says nothing for or against
-     dropping a blended gradient's plane; Schaefer and others note a manifold
-     criterion "may still contain intersecting polygons"). Not checked: that
-     the refinement takes the finest split that fits and is never skipped
-     silently (a reviewer's reading).
+1. **The contour rule for cells the lattice cannot resolve (gap 7):** a
+   feature thinner than a bake cell is lost or faceted. The failing cells are
+   already flagged and measured, so the fix is the contour's rule, not a
+   trigger. [The rendering plan](rendering.md#the-contour-rule-for-cells-the-lattice-cannot-resolve)
+   holds what is built, the two steps left (a crossing whose gradient blends
+   two faces gives no plane; a sub-cell face closes to one crease) and the
+   whole-world stored-mesh audit that checks it.
 2. **Non-uniform scale bounds (gap 11,** [rendering](rendering.md#bake-quality)).
    Then the three kinds of triangle the lattice's facing does not
    judge, which the tour's remaining reds and the Moth's shin groups share
@@ -1853,26 +1738,17 @@ Next: fill the engine gaps first
 
 Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
-step 5, the floor, which is an engine gap
-([rendering research](rendering-research.md#engine-gaps-filled-first)) and goes
-first; then step 0's baseline legs (`puck benchmark --route seams`, both backends, a
-quiet window), steps 1,
-2 and 3's windowed readings and step 7's remaining implementation after its
-contiguous fallback, shared retirement timeline, destination page proofs,
-native-pool pressure trim, Vulkan's ordered binding door and Direct3D 12's
-mapped regions (`IGpuMappedBuffer`, `DirectXGpuMappedBuffer`: the mesh region
-and the probe scene back 1 MiB chunks of one reserved buffer, grow without a
-second buffer and give back chunks no placement covers): Vulkan sparse
-resource ownership behind the same interface, page-only reservation credit
-with pool-owned slack, and physical compaction. Vulkan mesh regions still use
-contiguous storage.
-The remaining indexed-read prototype window uses frozen `e9c1d485c9`;
-current hardware qualification reads the 4070, 2060 and Deck, then
-[what step 3 left](streaming-and-memory.md#step-3-one-reservation). The plan
-owns the decisions, the build order
-and each step's check, on [the residency decision](../decisions/residency.md):
-the residency wait, background GPU work's budget, the region's budget, staging
-and every memory owner are its steps. This packet holds the defects beside it.
+step 5, the floor and eviction, an engine gap that goes first
+([rendering research](rendering-research.md#engine-gaps-filled-first)); then
+what is left of [step 7, the backing](streaming-and-memory.md#step-7-the-backing):
+Direct3D 12's mesh region and probe scene grow in chunks of one reserved
+buffer (`IGpuMappedBuffer`), and Vulkan's still use contiguous storage, so
+Vulkan's sparse ownership behind the same interface, page-only reservation
+credit and physical compaction remain. Steps 0 to 3 are built and owe their
+windowed readings, and the indexed-read prototype owes one more window on the
+build its [design for review](streaming-and-memory.md#sparse-backing-design-for-review)
+was frozen at. The plan owns the decisions, the build order and each step's
+check; this packet holds the defects beside it.
 
 - [high] Measure the session-residency fix on the RTX 4070. A cold debug-world
   boot built 55 residencies, one for each `self`, `wonderland` and nested
@@ -1975,6 +1851,12 @@ and every memory owner are its steps. This packet holds the defects beside it.
   hold every column that can ever raise, with displacement closing the dry
   ones, is a design question for the field's owner.
 - One group in the debug world has a mesh no draw names, not yet identified.
+- [medium] The mesh store evicts whole sets when it nears its size limit
+  (`CacheRetention`), and a whole ladder per backend is now several times the
+  bytes of the sets that limit was sized for, so a lead machine that bakes
+  for two backends and several identities loses sets it still needs. Size the
+  limit from what a set is, or retire by identity age, and say who owns the
+  figure.
 - [medium] Step 2's heap walk on a headless debug world names two large-object
   tenants the plan's [large host owners](streaming-and-memory.md#the-large-host-owners)
   table bounds by no step: `FieldCellDelta[]` arrays held by
@@ -2128,7 +2010,12 @@ The volume's cost and convergence:
   decodes only the `SdfMeshProbeRelight.OutputWords` prefix, and
   `SdfMeshProbeGpuWork.Complete` allocates the full readback and copies it
   again to strip the assertion word. Carry an explicit logical length, and
-  keep the readback token's fence ownership through commit.
+  keep the readback token's fence ownership through commit. Where hardware
+  ray queries answer the trace, the device holds the acceleration structures
+  and the software walk's copy of the scene both (`world.residency`'s
+  `trace-structures` line), about a gigabyte together by the lane's reading:
+  keep one, and judge the two paths' hits against each other with a device
+  law before the software copy goes.
 - [medium] The probe scene's capacity keeps its high-water mark:
   `SdfMeshIrradianceScene.GpuArena` never lowers its word count and
   `RecordSceneUpload` only grows the region. Reclaim capacity after a large
@@ -2141,6 +2028,10 @@ The volume's cost and convergence:
   and the gather law receiver lookup.
 - [low] A teleport brings cells relit long ago back into the window, and the
   next cycle prints `behind` with their age, which reads as overload.
+- [low] What the background budget does not charge or share, by the lane that
+  built its deadlines: a job run on a held frame is uncharged, two services'
+  reservations are not weighed against each other, and the probe coordinator
+  cuts its batch to the whole allowance (`SdfGpuWorkBudget`).
 - [medium · unmeasured] The debug world's night floor (EV 2, keyed on `day`)
   lengthens every point and spot light's range by about five stops, day and
   night, since ranges follow the darkest exposure any key reaches
@@ -2261,6 +2152,9 @@ What the light gets wrong:
 
 Artefacts still to isolate:
 
+- Orange patches on the hall floor near the lobby, seen once the hall's
+  indirect light read neutral; whether they are sun through the entrance is
+  not checked.
 - The owner's depth-visibility poses in `indirect`: at
   `body.pose 66.24 4.57 14.73 329` ceiling hotspots remain and the wall clips
   white; at `body.pose 58.17 4.57 30.87 180` hard diamond and star patterns
@@ -2412,6 +2306,19 @@ migrated to standard programs.
 - [low] Extracting `bloomSelected` added 48 alloca stores to `place.comp`'s
   DXIL with identical arithmetic; a GPU timing of `place` shows whether the
   driver removes them.
+
+### Ink
+
+Owner: rendering, one lane a step · ordinary · Next:
+[the plan](ink.md#build-order)'s step 1, one unit for a line's width (display
+pixels per view), then steps 2 and 3 in sequence, since they touch the same
+generated tables. Nothing of the plan is built. Its step 6 deletes the
+built-in toon and curvature lines once the standard package has moved off
+them, so no other lane renames that vocabulary meanwhile.
+
+- [low] The material cut now shares the contour's crease threshold. A chamfer
+  whose faces meet between that threshold and the old one has not been looked
+  at since; capture one material seam there.
 
 ### Temporal shimmer and cadence flicker
 
@@ -2610,6 +2517,10 @@ left worse, then the valley sectors' buried colliders.
 Owner: physics lane · ordinary · Next: per-surface contacts over a field
 collider, then the lifecycle lows as one pass.
 
+- [low · unconfirmed] A field lattice's travel resistance may stand stale
+  when lattices reinstall without the population rebuilding, a lead from the
+  lane that made installs follow product inputs. Reinstall a lattice under a
+  walking body and read its path.
 - [medium] A rigid body near a field collider generates its contacts by sweep:
   `FixedStaticContactSolver.CollectContacts` declines when a field collider
   lies within the step's reach, and `WorldBody.ProbeRigidSurface` sweeps the
@@ -2873,6 +2784,18 @@ P1 last. The plan owns the feature end to end; these are the defects it does not
   moves away. Define the optical boundary for both.
 - [low · unchecked] Whether a state-bound water colour rebuilds the field
   program every frame while it moves (`WorldFieldEmitter.Emit`).
+
+### Portals in play
+
+Owner: a specialist a step, the design reviewed · ordinary, and ahead of
+[a multi-seat client](#a-multi-seat-client)'s seat in another world and
+[the moon on another authority](#the-debug-world-at-mmo-scale), which both
+cross doors · Next: [the plan](portals-in-play.md#build-order)'s step 1, live
+door frames. Nothing of the plan is built.
+
+- [medium] A door on a row whose position reads a state cell fires where the
+  row first stood: the face catalog caches its frame (`WorldFaceCatalog`).
+  Step 1 fixes it, and its lane first writes the scenario that fails today.
 
 ### Transfers, federation and server
 
@@ -3258,6 +3181,11 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   per hidden change. [Disclosure](disclosure.md) rules that the version a
   recipient is shown is its own cursor's sequence. The roster's revision
   (`WorldDeclaredRoster`) is the same kind of door and goes with it.
+- [medium · unconfirmed] An observation revoked and granted again with no
+  delivery between may show the scene its old proof named
+  (`WorldSceneProof`): stamp the proof with the stream's span so a proof from
+  before the cut cannot stand after it. From the lane that fixed the pane
+  case; the withdrawal chokepoint's step 2 is where it is closed.
 
 - [high] Authored search must plan over what its actor is disclosed. Today an
   actor-less job reads true state under the audience check (an AI can read a
@@ -3516,6 +3444,11 @@ Owner: language lane (transpiler) · medium · Next: the cost corpus, then the
   `name [..]` (PUCK040), so an author spells it a clumsier way, against
   ergonomic-is-optimal. Seen converting the standard's rhythm judge, and not
   checked again since the author-wall lanes landed.
+- [low · unconfirmed] `puck compile --validate` once passed a fixture whose
+  prototype documents `puck creation stats` refused as invalid. Find the
+  check the validator lacks, now that validation is partitioned by unit. The
+  work sheet's price of a `setState` dispatch per firing is also unmeasured,
+  and the import graph's evaluation is missing from `compile --measure`.
 - [low] An imported module named `roles` changed how its importer lints
   (PUCK031, the fragment validated as a root). Re-run it on the current head,
   then find why a module's name changes import resolution.
@@ -3764,6 +3697,15 @@ The edit loop:
   with the document: the session emits no delta between revisions, so the
   World parses and diffs whole documents. The candidate is validated whole
   (step 5). The memo's step texts hold each check.
+- [high] Only two kinds of edit install narrowly. A reload names its install
+  from a fixed list (`WorldDocument.ReloadInstallKindOf`): state rows' values,
+  or creations in what shading reads with the shade programs. Every other
+  member takes the full install, so one colour changed in the day cycle
+  (`worlds/debug/day.puck`), a light, an exposure or a sky row rebuilds as a
+  declaration change does. Each compiled product already records the document
+  parts it read; derive what an install rebuilds from those reads, so the
+  list of narrow kinds goes and any edit costs what it reached. Check:
+  `world.iteration` after a one-colour sky edit reads no full install.
 - [medium] `puck decompile` writes a source the compiler refuses when the
   document holds a shading program: a palette's `shade` prints as its table
   key (`shade: "program/<hash>"`), which is PUCK126, and
@@ -3970,6 +3912,14 @@ each as one change that gives its lifecycle an explicit state.
     from it;
   - a failed after side leaves a half-frozen request directory with no
     `request.json` (`MeasureCommand`); stage and rename, or delete it.
+- [low] `puck mesh audit --eye` refuses a coordinate with a leading minus, so
+  an eye at a negative position cannot be given, and `--cpu --eye` over the
+  glacier ran for more than a quarter of an hour without an answer. Parse the
+  triple as one argument, and bound or report the CPU audit's work.
+- [low] `puck host load` reports commit and free memory but not what holds
+  the gap between them (the modified list, standby by priority, shared and
+  dedicated GPU memory, the non-paged pool), so a start refused for memory
+  cannot say what took it.
 - [medium] `puck locks` re-resolves floating packages throughout an affected
   lock file after a reference change, even without `--update`
   (`src/Puck.Cli.Gate/Locks/LockFiles.cs`, `RecordArguments` and `Record`).
@@ -4501,6 +4451,9 @@ their lane order; this packet keeps the single duplicates and leads.
 - A "delete this file, ignoring a failure" helper is written four times
   (`WorldArtifactStore.TryDeleteFile`, `WorldCaptureScheduler`,
   `CacheRetention`, `StartIdleness`). One home in the file-system primitives.
+- [low] What a scene reads is listed twice: `WorldSceneInputs`' rows omit the
+  look lanes and the poses, which a second list holds. One shared list of a
+  scene's reads, by the lane's report.
 - [low] The recorder writes a pass block per pass and selects the light mask
   again each time, and `SdfShadeDispatch.ViewLights` selects it once more.
   Select once per view per frame, in the memo that already holds the pass
@@ -4700,6 +4653,12 @@ standard package (`worlds/standard/`) should author it over a neutral engine
 default.
 
 Looks and rules of play held in engine code:
+
+- [low] How a shadow fades at the edge of its cascades' coverage is a kernel
+  constant (`SdfMeshShadowBandTexels` in `sdf-surface-stage.hlsli`). Author
+  the band's width as a render row with a neutral default; the fade between
+  shadow roles and an unmeasured probe's fade to its measured value are looks
+  of the same kind, by the lane's report.
 
 - [medium] An unauthored world renders a baked atmosphere: `WriteAtmosphere`
   falls back to `SdfAtmosphere.Default`, a fog of `SdfSky.DefaultFogDensity`,
@@ -4949,6 +4908,17 @@ and calibration, delivered cues, haptics) and the standard package's judge.
   budgets its terms, effectors and transform slots. Admitting a visiting
   look's rig waits on that budget, which the plan that admits visiting looks
   owns.
+- Decided (the lead's call): the bard takes the standard's squeeze of both
+  triggers in the debug world, and the debug tooling's Go and Tour pages
+  (`worlds/debug/controls.puck`) move off it, since the bard is the feature
+  and the pages are tooling. A small authored-controls lane.
+- [medium] The art pack's chase view shows the torso and the left upper arm
+  hiding the instrument's vent lights at four metres. The stage that builds
+  the instrument places or lights the deck so a chase camera reads it, checked
+  with the built rig.
+- [low · unconfirmed] In `puck test` a press scheduled in tick T landed in the
+  judge's interval T+2. Find whether the harness or the ingress adds the
+  tick before the judge's windows are tuned.
 - It is the first of the [play expressions](play-expressions.md). The other
   two the owner named, play by solving and play by calculating, are open
   explorations: that page holds
@@ -4981,6 +4951,17 @@ reversal brake, then a sitting.
   view alone reads; its windowed reading (the press drawn early in that view and
   in no other view, camera screen or session window) waits on the lead's batch.
 
+- [medium] A camera program whose subject is a placement frames that
+  placement where it rests: the rig compiler resolves it through the
+  document-only branch of the anchor resolver (`WorldCameraRigCompiler`,
+  `WorldAnchorPoses.TryRestPlacement`), where a light or a speaker on the same
+  placement reads the drawn pose (`WorldAnchorPoses.TryResolve`). An animated
+  or inhabited subject is framed off its mark. Resolve the subject each frame
+  through the same call.
+- [low] From the reach lane's report: a part read of a body that arrives
+  before its first pack answers from the origin (`LatchedShapePose`), and an
+  effector's ease keeps its registration awake only through its restless
+  slots, a coupling nothing states.
 - A reversal should brake faster than it accelerates: `ShapeWholeVelocityRow`
   converges at the engage rate whenever the stick is deflected, so a full
   reversal at 40 m/s² takes 8 ticks at 5 m/s.
@@ -5025,6 +5006,10 @@ Owner: input lane · ordinary · Next: the chat exhibit, the press's follow-ups
 and live hardware. The [input channel decision](../decisions/input-channels.md) owns
 the model.
 
+- [low] A rule that reads `$inputEvents` runs on idle ticks too, at a cost
+  nobody has counted, and a rule cannot read every press of a channel in a
+  step in one expression: the rhythm judge wanted an
+  `inputChannel(owner, each)` read. Count the idle cost first.
 - [medium] Free Cam admits only local seat owners: `WorldInputRuntime.TrySetCameraRoute`
   requires a Seat principal whose index equals its body below LocalSeatCount.
   Federated, routed peer and session input owners cannot enter the camera state.
@@ -5241,8 +5226,13 @@ content on the owner's call.
   tight rectangle across the whole cell, so the chess text screens' glyphs
   stretch (`sdfSampleGlyphDecal`); the camera's eye is wrong while a seat is
   being framed onto the bench (`world.view.camera`); and what a text paint
-  costs the views pass is unmeasured. At scale a town's signs are text
-  paints, so the session gap and the cost come first.
+  costs the views pass is unmeasured. Two limits are built in: a text is the
+  world's, not a body's, so its template reads no `$body` and every copy of a
+  creation shows the same words; and a world draws at most
+  `SdfSurfaceTextLayout.MaxTexts` texts of `SdfSurfaceTextLayout.MaxGlyphs`
+  glyphs each. At scale a town's signs and name plates are text paints, one
+  per copy and far more than that table, so the per-body template, a table
+  sized by what is drawn and the session gap come first.
 - [medium] The agent harness and embeddings are unexercised by the debug
   world. Build them as features that load the systems as real use does: a
   lobby guide run by `Puck.World.AgentHarness` that walks visitors to places;

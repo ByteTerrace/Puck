@@ -244,8 +244,9 @@ lead's batched GPU leg:
   latency-bound, so the bake's GPU time on both backends is a measurement
   request for a quiet window, not a lane's check.
 
-4. **Drop identity point ops and hoist each creation's root frame.** In a
-   lane (field-4). Needs only the catalogue, which is built.
+4. **Drop identity point ops and hoist each creation's root frame.** Built,
+   with bake clamps localized so a relief edit changes only its own group's
+   key; its check below is owed with the device verification above.
    *Check:* `puck creation stats` reports the glacier at about 1,033 or fewer
    instructions per evaluation (from 1,866) with one `TransformDynamic`
    instead of 209; `puck mesh audit --cpu` on the glacier and the north valley
