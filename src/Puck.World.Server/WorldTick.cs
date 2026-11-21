@@ -135,6 +135,9 @@ public sealed partial class WorldTick {
     // The stream lease id is server-minted; an older socket's finally block can therefore never clear a replacement
     // socket's state after a reconnect.
     private readonly WorldFederatedIntentState[] m_federatedIntents;
+    // The reason each body's federated input was last dropped for; the slot past the last body serves an input that
+    // names none.
+    private readonly string?[] m_federatedDrops;
 
     // Reentrancy guard, guarded by m_authorityGate with m_ordered: DrainOrdered dequeues and applies until empty, so
     // a re-entrant enqueue from inside an apply is a defined no-op (re-enqueue, return to the outer drain) instead
@@ -240,6 +243,7 @@ public sealed partial class WorldTick {
         m_untrustedSum = new long[(capacity * ChannelLimits.MaxChannels)];
         m_driveDenied = new bool[capacity];
         m_federatedIntents = new WorldFederatedIntentState[capacity];
+        m_federatedDrops = new string?[(capacity + 1)];
         m_host = host;
 
         if (

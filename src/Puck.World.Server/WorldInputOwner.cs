@@ -183,7 +183,7 @@ public sealed partial class WorldInputOwner {
         ReadOnlySpan<int> facing = default) {
         reason = string.Empty;
         if ((batch.Revision != Revision) || (batch.Epoch != Epoch) || (batch.Mapping != Mapping.Id) || (batch.Tick != admission.Tick) || (batch.NumericCount != Mapping.NumericCount)) {
-            reason = "input.mapping: stale revision, epoch, mapping or assigned tick";
+            reason = $"input.mapping: stale revision, epoch, mapping or assigned tick (batch revision {batch.Revision} epoch {batch.Epoch} mapping {batch.Mapping} tick {batch.Tick} numerics {batch.NumericCount}; owner revision {Revision} epoch {Epoch} mapping {Mapping.Id} tick {admission.Tick} numerics {Mapping.NumericCount})";
             return false;
         }
         if (m_usesFacing && (facing.Length != m_crossings.Length)) { reason = "input.facing: authority orientation is missing"; return false; }
@@ -286,7 +286,10 @@ public sealed partial class WorldInputOwner {
                     if (interval.Tick == input.CaptureTick) { capture = interval; found = true; break; }
                 }
             }
-            if (!found || (capture.Tick > admission.Tick) || !capture.Contains(offset: input.Offset)) { reason = "input.time: unknown, future or out-of-interval capture"; return false; }
+            if (!found || (capture.Tick > admission.Tick) || !capture.Contains(offset: input.Offset)) {
+                reason = $"input.time: unknown, future or out-of-interval capture (capture tick {input.CaptureTick} offset {input.Offset}, admitted at tick {admission.Tick}, {captureIntervals.Length} earlier intervals held{(found ? ", interval found" : "")})";
+                return false;
+            }
             if ((sequence != 0) && ((capture.EngineStart < lastCapture.EngineStart) || ((capture.EngineStart == lastCapture.EngineStart) && (input.Offset < lastOffset)))) {
                 reason = "input.time: capture must be monotonic with sequence";
                 return false;

@@ -1303,6 +1303,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 (m_roster.Seat(slot: slot) is not { } seat) ||
                 !seat.Source.IsLive
             ) {
+                if (slot == 0) { Puck.World.Protocol.RcProbe.Note($"client.submit slot0 skipped pending={m_roster.IsPending(slot: slot)} seat={(m_roster.Seat(slot: slot) is not null)} live={m_roster.Seat(slot: slot)?.Source.IsLive}"); }
                 continue;
             }
 
@@ -1312,12 +1313,14 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 objA: route.Endpoint,
                 objB: endpoint
             )) {
+                if (slot == 0) { Puck.World.Protocol.RcProbe.Note($"client.submit slot0 route endpoint {route.Endpoint?.Identity} is not the submitting endpoint {endpoint.Identity} (entity {route.EntityIndex})"); }
                 continue;
             }
             if (
                 (m_lastSubmissionEpoch[slot] == route.Epoch) &&
                 (m_lastSubmissionTick[slot] >= tick)
             ) {
+                if (!endpoint.ClockOwnedHere) { Puck.World.Protocol.RcProbe.Note($"client.submit slot{slot} deduplicated at endpoint {endpoint.Identity}", $"tick={tick} last={m_lastSubmissionTick[slot]}"); }
                 continue;
             }
 
@@ -1362,7 +1365,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 continue;
             }
 
-            if (seat.Input is not { Admitted: true } input) { continue; }
+            if (seat.Input is not { Admitted: true } input) {
+                Puck.World.Protocol.RcProbe.Note($"client.submit slot{slot} input not admitted (input={(seat.Input is not null)}) endpoint={endpoint.Identity} clockHere={endpoint.ClockOwnedHere}");
+                continue;
+            }
+            Puck.World.Protocol.RcProbe.Note($"client.submit slot{slot} submitted endpoint={endpoint.Identity} clockHere={endpoint.ClockOwnedHere} entity={targets[slot]} moved={(intent != default)}");
             endpoint.Submissions.SubmitIntent(submission: input.Publish(m_roster.PrincipalOf(slot: slot), targets[slot], tick, seat, intent));
             m_lastSubmissionEpoch[slot] = routes[slot]!.Epoch;
             m_lastSubmissionTick[slot] = tick;

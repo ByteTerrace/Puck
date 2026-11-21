@@ -42,12 +42,17 @@ public sealed partial class WorldTick {
         for (var index = 0; (index < m_federatedIntents.Length); index++) {
             ref var state = ref m_federatedIntents[index];
 
-            if (
-                !state.Active ||
-                (Host.Body(index: index) is not { } body) ||
-                !Host.Population.IsAdmittedPeer(bodyIndex: index) ||
-                (Host.Population.PeerPrincipal(index: index) != state.Principal)
-            ) {
+            if (!state.Active) { continue; }
+            if (Host.Body(index: index) is not { } body) {
+                NoteFederatedDrop(bodyIndex: index, reason: "its slot holds no body");
+                continue;
+            }
+            if (!Host.Population.IsAdmittedPeer(bodyIndex: index)) {
+                NoteFederatedDrop(bodyIndex: index, reason: "its body is not an admitted peer's");
+                continue;
+            }
+            if (Host.Population.PeerPrincipal(index: index) != state.Principal) {
+                NoteFederatedDrop(bodyIndex: index, reason: $"its slot belongs to {Host.Population.PeerPrincipal(index: index).Describe()}, not {state.Principal.Describe()}");
                 continue;
             }
 
@@ -61,7 +66,17 @@ public sealed partial class WorldTick {
                     Input = packet.Input with { Tick = Host.Input.Interval.Tick },
                 };
 
-                if (!ApplyIntentSubmission(body: body, submission: submission).IsAccepted) { continue; }
+                var admission = ApplyIntentSubmission(body: body, submission: submission);
+
+                if (!admission.IsAccepted) {
+                    NoteFederatedDrop(bodyIndex: index, reason: (admission.InputRefusal ?? admission.Permission.DescribeRefusal(
+                        actor: state.Principal,
+                        subject: $"body:{index}",
+                        verb: "drive"
+                    )));
+                    continue;
+                }
+                NoteFederatedDrop(bodyIndex: index, reason: null);
                 admitted = true;
                 var held = submission.Input.Image;
                 var projected = submission.Intent;
@@ -97,6 +112,23 @@ public sealed partial class WorldTick {
             };
 
             _ = ApplyIntentSubmission(body: body, submission: repeated);
+        }
+    }
+    /// <summary>Names a federated input this authority did not apply, once when the reason starts or changes, so a
+    /// remote seat whose body stands still says why. A <see langword="null"/> reason marks the body as taking input
+    /// again.</summary>
+    /// <param name="bodyIndex">The body the input names; an index outside the population shares one slot.</param>
+    /// <param name="reason">Why the input was dropped, or <see langword="null"/>.</param>
+    internal void NoteFederatedDrop(int bodyIndex, string? reason) {
+        var slot = ((((uint)bodyIndex) < ((uint)m_federatedIntents.Length)) ? bodyIndex : m_federatedIntents.Length);
+
+        if (string.Equals(a: m_federatedDrops[slot], b: reason, comparisonType: StringComparison.Ordinal)) { return; }
+        m_federatedDrops[slot] = reason;
+        if ((reason is not null) && Host.Output.HasNarrationSink) {
+            Host.Output.Narrate(
+                channel: "world.input.federated",
+                text: $"[world.input.federated: body:{bodyIndex} input dropped: {reason}]"
+            );
         }
     }
     // Hands the tape the federated device images this step is about to apply — a forwarded or federated traveler's
@@ -244,6 +276,7 @@ public sealed partial class WorldTick {
             (leaseId <= 0) ||
             (((uint)submission.EntityIndex) >= ((uint)m_federatedIntents.Length))
         ) {
+            NoteFederatedDrop(bodyIndex: submission.EntityIndex, reason: $"lease {leaseId} or body index {submission.EntityIndex} names no held-input row");
             return;
         }
 

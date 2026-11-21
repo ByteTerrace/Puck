@@ -1710,6 +1710,7 @@ public sealed class WorldPeerHost : IDisposable {
                 var (resolved, accepted) = await ExecuteAuthenticatedAsync(credential, () =>
                     WorldLocalForwardedAuthority.TryApplyIntent(m_server, sourceAuthority, in mobility, leaseId, in submission)
                 ).ConfigureAwait(false);
+                RcProbe.Note($"peer.intent received resolved={resolved.HasValue} accepted={accepted}", $"moved={(submission.Intent != default)}");
                 if (resolved is not { } stamped) {
                     await WriteFederationRefusal(
                         ct: ct,
