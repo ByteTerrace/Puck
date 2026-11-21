@@ -1619,6 +1619,15 @@ matrix alone and wrote only their pose words through `StagePose`).
   through the composition source's copy journal (`SdfFrame.MeshCopyChanges`, a `GpuChangedRows` read by a
   `GpuRowCursor`), which the dresser and the bake's layout check each read. `sdf.instances.dress.groups-visited`,
   `.groups-stood` and `.copies-visited` count it.
+- **The pose pack forks by registration.** `WorldCreationInstances.PackTransforms` decides every registration in a
+  serial pass (`BeginStep`), poses the woken ones across the `JobPool` as one `JobClass.Frame` fork, one partition a
+  registration (`Pose`, `PackRegistration`), and settles them in pool order (`EndStep`). A partition writes only its own
+  registration and slot range and keeps its scratch on its own stack; anything shared it would write (a list, a pool
+  field, a counter that is not interlocked) belongs in `BeginStep` or `EndStep`. A rig that reads another body
+  (`Registration.ReadsBodies`) poses after the fork, so a new read of another registration's pose goes through a body
+  read or it races. The state mirror's slot table takes a lease's first acquisition from many partitions under one
+  gate (`WorldStateMirror.Acquire`); its install, refresh and apply never run during the fork.
+  `sdf.creations.registrations.forked` counts the forked poses.
 - **A program's bake plan is made on its build thread.** The composition
   source hands each program its background build finishes to
   `ISdfFrameSource.ObserveBuilds`, the residency plans it there

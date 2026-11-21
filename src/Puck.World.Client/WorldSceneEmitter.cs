@@ -369,7 +369,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// animated/body-rooted stamps follow in the replay pool's range. An avatar repacks only while its presented pose,
     /// or pose epoch moves, or its root follower is still settling; a body that stops drawing
     /// parks its range once. Local seats fire one footstep cue per gait half-cycle.</remarks>
-    public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
+    public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) {
         m_animator.SetCatalogSlots(m_catalog.Slots, context.SlotBase);
         var deltaSeconds = m_pendingDeltaSeconds;
 

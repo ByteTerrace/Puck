@@ -125,7 +125,7 @@ public sealed class SdfFrameDressingAllocationLawTests {
             _ = builder.Sphere(material: material, radius: 1f);
             _ = builder.EndInstance();
         }
-        public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
+        public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) {
             if (!moved.Everything) { return; }
             slots[context.SlotBase] = new DynamicTransform(Orientation: Quaternion.Identity, Position: Vector3.Zero);
         }

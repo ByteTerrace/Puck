@@ -10,6 +10,9 @@ public static class WorldCreationWork {
     public static WorkKind Visited { get; } = new(name: "sdf.creations.registrations.visited", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Registrations whose authored pose programs ran.</summary>
     public static WorkKind Posed { get; } = new(name: "sdf.creations.registrations.posed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Posed registrations whose pose ran in the pack's fork, one partition each; the rest of the posed are rigs
+    /// that read another body, posed after the fork.</summary>
+    public static WorkKind Forked { get; } = new(name: "sdf.creations.registrations.forked", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Registrations retaining their pose because no input or continuation owed work.</summary>
     public static WorkKind Retained { get; } = new(name: "sdf.creations.registrations.retained", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Registrations whose pose evaluation was held by the existing rate mechanism.</summary>
@@ -40,5 +43,5 @@ public static class WorldCreationWork {
     public static WorkKind StaticCopies { get; } = new(name: "sdf.creations.static.copies", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Process totals; read twice to measure a window. Posed, retained and rate-held partition visited registrations;
     /// the bodies and placements among the posed and held count in <see cref="Puck.SdfVm.SdfUpdateRateCounts"/>.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, TermsEvaluated, EffectorSolves, StaticTemplates, StaticCopies, Packs]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Forked, Retained, RateHeld, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, TermsEvaluated, EffectorSolves, StaticTemplates, StaticCopies, Packs]);
 }
