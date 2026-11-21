@@ -587,6 +587,7 @@ public sealed partial class SdfMeshPathBake {
             m_demandTransforms = frame.DynamicTransforms;
             m_demandCopies = frame.MeshInstances;
             m_farDistance = frame.FarDistance;
+            ResumeReloads();
             if (!SameCopyLayout(frame: frame)) { IndexCopies(frame: frame); }
             m_copyCursor.Commit();
             // The bake reads only the baked handles: a frame whose height fields' heights alone moved changes nothing here.
@@ -2603,10 +2604,15 @@ public sealed partial class SdfMeshPathBake {
     private void Load(Group group) {
         var loaded = Library.TryLoad(declined: out var declined, form: (group.Dynamic ? group.Form : null), geometry: (group.LoadsForm ? SdfMeshLibrary.FormGeometry(form: group.Form) : group.Sealed), identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refusal: out var refusal);
 
-        // A bake that draws stored rungs alone reads a sound entry again once the account has room for its workspace,
-        // which the read waits on (SdfMeshStore.WorkspacePatience), rather than bake what the store holds.
+        // A bake that draws stored rungs alone reads a sound entry the account had no room for again, later, rather
+        // than bake what the store holds.
         if (!loaded && declined && (Library.Policy == SdfMeshCachePolicy.Stored)) {
-            Library.Cache.Count(kind: SdfMeshCache.LoadsRetried);
+            Reload(group: group);
+            return;
+        }
+        // A dynamic group whose own entry the store turned out not to hold loads the mesh stored of its form.
+        if (!loaded && !declined && !group.LoadsForm && HoldsForm(group: group)) {
+            group.LoadsForm = true;
             ScheduleLoad(group: group);
             return;
         }
@@ -3237,6 +3243,8 @@ public sealed partial class SdfMeshPathBake {
         // Whether the group loads the mesh the store holds of its form, baked at another pose, in place of its own
         // geometry's (SdfMeshLibrary.FormGeometry).
         public bool LoadsForm { get; set; }
+        // The loads of the group the account has had no room for in a row (SdfMeshPathBake.Reload).
+        public int LoadRetries { get; set; }
 
         private SdfMesh? m_floor;
 

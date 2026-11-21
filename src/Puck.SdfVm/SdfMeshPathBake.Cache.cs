@@ -43,9 +43,43 @@ public sealed partial class SdfMeshPathBake {
     /// from any thread.</summary>
     public bool Filling => ((Volatile.Read(location: ref m_filling) != 0) && (System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: Volatile.Read(location: ref m_decidedAt)) < FillingPatience));
 
+    // The groups whose load the account had no room for, each with the time its next read is due (Reload). Under the gate.
+    private readonly List<(Group Group, long Due)> m_reloads = [];
+
+    // The longest a declined load waits before it is read again, in seconds; the wait doubles from one second.
+    private const int MostReloadSeconds = 32;
+
+    // Holds a group whose stored entry the account had no room to read, to read it again after a wait that doubles each
+    // time in a row, so a short account costs a read a group every half minute at most rather than a worker spinning on
+    // it. The group stays held meanwhile, offering no lattice. On the pool.
+    private void Reload(Group group) {
+        Library.Cache.Count(kind: SdfMeshCache.LoadsRetried);
+        using (EnterGate(site: SdfMeshBakeReport.Gate.Load)) {
+            if (group.Retired || !GroupList.Holds(group: group)) { return; }
+
+            var seconds = Math.Min(val1: MostReloadSeconds, val2: (1 << Math.Min(val1: group.LoadRetries, val2: 5)));
+
+            group.LoadRetries++;
+            m_reloads.Add(item: (group, (System.Diagnostics.Stopwatch.GetTimestamp() + (seconds * System.Diagnostics.Stopwatch.Frequency))));
+        }
+    }
+    // Queues again each held load whose wait has passed. Under the gate, on the frame's thread.
+    private void ResumeReloads() {
+        if (m_reloads.Count == 0) { return; }
+
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+
+        for (var at = (m_reloads.Count - 1); (at >= 0); at--) {
+            var (group, due) = m_reloads[at];
+
+            if (!group.Retired && GroupList.Holds(group: group) && (now < due)) { continue; }
+            m_reloads.RemoveAt(index: at);
+            if (!group.Retired && GroupList.Holds(group: group)) { ScheduleLoad(group: group); }
+        }
+    }
     // Whether the library or its store holds a planned group's mesh: of its geometry, or for a dynamic group of its
     // form, baked at another pose.
-    private bool Holds(Group group, UInt128 identity) => (Library.Holds(geometry: group.Sealed, identity: identity) || (group.Dynamic && Library.HoldsForm(form: group.Form, identity: identity)));
+    private bool Stores(Group group, UInt128 identity) => (Library.Holds(geometry: group.Sealed, identity: identity) || (group.Dynamic && Library.HoldsForm(form: group.Form, identity: identity)));
     // Whether the store holds a mesh of a dynamic group's form under the group's identity, which loads in place of its
     // own geometry's (Begin).
     private bool HoldsForm(Group group) => (group.Dynamic && (Library.Disk?.Holds(geometry: SdfMeshLibrary.FormGeometry(form: group.Form), identity: group.Identity) ?? false));
@@ -75,7 +109,7 @@ public sealed partial class SdfMeshPathBake {
     // the store holds no rung of, which bakes. The rung answered holds the demand the plan asked, so it is asked again
     // only when the demand names another tier, except a floor planned on arrival, which still owes its detail.
     private Group? StoredRung(Group planned, UInt128 identity) {
-        if ((Library.Policy != SdfMeshCachePolicy.Stored) || Holds(group: planned, identity: identity)) { return null; }
+        if ((Library.Policy != SdfMeshCachePolicy.Stored) || Stores(group: planned, identity: identity)) { return null; }
         for (var step = 1; (step <= SdfMeshTier.Last); step++) {
             var coarser = (planned.Tier + step);
             var finer = (planned.Tier - step);
@@ -83,7 +117,7 @@ public sealed partial class SdfMeshPathBake {
             if ((coarser > planned.CoarsestTier) && (finer < planned.FinestTier)) { break; }
             foreach (var tier in (ReadOnlySpan<int>)[coarser, finer]) {
                 if ((tier > planned.CoarsestTier) || (tier < planned.FinestTier) || (RungOf(group: planned, tier: tier) is not { } rung)) { continue; }
-                if (!Holds(group: rung, identity: identity)) {
+                if (!Stores(group: rung, identity: identity)) {
                     rung.Retired = true;
                     continue;
                 }
@@ -139,7 +173,7 @@ public sealed partial class SdfMeshPathBake {
                     ladder.Next = (group.FinestTier - 1);
                     break;
                 }
-                if (Holds(group: rung, identity: identity)) {
+                if (Stores(group: rung, identity: identity)) {
                     rung.Retired = true;
                     ladder.Next--;
                     continue;

@@ -549,7 +549,7 @@ public sealed partial class SdfMeshPathBake {
     private bool StartReplacement(Group group, Group old, int index) {
         // A bake that draws stored rungs alone keeps drawing what it draws when the store lacks the rung asked: the
         // group is asked again only once its demand names another tier (Group.RetierRefused).
-        if ((Library.Policy == SdfMeshCachePolicy.Stored) && !Holds(group: group, identity: Identity.Value)) {
+        if ((Library.Policy == SdfMeshCachePolicy.Stored) && !Stores(group: group, identity: Identity.Value)) {
             Library.Cache.Count(kind: SdfMeshCache.RungsMissed);
             old.RetierRefused = true;
             group.Retired = true;

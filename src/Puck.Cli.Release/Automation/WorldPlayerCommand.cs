@@ -187,7 +187,8 @@ public static class WorldPlayerCommand {
             if (bake) {
                 // The places a body may be posed at, as the primary world's documents author them: each boot stands at
                 // every one, so the residencies a place opens (a portal's far side, a screen's session) are drawn there.
-                var places = composed.Worlds.First(predicate: entry => string.Equals(a: entry.Name, b: composed.PrimaryName, comparisonType: StringComparison.OrdinalIgnoreCase)).Definition.SpawnPoints.Select(selector: static point => point.Id).ToArray();
+                // The composition lists the primary world first.
+                var places = composed.Worlds[0].Definition.SpawnPoints.Select(selector: static point => point.Id).ToArray();
                 // One boot a backend fills the store: under the ladder policy it bakes every tier of every mesh it draws,
                 // whatever the window or the device's memory would have demanded, so no boot per target is needed to
                 // cover a target's tiers. It runs on this adapter's own profile, at the largest target's window.
@@ -433,7 +434,8 @@ public static class WorldPlayerCommand {
     private static BootReading Boot(WorldBackendPreference backend, BakeTarget target, string policy, IReadOnlyList<string> places, string output, string world, string logs, int bakeSeconds, string pass) {
         var name = $"{WorldBackendTokens.Token(backend: backend)}-{target.Profile}-{target.Width}x{target.Height}";
         var directory = Path.Combine(path1: logs, path2: $"{pass}-{name}");
-        var deadline = TimeSpan.FromSeconds(seconds: (300 + ((places.Count + 1) * (bakeSeconds + 90))));
+        // One wait and its answer at each place, and at the spawn; the World's own exit backstop, should the verb die.
+        var deadline = TimeSpan.FromSeconds(seconds: (300L + ((places.Count + 1L) * (bakeSeconds + 90L))));
         var request = new WorldLaunchRequest(Artifact: Path.Combine(path1: output, path2: "Puck.World.dll"), Step: Verb) {
             Arguments = ["--width", target.Width.ToString(provider: CultureInfo.InvariantCulture), "--height", target.Height.ToString(provider: CultureInfo.InvariantCulture),
                 "--cache-dir", Path.Combine(path1: output, path2: CacheName), "--mesh-cache", policy],
@@ -471,23 +473,55 @@ public static class WorldPlayerCommand {
             var unsettled = new List<string>();
             var stood = 0;
 
-            // Waits for the bakes where the body stands; false when they did not settle.
+            // The engine's own counts of what the boot has asked of its mesh cache so far.
+            BootReading Read() {
+                var counted = process.RunScript(lines: [$"world.counters {Puck.SdfVm.SdfMeshCache.SourceName}"], timeout: TimeSpan.FromSeconds(seconds: 60));
+
+                long Counted(Puck.Abstractions.Counting.WorkKind kind) => (CountOf(kind: kind.Name, lines: counted.Lines.Select(selector: static line => line.Text))
+                    ?? throw new InvalidOperationException(message: $"{name}: world.counters answered no {kind.Name}; its logs are in {CliPaths.ToDisplay(fullPath: directory)}."));
+
+                return new BootReading(
+                    Dispatches: Counted(kind: Puck.SdfVm.SdfMeshCache.Dispatches),
+                    GroupsBaked: Counted(kind: Puck.SdfVm.SdfMeshCache.GroupsBaked),
+                    Loaded: process.LinesFrom(from: 0).Where(predicate: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] start ")).Sum(selector: static row => CliLineFields.Count(line: row.Text, name: "loading")),
+                    LoadsRetried: Counted(kind: Puck.SdfVm.SdfMeshCache.LoadsRetried),
+                    Places: stood,
+                    RungsFilled: Counted(kind: Puck.SdfVm.SdfMeshCache.RungsFilled),
+                    RungsMissed: Counted(kind: Puck.SdfVm.SdfMeshCache.RungsMissed),
+                    Unsettled: unsettled
+                );
+            }
+
+            var before = Read();
+
+            // Waits for the bakes where the body stands; false when they did not settle. A wait that released while
+            // the bakes were still landing work (a fill's first place bakes the whole world's tiers, past one wait's
+            // longest hold) waits again, for as long as each wait dispatched or filled more; one that released with
+            // nothing landed since is the boot's answer.
             bool Settle(string place) {
-                var mark = process.LineCount;
-
                 stood++;
-                _ = process.RunScript(lines: [string.Create(provider: CultureInfo.InvariantCulture, handler: $"world.wait bakes {bakeSeconds}")], timeout: TimeSpan.FromSeconds(seconds: (bakeSeconds + 60)));
+                while (true) {
+                    var mark = process.LineCount;
 
-                var answer = process.WaitFor(accept: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[bakes:"), from: mark, timeout: TimeSpan.FromSeconds(seconds: 60));
+                    _ = process.RunScript(lines: [string.Create(provider: CultureInfo.InvariantCulture, handler: $"world.wait bakes {bakeSeconds}")], timeout: TimeSpan.FromSeconds(seconds: (bakeSeconds + 60)));
 
-                if (answer is null) { throw new InvalidOperationException(message: $"{name}: world.wait bakes gave no answer at {place}; its logs are in {CliPaths.ToDisplay(fullPath: directory)}."); }
-                if (answer.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[bakes: settled")) { return true; }
+                    var answer = process.WaitFor(accept: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[bakes:"), from: mark, timeout: TimeSpan.FromSeconds(seconds: 60));
 
-                // The answer without the residency report a not-settled answer appends after its reason.
-                var report = answer.Text.IndexOf(value: ": [sdf.mesh-bake]", comparisonType: StringComparison.Ordinal);
+                    if (answer is null) { throw new InvalidOperationException(message: $"{name}: world.wait bakes gave no answer at {place}; its logs are in {CliPaths.ToDisplay(fullPath: directory)}."); }
+                    if (answer.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[bakes: settled")) { return true; }
 
-                unsettled.Add(item: $"{place} ({((report > 0) ? answer.Text[..report] : answer.Text).Trim(trimChars: ['[', ']'])})");
-                return false;
+                    var after = Read();
+                    var landed = ((after.Dispatches > before.Dispatches) || (after.RungsFilled > before.RungsFilled));
+
+                    before = after;
+                    if (landed) { continue; }
+
+                    // The answer without the residency report a not-settled answer appends after its reason.
+                    var report = answer.Text.IndexOf(value: ": [sdf.mesh-bake]", comparisonType: StringComparison.Ordinal);
+
+                    unsettled.Add(item: $"{place} ({((report > 0) ? answer.Text[..report] : answer.Text).Trim(trimChars: ['[', ']'])})");
+                    return false;
+                }
             }
 
             if (Settle(place: "its spawn")) {
@@ -497,21 +531,7 @@ public static class WorldPlayerCommand {
                 }
             }
 
-            var counted = process.RunScript(lines: [$"world.counters {Puck.SdfVm.SdfMeshCache.SourceName}"], timeout: TimeSpan.FromSeconds(seconds: 60));
-
-            long Counted(Puck.Abstractions.Counting.WorkKind kind) => (CountOf(kind: kind.Name, lines: counted.Lines.Select(selector: static line => line.Text))
-                ?? throw new InvalidOperationException(message: $"{name}: world.counters answered no {kind.Name}; its logs are in {CliPaths.ToDisplay(fullPath: directory)}."));
-
-            var reading = new BootReading(
-                Dispatches: Counted(kind: Puck.SdfVm.SdfMeshCache.Dispatches),
-                GroupsBaked: Counted(kind: Puck.SdfVm.SdfMeshCache.GroupsBaked),
-                Loaded: process.LinesFrom(from: 0).Where(predicate: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] start ")).Sum(selector: static row => CliLineFields.Count(line: row.Text, name: "loading")),
-                LoadsRetried: Counted(kind: Puck.SdfVm.SdfMeshCache.LoadsRetried),
-                Places: stood,
-                RungsFilled: Counted(kind: Puck.SdfVm.SdfMeshCache.RungsFilled),
-                RungsMissed: Counted(kind: Puck.SdfVm.SdfMeshCache.RungsMissed),
-                Unsettled: unsettled
-            );
+            var reading = Read();
 
             Console.WriteLine(value: $"{Verb}: {pass} {name}: {((unsettled.Count == 0) ? $"settled at {stood} places" : $"not settled at {string.Join(separator: "; ", values: unsettled)}")}; {reading.Describe()}");
             return reading;
