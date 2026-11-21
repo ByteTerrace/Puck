@@ -1555,11 +1555,16 @@ step that meets it.
    placed per world, so where a world steps is a property of that world
    ([the world model](../architecture/worlds.md#the-idea-in-plain-terms)).
 
-   Two options are not taken. Leaving the tick serial fixes nothing: the frame
-   stays the sum of tick and produce. Deciding the thread question now, in
-   either direction, is premature: ruling a tick thread out on the latency
+   This question is now the plan's next design, ahead of the build order
+   above ([the CPU frame](open-items.md#the-cpu-frame), item 1). The owner's
+   ruling makes structural change the aim (AGENTS.md, "Change is the
+   default"), and both bar machines are CPU-bound on one thread that steps
+   and then produces. Leaving the tick serial fixes nothing: the frame stays
+   the sum of tick and produce. The design lane settles the arrangement with
+   the measurement this memo lacked: ruling a tick thread out on the latency
    ruling alone settles one world and leaves the many-world case unanswered,
-   and ruling it in adds a hand-off whose latency no source we read measures.
+   and ruling it in adds a hand-off whose latency no source we read measures,
+   so the lane measures it.
    The partitions' order still matters meanwhile. With the pool in place, a
    join that passes its wait budget keeps the logical tick open across loop
    iterations and lets the control plane run; without it, new partitions go

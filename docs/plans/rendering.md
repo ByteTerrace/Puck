@@ -70,15 +70,16 @@ in `worlds/standard/quality.puck`. A windowed boot applies that table on the
 frame thread once the device names its adapter, through the same door
 `world.device-profile` takes (`WorldDeviceProfileState.Select`).
 
-No current reading exists. The only one was taken from a source Release build
-before the table ever applied (`world.device-profile` echoed `table=none`),
-before the far cascade held a static layer, before distant redraws were
-sliced, and before the frame thread stopped waiting on pipeline-cache writes
-and device idles. None of its figures stand. It showed where to look first:
-the views pass was the largest GPU pass by far, the shadow passes and the
-resolve came next, the simulation and the frame's produce each took a large
-share of the CPU's frame, and host memory, not device memory, was what the
-16 GB machine ran out of.
+One reading exists, of a prerelease player build with the authority in
+process and its table applied: the route ran at a fraction of the bar on both
+backends, the frame was CPU-bound on produce and the simulation's steps
+before it was GPU-bound, the process held about twice its host-memory bar,
+and the build baked while it played. The CPU, GPU and memory work that
+answered it has landed and is unread on this machine, and no reading exists
+against a hosted authority. [Open items](open-items.md#hand-off) holds where
+that stands and the release that takes the next reading; the CPU half is
+[the CPU frame](open-items.md#the-cpu-frame)'s, and a player build that bakes
+is [its own packet](open-items.md#the-player-build-never-bakes).
 
 The steps, each after the one it names:
 
@@ -89,10 +90,10 @@ The steps, each after the one it names:
    [the benchmark's frame-bar reading](benchmark.md#comparing-runs) describes for
    this machine), read `world.device-profile` and `world.quality`,
    `world.iteration`, `host.frames`, `world.gpu-timing` with its timeline,
-   `world.rates`, `host.memory` and a gc-verbose trace. A pass's rolling mean
-   counts only the frames that recorded it (`ShaderPipelineRenderNode`'s
-   timing window), so a held pass's mean is the cost of one redraw: the
-   timeline shows the frame's real shape. A gap between the backends is
+   `world.rates`, `host.memory` and a gc-verbose trace. `world.gpu-timing`
+   reports each pass in milliseconds per frame and marks a row that has not
+   recorded lately as stale, so a held pass no longer reads as its one
+   redraw's cost. A gap between the backends is
    attributed only at matched clocks or from a capture
    ([the Vulkan packet](open-items.md#vulkan-regressions-and-gpu-robustness)
    records the earlier, unattributed one). Check: the reading names the
@@ -158,11 +159,9 @@ The steps, each after the one it names:
    Vulkan's aperture heaps, live and retiring residency and graph bytes, and
    the host's private bytes and managed heap. Share tables for the same
    mirror and stage infrequently changed data where the measured budget calls
-   for it. The `rtx2060` row sets a device bar and no host bar, so its host
-   pool follows the account's own budget (`MemoryAccount.DefaultBudget`); the
-   [streaming plan](streaming-and-memory.md#how-the-bars-are-read) sets the
-   RTX 4070's and the Steam Deck's memory bars and no plan yet sets this
-   machine's host bar.
+   for it. The `rtx2060` row authors a device bar and a host bar
+   (`worlds/standard/quality.puck`), and the one reading held about twice the
+   host bar; [memory](open-items.md#memory-on-the-deck-tier) owns closing it.
 6. **Passes past the local budget.** After 1. The `glass-clear` reading
    that cost about as much as the resolve was sustained, not one-off: the
    process ran past its local budget and the sums ran from system memory
