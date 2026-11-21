@@ -55,18 +55,16 @@ public sealed class WorldSiloReleaseControl(WorldSiloHost silo) {
                 separator: '/'
             );
 
-            if (
-                (parts.Length != 3) ||
-                !Guid.TryParseExact(
-                parts[2],
-                "D",
-                out var operation
-            ) ||
-                (operation == Guid.Empty)
-            ) {
-                context.Response.StatusCode = StatusCodes.Status409Conflict;
-                return true;
-            }
+            var operation = Guid.Empty;
+
+            Require(
+                condition: ((parts.Length == 3) && Guid.TryParseExact(
+                    parts[2],
+                    "D",
+                    out operation
+                ) && (operation != Guid.Empty)),
+                reason: "a release control request names one operation identifier"
+            );
             if (
                 (parts[1] == "fixture") &&
                 HttpMethods.IsPost(method: context.Request.Method)
@@ -82,10 +80,10 @@ public sealed class WorldSiloReleaseControl(WorldSiloHost silo) {
                 ).ConfigureAwait(continueOnCapturedContext: false);
                 return true;
             }
-            if (operation != state.PendingOperationId) {
-                context.Response.StatusCode = StatusCodes.Status409Conflict;
-                return true;
-            }
+            Require(
+                condition: (operation == state.PendingOperationId),
+                reason: $"operation {operation:D} is not the durable pending operation {state.PendingOperationId?.ToString(format: "D") ?? "(none)"}"
+            );
             switch (parts[1]) {
                 case "drain" when HttpMethods.IsPost(method: context.Request.Method):
                     Require(

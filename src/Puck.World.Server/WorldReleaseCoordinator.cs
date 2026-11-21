@@ -73,6 +73,9 @@ public readonly record struct WorldReleaseRuntimeResult(
     IReadOnlyDictionary<string, string>? RecoveryRoots = null);
 /// <summary>Runtime publication result. Private means the candidate remains fenced and unadmitted.</summary>
 public enum WorldReleaseRuntimePublication { Opened, Private, Refused }
+/// <summary>The answer of one runtime admission publication and, when it did not open, why: the coordinator reports
+/// <see cref="Detail"/> in its run result, so a refused or private publication names its cause.</summary>
+public readonly record struct WorldReleaseRuntimePublicationResult(WorldReleaseRuntimePublication Publication, string Detail);
 /// <summary>Worker lifecycle seam used by the durable coordinator.</summary>
 public interface IWorldReleaseRuntime {
     Task<WorldReleaseRuntimeResult> DrainSourceAndCaptureAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
@@ -82,12 +85,12 @@ public interface IWorldReleaseRuntime {
     Task<WorldReleaseRuntimeResult> StopCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
     Task<WorldReleaseRuntimeResult> VerifyCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<(WorldAuthorityIdentity Identity, WorldAuthorityFence Fence)>> ReadFenceCensusAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
-    Task<WorldReleaseRuntimePublication> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
+    Task<WorldReleaseRuntimePublicationResult> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
     /// <summary>Restores protected roots without starting a source. This must be safe to repeat while Recover remains durable.</summary>
     Task<WorldReleaseRuntimeResult> RecoverSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
     [Replaces(root: typeof(Puck.State.StateArena))]
     Task<WorldReleaseRuntimeResult> StartRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
-    Task<WorldReleaseRuntimePublication> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
+    Task<WorldReleaseRuntimePublicationResult> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
 }
 /// <summary>Result of one durable/runtime orchestration attempt.</summary>
 public readonly record struct WorldReleaseRunResult(
@@ -118,9 +121,21 @@ public sealed class WorldReleaseCoordinator {
         pin: out _,
         text: value
     );
+    // The one door to pre-commit recovery: every outcome, recovered or still pending, names the failure that began it, so
+    // a deploy log shows the cause however recovery ends. The core never formats the failure itself.
     private async Task<WorldReleaseRunResult> RecoverPreCommitAsync(WorldReleaseGroupSnapshot state, IWorldReleaseRuntime runtime, string failure, CancellationToken cancellationToken) {
+        var result = await RecoverPreCommitCoreAsync(
+            cancellationToken: cancellationToken,
+            failure: failure,
+            runtime: runtime,
+            state: state
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return (result with { Detail = $"{result.Detail}; cause: {failure}" });
+    }
+    private async Task<WorldReleaseRunResult> RecoverPreCommitCoreAsync(WorldReleaseGroupSnapshot state, IWorldReleaseRuntime runtime, string failure, CancellationToken cancellationToken) {
         if (state.Record.RecoveryRoots.Count == 0) {
-            return RefusedRun(reason: $"pre-commit failure before protected roots; retry drain without reopening an older checkpoint: {failure}");
+            return RefusedRun(reason: "pre-commit failure before protected roots; retry drain without reopening an older checkpoint");
         }
         if (state.Record.PendingPhase is not (WorldReleaseOperationPhase.Recover or WorldReleaseOperationPhase.RecoverActivate)) {
             var begun = await m_groups.BeginRecoveryAsync(
@@ -180,17 +195,17 @@ public sealed class WorldReleaseCoordinator {
             cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false);
 
-        return ((publication == WorldReleaseRuntimePublication.Opened)
+        return ((publication.Publication == WorldReleaseRuntimePublication.Opened)
             ? new(
                 false,
                 false,
-                $"target failed; source recovered: {failure}",
+                "target failed; source recovered",
                 await m_groups.LoadAsync(
                     state.Record.DeploymentGroup,
                     cancellationToken
                 ).ConfigureAwait(continueOnCapturedContext: false)
             ) { SourceRecovered = true }
-            : RefusedRun(reason: "source recovered privately; recovery remains pending until its admission publication succeeds")
+            : RefusedRun(reason: $"source recovered privately; recovery remains pending until its admission publication succeeds: {publication.Detail}")
         );
     }
     private static WorldReleaseGroupOutcome Refused(string reason) =>
@@ -627,15 +642,15 @@ public sealed class WorldReleaseCoordinator {
                                 cancellationToken
                             ).ConfigureAwait(continueOnCapturedContext: false);
 
-                            if (publication == WorldReleaseRuntimePublication.Private) {
+                            if (publication.Publication == WorldReleaseRuntimePublication.Private) {
                                 return new(
                                 CandidatePrivate: true,
                                 Completed: false,
-                                Detail: "candidate remains private until the group publication barrier succeeds",
+                                Detail: $"candidate remains private until the group publication barrier succeeds: {publication.Detail}",
                                 Snapshot: state
                             );
                             }
-                            if (publication != WorldReleaseRuntimePublication.Opened) { return RefusedRun(reason: "committed target admission publication was refused"); }
+                            if (publication.Publication != WorldReleaseRuntimePublication.Opened) { return RefusedRun(reason: $"committed target admission publication was refused: {publication.Detail}"); }
                             return new(
                                 true,
                                 false,
@@ -673,13 +688,13 @@ public sealed class WorldReleaseCoordinator {
                 cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false);
             } catch (Exception readError) when ((readError is not OperationCanceledException)) {
-                return RefusedRun(reason: $"cannot establish the durable commit boundary; restore nothing and retry status: {readError.Message}");
+                return RefusedRun(reason: $"cannot establish the durable commit boundary; restore nothing and retry status: {readError.Message}; cause: {error.Message}");
             }
             if (
                 (latest is not { } fresh) ||
                 (fresh.Record.PendingOperationId != state.Record.PendingOperationId)
             ) {
-                return RefusedRun(reason: "the operation changed while its result was uncertain; inspect durable status before resuming");
+                return RefusedRun(reason: $"the operation changed while its result was uncertain; inspect durable status before resuming; cause: {error.Message}");
             }
             state = fresh;
             if (

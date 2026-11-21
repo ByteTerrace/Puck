@@ -67,10 +67,19 @@ public sealed class WorldSiloReleaseRuntime : IWorldReleaseRuntime {
             throw new InvalidOperationException(message: "the runtime host does not match the durable release and world inventory");
         }
     }
-    private static WorldReleaseRuntimePublication Publication(WorldReleaseAdmissionPublication publication) => publication switch {
-        WorldReleaseAdmissionPublication.Opened => WorldReleaseRuntimePublication.Opened,
-        WorldReleaseAdmissionPublication.CandidatePrivate => WorldReleaseRuntimePublication.Private,
-        _ => WorldReleaseRuntimePublication.Refused,
+    private static WorldReleaseRuntimePublicationResult Publication(WorldReleaseAdmissionPublication publication) => publication switch {
+        WorldReleaseAdmissionPublication.Opened => new(
+            WorldReleaseRuntimePublication.Opened,
+            "the host opened admission"
+        ),
+        WorldReleaseAdmissionPublication.CandidatePrivate => new(
+            WorldReleaseRuntimePublication.Private,
+            "the host holds the candidate private until the group publication barrier"
+        ),
+        _ => new(
+            WorldReleaseRuntimePublication.Refused,
+            "the host refused admission publication"
+        ),
     };
 
     public async Task<WorldReleaseRuntimeResult> DrainSourceAndCaptureAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
@@ -91,7 +100,7 @@ public sealed class WorldSiloReleaseRuntime : IWorldReleaseRuntime {
             Succeeded: true
         );
     }
-    public async Task<WorldReleaseRuntimePublication> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
+    public async Task<WorldReleaseRuntimePublicationResult> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
         CheckHost(
             host: m_candidate,
             operation: operation,
@@ -99,8 +108,13 @@ public sealed class WorldSiloReleaseRuntime : IWorldReleaseRuntime {
         );
         return Publication(publication: await m_candidate.PublishManagedReleaseAdmissionAsync(cancellationToken).ConfigureAwait(continueOnCapturedContext: false));
     }
-    public async Task<WorldReleaseRuntimePublication> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
-        if (m_recoverySource is null) { return WorldReleaseRuntimePublication.Refused; }
+    public async Task<WorldReleaseRuntimePublicationResult> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
+        if (m_recoverySource is null) {
+            return new(
+                WorldReleaseRuntimePublication.Refused,
+                "no recovered source host exists to publish"
+            );
+        }
         CheckHost(
             host: m_recoverySource,
             operation: operation,

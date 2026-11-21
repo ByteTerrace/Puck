@@ -101,6 +101,7 @@ public sealed class WorldReleaseBootstrapTests {
                 authority: authority,
                 cancellationToken: token,
                 documentDirectory: null,
+                history: [],
                 manifest: manifest,
                 owner: owner
             ));
@@ -121,6 +122,7 @@ public sealed class WorldReleaseBootstrapTests {
                 authority: authority,
                 cancellationToken: token,
                 documentDirectory: null,
+                history: [],
                 manifest: manifest,
                 owner: owner
             );
@@ -129,6 +131,7 @@ public sealed class WorldReleaseBootstrapTests {
                 authority: authority,
                 cancellationToken: token,
                 documentDirectory: null,
+                history: [],
                 manifest: manifest,
                 owner: owner
             );
@@ -161,7 +164,7 @@ public sealed class WorldReleaseBootstrapTests {
     // silo.publish reads its file through WorldFileOrigin.TryReadPublishable. A document with a boot draw site proves
     // the difference: undrawn, the silo publishes the bytes a release's bootstrap carries, and the bootstrap finds the
     // row unchanged; drawn, as silo.publish once published it, the row holds one instance's cells and the bootstrap
-    // refuses it as a different world definition.
+    // refuses it as a different world definition unless the group's own recovered bootstrap captured it.
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
@@ -257,22 +260,45 @@ public sealed class WorldReleaseBootstrapTests {
             packageDirectory: package
         );
 
-        Task Bootstrap() => AzureCommand.InitializeWorldReleaseBootstrapAsync(
+        Task Bootstrap(IReadOnlyList<WorldReleaseGroupHistoryEntry> history) => AzureCommand.InitializeWorldReleaseBootstrapAsync(
             archive: archive,
             authority: authority,
             cancellationToken: token,
             documentDirectory: null,
+            history: history,
             manifest: manifest,
             owner: owner
         );
 
         if (drawn) {
             Assert.Contains(
-                actualString: (await Assert.ThrowsAsync<InvalidDataException>(testCode: Bootstrap)).Message,
-                expectedSubstring: "cannot replace an existing different world definition"
+                actualString: (await Assert.ThrowsAsync<InvalidDataException>(testCode: () => Bootstrap(history: []))).Message,
+                expectedSubstring: "existing different world definition"
+            );
+            // The same root captured by an earlier bootstrap of the group that recovered is the group's own definition,
+            // which a later bootstrap replaces with its release's bytes.
+            var operation = Guid.NewGuid();
+            var captured = (await authority.CaptureRecoveryRootAsync(
+                amber,
+                operation,
+                token
+            ))!.Value;
+
+            await Bootstrap(history: [new WorldReleaseGroupHistoryEntry {
+                OperationId = operation,
+                RecoveryRoots = new Dictionary<string, string> { [amber.RootKey] = captured.Pin },
+                Result = "recovered: test",
+                TargetRelease = "earlier",
+            }]);
+            Assert.Equal(
+                bytes,
+                (await authority.LoadPublishedDefinitionBytesAsync(
+                    cancellationToken: token,
+                    identity: amber
+                ))!.Value.ToArray()
             );
         } else {
-            await Bootstrap();
+            await Bootstrap(history: []);
             Assert.Equal(
                 bytes,
                 (await authority.LoadPublishedDefinitionBytesAsync(
