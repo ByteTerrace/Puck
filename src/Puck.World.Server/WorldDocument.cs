@@ -142,12 +142,20 @@ public sealed partial class WorldDocument {
         m_base = definition;
         m_baseOrigin = origin;
     }
-    /// <summary>Swaps the live definition and moves its install ordinal forward.</summary>
+    /// <summary>Swaps the live definition and moves its install ordinal forward. It is the one door every live
+    /// definition passes through, so it is also where a replaced <c>admission</c> section is announced: an install, an
+    /// undo, a seek and a checkpoint restore all reach <see cref="WorldServer.AdmissionChanged"/> without each naming
+    /// it.</summary>
     /// <param name="definition">The new live definition.</param>
     internal void AdoptDefinition(WorldDefinition definition) {
+        var previous = m_definition;
+
         m_definition = definition;
         if (Host.Arena is { } arena) { WorldStateReader.Bind(definition, arena); }
         m_sequence++;
+        if (!ReferenceEquals(objA: previous.Admission, objB: definition.Admission)) {
+            Host.NotifyAdmissionChanged();
+        }
     }
 
     /// <summary>Adopts a rebuilt solid field and bumps its revision.</summary>

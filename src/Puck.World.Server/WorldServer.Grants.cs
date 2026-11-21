@@ -4,12 +4,26 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
-    /// <summary>Raised on the tick thread after an install replaces the live <c>admission</c> section.</summary>
+    /// <summary>Raised on the tick thread whenever the live <c>admission</c> section is replaced, by an install, an
+    /// undo, a rebuild or a checkpoint restore alike. It only wakes a holder that would otherwise not look again until
+    /// its next frame or command: the policy itself is read live at every write, so a handler is never the only
+    /// enforcement. A handler runs on the tick thread, so it must not block or cancel synchronously.</summary>
     public event Action? AdmissionChanged;
     /// <summary>Closes transports attached to a generation when its ordered disconnect applies.</summary>
     public event Action<Principal>? PeerDisconnected;
 
-    internal void NotifyAdmissionChanged() => AdmissionChanged?.Invoke();
+    // Each handler runs in its own try, so one that throws neither skips the handlers after it nor faults the install,
+    // restore or seek that replaced the section.
+    internal void NotifyAdmissionChanged() {
+        if (AdmissionChanged is not { } handlers) { return; }
+        foreach (var handler in handlers.GetInvocationList().Cast<Action>()) {
+            try {
+                handler();
+            } catch (Exception fault) {
+                m_output.Narrate(channel: "world.admission", text: $"[world.admission: a live admission handler faulted: {fault.GetType().Name}: {fault.Message}]");
+            }
+        }
+    }
     internal void ClosePeerTransport(Principal principal) => PeerDisconnected?.Invoke(principal);
 
     /// <summary>Whether a peer generation is still connected and may submit commands.</summary>
