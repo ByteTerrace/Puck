@@ -91,6 +91,9 @@ public readonly record struct MemoryRowReading(string Name, PhysicalMemory Pool,
 public sealed record MemoryAdmissionReading(PhysicalMemory Pool, long? Limit, long Held, long Peak, long Promised, long Retired, long Forced, long ForcedJobs, long OverLimitBytes, long OverLimitGrants, long Refusals, long DeviceRefusals, long PressureTrims, long Floor, IReadOnlyList<long> ClassHeld, IReadOnlyList<long> ClassPromised) {
     /// <summary>Gets the owner of the most recent refusal in this pool.</summary>
     public string? LastRefusedOwner { get; init; }
+    /// <summary>Gets who took the pool's over-limit grants (<see cref="OverLimitGrants"/>), most bytes first: the
+    /// device family or host owner each grant was charged to, with its grants and bytes over the account's life.</summary>
+    public IReadOnlyList<MemoryOverLimitTaker> OverLimitTakers { get; init; } = [];
     /// <summary>Gets the sampled private bytes beyond what the host pool holds (its owners and its device blocks), which
     /// reduce the machine's room; zero without a host bar and outside host memory.</summary>
     public long PrivateBeyondHeld { get; init; }
@@ -130,6 +133,12 @@ public sealed record MemoryAdmissionReading(PhysicalMemory Pool, long? Limit, lo
     /// that fell leaves standing, and storage that cannot give way.</summary>
     public long OverLimit => ((Limit is { } limit) ? Math.Max(val1: 0L, val2: (((Held + Promised) - Forced) - limit)) : 0L);
 }
+/// <summary>One taker of a pool's over-limit grants.</summary>
+/// <param name="Taker">The device family (<c>owner/part</c>) or host owner the grants were charged to, or a segment's name
+/// for a device allocation with no family.</param>
+/// <param name="Grants">The grants admitted past the limit.</param>
+/// <param name="Bytes">The bytes those grants admitted past the limit.</param>
+public readonly record struct MemoryOverLimitTaker(string Taker, long Grants, long Bytes);
 /// <summary>One ledger segment's admission figures, in bytes.</summary>
 /// <param name="Backend">The backend whose ledger holds the segment's row.</param>
 /// <param name="Segment">The segment, with its pool.</param>

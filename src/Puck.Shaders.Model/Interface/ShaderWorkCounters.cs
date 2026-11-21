@@ -8,10 +8,15 @@ namespace Puck.Shaders;
 /// The members a pass interface declares when its kernels count their own work (<see cref="GpuWork.KernelKinds"/>) into
 /// their node's kernel counters (<see cref="GpuKernelCounters"/>): the pass's row and first named detail row, and the frame
 /// slot's counter buffer, bound read-write in the pass group. Every generated include (<see cref="ShaderInterfaceHlsl"/>)
-/// declares the counting functions: <c>puckCountWork(steps, texels)</c>, which sums a wave's counts and adds them with its
-/// first active lane, and <c>puckCountFragmentWork(steps, texels)</c>, which does the same for a fragment stage over the
-/// wave's lanes that are not helper lanes, since a helper lane's atomics have no effect. <c>puckCountDetail</c> adds to a
-/// named row per active invocation, including divergent layer branches, <c>puckCountShapes</c> adds a wave's primitive
+/// declares the counting functions: <c>puckCountWork(steps, texels)</c>, which reduces a compute thread group's counts in
+/// groupshared memory and adds them once for the group (so every thread of the group must reach the call, a kernel never
+/// returning ahead of it), and <c>puckCountFragmentWork(steps, texels)</c>, which sums a fragment stage's counts over the
+/// wave's lanes that are not helper lanes, since a helper lane's atomics have no effect, and adds them from the first.
+/// A pass whose row is <see cref="GpuKernelCounters.DisabledRow"/> branches out of each of them, and of
+/// <c>puckCountShapes</c> and <c>puckCountRejectedHit</c>, before any wave, groupshared or atomic work: the pass block's
+/// row is uniform across the dispatch, so the branch is too. <c>puckCountDetail</c> adds to a
+/// named row per active invocation, including divergent layer branches, and is gated by its own detail row alone, which
+/// consumers that decide from named counts rely on; <c>puckCountShapes</c> adds a group's primitive
 /// evaluations to the pass row, and <c>puckCountRejectedHit()</c> adds one hit the mesh hit door rejected
 /// (<see cref="GpuWork.MeshHitsRejected"/>) from the rejecting lane.
 /// An interface that declares all
@@ -101,6 +106,7 @@ public static class ShaderWorkCounters {
             // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
             // empty.
             static const uint PuckWorkRowWords = {{number(GpuKernelCounters.RowWords)}}u;
+            static const uint PuckWorkDisabledRow = 0xFFFFFFFFu;
             static const uint PuckWorkStepsWord = 0u;
             static const uint PuckWorkTexelsWord = {{number(GpuKernelCounters.CountWords)}}u;
             static const uint PuckWorkSkyWord = {{number((2 * GpuKernelCounters.CountWords))}}u;
@@ -123,18 +129,87 @@ public static class ShaderWorkCounters {
                     InterlockedAdd({{Buffer}}[word + 1u], 1u);
                 }
             }
-            // Adds an invocation's march steps and texels written to its pass's row: the wave sums both, and its first active
-            // lane adds each sum. Every lane that did work reaches the call, since a lane that returned before it counts nothing.
-            void puckCountWork(uint steps, uint texels) {
-                uint waveSteps = WaveActiveSum(steps);
-                uint waveTexels = WaveActiveSum(texels);
+            #if !defined(__SHADER_TARGET_STAGE) || (__SHADER_TARGET_STAGE == __SHADER_STAGE_COMPUTE)
+            groupshared uint puckWorkGroupALo;
+            groupshared uint puckWorkGroupAHi;
+            groupshared uint puckWorkGroupBLo;
+            groupshared uint puckWorkGroupBHi;
+            groupshared uint puckWorkGroupLeader;
+            // Reduces two counters across a compute thread group in groupshared memory so each group issues at most one
+            // global atomic per non-zero counter word instead of one per wave. Every thread in the group must reach the call.
+            void puckAddGroupWork(uint wordA, uint a, uint wordB, uint b) {
+                uint waveA = WaveActiveSum(a);
+                uint waveB = WaveActiveSum(b);
 
                 if (WaveIsFirstLane()) {
-                    uint row = (passGroup.{{Row}} * PuckWorkRowWords);
+                    uint ignored;
 
-                    puckAddWork((row + PuckWorkStepsWord), waveSteps);
-                    puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+                    InterlockedExchange(puckWorkGroupALo, 0u, ignored);
+                    InterlockedExchange(puckWorkGroupAHi, 0u, ignored);
+                    InterlockedExchange(puckWorkGroupBLo, 0u, ignored);
+                    InterlockedExchange(puckWorkGroupBHi, 0u, ignored);
+                    InterlockedExchange(puckWorkGroupLeader, 0u, ignored);
                 }
+                GroupMemoryBarrierWithGroupSync();
+
+                bool leader = false;
+
+                if (WaveIsFirstLane()) {
+                    uint prev;
+
+                    InterlockedAdd(puckWorkGroupLeader, 1u, prev);
+                    leader = (prev == 0u);
+                    if (waveA != 0u) {
+                        InterlockedAdd(puckWorkGroupALo, waveA, prev);
+                        if (prev > (0xFFFFFFFFu - waveA)) {
+                            InterlockedAdd(puckWorkGroupAHi, 1u);
+                        }
+                    }
+                    if (waveB != 0u) {
+                        InterlockedAdd(puckWorkGroupBLo, waveB, prev);
+                        if (prev > (0xFFFFFFFFu - waveB)) {
+                            InterlockedAdd(puckWorkGroupBHi, 1u);
+                        }
+                    }
+                }
+                GroupMemoryBarrierWithGroupSync();
+
+                uint groupALo = 0u;
+                uint groupAHi = 0u;
+                uint groupBLo = 0u;
+                uint groupBHi = 0u;
+
+                if (leader) {
+                    groupALo = puckWorkGroupALo;
+                    groupAHi = puckWorkGroupAHi;
+                    groupBLo = puckWorkGroupBLo;
+                    groupBHi = puckWorkGroupBHi;
+                }
+                GroupMemoryBarrierWithGroupSync();
+
+                if (leader) {
+                    puckAddWork(wordA, groupALo);
+                    if (groupAHi != 0u) {
+                        InterlockedAdd({{Buffer}}[wordA + 1u], groupAHi);
+                    }
+                    puckAddWork(wordB, groupBLo);
+                    if (groupBHi != 0u) {
+                        InterlockedAdd({{Buffer}}[wordB + 1u], groupBHi);
+                    }
+                }
+            }
+            #endif
+            // Adds an invocation's march steps and texels written to its pass's row: skips uniformly when counting is
+            // disabled, otherwise reduces across the compute thread group in groupshared memory and adds once per group.
+            void puckCountWork(uint steps, uint texels) {
+                if (passGroup.{{Row}} == PuckWorkDisabledRow) {
+                    return;
+                }
+            #if !defined(__SHADER_TARGET_STAGE) || (__SHADER_TARGET_STAGE == __SHADER_STAGE_COMPUTE)
+                uint row = (passGroup.{{Row}} * PuckWorkRowWords);
+
+                puckAddGroupWork((row + PuckWorkStepsWord), steps, (row + PuckWorkTexelsWord), texels);
+            #endif
             }
             // Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
             // The active lanes may name different rows (divergent layer evaluation): each distinct row among them in turn
@@ -165,18 +240,23 @@ public static class ShaderWorkCounters {
                 }
             }
             void puckCountShapes(uint shapes, uint gradients) {
-                uint waveShapes = WaveActiveSum(shapes);
-                uint waveGradients = WaveActiveSum(gradients);
-                if (WaveIsFirstLane()) {
-                    uint row = passGroup.{{Row}} * PuckWorkRowWords;
-                    puckAddWork(row + PuckWorkShapesWord, waveShapes);
-                    puckAddWork(row + PuckWorkGradientsWord, waveGradients);
+                if (passGroup.{{Row}} == PuckWorkDisabledRow) {
+                    return;
                 }
+            #if !defined(__SHADER_TARGET_STAGE) || (__SHADER_TARGET_STAGE == __SHADER_STAGE_COMPUTE)
+                uint row = (passGroup.{{Row}} * PuckWorkRowWords);
+
+                puckAddGroupWork((row + PuckWorkShapesWord), shapes, (row + PuckWorkGradientsWord), gradients);
+            #endif
             }
-            // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
-            // lanes, and the first of them adds each sum. A helper lane counts nothing and never adds, whether or not the
-            // backend lets it take part in wave operations, since its atomics have no effect.
+            // Adds a fragment's march steps and texels written to its pass's row: skips uniformly when counting is disabled,
+            // otherwise the wave sums its lanes that are not helper lanes, and the first of them adds each sum. A helper
+            // lane counts nothing and never adds, whether or not the backend lets it take part in wave operations, since its
+            // atomics have no effect.
             void puckCountFragmentWork(uint steps, uint texels) {
+                if (passGroup.{{Row}} == PuckWorkDisabledRow) {
+                    return;
+                }
                 bool counting = !IsHelperLane();
                 uint waveSteps = WaveActiveSum(counting ? steps : 0u);
                 uint waveTexels = WaveActiveSum(counting ? texels : 0u);
@@ -191,6 +271,9 @@ public static class ShaderWorkCounters {
             // Adds one hit the mesh hit door rejected to its pass's row, from the rejecting lane alone: a rejection is rare
             // and may sit in divergent control flow, so it takes no wave operation.
             void puckCountRejectedHit() {
+                if (passGroup.{{Row}} == PuckWorkDisabledRow) {
+                    return;
+                }
                 puckAddWork(((passGroup.{{Row}} * PuckWorkRowWords) + PuckWorkRejectedHitsWord), 1u);
             }
 

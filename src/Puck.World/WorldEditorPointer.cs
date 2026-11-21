@@ -213,12 +213,8 @@ public sealed class WorldEditorPointer(WorldSeatViewports viewports, WorldClient
             return null;
         }
 
-        var normal = (field.TryFieldGradient(gradient: out var gradient, position: hit.Point)
-            ? Vector3.Normalize(value: gradient.ToVector3())
-            : Vector3.Zero);
-
         return new WorldEditorPointerHit(
-            Normal: (VectorFunctions.IsFinite(vector: normal) ? normal : Vector3.Zero),
+            Normal: WorldFieldSurface.NormalAt(field: field, point: hit.Point),
             Point: hit.Point.ToRenderRelative(origin: FixedPosition.Zero)
         );
     }

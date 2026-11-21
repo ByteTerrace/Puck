@@ -200,7 +200,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
             slot.SampledTable = sampled;
         }
         Array.Clear(array: m_block);
-        SdfMeshBakeBlock.Write(batch: batch, block: m_block, instanceMaskWordCount: ((uint)maskWords), workCounterDetailRow: 0u, workCounterRow: 0u);
+        SdfMeshBakeBlock.Write(batch: batch, block: m_block, instanceMaskWordCount: ((uint)maskWords), workCounterDetailRow: 0u, workCounterRow: GpuKernelCounters.DisabledRow);
         slot.Block.Write<byte>(data: m_block);
         var world = m_tables.BackgroundWorldSet(slot.Worlds, points, sampled);
 

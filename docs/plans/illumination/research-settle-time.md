@@ -239,8 +239,8 @@ change; the batch in flight at each change was dropped.
   relights a probe) is 3 to 4 s of GPU, which the floor's 18 ms a second stretches to a few minutes; the moving sun
   alone needs 2,496 relights a second to hold level 0's age target, about 23 ms of GPU a second, more than the
   grant, and level 0 printed `[sdf.mesh-gi] behind` 47 times in leg 1.
-- **The authored probe budget never binds.** `render.indirect.budget` grants 122,880 relights and 122,880 traces a
-  second (`worlds/standard/quality.puck`) *(code)*; the GPU share is the limit.
+- **The authored probe budget never binds.** `render.indirect.budget` granted 122,880 relights and 122,880 traces a
+  second (`worlds/standard/quality.puck`, since replaced by a count a frame in each quality table) *(code)*; the GPU share is the limit.
 - **The floor still costs frames.** The budget's own judge (`FramesMissedBehind`, an upper bound) counted 13,159 of
   22,643 frames in leg 1 and 28,692 of 30,705 in leg 3 as frames background work may have cost, with up to 69.6 ms
   of background work directly ahead of one frame in leg 3 (`most-behind`) *(leg)*. The largest single jobs in leg 3

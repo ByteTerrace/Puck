@@ -22,7 +22,7 @@ public sealed partial class WorldEnvironmentResolve {
                 Intensity: Scalar(mirror, indirect?.Apply?.Intensity, 1f, WorldValueFields.IndirectIntensity, applySite),
                 Tint: Rgb(mirror, indirect?.Apply?.Tint, Vector3.One),
                 Contact: Scalar(mirror, indirect?.Apply?.Contact, 1f, WorldValueFields.IndirectContact, applySite)),
-            new SdfIndirectBudget(RelightPerSecond: (indirect?.Budget?.RelightPerSecond ?? 0), TracePerSecond: (indirect?.Budget?.TracePerSecond ?? 0), Age: (indirect?.Budget?.Age ?? 0f)),
+            new SdfIndirectBudget(RelightPerFrame: (indirect?.Budget?.RelightPerFrame ?? 0), TracePerFrame: (indirect?.Budget?.TracePerFrame ?? 0), Age: (indirect?.Budget?.Age ?? 0f)),
             new SdfIndirectLightingGrid(indirect?.LightingGrid?.DirectionDegrees ?? 0, indirect?.LightingGrid?.Radiance ?? 0));
     }
 }
