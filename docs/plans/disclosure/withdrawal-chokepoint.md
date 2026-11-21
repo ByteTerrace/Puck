@@ -1088,9 +1088,10 @@ as `WorldDeliveryCursor.Generation` and `WorldStreamIngress`.
   blanks a neighbour's view on a network hiccup. The authored surface is not:
   a `lease` member on an admission row, carried to the observer when the
   stream is admitted, holding the closed span showable that long, and closed
-  at once when the next session's first record arrives. Its first consumer is
-  a remote neighbour, which nothing in the debug world runs yet; the lane
-  that next works on remote observation builds it.
+  at once when the next session's first record arrives.
+  [The hosted world on a client](../remote-content.md#decision-6-the-lease-after-a-lost-connection)
+  designs it and builds it as its last step; it changes when a span closes and
+  adds nothing to the span, the label or the frame latch.
 - Whether the scene a mirror hands out can become one type that the proof's
   comparison walks, which would retire review-only item 3. Decided for now:
   no. The comparison is small (the frame identity the disclosure table already

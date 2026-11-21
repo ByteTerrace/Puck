@@ -115,6 +115,8 @@ public sealed partial class WorldServer {
             submission: in submission
         );
 
+    /// <inheritdoc cref="WorldTick.NoteFederatedDrop"/>
+    internal void NoteFederatedDrop(int bodyIndex, string? reason) => m_tick.NoteFederatedDrop(bodyIndex: bodyIndex, reason: reason);
     /// <inheritdoc cref="WorldTick.ReadClock"/>
     public long ReadClock(ClockFacet facet) => m_tick.ReadClock(facet: facet);
     /// <inheritdoc cref="WorldTick.ReleaseFederatedIntents"/>
