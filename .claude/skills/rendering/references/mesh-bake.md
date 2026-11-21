@@ -1501,10 +1501,12 @@ laws exercise that boundary.
   (a complete player build's default): a group arriving takes the nearest
   stored rung of its ladder, coarser first (`StoredRung`, in `Place`), a group
   asked another tier keeps what it draws until its demand names another
-  (`StartReplacement`, `Group.RetierRefused`), and a load the account had no
-  room for is read again rather than baked (`Load`). Only a shape the store
+  (`StartReplacement`, `Group.RetierRefused`), and a stored entry the account
+  had no room to read is never baked instead: a tier's replacement gives its
+  place back (`Decline`), and a group with nothing to draw reads again after a
+  doubling wait (`Reload`). Only a shape the store
   holds no rung of bakes. `world.counters sdf.mesh-cache` (`SdfMeshCache`) is
-  the reading: `dispatches`, `groups-baked`, `rungs-missed`, `loads-retried`
+  the reading: `dispatches`, `groups-baked`, `rungs-missed`, `loads-declined`
   and `rungs-filled`. A boot of a whole cache under `Stored` counts none of the
   first three, which is what `puck world player`'s check boots require.
 - **A dynamic group's mesh is stored under its form too.** Its geometry holds

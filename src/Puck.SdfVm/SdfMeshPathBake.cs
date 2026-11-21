@@ -2604,10 +2604,12 @@ public sealed partial class SdfMeshPathBake {
     private void Load(Group group) {
         var loaded = Library.TryLoad(declined: out var declined, form: (group.Dynamic ? group.Form : null), geometry: (group.LoadsForm ? SdfMeshLibrary.FormGeometry(form: group.Form) : group.Sealed), identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refusal: out var refusal);
 
-        // A bake that draws stored rungs alone reads a sound entry the account had no room for again, later, rather
-        // than bake what the store holds.
+        // A bake that draws stored rungs alone never bakes what the store holds because the account had no room to
+        // read it: a tier's replacement gives its place back, so the group keeps drawing the tier it has room for, and
+        // a group with nothing of its own to draw reads its entry again later.
         if (!loaded && declined && (Library.Policy == SdfMeshCachePolicy.Stored)) {
-            Reload(group: group);
+            Library.Cache.Count(kind: SdfMeshCache.LoadsDeclined);
+            if (!Decline(group: group)) { Reload(group: group); }
             return;
         }
         // A dynamic group whose own entry the store turned out not to hold loads the mesh stored of its form.
@@ -3245,6 +3247,9 @@ public sealed partial class SdfMeshPathBake {
         public bool LoadsForm { get; set; }
         // The loads of the group the account has had no room for in a row (SdfMeshPathBake.Reload).
         public int LoadRetries { get; set; }
+        // Whether the group is a tier's replacement whose stored mesh the account had no room to read
+        // (SdfMeshPathBake.Decline): it is done with nothing of its own, and the group it replaces takes its place back.
+        public bool Declined { get; set; }
 
         private SdfMesh? m_floor;
 

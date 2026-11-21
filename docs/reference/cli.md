@@ -394,7 +394,7 @@ drawn too.
   reads the engine's `sdf.mesh-cache` counters when its last wait ends.
 
 `player.json` keeps each boot's reading under `checked` (`places`, `settled`,
-`unsettled`, `dispatches`, `groupsBaked`, `tiersMissed`, `loadsRetried`,
+`unsettled`, `dispatches`, `groupsBaked`, `tiersMissed`, `loadsDeclined`,
 `tiersFilled`, `loaded`). It says `complete` only when every boot settled at
 every place and every check dispatched no lattice, baked no group and missed no
 tier; otherwise `incomplete` lists why, the verb exits 1, and `world caches

@@ -227,6 +227,12 @@ public sealed partial class SdfMeshPathBake {
                 FinishFill(fill: group, index: index, replaced: replaced);
                 continue;
             }
+            if (group.Declined) {
+                m_replacing.RemoveAt(index: at);
+                replaced.RetierRefused = true;
+                GiveBack(index: index, replaced: replaced, replacement: group);
+                continue;
+            }
             if (!group.Done || group.Ahead) { continue; }
             m_replacing.RemoveAt(index: at);
             if (group.Mesh is null) {

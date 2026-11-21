@@ -16,7 +16,7 @@ public enum SdfMeshCachePolicy : byte {
     Ladder,
     /// <summary>Draws stored rungs alone: a rung the store lacks is never baked while it holds another rung of the same
     /// shape, which draws in its place (a group arriving takes the nearest stored rung, coarser first, and a group
-    /// already drawing keeps what it draws), and a load the account has no room for is tried again rather than baked.
+    /// already drawing keeps what it draws), and a stored entry the account has no room to read is never baked instead.
     /// Only a shape the store holds no rung of bakes, since nothing else can draw it. What a build that ships its cache
     /// runs.</summary>
     Stored,
@@ -38,13 +38,14 @@ public static class SdfMeshCache {
     /// <summary>Counts each rung a <see cref="SdfMeshCachePolicy.Stored"/> bake asked that the store lacked, which another
     /// rung of the shape drew in place of.</summary>
     public static readonly WorkKind RungsMissed = new(name: "sdf.mesh-cache.rungs-missed", unit: "groups", workClass: WorkClass.Pacing);
-    /// <summary>Counts each load a <see cref="SdfMeshCachePolicy.Stored"/> bake tried again because the account had no
-    /// room for its workspace.</summary>
-    public static readonly WorkKind LoadsRetried = new(name: "sdf.mesh-cache.loads-retried", unit: "loads", workClass: WorkClass.Pacing);
+    /// <summary>Counts each stored entry a <see cref="SdfMeshCachePolicy.Stored"/> bake could not read because the
+    /// account had no room for it: a tier's replacement then keeps what it draws, and a group with nothing to draw reads
+    /// again later. A device whose memory bar is under what its view demands counts these while it bakes nothing.</summary>
+    public static readonly WorkKind LoadsDeclined = new(name: "sdf.mesh-cache.loads-declined", unit: "loads", workClass: WorkClass.Pacing);
     /// <summary>Counts each rung a <see cref="SdfMeshCachePolicy.Ladder"/> bake baked beyond the one its demand asked.</summary>
     public static readonly WorkKind RungsFilled = new(name: "sdf.mesh-cache.rungs-filled", unit: "groups", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [Dispatches, GroupsBaked, RungsMissed, LoadsRetried, RungsFilled];
+    private static readonly WorkKind[] DeclaredKinds = [Dispatches, GroupsBaked, RungsMissed, LoadsDeclined, RungsFilled];
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// library exists.</summary>

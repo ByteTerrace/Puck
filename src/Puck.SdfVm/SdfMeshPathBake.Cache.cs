@@ -53,7 +53,6 @@ public sealed partial class SdfMeshPathBake {
     // time in a row, so a short account costs a read a group every half minute at most rather than a worker spinning on
     // it. The group stays held meanwhile, offering no lattice. On the pool.
     private void Reload(Group group) {
-        Library.Cache.Count(kind: SdfMeshCache.LoadsRetried);
         using (EnterGate(site: SdfMeshBakeReport.Gate.Load)) {
             if (group.Retired || !GroupList.Holds(group: group)) { return; }
 
@@ -62,6 +61,29 @@ public sealed partial class SdfMeshPathBake {
             group.LoadRetries++;
             m_reloads.Add(item: (group, (System.Diagnostics.Stopwatch.GetTimestamp() + (seconds * System.Diagnostics.Stopwatch.Frequency))));
         }
+    }
+    // Ends a tier's replacement whose stored mesh the account had no room to read: it is done with nothing of its own,
+    // still drawing the mesh of the group it replaces, and FinishReplacements gives that group its place back, not to
+    // be asked that tier again until its demand names another. False for a group that replaces none. On the pool.
+    private bool Decline(Group group) {
+        using (EnterGate(site: SdfMeshBakeReport.Gate.Load)) {
+            if (group.Retired || !GroupList.Holds(group: group) || (group.Replaces is null) || group.Fill) { return false; }
+            group.Declined = true;
+            group.Contouring = false;
+            m_loadsDone++;
+            group.Done = true;
+            Finish();
+            return true;
+        }
+    }
+    // Gives a replacement's place back to the group it stood in for, which drew throughout, and lets the replacement
+    // go with the claims it took. Under the gate, on the frame's thread.
+    private void GiveBack(Group replacement, Group replaced, int index) {
+        Replace(group: replaced, index: index);
+        // Cleared first: a retired group retires the group it replaces.
+        replacement.Replaces = null;
+        m_retiredGroups.Add(item: replacement);
+        replacement.Retired = true;
     }
     // Queues again each held load whose wait has passed. Under the gate, on the frame's thread.
     private void ResumeReloads() {
@@ -197,10 +219,6 @@ public sealed partial class SdfMeshPathBake {
             ladder.Next = Math.Min(val1: ladder.Next, val2: (fill.Tier - 1));
         }
         Library.Cache.Count(kind: SdfMeshCache.RungsFilled);
-        Replace(group: replaced, index: index);
-        // Cleared first: a retired group retires the group it replaces.
-        fill.Replaces = null;
-        m_retiredGroups.Add(item: fill);
-        fill.Retired = true;
+        GiveBack(index: index, replaced: replaced, replacement: fill);
     }
 }

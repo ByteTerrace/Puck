@@ -90,7 +90,7 @@ public static class WorldPlayerCommand {
             With --no-bake, one headless boot fills everything but the meshes. A consumer starts the folder with --world
             worlds/<package> --cache-dir cache; `puck publish` turns it into a release and the installer installs that.
             Writes player.json first as incomplete and last with the commit, runtime, backends, targets and each boot's
-            reading (places, settled, dispatches, groupsBaked, tiersMissed, loadsRetried, tiersFilled, loaded), and prints
+            reading (places, settled, dispatches, groupsBaked, tiersMissed, loadsDeclined, tiersFilled, loaded), and prints
             each part's size. The record says complete only when every boot settled at every place and every check
             dispatched no lattice, baked no group and missed no tier; otherwise it lists why under incomplete, and
             `puck world caches produce` refuses the folder. Each boot's logs are in player-logs/. Exit 0 wrote a whole
@@ -398,17 +398,17 @@ public static class WorldPlayerCommand {
     /// <param name="Dispatches">The lattices the boot's bakes handed the GPU.</param>
     /// <param name="GroupsBaked">The groups that began a bake.</param>
     /// <param name="RungsMissed">The tiers a stored-only boot asked that the store lacked.</param>
-    /// <param name="LoadsRetried">The loads a stored-only boot tried again for want of workspace memory.</param>
+    /// <param name="LoadsDeclined">The stored entries a stored-only boot could not read for want of memory.</param>
     /// <param name="RungsFilled">The tiers a ladder boot baked beyond its demand.</param>
     /// <param name="Loaded">The groups the boot's bakes loaded from the store, summed over every start it reported.</param>
-    public sealed record BootReading(int Places, IReadOnlyList<string> Unsettled, long Dispatches, long GroupsBaked, long RungsMissed, long LoadsRetried, long RungsFilled, int Loaded) {
+    public sealed record BootReading(int Places, IReadOnlyList<string> Unsettled, long Dispatches, long GroupsBaked, long RungsMissed, long LoadsDeclined, long RungsFilled, int Loaded) {
         /// <summary>Gets whether the boot took everything it drew from the store: no lattice dispatched, no group baked
         /// and no tier missed.</summary>
         public bool Hits => ((Dispatches == 0L) && (GroupsBaked == 0L) && (RungsMissed == 0L));
 
         /// <summary>Describes the counts in one line, as the verb prints them.</summary>
         /// <returns>The line.</returns>
-        public string Describe() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"dispatches {Dispatches}, groups baked {GroupsBaked}, tiers missed {RungsMissed}, loads retried {LoadsRetried}, tiers filled {RungsFilled}, groups loaded {Loaded}");
+        public string Describe() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"dispatches {Dispatches}, groups baked {GroupsBaked}, tiers missed {RungsMissed}, loads declined {LoadsDeclined}, tiers filled {RungsFilled}, groups loaded {Loaded}");
         /// <summary>Writes the reading as <c>player.json</c> records it.</summary>
         /// <returns>The object.</returns>
         public JsonObject ToJson() => new() {
@@ -418,7 +418,7 @@ public static class WorldPlayerCommand {
             ["dispatches"] = Dispatches,
             ["groupsBaked"] = GroupsBaked,
             ["tiersMissed"] = RungsMissed,
-            ["loadsRetried"] = LoadsRetried,
+            ["loadsDeclined"] = LoadsDeclined,
             ["tiersFilled"] = RungsFilled,
             ["loaded"] = Loaded,
         };
@@ -484,7 +484,7 @@ public static class WorldPlayerCommand {
                     Dispatches: Counted(kind: Puck.SdfVm.SdfMeshCache.Dispatches),
                     GroupsBaked: Counted(kind: Puck.SdfVm.SdfMeshCache.GroupsBaked),
                     Loaded: process.LinesFrom(from: 0).Where(predicate: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] start ")).Sum(selector: static row => CliLineFields.Count(line: row.Text, name: "loading")),
-                    LoadsRetried: Counted(kind: Puck.SdfVm.SdfMeshCache.LoadsRetried),
+                    LoadsDeclined: Counted(kind: Puck.SdfVm.SdfMeshCache.LoadsDeclined),
                     Places: stood,
                     RungsFilled: Counted(kind: Puck.SdfVm.SdfMeshCache.RungsFilled),
                     RungsMissed: Counted(kind: Puck.SdfVm.SdfMeshCache.RungsMissed),

@@ -307,7 +307,8 @@ the set lacks, and the set no longer depends on which targets it was made for.
 A dynamic group's mesh is stored under its form as well as its posed geometry,
 so a body at another pose loads it. A player's build then runs the stored
 policy: where a tier is missing it draws the nearest stored one and never bakes
-it, and it reads a load its memory had no room for again. Only a shape the
+it, and an entry its memory has no room to read is held (the tier it draws
+stays) or read again, never baked. Only a shape the
 store holds no tier of bakes, because nothing else can draw it: a world whose
 rules make new static geometry in play (dealt cards, set type) bakes that
 geometry on any machine. The guarantee stops at what the authored spawn points
