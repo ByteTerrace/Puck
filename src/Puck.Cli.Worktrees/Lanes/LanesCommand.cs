@@ -182,7 +182,7 @@ public static partial class LanesCommand {
         if (words.Length < 2) { return "active"; }
         return (words[1].StartsWith(comparisonType: StringComparison.Ordinal, value: "done") ? "done" : (words[1].StartsWith(comparisonType: StringComparison.Ordinal, value: "blocked") ? "blocked" : "active"));
     }
-    private static async Task<LaneRow> ReadAsync(Worktree worktree, bool main, string mainRoot, string leaseRoot, string baseRef, TimeSpan stall, DateTimeOffset now, CancellationToken cancellationToken) {
+    private static async Task<LaneRow> ReadAsync(Worktree worktree, bool main, string mainRoot, IReadOnlyList<(string Resource, CliLease.LeaseState State)> leases, string baseRef, TimeSpan stall, DateTimeOffset now, CancellationToken cancellationToken) {
         var name = System.IO.Path.GetFileName(path: worktree.Path.TrimEnd(trimChar: '/'));
         var branch = (worktree.Branch ?? "(detached)");
         string? error = null;
@@ -282,10 +282,8 @@ public static partial class LanesCommand {
         bool Mine(string? checkout, string? lane) => ((checkout is not null) ? CliPaths.Same(left: checkout, right: worktree.Path) : ((lane is not null) && names.Contains(item: lane)));
         var uses = new List<LeaseUse>();
 
-        foreach (var resource in Leases) {
-            var state = CliLease.Inspect(name: resource, now: now, root: leaseRoot);
-
-            if (state.HolderAlive && Mine(checkout: state.Checkout, lane: state.Lane)) { uses.Add(item: new LeaseUse(Ahead: null, Lanes: null, Position: null, Resource: resource, State: "holding", Ticket: null)); }
+        foreach (var (resource, state) in leases) {
+            if (state.Holders.Any(predicate: held => held.Alive && Mine(checkout: held.Checkout, lane: held.Lane))) { uses.Add(item: new LeaseUse(Ahead: null, Lanes: null, Position: null, Resource: resource, State: "holding", Ticket: null)); }
             foreach (var ticket in state.Queue.Where(predicate: ticket => Mine(checkout: ticket.Checkout, lane: ticket.Lane))) {
                 uses.Add(item: new LeaseUse(Ahead: ticket.Ahead, Lanes: ticket.Lanes, Position: ticket.Position, Resource: resource, State: "queued", Ticket: ticket.Id));
                 break;
@@ -327,11 +325,14 @@ public static partial class LanesCommand {
         var worktrees = CliWorktree.Parse(listing: listing.Stdout);
         var mainRoot = worktrees[0].Path;
         var leases = (leaseRoot ?? System.IO.Path.Combine(path1: mainRoot, path2: ".claude", path3: "leases"));
+        // Read once for every row: a row only matches holders and waiters to its worktree, and rows read in parallel would
+        // each prune what another is probing for liveness.
+        (string Resource, CliLease.LeaseState State)[] states = [.. Leases.Select(selector: resource => (resource, CliLease.Inspect(name: resource, now: now, root: leases)))];
         using var gate = new SemaphoreSlim(initialCount: 6);
         var rows = await Task.WhenAll(tasks: worktrees.Select(selector: async (worktree, index) => {
             await gate.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             try {
-                return await ReadAsync(baseRef: baseRef, cancellationToken: cancellationToken, leaseRoot: leases, main: (index == 0), mainRoot: mainRoot, now: now, stall: stall, worktree: worktree).ConfigureAwait(continueOnCapturedContext: false);
+                return await ReadAsync(baseRef: baseRef, cancellationToken: cancellationToken, leases: states, main: (index == 0), mainRoot: mainRoot, now: now, stall: stall, worktree: worktree).ConfigureAwait(continueOnCapturedContext: false);
             } finally { _ = gate.Release(); }
         })).ConfigureAwait(continueOnCapturedContext: false);
 

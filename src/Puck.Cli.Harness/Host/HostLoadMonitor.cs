@@ -16,7 +16,10 @@ namespace Puck.Cli.Host;
 /// <param name="CommitLimitGb">The system's commit limit, in gigabytes; NaN when the platform reports none.</param>
 /// <param name="Starts">The running processes the host tracks for admission (<see cref="HostProcesses.RunningStart"/>) with
 /// their private bytes, or <see langword="null"/> when the reading lists none.</param>
-public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, double FreeRamGb, double FreeDiskGb, string? GpuHolder, int ReuseNodes, string? HeavyTestHolder = null, double CommitChargeGb = double.NaN, double CommitLimitGb = double.NaN, IReadOnlyList<HostRunningStart>? Starts = null) {
+/// <param name="Holds">The gpu and heavy holds other processes were admitted to (<see cref="CliLease.AdmittedHolds"/>), each with
+/// its holder's process tree measured, or <see langword="null"/> when the reading lists none. The reading process's own holds
+/// and its ancestors' are left out: its own reservations and starts cover the first, and its work spends the second.</param>
+public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, double FreeRamGb, double FreeDiskGb, string? GpuHolder, int ReuseNodes, string? HeavyTestHolder = null, double CommitChargeGb = double.NaN, double CommitLimitGb = double.NaN, IReadOnlyList<HostRunningStart>? Starts = null, IReadOnlyList<HostLeaseHold>? Holds = null) {
     /// <summary>Gets the commit charge as a percentage of the commit limit: allocations fail at 100 whatever physical memory
     /// is free. NaN when the charge or the limit is unknown.</summary>
     public double CommitPercent => ((double.IsFinite(d: CommitChargeGb) && double.IsFinite(d: CommitLimitGb) && (CommitLimitGb > 0)) ? (100.0 * CommitChargeGb / CommitLimitGb) : double.NaN);
@@ -47,11 +50,32 @@ public readonly record struct HostRunningStart(int Id, HostStartKind Kind, doubl
     /// free memory: its private working set; its whole working set when the reading carries no private working set; its
     /// private bytes when it carries neither. Each stand-in is never less than the quantity it replaces, so a reading that
     /// cannot split residency judges conservatively.</summary>
-    public double ResidentGb => (double.IsFinite(d: PrivateResidentGb) ? PrivateResidentGb : (double.IsFinite(d: WorkingSetGb) ? WorkingSetGb : PrivateGb));
+    public double ResidentGb => ResidentOf(privateGb: PrivateGb, privateResidentGb: PrivateResidentGb, workingSetGb: WorkingSetGb);
+    /// <summary>Returns the physical memory a process needs resident, in gigabytes, as <see cref="ResidentGb"/> judges it: the
+    /// private working set, else the whole working set, else the private bytes.</summary>
+    /// <param name="privateGb">The process's private bytes, in gigabytes.</param>
+    /// <param name="privateResidentGb">The process's private working set, in gigabytes, or NaN when unknown.</param>
+    /// <param name="workingSetGb">The process's whole working set, in gigabytes, or NaN when unknown.</param>
+    /// <returns>The resident need, in gigabytes.</returns>
+    public static double ResidentOf(double privateGb, double privateResidentGb, double workingSetGb) => (double.IsFinite(d: privateResidentGb) ? privateResidentGb : (double.IsFinite(d: workingSetGb) ? workingSetGb : privateGb));
     /// <summary>Gets the process's whole working set, in gigabytes, for reporting: <see cref="WorkingSetGb"/>, or
     /// <see cref="ResidentGb"/> when the reading carries none.</summary>
     public double HeldGb => (double.IsFinite(d: WorkingSetGb) ? Math.Max(val1: WorkingSetGb, val2: ResidentGb) : ResidentGb);
 }
+/// <summary>A lease another process holds for admitted work, with the process tree that work runs in measured.</summary>
+/// <param name="Lease">The resource: gpu or heavy.</param>
+/// <param name="Holder">The holder name.</param>
+/// <param name="Id">The holder's process id.</param>
+/// <param name="StartTicks">The holder process's UTC start ticks.</param>
+/// <param name="Kind">The expected peak class of the work the hold covers.</param>
+/// <param name="Device">Whether the work opens a GPU device.</param>
+/// <param name="PrivateGb">The private bytes of the holder and its descendants together, in gigabytes.</param>
+/// <param name="ResidentGb">The private working set of the holder and its descendants together, in gigabytes (each process's
+/// whole working set, or its private bytes, where the platform does not split it).</param>
+/// <param name="CpuSeconds">The CPU time the holder and its live descendants have used, in seconds; NaN when none of them
+/// reports it.</param>
+/// <param name="Members">The ids of the holder and every descendant process.</param>
+public readonly record struct HostLeaseHold(string Lease, string Holder, int Id, long StartTicks, HostStartKind Kind, bool Device, double PrivateGb, double ResidentGb, double CpuSeconds, IReadOnlyList<int> Members);
 /// <summary>The thresholds that turn readings into admission lines. A threshold left out is never judged, so with
 /// none the monitor reports only GPU transitions. A start's need is its own expected peak (<see cref="HostStartTracker"/>),
 /// judged in two quantities that are not the same: its private bytes (commit) against the commit headroom less a reserve

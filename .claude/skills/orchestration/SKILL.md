@@ -1003,7 +1003,7 @@ times out under load is re-run once alone and reported as a flake. Only
 wall-clock work needs a quiet machine, and the lead takes it: a lane judges
 by counts and lists the timing reads it wants, and the lead runs them in a
 window it has cleared of every other lane's builds, suites, evals and World
-runs, or grants the lane interleaved A/B rounds under the heavy lease. A
+runs, or grants the lane interleaved A/B rounds under `puck lease heavy --exclusive`. A
 brief that measures boot, compile or frame time grants no GPU and takes no
 timing while other lanes run.
 
@@ -1068,13 +1068,15 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
 `LOADED` when capacity ends without pressure, `PRESSURE`, `GPU busy` and
 `GPU idle`), so each change arrives once:
 
-- On capacity, admit the next job. A heavy job (a solution build plus a full
-  suite) is one at a time per machine: a full
-  `Puck.World.Tests` or `Puck.World.Presentation.Tests` run never runs beside
-  another. `puck gate` and `puck affected` acquire the existing heavy lease
-  around each heavy suite, sample headroom while holding it, and release it on
-  every exit. Nested runs under `puck lease heavy` serialize on child leases
-  after validating the ancestor holder's process identity.
+- On capacity, admit the next job. Heavy jobs share the machine by measured
+  headroom: the heavy lease takes several holders while admission covers each
+  new one's expected peak beside what the running ones still have to grow, and
+  a further heavy start waits on CPU while the CPU is over the capacity
+  threshold. `puck gate` and `puck affected` acquire a heavy slot around each
+  heavy suite and release it on every exit; a run that must not share the
+  machine passes `puck lease heavy --exclusive`. Nested runs under
+  `puck lease heavy` serialize on child leases after validating the ancestor
+  holder's process identity.
 - A lane never runs a full `puck test worlds/debug` sweep (every test world, a
   long heavy run): the brief names the test files its
   change can reach, and the lead runs one full sweep on the integrated head. A lane
@@ -1090,7 +1092,7 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   `lane`, defaulting to the checkout's directory name. A waiter that is killed
   leaves a ticket the next waiter drops; a stale `<name>.queue` entry needs no
   manual cleanup
-  ([CLI reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work)).
+  ([CLI reference](../../../docs/reference/cli.md#puck-leaseshared-machine-work)).
 - The GPU is the scarce resource (the owner's direction): most running lanes are
   GPU-free (CPU work shown headless), and a lane whose finish line needs a
   windowed World is started only when the GPU queue can take it, three granted

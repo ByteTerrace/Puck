@@ -1,9 +1,9 @@
 namespace Puck.Cli;
 
 /// <summary>The machine-wide heavy lease every heavy run takes the same way: a heavy test suite (<c>puck gate</c>, <c>puck affected</c>) and a
-/// multi-world <c>puck test</c>. Two heavy runs at once exhaust memory, so each admits before holding the lease for execution, under the
-/// checkout's lane. A run already under <c>puck lease heavy</c> nests, since <see cref="ProcessInspection.IsAncestor"/> recognizes the holder
-/// as its own ancestor.</summary>
+/// multi-world <c>puck test</c>. Heavy runs share the lease while host admission covers each one's expected peak beside what the
+/// others still have to grow, so each admits before holding a slot for execution, under the checkout's lane. A run already under
+/// <c>puck lease heavy</c> nests, since <see cref="ProcessInspection.IsAncestor"/> recognizes the holder as its own ancestor.</summary>
 public static class HeavyLease {
     /// <summary>Admits without a hold, then holds the shared heavy lease for the run's execution.</summary>
     /// <param name="repositoryRoot">The checkout whose common Git directory owns the lease.</param>

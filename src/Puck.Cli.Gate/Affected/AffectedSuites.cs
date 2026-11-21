@@ -21,8 +21,8 @@ public sealed record AffectedSuiteResult(int ExitCode, IReadOnlyList<string> Rep
 /// of exactly those projects, then runs their test hosts side by side, at most <c>--suite-jobs</c> at once, each on the
 /// build that invocation left (<c>dotnet test --project &lt;suite&gt; --no-build</c>, CPU tests only). Heavy suites start
 /// first, and each holds the shared heavy lease through admission and execution
-/// (<see cref="HeavyLease"/>, <see cref="HostAdmission"/>): no other heavy run on the machine, and
-/// memory and disk headroom.
+/// (<see cref="HeavyLease"/>, <see cref="HostAdmission"/>): memory, commit and disk headroom for its expected peak beside
+/// what other heavy holders still have to grow, and CPU headroom while another runs.
 /// </summary>
 public static class AffectedSuites {
     // A build or a suite killed at this ceiling has hung; the slowest suite runs for a few minutes.

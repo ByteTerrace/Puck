@@ -20,7 +20,8 @@ namespace Puck.Cli.Host;
 public static class HostProcesses {
     /// <summary>The test assemblies whose device laws open a GPU device: the gate's device-suite steps.</summary>
     public static readonly IReadOnlyList<string> DeviceTestAssemblies = ["Puck.World.Tests", "Puck.DirectX.Tests", "Puck.Vulkan.Tests", "Puck.Platform.Windows.Tests"];
-    /// <summary>The test assemblies whose full run is heavy: the machine takes one at a time, whoever starts it.</summary>
+    /// <summary>The test assemblies whose full run is heavy: each run takes the heavy lease and is tracked as a heavy-suite
+    /// start, whose measured peak admission reserves.</summary>
     public static readonly IReadOnlyList<string> HeavyTestAssemblies = ["Puck.SdfVm.Tests", "Puck.World.Presentation.Tests", "Puck.World.Tests"];
     private static readonly string[] NeverWork = ["powershell", "pwsh", "bash", "sh", "cmd", "grep", "conhost", "MSBuild", "csc", "VBCSCompiler"];
     private static readonly string[] ExecValueOptions = ["--depsfile", "--runtimeconfig", "--additionalprobingpath", "--additional-deps", "--fx-version", "--roll-forward", "--roll-forward-on-no-candidate-fx"];
