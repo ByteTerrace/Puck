@@ -1409,15 +1409,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             m_owner = owner;
             m_sourceAuthority = sourceAuthority;
             m_lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: owner.m_lifetime.Token);
-            m_worker = Task.Run(function: async () => {
-                try {
-                    await RunAsync(ct: m_lifetime.Token).ConfigureAwait(continueOnCapturedContext: false);
-                    Puck.World.Protocol.RcProbe.Note($"pump.exit '{sourceAuthority}' ended (lacksSigningIdentity={owner.LacksSigningIdentity()})");
-                } catch (Exception exception) {
-                    Puck.World.Protocol.RcProbe.Note($"pump.fault '{sourceAuthority}' {exception.GetType().Name}: {exception.Message}");
-                    throw;
-                }
-            });
+            m_worker = Task.Run(function: () => RunAsync(ct: m_lifetime.Token));
         }
 
         private async Task HandoffAsync(Stream stream, CancellationToken ct) {
@@ -1604,13 +1596,11 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         !response.Ok ||
                         (response.Kind != ((byte)WorldFederationResponse.Ack))
                     ) {
-                        Puck.World.Protocol.RcProbe.Note($"pump.refused {DescribeHandshake(read: response, stage: "intent stream update")}");
                         throw new IOException(message: DescribeHandshake(
                             read: response,
                             stage: "intent stream update"
                         ));
                     }
-                    Puck.World.Protocol.RcProbe.Note("pump.acked", $"moved={(sent.Intent != default)}");
 
                     if (!string.Equals(
                         a: connectedEndpoint,
@@ -1683,10 +1673,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 (acknowledged.Submission == submission) &&
                 (m_owner.m_clock.GetElapsedTime(startingTimestamp: acknowledged.Timestamp) < IntentAcknowledgementWindow)
             ) {
-                Puck.World.Protocol.RcProbe.Note("pump.publish unchanged since its acknowledgement");
                 return;
             }
-            Puck.World.Protocol.RcProbe.Note("pump.publish queued", $"moved={(submission.Intent != default)} tick={submission.Tick}");
             var pending = m_pending.GetOrAdd(key: key, valueFactory: static _ => new());
 
             lock (pending) {

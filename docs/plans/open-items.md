@@ -735,46 +735,34 @@ whose check boots did not settle with no tier missed.
 
 ### A hosted world on a client
 
-Owner: federation and presentation; a principal's design, reviewed by another
-family, before code · high, M1 · Next: read it on a real pair. Boot a
-listening World and a `--connect` client on one staged document
-([the benchmark](#the-benchmark) holds the staging), and on the client read
-`world.nesting` and capture the press, an emulator cabinet, a chess screen and
-a gallery painting.
+Owner: federation and presentation · high, M1 · Next: another family's review
+of [the design](remote-content.md), then its
+[build order](remote-content.md#the-build-order), whose first steps are the
+pair started from `puck_world_start` and the remote seat's input.
 
 - [high] A world delivered from another authority shows no text, no machines
   and no session screens on the client that presents it
-  ([worlds](../architecture/worlds.md#observation-and-display)). Read in the
-  code: a machine screen asks the machine host of a world this process runs
-  and gets none for a remote one (`WorldScreenBinder.MachinesOf`), and a
-  delivered world's fonts resolve beside a document directory it does not
-  carry (`WorldTextCatalog`, `WorldDefinition.DocumentDirectory`). The session
-  screens' half is the architecture page's statement and was not traced. On
-  the RTX 2060 against the hosted authority this would blank every gallery
-  painting, the press, the emulator cabinets and the chess screens, so the
-  debug world would stop proving the idea in the topology M1 is about. The
-  design weighs two answers and may take one per kind:
-  - *The client runs them from its own package.* A player build ships the
-    world's package, so fonts and other content resolve by content pin from
-    it. A deterministic machine runs on the client from the cartridge it
-    ships, driven by the inputs the authority replicates, and a session
-    screen's world runs as a local replica the way a routed session already
-    renders through its own residency. It costs the authority nothing per
-    viewer and needs every machine input on the wire and a way to join a
-    machine in progress (its saved image).
-  - *The authority streams them.* The authority sends machine frames and
-    screen images. It needs no determinism on the client, and it costs
-    encoded video per viewer per screen, which does not survive a town's
-    worth of viewers.
-  Check: the capture set above on the client matches the same set taken in
-  process. At scale: a hub of a dozen worlds shows a dozen worlds' screens, so
-  the answer must cost by what a viewer looks at.
-- [high] A remote seat does not play. The defects are read and listed in
-  [the benchmark](#the-benchmark)'s remote-authority item: a `--connect`
-  traveller's input does not move its body, the debug world admits no remote
-  player, a replica travels as one capped message, a replica that names
-  content by relative path fails validation, and the client still steps its
-  whole boot world. M1 needs each closed, not worked around per world.
+  ([worlds](../architecture/worlds.md#observation-and-display)). On the RTX
+  2060 against the hosted authority this would blank every gallery painting,
+  the press, the emulator cabinets and the chess screens. The design settles
+  one answer for all three: the authority sends content pins, a machine's
+  image and inputs, and a window's relayed delivery, and the client computes
+  the picture. Check: the capture set (the press, an emulator cabinet, a chess
+  screen and a gallery painting) on the client matches the same set taken in
+  process, which is the lead's windowed leg after the design's step 7.
+- [high] A remote seat does not play. The design fixes each defect at its
+  cause: a remote input batch is refused by the authority's input admission
+  for its capture time and then refused forever
+  ([what ran](remote-content.md#what-ran-and-what-it-settled)), the debug
+  world admits no remote player, a replica travels as one capped message, a
+  delivered document that names content by relative path fails validation, and
+  the client still steps its whole boot world.
+- [medium] The debug world's transfer to a remote authority is refused at the
+  reservation, before any input: the answer embeds the whole document, which
+  the client refuses for its relative paths and for a rule that reads a
+  withheld cell. The design's steps 3 and 4 close it.
+- [low] `body.where` for a seat whose body is on a remote authority fails with
+  a null reference on the client. The design's step 5 checks it.
 
 ### A multi-seat client
 
@@ -4238,10 +4226,12 @@ the stages; this packet holds what a stage does not.
   - A `--connect` traveller's seat input does not move its body on the remote
     authority. With the transfer committed and deliveries arriving, a held
     `player.signal gamepad.leftStick 0 1` leaves `body.where` unchanged for 90
-    ticks and neither process names a refusal. The client submits through
-    `WorldFederatedServerLink.SubmitIntent`, and the authority admits through
-    `WorldTick.PublishFederatedIntent`; where the input is lost between them is
-    not known. This blocks every remote route, on any world.
+    ticks. The input reaches the authority and is refused by its input
+    admission (`WorldInputOwner.TryAdmit`): the batch that carries the stick's
+    movement is refused for its capture time, and every batch after it for
+    disagreeing with a movement the authority never took
+    ([what ran](remote-content.md#what-ran-and-what-it-settled)). This blocks
+    every remote route, on any world.
   - `--connect` resolves its remote destination from the document the client
     booted and refuses one that authors no `host.authorityNamespace`
     (`WorldInstanceHost`'s remote destination resolution). The subject a run

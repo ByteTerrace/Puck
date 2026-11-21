@@ -141,13 +141,8 @@ public sealed class WorldFederatedServerLink(IWorldRoutedRequests authority) : I
             submission: in submission,
             reason: out var reason
         )) {
-            RcProbe.Note($"link.intent body:{submission.EntityIndex} forwarded owner={submission.InputOwner?.Describe() ?? "none"} principal={submission.Principal.Describe()}");
-            if (!submission.Input.Events.IsEmpty) {
-                RcProbe.Note("link.intent events", $"tick={submission.Tick} batchTick={submission.Input.Tick} revision={submission.Input.Revision} epoch={submission.Input.Epoch} events={submission.Input.Events.Length} firstCapture={submission.Input.Events.Span[0].CaptureTick} offset={submission.Input.Events.Span[0].Offset}");
-            }
             NoteAvailable(bodyIndex: submission.EntityIndex);
         } else {
-            RcProbe.Note($"link.intent body:{submission.EntityIndex} refused: {reason}");
             NoteUnavailable(
                 bodyIndex: submission.EntityIndex,
                 reason: reason
