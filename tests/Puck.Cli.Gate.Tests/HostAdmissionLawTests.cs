@@ -17,7 +17,7 @@ public sealed class HostAdmissionLawTests {
 
     // A commit reading is a percentage of a 40 GB commit limit; none is a platform that reports no limit. Free memory
     // defaults to plenty, so a law about commit is not also a law about physical memory.
-    private static HostSample Sample(double cpu = 0, double ram = 64, double disk = 100, string? gpu = null, string? heavy = null, double? commit = null, double limit = 40, HostRunningStart[]? starts = null, HostLeaseHold[]? holds = null) => new(At: DateTimeOffset.UnixEpoch, CpuPercent: cpu, FreeDiskGb: disk, FreeRamGb: ram, GpuHolder: gpu, HeavyTestHolder: heavy, ReuseNodes: 42, CommitChargeGb: ((commit is { } percent) ? (percent * limit / 100.0) : double.NaN), CommitLimitGb: ((commit is null) ? double.NaN : limit), Starts: starts, Holds: holds);
+    private static HostSample Sample(double cpu = 0, double ram = 64, double disk = 100, string? gpu = null, string? heavy = null, double? commit = null, double limit = 40, HostRunningStart[]? starts = null, HostLeaseHold[]? holds = null, double deviceTotal = double.NaN, double deviceUsed = double.NaN) => new(At: DateTimeOffset.UnixEpoch, CpuPercent: cpu, FreeDiskGb: disk, FreeRamGb: ram, GpuHolder: gpu, HeavyTestHolder: heavy, ReuseNodes: 42, CommitChargeGb: ((commit is { } percent) ? (percent * limit / 100.0) : double.NaN), CommitLimitGb: ((commit is null) ? double.NaN : limit), Starts: starts, Holds: holds, DeviceTotalGb: deviceTotal, DeviceUsedGb: deviceUsed);
     // Another lane's heavy hold: `puck lease heavy` PID 41, whose tree holds `privateGb` of commit (resident alike) and has
     // used `cpuSeconds` of CPU, with the given members beside the holder.
     private static HostLeaseHold HeavyHold(double privateGb, double cpuSeconds = 0, HostStartKind kind = HostStartKind.HeavySuite, params int[] members) =>
@@ -35,7 +35,7 @@ public sealed class HostAdmissionLawTests {
     public void HostOptionsDefaultToTheAdmissionThresholdsAndStillAllowOverrides() {
         var load = HostCommand.Create().Subcommands.Single(predicate: command => (command.Name == "load"));
         var defaults = HostLoadThresholds.ThisMachine;
-        (string Name, double? Value)[] thresholds = [("--capacity-cpu", defaults.CapacityCpuPercent), ("--commit-reserve", defaults.CommitReservePercent),("--pressure-ram", defaults.PressureRamGb), ("--pressure-disk", defaults.PressureDiskGb)];
+        (string Name, double? Value)[] thresholds = [("--capacity-cpu", defaults.CapacityCpuPercent), ("--commit-reserve", defaults.CommitReservePercent), ("--device-full", defaults.DeviceFullPercent),("--pressure-ram", defaults.PressureRamGb), ("--pressure-disk", defaults.PressureDiskGb)];
 
         foreach (var (name, value) in thresholds) {
             var option = ((Option<double?>)load.Options.Single(predicate: option => (option.Name == name)));
@@ -73,10 +73,10 @@ public sealed class HostAdmissionLawTests {
         return new HostStartTracker(root);
     }
     // Feeds one finished process of a kind to a tracker over the shared root: seen, then gone after a plateau.
-    private static void Observed(string root, GateClock clock, HostStartKind kind, int id, double privateGb, double workingSetGb, double privateResidentGb = double.NaN) {
+    private static void Observed(string root, GateClock clock, HostStartKind kind, int id, double privateGb, double workingSetGb, double privateResidentGb = double.NaN, HostStartProfile? marked = null) {
         var tracker = new HostStartTracker(root);
 
-        _ = tracker.Judge(reading: Sample(starts: [new(Id: id, Kind: kind, PrivateGb: privateGb, PrivateResidentGb: privateResidentGb, StartTicks: id, WorkingSetGb: workingSetGb)]), kind: HostStartKind.Step, thresholds: Desk, clock: clock, reserve: false);
+        _ = tracker.Judge(reading: Sample(starts: [new(Id: id, Kind: kind, PrivateGb: privateGb, PrivateResidentGb: privateResidentGb, StartTicks: id, WorkingSetGb: workingSetGb, Marked: marked)]), kind: HostStartKind.Step, thresholds: Desk, clock: clock, reserve: false);
         clock.Advance(HostStartTracker.Plateau);
         _ = tracker.Judge(reading: Sample(), kind: HostStartKind.Step, thresholds: Desk, clock: clock, reserve: false);
     }
@@ -663,7 +663,7 @@ public sealed class HostAdmissionLawTests {
         var asked = new List<(string Step, bool Device, bool Heavy, HostStartKind Kind)>();
         using var error = new StringWriter();
         HostAdmit admit = (checkout, step, device, heavySuite, kind, bound, reserve, progress, stage, cancellationToken) => {
-            asked.Add(item: (step, device, heavySuite, kind));
+            asked.Add(item: (step, device, heavySuite, kind.Kind));
 
             return Task.FromResult(result: HostAdmission.Wait(step, device, heavySuite, () => ((readings++ < 2) ? Sample(commit: 98, limit: 64) : Sample(commit: 60, limit: 64)), clock, clock.Advance, error, cancellationToken, Thresholds, bound, stage, kind, reserve: reserve));
         };
@@ -775,19 +775,15 @@ public sealed class HostAdmissionLawTests {
 
             Assert.True(CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).HolderAlive);
 
-            // Another lane's start, short of headroom: it waits the shortage out, then queues behind the lane that holds the
-            // GPU, or runs beside it in a heavy slot of its own once headroom covers it.
+            // Another lane's start, short of headroom: it waits the shortage out, then runs beside the lane that holds the
+            // lease in a slot of its own once headroom covers it.
             tight = true;
 
             var queued = WorldLaunch.AdmitAsync((lane with { Holder = "b", Lane = "b" }), token);
 
             await shortReadings.WaitAsync(token);
-            if (resource == "gpu") {
-                Assert.False(queued.IsCompleted);
-            } else {
-                _ = await queued.WaitAsync(token);
-                Assert.Equal(["a", "b"], CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).Holders.Select(static held => held.Holder));
-            }
+            _ = await queued.WaitAsync(token);
+            Assert.Equal(["a", "b"], CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).Holders.Select(static held => held.Holder));
             first.Dispose();
 
             using var second = await queued;
@@ -1050,6 +1046,134 @@ public sealed class HostAdmissionLawTests {
     [Theory]
     public void ShellsBuildsAndOtherProcessesAreNotTrackedStarts(string name, string commandLine) =>
         Assert.Null(@object: HostProcesses.RunningStart(name: name, commandLine: commandLine));
+    // A windowed World is judged by its own profile: its mesh store (a cold boot bakes every mesh and peaks far higher) and
+    // its backend are measured in windows of their own, so the cold bakes never set what a warm session must find free.
+    [Fact]
+    public void AColdStoreAndEachBackendAreMeasuredInWindowsOfTheirOwn() {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        var clock = new GateClock();
+        var windowed = new HostStartProfile(HostStartKind.WindowedWorld);
+
+        Observed(directory.RootPath, clock, HostStartKind.WindowedWorld, id: 1, privateGb: 12, workingSetGb: 9, privateResidentGb: 8, marked: windowed);
+        Observed(directory.RootPath, clock, HostStartKind.WindowedWorld, id: 2, privateGb: 22, workingSetGb: 17, privateResidentGb: 15, marked: windowed.Cold);
+        Observed(directory.RootPath, clock, HostStartKind.WindowedWorld, id: 3, privateGb: 14, workingSetGb: 10, privateResidentGb: 9, marked: (windowed with { Device = "vulkan" }));
+        // An unmarked World is judged by its kind alone.
+        Observed(directory.RootPath, clock, HostStartKind.WindowedWorld, id: 4, privateGb: 12, workingSetGb: 9, privateResidentGb: 8);
+
+        var next = new HostStartTracker(directory.RootPath);
+
+        Assert.Equal(expected: 12.0, actual: next.ExpectedPeaks(kind: windowed).PrivateGb);
+        Assert.Equal(expected: 22.0, actual: next.ExpectedPeaks(kind: windowed.Cold).PrivateGb);
+        Assert.Equal(expected: 14.0, actual: next.ExpectedPeaks(kind: (windowed with { Device = "vulkan" })).PrivateGb);
+        Assert.Equal(expected: ["WindowedWorld", "WindowedWorld.cold", "WindowedWorld.vulkan"], actual: Directory.EnumerateFiles(Path.Combine(directory.RootPath, HostStartTracker.ObservationDirectory)).Where(static file => !file.EndsWith(".guard")).Select(static file => Path.GetFileName(file)).Order().ToArray());
+        // Neither dimension means anything to a heavy suite, so a mark that names them measures the same window.
+        Assert.Equal(expected: next.ExpectedPeaks(kind: HostStartKind.HeavySuite), actual: next.ExpectedPeaks(kind: new HostStartProfile(HostStartKind.HeavySuite, "vulkan", StoreWarmth.Cold)));
+    }
+    // With a warm window of 12 GB and a cold one of 22 GB measured, 14 GB of free memory admits a warm start and not a cold
+    // one: the cold bakes no longer set what every windowed start must find free.
+    [Fact]
+    public void AWarmStartIsAdmittedWhereAColdStartIsNot() {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        var peaks = Path.Combine(directory.RootPath, HostStartTracker.ObservationDirectory);
+
+        Directory.CreateDirectory(peaks);
+        File.WriteAllText(Path.Combine(peaks, "WindowedWorld"), "1 1 12 8 9\n");
+        File.WriteAllText(Path.Combine(peaks, "WindowedWorld.cold"), "1 1 22 15 16\n");
+
+        var reading = Sample(commit: 30, limit: 64, ram: 14);
+        var warm = new HostStartTracker(directory.RootPath).Judge(reading: reading, kind: HostStartKind.WindowedWorld, thresholds: Desk, clock: new GateClock(), reserve: false);
+        var cold = new HostStartTracker(directory.RootPath).Judge(reading: reading, kind: new HostStartProfile(HostStartKind.WindowedWorld).Cold, thresholds: Desk, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (true, true, 8.0, "WindowedWorld"), actual: (warm.CommitCovered, warm.PhysicalCovered, warm.ResidentOwnGb, warm.Profile!.Value.Name));
+        Assert.Equal(expected: (true, false, 15.0, "WindowedWorld.cold"), actual: (cold.CommitCovered, cold.PhysicalCovered, cold.ResidentOwnGb, cold.Profile!.Value.Name));
+    }
+    // Before a profile has an observation, a cold windowed World is expected to peak at the cold bake's figure, and a running
+    // start still growing is expected to reach the peak of the profile its launch marked.
+    [Fact]
+    public void AnUnmeasuredColdStartAndAMarkedRunningStartExpectTheColdPeak() {
+        var tracker = new HostStartTracker();
+        var cold = new HostStartProfile(HostStartKind.WindowedWorld).Cold;
+        var growing = new HostRunningStart(Id: 11, Kind: HostStartKind.WindowedWorld, PrivateGb: 2, StartTicks: 1);
+
+        Assert.Equal(expected: HostLoadThresholds.ColdWindowedWorldPeakGb, actual: tracker.ExpectedPeaks(kind: cold, thresholds: Desk).PrivateGb);
+        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb, actual: tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld, thresholds: Desk).PrivateGb);
+
+        var unmarked = new HostStartTracker().Judge(reading: Sample(starts: [growing]), kind: HostStartKind.Step, thresholds: Desk, clock: new GateClock(), reserve: false);
+        var marked = new HostStartTracker().Judge(reading: Sample(starts: [growing with { Marked = cold }]), kind: HostStartKind.Step, thresholds: Desk, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (HostLoadThresholds.WindowedWorldPeakGb - 2, HostLoadThresholds.ColdWindowedWorldPeakGb - 2), actual: (unmarked.GrowthGb, marked.GrowthGb));
+    }
+    // A device start shares the GPU with a working holder while the dedicated video memory in use is under 95% of the
+    // device's (11.4 GB of a 12 GB device). It waits for the holder once the device is full, or when the device cannot be
+    // measured, and a lone start never waits.
+    [InlineData(12.0, 4.0, true)]
+    [InlineData(12.0, 9.9, true)]
+    [InlineData(12.0, 11.3, true)]
+    [InlineData(12.0, 11.4, false)]
+    [InlineData(12.0, 14.0, false)]
+    [InlineData(double.NaN, double.NaN, false)]
+    [Theory]
+    public void ADeviceStartSharesTheGpuWhileItsMemoryHasHeadroom(double total, double used, bool admitted) {
+        var clock = new GateClock();
+        using var error = new StringWriter();
+
+        Assert.Equal(expected: admitted, actual: HostAdmission.Wait("start", true, false, () => Sample(gpu: "Puck.World 9", deviceTotal: total, deviceUsed: used), clock, clock.Advance, error, CancellationToken.None, Thresholds, TimeSpan.FromSeconds(seconds: 25), null, HostStartKind.Step, new HostStartTracker()));
+        if (!admitted) { Assert.Contains(expectedSubstring: "the GPU is held by Puck.World 9", actualString: error.ToString()); }
+        if (!admitted && double.IsFinite(total)) { Assert.Contains(expectedSubstring: $"with {used:0.0}GB of {total:0.0}GB device memory in use", actualString: error.ToString()); }
+        // Nothing else working on the device: a full GPU never holds the lone start back.
+        Assert.True(HostAdmission.Wait("start", true, false, () => Sample(deviceTotal: 12, deviceUsed: 11.9), clock, clock.Advance, error, CancellationToken.None, Thresholds, TimeSpan.FromSeconds(seconds: 25), null, HostStartKind.Step, new HostStartTracker()));
+        // A step that opens no device never waits on the GPU.
+        Assert.True(HostAdmission.Wait("build", false, false, () => Sample(gpu: "Puck.World 9", deviceTotal: 12, deviceUsed: 11.9), clock, clock.Advance, error, CancellationToken.None, Thresholds, TimeSpan.FromSeconds(seconds: 25), null, HostStartKind.Step, new HostStartTracker()));
+    }
+    // The counter's instances are one per process and adapter: the instances that share an adapter's luid add up, and the
+    // busiest adapter's total is the memory in use.
+    [Fact]
+    public void TheDeviceMemoryInUseIsTheBusiestAdaptersInstancesAddedUp() {
+        const long Gb = 1073741824;
+
+        Assert.Equal(expected: 4.0, actual: HostGpuMeter.Used([
+            ("pid_100_luid_0x00000000_0x0000AAAA_phys_0", (3 * Gb)),
+            ("pid_200_luid_0x00000000_0x0000AAAA_phys_0", (1 * Gb)),
+            ("pid_100_luid_0x00000000_0x0000BBBB_phys_0", (2 * Gb)),
+            ("pid_300_luid_0x00000000_0x0000BBBB_phys_0", (1 * Gb)),
+        ]));
+        Assert.Equal(expected: 0.0, actual: HostGpuMeter.Used([]));
+    }
+    // A hold whose tree uses no CPU for a plateau is idle, and the tracker marks it for the whole machine (the probe then
+    // leaves its device out), as it marks an idle start; a hold that is working is not marked.
+    [Fact]
+    public void AGpuHolderThatSitsIdleIsMarkedIdleForTheMachine() {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        var clock = new GateClock();
+        var tracker = new HostStartTracker(directory.RootPath);
+        var mark = Path.Combine(directory.RootPath, "start-idle", "41-41");
+
+        HostLeaseHold Hold(double cpuSeconds) => (HeavyHold(privateGb: 6, cpuSeconds: cpuSeconds, kind: HostStartKind.WindowedWorld) with { Device = true, Lease = "gpu" });
+
+        _ = tracker.Judge(reading: Sample(holds: [Hold(cpuSeconds: 10)]), kind: HostStartKind.Step, thresholds: Desk, clock: clock, reserve: false);
+        clock.Advance(HostStartTracker.Plateau);
+        _ = tracker.Judge(reading: Sample(holds: [Hold(cpuSeconds: 40)]), kind: HostStartKind.Step, thresholds: Desk, clock: clock, reserve: false);
+        Assert.False(File.Exists(mark));
+
+        clock.Advance(HostStartTracker.Plateau);
+        _ = tracker.Judge(reading: Sample(holds: [Hold(cpuSeconds: 40)]), kind: HostStartKind.Step, thresholds: Desk, clock: clock, reserve: false);
+        Assert.True(File.Exists(mark));
+    }
+    [InlineData(WorldShape.Windowed)]
+    [InlineData(WorldShape.Document)]
+    [Theory]
+    public void ALaunchPredictsItsProfileFromItsBackendAndItsMeshStore(WorldShape shape) {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        var request = new WorldLaunchRequest(Artifact: "Puck.World.dll", Step: "law") { Arguments = ["--cache-dir", directory.RootPath], Backend = Puck.World.WorldBackendPreference.Vulkan, Shape = shape };
+
+        // An empty store bakes every mesh; one that holds a mesh loads them.
+        Assert.Equal(new HostStartProfile(HostStartKind.WindowedWorld, "vulkan", StoreWarmth.Cold), request.Profile);
+        Directory.CreateDirectory(directory.PathOf("meshes"));
+        File.WriteAllText(directory.PathOf("meshes/a.mesh"), "mesh");
+        Assert.Equal(new HostStartProfile(HostStartKind.WindowedWorld, "vulkan"), request.Profile);
+        Assert.Equal(new HostStartProfile(HostStartKind.WindowedWorld), (request with { Backend = null }).Profile);
+        Assert.Equal(new HostStartProfile(HostStartKind.HeadlessWorld), (request with { Shape = WorldShape.Headless }).Profile);
+    }
     [Fact]
     public void PersistentPressureStopsAtTheBoundAndCancellationStartsNothing() {
         var clock = new GateClock();

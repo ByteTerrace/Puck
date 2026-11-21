@@ -102,7 +102,7 @@ public static partial class FrameBenchmarks {
             SweepWorld BootWorld(string log, SuiteBudget budget) {
                 Directory.CreateDirectory(log);
                 var request = new WorldLaunchRequest("bench frames", build.Path) {
-                    Shape = shape, Backend = backend, World = Path.GetFullPath(parse.GetValue(options.World)!),
+                    Shape = shape, Backend = backend, Timing = true, World = Path.GetFullPath(parse.GetValue(options.World)!),
                     StateDirectory = Path.Combine(log, "state"), ExitAfterSeconds = 0,
                     Arguments = ["--width", parse.GetValue(options.Width).ToString(CultureInfo.InvariantCulture), "--height", parse.GetValue(options.Height).ToString(CultureInfo.InvariantCulture),
                         .. (parse.GetValue(options.Cache) is { } cache ? new[] { "--cache-dir", Path.GetFullPath(cache) } : [])],

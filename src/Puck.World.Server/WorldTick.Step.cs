@@ -1047,7 +1047,7 @@ public sealed partial class WorldTick {
             if (pending is { } reason) {
                 held = true;
                 if (PendingReason != reason) {
-                    var partitions = (reason == Puck.Hosting.Jobs.JobPool.JoinWait) ? Host.Jobs?.DescribeHeldPartitions() : null;
+                    var partitions = (reason == Puck.Hosting.Jobs.JobPool.JoinWait) ? Host.Jobs?.DescribeHeldPartitions(Puck.Hosting.Jobs.JobClass.Tick) : null;
                     var detail = string.IsNullOrEmpty(partitions) ? reason.ToString() : $"{reason} (held partitions {partitions})";
                     m_tickBlock = new TickBlock(reason, m_pendingTick.PreviousEngineTicks, detail, Environment.CurrentManagedThreadId);
                 }

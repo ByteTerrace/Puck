@@ -125,8 +125,9 @@ public sealed class WorldPresentationProbe(TimeProvider? time = null) {
     private static ulong ProgramHash(SdfProgram program) {
         var hash = Fnv1aHash.Create();
 
-        hash.Add(value: ((uint)program.Words.Length));
-        foreach (var word in program.Words) { hash.Add(value: word); }
+        hash.Add(value: ((uint)program.WordCount));
+        foreach (var word in program.FieldWords) { hash.Add(value: word); }
+        foreach (var word in program.ShadingWords) { hash.Add(value: word); }
         hash.Add(value: ((uint)program.Appearance.ScreenSurfaceWords.Length));
         foreach (var word in program.Appearance.ScreenSurfaceWords) { hash.Add(value: word); }
         return hash.Value;

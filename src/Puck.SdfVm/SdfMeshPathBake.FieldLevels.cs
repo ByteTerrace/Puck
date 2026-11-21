@@ -162,7 +162,7 @@ public sealed partial class SdfMeshPathBake {
         }
         if (contour.QuadCount == 0) { return null; }
 
-        var creases = CreaseVertices(contour: contour, workspace: null);
+        var creases = CreaseVertices(allocator: null, contour: contour, workspace: null);
 
         if (creases.Length > 0) {
             using var projection = new ContourProjection(contour: contour);

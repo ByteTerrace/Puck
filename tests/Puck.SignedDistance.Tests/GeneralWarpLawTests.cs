@@ -143,11 +143,11 @@ public sealed class GeneralWarpLawTests {
         };
 
         foreach (var c in cases) {
-            Assert.True(condition: Program(warp: c.Sugar).Words.SequenceEqual(other: Program(warp: b => b.RotatePlane(
+            Assert.True(condition: Program(warp: c.Sugar).CopyWords().AsSpan().SequenceEqual(other: Program(warp: b => b.RotatePlane(
                 driver: c.Driver,
                 plane: c.Plane,
                 rate: 0.3f
-            )).Words));
+            )).CopyWords()));
         }
     }
     [Fact]

@@ -59,7 +59,7 @@ public static class GateCommand {
             Checks write nothing.
             Before each heavy step, admission waits for memory and disk headroom by host load's default thresholds.
             CPU load is advisory: a step runs whatever the CPU, and the gate prints a load over the threshold.
-            A step that opens a device (the --gpu steps) also waits for an idle GPU, and a heavy suite
+            A step that opens a device (the --gpu steps) also waits while the GPU's video memory is full beside another working device holder, and a heavy suite
             ({string.Join(separator: ", ", values: HostProcesses.HeavyTestAssemblies)}, also inside affected --run) holds the shared
             heavy lease through admission and execution. Nested runs use serialized child leases after
             validating the ancestor holder, so they never wait on their own enclosing lease.

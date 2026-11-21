@@ -396,14 +396,14 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_VISIBILITY_ZERO_NORMAL", value: SdfVisibility.ZeroNormal);
         declarations.Section(title: "The mesh region's draw record (SdfMeshRecord) and the level shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshLevelShift).");
         declarations.Count(name: "SDF_MESH_DRAW_WORDS", value: SdfMeshRecord.DrawWords);
-        declarations.Count(name: "SDF_MESH_MATRIX_WORDS", value: SdfMeshRecord.MatrixWords);
+        declarations.Count(name: "SDF_MESH_POSE_WORDS", value: SdfMeshRecord.PoseWords);
+        declarations.Count(name: "SDF_MESH_SCALE_WORD", value: SdfMeshRecord.ScaleWord);
         declarations.Count(name: "SDF_MESH_MATERIAL_WORD", value: SdfMeshRecord.MaterialWord);
         declarations.Count(name: "SDF_MESH_INDEX_WORD", value: SdfMeshRecord.IndexWord);
         declarations.Count(name: "SDF_MESH_INDEX_COUNT_WORD", value: SdfMeshRecord.IndexCountWord);
         declarations.Count(name: "SDF_MESH_VERTEX_WORD", value: SdfMeshRecord.VertexWord);
         declarations.Count(name: "SDF_MESH_FLAGS_WORD", value: SdfMeshRecord.FlagsWord);
         declarations.Count(name: "SDF_MESH_TRIANGLE_MATERIAL_WORD", value: SdfMeshRecord.TriangleMaterialWord);
-        declarations.Count(name: "SDF_MESH_NORMAL_MATRIX_WORD", value: SdfMeshRecord.NormalMatrixWord);
         declarations.Count(name: "SDF_MESH_FRAME_SLOT_WORD", value: SdfMeshRecord.FrameSlotWord);
         declarations.Count(name: "SDF_MESH_SKIN_WORD", value: SdfMeshRecord.SkinWord);
         declarations.Count(name: "SDF_MESH_SKIN_VERTEX_WORDS", value: SdfMeshRecord.SkinVertexWords);
@@ -415,6 +415,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_SELECTION_WORD", value: SdfMeshRecord.SelectionWord);
         declarations.Count(name: "SDF_MESH_ABSENT_FLAG", value: SdfMeshRecord.AbsentFlag);
         declarations.Count(name: "SDF_MESH_DYNAMIC_FLAG", value: SdfMeshRecord.DynamicFlag);
+        declarations.Count(name: "SDF_MESH_SLOT_BOX_FLAG", value: SdfMeshRecord.SlotBoxFlag);
         declarations.Count(name: "SDF_MESH_VERTEX_WORDS", value: SdfMeshRecord.VertexWords);
         declarations.Count(name: "SDF_MESH_MEMBER_WORDS", value: SdfMeshRecord.MemberWords);
         declarations.Bits(name: "SDF_MESH_NORMALS_FLAG", value: SdfMeshRecord.NormalsFlag);

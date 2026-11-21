@@ -721,7 +721,18 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   its error in display pixels over the box's nearest depth, with the 1.1-pixel
   band kept per draw in the GPU state, a cascade's by its texel. The residency
   uploads bounds and level metadata once
-  in each changed mesh record; every raster pass uploads 224 bytes of controls
+  in each changed mesh record. A draw riding its frame slot (`SdfMeshDraw.RidesSlot`:
+  every draw with a frame slot, whose matrix is the slot's pose at its scale)
+  keeps its scale as its pose and its box in the slot's frame
+  (`SdfMeshRecord.SlotBoxFlag`); the kernels pose it from the slot's row
+  (`sdfMeshPoseOf`) and derive its world box the same way (`sdfSelectionBox`), so
+  a body that moves rewrites its slot's row and no record. The host judges it by
+  `SdfMeshBox.Ridden`, the box's twin, held per row as last judged
+  (`SdfWorldTables.RowSelection`) and moved as its slot moves (`NoteMovedSlots`);
+  a producer that names a slot builds the draw's matrix from that slot's
+  transform in the same frame, or the CPU and the kernels place it apart. A cut
+  of a rider's pose history (`SdfMeshObservation.PoseCut`) reseats its slot's
+  previous row (`ReseatRiddenSlot`). Every raster pass uploads 224 bytes of controls
   and records one counted indirect draw per phase. A draw with no
   box draws its merged mesh, so a skinned body never coarsens. A shape that
   changes when `world.detail 0` is set is the level's.
@@ -839,15 +850,17 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   (`SdfPoseOverlay`: first slot, slot count, first overlay row) makes that view
   read a stamp's dynamic-transform slots from other rows of the same table: the
   pass block's `poseOverlay`, applied by `sdfViewPoseSlot` (`frame/sdf-mesh.hlsli`)
-  to every skin member read (`sdfMeshSkinSlotsOf`), to the draw's own frame slot
-  through `sdfViewPoseCarry` in `sdfMeshWorldVertex` and `sdfMeshPreviousPosition`
-  (a draw's matrix is its frame slot's own row), and to a hit's shading frame
+  to every skin member read (`sdfMeshSkinSlotsOf`), to the frame slot a draw rides
+  (`sdfMeshPoseOf`, `sdfMeshPreviousPoseOf`, so the view poses the draw from the
+  overlay row), and to a hit's shading frame
   (`sdfMeshHitFrameSlot`, `sdfMeshSurfaceNormal`). Only a seat's own view carries
   one, for its guess layer (`WorldCreationInstances.GuessOverlay`); a new reader of
   a mesh vertex's or a hit's slot goes through `sdfViewPoseSlot`, or that view draws
   the shared pose there. A light anchored to a slot, a mirror's or portal's own
-  view and the host's anchors read the shared rows, and a rigid draw is culled by
-  its shared pose's box.
+  view and the host's anchors read the shared rows. The GPU culls a rigid draw by
+  the box its view poses it at (`sdfSelectionBox`); the motion scopes judge it by
+  its shared pose's box, and an overlay row that moves meets that view's scopes
+  whole.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else. Views and glass visit lights
   through one walk (`sdfLightWalkStart`, `sdfLightNext`) over two masks
@@ -1535,7 +1548,9 @@ creations' drivers and effector surface probes, and the mesh dresser), never a
 screenshot, so it costs whatever the scene animates with nothing armed; `pack`
 is `SdfWorldTables.Pack`, mostly the changed mesh records
 (`sdf.instances.records.changed` per frame; `records.posed` of them moved their
-matrix alone and wrote only their pose words through `StagePose`).
+matrix alone and wrote only their pose words through `StagePose`). A draw riding
+its frame slot moves with the slot's row and packs no record, so a moving body
+counts in `sdf.transforms`, never in `records.posed`.
 
 - **The far cascade is the frame's largest variable pass; read whether it
   holds.** With box-only selection it draws nearly every caster in a 280 m box out to 200 m toward the
@@ -1619,6 +1634,15 @@ matrix alone and wrote only their pose words through `StagePose`).
   through the composition source's copy journal (`SdfFrame.MeshCopyChanges`, a `GpuChangedRows` read by a
   `GpuRowCursor`), which the dresser and the bake's layout check each read. `sdf.instances.dress.groups-visited`,
   `.groups-stood` and `.copies-visited` count it.
+- **The pose pack forks by registration.** `WorldCreationInstances.PackTransforms` decides every registration in a
+  serial pass (`BeginStep`), poses the woken ones across the `JobPool` as one `JobClass.Frame` fork, one partition a
+  registration (`Pose`, `PackRegistration`), and settles them in pool order (`EndStep`). A partition writes only its own
+  registration and slot range and keeps its scratch on its own stack; anything shared it would write (a list, a pool
+  field, a counter that is not interlocked) belongs in `BeginStep` or `EndStep`. A rig that reads another body
+  (`Registration.ReadsBodies`) poses after the fork, so a new read of another registration's pose goes through a body
+  read or it races. The state mirror's slot table takes a lease's first acquisition from many partitions under one
+  gate (`WorldStateMirror.Acquire`); its install, refresh and apply never run during the fork.
+  `sdf.creations.registrations.forked` counts the forked poses.
 - **A program's bake plan is made on its build thread.** The composition
   source hands each program its background build finishes to
   `ISdfFrameSource.ObserveBuilds`, the residency plans it there

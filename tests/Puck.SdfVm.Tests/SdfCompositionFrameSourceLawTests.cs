@@ -239,7 +239,7 @@ public sealed class SdfCompositionFrameSourceLawTests {
                 _ = builder.EndInstance();
             }
         }
-        public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
+        public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) {
             if (!moved.Everything) {
                 return;
             }

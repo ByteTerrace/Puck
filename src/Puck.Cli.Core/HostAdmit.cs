@@ -5,9 +5,11 @@ namespace Puck.Cli;
 /// it in, as it does <see cref="LeaseSettle"/>).</summary>
 /// <param name="checkout">The checkout whose drive's free disk is judged.</param>
 /// <param name="step">The step's name, for the wait lines.</param>
-/// <param name="device">Whether the step opens a GPU device, and so also waits for an idle GPU.</param>
+/// <param name="device">Whether the step opens a GPU device, and so also waits while the GPU is full beside another working
+/// device holder.</param>
 /// <param name="heavySuite">Whether the step runs heavy work, and so also waits for CPU headroom while another process's heavy hold runs.</param>
-/// <param name="kind">What the start is, which sets the commit it is expected to peak at.</param>
+/// <param name="profile">What the start is, which sets the commit it is expected to peak at: its kind, and for a windowed
+/// World its backend and whether its mesh store is warm.</param>
 /// <param name="bound">How long to wait, at most, or <see langword="null"/> for the admission's own bound.</param>
 /// <param name="reserve">Whether an admitted start reserves its expected peak; pre-lease judgements reserve nothing.</param>
 /// <param name="progress">Receives the wait lines.</param>
@@ -15,4 +17,4 @@ namespace Puck.Cli;
 /// ignore it.</param>
 /// <param name="cancellationToken">Stops the wait.</param>
 /// <returns><see langword="true"/> once the host can take the step; <see langword="false"/> when the bound passed first.</returns>
-public delegate Task<bool> HostAdmit(string checkout, string step, bool device, bool heavySuite, HostStartKind kind, TimeSpan? bound, bool reserve, TextWriter progress, Action<string>? stage, CancellationToken cancellationToken);
+public delegate Task<bool> HostAdmit(string checkout, string step, bool device, bool heavySuite, HostStartProfile profile, TimeSpan? bound, bool reserve, TextWriter progress, Action<string>? stage, CancellationToken cancellationToken);

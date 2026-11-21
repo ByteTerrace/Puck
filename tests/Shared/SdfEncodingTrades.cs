@@ -36,7 +36,7 @@ internal static class SdfEncodingTrades {
     // The words of a packer that writes every rigid leaf's rotation X into Y and Y into X: the rigid-leaf plan follows the
     // segment directory header's rigid-plan lane, one vector per segment, then three per leaf, the rotation the second.
     public static uint[] RigidLeafRotationXySwapped(SdfProgram program) {
-        var words = program.Words.ToArray();
+        var words = program.CopyWords();
         var segmentOffset = SegmentDirectoryOf(program: program, words: words);
         var segmentCount = ((int)words[((segmentOffset * 4) + SdfProgram.SegmentCountLane)]);
         var planOffset = ((int)words[((segmentOffset * 4) + SdfProgram.SegmentRigidPlanLane)]);
@@ -57,7 +57,7 @@ internal static class SdfEncodingTrades {
     // path's table starts at the vector its instruction's Data0.x bits name, two vectors an edge, the radii the second's
     // x and y.
     public static uint[] PathRadiiSwapped(SdfProgram program) {
-        var words = program.Words.ToArray();
+        var words = program.CopyWords();
 
         foreach (var instruction in program.Instructions.Where(predicate: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Path))))) {
             var table = ((int)BitConverter.SingleToUInt32Bits(value: instruction.Data0.X));
