@@ -391,7 +391,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     public void Step(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs) {
         var generation = 0UL;
         var result = StepSegment(deltaTicks: deltaTicks, inputs: inputs, generation: ref generation,
-            deadline: QueuedWorkerLifecycle<GroupWorkItem>.StandaloneDeadline());
+            deadline: WaitDeadline.Synchronous());
         _ = QueuedWorkerLifecycle<GroupWorkItem>.RequireSettled(result);
     }
     /// <summary>Accepts one exact tick/seat-input segment for ordered execution, applying producer backpressure at the
@@ -402,7 +402,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     public QueuedMachineSubmission Submit(ulong deltaTicks, ReadOnlySpan<MachinePadState> inputs) {
         var generation = 0UL;
         var result = EnqueueStep(deltaTicks: deltaTicks, inputs: inputs, forceStage: false, generation: ref generation,
-            deadline: QueuedWorkerLifecycle<GroupWorkItem>.StandaloneDeadline());
+            deadline: WaitDeadline.Synchronous());
         return QueuedWorkerLifecycle<GroupWorkItem>.RequireSettled(result);
     }
 

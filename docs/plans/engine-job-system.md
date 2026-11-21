@@ -1018,9 +1018,11 @@ Only the stall deadline declares a device lost or an authority stalled.
   so an admission that times out never took a permit and releases none), a
   task, a monitor condition (the caller holds the monitor and re-tests its
   condition), a thread's join, and `Until`, which sleeps to the deadline and is
-  the pacer's own. On the pump thread a deadline is clipped to what the
+  the pacer's own. On the pump thread a slice deadline is clipped to what the
   iteration's allowance has left, and the time a wait took is charged to it, so
-  sequential waits cannot each spend a full budget. The door keeps the standing
+  sequential waits cannot each spend a full budget. A synchronous deadline
+  (`WaitDeadline.Synchronous`), which a door that completes its operation or
+  throws mints because it cannot resume the wait, is charged and never clipped. The door keeps the standing
   waits and the latest expired ones (reason, thread, start, budget), which is
   what `world.wait` and `host.frames` read. A wait that finds its object
   already complete records nothing and allocates nothing.
