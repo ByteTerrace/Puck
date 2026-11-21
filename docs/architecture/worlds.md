@@ -892,8 +892,10 @@ A peer reopens for a fresh primer: a snapshot alone cannot repair a missed defin
 or authority route. The queued records retain their original order and authority/session epochs until that
 invalidation; no later record enters a detached queue. A retired authority route detaches with
 `world.observation.invalidated`, and a composition its recipient's disclosure refuses
-(`WorldDisclosureException`) with `world.observation.disclosure`. Any other failure to compose is a
-fault, and faulting sinks still detach independently.
+(`WorldDisclosureException`) with `world.observation.disclosure`. A record the receiver's cap for its kind
+(`WorldFederationCodec.MaxResponseBytes`) would refuse detaches with `world.observation.oversize` instead of
+being sent; a snapshot's cap is the federation frame ceiling, which a primer's cells and the rest of the
+snapshot share. Any other failure to compose is a fault, and faulting sinks still detach independently.
 
 Session queries cross the same disclosure decision as delivery. A `Frames` session reads no query result;
 `Presentation` sessions can query only recipient-filtered state observations, whose projection is also used
