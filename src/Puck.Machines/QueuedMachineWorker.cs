@@ -156,6 +156,10 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// <summary>Gets the number of accepted segments whose emulation has completed.</summary>
     public long CompletedSteps =>
         checked((Interlocked.Read(location: ref m_checkpointCompletedSteps) + m_lifecycle.CompletedSteps));
+    /// <summary>Gets the host time the worker thread has spent running segments since the current core was
+    /// attached.</summary>
+    public TimeSpan StepBusyTime =>
+        m_lifecycle.StepBusyTime;
     /// <summary>Gets the light the framebuffer emits — its average color, normalized 0..1.</summary>
     public Vector3 EmittedLight {
         get {
@@ -643,7 +647,7 @@ public sealed class QueuedMachineWorker : IDisposable {
 
         try {
             while (true) {
-                current = m_lifecycle.TakeWork();
+                current = m_lifecycle.TakeWork(takenTimestamp: out var takenAt);
 
                 switch (current.Kind) {
                     case WorkKind.Step:
@@ -699,7 +703,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                             stagedNativeFrame = nativeFrame;
                         }
 
-                        m_lifecycle.CompleteStep();
+                        m_lifecycle.CompleteStep(startedTimestamp: takenAt);
 
                         // The interval means native frames, not submitted work items — one native-frame count that is
                         // independent of how many exact segments each frame took.
@@ -976,7 +980,8 @@ public sealed class QueuedMachineWorker : IDisposable {
             m_lentStagedNativeFrame = nativeFrame;
         }
 
-        m_lifecycle.CompleteStep();
+        // The step ran on the link's thread, whose own lifecycle charges its time.
+        m_lifecycle.CompleteStep(startedTimestamp: 0L);
 
         if ((nativeFrame - m_lentFlushNativeFrame) >= SaveFlushIntervalFrames) {
             m_lentFlushNativeFrame = nativeFrame;

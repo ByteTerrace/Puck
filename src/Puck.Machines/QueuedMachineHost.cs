@@ -85,6 +85,8 @@ public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime
     /// <inheritdoc/>
     public long NativeFrameIndex => m_worker.NativeFrameIndex;
     /// <inheritdoc/>
+    public TimeSpan StepBusyTime => m_worker.StepBusyTime;
+    /// <inheritdoc/>
     public Vector3 EmittedLight => m_worker.EmittedLight;
     /// <inheritdoc/>
     public IReadOnlyDictionary<string, IMachineInputPort> InputPorts { get; }
