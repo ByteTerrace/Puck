@@ -3,8 +3,12 @@
 This memo answers [the job system's open question 7](engine-job-system.md#open-questions)
 and designs item 1 of [the CPU frame](open-items.md#the-cpu-frame): the
 in-process authority steps on a thread of its own, and the frame presents the
-latest completed tick. It is a design. Another family reviews it before any
-code is written, and [the steps](#the-steps) are what is built afterwards.
+latest completed tick. Another family reviewed its first draft and raised
+fifteen findings. This revision answers each
+([the review's findings](#the-reviews-findings)), and the findings changed the
+build order: the frame cannot run beside the tick until the frame reads no
+live authority state, and the review showed how much it reads today.
+[The steps](#the-steps) are what is built.
 
 ## Summary
 
@@ -39,6 +43,12 @@ Three properties follow.
 
 The old path, in which the pump executes the tick, is deleted. No toggle
 selects it.
+
+The work lands in three stages. The first moves no behaviour: the tick's
+parts are separated and the frame thread's cheap readers are fixed. The second
+closes each place the frame reads the authority, one structural door at a
+time, while the loop still waits for every tick. The third stops the wait,
+and that is where the frame time falls.
 
 ## What the code does today
 
@@ -90,8 +100,8 @@ Each authority tick has three parts, and the design places each on a thread.
    source watch and reload polls, seat route changes, seat views and seat
    intents (`WorldInstanceHost.PrepareBootSeatIntents`), and the transfer
    drain (`WorldInstanceHost.DrainPendingTransfers`). For each world it is the
-   server's mailbox drain, which stays on the pump because a mailbox entry can
-   reach the host's own tables.
+   server's mailbox drain and the tick's adjacency record, which stay on the
+   pump because both can reach the host's own tables.
 2. **Execute, on the step thread.** The part `WorldServerStepShell.TryStep`
    runs under `WorldServer.AuthorityGate` today: the replay tape's injection,
    `WorldTick.TryAdvance`, the mutation journal's flush, the journal fold and
@@ -129,11 +139,30 @@ host step is two waves, which keeps today's order of events.
   another wave, so its next intents are composed after its last tick was
   collected, as now.
 
-Within the second wave this changes two things about order, both
-deterministic. An instance that an earlier instance's settle stops in the
-same host step has already taken its tick. An instance that a settle starts
-takes its first tick in the next host step. Instances do not observe one
-another inside a host step, so nothing else moves.
+The two waves are kept, and not merged into one, because one wave would move
+every scenario's input by a tick: the test runner's lines would reach the
+sibling worlds a host step later than they do now. Two waves keep every
+script's order, at the cost of a second hand-off in a host step.
+
+Within the second wave five things about order change. Each is deterministic
+on one step thread, and each moves state hashes for the scenarios it reaches,
+which are re-recorded in the step that makes the change.
+
+- An instance that an earlier instance's settle stops in the same host step
+  has already taken its tick.
+- An instance that a settle starts takes its first tick in the next host
+  step.
+- A later instance no longer sees an earlier instance's delivery from the
+  same wave. Its adjacency contacts and link liveness
+  (`WorldTick.ObserveAdjacencyDeliveries`) read its neighbours as of the
+  previous collect.
+- Input a portal forwards from one instance to another
+  (`WorldPortalInputProducer.Forward`, from the settle after the source's
+  tick) arrives a host step later, since both ticks execute before the
+  source is collected.
+- An instance that takes several ticks in a host step takes them breadth
+  first, a wave each, where today it takes them all before the next instance
+  steps. The session resolver mints its generation ids in that new order.
 
 A replay drive that fast-forwards steps several boot ticks in one host step
 today. Each of those is its own wave, and the pump waits for it, so a
@@ -162,36 +191,72 @@ complete, keep its input, ask again.
 | Paced, producing frames, the last tick due this iteration | None: it polls | Produces, showing the last collected tick |
 | The same, an earlier tick of a catch-up burst | The pump's wait allowance (`HostWaits.PumpAllowance`) | Waits, because the next tick's input needs this tick's results |
 | Lockstep (`HostPacing.StepsOneTickPerFrame`), a capture's hold, the offscreen host | The allowance | Produces only once the tick is collected, as today |
+| A tick the capture schedule arms a capture on | The allowance | Produces once the tick is collected, so the capture is served on the frame it is served on today |
 | Headless | The allowance | There is no frame |
 
-`HostLoop` polls again after produce, so a wave that finished during the
-frame is collected and the next wave handed over before the pacing wait. A
-later step wakes the pacing wait itself when a wave finishes
-([step 6](#the-steps)).
+`HostLoop` polls again after produce, and a later step wakes the pacing wait
+when a wave finishes. Both polls only resume a host step that is already
+open: they collect its first wave and hand over its second. Neither starts a
+new host step. A new host step closes input, so it starts only in the
+iteration's step section, after that iteration's input capture and control
+phase. Otherwise which tick saw an input or a console line would depend on
+whether the previous tick finished before or after produce.
+
+The capture row needs the scheduler to say, before the hand-off, that a tick
+will arm a scheduled capture. Without it the pump would not wait, the capture
+would arm a frame late, and the next frame would hold its clock for it.
 
 A burst no longer costs the frame every tick it owes. With `k` ticks due, the
 frame waits for `k - 1` and runs beside the last. The rule that sheds steps
 once a burst has spent one tick period of wall time stays.
 
-### From the authority to the client: the hub's outbox
+### From the authority to the client: the outbox
 
-While a server's tick executes, its `WorldOutputHub` records each delivery
-instead of making it, in order. The collect replays the record on the pump.
-The borrowed snapshot stays valid because a server executes one tick per
-wave, and the next tick cannot start before the pump has collected this one.
+A delivery has two halves, and they belong on different threads.
 
-A sink receives on the step thread only if it declares that it may, with a
-marker interface. The federation and peer sinks, which copy into a wire
-queue, declare it. `WorldClient`, `WorldSessionMirror` and every sink that
-declares nothing are deferred, which is the safe default: their code runs on
-the thread it runs on today.
+- **Composing it is the authority's work.** The hub's fan-out picks what each
+  subscriber may see. `WorldSessionSink` builds a recipient's disclosure from
+  the server as it stands at that moment (`WorldServer.DeliveryTime`,
+  `WorldServer.DocumentVersion`, the recipient's view) into scratch it reuses.
+  The local presentation's cues are attached only while the tick is delivering
+  (`WorldTick.PresentLocalCues`, `WorldTick.PresentCues`), and the tick clears
+  them straight afterwards. All of that stays inline, on the thread that runs
+  the tick, where the state it reads is the state the delivery describes.
+- **Receiving it is the client's work.** What the composing half hands to the
+  receiving sink (`WorldClient`, a `WorldSessionMirror`) is recorded in an
+  outbox instead of being delivered, and the collect replays the outbox on the
+  pump, in order.
 
-Three more things the authority calls leave the tick the same way, because
-their callees are the pump's:
+So the outbox sits at the last hop: between the hub or a `WorldSessionSink`
+and the sink it finally delivers to. A sink receives on the delivering thread
+only if it declares that it may, with a marker interface. The federation and
+peer sinks, which copy into a wire queue, declare it. Every sink that declares
+nothing is deferred, which is the safe default.
+
+A record holds what its delivery lent. A snapshot lends memory the next
+snapshot of the same server or session sink overwrites. One tick can deliver
+twice to one sink (a definition delivery primes a snapshot, and the tick's own
+snapshot follows), so the outbox copies a record's lent spans when it already
+holds an earlier one from the same lender, and otherwise holds the loan until
+the collect.
+
+The outbox records whenever the delivering thread is not the pump inside the
+boundary window. That covers the step thread during a tick. It also covers a
+socket task that applies a grant or a session lever through
+`WorldServer.ExecuteAuthorityOperation` between two waves, whose delivery
+would otherwise reach `WorldClient` on the socket thread while the frame is
+being produced. The pump drains the outbox when the window opens as well as at
+a collect.
+
+Three more things the authority calls are the pump's, and leave the same way:
 
 - the completion of a submission that came through `LoopbackTransport`;
 - `WorldServer.EchoTap`, which feeds toasts and the editor;
-- `WorldServer.SaveEffectTap`, which reads the live presentation levers.
+- the part of `WorldServer.SaveEffectTap` that reads the live presentation
+  levers and writes the file. The part that reads the authority and compacts
+  the journal (`WorldSessionCapture.Capture`, `WorldServer.Compact`) stays
+  where the rule fired, so a save still captures the state at that point of
+  the tick and `world.undo` keeps the entries made after it.
 
 Each is wrapped where it is assigned, so no call site inside the tick can
 invoke it directly. The taps the replay tape attaches
@@ -207,34 +272,82 @@ The replay hands sinks the tick's completion time. `WorldClient` and
 clock, and `WorldSessionMirror.ResolveInterpolationAlpha` then yields the
 fraction it yields today.
 
+### What a delivered document may reach
+
+A record in the outbox must not lead back into the authority. Today it does.
+The server binds its live document to its own arena
+(`WorldStateDocumentValues.BindLive`, `WorldStateReader.Bind`) and delivers
+that same object, so a state-bound value the frame reads in
+`WorldClient.Definition` reads the arena the tick is writing, and
+`WorldClient.DeliverPresentation` even carries the binding onto the document
+it builds. No seam of `WorldServer` is crossed, so no check sees it.
+
+The document a local sink receives is therefore bound to that sink's own
+values, never to the server's arena. The client already keeps those values for
+an authority in another process: a delivery that changes only values leaves
+the declaration fixed, and the snapshot that follows carries the cells that
+moved (`WorldStateStamp.ArenaValues`, `WorldDocumentStateView.ApplyFieldCells`).
+The local client takes the same path. The server keeps its bound document to
+itself and hands a sink the document rebound to the sink's replica, and the
+rebinding copies only the paths to the values it replaces, as `BindLive` does.
+This is the last cut of [the presentation view](runtime-and-delivery.md#the-presentation-view),
+taken for the local client's state values. Step 5 builds it, and its check is
+the conformance law that plan already owes: the local view and a view rebuilt
+from the same deliveries answer every state read identically.
+
 ### From the client to the authority: the boundary window and the link
 
 The pump may touch the authority in one window: inside the loop's control
 phase and step section, while no wave is in flight. Console verbs, the input
-snapshot's handlers, prepare and collect all run there, as they do now.
+snapshot's handlers, prepare and collect all run there, as they do now. The
+window is an explicit scope the loop opens and closes on the pump, held in a
+thread-static, and the pump is registered once before the loop's first
+iteration, so the first control phase is inside the rule like every other.
 
-Outside the window the pump has one door, the link. A submission made through
-`LoopbackTransport` outside the window is queued in the transport and
-submitted, in order, when the window next opens. Today such a submission
-applies at once, between two ticks; queued, it still applies between two
-ticks. Which callers submit from a window event or from produce was not read
-for this memo. The queue makes each of them correct without a list, and step
-2 counts them.
+Outside the window the pump has one door, the link, and the link is narrow.
 
-Any other access from the pump outside the window throws. `WorldServer`
-already guards its state seams with `WorldServer.ThrowIfTickPending`
-(`WorldServer.Definition`, `WorldServer.Population`, `WorldServer.Machines`,
-`WorldServer.Engagement`, `WorldServer.Events` and the gate behind
-`WorldServer.ExecuteAuthorityOperation`). That check gains the window, and
-the seams that lack it gain the check (`WorldServer.Grants`,
-`WorldServer.Configuration`, `WorldServer.Tick`, `WorldServer.SolidField`).
-The pump is the thread `HostWaits.BeginPumpIteration` registered, so the check
-costs one thread-static read, and a server with no pump (a law test, a silo
-row) is unaffected.
+- **A submission that needs no answer is queued.** `LoopbackTransport` holds
+  it before it mints the envelope, so the sequence number and the replay
+  tape's tap both happen when the window next opens, in order, on the thread
+  that owns the tape's open tick.
+- **A call whose caller reads the answer before it returns is refused.**
+  `LoopbackTransport.Query` and `LoopbackTransport.SubmitSession` complete
+  inside the call today, and their callers depend on it:
+  `PlayerRoster.ResolveSlot` asks the authority for a device's preferred
+  profile while input is captured, and the roster's join and leave paths
+  change the client's seat table only if the reply said yes. Queued, the
+  first would seat a controller in the wrong slot and the second would split
+  the client's roster from the server's. Outside the window both throw, and
+  their callers move: the roster reads the profile catalog and the controller
+  preferences from values the authority publishes at each collect, and a join
+  or a leave asked for by a window event is run in the next control phase.
 
-The throw does not depend on timing. A frame-thread reader that touches the
-authority during produce throws on its first frame, whether or not a tick
-happened to be running, because produce is outside the window always.
+Any other access from the pump outside the window is closed off in two ways,
+and the first is preferred wherever it can be had.
+
+- **Types the frame cannot name.** `Puck.World.Client` cannot reference
+  `Puck.World.Server` (`build/Architecture.props`). The presentation types
+  that read the authority today all sit in the composition root, `Puck.World`,
+  which may name both. They move into a presentation project under the same
+  rule, which also forbids `Puck.World.Machines`. A field of type
+  `WorldServer`, `WorldPopulation`, `WorldBody` or a machine host in
+  presentation code is then a compile error, and the reference that survives
+  the window cannot be written. What presentation reads instead is published:
+  a tick's values as an immutable record written at the collect, and screens'
+  machine outputs as a table of video outputs and clock values, not a
+  reference to the machine host.
+- **A check at the server's seams, for what stays in the composition root.**
+  `WorldServer` already guards some of its state with
+  `WorldServer.ThrowIfTickPending`. That check gains the window, and every
+  member the tick mutates gains the check: `WorldServer.Grants`,
+  `WorldServer.Configuration`, `WorldServer.Tick`, `WorldServer.SolidField`,
+  `WorldServer.Input`, `WorldServer.CompletedEngineTicks`,
+  `WorldServer.DeliveryTime`, `WorldServer.DocumentVersion`,
+  `WorldServer.NextInputTick`, `WorldServer.SolidRevision`,
+  `WorldServer.Search`, `WorldServer.JournalLength` and the rest the review
+  listed. The throw does not depend on timing: produce is outside the window
+  always, so a reader throws on its first frame whether or not a tick was
+  running.
 
 ## The determinism invariant
 
@@ -250,29 +363,39 @@ or an order, so the same document and input give the same state.
 - *The step thread cannot read open input.* It is handed a wave only by the
   pump, and the hand-off is the one place a wave starts. Everything the tick
   reads as input (the intent queue `WorldTick.EnqueueIntent` fills, the
-  ordered submissions `WorldTick.Submit` fills, the mailbox) was written
-  before the hand-off, and the link queues anything later.
-- *The pump cannot read a tick in flight.* The boundary window is the single
-  door. `WorldServer`'s seams refuse the pump outside it, deterministically.
-- *The authority cannot write the client's state from the step thread.* The
-  hub defers every sink that has not declared itself safe, and the three
+  ordered submissions `WorldTick.Submit` fills, the mailbox, the tick's
+  adjacency record) was written before the hand-off, and the link queues
+  anything later.
+- *A new host step starts only after the iteration's input capture and
+  control phase.* The polls after produce and inside the pacing wait resume an
+  open host step and never close input.
+- *The frame cannot name the authority.* Presentation code lives where a
+  server type is a compile error, and reads what the authority published.
+  What still lives in the composition root passes a seam of `WorldServer`
+  that refuses the pump outside the window, deterministically.
+- *A delivery cannot lead back into the authority.* The outbox records at the
+  last hop, and a delivered document is bound to the receiving sink's own
+  values.
+- *The authority cannot write the client's state from another thread.* The
+  outbox defers every sink that has not declared itself safe, whenever the
+  delivering thread is not the pump inside the window, and the three
   callbacks above are wrapped at their one assignment.
 - *Collect is ordered by name, not by completion.* Which instance finished
   first is never read.
 
 **Where the guarantee stops.**
 
-- A reference to an object the authority owns, taken inside the window and
-  read outside it (a `WorldBody`, a `WorldPopulation`, a machine host),
-  passes no seam. The readers the code search found are listed
-  [below](#frame-thread-readers-and-where-each-moves), and the search is the
-  only cover for one it missed.
+- The composition root can still take a reference inside the window and read
+  it outside (a closure it wires into presentation). Moving the presentation
+  types out leaves that wiring as the only place it can happen, and the seam
+  check covers a `WorldServer` member read through it. A closure over an
+  object the server handed out is covered only by reading the wiring.
 - A service the composition root injects into the server and also uses on the
-  pump is outside the hub. Those are named in
+  pump is outside the outbox. Those are named in
   [what the tick calls](#what-the-tick-calls-outside-the-authority).
-- The check covers the pump. Another thread that reads a server's property
-  without `WorldServer.ExecuteAuthorityOperation` was unsafe before this
-  change and still is.
+- The seam check covers the pump. Another thread that reads a server's
+  property without `WorldServer.ExecuteAuthorityOperation` was unsafe before
+  this change and still is.
 - Presentation is outside the contract, as [rule 4](../../AGENTS.md#core-rules)
   says: which frame first shows a tick depends on timing.
 
@@ -305,15 +428,32 @@ the window.
 | `WorldEditorSeats`' edit probe | The server and its grants | Evaluated at collect and held per seat |
 | The seat post-step (`WorldSeatContextSync.Publish`, haptics, key lights, the wheel) | Grants and the definition's screens | Nothing: it runs at collect, inside the window |
 
+The review found readers this table's first draft missed. Each reads the
+authority through a closure, which the reference search does not follow.
+
+| Reader | What it reads today | Where it moves |
+|---|---|---|
+| A state-bound value in `WorldClient.Definition`, and every `WorldStateReader` read of that document | The server's arena, through the document's live binding | The sink's own values ([above](#what-a-delivered-document-may-reach)) |
+| Authored commands (`CommandRegistry.AuthoredCommandsFor`), asked on every button press and by `WorldOverlayFeed` | `WorldServer.Configuration`, through the source `WorldPostBuildWiring` installs | A command set published at each collect and at each install outside a tick |
+| `HostLog`'s tick anchor, on every line any thread writes | `WorldServer.NextInputTick` | The completed boot tick, published at each collect as one atomic value |
+| `WorldTickScript.CompletedTick`, read by the frame recording as an iteration opens and by the `benchmark.tick` reading | `WorldServer.NextInputTick` | The same published tick |
+| `WorldDiagnosticOverlay.Snapshot`, on every frame a diagnostic view is on | `WorldDiagnostics.Revision`, `WorldDiagnostics.Tick` and `WorldDiagnostics.DrawnReady`, and a report it starts from the frame, which copies the population and the definition | The inputs are copied at the collect while a diagnostic view is on, and the overlay starts and polls its analysis over that copy |
+| A screen's machine clock (`IWorldMachineHost.PresentedTicks`) | Four fields the machine host writes one after another as the tick advances it | A value record the host publishes whole, held in the binder's table; never a reference to the host |
+
 Two readers are found by their effect and not by a server reference.
 
 - **A seat's look.** `WorldClient.AdvanceSeatViews` integrates stick and gyro
-  look once a tick, in prepare, and `WorldSeatViewState.PresentedLook` takes
-  back the part of that step the frame has not reached. With the tick in
-  flight, the frame would present the new step against the previous tick's
-  interpolation and then step backward when the tick arrives. The seat view
-  therefore holds a tick's step as pending until the tick that carried it is
-  collected for the authority the seat is routed to.
+  look once a host step, in prepare, and `WorldSeatViewState.PresentedLook`
+  takes back the part of that step the frame has not reached. With the tick
+  in flight, the frame would present the new step against the previous tick's
+  interpolation and then step backward when the tick arrives. So a seat's
+  step is held as pending only while a tick that will carry it is in flight:
+  the wave handed over in this host step holds a tick of the local world the
+  seat is routed to. It is presented when that tick is collected. In every
+  other case the step is presented at once, as now: the routed world is
+  paused or stopped, it is not due in this host step, or its clock is another
+  process's (`WorldAuthorityEndpoint.ClockOwnedHere` is false). A world that
+  steps less often than the host therefore never accumulates look steps.
 - **Render poses.** `WorldClient.UpdateRenderPoses` scans
   `WorldClient.EntityCapacity` slots every frame and interpolates every
   active body, at rest or not. The pose table already keeps the dense list of
@@ -335,18 +475,29 @@ reaches outside the server is one of these.
 | The replay tape's taps, `WorldHistory`, the mutation journal | Inline; they are the authority's |
 | `WorldSeatAuthorityRouter` | Inline; its table is compare-and-swap and its change edge is delivered on the pump (`WorldSeatAuthorityRouter.RouteChanged`) |
 | Machines (`IWorldMachineHost`) | Inline; machines run on their own workers already |
-| Addon guests (`IWorldAddonHost`) | Inline; step 2 confirms on the headless boot that a guest mounted on the main thread ticks on the step thread |
+| Addon guests (`IWorldAddonHost`) | Inline; step 3 confirms on the headless boot that a guest mounted on the main thread ticks on the step thread |
 | `WorldServer.Profiles`, `WorldServer.Neighbours`, `WorldServer.RebuildDocuments`, `WorldServer.TransferForwarder` | Inline; the pump uses them only inside the window |
 | `WorldServer.Envelope` | Reads the published record |
 | `HostFrameWork` measurements | The step thread binds its own; collect folds its parts into the iteration |
 | `WorldNarrationScope` | Set by the step thread for each tick of a wave |
 
-One consequence belongs to the job system. `JobPool` runs one fork across its
-workers at a time, and a fork requested meanwhile runs inline on its caller.
-The tick's forks and the frame's forks used to alternate on one thread; now
-they overlap, so one of them runs serially whenever they meet. The pool must
-serve two forking threads before the [frame fork](open-items.md#the-cpu-frame)
-and the parallel tick both pay. That is the job system's step, not this one.
+One thing the tick reaches is not the authority's and is not safe where it
+is. `WorldAdjacencyFields.BeginTick` runs inside the tick and resolves a
+neighbour through the host (`WorldInstanceHost.TryResolveObservedProjection`).
+That reads and writes the host's tables, can start a world instance, and
+attaches or disposes an observation, whose first delivery is made straight to
+the sink. The host's tables are the pump's. So the resolution, the start, the
+attach and the pin all move into prepare, on the pump, after the previous
+wave's collect has replayed the mirrors' deliveries. Prepare then publishes
+one immutable adjacency record for the tick. The tick reads that record, and
+so does the frame, which is the reader the table above already moves.
+
+The job pool is ready for a second forking thread: each `JobClass` holds its
+own fork, so the frame's fork and the tick's run side by side. The review
+found that a wake requested while another class's wake is still pending can
+release no worker, and that two forking threads beside the workers and the
+audio thread are one more active thread than the machine has processors. The
+lane that owns `JobPool` fixes both.
 
 ## Input, and the time from input to display
 
@@ -379,6 +530,15 @@ A tick longer than a frame arrives a frame later than a shorter one would.
 The interleaved loop had no such frame to compare with: it stalled the frame
 for the whole tick.
 
+**Outputs with nothing to interpolate.** A tick also delivers things a frame
+shows whole: a state cell a HUD binds without easing, a body's facts and the
+animation they trigger, a spawn or a teleport, a cue, a seat's reconciled
+input answer, a machine's video frame. Today the frame that stepped a tick
+shows these. With the tick beside the frame they show one frame later, a
+full frame period, even when the tick and the produce together fit in one
+frame. That is the cost of never waiting, and it is the larger of the two
+latencies this design adds.
+
 **Look, camera and cursor.** Pointer look moves the seat's live look when the
 event arrives and shows at once, as now. Stick and gyro look integrate once a
 tick and are presented with the tick that carried them
@@ -387,8 +547,8 @@ from presentation state.
 
 **The budget.** On [the benchmark's latency column](benchmark.md#presentation-timing-and-admission-stage-8),
 at an equal frame rate, between-tick pointer look reads no later than it does
-on the interleaved loop, and tick-integrated motion reads no more than one
-frame period later. The lead takes both readings, before and after, in a
+on the interleaved loop, and tick-integrated motion and the outputs with
+nothing to interpolate read no more than one frame period later. The lead takes both readings, before and after, in a
 quiet window ([verification](#what-the-lead-measures)). A reading past the
 budget reopens one choice, which this memo leaves closed: letting the pump
 wait a bounded slice for a tick that is about to finish.
@@ -425,9 +585,15 @@ authority the way it does now: on the pump, inside the window.
   `WorldTickScript.PublishTick`, at collect, and reads only what the seat's
   authority delivered, which collect has just applied.
 - **`host.frames`.** The iteration's `simulate` phase becomes the pump's
-  share: prepare and collect. The tick's own cost is the step thread's, on
-  the timeline's separate tick lane (`HostFrameTimeline.NoteTick`), and each
-  iteration reports whether a tick was in flight while it produced.
+  share: prepare and collect. The tick's own cost is timed on the step
+  thread and reported on the timeline's separate tick lane
+  (`HostFrameTimeline.NoteTick`); timed on the pump it would be the collect's
+  few microseconds. A step is counted in the iteration that collected it,
+  wherever in the iteration that was, so an iteration that finished a step
+  after produce is not read as a stall by the benchmark. The hint that the
+  next iteration will step (`HostIteration.StepsNext`) leaves out the step
+  already open. Each iteration reports whether a tick was in flight while it
+  produced.
 
 ## A hub of a dozen live worlds
 
@@ -438,13 +604,11 @@ for.
 
 The step thread executes the wave serially today. The job memo's step T4
 forks it: the step thread becomes the fork's parent, and each world's tick is
-a partition. One rule must come with that. A world reads its neighbours
-through mirrors that the neighbour's tick writes
-(`WorldInstanceHost`'s observation sessions), and in a serial wave a later
-world sees an earlier world's delivery from the same wave. Under a fork that
-would depend on timing. So T4 defers mirror deliveries to collect as well,
-and every world in a wave reads its neighbours as of the previous collect.
-This memo's outbox is the mechanism; T4 changes which sinks use it.
+a partition. The rule a fork needs is already in place by then. A world reads
+its neighbours through mirrors that the neighbour's tick delivers to
+(`WorldInstanceHost`'s observation sessions), and the outbox defers those
+deliveries to the collect, so every world in a wave reads its neighbours as
+of the previous collect whichever tick finishes first.
 
 The silo steps its rows through `WorldInstanceHost` too, so its rows take the
 same waves on the same thread, and T4 serves both hosts.
@@ -472,9 +636,10 @@ same waves on the same thread, and T4 serves both hosts.
   delivering thread. It is still deferred here, so that a camera reading a
   body through a mirror and a scene drawing it from `WorldClient` see one
   tick.
-- **`JobPool`.** A fork joins in its caller and one fork runs at a time, so
-  it cannot run a tick beside the frame. The step thread is the parent the
-  pool's forks need.
+- **`JobPool`.** A fork joins in its caller, so the pool cannot run a whole
+  tick beside the frame. The step thread is the parent the tick's forks
+  need, and the pool already gives the tick a class of its own
+  (`JobClass.Tick`).
 - **`QueuedWorkerLifecycle<TWorkItem>`.** The machines' worker: a queue, a
   window of pending steps with producer backpressure, and barrier items. The
   step thread takes one wave at a time from one producer and needs none of
@@ -496,56 +661,121 @@ the cost. Keeping the tick on the frame thread fixes nothing.
 
 ## The steps
 
-Each step lands on its own and carries a check that reads load-independent
-evidence.
+Three stages. Every step lands on its own and carries a check that reads
+load-independent evidence. Through the first two stages the pump waits for
+every wave, so the loop behaves as it does today and each step is safe alone.
+The steps of the second stage do not depend on one another and can run in
+separate lanes.
 
-1. **Three parts and the outbox, still on one thread.** `WorldServerStepShell`
-   splits into prepare, execute and collect; the hub defers and replays;
-   deliveries carry the completion time. Check: `puck test --reproduce` over
-   the scenarios the change reaches, and the same state hashes as the base,
-   since this step claims to change nothing.
-2. **The step thread and the waves.** `WorldInstanceHost` owns the thread;
-   `WorldHostStep` hands over the two waves; the rate and stall flag are
-   published; the window's check and the link's queue go in. The path on
-   which the pump executes a tick is deleted. Check: a law holds the step
-   thread inside a tick and reads `WorldServer.Population` from a registered
-   pump, which throws; the headless debug world boots and answers
-   `body.where`; `world.counters` counts the submissions the link queued
-   outside the window; `puck test --reproduce` passes at `--jobs 1` and at
-   other worker counts.
-3. **The loop.** `HostLoop` produces while a step is in flight outside
-   lockstep, polls after produce and reads the rate once; `FixedStepPump`
-   takes the next due step after a resumed one. Check: `host.frames` on the
-   headless boot shows the tick lane's cost apart from `simulate`.
-4. **The readers.** Each row of [the table](#frame-thread-readers-and-where-each-moves).
-   Check: the windowed debug world plays the benchmark route with no throw
-   from the window's check (the lead's run).
-5. **The seat look and the moving set.** Check: `world.counters` counts the
-   poses a frame interpolated, and the count is the moving bodies; under a
-   held stick the presented yaw never steps backward (the lead's run).
-6. **The pacing wait's wake.** A finished wave wakes `HostWaits.Pace`, which
-   resumes the step. Check: with a tick longer than produce, a host step with
-   two waves completes within one iteration, read from `host.frames`' steps
-   per iteration. The swap chain's own wait is not serviced until
-   [C0.6](engine-job-system.md#the-steps) puts it through the door.
-7. **The documents.** The hosting reference, the rendering register's
-   pipelining decision and the `puck-world` skill describe the new loop; open
-   question 7 and item 1 of the CPU frame are deleted.
+**Stage one: no behaviour moves.**
+
+1. **The frame's cheap readers.** `WorldClient.UpdateRenderPoses` interpolates
+   the moving set, and `HostLoop` resolves the step rate once an iteration.
+   Check: `world.counters` reads the poses a frame interpolated beside the
+   active bodies, and at rest the first is zero.
+2. **Published host values.** `WorldHostStep` publishes the completed boot
+   tick, the step rate and the stall flag at each collect, and `HostLog`'s
+   anchor, `WorldTickScript` and `HostLoop` read those. Check: `puck
+   references` finds no reader of `WorldServer.NextInputTick` or
+   `WorldServer.Configuration` in a closure the frame or another thread calls.
+3. **Three parts and the step thread, with the pump waiting.**
+   `WorldServerStepShell` splits into prepare, execute and collect.
+   `WorldInstanceHost` owns the step thread and hands it each execute, and the
+   pump waits for it exactly as long as it runs the tick today, so nothing
+   overlaps. The timeline's tick lane is measured on the step thread. Check:
+   the headless debug world boots and answers `body.where`; `puck test
+   --reproduce` passes at `--jobs 1` and at other worker counts with the
+   base's state hashes, since this step claims to change nothing.
+
+**Stage two: the doors.**
+
+4. **The outbox**, at the last hop, with the three callbacks and the save
+   effect's split. Check: a law delivers twice to one session sink in a tick
+   and reads both records intact at the collect; the scenarios that fire cues
+   keep their hashes.
+5. **A delivered document bound to its sink's values.** Check: the
+   conformance law of [the presentation view](runtime-and-delivery.md#the-presentation-view)
+   over the debug world, and `puck references` finds no `WorldStateReader.Bind`
+   outside the server.
+6. **Adjacency in prepare**, with the tick's immutable record. Check: a law
+   steps a world whose neighbour restarts and finds no call into
+   `WorldInstanceHost` from inside the tick; the crossing scenarios pass
+   `puck test --reproduce`.
+7. **The link.** Queued submissions mint when the window opens; `Query` and
+   `SubmitSession` refuse outside it; the roster reads published profiles.
+   Check: a law joins a controller from a window event while a tick is held
+   and seats it in its preferred slot.
+8. **Presentation out of the composition root**, into a project that cannot
+   reference the server or the machines, with the published tick record, the
+   machine presentation table and the diagnostic copy. Check: the project
+   builds under its architecture profile, which is the proof that no frame
+   type holds the authority.
+9. **The window and the seam check**, on every member the tick mutates.
+   Check: a law reads `WorldServer.Population` from a registered pump outside
+   the window, which throws; the windowed debug world plays the benchmark
+   route with no throw (the lead's run).
+
+**Stage three: the wait ends.**
+
+10. **The loop stops waiting for the last due tick.** `HostLoop` produces
+    while a step is in flight outside lockstep, polls after produce only to
+    resume an open host step, waits on a tick a scheduled capture arms, and
+    counts a step in the iteration that collected it; `FixedStepPump` takes
+    the next due step after a resumed one in the step section; the two waves
+    replace the serial instance loop; the seat's look step is held while its
+    tick is in flight. The path on which the pump waits for every tick is
+    deleted. Check: `host.frames` shows iterations that produced while a tick
+    was in flight and the tick lane's cost apart from `simulate`; `puck test
+    --reproduce` passes at every worker count, with the scenarios the second
+    wave reorders re-recorded.
+11. **The pacing wait's wake.** A finished wave wakes `HostWaits.Pace`, which
+    resumes the open host step. Check: with a tick longer than produce, a
+    host step's two waves complete within one iteration, read from
+    `host.frames`' steps per iteration. The swap chain's own wait is not
+    serviced until [C0.6](engine-job-system.md#the-steps) puts it through the
+    door.
+12. **The documents.** The hosting reference, the rendering register's
+    pipelining decision and the `puck-world` skill describe the new loop; open
+    question 7 and item 1 of the CPU frame are deleted.
 
 ### What the lead measures
 
 These need a quiet machine and a window, which a lane does not have.
 
-- **Frame time.** The benchmark route on the debug world before and after:
-  `host.frames`' interval and its `simulate` and tick-lane lines. Expected:
-  the interval falls by about the tick's cost on iterations that stepped,
-  and `steps.shed` does not rise.
-- **Input to display.** The benchmark's latency column, both rows, before and
-  after, against [the budget](#input-and-the-time-from-input-to-display).
-- **The hand-off's own cost.** The time from the pump's hand-off to the step
-  thread's first instruction, read from the tick lane against the wave's
-  execute time. It is expected to be tens of microseconds, by reasoning about
-  an event wake; no reading has been taken.
+- **Frame time**, after stage three. The benchmark route on the debug world
+  before and after: `host.frames`' interval and its `simulate` and tick-lane
+  lines. Expected: the interval falls by about the tick's cost on iterations
+  that stepped, and `steps.shed` does not rise.
+- **Input to display**, after stage three. The benchmark's latency column,
+  both rows, before and after, against
+  [the budget](#input-and-the-time-from-input-to-display).
+- **The hand-off's own cost**, after step 3. The time from the pump's
+  hand-off to the step thread's first instruction, read from the tick lane
+  against the wave's execute time. It is expected to be tens of microseconds,
+  by reasoning about an event wake; no reading has been taken.
+
+## The review's findings
+
+The review argued from source. Each line it cited was reopened before its
+ruling, on the tree the review read and on the integration tip after it.
+
+| Finding | Ruling |
+|---|---|
+| **H1** [high] A delivered document is the server's own, bound to its live arena, so the frame reads the arena the tick writes. | Accepted. `WorldDocument.DeliverPending` hands sinks the document `WorldStateReader.Bind` bound, and `WorldClient.DeliverPresentation` copies the binding. A local sink now receives a document bound to its own values ([what a delivered document may reach](#what-a-delivered-document-may-reach)); step 5. |
+| **H2** [high] The adjacency source changes the host's tables, starts instances and attaches observations from inside the tick. | Accepted. Resolution, start, attach and pin move to prepare, and the tick and the frame both read one immutable record; step 6. |
+| **H3** [high] An outbox at the hub loses a tick's cues, replays session sinks against later state, and lets a second delivery overwrite the first's scratch. | Accepted. Composing stays inline and the outbox sits at the last hop, copying a lent span only when it holds an earlier one from the same lender; step 4. |
+| **H4** [high] Queuing the link breaks callers that read a reply before the call returns, and a tap fired before the queue races the tape. | Accepted. Only submissions that need no answer are queued, before the envelope is minted; `Query` and `SubmitSession` refuse outside the window and their callers move; step 7. |
+| **H5** [high] Readers the table missed: authored commands, the log's tick anchor, the tick script's tick, the diagnostic overlay, the machine clock. | Accepted, each added to [the table](#frame-thread-readers-and-where-each-moves). The first draft's claim that the diagnostic report copies inside the window was wrong for the overlay; steps 2 and 8. |
+| **H6** [high] A poll after produce that starts a new host step closes input without that iteration's capture or console drain. | Accepted. Those polls only resume an open host step ([the pump's waits](#the-pumps-waits)); step 10. |
+| **H7** [high] Holding the look step until a collect freezes look while paused, on a slower world and on another process's clock. | Accepted. The step is held only while a local tick that carries it is in flight; step 10. |
+| **H8** [high] A lost wake and one thread too many once two classes fork at once. | Accepted, and owned by the lane that owns `JobPool`. |
+| **M1** [medium] The seam check misses members and cannot see a reference kept past the window. | Accepted, and the order of preference reversed: presentation moves where a server type cannot be named, and the check covers what remains; steps 8 and 9. The review's third proposal, a `ref struct` window that hands out `ref struct` views of the population, is not taken: every console verb reads the population through the same members, and moving the frame's types out removes the readers the views would guard. |
+| **M2** [medium] A deferred save captures end-of-tick state and compacts entries made after it; a socket task's inline delivery reaches the client between waves. | Accepted on both. The save's capture and compaction stay at the rule; the outbox records whenever the deliverer is not the pump inside the window; step 4. |
+| **M3** [medium] The second wave moves more than the draft said. | Accepted. The five changes are listed in [waves](#waves), and the false sentence is gone. |
+| **M4** [medium] Steps collected after produce are counted in no iteration, the next-step hint reads an accumulator the open step has not left, and the tick's cost is timed on the pump. | Accepted. A step is counted, and `simulate` charged, in the iteration that collected it; the hint subtracts the open step; the tick lane is timed on the step thread; steps 3 and 10. |
+| **M5** [medium] Outputs with nothing to interpolate arrive a frame later, and a scheduled capture arms a frame late. | Accepted. [The budget](#input-and-the-time-from-input-to-display) now states the frame, and the pump waits on a tick the schedule arms a capture on. |
+| **L1** [low] The first control phase drains before the pump is registered, and the registration lasts the whole loop. | Accepted. The pump is registered before the loop, and the window is its own scope. |
+| **L2** [low] The draft's account of `JobPool` was out of date. | Accepted and rewritten. |
 
 ---
 

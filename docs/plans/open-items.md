@@ -639,8 +639,12 @@ wait behind them.
    timing can change simulation state, AGENTS.md rule 4), what enforces it,
    every frame-thread reader and where it moves, and the input-to-display
    budget ([the pipelining decision](../decisions/rendering.md#the-pipeline-foundation)).
-   Next: another family's review of that memo, then
-   [its steps](tick-thread.md#the-steps). Check: `host.frames` shows the
+   The memo is reviewed and its findings answered. The frame cannot run
+   beside the tick until it reads no live authority state, so
+   [its steps](tick-thread.md#the-steps) come in three stages, and the second
+   stage's steps (the outbox, a delivered document bound to its sink's values,
+   adjacency in prepare, the link, presentation out of the composition root)
+   can run in separate lanes. Next: stage one. Check: `host.frames` shows the
    step outside the frame's interval on the route, and
    `puck test --reproduce` passes at every worker count. At scale: every
    world a client runs steps on its own thread, which is the shape the silo's

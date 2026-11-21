@@ -1532,9 +1532,9 @@ step that meets it.
    world instance's tick is handed over in a wave that T4 later forks. That
    memo states the determinism invariant and what enforces it, the frame
    thread's readers of simulation state and where each moves, and the time
-   from input to display. Two things in this plan follow from it. The pool
-   runs one fork at a time, so the tick's forks and the frame's forks, which
-   now overlap, need a pool that serves two forking threads before both pay.
+   from input to display. Two things in this plan follow from it. The tick's
+   forks and the frame's forks will overlap, each in its own `JobClass`, so
+   the pool's wake and its worker count must hold with two forking threads.
    And T4's fork needs every world in a wave to read its neighbours as of the
    previous collect, which that memo's outbox provides.
 
