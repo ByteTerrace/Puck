@@ -46,9 +46,18 @@ public sealed class OutboxLawTests {
         }
     }
 
+    // The card table, with a rule that counts every tick, so each tick's own snapshot carries a cell.
+    private static WorldDefinition CountingTable() {
+        var table = StreamGenerationLawTests.Table();
+        return table with {
+            StateRaw = new WorldStateSection(World: [.. table.State, StateFixtures.IntSlot(name: "ticks")]),
+            Rules = [new WorldRule(CellName.Parse("count"), [new ActionEffect.AddState("ticks", Value: 1m)])],
+        };
+    }
+
     [Fact]
     public void ASessionSinkDeliveringTwiceInOneTickHandsItsDeferredObserverBothRecordsIntactAtTheCollect() {
-        using var fixture = Fixtures.FreshServer(StreamGenerationLawTests.Table());
+        using var fixture = Fixtures.FreshServer(CountingTable());
         var deferred = new Recorder();
         var deferredBeforeTick = 0;
         var deferredDuringTick = new List<int>();

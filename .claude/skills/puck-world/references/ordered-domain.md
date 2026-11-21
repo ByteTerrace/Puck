@@ -86,9 +86,16 @@ accept/reject outcome travels on stderr and through `WorldServer.EchoTap`),
 `Session(SessionReply)`, `Query(QueryAnswer)`,
 `MachineOperation(MachineOperationResult)`, `Mutation(WorldMutationOutcome)` and
 `Refusal(Code, Detail)` (an ingress or transport refusal that forms no mutation outcome). On loopback the completion has
-already fired before `Submit` returns; console verbs format their result
-lines FROM the reply the callback receives, never from a live read after the
-call.
+already fired before `Submit` returns when the submission applies inline on
+the thread that collects the server's outbox; console verbs format their
+result lines FROM the reply the callback receives, never from a live read after
+the call. A loopback completion is the host loop's: `IWorldServerHost.Submit`
+stores it routed through the server's `WorldOutputHub` outbox, so one a tick
+raises (a buffered mutation's outcome) or another thread raises reaches the
+client when the outbox collects, right after that tick and before its hooks.
+`WorldServer.EchoTap` and `WorldServer.SaveEffectTap` are routed the same way
+at their assignment. The public `WorldServer.Submit`, which socket peers and
+forwarded travellers use, keeps its completion on the raising thread.
 
 ## Drain timing
 
