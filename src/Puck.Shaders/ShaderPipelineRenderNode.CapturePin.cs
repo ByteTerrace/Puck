@@ -51,12 +51,13 @@ public sealed partial class ShaderPipelineRenderNode {
         if (
             (m_capture.PendingPath is null) ||
             (m_publishedBinding is null) ||
-            (m_frame == 0)
+            (m_frame == 0) ||
+            !m_captureSource.TryRead(latch: in m_frameLatch, image: out var source)
         ) {
             return;
         }
 
-        var source = m_captureSource;
+        var sourceLabel = m_captureSource.Label;
 
         WaitAll();
         HoldLeases();
@@ -106,6 +107,7 @@ public sealed partial class ShaderPipelineRenderNode {
             copy.Format
         ));
         m_publishedLayout = m_outputLayout;
+        m_publishedLabel = sourceLabel;
         m_publishedStateTick = m_captureSourceTick;
     }
     // Capture pinning and finite read epochs use the same counted, same-format device copy. The source is restored

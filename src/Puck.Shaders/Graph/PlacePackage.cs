@@ -293,6 +293,10 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
             var pipeline = m_built.Pipeline;
             var set = m_sets.PassSet(slot: recording.Slot);
 
+            var destination = recording.Outputs[0].ReadImage(latch: recording.Latch);
+            var baseImage = recording.Inputs[0].ReadImage(latch: recording.Latch);
+            var sourceImage = recording.Inputs[1].ReadImage(latch: recording.Latch);
+
             m_workCounters.Write(
                 passSet: set,
                 recording: recording
@@ -301,19 +305,19 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 arrayElement: 0,
                 binding: m_destination,
                 descriptorSetHandle: set,
-                imageViewHandle: recording.Outputs[0].Image.ImageViewHandle
+                imageViewHandle: destination.ImageViewHandle
             );
             m_services.Bindings.WriteSampledImage(
                 arrayElement: 0,
                 binding: m_base,
                 descriptorSetHandle: set,
-                imageViewHandle: recording.Inputs[0].Image.ImageViewHandle
+                imageViewHandle: baseImage.ImageViewHandle
             );
             m_services.Bindings.WriteSampledImage(
                 arrayElement: 0,
                 binding: m_source,
                 descriptorSetHandle: set,
-                imageViewHandle: recording.Inputs[1].Image.ImageViewHandle
+                imageViewHandle: sourceImage.ImageViewHandle
             );
             recorder.BindPipeline(
                 bindPoint: GpuBindPoint.Compute,

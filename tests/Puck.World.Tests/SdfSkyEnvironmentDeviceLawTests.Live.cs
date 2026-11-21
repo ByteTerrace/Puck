@@ -214,9 +214,13 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
                 var reads = recording.Reads!;
                 var input = reads[0];
 
-                owner.Seen[instance] = new(Image: input.Image, Layout: input.Layout, Publication: input.Publication, Tainted: input.Tainted);
-                recording.Leases.Hold(lease: reads.Take(index: 0));
-                var image = recording.Outputs[0].Image.ImageHandle;
+                _ = input.TryRead(latch: recording.Latch, read: out var resolvedInput);
+                owner.Seen[instance] = new(Image: resolvedInput.Image, Layout: resolvedInput.Layout, Publication: resolvedInput.Publication, Tainted: input.Label.External);
+                if (reads.TryTake(index: 0, latch: recording.Latch, lease: out var lease, read: out _)) {
+                    recording.Leases.Hold(lease: in lease);
+                }
+                _ = recording.Outputs[0].Image.TryRead(latch: recording.Latch, image: out var output);
+                var image = output.ImageHandle;
                 // The package boundary is ComputeWrite. Its test clear is a transfer on Vulkan and a UAV write on
                 // DirectX; restore that declared boundary before the graph records the consumer's next access.
                 recording.Recorder.TransitionImageLayout(recording.CommandBuffer, image,
@@ -271,8 +275,15 @@ public sealed partial class SdfSkyEnvironmentDeviceLawTests {
             output = default;
             if (!Converter.Publication.IsPublished()) { return false; }
             Acquired++;
-            output = new(Image: Converter.Output, Layout: Converter.OutputLayout,
-                Lease: new GpuImageLease(Converter.ImageViewHandle, _ => Released++, Publication: Converter.Publication) { Image = Converter.Output }, Tainted: Tainted);
+            output = new(
+                image: Converter.Output,
+                label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(
+                    external: Tainted,
+                    source: Puck.Abstractions.Presentation.DeliveryPublicSource.DeviceOrCapture
+                ),
+                layout: Converter.OutputLayout,
+                lease: new GpuImageLease(Converter.ImageViewHandle, _ => Released++, Publication: Converter.Publication) { Image = Converter.Output }
+            );
             return true;
         }
     }

@@ -1,5 +1,6 @@
 using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Shaders;
 using Puck.SignedDistance;
@@ -43,8 +44,8 @@ public sealed partial class SdfWorldTables {
 
     private void PrepareSkyEnvironment(bool physical) => m_skyEnvironment.Prepare(physical: physical);
 
-    internal ulong? SkyEnvironmentSignature(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
-        var known = m_skyEnvironment.ObserveSources(reads: reads, residency: residency, view: view);
+    internal ulong? SkyEnvironmentSignature(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads, in DeliveryLatch latch) {
+        var known = m_skyEnvironment.ObserveSources(latch: in latch, reads: reads, residency: residency, view: view);
 
         return (known ? unchecked((ulong)(m_skyEnvironment.Publication.Renders + (m_skyEnvironment.Owes ? 1 : 0))) : null);
     }
@@ -139,7 +140,7 @@ public sealed partial class SdfWorldTables {
             Owes = m_refresh.Owes(block: sky, layers: m_tables.m_skyLayerRecords, physical: physical);
             if (m_refresh.Projected) { Projected = true; Skipped = m_refresh.Skipped; }
         }
-        public bool ObserveSources(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
+        public bool ObserveSources(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads, in DeliveryLatch latch) {
             m_watch.Clear();
             CanRecord = true;
             var known = true;
@@ -161,8 +162,12 @@ public sealed partial class SdfWorldTables {
                     (residency.ScreenRead(reads: reads, screen: screen, view: view) is var read and >= 0) && (reads is not null)) {
                     var input = reads[read];
 
-                    m_watch.Observe(publication: input.Publication, screen: screen, tainted: input.Tainted);
-                    if ((input.Lease.ImageViewHandle != 0) && !input.Publication.IsPublished()) { known = false; }
+                    if (input.TryRead(latch: in latch, read: out var resolved) && (resolved.ImageViewHandle != 0)) {
+                        m_watch.Observe(publication: resolved.Publication, screen: screen, tainted: input.Label.External);
+                        if (!resolved.Publication.IsPublished()) { known = false; }
+                    } else {
+                        m_watch.Observe(publication: default, screen: screen, tainted: false);
+                    }
                 }
             }
             CanRecord &= (known || Forced);

@@ -24,6 +24,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests : IDisposable {
         Height: Extent,
         ImageHandle: 0x9000,
         ImageViewHandle: 0x9001,
+        Label: Puck.Abstractions.Presentation.DeliveryLabel.ForSource(source: Puck.Abstractions.Presentation.DeliveryPublicSource.Host),
         Layout: GpuImageLayout.ShaderReadOnly,
         Width: Extent
     );

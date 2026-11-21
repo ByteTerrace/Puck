@@ -160,9 +160,19 @@ public sealed class RenderGraphSourceConverter : IDisposable {
 
             return false;
         }
-        if ((image.Width != Header.Width) || (image.Height != Header.Height)) {
+
+        var latch = (context.Latch.IsLatched ? context.Latch : DeliveryLatch.Capture());
+        var latched = (context.Latch.IsLatched ? context : (context with { Latch = latch }));
+
+        if (!image.TryRead(latch: in latch, image: out var resolved)) {
             lease.Retire();
-            Render = FrameRender.Refused(reason: $"an imported {image.Width}x{image.Height} image was handed to a {Header.Width}x{Header.Height} conversion");
+            Render = FrameRender.Refused(reason: "the imported image's delivery label was refused at the frame's latch");
+
+            return false;
+        }
+        if ((resolved.Width != Header.Width) || (resolved.Height != Header.Height)) {
+            lease.Retire();
+            Render = FrameRender.Refused(reason: $"an imported {resolved.Width}x{resolved.Height} image was handed to a {Header.Width}x{Header.Height} conversion");
 
             return false;
         }
@@ -173,7 +183,7 @@ public sealed class RenderGraphSourceConverter : IDisposable {
             name: RenderGraphPackageCatalog.SourceInput
         );
 
-        return ProduceConversion(in context);
+        return ProduceConversion(in latched);
     }
 
     private bool ProduceConversion(in FrameContext context) {

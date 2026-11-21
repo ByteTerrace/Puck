@@ -639,9 +639,12 @@ public sealed class WorldCaptureFillLawTests {
                 return 0;
             }
 
-            output.Lease.Retire();
+            var latch = DeliveryLatch.Capture();
+            var view = (output.TryRead(latch: in latch, acquired: out var acquired) ? acquired.Lease.ImageViewHandle : 0);
 
-            return output.Lease.ImageViewHandle;
+            output.Retire();
+
+            return view;
         }
         public void ReleasePipelines() => m_held.Set();
     }

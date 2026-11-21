@@ -1,3 +1,5 @@
+using Puck.Abstractions.Presentation;
+
 namespace Puck.World.Protocol;
 
 /// <summary>The stream a reader is bound to and the span of it the reader holds.</summary>
@@ -23,6 +25,7 @@ public readonly record struct WorldStreamSpan(ulong Stream, long Generation, lon
 /// stream.</remarks>
 public sealed class WorldStreamIngress {
     private readonly Lock m_gate = new();
+    private readonly DeliverySpanSource m_deliverySpans = new();
     private WorldStreamSpan m_span;
     // Every stream whose span closed on this reader: none binds it again.
     private readonly HashSet<ulong> m_closed = [];
@@ -30,6 +33,8 @@ public sealed class WorldStreamIngress {
 
     /// <summary>Gets the stream the reader is bound to and the span it holds.</summary>
     public WorldStreamSpan Span { get { lock (m_gate) { return m_span; } } }
+    /// <summary>Gets the current delivery span of this ingress, ended on every accepted cut or close.</summary>
+    public DeliverySpan DeliverySpan => m_deliverySpans.Span;
     /// <summary>Gets the number of records dropped.</summary>
     public long Refusals => Interlocked.Read(location: ref m_refusals);
 
@@ -38,7 +43,7 @@ public sealed class WorldStreamIngress {
     /// <returns><see langword="true"/> when the record may move the reader.</returns>
     public bool Admit(in WorldStreamStamp stream) {
         lock (m_gate) {
-            return Take(stream: in stream);
+            return Take(stepped: out _, stream: in stream);
         }
     }
     /// <summary>Decides whether a cut record of the bound stream moves the reader, and takes it: a cut moves the span
@@ -53,8 +58,12 @@ public sealed class WorldStreamIngress {
                 Refuse();
                 return false;
             }
-            if (!Take(stream: in stream)) { return false; }
-            if (terminal) { CloseLocked(); }
+            if (!Take(stepped: out var stepped, stream: in stream)) { return false; }
+            if (terminal) {
+                CloseLocked();
+            } else if (!stepped) {
+                _ = m_deliverySpans.Advance();
+            }
             return true;
         }
     }
@@ -74,23 +83,36 @@ public sealed class WorldStreamIngress {
     private void CloseLocked() {
         _ = m_closed.Add(item: m_span.Stream);
         m_span = m_span with { Closed = true };
+        m_deliverySpans.Close();
     }
-    private bool Take(in WorldStreamStamp stream) {
+    private bool Take(in WorldStreamStamp stream, out bool stepped) {
         if (!stream.IsSpanned) {
+            stepped = false;
             if (m_span.Stream == 0UL) { return true; }
             Refuse();
             return false;
         }
         if ((m_span.Stream == 0UL) || m_span.Closed) {
-            if (m_closed.Contains(item: stream.Stream)) { Refuse(); return false; }
+            if (m_closed.Contains(item: stream.Stream)) {
+                stepped = false;
+                Refuse();
+                return false;
+            }
             m_span = new WorldStreamSpan(Closed: false, Generation: stream.Generation, Ordinal: stream.Ordinal, Stream: stream.Stream);
+            _ = m_deliverySpans.Advance();
+            stepped = true;
             return true;
         }
         if ((stream.Stream != m_span.Stream) || (stream.Generation < m_span.Generation) || (stream.Ordinal <= m_span.Ordinal)) {
+            stepped = false;
             Refuse();
             return false;
         }
+        stepped = (stream.Generation > m_span.Generation);
         m_span = m_span with { Generation = stream.Generation, Ordinal = stream.Ordinal };
+        if (stepped) {
+            _ = m_deliverySpans.Advance();
+        }
         return true;
     }
     private void Refuse() => Interlocked.Increment(location: ref m_refusals);

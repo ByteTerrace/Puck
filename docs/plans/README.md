@@ -93,6 +93,7 @@ Decisions: [runtime and delivery](../decisions/runtime-and-delivery.md), [machin
 - [Iteration](iteration.md): the loops an author and a developer go round, how each is timed edit to frame, and the work that makes each fast; [the authoring loop memo](iteration/authoring-loop.md) holds its build order.
 - [Code size](code-size.md): where the source's lines are, the families of hand-written code that one definition could generate, the lanes that remove them, and how each wave keeps size falling.
 - [The engine job system](engine-job-system.md): one scheduler and its classes, the deterministic parallel tick, parallel view recording, memory ownership and background work proportional to change.
+- [The tick on its own thread](tick-thread.md): the in-process authority executes each tick on a step thread and the frame presents the last tick the loop collected, with the determinism invariant, the frame thread's readers of simulation state, the input-to-display budget and the steps.
 - [Runtime and delivery](runtime-and-delivery.md): how a world is composed, compiled, packaged, released and rolled back, and what a client may observe of it.
 - [Updater policy](updater-policy.md): one durable install record for the updater, the stub, registration and the pruner.
 - [Owned memory for Puck's own host](memory-pooling.md): the later custom no-GC runtime port.
