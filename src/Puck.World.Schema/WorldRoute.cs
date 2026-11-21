@@ -65,7 +65,7 @@ public abstract record WorldRouteStep {
     /// <param name="Point">The point, or <see langword="null"/> for <paramref name="Spawn"/>.</param>
     /// <param name="YawDegrees">The heading a point pose faces.</param>
     public sealed record PoseBody(
-        [property: DocumentText("a spawn point id")]
+        [property: DocumentName(WorldNameKind.SpawnPoint, WorldNameRole.Names)]
         [property: JsonPropertyName("spawn"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Spawn = null,
         [property: JsonPropertyName("point"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Point = null,
         [property: JsonPropertyName("yawDegrees")] float YawDegrees = 0f

@@ -229,7 +229,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
 
             color = sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection);
 
-            float3 indirect = sdfMeshIndirectSeen(probes, normal);
+            float3 indirect = sdfViewsIndirectSeen(probes, normal);
             float3 indirectTerm = indirect * passGroup.indirectApply.rgb * (shadeMaterial.receive * passGroup.indirectApply.w
                 * lerp(1.0, ambientOcclusion, passGroup.indirectContact));
             color += indirectTerm * shadeMaterial.albedo * (1.0 - shadeMaterial.metal);
@@ -253,7 +253,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
                 float3 viewDirection = -p.rayDirection;
                 float nDotV = saturate(dot(normal, viewDirection));
                 float3 reflectDirection = reflect(p.rayDirection, normal);
-                float3 environment = sdfMeshReflectionSeen(probes, reflectDirection, worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness));
+                float3 environment = sdfViewsReflectionSeen(probes, reflectDirection, worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness));
 
                 reflectionTerm = environment;
                 environmentTerm = ((environment * sdfMaterialEnvironmentBrdf(f0, shadeMaterial.roughness, nDotV)) * ambientOcclusion);

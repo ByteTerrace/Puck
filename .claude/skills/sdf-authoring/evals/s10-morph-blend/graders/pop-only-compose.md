@@ -3,4 +3,4 @@ type: llm
 weight: 1
 ---
 
-The response says Morph, StairsUnion and StairsSubtraction compose only at a field-scope pop and are not valid on a shape.
+The response says a shape carrying Morph opens a field scope of its own and, at that scope's pop, interpolates from the field before it to the shape as the morph facet's lane runs from `from` to `to`.

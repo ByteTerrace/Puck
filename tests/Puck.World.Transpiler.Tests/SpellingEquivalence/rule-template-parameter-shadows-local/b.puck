@@ -1,0 +1,18 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot count = 0
+    slot other = 0
+  }
+}
+
+rule "tick" {
+  local step = count + 5
+  local base = count + 1
+  local i = count + 9
+  when count < 3
+  count = count + 2 * 4 + base
+  other = 3 + step
+}

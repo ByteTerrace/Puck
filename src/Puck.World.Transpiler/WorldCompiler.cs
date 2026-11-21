@@ -318,6 +318,10 @@ internal static class WorldCompiler {
         // were already reported against them.
         foreach (var test in testWorlds.Concat(second: worlds.SelectMany(selector: static world => world.TestWorlds)).Distinct()) {
             WorldDocumentMembers.Canonicalize(document: test.Json, sourceMap: sourceMap, diagnostics: null, basePath: documentDirectory);
+
+            if ((sourcePath is not null) && (test.Foreign.Count > 0)) {
+                RefuseUnreachedExpectations(diagnostics: diagnostics, session: session, sourcePath: sourcePath, test: test);
+            }
         }
 
         return new WorldCompilation(
@@ -328,6 +332,41 @@ internal static class WorldCompiler {
             SourceMap: ((worlds.Count == 1) ? worlds[0].SourceMap : sourceMap),
             TestWorlds: testWorlds
         ) { Declaration = declaration, Acknowledgements = SourceAcknowledgements.Of(document: document, sourcePath: sourcePath), Assets = assets, EvaluationWork = loweringResult.EvaluationWork, Worlds = worlds };
+    }
+
+    // A test's expectation about a sibling document is judged in the document a crossing starts, so one naming a
+    // document no reference of the test's world reaches has nothing to carry it. The reach is the walk `puck test`
+    // stages the documents by (WorldCompileSession.ReachDocuments), so every door that compiles refuses what it would.
+    private static void RefuseUnreachedExpectations(WorldCompileSession session, WorldTestWorld test, string sourcePath, DiagnosticBag diagnostics) {
+        var directory = (Path.GetDirectoryName(path: Path.GetFullPath(path: sourcePath)) ?? ".");
+        var ownId = (((test.Json["documentId"]?.GetValue<string>() is { } documentId) && WorldDocumentName.TryValidate(name: documentId, reason: out _)) ? documentId : test.Name);
+        var roots = new List<(JsonObject World, string Path)>();
+        var known = new List<string>();
+
+        foreach (var (name, world) in ((IEnumerable<(string, JsonObject)>)[(ownId, test.Json), .. test.Siblings.Select(selector: static sibling => (sibling.Name, sibling.Json))])) {
+            var path = Path.Combine(path1: directory, path2: WorldDocumentName.DocumentFile(name: name));
+            var composed = (((world["basis"] is not null) || (world["imports"] is not null)) &&
+                session.TryCompose(composed: out var layered, reason: out _, rootBytes: System.Text.Encoding.UTF8.GetBytes(s: world.ToJsonString()), rootResolvedPath: path) && (layered is not null))
+                ? layered
+                : world;
+
+            roots.Add(item: (composed, path));
+            known.Add(item: name);
+        }
+        var unreached = new HashSet<string>(collection: test.Foreign.Select(selector: static expectation => expectation.Document), comparer: StringComparer.Ordinal);
+
+        foreach (var (name, _, _) in session.ReachDocuments(known: known, roots: roots)) {
+            if (unreached.Remove(item: name) && (unreached.Count == 0)) {
+                return;
+            }
+        }
+        foreach (var expectation in test.Foreign.Where(predicate: expectation => unreached.Contains(item: expectation.Document))) {
+            diagnostics.ReportError(
+                code: PuckDiagnosticCodes.TestStepInadmissible,
+                message: $"test '{test.Test}' expects verdicts from the document '{expectation.Document}', which no reference of the world reaches from {directory}, so there is no document to carry them",
+                span: expectation.Span
+            );
+        }
     }
 
     /// <summary>Reads <paramref name="path"/> and compiles it.</summary>

@@ -15,7 +15,7 @@ import {
 import {
   subnetType
 } from 'ts/bvm:ptn_network_basic-topology:0.0.4'
-import { worldSiloConfigType, worldSiloActionGroupConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.6'
+import { worldSiloConfigType, worldSiloActionGroupConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.7'
 
 import {
   groupType
@@ -2626,7 +2626,7 @@ module postgreSql 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.16.1' 
     version: resources.postgresFlexibleServer!.version
   }
 }
-module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.5' = {
+module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.6' = {
   params: {
     customerManagedKey: defaultCustomerManagedKeySettings
     enableTelemetry: enableTelemetry
@@ -3314,7 +3314,7 @@ module worldSiloIdentity 'br/public:avm/res/managed-identity/user-assigned-ident
     tags: union(tags, resources.worldSilo.userAssignedIdentity.?tags ?? {})
   }
 }
-module worldSilo 'ts/bvm:ptn_platform_world-silo:0.0.6' = {
+module worldSilo 'ts/bvm:ptn_platform_world-silo:0.0.7' = {
   dependsOn: [publicFlexApi, containerRegistry]
   params: {
     configuration: resources.worldSilo

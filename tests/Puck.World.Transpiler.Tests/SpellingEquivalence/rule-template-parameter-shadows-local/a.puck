@@ -1,0 +1,26 @@
+// Inside a rule body, a spliced rule template's parameter and a compile-time loop's variable are inner to the
+// calling rule's locals: a name bound both ways reads the inner binding, and a name only the rule binds reads the local.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot count = 0
+    slot other = 0
+  }
+}
+
+rule template bump(step) {
+  count = count + step * 4 + base
+}
+
+rule "tick" {
+  local step = count + 5
+  local base = count + 1
+  local i = count + 9
+  when count < 3
+  bump(step: 2)
+  for i in [3] {
+    other = i + step
+  }
+}

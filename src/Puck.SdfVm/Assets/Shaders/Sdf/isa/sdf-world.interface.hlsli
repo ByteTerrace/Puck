@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/789cb70b6f7501b4127df431508a3773088812451979a1515b10f1bac9ff4981). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/3c4a6d9e5c25619d7446c53e172e566f5d406564595b8776e622155fa3a302d6). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -249,8 +249,8 @@ struct SdfWorldPass {
     [[vk::offset(1404)]] uint _pad1404;
     [[vk::offset(1408)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaEC02D87F : register(b0, space3);
-#define passGroup passGroupIsaEC02D87F
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa93E73376 : register(b0, space3);
+#define passGroup passGroupIsa93E73376
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);
@@ -328,17 +328,32 @@ void puckCountWork(uint steps, uint texels) {
     }
 }
 // Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
-// Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
+// The active lanes may name different rows (divergent layer evaluation): each distinct row among them in turn
+// sums its lanes' counts across the wave, and that row's first lane adds each sum, so a wave adds once a row
+// rather than once a lane.
 void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
     if (passGroup.workCounterRowDetail == 0u) {
         return;
     }
-    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
-    puckAddWork((row + PuckWorkStepsWord), steps);
-    puckAddWork((row + PuckWorkTexelsWord), texels);
-    puckAddWork((row + PuckWorkSkyWord), evaluations);
-    puckAddWork((row + PuckWorkSkyHashesWord), hashes);
-    puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
+    [loop] for (;;) {
+        if (WaveReadLaneFirst(detail) == detail) {
+            uint waveSteps = WaveActiveSum(steps);
+            uint waveTexels = WaveActiveSum(texels);
+            uint waveEvaluations = WaveActiveSum(evaluations);
+            uint waveHashes = WaveActiveSum(hashes);
+            uint waveLoads = WaveActiveSum(loads);
+
+            if (WaveIsFirstLane()) {
+                uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
+                puckAddWork((row + PuckWorkStepsWord), waveSteps);
+                puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+                puckAddWork((row + PuckWorkSkyWord), waveEvaluations);
+                puckAddWork((row + PuckWorkSkyHashesWord), waveHashes);
+                puckAddWork((row + PuckWorkSkyTextureLoadsWord), waveLoads);
+            }
+            break;
+        }
+    }
 }
 void puckCountShapes(uint shapes, uint gradients) {
     uint waveShapes = WaveActiveSum(shapes);

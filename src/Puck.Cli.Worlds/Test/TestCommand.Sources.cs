@@ -273,8 +273,7 @@ public static partial class TestCommand {
     // the crossing returns to the instance the leg booted rather than starting a second one.
     //
     // `foreign` are the test's expectations about sibling documents: each is lowered into the document of its name as
-    // that document is reached, so the verdict is judged in the world a crossing starts. A document no reference
-    // reaches has nothing to carry the verdict, and the staging is refused by name.
+    // that document is reached, so the verdict is judged in the world a crossing starts.
     private static bool TryStageTestWorld(string name, JsonObject world, IReadOnlyList<(string Name, byte[] Json)> siblings, IReadOnlyList<WorldTestForeign> foreign, string sourceDirectory, string generatedDirectory, out string path, out string? reason) {
         var catalog = CliWorldVocabulary.EnsureInstalled();
         var directory = Path.Combine(
@@ -302,7 +301,7 @@ public static partial class TestCommand {
         }
 
         // A documentId that cannot name a file stays under the generated name, and the boot refuses it by name.
-        var ownId = (((ReadObject(path: staged)?["documentId"]?.GetValue<string>() is { } documentId) && WorldDocumentName.TryValidate(name: documentId, reason: out _))
+        var ownId = (((Staged(path: staged)["documentId"]?.GetValue<string>() is { } documentId) && WorldDocumentName.TryValidate(name: documentId, reason: out _))
             ? documentId
             : name
         );
@@ -317,137 +316,54 @@ public static partial class TestCommand {
             sourceFileName: staged
         );
 
-        var reached = new HashSet<string>(collection: [ownId, .. siblings.Select(selector: static sibling => sibling.Name)], comparer: DocumentName.Comparer);
-        var pending = new Queue<(string Name, JsonObject World, string SourceDirectory)>(collection: siblings.Select(selector: sibling => (sibling.Name, ((JsonObject)JsonNode.Parse(utf8Json: sibling.Json)!), sourceDirectory)));
+        // The staged worlds' references resolve beside the directory they were authored in.
+        string Beside(string document) => Path.Combine(path1: sourceDirectory, path2: WorldDocumentName.DocumentFile(name: document));
+        var roots = new List<(JsonObject World, string Path)> { (Staged(path: path), Beside(document: ownId)) };
 
-        var judged = new HashSet<string>(comparer: DocumentName.Comparer);
-
-        if (!Reach(
-            foreign: foreign,
-            judged: judged,
-            pending: pending,
-            reached: reached,
-            reason: out reason,
-            sourceDirectory: sourceDirectory,
-            staged: path
-        )) {
-            return false;
-        }
-
-        while (pending.TryDequeue(result: out var next)) {
-            if (!WorldStaging.TryWrite(
-                catalog: catalog,
-                directory: directory,
-                name: next.Name,
-                path: out var siblingPath,
-                reason: out var siblingReason,
-                sourceDirectory: next.SourceDirectory,
-                world: next.World
-            )) {
-                reason = $"the document '{next.Name}' beside it does not compose: {siblingReason}";
-
+        foreach (var (siblingName, siblingJson) in siblings) {
+            if (!Stage(document: siblingName, world: ((JsonObject)JsonNode.Parse(utf8Json: siblingJson)!), from: sourceDirectory, staged: out var siblingPath, reason: out reason)) {
                 return false;
             }
-
-            if (!Reach(
-                foreign: foreign,
-                judged: judged,
-                pending: pending,
-                reached: reached,
-                reason: out reason,
-                sourceDirectory: next.SourceDirectory,
-                staged: siblingPath
-            )) {
-                return false;
-            }
+            roots.Add(item: (Staged(path: siblingPath), Beside(document: siblingName)));
         }
+        // A document the test expects verdicts from carries them as it is staged; the source's compile already refused
+        // an expectation about a document this walk does not reach.
+        foreach (var (document, resolved, found) in WorldCompileSession.Shared.ReachDocuments(known: [ownId, .. siblings.Select(selector: static sibling => sibling.Name)], roots: roots)) {
+            var matched = foreign.Where(predicate: expectation => string.Equals(a: expectation.Document, b: document, comparisonType: StringComparison.Ordinal)).ToArray();
 
-        if (foreign.FirstOrDefault(predicate: expectation => !judged.Contains(item: expectation.Document)) is { } unreached) {
-            reason = $"the test expects verdicts from the document '{unreached.Document}', which no reference of the world reaches from {sourceDirectory}, so there is no document to carry them";
+            if (matched.Length > 0) {
+                var inheritedState = ((((found["basis"] is not null) || (found["imports"] is not null)) &&
+                    WorldCompileSession.Shared.TryCompose(composed: out var composedFound, reason: out _, rootBytes: Encoding.UTF8.GetBytes(s: found.ToJsonString()), rootResolvedPath: resolved))
+                        ? (composedFound?["state"] as JsonObject)
+                        : null
+                );
 
-            return false;
-        }
-
-        reason = null;
-
-        return true;
-    }
-    // Queues every document a staged world's references name that is not staged yet and that stands beside the
-    // directory the world was authored in: its .puck source compiled, as the run-time resolver prefers it, else its JSON
-    // document. A name nothing there answers as one document (no file, a source that does not compile or declares
-    // several worlds, a file that is not a JSON object) stays unstaged, and the crossing reaching for it is refused by
-    // name at run time, as it would be beside the source. A document the test expects verdicts from carries them when
-    // it is queued, and is noted in `judged`.
-    private static bool Reach(string staged, string sourceDirectory, HashSet<string> reached, Queue<(string Name, JsonObject World, string SourceDirectory)> pending, IReadOnlyList<WorldTestForeign> foreign, HashSet<string> judged, out string? reason) {
-        reason = null;
-
-        foreach (var reference in ((ReadObject(path: staged)?["references"] as JsonArray) ?? []).OfType<JsonObject>()) {
-            if (
-                (reference["document"]?.GetValue<string>() is not { } document) ||
-                !WorldDocumentName.TryValidate(name: document, reason: out _) ||
-                !reached.Add(item: document)
-            ) {
-                continue;
-            }
-
-            var source = Path.GetFullPath(path: Path.Combine(
-                path1: sourceDirectory,
-                path2: WorldDocumentName.SourceFile(name: document)
-            ));
-            var json = Path.GetFullPath(path: Path.Combine(
-                path1: sourceDirectory,
-                path2: WorldDocumentName.DocumentFile(name: document)
-            ));
-            var found = (File.Exists(path: source)
-                ? ((WorldCompileSession.Shared.TryCompile(compiled: out var compiled, failure: out _, path: source) && compiled!.EmitsDocument && (compiled.Document is { } bytes))
-                    ? ParseObject(bytes: bytes)
-                    : null)
-                : (File.Exists(path: json)
-                    ? ReadObject(path: json)
-                    : null)
-            );
-
-            if (found is not null) {
-                var matched = foreign
-                    .Where(predicate: expectation => string.Equals(a: expectation.Document, b: document, comparisonType: StringComparison.Ordinal))
-                    .ToArray();
-
-                if (matched.Length > 0) {
-                    var inheritedState = ((((found["basis"] is not null) || (found["imports"] is not null)) &&
-                        WorldCompileSession.Shared.TryCompose(
-                            composed: out var composedFound,
-                            reason: out _,
-                            rootBytes: Encoding.UTF8.GetBytes(s: found.ToJsonString()),
-                            rootResolvedPath: (File.Exists(path: source) ? source : json)
-                        ))
-                            ? (composedFound?["state"] as JsonObject)
-                            : null
-                    );
-
-                    foreach (var expectation in matched) {
-                        if (!expectation.TryApply(inheritedState: inheritedState, reason: out var applyReason, world: found)) {
-                            reason = applyReason;
-
-                            return false;
-                        }
-
-                        _ = judged.Add(item: document);
+                foreach (var expectation in matched) {
+                    if (!expectation.TryApply(inheritedState: inheritedState, reason: out reason, world: found)) {
+                        return false;
                     }
                 }
-
-                pending.Enqueue(item: (document, found, sourceDirectory));
+            }
+            if (!Stage(document: document, world: found, from: (Path.GetDirectoryName(path: resolved) ?? sourceDirectory), staged: out _, reason: out reason)) {
+                return false;
             }
         }
 
+        reason = null;
+
         return true;
-    }
-    private static JsonObject? ReadObject(string path) => ParseObject(bytes: File.ReadAllBytes(path: path));
-    // A document's bytes as a JSON object, or null when they are not one.
-    private static JsonObject? ParseObject(byte[] bytes) {
-        try {
-            return (JsonNode.Parse(utf8Json: bytes) as JsonObject);
-        } catch (JsonException) {
-            return null;
+
+        bool Stage(string document, JsonObject world, string from, out string staged, out string? reason) {
+            if (WorldStaging.TryWrite(catalog: catalog, directory: directory, name: document, path: out staged, reason: out var stageReason, sourceDirectory: from, world: world)) {
+                reason = null;
+
+                return true;
+            }
+            reason = $"the document '{document}' beside it does not compose: {stageReason}";
+
+            return false;
         }
     }
+    // A document WorldStaging wrote, which is a JSON object.
+    private static JsonObject Staged(string path) => JsonNode.Parse(utf8Json: File.ReadAllBytes(path: path))!.AsObject();
 }

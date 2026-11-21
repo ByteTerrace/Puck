@@ -1,0 +1,17 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+import "lib"
+
+state {
+  world {
+    slot count = 0
+  }
+}
+
+sized(size: 7)
+
+rule "tick" {
+  when count < 3
+  bump(row: count)
+}

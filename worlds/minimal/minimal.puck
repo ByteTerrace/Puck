@@ -20,7 +20,7 @@ bodies {
   localSeats: 1
   networkPlayers: 0
   reconnectGraceSeconds: 0
-  seatSpawns ["start"]
+  seatSpawns [start]
   sleepAfterSeconds: 0s
 }
 

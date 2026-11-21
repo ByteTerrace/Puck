@@ -21,7 +21,7 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
     public IGpuPipeline Create(
         IGpuRenderPass renderPass,
         IGpuShaderModule vertexShaderModule,
-        IGpuShaderModule fragmentShaderModule,
+        IGpuShaderModule? fragmentShaderModule,
         GpuGraphicsPipelineDescription description,
         in GpuObjectName name
     ) =>
@@ -45,13 +45,13 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
 
         return pipeline;
     }
-    private DirectXGpuPipeline CreateGraphics(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
+    private DirectXGpuPipeline CreateGraphics(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule? fragmentShaderModule, GpuGraphicsPipelineDescription description) {
         ArgumentNullException.ThrowIfNull(description);
         description.ValidateAgainst(renderPass: renderPass);
 
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var vs = ((DirectXGpuShaderModule)vertexShaderModule);
-        var ps = ((DirectXGpuShaderModule)fragmentShaderModule);
+        var ps = ((DirectXGpuShaderModule?)fragmentShaderModule);
         // The render pass's formats are the PSO's render-target and depth-stencil formats, as a Vulkan pipeline takes
         // them from its render pass.
         var pass = ((DirectXGpuRenderPass)renderPass);
@@ -94,8 +94,8 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
                     inputElementCount: ((uint)attributes.Count),
                     vsHandle: vs.Handle,
                     vsLength: vs.BytecodeLength,
-                    psHandle: ps.Handle,
-                    psLength: ps.BytecodeLength
+                    psHandle: (ps?.Handle ?? 0),
+                    psLength: (ps?.BytecodeLength ?? 0)
                 );
             } catch {
                 layout.Dispose();

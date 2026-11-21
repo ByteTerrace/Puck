@@ -453,11 +453,15 @@ compute samples camera depth, late compute samples light depth, in separate sets
 A far cascade at a reduced rate holds a static layer (`SdfFarShadows.HoldsStaticLayer`; the far pass's
 `ShadowFarStaticDepth` and `ShadowFarStaticExit` outputs, `SdfWorldPackage.WithShadows`' `farStatic`). Its invariant is
 that the layer is copied only into a cascade drawn from the camera it was drawn from, holding the static revision it
-drew; `SdfWorldPasses.RecordFar` is the one door (`SdfFarStaticLayer`, its `drawsStatic`), and `SubmittedFar` commits the
+drew; `SdfWorldPasses.RecordFar` is the one door (`SdfFarStaticLayer`, its `SdfFarStaticUse`), and `SubmittedFar` commits the
 layer. The recorder stages the static draws through a second `SdfMeshOcclusion` (`SdfMeshMotion.Static`, its own mesh
 set group after the cascade's, `OcclusionGroups`) and the moving draws plus every glass draw through the cascade's own
 (`SdfMeshMotion.Dynamic`) over a `CopyDepth` of the layer; the kernel leaves a draw a motion filter excludes untouched.
-A path that draws the layer must call `SdfWorldTables.CastersRead`, or a caster absent then never redraws it on landing.
+A refresh that ends the fit (`DecideFar`'s covers false) bypasses the layer (`SdfFarStaticUse.Bypasses`): every caster
+straight into the cascade, no static selection and no copy, and the layer stops standing until the next refresh the rate
+alone calls for draws it again; a layer drawn on a refresh that ends the fit would stand for nothing when the next one
+ends it too, as a walking camera does. So under a turning sun the authored `farShadows.turnDegrees` is the layer's
+lifetime. A path that draws the layer must call `SdfWorldTables.CastersRead`, or a caster absent then never redraws it on landing.
 The static selection's late step samples the layer it just drew, an access the graph plan never sees; it binds because
 `ShaderPipelineRenderNode.UsageOf` creates every depth sampled. A depth created without `Sampled` is a `D32_FLOAT`
 texture, and Direct3D 12 removes the device (`DXGI_ERROR_INVALID_CALL`, no breadcrumb) on creating its shader resource
@@ -689,7 +693,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   the occlusion live.
 - **A cascade has two layers.** Each cascade pass draws its depth (every face,
   `SdfMeshRasterPass.ShadowDescription`) and its exit layer (faces toward the
-  light culled, `ShadowExitDescription`) into its two outputs. A triangle the
+  light culled, `SdfMeshRasterPass.ShadowExitKey`) into its two outputs. A triangle the
   surface pass sees turned from the light compares against the exit layer, so
   its own body lets a wrapped material's light through while any other solid in
   front shadows it; one facing the light keeps the depth, which holds no wall's
@@ -1520,7 +1524,16 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 Produce is split into `produce-work`, the frame thread's own work, and
 `produce-fence`, its time blocked on submission fences (`GpuFenceBlocking`,
 counted in `GpuBatchedSubmissionFence`'s one wait door): a produce that grows
-by its fence share is GPU back-pressure, not CPU work.
+by its fence share is GPU back-pressure, not CPU work. Its usual home is the
+upload's ring wait (`SdfWorldTables.SubmitUpload` waits the previous upload's
+fence, so the frame thread waits for the GPU to finish the frame two back), and
+`begin` is the presenter's own wait for the previous frame. The `produce-work
+parts` are `HostFrameWorkPart`s: `capture` is the residency's scene capture
+(`SdfWorldResidency.Capture`: the composition's pose and transform pack, the
+creations' drivers and effector surface probes, and the mesh dresser), never a
+screenshot, so it costs whatever the scene animates with nothing armed; `pack`
+is `SdfWorldTables.Pack`, mostly the changed mesh records
+(`sdf.instances.records.changed` per frame).
 
 - **The far cascade is the frame's largest variable pass; read whether it
   holds.** With box-only selection it draws nearly every caster in a 280 m box out to 200 m toward the

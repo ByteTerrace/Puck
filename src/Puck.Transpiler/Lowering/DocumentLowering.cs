@@ -709,13 +709,13 @@ public static partial class DocumentLowering {
     // A member has one spelling: a name, a key, an expression and a closed word are bare, and text is a string
     // literal. An interpolated string computes one name, one key or text at compile time; an expression is never
     // built as text, so it takes an interpolated string only as an atom inside its bare spelling.
-    private static void RefuseMisspelledMember(string? holderName, string memberName, DocumentValueForm form, ExpressionNode value, DocumentScope scope) {
+    private static void RefuseMisspelledMember(string? holderName, string memberName, DocumentValueForm form, ExpressionNode value, DocumentScope scope, bool element = false) {
         if (form == DocumentValueForm.Unclassified) {
             return;
         }
         if (value is ArrayExpressionNode array) {
-            foreach (var element in array.Elements) {
-                RefuseMisspelledMember(form: form, holderName: holderName, memberName: memberName, scope: scope, value: element);
+            foreach (var item in array.Elements) {
+                RefuseMisspelledMember(form: form, holderName: holderName, memberName: memberName, scope: scope, value: item, element: true);
             }
 
             return;
@@ -759,7 +759,7 @@ public static partial class DocumentLowering {
         if (value is LiteralExpressionNode { Value: string { Length: > 0 } written }) {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.ArgumentWrittenBare,
-                message: $"{member} holds {holds} and is written bare; write '{memberName}: {BareSpelling(form: form, written: written)}'",
+                message: $"{member} holds {holds} and is written bare; write {(element ? $"'{BareSpelling(form: form, written: written)}' in the list" : $"'{memberName}: {BareSpelling(form: form, written: written)}'")}",
                 span: value.Span
             );
         } else if ((form == DocumentValueForm.Name) && (value is ObjectExpressionNode)) {
@@ -2145,9 +2145,11 @@ public static partial class DocumentLowering {
                     : null);
                 using var origin = scope.SourceMap?.PushOrigin(sourcePath: template.DefinitionPath);
                 using var diagSource = scope.Diagnostics.PushSource(related: useSite, sourcePath: template.DefinitionPath);
+                // The template's parameters are its body's inner bindings, above the calling rule's locals.
+                string[] binders = [.. scope.RuleBinders, .. template.Parameters.Select(selector: static parameter => parameter.Name)];
 
                 foreach (var (member, invocation) in spliced) {
-                    foreach (var flattened in ExpandBody(scope: invocation, statements: [member])) {
+                    foreach (var flattened in ExpandBody(scope: invocation.WithRuleBinders(names: binders), statements: [member])) {
                         yield return flattened;
                     }
                 }
@@ -2182,7 +2184,7 @@ public static partial class DocumentLowering {
                 }
 
                 foreach (var flattened in ExpandBody(
-                    scope: iteration,
+                    scope: iteration.WithRuleBinders(names: [.. ((IEnumerable<string?>)[loop.Item, loop.Index]).OfType<string>()]),
                     statements: [produced]
                 )) {
                     yield return flattened;

@@ -48,7 +48,7 @@ probes [
     kind: "average"
     rateHz: 30
     inputs {
-      frame: view(cameraName: "beacon-eye")
+      frame: view(cameraName: `beacon-eye`)
     }
   }
 ]

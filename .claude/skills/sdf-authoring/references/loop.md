@@ -124,10 +124,9 @@ puck lint <file>.puck --strict
 `compile --validate` runs document-level validation: the panel/trim/cells
 creation-scope refusal fires here (it walks every `prototypes[]` row
 unconditionally, whether or not a placement uses it). No shape-count ceiling
-exists: `CreationDocument.StampShapeCount` only reports bake work. It does **not** run emission or contact construction — `Morph` and
-similar PopField-only blends validate here and only fail at the next step;
-a Path prism profile under a `solid` placement, and a residual
-nonuniform `Scale`, likewise surface only there.
+exists: `CreationDocument.StampShapeCount` only reports bake work. It does **not** run emission or contact construction: a Path prism profile
+under a `solid` placement and a residual nonuniform `Scale` surface only at the
+next step.
 
 ```bash
 puck creation stats --world <path> [--prototype <id>]
@@ -146,13 +145,13 @@ validation refusal **or emission inspection failure**; 2 is a usage error.
 Text-bearing prototypes explicitly report that a resolved font atlas is needed
 and defer clamp inspection to live `world.budget`.
 
-`Morph`, `StairsUnion`, and `StairsSubtraction` are defined enum values:
-raw document validation accepts them, but static shape emission rejects them
-as PopField-only composition. Text-free stats catches that failure when the
-selected path forwards the blend. Animated ungrouped shapes take pooled Union
-defaults, so their unsupported authored blend can still appear in a histogram
-with exit 0. Stats proves neither authored-blend preservation across paths,
-live motion, nor rendered appearance.
+`Morph`, `StairsUnion` and `StairsSubtraction` compose at a field-scope pop: the
+shape emission (`ShapeEmission`) and a solid placement's contact emission
+(`CreationStampEmitter.EmitFixed`) both open that scope with `ShapeScope.Open`.
+Animated ungrouped shapes take pooled Union defaults, so an authored blend can
+still appear in a histogram it does not shape. Validation refuses a `Morph` without its `morph` facet and a
+stairs blend without a `smooth` radius. Stats proves neither authored-blend
+preservation across paths, live motion, nor rendered appearance.
 
 `creation shape --world <path> --prototype <id> [--shape <name>...]` and its
 live twin `creation.shape <prototype> [<shape-name>...]` (headless too) read

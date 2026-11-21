@@ -33,8 +33,13 @@ float sdfMeshIrradianceHalf(uint word, uint high) {
 uint sdfMeshCubeFace(float3 normal, uint axis) {
     return ((2u * axis) + ((normal[axis] < 0.0) ? 1u : 0u));
 }
-// A probe's sky share, its surfaces' radiance and its sky light, all read from its slot's words.
-void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out float3 radiance, out float3 skyLight) {
+// A six-axis cube about a normal, read from its words in `words`: the sky shares from `skyWord` (three words, an axis's
+// positive face in the low half and its negative face in the high), and the radiance and the sky light from `radianceWord`
+// and `skyLightWord` (nine words each, face f's channel c the half (3f + c) counting from the low half of the first word).
+// A probe's slot holds its cube so (SDF_MESH_IRRADIANCE_*_WORD), and a views probe record its cell's blended cube
+// (sdf-views-probes.hlsli).
+void sdfMeshCubeRead(StructuredBuffer<uint> words, uint skyWord, uint radianceWord, uint skyLightWord, float3 normal,
+    out float sky, out float3 radiance, out float3 skyLight) {
     float3 squared = (normal * normal);
     sky = 0.0;
     radiance = 0.0;
@@ -42,17 +47,22 @@ void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out floa
     [unroll] for (uint axis = 0u; (axis < 3u); axis++) {
         uint face = sdfMeshCubeFace(normal, axis);
         uint negative = (face & 1u);
-        sky += (squared[axis] * sdfMeshIrradianceHalf(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_SKY_WORD + axis], negative));
+        sky += (squared[axis] * sdfMeshIrradianceHalf(words[skyWord + axis], negative));
         float3 value;
         float3 open;
         [unroll] for (uint channel = 0u; (channel < 3u); channel++) {
             uint entry = ((3u * face) + channel);
-            value[channel] = sdfMeshIrradianceHalf(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_RADIANCE_WORD + (entry >> 1)], (entry & 1u));
-            open[channel] = sdfMeshIrradianceHalf(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_SKY_LIGHT_WORD + (entry >> 1)], (entry & 1u));
+            value[channel] = sdfMeshIrradianceHalf(words[radianceWord + (entry >> 1)], (entry & 1u));
+            open[channel] = sdfMeshIrradianceHalf(words[skyLightWord + (entry >> 1)], (entry & 1u));
         }
         radiance += (squared[axis] * value);
         skyLight += (squared[axis] * open);
     }
+}
+// A probe's sky share, its surfaces' radiance and its sky light, all read from its slot's words.
+void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out float3 radiance, out float3 skyLight) {
+    sdfMeshCubeRead(sdfMeshIrradiance, (address + SDF_MESH_IRRADIANCE_SKY_WORD), (address + SDF_MESH_IRRADIANCE_RADIANCE_WORD),
+        (address + SDF_MESH_IRRADIANCE_SKY_LIGHT_WORD), normal, sky, radiance, skyLight);
 }
 
 // KEEP IN SYNC with SdfMeshIrradiance.Gather. A corner's weight is its cell's trilinear share times
@@ -306,6 +316,9 @@ struct SdfMeshProbes {
     // only by the surfaces they measured.
     bool measured;
     bool remainderMeasured;
+    // One more than the first word of a views probe record whose blended cube (sdfMeshProbeCube) these probes are, read in
+    // place of their corners where a reader holds the record; zero for none.
+    uint cube;
 };
 
 // The two stages' cages a reader of the gathered probes resolves once before its corners (sdfMeshProbeAt).
@@ -437,6 +450,7 @@ SdfMeshProbes sdfMeshProbesNone() {
     probes.share = 0.0;
     probes.measured = false;
     probes.remainderMeasured = false;
+    probes.cube = 0u;
     [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
         probes.weight[corner] = 0.0;
     }
@@ -581,6 +595,47 @@ void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVi
     skyVisibility = (sky / total);
     radiance = (reflected / total);
     skyLight = (open / total);
+}
+// The gathered probes' six-axis cubes blended into one by their weights, face by face (+X, -X, +Y, -Y, +Z, -Z), each over
+// the total weight, zero where no corner answers. A cube's value about a direction is linear in its faces, so this cube
+// read along any direction (sdfMeshCubeRead) is sdfMeshIrradianceAt's answer along it, up to the order of the sums.
+void sdfMeshProbeCube(SdfMeshProbes probes, out float sky[6], out float3 radiance[6], out float3 skyLight[6]) {
+    float total = 0.0;
+
+    [unroll] for (uint cleared = 0u; (cleared < 6u); cleared++) {
+        sky[cleared] = 0.0;
+        radiance[cleared] = 0.0;
+        skyLight[cleared] = 0.0;
+    }
+
+    SdfMeshProbeStages stages = sdfMeshProbeStagesOf(probes);
+
+    [loop] for (uint corner = 0u; (corner < 16u); corner++) {
+        uint address;
+        if (!sdfMeshProbeAt(probes, stages, corner, address)) {
+            continue;
+        }
+
+        float weight = probes.weight[corner];
+
+        [unroll] for (uint face = 0u; (face < 6u); face++) {
+            sky[face] += (weight * sdfMeshIrradianceHalf(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_SKY_WORD + (face >> 1)], (face & 1u)));
+            [unroll] for (uint channel = 0u; (channel < 3u); channel++) {
+                uint entry = ((3u * face) + channel);
+                radiance[face][channel] += (weight * sdfMeshIrradianceHalf(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_RADIANCE_WORD + (entry >> 1)], (entry & 1u)));
+                skyLight[face][channel] += (weight * sdfMeshIrradianceHalf(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_SKY_LIGHT_WORD + (entry >> 1)], (entry & 1u)));
+            }
+        }
+        total += weight;
+    }
+
+    float scale = ((total > 0.0) ? (1.0 / total) : 0.0);
+
+    [unroll] for (uint scaled = 0u; (scaled < 6u); scaled++) {
+        sky[scaled] *= scale;
+        radiance[scaled] *= scale;
+        skyLight[scaled] *= scale;
+    }
 }
 // The visibility of a light of the lights table at the surface (a traced point or spot light, or a shadowing directional
 // in a view with no cascade): the weight of the gathered probes read bounded by their

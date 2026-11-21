@@ -28,7 +28,7 @@ import "stopped-machines"
 bodies {
   localSeats: 2
   seatActivation [Eager, Eager]
-  seatSpawns ["stage", "stage"]
+  seatSpawns [stage, stage]
 }
 
 suitToggle(seat: 2, index: 1)

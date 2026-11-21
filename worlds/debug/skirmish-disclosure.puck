@@ -14,7 +14,7 @@ import "skirmish"
 bodies {
   localSeats: 2
   seatActivation [Eager, Eager]
-  seatSpawns ["stage", "stage"]
+  seatSpawns [stage, stage]
 }
 
 // The sessions the harness observes from: the authority's name decides the tier. The editor session may also write

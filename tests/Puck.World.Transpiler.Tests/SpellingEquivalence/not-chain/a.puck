@@ -1,0 +1,21 @@
+// A gate is true or false, so two negations cancel: a chain of `not` is the gate with one `not` at most, however long
+// it is written, and nests no deeper in the document.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot count = 0
+    slot other = 0
+  }
+}
+
+rule "even" {
+  when not not (count == 0) and not not not not other
+  count = 1
+}
+
+rule "odd" {
+  when not not not count > 1
+  count = 2
+}

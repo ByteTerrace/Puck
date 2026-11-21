@@ -366,6 +366,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 ),
                 pipelines: Pipelines,
                 meshRaster: MeshRaster,
+                shadowEntryRaster: ShadowRaster,
                 shadowRaster: ShadowRaster,
                 shadowExitRaster: ShadowRaster,
                 shadowGlassRaster: ShadowRaster,

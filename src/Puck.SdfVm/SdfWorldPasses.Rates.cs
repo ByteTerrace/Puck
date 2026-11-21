@@ -35,8 +35,10 @@ namespace Puck.SdfVm;
 // in its current graph), the fit still covers the view (DecideFar's covers, measured against that same camera, whose
 // anchors a refresh over the static layer leaves where the layer's own refresh set them) and the static scene's revision
 // is the one it drew (SdfWorldTables.StaticDrawRevision, which the distant map's hold trusts too); otherwise the
-// recording draws the layer again. So the static layer is drawn again only on a static change, a light turn past the
-// authored tolerance or anything else that ends the fit, and the moving casters at the authored rate.
+// recording draws the layer again on a refresh the rate alone calls for, and on a refresh that ends the fit draws every
+// caster straight into the cascade, with no layer and no copy, since a layer drawn there stands for nothing a later
+// refresh that ends the fit again can reuse (SdfFarStaticUse). So the static layer is drawn again only on a static change
+// or on the first rate refresh after the fit ended, and the moving casters at the authored rate.
 public sealed partial class SdfWorldPasses {
     // A layer's receiver coverage names the sample grid it classified the casters against: the cull level, the detail
     // choice, the render extent and scale, and the view's cut and bindings. The light is absent (readers use that layer's
@@ -125,23 +127,27 @@ public sealed partial class SdfWorldPasses {
     /// <param name="counts">The frame's rate counters, or <see langword="null"/>.</param>
     /// <param name="layer">The static layer the recorder holds: whether its graph keeps one, whether it has drawn the one of
     /// the target it binds, and the static scene's revision the recording draws.</param>
-    /// <param name="drawsStatic">Whether the recording draws the static layer again before it copies it into the cascade;
-    /// always <see langword="false"/> without one.</param>
+    /// <param name="staticUse">How the recording uses the static layer: <see cref="SdfFarStaticUse.Absent"/> without one.</param>
     /// <returns>The layers to draw: both unless a split refresh draws one of them, and always both with a static
     /// layer.</returns>
-    internal SdfFarLayers RecordFar(string instance, in SdfMeshShadowCamera fresh, bool written, WorkCounterSet? counts, SdfFarStaticLayer layer, out bool drawsStatic) {
+    internal SdfFarLayers RecordFar(string instance, in SdfMeshShadowCamera fresh, bool written, WorkCounterSet? counts, SdfFarStaticLayer layer, out SdfFarStaticUse staticUse) {
         var entry = Refresh(instance: instance);
         var layers = (((entry.FarLayers == SdfFarLayers.None) || !written) ? SdfFarLayers.Both : entry.FarLayers);
         // An exit layer alone is drawn from the camera its depth was drawn from.
         var camera = ((layers == SdfFarLayers.Exit) ? entry.FarCamera : fresh);
 
-        drawsStatic = false;
+        staticUse = SdfFarStaticUse.Absent;
         if (layer.Held) {
             var stands = (entry.FarStaticStands && entry.FarCovers && layer.Written && entry.FarCamera.Equals(other: entry.FarStaticCamera));
 
             layers = SdfFarLayers.Both;
             camera = (stands ? entry.FarStaticCamera : camera);
-            drawsStatic = (!stands || (entry.FarStaticRevision != layer.Revision));
+            // A layer drawn on a refresh that ends the hold would stand for no later refresh unless the next one covers
+            // too, so such a refresh draws every caster straight into the cascade and lets the layer go; the next refresh
+            // the rate alone calls for draws it again.
+            staticUse = ((stands && (entry.FarStaticRevision == layer.Revision))
+                ? SdfFarStaticUse.Reuses
+                : (entry.FarCovers ? SdfFarStaticUse.Draws : SdfFarStaticUse.Bypasses));
         }
 
         entry.FarPendingFrame = m_frame;
@@ -149,7 +155,11 @@ public sealed partial class SdfWorldPasses {
         entry.FarPendingReceivers = ReceiverSignatureOf(entry);
         entry.FarPendingCounts = counts;
         entry.FarPendingCamera = camera;
-        entry.FarPendingStatic = (layer.Held ? drawsStatic : null);
+        entry.FarPendingStatic = staticUse switch {
+            SdfFarStaticUse.Draws => true,
+            SdfFarStaticUse.Reuses => false,
+            _ => null,
+        };
         entry.FarPendingRevision = layer.Revision;
 
         return layers;
@@ -350,7 +360,8 @@ public sealed partial class SdfWorldPasses {
         // Whether the decided frame's fit still covers what the view shows, so only the rate called for a refresh.
         public bool FarCovers { get; set; }
         // The static layer a submitted recording last drew, while it stands: the camera and the static scene's revision it
-        // was drawn from. What this frame's recording does to it: null with no static layer, true when it draws it again.
+        // was drawn from. What this frame's recording does to it: true when it draws it again, false when it reuses it, and
+        // null when it holds none or draws past it, which lets it go.
         public bool FarStaticStands { get; set; }
         public SdfMeshShadowCamera FarStaticCamera { get; set; }
         public long FarStaticRevision { get; set; } = -1;
@@ -364,6 +375,18 @@ public sealed partial class SdfWorldPasses {
 /// binds.</param>
 /// <param name="Revision">The static scene's revision the recording draws (<see cref="SdfWorldTables.StaticDrawRevision"/>).</param>
 internal readonly record struct SdfFarStaticLayer(bool Held, bool Written, long Revision);
+/// <summary>How a far cascade recording uses its static layer (<see cref="SdfWorldPasses.RecordFar"/>).</summary>
+internal enum SdfFarStaticUse : byte {
+    /// <summary>The cascade holds no static layer: every caster is drawn into it.</summary>
+    Absent = 0,
+    /// <summary>The standing layer is copied into the cascade and the moving casters drawn over it.</summary>
+    Reuses = 1,
+    /// <summary>The layer is drawn again, then copied into the cascade and the moving casters drawn over it.</summary>
+    Draws = 2,
+    /// <summary>A refresh that ends the hold: every caster is drawn straight into the cascade and the layer stops
+    /// standing.</summary>
+    Bypasses = 3,
+}
 /// <summary>Which of the far shadow cascade's two layers its pass draws on a frame (<see cref="SdfWorldPasses"/>).</summary>
 [Flags]
 internal enum SdfFarLayers : byte {

@@ -232,7 +232,7 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             destinationAccessMask: (AccessStructureRead | AccessStructureWrite), destinationStageMask: (StageBuild | StageCompute),
             sourceAccessMask: AccessStructureWrite, sourceStageMask: StageBuild);
     /// <inheritdoc/>
-    public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+    public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, ulong offsetBytes = 0) {
         ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
         ArgumentOutOfRangeException.ThrowIfZero(bufferHandle);
         if (
@@ -250,6 +250,7 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             bufferHandle: bufferHandle,
             commandBufferHandle: commandBufferHandle,
             device: Device,
+            offsetBytes: offsetBytes,
             sizeBytes: sizeBytes
         );
         // vkCmdFillBuffer writes in the transfer stage. The neutral compute barrier vocabulary has no transfer

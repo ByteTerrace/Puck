@@ -1,0 +1,25 @@
+// A key that compile-time constants decide is the literal key they decide, read or written, in a gate, a value or a
+// call form's key, and costs what the literal costs.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let k = 1
+
+state {
+  world {
+    row {
+      name: "cards"
+      kind: "Int"
+      capacity: 3
+      cells: map(range(0, 3), i => { key: $"{i}", value: 0 })
+    }
+    slot count = 0
+  }
+}
+
+rule "tick" {
+  when cards[k + 1] < 2 and cards[k * 2 - 2] == 0
+  count = cards[k + 1] + cards[(k + 3) / 2]
+  cards[k + 1] = count
+  cards[k - 1] += 1
+}

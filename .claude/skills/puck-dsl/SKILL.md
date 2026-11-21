@@ -79,7 +79,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   statements (locals, `when`, `if`, effects) a rule body calls and splices
   (`worlds/standard/seat.puck`'s `seatPress`); `import "name" [as alias]`,
   `export` (and `exports { … }`, whose repeated blocks merge facet lists), and
-  `use m as a(args)` compose modules. An import's export surface is explicit,
+  `use m as a(args)` compose modules. An aliased library's template or rule
+  template is called as a statement by its qualified name (`m.sized(size: 7)`),
+  as its function is in an expression. An import's export surface is explicit,
   never transitive across nested imports. `table` and `pile` admit
   `capacity(auto)` to lower to their authored entries' count.
 - **A template body's block or rule name is a parameter reference only when
@@ -114,7 +116,12 @@ A document's `schema:` field selects its vocabulary, never the filename.
   literal, or a builtin's result.
   World locals precede every gate and effect and evaluate in declaration
   order. A late declaration is refused; move it before the first gate or
-  effect to make its pre-effect read explicit.
+  effect to make its pre-effect read explicit. A header `when`
+  (`rule "x" when … { }`) stands after the body's leading locals. A local
+  hides a document constant of the same name inside its rule: the innermost
+  binding wins, in lowering, hover and go-to-definition. A spliced `rule
+  template`'s parameters and a rule-body `for`'s variables are inner to the
+  rule's locals (`DocumentScope.RuleBinders`).
   A rule has one gate and one decision, so a `when`, `decision` or nested
   `rule` inside a rule-body `for` is **PUCK114**; write the condition in the
   rule's own `when`, or in an `if` inside the loop.
@@ -165,6 +172,10 @@ A document's `schema:` field selects its vocabulary, never the filename.
   when nothing crossed. An absent body reads every register as 0, so a claim of
   `0` there also claims presence
   ([testing a world](../../../docs/authoring/testing-a-world.md#crossing-into-another-document)).
+  A block naming a document no reference of the world reaches is `PUCK105` in
+  every compile (`puck compile`, `puck lint`, the language server), checked by
+  the reference walk `puck test` stages with (`WorldCompileSession.ReachDocuments`).
+  `puck lint <dir>` reports a library `let` or template no linted source reads.
 - **`allow CODE "why"` acknowledges a deliberate warning or note** over the
   statement on the next line (a row, a `let`, a template call), never an error.
   It changes nothing in the document; an unknown code, a missing reason or
@@ -201,7 +212,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   in a source gate are refused by name; write a comparison such as `left == right`.
 - **One bracket rule.** `row.key` names a literal key; `row[expression]`
   evaluates. Names in brackets resolve lexically, so an unknown bare word is
-  an error. Use `row["key"]` for a quoted literal key. Read a local as `name`,
+  an error. A key compile-time constants decide (`slot[k + 1]` with
+  `let k = 1`) lowers to the literal key (`slot[2]`), priced and refused as
+  that literal is. Use `row["key"]` for a quoted literal key. Read a local as `name`,
   never `local(name)`; use `row[x]`, never `row[(x)]` or `row[slot[$value]]`.
   Functions are recognized only in call position, so a local may be named `sign`.
 

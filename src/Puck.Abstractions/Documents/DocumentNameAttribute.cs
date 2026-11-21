@@ -46,6 +46,12 @@ public enum WorldNameKind : byte {
     /// <summary>A <c>screenMaterials</c> row: its own namespace, apart from every state-side name, which a screen row
     /// and a creation face name by id.</summary>
     ScreenMaterial,
+    /// <summary>A <c>cameras</c> row, which a view slot, a screen's view source and a carried screen name: its own
+    /// namespace, shared by every layer of a composition.</summary>
+    Camera,
+    /// <summary>A <c>spawnPoints</c> row, which a pose, a route step, a seat and a distribution name: its own
+    /// namespace, shared by every layer of a composition.</summary>
+    SpawnPoint,
     /// <summary>Any declaration the document makes, whatever its namespace: an entry of a module's export lists.</summary>
     Any,
 }

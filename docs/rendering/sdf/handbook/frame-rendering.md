@@ -106,8 +106,8 @@ through the interpreter (`mapCore`), the frame's one walk of the SDF program. A
 frame with no pending bake skips both, so a settled scene evaluates no field on
 the GPU at all.
 
-**shadow-near**, **shadow-far** and **shadow-second** (`sdf-mesh-shadow.vert.hlsl`,
-`sdf-mesh-shadow.frag.hlsl`) draw the opaque mesh draws from the light cameras
+**shadow-near**, **shadow-far** and **shadow-second** (`sdf-mesh-shadow.vert.hlsl`)
+draw opaque meshes from the light cameras
 `SdfMeshShadowCascades` fits ([the shadow cascades](#the-shadow-cascades)) into
 their depth alone, each draw whose box lies in the cascade's light box and,
 swept along the light, may shadow a receiver the view shows
@@ -117,6 +117,11 @@ emits (the secondary shadow role, `SdfLights.RoleSlot`), and a view whose world
 holds one stable slot has no `shadow-second` at all. A view whose world draws a
 distant map adds `shadow-distant` ([the distant shadow map](#the-distant-shadow-map)),
 which stands on every frame its inputs do.
+
+The opaque shadow pipelines write depth without a fragment stage.
+The entry pass culls back faces on closed, rigid casters whose bounds are
+wholly beyond the light's near plane. The glass raster marks the optical tiles
+it touches so the next redraw can clear those tiles.
 
 **mesh** (`sdf-mesh.vert.hlsl`, `sdf-mesh.frag.hlsl`) rasterizes the frame's mesh draws, one draw call
 each, into the mesh visibility target at the view's extent: per pixel the ray parameter,
@@ -422,7 +427,10 @@ lights and volumes it reads. `composite` scales with the output's pixels and
 glass draws' fragments (every face of each, front and back) and `glass-shade`
 with the render grid's pixels, a copy for every pixel no glass covers and a
 refracted read, up to eight for a frosted pane, for every pixel glass does;
-`glass-clear` is one buffer clear.
+`glass-clear` clears only the rows of the sums the previous raster could have
+written, from the rows its glass draws' boxes spanned
+(`SdfWorldTables.GlassRows`), so a view whose glass covers a band of the screen
+clears that band rather than the whole buffer.
 
 Each pass exposes `gpu.shapes.evaluated` beside `gpu.march.steps`; on the
 baked-mesh path only `bake` evaluates shapes, so a settled frame counts none.
@@ -746,7 +754,9 @@ Each sum is linear in the samples, so each can be filtered like color. Views
 writes the first, `aᵢ Tᵢ Cᵢ`, as the lit image's color; the alpha holds `aᵢ`.
 The resolve computes each kind's **in-scatter weight** `aᵢ Wᵢₖ`, the fog's, the
 haze's and the medium's, from each sample's own visibility record along the
-output pixel's ray, and reads them beside the color at every tap of the same
+sample's own ray, the ray its color's transmittance was taken along, once per
+sample for an output group's tile of samples, and reads them beside the color at
+every tap of the same
 reconstruction footprint (`reconstruction.hlsli`'s footprint and running sum); the
 temporal path sums them with the same Gaussian weights and reprojects them with
 the same history weights. The composite then adds each `Gₖ` times its resolved

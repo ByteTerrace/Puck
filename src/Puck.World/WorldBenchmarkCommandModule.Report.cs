@@ -337,7 +337,7 @@ public sealed partial class WorldBenchmarkCommandModule {
         return new JsonObject { ["count"] = over.Count, ["listed"] = listed.Count, ["sampleTicks"] = SampleTicks, ["items"] = listed };
     }
 
-    // Each GPU pass's mean and longest over the samples taken in the chapter, each sample a pass's rolling window mean.
+    // Each GPU pass's mean and maximum across the chapter's readings of its rolling per-frame cost.
     // Null when the host composes no render graph or no sample was complete.
     private JsonNode? DescribeGpu(Chapter chapter) {
         if (gpuTiming is not { Available: true }) {

@@ -14,7 +14,9 @@ public sealed partial class WorldSiloHost {
         requireAdmission: true,
         cancellationToken
     );
-    /// <summary>Checks candidate persistence and pump health without treating private verification as admission.</summary>
+    /// <summary>Checks candidate persistence and pump health without treating private verification as admission. Unlike
+    /// public readiness it also fails on authority retention, so an operator and release verification see leaked
+    /// storage.</summary>
     public Task<string> CheckPrivateHealthAsync(CancellationToken cancellationToken) => CheckHealthCoreAsync(
         requireAdmission: false,
         cancellationToken
@@ -67,7 +69,9 @@ public sealed partial class WorldSiloHost {
                         completion.TrySetResult(result: $"{world.World}: checkpoint overdue"); return;
                     }
                 }
-                if (row.RetentionFailures >= RetentionFailureLimit) {
+                // Retention deletes what a newer checkpoint superseded. Failing it leaks storage, which private health and
+                // the operator see, but the world it serves is whole, so public readiness never withdraws players for it.
+                if (!requireAdmission && (row.RetentionFailures >= RetentionFailureLimit)) {
                     completion.TrySetResult(result: $"{world.World}: authority retention failing ({row.RetentionFailure})"); return;
                 }
                 if (

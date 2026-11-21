@@ -802,7 +802,11 @@ report, and a red one neither holds nor skips the deploy. A manual
 run exposes one `deploy` switch; setting it to false performs build and validation
 only. Pull requests have no Azure credentials. Trusted infrastructure
 builds authenticate before restoring the pinned `ts/bvm` Template Specs through
-`src/Puck.Azure.Resources/bicepconfig.json`.
+`src/Puck.Azure.Resources/bicepconfig.json`, and refuse a pattern whose pinned
+version is unpublished or differs from its source, since the deploy reads the
+published version. `puck azure publish-template-specs`, run by the owner or the
+lead, publishes a new version or republishes a changed one in place: a published
+version is greenfield, since this repository's deployments are its only clients.
 
 The `Puck` GitHub environment supplies `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and
 `AZURE_SUBSCRIPTION_ID` for the single CI identity, `bytrcidpzzz` (client ID
@@ -940,8 +944,7 @@ storage. Azure refuses Spot Try & Restore (`spotRestorePolicy`) on a Flexible
 scale set, so `worldSiloCompute.bicep` holds the worker count with a
 fixed-count autoscale setting: autoscale returns a set below its minimum to the
 minimum, recreating an evicted worker once Spot capacity allows, and the world
-is offline until it does. `spot.restoreTimeout` is read by nothing; the
-published world-silo type still requires it. Spot draws on the region's
+is offline until it does. Spot draws on the region's
 separate low-priority vCPU quota. Azure cannot change a scale set's priority in
 place, so a rollout that changes it deletes and recreates the scale set once the
 source has drained.

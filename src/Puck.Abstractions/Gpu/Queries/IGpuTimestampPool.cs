@@ -35,8 +35,13 @@ public interface IGpuTimestampPool : IDisposable {
     /// <param name="offset">The destination byte offset, a multiple of eight.</param>
     void Resolve(nint command, uint first, uint count, nint destination, ulong offset);
 }
-/// <summary>One pass's observed average GPU time; unavailable until a timestamp pair completed.</summary>
+/// <summary>One pass's observed GPU time over a window of completed node submissions.</summary>
 /// <param name="Pass">The pass's ledger name.</param>
 /// <param name="Milliseconds">The mean duration of the retained samples.</param>
 /// <param name="Samples">The number of completed samples in the mean.</param>
-public readonly record struct GpuPassTiming(string Pass, double Milliseconds, int Samples);
+/// <param name="PerFrameMs">Total sampled milliseconds divided by the window width, including skipped frames.</param>
+/// <param name="LastSubmission">Newest submission that timed the pass, or zero if it has never been timed in this graph.</param>
+public readonly record struct GpuPassTiming(string Pass, double Milliseconds, int Samples, double PerFrameMs = 0, long LastSubmission = 0) {
+    /// <summary>Whether this pass has timed work, all of it outside the current window.</summary>
+    public bool Stale => (Samples == 0) && (LastSubmission != 0);
+}

@@ -131,7 +131,7 @@ beyond `puck parity`, so a kernel change is judged by running
 |---|---|---|
 | `Sdf/passes/fullscreen.vert.hlsl` | Minimal fullscreen triangle vertex shader. | The overlay and `sdf.film-grain` |
 | `Sdf/passes/sdf-mesh.vert.hlsl`, `Sdf/passes/sdf-mesh.frag.hlsl` | The mesh pass: one draw call a mesh draw, pulling its triangles from the mesh region and writing the nearest surface's ray parameter, draw and triangle into the mesh target the surface pass reads. Reads `isa/sdf-mesh.interface.hlsli`. | `SdfMeshRasterPass` (`ShaderStem`) |
-| `Sdf/passes/sdf-mesh-shadow.vert.hlsl`, `Sdf/passes/sdf-mesh-shadow.frag.hlsl` | The shadow cascades' pass: the mesh pass's triangle pull projected orthographically along the light into a cascade's reversed, linear depth alone, which the surface pass samples (`sdfMeshShadowDepth`); the fragment stage writes no colour and counts its fragments. Reads `isa/sdf-mesh.interface.hlsli`. | `SdfMeshRasterPass` (`ShadowShaderStem`) |
+| `Sdf/passes/sdf-mesh-shadow.vert.hlsl` | Projects the mesh triangles along the light into the cascade's reversed, linear depth. The surface pass samples it through `sdfMeshShadowDepth`. | `SdfMeshRasterPass` (`ShadowShaderStem`) |
 | `Sdf/passes/sdf-film-grain.frag.hlsl` | Fullscreen integer-hashed film grain over the frame the pass before it wrote, the fragment stage of the `sdf.film-grain` render graph package (`RenderGraphPackageCatalog.SdfFilmGrain`). | A `views.post` row naming `sdf.film-grain` |
 
 ## Validation rule

@@ -203,7 +203,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
     public IGpuPipeline Create(
         IGpuRenderPass renderPass,
         IGpuShaderModule vertexShaderModule,
-        IGpuShaderModule fragmentShaderModule,
+        IGpuShaderModule? fragmentShaderModule,
         GpuGraphicsPipelineDescription description,
         in GpuObjectName name
     ) {
@@ -223,20 +223,20 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
         return pipeline;
     }
 
-    private VulkanGraphicsPipeline CreateGraphics(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description) {
+    private VulkanGraphicsPipeline CreateGraphics(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule? fragmentShaderModule, GpuGraphicsPipelineDescription description) {
         ArgumentNullException.ThrowIfNull(description);
         description.ValidateAgainst(renderPass: renderPass);
 
         var logicalDevice = deviceContext.LogicalDevice;
         var pass = ((VulkanGpuRenderPass)renderPass);
         var vertexShader = ((VulkanShaderModule)vertexShaderModule);
-        var fragmentShader = ((VulkanShaderModule)fragmentShaderModule);
+        var fragmentShader = ((VulkanShaderModule?)fragmentShaderModule);
 
         if (ShaderStage.Vertex != vertexShader.Stage) {
             throw new InvalidOperationException(message: "Graphics-pipeline creation requires a vertex shader module.");
         }
 
-        if (ShaderStage.Fragment != fragmentShader.Stage) {
+        if ((fragmentShader is not null) && (ShaderStage.Fragment != fragmentShader.Stage)) {
             throw new InvalidOperationException(message: "Graphics-pipeline creation requires a fragment shader module.");
         }
 
@@ -300,7 +300,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
                     : null),
                 Device: logicalDevice.Commands,
                 DynamicStates: [DynamicStateViewport, DynamicStateScissor],
-                FragmentShaderModuleHandle: fragmentShader.Handle,
+                FragmentShaderModuleHandle: (fragmentShader?.Handle ?? 0),
                 Multisample: new VkPipelineMultisampleStateCreateInfo {
                     RasterizationSamples = SampleCount1Bit,
                     SType = StructureTypePipelineMultisampleStateCreateInfo,
