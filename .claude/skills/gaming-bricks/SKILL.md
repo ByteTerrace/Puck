@@ -172,7 +172,11 @@ for last/peak/total fuel. Run=2 plays runtime segments; run=3 fuzzes a seeded wi
 No game addresses or title knowledge belongs in this guest.
 
 The debug world runs 30 world ticks per second, holding inputs across about two native
-frames. Hash/probe reads drain workers; checkpoints preserve their rational cycle phase,
+frames; a screen shows only each segment's last one. `machine.state` reports each
+machine's `nativeFrames`, `backpressure` and worker `busyMs` (host time, never state):
+`busyMs` over the wall time between two reads is the share of real time it needs. It is
+a timing reading, so it is taken only on a quiet machine; `nativeFrames` per segment
+is a count any machine can read. Hash/probe reads drain workers; checkpoints preserve their rational cycle phase,
 so these generic checks need no extra frame-stamped input seam. Every queued core
 implements pure `PeekByte`/`PeekBytes` (AGB's reads bus inspection, including byte
 lanes of 16-bit IO registers); the inherited default peeks zero and hides live RAM.

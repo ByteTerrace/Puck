@@ -352,13 +352,43 @@ package above is not started. One item belongs to no package:
 - Emulation rate. A Deck takes several times longer per world tick than the
   World's own tick CPU (`puck bench world` prints each machine's tick alone), and
   a headless unpaced run (`puck test`, replay catch-up, `--unpaced`) waits on the
-  slowest machine's pending window, which is a Deck in the debug world. With
-  quiet master ticks skipped, the per-dot PPU (`HgdPpu.StepDot`: the range tests
-  in `StepRenderingDot` and `StepSprites`, `EmitPixel`) and the CPU's per-cycle
-  `Transfer` are most of what is left. Cutting them, for example by deciding
-  each dot's work from a per-dot table rather than a cascade of range tests,
-  must leave every state `QuietTickEquivalenceLawTests` and the battery compare
-  unchanged.
+  slowest machine's pending window, which is a Deck in the debug world (four of
+  them: the device row's and the range's three televisions). `machine.state`'s
+  `busyMs` over wall time reads each one's share of real time on any machine.
+  The core allocates nothing per frame. Its cost is the reference execution
+  mode itself: an NTSC frame steps `HgdMachine.StepMasterTick` about 119,100
+  times (4.07 per CPU cycle, 238,200 quiet ticks skipped), 89,330 dots and
+  29,270 CPU cycles, and makes roughly 190,000 `IHgdMapper` interface calls:
+  three per CPU cycle (`ObserveM2` twice, `Irq`) plus the cartridge reads, and
+  about 340 per rendering line from the PPU's fetches (`ObservePpuAddress` and
+  `PpuRead`). On NROM, which times nothing, about 130,000 of them reach empty
+  methods. The work, largest first:
+  1. The catch-up mode [Clock and scheduling](#clock-and-scheduling) allows: run
+     the CPU and the PPU in spans up to the next observable edge (a PPU register
+     access, the NMI edge, a board's IRQ deadline, DMA, the APU's IRQ), the
+     scheduler the Advanced Gaming Brick already has (`AgbScheduler`), gated by
+     the chunk-partition equivalence stage.
+  2. Board access through cached bank windows, as the Humble Gaming Brick's
+     `SystemBus` caches its ROM banks (an array and offset refreshed on a mapper
+     control write), instead of an interface call and a span rebuilt from
+     `HgdCartridge.PrgRom` or `ChrRom` on every access; edge observation only
+     for a board that declares it times on edges (MMC1's write rule, MMC3's
+     A12 counter).
+  3. A decode cached at the opcode fetch: every CPU cycle reads
+     `Instructions[m_opcode]` several times through `CurrentMode` and
+     `CurrentOperation` and re-runs the `IsStore` and `IsModify` pattern tests;
+     the cached fields derive from `m_opcode`, so the snapshot does not change.
+  4. One framebuffer in state: `HgdPpu` serializes both `m_frame` and
+     `m_completedFrame`, 245,760 of a 258,693-byte capture, and copies one into
+     the other at every vertical blank; each brick keeps one.
+  5. The presentation path moves about 1.2 MB per shown frame for 61,440
+     nine-bit pixels: `HgdPalette.Convert` to `0x00RRGGBB`, the worker's
+     `RepackFramebuffer` to RGBA8 (a second pass every core pays), the copy
+     under the frame lock in `WriteFrame`, and the upload. The engine's
+     `Indexed8` source format, which no machine uses, converts on the GPU, but
+     a 512-entry palette needs a wider index.
+  Each must leave every state `QuietTickEquivalenceLawTests` and the battery
+  compare unchanged.
 
 ---
 
