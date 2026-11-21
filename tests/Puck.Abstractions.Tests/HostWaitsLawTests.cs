@@ -6,8 +6,8 @@ namespace Puck.Abstractions.Tests;
 
 /// <summary>
 /// The wait door's contract, which running the engine cannot show: a deadline wait on something that never completes
-/// returns its expiry as a value and is listed with its reason; on the pump thread the door clips a wait to the
-/// iteration's allowance and charges it; the consumer role is refused to the pump and to any thread but its own; and a
+/// returns its expiry as a value and is listed with its reason; on the pump thread the door clips a slice wait to the
+/// iteration's allowance and charges it, and never clips a synchronous one; the consumer role is refused to the pump and to any thread but its own; and a
 /// wait whose object is already complete allocates nothing.
 /// </summary>
 public sealed class HostWaitsLawTests {
@@ -73,6 +73,12 @@ public sealed class HostWaitsLawTests {
                 count = HostWaits.Expired(destination: expired);
                 Assert.Equal(expected: 0L, actual: expired[..count].ToArray().First(predicate: record => (record.ThreadId == Environment.CurrentManagedThreadId)).BudgetTicks);
 
+                // A synchronous deadline's caller cannot resume its wait, so the spent allowance does not clip it.
+                using (new Timer(callback: _ => signal.Set(), dueTime: TimeSpan.FromMilliseconds(value: 20), period: Timeout.InfiniteTimeSpan, state: null)) {
+                    Assert.Equal(expected: WaitOutcome.Completed, actual: HostWaits.Wait(deadline: WaitDeadline.Synchronous(budget: TimeSpan.FromSeconds(value: 20)), reason: Reason, signal: signal));
+                }
+                signal.Reset();
+
                 // The next control phase opens a fresh allowance.
                 HostWaits.BeginPumpIteration(allowance: allowance);
                 Assert.Equal(expected: allowance, actual: HostWaits.PumpAllowance);
@@ -80,6 +86,19 @@ public sealed class HostWaitsLawTests {
                 HostWaits.EndPump();
             }
             Assert.Null(@object: HostWaits.PumpAllowance);
+        });
+    }
+    [Fact]
+    public void ASynchronousDoorThrowsOnlyWhileItsOperationIsPendingAndNamesTheExpiredWait() {
+        OnOwnThread(body: () => {
+            using var signal = new ManualResetEventSlim(initialState: false);
+
+            HostWaits.ThrowIfPending(pending: null);
+            Assert.Equal(expected: WaitOutcome.DeadlinePassed, actual: HostWaits.Wait(deadline: WaitDeadline.Synchronous(budget: TimeSpan.FromMilliseconds(value: 5)), reason: Reason, signal: signal));
+
+            var thrown = Assert.Throws<TimeoutException>(testCode: () => HostWaits.ThrowIfPending(pending: Reason));
+
+            Assert.StartsWith(expectedStartString: $"{Reason} (expired: {Reason} on ", actualString: thrown.Message);
         });
     }
     [Fact]

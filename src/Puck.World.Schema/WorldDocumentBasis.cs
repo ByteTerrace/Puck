@@ -529,25 +529,8 @@ public static class WorldDocumentBasis {
                 continue;
             }
 
-            if (path.EndsWith(suffix: "spaces")) {
-                ValidateSpaceCompositionIdentity(basisRow: basisObject, overlayRow: overlayRow, path: path.ToString());
-            }
-
-            if (TypeDiscriminatorsDiffer(
-                basis: basisObject,
-                overlay: overlayRow
-            )) {
-                merged[basisIndex] = WorldDocumentOrigins.Clone(node: overlayRow, origins: origins);
-            } else {
-                path.Push(name: key, identity: basisKey!);
-                MergeObject(
-                    consume: consume,
-                    origins: origins,
-                    target: basisObject,
-                    overlay: overlayRow,
-                    path: path
-                );
-                path.Pop();
+            if (RefineRow(basisObject, overlayRow, key, basisKey!, path, origins, consume) is var refined && !ReferenceEquals(refined, basisObject)) {
+                merged[basisIndex] = refined;
             }
             survivors?.Add(merged[basisIndex]);
         }
@@ -577,6 +560,57 @@ public static class WorldDocumentBasis {
         }
 
         return (positions.Count == 0) ? merged : PositionRows(merged, positions, key, path.ToString(), origins);
+    }
+    // A keyed row refined by its same-key overlay row: replaced by a copy of the overlay when their discriminators differ,
+    // otherwise merged member-wise in place.
+    private static JsonNode? RefineRow(JsonObject basisObject, JsonObject overlayRow, string key, JsonNode basisKey, MergePath path, WorldDocumentOrigins? origins, bool consume) {
+        if (path.EndsWith(suffix: "spaces")) {
+            ValidateSpaceCompositionIdentity(basisRow: basisObject, overlayRow: overlayRow, path: path.ToString());
+        }
+        if (TypeDiscriminatorsDiffer(basis: basisObject, overlay: overlayRow)) {
+            return WorldDocumentOrigins.Clone(node: overlayRow, origins: origins);
+        }
+        path.Push(name: key, identity: basisKey);
+        MergeObject(consume: consume, origins: origins, target: basisObject, overlay: overlayRow, path: path);
+        path.Pop();
+        return basisObject;
+    }
+    /// <summary>Refines one row of a keyed list by its same-key delta row, as the keyed-list merge refines a basis row
+    /// the overlay names.</summary>
+    /// <param name="row">The row's tree, which is merged into in place unless the delta replaces it.</param>
+    /// <param name="delta">The delta row; it is not changed.</param>
+    /// <param name="key">The list's identity key (<see cref="TryFindRowKey"/>).</param>
+    /// <param name="path">The list's path, the prefix of a refusal.</param>
+    /// <returns>The refined row.</returns>
+    /// <exception cref="JsonException">The delta does not merge into the row.</exception>
+    internal static JsonObject RefineKeyedRow(JsonObject row, JsonObject delta, string key, string path) =>
+        (JsonObject)RefineRow(row, delta, key, RowIdentity(row, key)!, new MergePath(path), origins: null, consume: false)!;
+    /// <summary>Refuses a tombstone row whose shape is not exactly its identity and <c>$drop</c>.</summary>
+    /// <param name="row">The tombstone row.</param>
+    /// <param name="key">The list's identity key.</param>
+    /// <param name="path">The list's path, the prefix of a refusal.</param>
+    /// <exception cref="JsonException">The row is not a tombstone's shape.</exception>
+    internal static void RequireTombstone(JsonObject row, string key, string path) => RequireTombstoneShape(row: row, key: key, path: path);
+    /// <summary>Refuses a row appended to a keyed list that carries compose vocabulary.</summary>
+    /// <param name="row">The appended row.</param>
+    /// <param name="path">The list's path, the prefix of a refusal.</param>
+    /// <exception cref="JsonException">The row carries <c>$drop</c>, <c>$before</c> or <c>$replace</c>.</exception>
+    internal static void RefuseAppendedRow(JsonObject row, string path) =>
+        RefuseRowMarkers(node: row, path: path, context: "an appended row is new content, not compose vocabulary");
+    /// <summary>Merges one member's delta into its value as an object merge merges that member, below the document
+    /// root.</summary>
+    /// <param name="path">The owning object's path, which is not the document root.</param>
+    /// <param name="name">The member's name.</param>
+    /// <param name="basis">The member's value tree, which the merge takes; <see langword="null"/> for a null value.</param>
+    /// <param name="delta">The member's delta; it is not changed.</param>
+    /// <param name="present">Whether the member is present after the merge.</param>
+    /// <returns>The merged value, or <see langword="null"/> when it is null or absent.</returns>
+    /// <exception cref="JsonException">The delta does not merge into the value.</exception>
+    internal static JsonNode? MergeMember(string path, string name, JsonNode? basis, JsonNode? delta, out bool present) {
+        var target = new JsonObject { [name] = basis };
+        MergeObject(target: target, overlay: new JsonObject { [name] = delta?.DeepClone() }, path: new MergePath(path), origins: null, consume: false);
+        present = target.TryGetPropertyValue(propertyName: name, jsonNode: out var merged);
+        return merged;
     }
     // Stable dependency ordering: unpositioned rows retain their order, and predecessors of a target retain
     // authored order. Resolve after all drops/appends, so forward references work and missing targets refuse.

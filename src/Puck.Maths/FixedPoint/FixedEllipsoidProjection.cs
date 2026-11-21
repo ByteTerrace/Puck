@@ -67,11 +67,23 @@ public readonly record struct FixedEllipsoidProjection(int Side, FixedQ4816 Lowe
     /// <param name="point">The point, in the ellipsoid's frame.</param>
     /// <param name="radii">The radii along X, Y and Z; a component below one raw is taken as one raw.</param>
     /// <returns>The side, the interval and the scalar.</returns>
-    public static FixedEllipsoidProjection Project(FixedVector3 point, FixedVector3 radii) {
+    public static FixedEllipsoidProjection Project(FixedVector3 point, FixedVector3 radii) => Project(foot: out _, point: point, radii: radii);
+    /// <summary>Returns the distance from a point to the ellipsoid of radii <paramref name="radii"/> about the origin,
+    /// and the surface point the distance was measured to.</summary>
+    /// <param name="point">The point, in the ellipsoid's frame.</param>
+    /// <param name="radii">The radii along X, Y and Z; a component below one raw is taken as one raw.</param>
+    /// <param name="foot">The surface point <see cref="Distance"/> measures to, in the point's octant, each coordinate
+    /// rounded to the nearest raw: the point itself where the side is undecided. The surface's outward normal there is
+    /// along <c>foot_i / radii_i²</c>.</param>
+    /// <returns>The side, the interval and the scalar.</returns>
+    public static FixedEllipsoidProjection Project(FixedVector3 point, FixedVector3 radii, out FixedVector3 foot) {
         Span<long> axes = [Radius(raw: radii.X.Value), Radius(raw: radii.Y.Value), Radius(raw: radii.Z.Value)];
         Span<long> coordinates = [Magnitude(raw: point.X.Value), Magnitude(raw: point.Y.Value), Magnitude(raw: point.Z.Value)];
+        Span<long> feet = stackalloc long[3];
+        var answer = Solve(foot: feet, point: coordinates, radii: axes);
 
-        return Solve(radii: axes, point: coordinates);
+        foot = new FixedVector3(X: FixedQ4816.CopySign(value: FixedQ4816.FromRawBits(value: feet[0]), sign: point.X), Y: FixedQ4816.CopySign(value: FixedQ4816.FromRawBits(value: feet[1]), sign: point.Y), Z: FixedQ4816.CopySign(value: FixedQ4816.FromRawBits(value: feet[2]), sign: point.Z));
+        return answer;
     }
 
     private static long Radius(long raw) => Math.Max(val1: raw, val2: 1L);
@@ -79,8 +91,9 @@ public readonly record struct FixedEllipsoidProjection(int Side, FixedQ4816 Lowe
 
     // The side from the original raws, then the interval from raws no wider than LengthBits: scaled down by a power of two
     // where they are wider, which moves the point and the surface by at most the rounding (the distance is 1-Lipschitz in
-    // the point, and radii moved by at most d move the surface by at most d).
-    private static FixedEllipsoidProjection Solve(Span<long> radii, Span<long> point) {
+    // the point, and radii moved by at most d move the surface by at most d). A non-empty foot receives the magnitudes of
+    // the surface point the scalar measures to.
+    private static FixedEllipsoidProjection Solve(Span<long> radii, Span<long> point, Span<long> foot = default) {
         var side = SideOf(radii: radii, point: point);
 
         var widest = 0L;
@@ -91,6 +104,7 @@ public readonly record struct FixedEllipsoidProjection(int Side, FixedQ4816 Lowe
         if (side == 0) {
             // Within the implicit test's rounding of the surface: the squared ratios' error, under 2^-59, moves a point
             // by under that share of the widest length.
+            if (!foot.IsEmpty) { point.CopyTo(destination: foot); }
             return new(Side: 0, Lower: FixedQ4816.Zero, Upper: FixedQ4816.FromRawBits(value: (FootSlack + (widest >> 59))), Distance: FixedQ4816.Zero);
         }
 
@@ -114,12 +128,19 @@ public readonly record struct FixedEllipsoidProjection(int Side, FixedQ4816 Lowe
         }
 
         var scaledSide = ((shift > 0) ? SideOf(radii: radii, point: point) : side);
-        var (lower, upper, nearest) = ((scaledSide == 0) ? (0L, FootSlack, 0L) : Interval(radii: radii, point: point, side: scaledSide));
+        var (lower, upper, nearest) = (0L, FootSlack, 0L);
 
+        if (scaledSide != 0) {
+            (lower, upper, nearest) = Interval(foot: foot, point: point, radii: radii, side: scaledSide);
+        } else if (!foot.IsEmpty) {
+            point.CopyTo(destination: foot);
+        }
         if (shift > 0) {
             lower = Saturate(value: ((((Int128)lower) << shift) - widen));
             upper = Saturate(value: ((((Int128)upper) << shift) + widen));
             nearest = Saturate(value: (((Int128)nearest) << shift));
+
+            for (var axis = 0; (axis < foot.Length); axis++) { foot[axis] = Saturate(value: (((Int128)foot[axis]) << shift)); }
         }
         lower = Math.Clamp(value: lower, min: 0L, max: upper);
 
@@ -178,7 +199,7 @@ public readonly record struct FixedEllipsoidProjection(int Side, FixedQ4816 Lowe
     }
 
     // The root's bracket and the interval it gives, for raws below 2^LengthBits on a decided side.
-    private static (long Lower, long Upper, long Nearest) Interval(ReadOnlySpan<long> radii, ReadOnlySpan<long> point, int side) {
+    private static (long Lower, long Upper, long Nearest) Interval(ReadOnlySpan<long> radii, ReadOnlySpan<long> point, int side, Span<long> foot) {
         var count = radii.Length;
         var least = radii[0];
 
@@ -220,7 +241,7 @@ public readonly record struct FixedEllipsoidProjection(int Side, FixedQ4816 Lowe
                     if (gaps[axis] != Int128.Zero) { others.Add(numerator: numerators[axis], denominator: gaps[axis]); }
                 }
                 if ((others.Sign ?? -1) <= 0) {
-                    return PoleFoot(gaps: gaps, numerators: numerators, point: point, radii: radii, sum: others.High);
+                    return PoleFoot(foot: foot, gaps: gaps, numerators: numerators, point: point, radii: radii, sum: others.High);
                 }
             }
             low = start;
@@ -257,7 +278,7 @@ public readonly record struct FixedEllipsoidProjection(int Side, FixedQ4816 Lowe
         }
 
         var lower = (long)gapSquared.SquareRoot();
-        var (nearest, upper) = MiddleFoot(gaps: gaps, numerators: numerators, point: point, radii: radii, u: (low + ((high - low) / 2)));
+        var (nearest, upper) = MiddleFoot(foot: foot, gaps: gaps, numerators: numerators, point: point, radii: radii, u: (low + ((high - low) / 2)));
 
         return (lower, upper, nearest);
     }
@@ -280,28 +301,29 @@ public readonly record struct FixedEllipsoidProjection(int Side, FixedQ4816 Lowe
         return squares.Sign;
     }
     // The foot at the pole: the other axes' coordinates at u = 0, and the rest, e_m sqrt(1 - sum), on one least axis.
-    private static (long Lower, long Upper, long Nearest) PoleFoot(ReadOnlySpan<Int128> gaps, ReadOnlySpan<Int128> numerators, ReadOnlySpan<long> point, ReadOnlySpan<long> radii, UInt128 sum) {
+    private static (long Lower, long Upper, long Nearest) PoleFoot(ReadOnlySpan<Int128> gaps, ReadOnlySpan<Int128> numerators, ReadOnlySpan<long> point, ReadOnlySpan<long> radii, UInt128 sum, Span<long> foot) {
         var squared = UInt128.Zero;
         var placed = false;
 
         for (var axis = 0; (axis < gaps.Length); axis++) {
-            Int128 foot;
+            Int128 coordinate;
 
             if (gaps[axis] != Int128.Zero) {
-                foot = RoundedQuotient(numerator: ((((Int128)radii[axis]) * numerators[axis]) << FootBits), denominator: gaps[axis]);
+                coordinate = RoundedQuotient(numerator: ((((Int128)radii[axis]) * numerators[axis]) << FootBits), denominator: gaps[axis]);
             } else if (!placed) {
                 placed = true;
 
                 var rest = ((sum >= SquareOne) ? UInt128.Zero : (SquareOne - sum));
 
-                foot = (Int128)((((UInt128)radii[axis]) * rest.SquareRoot()) >> (RatioBits - FootBits));
+                coordinate = (Int128)((((UInt128)radii[axis]) * rest.SquareRoot()) >> (RatioBits - FootBits));
             } else {
-                foot = Int128.Zero;
+                coordinate = Int128.Zero;
             }
 
-            var difference = (foot - (((Int128)point[axis]) << FootBits));
+            var difference = (coordinate - (((Int128)point[axis]) << FootBits));
 
             squared += (UInt128)(difference * difference);
+            Place(foot: foot, axis: axis, coordinate: coordinate);
         }
 
         var (distance, upper) = Measured(squared: squared);
@@ -310,7 +332,7 @@ public readonly record struct FixedEllipsoidProjection(int Side, FixedQ4816 Lowe
     }
     // The foot at u scaled radially onto the surface, and its distance from the point: to nearest, and rounded up with
     // FootSlack for the foot's own rounding.
-    private static (long Nearest, long Upper) MiddleFoot(ReadOnlySpan<Int128> gaps, ReadOnlySpan<Int128> numerators, ReadOnlySpan<long> point, ReadOnlySpan<long> radii, Int128 u) {
+    private static (long Nearest, long Upper) MiddleFoot(ReadOnlySpan<Int128> gaps, ReadOnlySpan<Int128> numerators, ReadOnlySpan<long> point, ReadOnlySpan<long> radii, Int128 u, Span<long> foot) {
         var count = gaps.Length;
         Span<UInt128> ratios = stackalloc UInt128[count];
         var sum = UInt128.Zero;
@@ -326,15 +348,20 @@ public readonly record struct FixedEllipsoidProjection(int Side, FixedQ4816 Lowe
         var squared = UInt128.Zero;
 
         for (var axis = 0; (axis < count); axis++) {
-            var foot = ((length == UInt128.Zero) ? Int128.Zero : RoundedQuotient(numerator: (Int128)((((UInt128)radii[axis]) * ratios[axis]) << FootBits), denominator: (Int128)length));
-            var difference = (foot - (((Int128)point[axis]) << FootBits));
+            var coordinate = ((length == UInt128.Zero) ? Int128.Zero : RoundedQuotient(numerator: (Int128)((((UInt128)radii[axis]) * ratios[axis]) << FootBits), denominator: (Int128)length));
+            var difference = (coordinate - (((Int128)point[axis]) << FootBits));
 
             squared += (UInt128)(difference * difference);
+            Place(foot: foot, axis: axis, coordinate: coordinate);
         }
 
         var (nearest, upper) = Measured(squared: squared);
 
         return (nearest, (upper + FootSlack));
+    }
+    // A foot coordinate formed FootBits past a raw, rounded to the nearest raw, into a requested foot.
+    private static void Place(Span<long> foot, int axis, Int128 coordinate) {
+        if (!foot.IsEmpty) { foot[axis] = (long)((coordinate + (Int128.One << (FootBits - 1))) >> FootBits); }
     }
 
     private static Int128 RoundedQuotient(Int128 numerator, Int128 denominator) => ((numerator + (denominator / 2)) / denominator);

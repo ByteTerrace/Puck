@@ -218,7 +218,7 @@ public sealed partial class WorldDocument {
             EngineTick: engineTick,
             Mutation: mutation,
             Tick: tick
-        ) { DrawHistory = privateWords };
+        ) { DrawHistory = privateWords, Played = (derived || (connectionId == SubmissionEnvelope.ScopedReplayConnectionId)) };
         m_journal.Add(entry);
         commitJournal?.Invoke();
         // Guest decisions belong to the checkpoint's tick, not the external-edit recovery tail.

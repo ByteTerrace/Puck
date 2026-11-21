@@ -112,9 +112,9 @@ public sealed partial class WorldColliderSet {
             return FixedFieldReach.Unbounded();
         }
 
-        var exponent = (copy.Shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent);
+        var exponent = EllipsoidExponent(copy: in copy);
         var grow = FixedQ4816.Max(x: dilation, y: FixedQ4816.Zero);
-        var gain = FixedVector3.FromVector3(value: SdfSolidGeometry.DilationGain(exponent: exponent, scale: copy.Shape.Scale, type: copy.Shape.Type));
+        var gain = FixedVector3.FromVector3(value: SdfSolidGeometry.DilationGain(exponent: (exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent), scale: copy.Shape.Scale, type: copy.Shape.Type));
         var dilationReach = (gain * grow);
 
         if (ShapePointOps.DeformsContact(shape: copy.Shape)) {
@@ -127,7 +127,7 @@ public sealed partial class WorldColliderSet {
         var half = (FixedVector3.Abs(value: copy.LocalHalfExtents) + dilationReach);
         var reach = FixedFieldReach.Oriented(center: copy.Center, halfExtent: half, rotation: copy.Rotation);
 
-        if (ShapePointOps.DeformsContact(shape: copy.Shape) || (copy.Shape.Type is not (SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid or SdfSolidPrimitive.Superellipsoid))) {
+        if (ShapePointOps.DeformsContact(shape: copy.Shape) || (exponent is not { } ellipsoid)) {
             return reach;
         }
 
@@ -136,10 +136,9 @@ public sealed partial class WorldColliderSet {
         // a ball of the dilation, whose support along an axis is the ellipsoid's plus the dilation (the ellipsoid of the
         // grown radii falls short of it off the principal axes). Either support along each world axis is its exact
         // world box, far tighter than its turned box's.
-        var spheroid = SdfSolidGeometry.IsSpheroid(exponent: exponent, scale: copy.Shape.Scale, type: copy.Shape.Type);
-        var ball = FixedStaticCollider.Superellipsoid(center: copy.Center, exponent: FixedQ4816.FromDouble(value: ((copy.Shape.Type == SdfSolidPrimitive.Superellipsoid)
-            ? exponent
-            : SdfProgramBuilder.MinSuperellipsoidExponent)), radii: (spheroid ? FixedVector3.Abs(value: copy.LocalHalfExtents) : half), rotation: copy.Rotation);
+        var spheroid = IsSpheroidCopy(copy: in copy);
+        var ball = FixedStaticCollider.Superellipsoid(center: copy.Center, exponent: FixedQ4816.FromDouble(value: ellipsoid),
+            radii: (spheroid ? FixedVector3.Abs(value: copy.LocalHalfExtents) : half), rotation: copy.Rotation);
         var swept = (spheroid ? grow : FixedQ4816.Zero);
         var padding = new FixedVector3(X: (FixedFieldReach.Padding + swept), Y: (FixedFieldReach.Padding + swept), Z: (FixedFieldReach.Padding + swept));
         var world = (new FixedVector3(
@@ -150,12 +149,12 @@ public sealed partial class WorldColliderSet {
 
         return (reach with { Box = FixedAabb.FromCenter(center: copy.Center, extent: FixedVector3.Min(left: reach.Box.Extent, right: world)) });
     }
-    // A copy's analytic collider when its surface is the copy's own surface in the contact field: a sphere, a Box's
-    // rounded or chamfered box, a round capsule and a half-space are the drawn primitive dilated by the margin, as the
-    // field's margined primitive is. A cylinder is exact only undilated and with no rim inset, since a dilated cylinder's
-    // rims round where its collider's stay sharp; an oriented-box stand-in, an inset core and a superellipsoid (whose
-    // field dilates by its gauge, not by distance) only bound theirs. A negative margin erodes, which no collider here
-    // mirrors.
+    // A copy's analytic collider when its surface is the copy's own surface in the contact field: a sphere, a spheroid
+    // (whose field is its true distance and whose collider measures it), a Box's rounded or chamfered box, a round capsule
+    // and a half-space are the drawn primitive dilated by the margin, as the field's margined primitive is. A cylinder is
+    // exact only undilated and with no rim inset, since a dilated cylinder's rims round where its collider's stay sharp;
+    // an oriented-box stand-in, an inset core and any other superellipsoid (whose field dilates by its gauge, not by
+    // distance) only bound theirs. A negative margin erodes, which no collider here mirrors.
     private static FixedStaticCollider? ExactCollider(in FixedStaticCollider collider, in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) {
         if ((margin < FixedQ4816.Zero) || ShapePointOps.DeformsContact(shape: copy.Shape)) {
             return null;
@@ -164,6 +163,7 @@ public sealed partial class WorldColliderSet {
         var exact = collider.Kind switch {
             FixedStaticColliderKind.Sphere or FixedStaticColliderKind.RoundedBox or FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.HalfSpace => true,
             FixedStaticColliderKind.Cylinder => ((margin == FixedQ4816.Zero) && (CylinderInset(copy: in copy) == default)),
+            FixedStaticColliderKind.Superellipsoid => IsSpheroidCopy(copy: in copy),
             _ => false,
         };
 

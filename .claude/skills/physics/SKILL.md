@@ -177,9 +177,13 @@ A field row’s `simulationOnly` flag keeps the height scale in `FieldLattice.St
   opening and seam layers are.
 - **Approximations the reference names.** Rounded or chamfered circular rims
   use a contained cylinder core with a reported inward bound (the fix is an
-  exact rim contact); elliptical and carved primitives stay bounded
-  approximations in the analytic provider; tilted box-in-cylinder edges are
-  conservative.
+  exact rim contact); a superellipsoid above exponent two and the carved
+  primitives stay bounded approximations in the analytic provider (an
+  exponent-2 collider measures its exact distance through
+  `FixedEllipsoidProjection`, and a spheroid is the field's own surface); a
+  triaxial ellipsoid's gauge field dilates past its collider's true margined
+  surface along its long axes (the field side's fix is the true distance
+  under a non-uniform scale); tilted box-in-cylinder edges are conservative.
 - Packets: [certified field contact](../../../docs/plans/open-items.md#certified-field-contact),
   [collision versus drawn mesh](../../../docs/plans/open-items.md#collision-versus-drawn-mesh),
   [water](../../../docs/plans/open-items.md#water) and

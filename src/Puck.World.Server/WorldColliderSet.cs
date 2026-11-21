@@ -350,15 +350,16 @@ public sealed partial class WorldColliderSet : IContactField {
         hash.Add(value: collider.Rotation.W.Value);
     }
 
-    // Boxes retain their authored rounding (sharp without one) and circular cylinders their surface; other finite
-    // primitives retain a bound.
+    // Boxes retain their authored rounding (sharp without one), and circular cylinders and ellipsoids their surface; other
+    // finite primitives retain a bound.
     private static readonly FixedQ4816 SqrtTwo = FixedQ4816.Sqrt(value: FixedQ4816.FromInteger(value: 2));
     private static readonly FixedQ4816 BevelFactor = (FixedQ4816.FromInteger(value: 2) - SqrtTwo);
     // A capsule's half segment per unit of its scale.y: the segment is 0.5·scale.y long.
     private static readonly FixedQ4816 CapsuleHalfSegment = FixedQ4816.FromDouble(value: 0.25);
 
     // The one collider a solid row compiles for a creation's primitive copy, static and attached rows alike: a plane a
-    // half-space, a uniformly scaled sphere a sphere, anything else its finite collider; each grown by the margin.
+    // half-space, an exponent-2 ellipsoid-family shape scaled alike on every axis a sphere, anything else its finite
+    // collider; each grown by the margin.
     private static FixedStaticCollider CopyCollider(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) {
         if (ShapePointOps.DeformsContact(shape: copy.Shape) && (copy.Shape.Type != SdfSolidPrimitive.Plane)) {
             return FixedStaticCollider.Box(center: copy.Center, halfExtents: (copy.LocalHalfExtents + new FixedVector3(X: margin, Y: margin, Z: margin)), rotation: copy.Rotation);
@@ -369,15 +370,29 @@ public sealed partial class WorldColliderSet : IContactField {
             return FixedStaticCollider.HalfSpace(point: (copy.Center + (normal * margin)), normal: normal);
         }
         if (IsSphereCopy(copy: copy)) {
-            var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
+            var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: copy.Shape.Type);
 
             return FixedStaticCollider.Sphere(center: copy.Center, radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin));
         }
 
         return PlacementFinite(copy: copy, margin: margin);
     }
+    // An exponent-2 member of the ellipsoid family scaled alike on every axis: its field is a sphere's distance.
     private static bool IsSphereCopy(in FixedCreationStampPrimitiveCopy copy) =>
-        ((copy.Shape.Type == SdfSolidPrimitive.Sphere) && (copy.UniformScale > FixedQ4816.Zero));
+        ((copy.UniformScale > FixedQ4816.Zero) && (EllipsoidExponent(copy: in copy) == SdfProgramBuilder.MinSuperellipsoidExponent));
+    // The exponent a Sphere, Ellipsoid or Superellipsoid emits with (a sphere and an ellipsoid emit the exponent-2 shape),
+    // or null for any other primitive.
+    private static float? EllipsoidExponent(in FixedCreationStampPrimitiveCopy copy) => copy.Shape.Type switch {
+        SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid => SdfProgramBuilder.MinSuperellipsoidExponent,
+        SdfSolidPrimitive.Superellipsoid => ShapeDocument.EffectiveExponent(exponent: copy.Shape.Exponent),
+        _ => null,
+    };
+    // Whether a copy's contact field is its spheroid's true distance: the one predicate that chooses the revolved ellipse
+    // the field emits (SdfSolidGeometry.IsSpheroid), so the copy's exact collider (ExactCollider) and its reach (CopyReach)
+    // follow the field. A deformed copy collides as its composed field.
+    private static bool IsSpheroidCopy(in FixedCreationStampPrimitiveCopy copy) =>
+        ((EllipsoidExponent(copy: in copy) is { } exponent) && !ShapePointOps.DeformsContact(shape: copy.Shape) &&
+        SdfSolidGeometry.IsSpheroid(exponent: exponent, scale: copy.Shape.Scale, type: copy.Shape.Type));
     // A compiled collider with the authored source the diagnostics name it by.
     private static WorldDiagnosticCollider DiagnosticOf(in FixedStaticCollider collider, in FixedCreationStampPrimitiveCopy copy, WorldPlacement placement, WorldPrototype creation) =>
         new(collider, placement.Id.ToString(), creation.Id.ToString(),
@@ -417,9 +432,11 @@ public sealed partial class WorldColliderSet : IContactField {
                 (copy.LocalHalfExtents.X + margin)
             );
         }
-        if (copy.Shape.Type == SdfSolidPrimitive.Superellipsoid) {
-            return FixedStaticCollider.Superellipsoid(copy.Center, copy.Rotation, copy.LocalHalfExtents,
-                FixedQ4816.FromDouble(value: (copy.Shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent))) with { Radius = margin };
+        if (EllipsoidExponent(copy: in copy) is { } exponent) {
+            // Its radii swept by the margin. At exponent two the collider measures the ellipsoid's true distance, which is
+            // a spheroid's field (IsSpheroidCopy) and a triaxial ellipsoid's surface, whose gauge field dilates farther
+            // along its long axes under a margin; a higher exponent's distance is its gauge.
+            return FixedStaticCollider.Superellipsoid(copy.Center, copy.Rotation, copy.LocalHalfExtents, FixedQ4816.FromDouble(value: exponent)) with { Radius = margin };
         }
         if ((copy.Shape.Type == SdfSolidPrimitive.Cylinder) && (copy.LocalHalfExtents.X == copy.LocalHalfExtents.Z)) {
             var inset = CylinderInset(copy: copy);
@@ -820,7 +837,7 @@ public sealed partial class WorldColliderSet : IContactField {
 
                 if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
                     planes++;
-                } else if (IsSphereCopy(copy: copy)) {
+                } else if (placementCollider.Kind == FixedStaticColliderKind.Sphere) {
                     spheres++;
                 } else if (placementCollider.Kind == FixedStaticColliderKind.Cylinder) {
                     cylinders++;

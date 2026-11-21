@@ -68,7 +68,7 @@ public sealed record CreationShapeLaw(
         }
         if (shape.Lift is { } lift) { _ = line.Append(value: $"/{lift}"); }
         _ = line.Append(value: $" scale={Vector(value: shape.Scale)}");
-        if (shape.Type == SdfSolidPrimitive.Superellipsoid) { _ = line.Append(value: $" e={Number(value: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent))}"); }
+        if (shape.Type == SdfSolidPrimitive.Superellipsoid) { _ = line.Append(value: $" e={Number(value: ShapeDocument.EffectiveExponent(exponent: shape.Exponent))}"); }
         if (Facets(shape: shape) is { Length: > 0 } facets) { _ = line.Append(value: $" facets={facets}"); }
         if (Failure is { } failure) {
             return line.Append(value: $" lowering=refused ({failure})").ToString();

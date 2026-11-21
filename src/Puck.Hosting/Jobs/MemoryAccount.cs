@@ -1241,7 +1241,7 @@ public sealed class MemoryAccount {
         public bool TryReserveWithin(long peak, TimeSpan patience, in WaitReason reason) {
             if (TryReserve(peak: peak) || TryReserveForced(peak: peak)) { return true; }
 
-            var deadline = WaitDeadline.In(budget: patience);
+            var deadline = WaitDeadline.Synchronous(budget: patience);
 
             // Counted as a waiter before each ask, so a release after the ask pulses. One made between the ask and the
             // sleep is missed, and the slice bounds what that costs.
@@ -1251,11 +1251,11 @@ public sealed class MemoryAccount {
                     if (TryReserve(peak: peak) || TryReserveForced(peak: peak)) { return true; }
                     if (deadline.HasPassed) { return false; }
 
-                    var slice = WaitDeadline.In(budget: RoomSlice);
+                    var slice = WaitDeadline.Synchronous(budget: RoomSlice);
                     WaitOutcome outcome;
 
                     lock (m_account.m_room) {
-                        outcome = HostWaits.OnCondition(deadline: ((slice.Timestamp < deadline.Timestamp) ? slice : deadline), monitor: m_account.m_room, reason: in reason);
+                        outcome = HostWaits.OnCondition(deadline: slice.Earliest(other: deadline), monitor: m_account.m_room, reason: in reason);
                     }
                     // A pulse and a slice that ran out both ask again; only the patience running out ends the wait,
                     // after one last ask.

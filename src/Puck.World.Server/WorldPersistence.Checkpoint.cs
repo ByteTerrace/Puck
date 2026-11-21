@@ -48,13 +48,14 @@ public sealed partial class WorldPersistence {
         return json;
     }
 
-    // Undo the last `count` applied mutations (default clamps to 1): restore the base and deterministically replay the
-    // journal minus its tail through the SAME per-entry gates a live mutation passes — compose, whole-document
-    // validate, render-envelope capacity, and solid-field buildability — everything but the authority check (the
-    // every-section Mutate hold below already re-proves authority for the whole undo, so no per-entry grant lookup is
-    // needed). The replay is ALL-OR-NOTHING: any entry failing any gate refuses the undo outright, names the failing
-    // entry's index and reason on stderr, and installs NOTHING — a validated prefix is not a validated document, and no
-    // general admissibility invariant lets a partially-replayed journal stand in for one that fully replayed.
+    // Undo the last `count` entries a principal authored (default clamps to 1): source edits and submitted mutations,
+    // never an entry the World made itself, which is document history every replay keeps (WorldJournalEntry.Authored).
+    // Restore the base and deterministically replay every other entry, the World's own after the dropped ones included,
+    // through the SAME per-entry gates a live mutation passes — compose, whole-document validate, render-envelope
+    // capacity, and solid-field buildability — everything but the authority check (the every-section Mutate hold below
+    // already re-proves authority for the whole undo, so no per-entry grant lookup is needed). The replay is
+    // ALL-OR-NOTHING: any entry failing any gate refuses the undo outright, names the failing entry's index and reason,
+    // and installs NOTHING — a validated prefix is not a validated document.
     internal bool ApplyUndo(int count, Principal principal, int connectionId, long correlationId) {
         if (!Host.Grants.IsOperator(principal: principal)) {
             return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: "world.undo requires the operator");
@@ -76,44 +77,58 @@ public sealed partial class WorldPersistence {
             return false;
         }
 
-        if (Host.Document.Journal.Count == 0) {
+        var journal = Host.Document.Journal;
+        var authored = journal.Count(static entry => entry.Authored);
+
+        if (authored == 0) {
             return RefuseUndo(
                 connectionId: connectionId,
                 correlationId: correlationId,
-                refusal: "undo refused: nothing to undo"
+                refusal: ((journal.Count == 0)
+                    ? "undo refused: nothing to undo"
+                    : $"undo refused: nothing to undo — the journal holds only the {journal.Count} entries the World made itself, which undo keeps")
             );
         }
 
         // A bounded journal (host.journalDepth > 0) has already folded anything past the horizon into m_base — the
         // journal itself never holds more than that many entries (see EnforceJournalDepth), so a request past what
         // remains cannot be satisfied by clamping to fewer without silently doing less than asked. An unbounded
-        // journal (0, today's behavior) keeps the old clamp: every entry is always still there to reach.
+        // journal (0) keeps the clamp: every entry is always still there to reach.
         var journalDepth = Host.Document.Definition.Host.JournalDepth;
 
         if (
             (journalDepth > 0) &&
-            (count > Host.Document.Journal.Count)
+            (count > authored)
         ) {
             return RefuseUndo(
                 connectionId: connectionId,
                 correlationId: correlationId,
-                refusal: $"undo refused ({nameof(WorldUndoRefusal.PastHorizon)}): {count} requested, but host.journalDepth {journalDepth} bounds the horizon to the {Host.Document.Journal.Count} entries still in the journal — earlier mutations have already compacted into the base"
+                refusal: $"undo refused ({nameof(WorldUndoRefusal.PastHorizon)}): {count} requested, but host.journalDepth {journalDepth} bounds the horizon to the {authored} authored entries still in the journal — earlier edits have already compacted into the base"
             );
         }
 
         var drop = Math.Clamp(
             value: count,
             min: 1,
-            max: Host.Document.Journal.Count
+            max: authored
         );
-        var keep = (Host.Document.Journal.Count - drop);
+        // The dropped entries, oldest first: the last `drop` entries a principal authored.
+        var dropped = new List<int>(capacity: drop);
+
+        for (var index = (journal.Count - 1); (dropped.Count < drop); index--) {
+            if (journal[index].Authored) { dropped.Insert(index: 0, item: index); }
+        }
 
         var candidate = Host.Tick.ProjectDealsForEdit(Host.Document.Base, previous: null);
-        var kept = new List<WorldJournalEntry>(capacity: keep);
+        var prefix = candidate;
+        var kept = new List<WorldJournalEntry>(capacity: (journal.Count - drop));
         var products = Host.Document.BeginProductReplay();
 
-        for (var index = 0; (index < keep); index++) {
-            var entry = Host.Document.Journal[index];
+        for (var index = 0; (index < journal.Count); index++) {
+            if (index == dropped[0]) { prefix = candidate; }
+            if (dropped.BinarySearch(item: index) >= 0) { continue; }
+
+            var entry = journal[index];
             if (!entry.TryCompose(Host, candidate, out var next, out var composeReason)) {
                 var composeRefusal = $"undo refused: replay failed at journal entry {index} ({entry.Description}) — {composeReason}";
 
@@ -150,7 +165,8 @@ public sealed partial class WorldPersistence {
         // An undo whose dropped entries changed only state values or what presentation reads installs as that edit, the
         // way a reload of the same change does (ReloadInstallKindOf names the kind, TryInstallEdit installs it), and
         // keeps the session's arena, deals and draws.
-        var undone = DroppedEdit(candidate: candidate, keep: keep, restored: out var restored);
+        var undone = DroppedEdit(candidate: candidate, prefix: prefix, dropped: dropped, restored: out var restored);
+        var named = $" ({string.Join(separator: ", ", values: dropped.Select(selector: index => journal[index].Description))})";
         var changed = WorldDocument.DescribeChanged(changed: undone);
         var restoredRows = (IReadOnlyList<string>)[];
 
@@ -160,7 +176,8 @@ public sealed partial class WorldPersistence {
             if (!Host.Document.TryInstallEdit(candidate: restored, detail: out var detail, kind: restoredKind, principal: principal, reason: out var editReason, rows: restoredRows, validated: true)) {
                 return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: $"undo refused: {editReason}");
             }
-            return AcceptUndo(connectionId: connectionId, correlationId: correlationId, detail: (detail + changed), drop: drop, kept: kept);
+            WorldBootWork.Count(kind: WorldBootWork.UndoNarrowInstalls);
+            return AcceptUndo(connectionId: connectionId, correlationId: correlationId, detail: (detail + changed), dropped: $"{drop}{named}", kept: kept);
         }
 
         Host.DrawKeys.AdvanceGeneration();
@@ -190,47 +207,51 @@ public sealed partial class WorldPersistence {
         Host.Document.CommitInstall(stage: stage);
         // The restored document already carries the deal projection its replay made.
         Host.Tick.PrimeDealProjection();
-        return AcceptUndo(connectionId: connectionId, correlationId: correlationId, detail: (", full install" + changed), drop: drop, kept: kept, stage: stage);
+        return AcceptUndo(connectionId: connectionId, correlationId: correlationId, detail: (", full install" + changed), dropped: $"{drop}{named}", kept: kept, stage: stage);
     }
 
-    // What the dropped tail of the journal changed, read by composing it again over the restored document (every entry
-    // passed its gates when it applied) and naming the parts the two hold as different instances. When the tail changed
-    // only state values, or only creations in what shading reads and shade programs, `restored` is the live document
-    // with exactly those rows set back: every other row stays the live instance, so the session's arena, deals and
-    // draws carry over and the install delivers only the rows the undo moved. Otherwise `restored` is null and the undo
-    // installs the replayed document whole.
-    private WorldDocumentInputs DroppedEdit(WorldDefinition candidate, int keep, out WorldDefinition? restored) {
+    // What the dropped entries changed, read by composing them alone again over the replay's document at the first of
+    // them (every entry passed its gates when it applied) and naming the parts the two hold as different instances: the
+    // World's own entries are replayed on both sides of the undo, so they are no part of what it moves. When the dropped
+    // entries changed only state values, or only creations in what shading reads and shade programs, `restored` is the
+    // live document with exactly those rows set to the replayed document's: every other row stays the live instance, so
+    // the session's arena, deals and draws carry over and the install delivers only the rows the undo moved. Otherwise
+    // `restored` is null and the undo installs the replayed document whole.
+    private WorldDocumentInputs DroppedEdit(WorldDefinition candidate, WorldDefinition prefix, List<int> dropped, out WorldDefinition? restored) {
         restored = null;
 
         var journal = Host.Document.Journal;
-        var undone = candidate;
+        var undone = prefix;
 
-        for (var index = keep; (index < journal.Count); index++) {
+        foreach (var index in dropped) {
             if (!journal[index].TryCompose(Host, undone, out var next, out _)) { return WorldDocumentInputs.All; }
             undone = Host.Tick.ProjectDealsForEdit(next, previous: undone);
         }
 
-        var changed = WorldDocumentInputs.Changed(after: candidate, before: undone);
+        var changed = WorldDocumentInputs.Changed(after: prefix, before: undone);
 
-        if (WorldDocument.ReloadInstallKindOf(candidate: candidate, live: undone, rows: out var valueRows) is not (WorldInstallKind.Nothing or WorldInstallKind.Presentation or WorldInstallKind.Value)) {
+        if (WorldDocument.ReloadInstallKindOf(candidate: prefix, live: undone, rows: out var valueRows) is not (WorldInstallKind.Nothing or WorldInstallKind.Presentation or WorldInstallKind.Value)) {
             return changed;
         }
 
         var live = Host.Document.Definition;
         var creations = live.CreationsRaw;
 
-        if (!ReferenceEquals(objA: candidate.CreationsRaw, objB: undone.CreationsRaw)) {
-            if (live.Creations.Count != undone.Creations.Count) { return changed; }
+        if (!ReferenceEquals(objA: prefix.CreationsRaw, objB: undone.CreationsRaw)) {
+            if ((live.Creations.Count != undone.Creations.Count) || (prefix.Creations.Count != undone.Creations.Count)) { return changed; }
 
             WorldPrototype[]? rows = null;
 
-            for (var index = 0; (index < candidate.Creations.Count); index++) {
-                var row = candidate.Creations[index];
+            for (var index = 0; (index < prefix.Creations.Count); index++) {
+                var row = prefix.Creations[index];
 
                 if (ReferenceEquals(objA: row, objB: undone.Creations[index])) { continue; }
-                if (!live.Creations[index].Id.Equals(row.Id)) { return changed; }
+                if (!live.Creations[index].Id.Equals(row.Id) ||
+                    (WorldDefinitionRows.FindCreation(creations: candidate.Creations, id: row.Id.Value) is not { } replayed)) {
+                    return changed;
+                }
                 rows ??= [.. live.Creations];
-                rows[index] = row;
+                rows[index] = replayed;
             }
             creations = (rows ?? creations);
         }
@@ -239,27 +260,27 @@ public sealed partial class WorldPersistence {
         // back would replace the stored table the live document carries with another instance.
         restored = (ReferenceEquals(objA: creations, objB: live.CreationsRaw) ? live : (live with { CreationsRaw = creations }));
 
-        var restoring = candidate.ShadesRaw;
-        var dropping = undone.ShadesRaw;
+        var before = prefix.ShadesRaw;
+        var after = undone.ShadesRaw;
 
-        if (!ReferenceEquals(objA: restoring, objB: dropping)) {
+        if (!ReferenceEquals(objA: before, objB: after)) {
             var held = live.ShadesRaw;
+            var replayed = candidate.ShadesRaw;
             Dictionary<string, SdfShadeDefinition>? table = null;
 
             Dictionary<string, SdfShadeDefinition> Table() => (table ??= ((held is null)
                 ? new Dictionary<string, SdfShadeDefinition>(StringComparer.Ordinal)
                 : new Dictionary<string, SdfShadeDefinition>(held, StringComparer.Ordinal)));
 
-            foreach (var (name, program) in (restoring ?? new Dictionary<string, SdfShadeDefinition>())) {
-                if ((dropping?.TryGetValue(key: name, value: out var dropped) != true) || !ReferenceEquals(objA: dropped, objB: program)) { Table()[name] = program; }
+            foreach (var name in (before?.Keys ?? []).Union(second: (after?.Keys ?? []), comparer: StringComparer.Ordinal)) {
+                if (ReferenceEquals(objA: ((before?.TryGetValue(key: name, value: out var was) == true) ? was : null), objB: ((after?.TryGetValue(key: name, value: out var now) == true) ? now : null))) { continue; }
+                if (replayed?.TryGetValue(key: name, value: out var restoring) == true) { Table()[name] = restoring; }
+                else if (held?.ContainsKey(key: name) == true) { _ = Table().Remove(key: name); }
             }
-            foreach (var name in (dropping?.Keys ?? [])) {
-                if ((restoring?.ContainsKey(key: name) != true) && (held?.ContainsKey(key: name) == true)) { _ = Table().Remove(key: name); }
-            }
-            if (table is not null) { restored = (restored with { ShadesRaw = (((restoring is null) && (table.Count == 0)) ? null : table) }); }
+            if (table is not null) { restored = (restored with { ShadesRaw = (((replayed is null) && (table.Count == 0)) ? null : table) }); }
         }
         if (valueRows.Count > 0) {
-            // The live section's rows in the live order, each row the dropped tail moved replaced by the replayed one;
+            // The live section's rows in the live order, each row the dropped entries moved replaced by the replayed one;
             // WithStateSection keeps the compiled catalog the rows still fit.
             var section = restored.StateRaw;
             var replays = candidate.StateRaw?.World;
@@ -283,15 +304,15 @@ public sealed partial class WorldPersistence {
         return changed;
     }
 
-    // Keeps the journal's replayed prefix, finishes what a full install committed, and answers the submitting line the
+    // Keeps the replayed entries, finishes what a full install committed, and answers the submitting line the
     // way a refusal does (RefuseUndo), through the same tap; that answer is the undo's one report, so nothing narrates
     // it beside.
-    private bool AcceptUndo(int drop, List<WorldJournalEntry> kept, string detail, int connectionId, long correlationId, WorldDocument.DocumentStage? stage = null) {
+    private bool AcceptUndo(string dropped, List<WorldJournalEntry> kept, string detail, int connectionId, long correlationId, WorldDocument.DocumentStage? stage = null) {
         Host.Document.Journal.Clear();
         Host.Document.Journal.AddRange(collection: kept);
         if (stage is not null) { Host.Document.FinishInstall(stage: stage); }
         Host.EchoTap?.Invoke(obj: new WorldEditEcho(
-            Message: $"dropped {drop}, {Host.Document.Journal.Count} remaining{detail}",
+            Message: $"dropped {dropped}, {Host.Document.Journal.Count} remaining{detail}",
             Rejected: false,
             Kind: WorldEditEchoKind.Mutation,
             ConnectionId: connectionId,

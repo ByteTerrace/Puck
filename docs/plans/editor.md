@@ -33,7 +33,8 @@ Build mode (E1), the inspector (E5), cost per object and GPU pass timing (E9),
 and deterministic time travel (`world.history`) are in place; the
 [World guide](../../src/Puck.World/README.md#build-mode) and the
 [state reference](../reference/state/worlds.md#travel-through-recorded-time)
-describe them. `world.undo` replays the journal minus its tail and is
+describe them. `world.undo` drops the last entries any principal authored (never
+the World's own, which it replays), not the acting principal's alone, and is
 unbindable; there is no redo anywhere except the forge draft's one-level swap
 (`CartridgeDraft.Undo`). There are no gizmos, no selection, no copy or paste,
 and no measurement. GPU hover identifies a placement but does not select it.

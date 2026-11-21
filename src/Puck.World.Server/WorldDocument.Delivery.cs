@@ -42,8 +42,9 @@ public sealed partial class WorldDocument {
     /// outside the tick. A projection recipient reads its observations from that delivery: its per-tick step sends
     /// anchors alone, so a jump nothing delivered would leave it presenting the state the jump replaced.</summary>
     internal void MarkDefinitionDeliveryPending() => m_pendingDefinitionDelivery = true;
-    /// <summary>Records that the live definition's state values have moved since the last delivery, so the step's
-    /// <see cref="DeliverPending"/> carries them to every attached sink.</summary>
+    /// <summary>Records that the live definition's state values, or what a recipient may read of them (an authority
+    /// transition), have moved since the last delivery, so the step's <see cref="DeliverPending"/> carries them to every
+    /// attached sink; each recipient's stream decides whether it owes its reader the disclosed document again.</summary>
     /// <remarks>A shape change already pending outranks this: a definition delivery carries the values too.</remarks>
     internal void MarkStateDeliveryPending() => m_pendingStateDelivery = true;
     /// <summary>Attaches a client sink the per-tick snapshot is delivered to, immediately delivering the live
