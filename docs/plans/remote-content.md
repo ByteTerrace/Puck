@@ -784,6 +784,19 @@ its picture needs.
    it, pins on a voice set's samples, the text catalog and the machines'
    presentation half in the projection, the bounds on fetched content and
    delivered fonts, `EmbedAudio` and the text catalog's directory deleted.
+   *Built in part:* the resolver (`ContentResolver`, reached as
+   `WorldProjectionContent.Resolver`) answers a pin from a file a loaded world
+   registered and then from the shared store; a delivered document's fonts are
+   read through it by pin and its font paths are never opened; every text
+   catalog shares one font cache; and the client's intent stream narrates and
+   restarts when its worker fails on anything but the transport. *Not built:*
+   the fetch on a miss, the other loaders (audio rows, voice sets, machine
+   content), pins on a voice set's samples, the projection's text catalog and
+   machines, the store's budget for each authority, the glyph and pixel bounds
+   on a delivered font catalog, the resolver's counts on `world.counters`, and
+   the deletion of `EmbedAudio`. The delivered text itself has not been seen:
+   a headless host builds no scene for a delivered world, so the check below
+   needs a rendering host.
    *Check:* with the debug world staged, the reservation is no longer refused
    for a relative path; on the client `world.nesting` reports that the world's
    text resolves; a counter reads content found in the package, found in the

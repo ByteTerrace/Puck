@@ -1478,8 +1478,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
 
                     // Only a lane this pump could not re-establish is an outage. An established lane ending is not
                     // evidence about the peer: a peer cancelling its own pending read closes the handle abortively
-                    // (WSAECONNABORTED), so its ordinary shutdown arrives here identically to a fault, and
-                    // reconnecting loses nothing because an unacknowledged row is still pending.
+                    // (WSAECONNABORTED), so its ordinary shutdown arrives here identically to a fault. The authority
+                    // restarts the traveller's input on the new lane and publishes the epoch it continues from.
                     if (
                         !established &&
                         (Interlocked.Exchange(
@@ -1507,6 +1507,28 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                     if (HasPending) {
                         try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
                     }
+                } catch (Exception exception) {
+                    // Not a transport failure: the lane could not encode or carry a batch. A worker that ended here
+                    // would leave the seat's input going nowhere for the rest of the run with nothing said, so the
+                    // lane names the failure every time and starts again. The batch that raised it was already taken
+                    // from its queue, so the next connection does not meet it.
+                    if (m_owner.m_narrationHub is { HasNarrationSink: true }) {
+                        m_owner.m_narrationHub?.Narrate(
+                            channel: "world.authority unavailable",
+                            text: $"[world.authority unavailable: intent stream to '{m_owner.Endpoint}' failed and is restarting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"
+                        );
+                    }
+
+                    try {
+                        await Task.Delay(
+                            cancellationToken: ct,
+                            delay: IntentRetryDelay,
+                            timeProvider: m_owner.m_clock
+                        ).ConfigureAwait(continueOnCapturedContext: false);
+                    } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
+                        return;
+                    }
+                    try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
                 }
             }
         }

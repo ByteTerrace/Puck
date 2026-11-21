@@ -1118,7 +1118,11 @@ what it would show in the boot world, from that world's own sources, never the b
   `routed$<digest>$camera$<camera>`) into the residency that level's world renders through, after
   that residency's own views. A camera view reads its world's other camera views at their previous
   frame, so cameras filming each other's screens never wait on each other within a frame.
-- Text draws through that world's own font catalog, resolved beside that world's own document.
+- Text draws through that world's own font catalog. A world this process loaded from a file reads
+  its fonts beside that file. A world another authority delivered has no directory, and its font
+  paths are never opened: each font is read by its content pin from what this process already holds,
+  a font file a world it loaded named under the same pin, or the shared content store
+  (`WorldProjectionContent.Resolver`). Every catalog shares one font cache, keyed by font content.
   An unresolved delivery clears the drawn text and atlas, including a catalog that previously drew,
   and reports its text fault until a valid delivery arrives.
 - A probe shows nothing: only the boot world runs a probe host, so a probe of another world opens
@@ -1126,11 +1130,13 @@ what it would show in the boot world, from that world's own sources, never the b
 - A producer of the local device's content (a camera, a desktop capture) shows nothing, so being
   shown through a portal never opens the local user's camera or desktop.
 
-A world delivered from another authority carries no document directory and runs its machines there,
-so its text and its machines show nothing here, and `world.nesting` says why. Its session screens
-show nothing too: the authority holds a screen's session only for the worlds this process runs, and
-no message carries a remote world's screen session to the presenting process. A remote world's
-camera views and producers show.
+A world delivered from another authority runs its machines there, so its machines show nothing here,
+and its text shows only when this process holds its fonts: no message yet fetches a font it lacks,
+and a presentation-tier delivery carries no text catalog. `world.nesting` says why in each case. Its
+session screens show nothing too: the authority holds a screen's session only for the worlds this
+process runs, and no message carries a remote world's screen session to the presenting process. A
+remote world's camera views and producers show.
+[The hosted world on a client](../plans/remote-content.md) is the design that closes each.
 
 The authority opens the sessions a world's screens and infinity layers show while that world is
 fewer observations deep than the nesting depth. The boot world and every world a human stands in
