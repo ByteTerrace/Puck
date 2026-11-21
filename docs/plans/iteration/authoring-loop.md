@@ -819,20 +819,23 @@ stage order is in [the duplicates](#duplicates-to-remove).
    changed rows, and `WorldDefinitionMembers.Replace` shares unchanged rows after
    reading and resolving a replacement. Presentation delivery therefore
    carries only the changed creation and shade rows, and
-   value delivery uses changed snapshot rows. `world.undo` of a presentation
-   edit is a presentation install too: the dropped journal tail is composed
-   again over the restored document, and when it changed only creations in
-   what shading reads and shade programs, exactly those rows are set back on
-   the live document (`WorldPersistence.DroppedPresentation`) and installed
-   through the narrow install a reload uses (`WorldDocument.TryInstallEdit`).
-   The session's state, deals and draws carry over. The
+   value delivery uses changed snapshot rows. `world.undo` of a value or
+   presentation edit is the same narrow install: the dropped journal tail is
+   composed again over the restored document, and when it changed only state
+   row values, or only creations in what shading reads and shade programs,
+   exactly those rows are set back on the live document
+   (`WorldPersistence.DroppedEdit`) and installed through the narrow install a
+   reload uses (`WorldDocument.TryInstallEdit`, kind named by
+   `WorldDocument.ReloadInstallKindOf`). The session's arena, deals and draws
+   carry over. The
    [live edit path](../iteration.md#the-live-edit-path-step-3) describes the
    mechanisms and counters. Section-scoped admission for remote authors stays
    with the [published-world decision](#what-the-owner-settled). *Check:* a
    one-colour save in the debug world reads one row per delivery
    (`world.boot.presentation-rows-delivered` over
    `world.boot.presentation-deliveries`), and undoing it adds one
-   presentation install and no full install.
+   presentation install and no full install; a one-value save and its undo add
+   one value install each.
 5. **Narrow the remaining document checks** for the delta and for
    `world.row.set` alike. Start with state declarations and the shared checks
    still in the `document` partition, then make a full reload validate its

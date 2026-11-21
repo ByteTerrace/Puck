@@ -299,9 +299,10 @@ rows, [the checks](#checks) below are owed.
   that actually installed to the same journal as console mutations
   (`WorldJournalEntry.TryCompose`). An unchanged reload advances the source
   revision without adding an entry. An undo whose dropped entries changed only
-  creations in what shading reads and shade programs sets those rows back on
-  the live document and takes the presentation install a reload takes
-  (`WorldPersistence.DroppedPresentation`), keeping the session's state; any
+  state row values, or only creations in what shading reads and shade programs,
+  sets those rows back on the live document and takes the install a reload of
+  that change takes (`WorldPersistence.DroppedEdit`), keeping the session's
+  state; any
   other undo installs the replayed document whole. Undo and reset leave the
   file on disk alone. The checkpoint keeps the source revision independently of the undo
   base so the next save merges against the source the authority last accepted.

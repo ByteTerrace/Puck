@@ -290,11 +290,12 @@ its own.
   (an acceptance as `dropped <n>, <m> remaining`, then the install it took and
   the parts it changed), so `world.undo` answers its own line like every
   registered verb. There is no per-mutation inverse. When the dropped tail,
-  composed again over the restored document, changed only creations in what
-  shading reads and shade programs, the undo sets exactly those rows back on
-  the live document and takes the reload's presentation install
-  (`WorldPersistence.DroppedPresentation`, `WorldDocument.TryInstallEdit`):
-  state, deals, draws and every compiled product but the envelope's fit stay,
+  composed again over the restored document, changed only state row values, or
+  only creations in what shading reads and shade programs, the undo sets
+  exactly those rows back on the live document and takes the install a reload
+  of that change takes (`WorldPersistence.DroppedEdit`,
+  `WorldDocument.ReloadInstallKindOf`, `WorldDocument.TryInstallEdit`): the
+  arena, deals, draws and every compiled product but the envelope's fit stay,
   and only the changed rows are delivered. Any other undo installs the replayed
   document whole through the install door, which also restores the state and
   deals the document holds and keeps the live field lattices and rule latches. Proven
