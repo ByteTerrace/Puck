@@ -68,9 +68,16 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
     private readonly LinkedList<Line> m_settling = [];
 
     private TextCommandSession? m_session;
+    private long m_publishedTick = unchecked((long)completedTick());
 
     /// <summary>Gets the boot world's last completed tick, the coordinate every armed line is pinned to.</summary>
     public ulong CompletedTick => completedTick();
+    /// <summary>Gets the boot world's completed tick as the tick-complete hook last published it, or the tick the world
+    /// stood at when this script was built: the reading for a caller outside the console's control phase and the step
+    /// (a frame, the host log, another thread), which does not read the authority. It trails
+    /// <see cref="CompletedTick"/> only after the authority's clock moved outside a step (a restored timeline, a load
+    /// into a paused world), until the next tick completes.</summary>
+    public ulong PublishedTick => unchecked((ulong)Volatile.Read(location: ref m_publishedTick));
     /// <summary>Gets the number of lines armed and not yet run.</summary>
     public int PendingCount => m_pending.PendingCount;
 
@@ -194,6 +201,7 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
     /// drain before the next tick steps.</summary>
     /// <param name="tick">The boot world's just-completed tick.</param>
     public void PublishTick(ulong tick) {
+        Volatile.Write(location: ref m_publishedTick, value: unchecked((long)tick));
         Ticked?.Invoke(obj: tick);
         if (!m_pending.TryTake(rows: out var due, tick: tick)) {
             return;
