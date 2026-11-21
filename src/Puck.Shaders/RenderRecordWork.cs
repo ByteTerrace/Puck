@@ -11,7 +11,11 @@ namespace Puck.Shaders;
 /// <c>frames</c> it is the recording critical path a frame would keep if its jobs ran side by side, beside
 /// <c>record-microseconds</c> divided by <c>frames</c>, the serial sum. <c>packages-microseconds</c> is the frame's
 /// package preparation that precedes every job (an SDF residency's upload and background pump), which no job pays.
-/// Wall-clock readings: pacing counts, never compared between runs.
+/// Wall-clock readings: pacing counts, never compared between runs. <c>passes.recorded</c>, <c>passes.stood</c> and
+/// <c>passes.skipped</c> count what each recorded job's passes did: recorded their work, stood on their latest output
+/// because their signature and inputs held, or skipped a frame they had no work in. They are counts of work, and
+/// over the same frames <c>passes.stood</c> against <c>passes.recorded</c> is how much of the graph a frame left
+/// standing.
 /// </summary>
 public sealed class RenderRecordWork : WorkLedger<WorkCounterSet> {
     private static readonly WorkKind Frames = Kind(name: "render.record.frames", unit: "count");
@@ -22,7 +26,10 @@ public sealed class RenderRecordWork : WorkLedger<WorkCounterSet> {
     private static readonly WorkKind Commit = Kind(name: "render.record.commit-microseconds", unit: "microseconds");
     private static readonly WorkKind Longest = Kind(name: "render.record.longest-microseconds", unit: "microseconds");
     private static readonly WorkKind PackagePreparation = Kind(name: "render.record.packages-microseconds", unit: "microseconds");
-    private static readonly WorkKind[] Kinds = [Frames, Jobs, Failed, Prepare, Record, Commit, Longest, PackagePreparation];
+    private static readonly WorkKind PassesRecorded = Kind(name: "render.record.passes.recorded", unit: "count");
+    private static readonly WorkKind PassesStood = Kind(name: "render.record.passes.stood", unit: "count");
+    private static readonly WorkKind PassesSkipped = Kind(name: "render.record.passes.skipped", unit: "count");
+    private static readonly WorkKind[] Kinds = [Frames, Jobs, Failed, Prepare, Record, Commit, Longest, PackagePreparation, PassesRecorded, PassesStood, PassesSkipped];
 
     private RenderRecordWork() : base(counters: new(name: "render.record", kinds: Kinds)) { }
 
@@ -43,6 +50,15 @@ public sealed class RenderRecordWork : WorkLedger<WorkCounterSet> {
     /// (<see cref="IRenderGraphPackageFactory.PrepareRender"/>).</summary>
     /// <param name="ticks">The preparation's duration, in <see cref="Stopwatch"/> ticks.</param>
     internal void PreparedPackages(long ticks) => Counters.Add(PackagePreparation, Microseconds(ticks: ticks));
+    /// <summary>Counts what one recorded job's passes did.</summary>
+    /// <param name="recorded">The passes that recorded their work.</param>
+    /// <param name="stood">The passes that stood on their latest output.</param>
+    /// <param name="skipped">The passes that skipped the frame.</param>
+    internal void Passes(int recorded, int stood, int skipped) {
+        Counters.Add(PassesRecorded, recorded);
+        Counters.Add(PassesStood, stood);
+        Counters.Add(PassesSkipped, skipped);
+    }
     /// <summary>Counts one job whose recording failed and was abandoned.</summary>
     internal void Abandoned() => Counters.Count(Failed);
     /// <summary>Counts one render-graph frame that recorded jobs, with its longest single recording.</summary>

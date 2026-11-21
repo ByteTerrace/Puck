@@ -92,6 +92,8 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
         try {
             PrepareWorkDetails(context: in context, counters: counters, slot: slot);
             var countersWritten = false;
+            var (recorded, stood, skipped) = (0, 0, 0);
+
             for (var index = 0; (index < passes.Length); index++) {
                 var pass = passes[index];
 
@@ -102,6 +104,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                     );
                     SkippedCadence(pass: pass);
                     m_work.SkipPass(pass: index);
+                    skipped++;
 
                     continue;
                 }
@@ -113,6 +116,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                     SkipAccesses(pass: pass, slot: slot);
                     m_work.StandPass(pass: index);
                     pass.Package?.Stood();
+                    stood++;
                     continue;
                 }
                 if (!countersWritten && counters is not null) {
@@ -134,7 +138,9 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                 m_work.LeavePass();
                 RecordedCadence(pass: pass, signature: signature);
                 pass.Recorded = true;
+                recorded++;
             }
+            RenderRecordWork.Process.Passes(recorded: recorded, skipped: skipped, stood: stood);
             if (countersWritten && counters is not null) {
                 counters.RecordCopy(
                     commandBuffer: command,

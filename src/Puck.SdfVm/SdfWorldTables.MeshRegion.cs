@@ -225,12 +225,11 @@ public sealed partial class SdfWorldTables {
 
     private readonly GpuRegion m_meshRegion;
 
-    // One more for every new draw list the region packs: the cadence signature folds it, so a frame whose draws moved
-    // renders.
+    // One more for every draw record a staging writes. The whole view's signature folds it; a pass signs with its motion
+    // scope's revision instead (SdfMotionScope), which moves only for the records the pass can show.
     private long m_meshRevision;
 
-    /// <summary>Gets the revision of the staged draw records: one more for every staging that wrote a record. A target a
-    /// pass rasterized holds hits that resolve through the records of the revision it was recorded under. Read on the
+    /// <summary>Gets the revision of the staged draw records: one more for every record a staging wrote. Read on the
     /// frame thread.</summary>
     public long MeshRevision => m_meshRevision;
 
@@ -427,7 +426,7 @@ public sealed partial class SdfWorldTables {
             Array.Resize(array: ref m_stagedDraws, newSize: capacity); Array.Resize(array: ref m_stagedOccupancies, newSize: capacity);
             Array.Resize(array: ref m_stagedCasterState, newSize: capacity);
         }
-        for (var row = draws.Count; (row < m_stagedCount); row++) { Unname(row: row); }
+        for (var row = draws.Count; (row < m_stagedCount); row++) { NoteUnnamedRow(row: row); Unname(row: row); }
         for (var run = 0; (run < m_owedDraws.Count); run++) {
             var end = Math.Min(val1: draws.Count, val2: (m_owedDraws.Start(index: run) + m_owedDraws.Length(index: run)));
 
@@ -468,6 +467,7 @@ public sealed partial class SdfWorldTables {
         EnsurePreviousMeshCapacity(count: draws.Count);
         m_meshSource = draws.Roster; m_meshCauseSource = draws.Roster; m_meshSourceRevision = draws.Revision; m_meshSourceSerial = draws.Serial; m_meshStaged = true;
         OrderLanding(draws: draws); CountOwed();
+        EndMotionStaging();
         FinishMeshStaging(frame: frame);
     }
     private void Unname(int row) {
@@ -496,6 +496,7 @@ public sealed partial class SdfWorldTables {
     public void StageLandedMeshes(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(argument: frame);
         if (m_disposed || !m_meshLandedSinceStaging || !ReferenceEquals(objA: frame.DrawRows.Roster, objB: m_meshSource) || (frame.DrawRowsRevision != m_meshSourceRevision)) { return; }
+        BeginMotionStaging(frame: frame);
         StageMeshRegion(frame: frame);
     }
 
@@ -610,7 +611,10 @@ public sealed partial class SdfWorldTables {
                         }
                     }
 
+                    var wasLive = ReadStagedSelection(row: index, record: record, box: out var before, glass: out var wasGlass);
                     var mask = StageMeshDraw(draw: in draw, incremental: true, index: index, old: old, record: record, tally: ref tally);
+
+                    NoteStagedRow(row: index, wasLive: wasLive, before: in before, wasGlass: wasGlass, draw: in draw, record: record);
                     // The grown reserve may occupy old mesh words. Its newly shadowed zeros are not evidence of
                     // device zeros: initialize every word of a newly exposed record, including zero placement words.
                     if (index >= m_stagedCount) { mask = (ulong.MaxValue >> (64 - SdfMeshRecord.DrawWords)); }

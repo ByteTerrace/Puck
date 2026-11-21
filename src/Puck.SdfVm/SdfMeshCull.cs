@@ -7,9 +7,10 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfMeshBox"/>) may lie in the view's frustum before the frame's far distance, a shadow cascade the draws
 /// whose box lies in its light's box and, swept along the light, may shadow a receiver the view shows, a held shadow map
 /// the draws whose box lies in its light's box (<see cref="OfLightBox"/>), and <see cref="None"/> every draw. A draw with
-/// no host box is always kept.
+/// no host box is always kept. Two culls are equal when they keep by the same values, which a consumer that holds one
+/// across frames compares (<see cref="SdfMotionScope"/>).
 /// </summary>
-public readonly struct SdfMeshCull {
+public readonly record struct SdfMeshCull {
     /// <summary>The texels beside a receiver a cascade's shadow filter reads at most: the blocker search's widest disk
     /// (<c>SdfMeshShadowMaxTexels</c>, <c>passes/sdf-surface-stage.hlsli</c>) and the receiver's normal offset, rounded
     /// up.</summary>
@@ -37,6 +38,16 @@ public readonly struct SdfMeshCull {
 
     /// <summary>Gets the cull that keeps every draw.</summary>
     public static SdfMeshCull None => default;
+
+    /// <summary>Returns what the cull keeps by, for a report: the view's frustum, a cascade's casters, a light's box, or
+    /// every draw.</summary>
+    /// <returns>The name.</returns>
+    public override string ToString() => (m_kind switch {
+        1 => "view",
+        2 => "cascade",
+        3 => "light-box",
+        _ => "every-draw",
+    });
 
     // GPU selection's pass controls; KEEP IN SYNC with sdf-mesh-selection.hlsli. The camera here is the unjittered
     // camera used by the host cull, including NearKeeps, rather than the raster projection's temporal sample.

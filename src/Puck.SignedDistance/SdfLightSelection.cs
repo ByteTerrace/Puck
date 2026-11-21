@@ -41,6 +41,15 @@ public static class SdfLightSelection {
 
         return mask;
     }
+    /// <summary>Returns the distance from its position past which a light lights nothing: a point's range, an
+    /// occluder's <see cref="OccluderReach"/> radii, and infinity for a light that reaches every surface.</summary>
+    /// <param name="light">The light.</param>
+    /// <returns>The reach, in world units.</returns>
+    public static float ReachOf(in SdfLight light) => (light.Kind switch {
+        SdfLightKind.Point => light.Param,
+        SdfLightKind.Occluder => (OccluderReach * light.Param),
+        _ => float.PositiveInfinity,
+    });
     /// <summary>Returns whether a light can reach a surface a view shows.</summary>
     /// <param name="light">The light.</param>
     /// <param name="camera">The view's camera.</param>
@@ -51,11 +60,7 @@ public static class SdfLightSelection {
             return false;
         }
 
-        var reach = (light.Kind switch {
-            SdfLightKind.Point => light.Param,
-            SdfLightKind.Occluder => (OccluderReach * light.Param),
-            _ => float.PositiveInfinity,
-        });
+        var reach = ReachOf(light: in light);
 
         if (float.IsPositiveInfinity(f: reach) || (light.DynamicSlot != SdfProgram.NoDynamicTransformSlot)) {
             return true;
