@@ -270,7 +270,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         entry.UnreadFrames = unreadFrames;
         if ((entry.View is { } current) && (current.Residency.Tables is { } packed)) {
-            UpdateSurfaceInputs(entry: entry, tables: packed, view: current);
+            UpdateSurfaceInputs(entry: entry, instance: instance, tables: packed, view: current);
+            // A view that stands whole asks no pass for its signature, so its scopes are kept held here.
+            entry.ObserveDrawn(tables: packed);
         }
 
         if (
@@ -293,7 +295,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             (view.Residency.Tables is { } tables) &&
             entry.Temporal.Stands(
                 // Asked before any pass of the frame records, so no upload has advanced the tables this frame: the poses
-                // they hold now are the previous poses of a render taken this frame.
+                // the instance's scope holds now are the previous poses of a render taken this frame.
                 epoch: EpochOf(
                     debug: tables.PassValues.DebugMode,
                     entry: entry,
@@ -303,7 +305,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                     view: view,
                     width: entry.Temporal.Epoch.Width
                 ),
-                previousPoses: tables.PoseRevision
+                previousPoses: PosesOf(entry: entry, tables: tables).Poses
             )
         );
     }
@@ -324,7 +326,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     }
 
     // Prepares an instance's history once a frame, after its residency's upload for the frame: the tables then hold this
-    // render's poses as current and the preceding upload's as previous. Temporal names whether the recording pass belongs
+    // render's poses as current and the preceding upload's as previous, which the instance reads as its own scope's
+    // (PosesOf), so only a draw its view can show moving breaks its history. Temporal names whether the recording pass belongs
     // to the temporal fragment, which every pass of one installed graph agrees on; unread is the instance's unread frames
     // the recording carries.
     internal SdfTemporalHistory TemporalOf(string instance, SdfWorldView view, uint width, uint height, int debug, bool temporal, long unread, uint renderWidth = 0, uint renderHeight = 0) {
@@ -333,12 +336,12 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         if (entry.TemporalFrame != m_frame) {
             entry.TemporalFrame = m_frame;
             entry.InstalledTemporal = temporal;
-            var tables = view.Residency.Tables!;
+            var poses = PosesOf(entry: entry, tables: view.Residency.Tables!);
 
             entry.Temporal.Prepare(
                 camera: SnapshotOf(view: view).Camera,
                 counted: ((entry.Convergence is { IsActive: true } convergence) ? convergence.Samples : null),
-                currentPoses: tables.PoseRevision,
+                currentPoses: poses.Poses,
                 held: view.Residency.HoldsFrame,
                 epoch: EpochOf(
                     debug: debug,
@@ -349,7 +352,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                     view: view,
                     width: width
                 ),
-                previousPoses: tables.PreviousPoseRevision,
+                previousPoses: poses.PreviousPoses,
                 renderHeight: renderHeight,
                 renderWidth: renderWidth
             );

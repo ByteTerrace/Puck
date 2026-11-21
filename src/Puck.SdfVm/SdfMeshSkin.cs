@@ -50,6 +50,19 @@ public static class SdfMeshSkin {
         counters.Add(amount: blended, kind: BlendedVertices);
     }
 
+    /// <summary>Returns the motion a member's current pose carries the geometry baked at its rest pose by, in its
+    /// group's frame: a point <c>p</c> riding the member wholly stands at <c>rotate(p) + translation</c>. The host twin of
+    /// <c>sdfMeshMemberDelta</c> (<c>frame/sdf-mesh-skin.hlsli</c>).</summary>
+    /// <param name="rest">The member, whose pose is the one its geometry was baked at.</param>
+    /// <param name="position">The member slot's current position in the group's frame, in the group's own units.</param>
+    /// <param name="orientation">The member slot's current orientation in the group's frame.</param>
+    /// <returns>The motion's rotation and translation.</returns>
+    public static (Quaternion Rotation, Vector3 Translation) MotionOf(in SdfMeshMember rest, Vector3 position, Quaternion orientation) {
+        var rotation = Quaternion.Normalize(value: (orientation * Quaternion.Inverse(value: rest.Orientation)));
+
+        return (rotation, (position - Vector3.Transform(rest.Position, rotation)));
+    }
+
     /// <summary>Poses a stored skin in its group frame for CPU audit. Slot offsets name current rigid delta frames.
     /// The normalized dual quaternion uses the existing Maths carrier; the GPU counterpart uses presentation floats.</summary>
     /// <param name="mesh">The stored skin, in its group's frame.</param>
@@ -66,10 +79,9 @@ public static class SdfMeshSkin {
             if (member == SdfMesh.NoMember) { return (Quaternion.Identity, Vector3.Zero); }
             var rest = mesh.Members.Span[member];
 
-            if (!poses.TryGetValue(key: rest.SlotOffset, value: out var current)) { return (Quaternion.Identity, Vector3.Zero); }
-            var q = Quaternion.Normalize(value: (current.Orientation * Quaternion.Inverse(value: rest.Orientation)));
-
-            return (q, (current.Position - Vector3.Transform(rest.Position, q)));
+            return (poses.TryGetValue(key: rest.SlotOffset, value: out var current)
+                ? MotionOf(orientation: current.Orientation, position: current.Position, rest: in rest)
+                : (Quaternion.Identity, Vector3.Zero));
         }
         for (var vertex = 0; (vertex < positions.Length); vertex++) {
             var p = mesh.Positions.Span[vertex];
