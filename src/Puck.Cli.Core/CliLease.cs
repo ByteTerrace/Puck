@@ -383,10 +383,9 @@ public sealed class CliLease : IDisposable {
     // or `host`, and `exclusive` or `shared`), read only for the holder it names, like the checkout sidecar.
     private const string HoldFile = "hold";
 
-    private static string HoldSidecar(Hold hold, string[] metadata) =>
-        $"{metadata[2]}\n{metadata[3]}\n{(hold.Kind?.ToString() ?? "-")}\n{(hold.Device ? "device" : "host")}\n{(hold.Exclusive ? "exclusive" : "shared")}\n";
+    private static string HoldSidecar(Hold hold, string[] metadata) => Sidecar(metadata: metadata, values: [(hold.Kind?.ToString() ?? "-"), (hold.Device ? "device" : "host"), (hold.Exclusive ? "exclusive" : "shared")]);
     private static Hold? HoldOf(string slot, string[] owner) =>
-        (((owner.Length >= 4) && (ReadLines(path: Path.Combine(path1: slot, path2: HoldFile)) is [var pid, var ticks, var kind, var device, var exclusive]) && (pid == owner[2]) && (ticks == owner[3]))
+        ((Owned(owner: owner, sidecar: Path.Combine(path1: slot, path2: HoldFile)) is [var kind, var device, var exclusive])
             ? new Hold(Device: (device == "device"), Exclusive: (exclusive == "exclusive"), Kind: (Enum.TryParse<HostStartKind>(value: kind, result: out var parsed) ? parsed : null))
             : null);
 
@@ -396,11 +395,13 @@ public sealed class CliLease : IDisposable {
     // for the owner they name, so a file a crashed holder or waiter left is never read for the next one.
     private const string CheckoutFile = "checkout";
 
-    /// <summary>The contents of a checkout sidecar: the owner's process id and start ticks, then the checkout.</summary>
-    private static string Sidecar(string checkout, string[] metadata) => $"{metadata[2]}\n{metadata[3]}\n{checkout}\n";
+    /// <summary>The contents of an owner-keyed sidecar: the owner's process id and start ticks, then its values, a line each.</summary>
+    private static string Sidecar(string[] metadata, params string[] values) => string.Concat(values: new[] { metadata[2], metadata[3] }.Concat(second: values).Select(selector: static line => (line + "\n")));
+    /// <summary>The values an owner-keyed sidecar records, when it names the process the holder or ticket metadata names.</summary>
+    private static string[]? Owned(string sidecar, string[] owner) =>
+        (((owner.Length >= 4) && (ReadLines(path: sidecar) is [var pid, var ticks, .. var values]) && (pid == owner[2]) && (ticks == owner[3])) ? values : null);
     /// <summary>The checkout a sidecar records, when the sidecar names the process the holder or ticket metadata names.</summary>
-    private static string? CheckoutOf(string sidecar, string[] owner) =>
-        (((owner.Length >= 4) && (ReadLines(path: sidecar) is [var pid, var ticks, var checkout]) && (pid == owner[2]) && (ticks == owner[3])) ? checkout : null);
+    private static string? CheckoutOf(string sidecar, string[] owner) => ((Owned(owner: owner, sidecar: sidecar) is [var checkout]) ? checkout : null);
     /// <summary>Whether a process holds a lease's guard: a momentary shared hold succeeds only when no exclusive holder has
     /// it. A guard that cannot be probed for another reason falls back to the holder file's process identity.</summary>
     private static bool GuardHeld(string directory, string[] holder, DateTimeOffset now) {
@@ -438,7 +439,7 @@ public sealed class CliLease : IDisposable {
 
         try {
             Directory.CreateDirectory(path: directory);
-            AtomicFile.WriteAllText(path: path, contents: Sidecar(checkout: checkout, metadata: metadata));
+            AtomicFile.WriteAllText(path: path, contents: Sidecar(metadata: metadata, values: checkout));
             foreach (var sidecar in Directory.EnumerateFiles(path: directory)) {
                 if ((Path.GetExtension(path: sidecar).Length == 0) && !File.Exists(path: Path.Combine(path1: queue, path2: Path.GetFileName(path: sidecar)))) {
                     try { File.Delete(path: sidecar); } catch (IOException) { } catch (UnauthorizedAccessException) { }
@@ -692,7 +693,7 @@ public sealed class CliLease : IDisposable {
                     var metadata = Metadata(clock: request.Clock, holder: request.Holder, lane: request.Lane);
 
                     // The sidecars land first, so a reader that sees the new holder sees its checkout and hold.
-                    WriteMetadata(path: Path.Combine(path1: slot, path2: CheckoutFile), contents: Sidecar(checkout: request.Checkout, metadata: metadata));
+                    WriteMetadata(path: Path.Combine(path1: slot, path2: CheckoutFile), contents: Sidecar(metadata: metadata, values: request.Checkout));
                     WriteMetadata(path: Path.Combine(path1: slot, path2: HoldFile), contents: HoldSidecar(hold: (request.Hold with { Exclusive = exclusive }), metadata: metadata));
                     WriteMetadata(path: Path.Combine(path1: slot, path2: "holder"), contents: string.Concat(values: metadata.Select(selector: static line => (line + "\n"))));
                     return (waiting with { Lease = new CliLease(directory: slot, gate: gate) });
