@@ -523,15 +523,15 @@ public sealed partial class DocumentScope {
     /// <param name="statements">The statements in this lexical document scope.</param>
     public void IndexDeclarations(IReadOnlyList<StatementNode> statements) {
         if (!Annotations.TryGetValue(key: "DeclaredRows", value: out var rowsValue)) {
-            rowsValue = ImmutableHashSet.CreateBuilder<string>(equalityComparer: StringComparer.Ordinal);
+            rowsValue = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
             Annotations["DeclaredRows"] = rowsValue;
         }
         if (!Annotations.TryGetValue(key: "DeclaredPools", value: out var poolsValue)) {
-            poolsValue = ImmutableHashSet.CreateBuilder<string>(equalityComparer: StringComparer.Ordinal);
+            poolsValue = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
             Annotations["DeclaredPools"] = poolsValue;
         }
         if (!Annotations.TryGetValue(key: "DeclaredGates", value: out var gatesValue)) {
-            gatesValue = ImmutableHashSet.CreateBuilder<string>(equalityComparer: StringComparer.Ordinal);
+            gatesValue = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
             Annotations["DeclaredGates"] = gatesValue;
         }
         IndexStructuralNames(gates: ((ImmutableHashSet<string>.Builder)gatesValue!), pools: ((ImmutableHashSet<string>.Builder)poolsValue!), rows: ((ImmutableHashSet<string>.Builder)rowsValue!), statements: statements);

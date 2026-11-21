@@ -170,7 +170,7 @@ public static class WorldDrawBootResolver {
                 written ??= previous!.ToArray();
                 written[index] = written[index] with { Value = value };
             } else {
-                written = [new StateCell(Key: StateRow.SlotKey, Value: value)];
+                written = [previous is [{ } held] ? held with { Value = value } : new StateCell(Key: StateRow.SlotKey, Value: value)];
             }
             refusal = string.Empty;
             return true;

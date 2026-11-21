@@ -335,7 +335,7 @@ public abstract record StateTransform {
     ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
-            reads: [.. Named(name: From), .. Named(name: Where?.Spelling)],
+            reads: [.. VectorSubject(spelling: From), .. Named(name: Where?.Spelling)],
             writes: VectorSubject(spelling: Into)
         );
     }
@@ -360,7 +360,7 @@ public abstract record StateTransform {
     ) : StateTransform {
         /// <inheritdoc/>
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(
-            reads: [.. Named(name: From), .. VectorSubject(spelling: Query), .. Named(name: Where?.Spelling)],
+            reads: [.. VectorSubject(spelling: From), .. VectorSubject(spelling: Query), .. Named(name: Where?.Spelling)],
             writes: [Into.Spelling]
         );
     }

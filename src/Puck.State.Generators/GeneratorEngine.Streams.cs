@@ -62,8 +62,7 @@ public static partial class GeneratorEngine {
         private Pcg32XshRr m_base;
         private CompiledSource? m_extended;
         private PrivateDrawSample? m_secret;
-        private ulong m_seedState;
-        private ulong m_stream;
+        private DrawSeed m_seed;
         private long m_start;
         private ClosedBitset256 m_mask;
         private bool m_exhausts;
@@ -124,10 +123,9 @@ public static partial class GeneratorEngine {
                     ? masks[0]
                     : default),
                 m_secret = secret,
-                m_seedState = seed.State,
+                m_seed = seed,
                 m_start = cursor,
                 m_skip = skip,
-                m_stream = seed.Stream,
                 m_targetKind = targetKind,
             };
 
@@ -176,8 +174,8 @@ public static partial class GeneratorEngine {
             if (m_secret is { } key) {
                 value = key(
                     cursor: Cursor,
-                    seed: m_seedState,
-                    stream: m_stream
+                    seed: m_seed.State,
+                    stream: m_seed.Stream
                 );
                 reason = string.Empty;
                 m_advances++;
@@ -244,7 +242,7 @@ public static partial class GeneratorEngine {
         private void Restore(DrawStream before) {
             this = before;
             if (m_extended is { } cache) {
-                _ = TryPositionExtended(cache, m_generator, m_seedState, m_stream, m_skip, Cursor, out _);
+                _ = TryPositionExtended(cache, m_generator, m_seed, m_skip, Cursor, out _);
             }
         }
     }
