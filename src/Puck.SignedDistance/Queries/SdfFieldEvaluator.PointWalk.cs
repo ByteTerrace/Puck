@@ -46,6 +46,12 @@ public sealed partial class SdfFieldEvaluator {
             return false;
         }
 
+        if (m_regions is not null) {
+            (distance, material, instructionsWalked) = WalkPoint(candidate: -1, reaches: [], tape: RegionTape(point: worldPosition), worldPosition: worldPosition);
+
+            return true;
+        }
+
         var candidate = FillPointReaches(margin: 0L, reaches: out var reaches, worldPosition: worldPosition);
 
         (distance, material, instructionsWalked) = WalkPoint(candidate: candidate, reaches: reaches, worldPosition: worldPosition);
@@ -89,8 +95,9 @@ public sealed partial class SdfFieldEvaluator {
 
         return candidate;
     }
-    // Walks the whole program at one point over reaches FillPointReaches filled, and counts the evaluation.
-    private (FixedQ4816 Distance, int Material, int InstructionsWalked) WalkPoint(FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, int candidate) {
+    // Walks the whole program at one point over reaches FillPointReaches filled, or the tape of the point's region with
+    // no reaches (SdfFieldEvaluator.Regions.cs), and counts the evaluation.
+    private (FixedQ4816 Distance, int Material, int InstructionsWalked) WalkPoint(FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, int candidate, ReadOnlySpan<int> tape = default) {
         var primer = PointPrimer.None;
         var walked = 0L;
         var powerWork = new PowerWork();
@@ -103,6 +110,7 @@ public sealed partial class SdfFieldEvaluator {
             primer: ref primer,
             powerWork: ref powerWork,
             reaches: reaches,
+            tape: tape,
             walked: ref walked,
             worldPosition: worldPosition
         );
@@ -117,8 +125,9 @@ public sealed partial class SdfFieldEvaluator {
     // each cullable instance as it meets it: an instance whose reach clears the running answer, or exceeds the primer's
     // answer, is skipped. The first instance the running answer cannot skip first walks the nearest instance on its own,
     // the primer, whose answer then joins where that instance stands in the stream. Without reaches it walks every
-    // instance in the range, as the primer's own walk does.
-    private (FixedQ4816 Distance, int Material) WalkPoints(int first, int end, FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, ref PointPrimer primer, ref long walked, ref PowerWork powerWork, InfluenceWalk? influence = null) {
+    // instance in the range, as the primer's own walk does. With a tape it walks the tape's ranges in stream order in
+    // place of [first, end), one accumulator across them all.
+    private (FixedQ4816 Distance, int Material) WalkPoints(int first, int end, FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, ref PointPrimer primer, ref long walked, ref PowerWork powerWork, InfluenceWalk? influence = null, ReadOnlySpan<int> tape = default) {
         var resultDistance = FarDistance;
         var resultMaterial = 0;
         var visited = 0L;
@@ -137,8 +146,14 @@ public sealed partial class SdfFieldEvaluator {
         Span<(FixedQ4816 Distance, int Material)> scopes = stackalloc (FixedQ4816, int)[SdfProgramBuilder.MaxFieldScopeDepth];
         var scopeDepth = 0;
         var cullIndex = (reaches.IsEmpty ? cullBounds.Length : 0);
+        var test = new PointReachTest(point: worldPosition);
+        var tapeAt = 0;
 
-        for (var index = first; (index < end); index++) {
+        if (!tape.IsEmpty) {
+            (first, end, tapeAt) = (tape[0], tape[1], 2);
+        }
+
+        for (var index = first; NextLive(at: ref tapeAt, end: ref end, index: ref index, tape: tape); index++) {
             if (
                 (cullIndex < cullBounds.Length) &&
                 (cullBounds[cullIndex].First == index)
@@ -159,7 +174,7 @@ public sealed partial class SdfFieldEvaluator {
                     continue;
                 }
 
-                if (InstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], threshold: primer.Threshold(resultDistance: resultDistance), worldPosition: worldPosition)) {
+                if (InstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], test: in test, threshold: primer.Threshold(resultDistance: resultDistance))) {
                     index = (cullBounds[bound].End - 1);
 
                     continue;
@@ -179,7 +194,7 @@ public sealed partial class SdfFieldEvaluator {
                         worldPosition: worldPosition
                     );
 
-                    if (InstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], threshold: primer.Threshold(resultDistance: resultDistance), worldPosition: worldPosition)) {
+                    if (InstanceClears(bound: in cullBounds[bound], cheapReach: reaches[bound], test: in test, threshold: primer.Threshold(resultDistance: resultDistance))) {
                         index = (cullBounds[bound].End - 1);
 
                         continue;
@@ -206,7 +221,7 @@ public sealed partial class SdfFieldEvaluator {
 
                         var segment = segmentSlots[index];
 
-                        if ((influence is null) && (segment >= 0) && (SkippedChainsEnd(answer: resultDistance, segment: segment, worldPosition: worldPosition) is var skipped and >= 0)) {
+                        if ((influence is null) && (segment >= 0) && (SkippedChainsEnd(above: resultDistance, below: resultDistance, segment: segment, test: in test) is var skipped and >= 0)) {
                             index = (skipped - 1);
                         } else if (!frames.IsEmpty) {
                             root.Reset(frame: frames[index], index: ref index, point: ref localPosition, scale: ref distanceScale);
@@ -640,28 +655,6 @@ public sealed partial class SdfFieldEvaluator {
             (((Bound >= 0) && (Distance < resultDistance)) ? (Distance + FixedQ4816.Epsilon) : resultDistance);
     }
 
-    // The end of the chains a point walk skips from the ResetPoint opening the chain in this slot: the largest node of the
-    // segment hierarchy starting there whose certificate clears the answer, else the chain alone; minus one when neither
-    // clears.
-    private int SkippedChainsEnd(int segment, FixedVector3 worldPosition, FixedQ4816 answer) {
-        for (var group = m_segmentGroupHeads[segment]; (group >= 0); group = m_segmentGroupNext[group]) {
-            ref readonly var node = ref m_segmentGroups[group];
-
-            if (node.Reach.PointClears(point: worldPosition, threshold: SegmentThreshold(above: answer, below: answer, bound: in node))) {
-                return node.End;
-            }
-        }
-
-        ref readonly var chain = ref m_segmentBounds[segment];
-
-        return (chain.Reach.PointClears(point: worldPosition, threshold: SegmentThreshold(above: answer, below: answer, bound: in chain)) ? chain.End : -1);
-    }
-    // Whether an instance's candidates clear the threshold: its certificate at the largest axis distance first, then at
-    // the exact distance, then each lowering member's.
-    private bool InstanceClears(in CullBound bound, FixedQ4816 cheapReach, FixedQ4816 threshold, FixedVector3 worldPosition) =>
-        ((threshold.Value <= bound.SeedFloor) && ((cheapReach >= threshold) ||
-            bound.Reach.PointClears(point: worldPosition, threshold: threshold.Value) ||
-            ((bound.MemberCount > 1) && MembersClear(bound: in bound, threshold: threshold.Value, worldPosition: worldPosition))));
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsIdentityRotation(in CompiledInstruction instruction) =>
         ((instruction.Data0X == FixedQ4816.Zero) && (instruction.Data0Y == FixedQ4816.Zero) && (instruction.Data0Z == FixedQ4816.Zero) &&

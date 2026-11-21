@@ -114,9 +114,9 @@ lane; it does not gate starting them.
    reads its slot's transform instead of storing a matrix, so a moving body
    rewrites one transform row and pack stops restaging records.
 4. **`field-queries`** · high · a principal. Item 4: presentation queries
-   (effector probes, camera clearance) leave the interpreted CPU field, on
-   the GPU a frame late or as compiled vectorized code, whichever the lane
-   shows is better.
+   (effector probes, camera clearance) stop walking the whole static world.
+   Region tapes are built; the float reader is the open part
+   ([the design](field-queries.md#build-order)).
 5. **`frame-garbage`** · high · a specialist. Item 5 and the memory tenants:
    no collection pauses during play, the 26 MB appearance clone, the 80 MB
    clearance evaluator.
@@ -688,19 +688,21 @@ wait behind them.
 4. **Presentation queries stop interpreting the field on the CPU.** The
    creation effectors' surface probes (`WorldCreationInstances.ApplyEffectors`)
    and the chase camera's clearance march (`WorldCameraClearance.March`) walk
-   `SdfFieldEvaluator` on the frame thread, and the clearance keeps a whole
-   CPU evaluator alive for it. A design lane weighs two replacements. Batch
-   the probes onto the GPU and answer them a frame late: the kernels already
-   evaluate the same program, and the cost is a frame of lag in feet and
-   camera. Or compile the CPU evaluator to vectorized native code from the
-   one definition per field op the
-   [field programs](field-programs.md#build-order) plan generates readers
-   from, which also serves contact and the bake's CPU twin. These are
-   presentation queries; the simulation's fixed-point contact is not moved.
-   Check: `world.counters world.field-queries` and the frame thread's share
-   in the trace, with the feet captures of the verification debts unchanged.
-   At scale: a town's feet are hundreds of probes a frame, which only a batch
-   or compiled code can answer.
+   `SdfFieldEvaluator`, and the clearance keeps a whole CPU evaluator alive
+   for it. [The design](field-queries.md) weighs a GPU batch answered a frame
+   late against the CPU and chooses the CPU. Its first part is built: the
+   presentation field is a regional evaluator, which walks the chains that can
+   change the field in the cube its sample lies in and answers what the plain
+   evaluator answers, to the bit. Its second part is open: a float reader in
+   vector width, lowered from shared definitions, for the gradient's taps and
+   lattice fills, which never decides a hit. These are presentation queries;
+   the simulation's fixed-point contact is not moved. Check: the design's
+   [build order](field-queries.md#build-order), step by step, with
+   `world.counters world.field-queries`, `sdf.point` and `sdf.regions` and the
+   frame thread's share in the trace, and the feet captures of the
+   verification debts unchanged. At scale: a town's feet are hundreds of
+   probes a frame over a field as large as the zone, so a query's cost has to
+   follow the neighbourhood, not the world.
 5. **Background garbage leaves the shared heap.** A bake's and a worker's
    scratch is rented or owned (`RentedArrays`, `RentedScope`, `IAllocator`),
    so background work cannot pause the frame thread with a collection, and
@@ -1285,9 +1287,11 @@ The frame thread's CPU work, largest first:
 - [high] CPU field queries: the creation effectors' surface probes
   (`WorldCreationInstances.ApplyEffectors`) and the chase camera's clearance
   march (`WorldCameraClearance.March`), together about a third of the meadow's
-  frame. Answers live on their owners through one door (`WorldFieldAnswer`).
-  Remaining, on a rendered World: count `world.counters world.field-queries`
-  and `sdf.point.evaluations` under `world.lockstep` at the meadow and the
+  frame before the presentation field became regional
+  ([the design](field-queries.md)). Answers live on their owners through one
+  door (`WorldFieldAnswer`).
+  Remaining, on a rendered World: count `world.counters world.field-queries`,
+  `sdf.point` and `sdf.regions` under `world.lockstep` at the meadow and the
   forest road, and confirm the clearance family reuses at rest; read the chase
   target at full precision to find whether its 0.1 mm a frame drift is the
   boom follower's tail (`WorldSeatViewState.Follow`) or a body that does not
@@ -1301,7 +1305,10 @@ The frame thread's CPU work, largest first:
   so the gradient falls only on targets a foot draws. A
   four-tap tetrahedral difference, the GPU interpreter's form, cuts every
   gradient consumer by a third; it moves contact normals, so it is a measured
-  change of the deterministic query.
+  change of the deterministic query, and it reads zero at a corner of three
+  planes, where the six taps read the corner's diagonal. For presentation the
+  six taps become one vector walk instead
+  ([the float reader](field-queries.md#the-float-reader)).
 - [medium] Posing follows the rates, and occlusion is not consulted: a
   creation holds only while no camera's frustum and no cascade keeps its
   sphere (`WorldCreationInstances.Shown`), so at flight B the motion gallery's
@@ -1966,8 +1973,11 @@ in [sweep](#sweep-and-visual-checks).
   arithmetic still costs a player detail on screen; it is the same shortfall
   that refused store reads on the 2060's own run.
 - [medium] The camera's clearance keeps a whole CPU field evaluator alive
-  (`WorldCameraClearance`, `SdfFieldEvaluator`). It goes with
-  [the CPU frame](#the-cpu-frame)'s item 4.
+  (`WorldCameraClearance`, `SdfFieldEvaluator`), tens of megabytes for the
+  debug world. [The field queries design](field-queries.md) keeps it:
+  it is the reference that makes every decision. What it holds is mostly its
+  compiled instructions and certificates, so the cut is in their layout.
+  Next: `puck host heap` on a windowed World, to name the arrays and sizes.
 - [medium] The allocator's slack is never returned in play, and the bar is
   read on private bytes, which count driver commit the process does not
   touch. Read the bar on resident pages, as the bake's host bar already does,
@@ -3839,9 +3849,6 @@ State across an install:
 - A cell written back under a per-cell `advance` trait after removal
   (`TryApplyCellUpsert`) gets no birth clock and accumulates from the origin,
   where an import settles such a cell to its install time.
-- A bound document value read by the in-process client reads the server's
-  arena from the presentation thread (`WorldLiveValues`), unsynchronized with
-  the tick.
 - [low] Rule-group progress (`RuleGroupState`) and decision state survive a
   load, while latches and scoped replays clear on one
   (`WorldServer.ContinueArena`). Clearing them needs a reorder: a checkpoint

@@ -253,6 +253,7 @@ public readonly ref struct SdfGpuWorkRecording {
 
         copies.Record(flushed: true, handsToReaders: true, region: region, slot: regionSlot);
         _ = copies.Finish();
+        m_owner.NoteCopied(slot: m_slot, region: region, regionSlot: regionSlot);
     }
 }
 /// <summary>A background GPU job's buffer the device has no room for: the service's reservation, or the device itself,
@@ -347,8 +348,8 @@ public sealed class SdfGpuWork : IDisposable {
     /// <summary>The fewest host payload bytes an upload job is allowed to stage, which the budget may overdraw once: one
     /// MiB.</summary>
     public const int UploadChunkBytes = (1 << 20);
-    /// <summary>The most host payload bytes one upload job stages: eight MiB, within a staged region slot's staging floor
-    /// (<see cref="GpuRegion.StagingFloorBytes"/>).</summary>
+    /// <summary>The most host payload bytes one upload job stages: eight MiB, the block of its region's staging ring the
+    /// job holds until its fence signals (<see cref="GpuRegion.Retire"/>).</summary>
     public const int MostUploadJobBytes = (8 << 20);
     /// <summary>The host payload, in bytes a second, a presentation's background uploads stage at most: a chunk in every
     /// slot of one service each frame at the 60 Hz frame bar. It accrues by wall time between steps, so a presentation
@@ -653,7 +654,7 @@ public sealed class SdfGpuWork : IDisposable {
                 Stop.Host => TimeSpan.FromSeconds(value: (HostBudget.TotalSeconds / HostShare)),
                 // The queued jobs may be another service's, whose fences wake only their own: come back once they should
                 // have run.
-                Stop.Deadline => TimeSpan.FromSeconds(value: m_budget.QueuedSeconds),
+                Stop.Deadline => TimeSpan.FromSeconds(value: m_budget.DeadlineRetrySeconds),
                 // The services ahead of this one charge as their own jobs complete: come back after one frame allowance.
                 Stop.Turn => TimeSpan.FromSeconds(value: Math.Max(val1: m_budget.FrameAllowanceSeconds, val2: HostBudget.TotalSeconds)),
                 _ => null,
@@ -772,6 +773,10 @@ public sealed class SdfGpuWork : IDisposable {
 
             if ((slot.Job is not { } job) || !slot.Fence.IsSignaled) { continue; }
             slot.Fence.Wait();
+            // The fence proves the job's region copies read what they staged: each region gives that staging back now,
+            // not at its slot's next flush.
+            foreach (var (region, regionSlot) in slot.Regions) { region.Retire(slot: regionSlot); }
+            slot.Regions.Clear();
 
             var client = slot.Client!;
 
@@ -1016,6 +1021,7 @@ public sealed class SdfGpuWork : IDisposable {
         slot.Readback = null;
         slot.Copied = false;
         slot.Consumed = false;
+        slot.Regions.Clear();
         slot.RingSlot = tables.CurrentSlot;
         try {
             recorder.BeginCommandBuffer(commandBufferHandle: commandBuffer);
@@ -1104,6 +1110,9 @@ public sealed class SdfGpuWork : IDisposable {
     // Marks that the slot's job recorded something that consumes state (a region's owed words), after which handing the
     // job back would lose it.
     internal void Consume(int slot) => m_slots[slot].Consumed = true;
+    // Notes that the slot's job copied a region through the region's slot, which Poll retires once the job's fence
+    // signals (GpuRegion.Retire).
+    internal void NoteCopied(int slot, GpuRegion region, int regionSlot) => m_slots[slot].Regions.Add(item: (region, regionSlot));
     // The one door a slot's buffer is created through: returns the buffer the slot holds for a client's part when it
     // still fits the job, and otherwise replaces it, reserving the growth before the device is asked and giving the
     // old buffer's bytes back first, so the slot never holds both. A refusal leaves the slot without the part, which
@@ -1229,6 +1238,8 @@ public sealed class SdfGpuWork : IDisposable {
         public IGpuSubmissionFence Fence { get; } = Fence;
         public IGpuReadbackBuffer Times { get; } = Times;
         public List<HeldBuffer> Held { get; } = [];
+        // The regions the job in flight copied, each with the region slot it staged through.
+        public List<(GpuRegion Region, int Slot)> Regions { get; } = [];
 
         public SdfGpuWorkReadback? Lease { get; set; }
         // The client the slot's last answered job was, which holds Lease until it releases it.

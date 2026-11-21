@@ -171,14 +171,17 @@ public sealed partial class WorldScreenBinder {
         return split < 0 || !path.IsEmpty;
     }
     // A view's access through a session feed's chain and an infinity layer: available only while every session and layer
-    // it is seen through may observe, at the latest epoch among them, under the route of every one's viewer span and the
-    // delivery span of every mirror it reads (an ended span while any may not observe). A view gated by neither is open.
+    // it is seen through may observe and every span on its route is still open, at the latest epoch among them, under the
+    // route of every one's viewer span and the delivery span of every mirror it reads (an ended span while any may not
+    // observe). A view whose route already ended is unavailable, so its node pauses rather than rendering pictures no
+    // reader may be given. A view gated by neither is open.
     private static WorldViewAccess Access(SessionFeed? feed, InfinityEntry? infinity, RouteCache route) {
         var spans = route.Next;
         var available = true;
         var epoch = 0L;
+        var latch = DeliveryLatch.Capture();
 
-        WalkRoute(available: ref available, epoch: ref epoch, feed: feed, infinity: infinity, spans: spans);
+        WalkRoute(available: ref available, epoch: ref epoch, feed: feed, infinity: infinity, latch: in latch, spans: spans);
         if (spans.Count == 0) {
             return WorldViewAccess.Open;
         }
@@ -192,31 +195,39 @@ public sealed partial class WorldScreenBinder {
     private static bool Available(SessionFeed feed) {
         var available = true;
         var epoch = 0L;
+        var latch = DeliveryLatch.Capture();
 
-        WalkRoute(available: ref available, epoch: ref epoch, feed: feed, infinity: null, spans: null);
+        WalkRoute(available: ref available, epoch: ref epoch, feed: feed, infinity: null, latch: in latch, spans: null);
         return available;
     }
     // Visits every session and layer a view is seen through, from the leaf up.
-    private static void WalkRoute(SessionFeed? feed, InfinityEntry? infinity, List<DeliverySpan>? spans, ref bool available, ref long epoch) {
+    private static void WalkRoute(SessionFeed? feed, InfinityEntry? infinity, in DeliveryLatch latch, List<DeliverySpan>? spans, ref bool available, ref long epoch) {
         for (var current = feed; current is not null; current = current.ParentFeed) {
-            Visit(access: current.Route.Access, available: ref available, epoch: ref epoch, mirror: current.Mirror, spans: spans);
+            Visit(access: current.Route.Access, available: ref available, epoch: ref epoch, latch: in latch, mirror: current.Mirror, spans: spans);
             if (current.ParentInfinity is { } parent) {
-                Visit(access: parent.Access, available: ref available, epoch: ref epoch, mirror: parent.Hosted?.Mirror, spans: spans);
+                Visit(access: parent.Access, available: ref available, epoch: ref epoch, latch: in latch, mirror: parent.Hosted?.Mirror, spans: spans);
             }
         }
         if (infinity is not null) {
-            Visit(access: infinity.Access, available: ref available, epoch: ref epoch, mirror: infinity.Hosted?.Mirror, spans: spans);
+            Visit(access: infinity.Access, available: ref available, epoch: ref epoch, latch: in latch, mirror: infinity.Hosted?.Mirror, spans: spans);
         }
     }
-    private static void Visit(WorldViewerAccess access, WorldSessionMirror? mirror, List<DeliverySpan>? spans, ref bool available, ref long epoch) {
-        available &= (access.Level != WorldSessionAccess.None);
+    private static void Visit(WorldViewerAccess access, WorldSessionMirror? mirror, in DeliveryLatch latch, List<DeliverySpan>? spans, ref bool available, ref long epoch) {
+        var span = access.Span;
+        var mirrorSpan = mirror?.DeliverySpan;
+
+        available &= (
+            (access.Level != WorldSessionAccess.None) &&
+            latch.IsCurrent(span: span) &&
+            ((mirrorSpan is null) || latch.IsCurrent(span: mirrorSpan))
+        );
         epoch = Math.Max(val1: epoch, val2: access.Epoch);
         if (spans is null) {
             return;
         }
-        spans.Add(item: access.Span);
-        if (mirror is not null) {
-            spans.Add(item: mirror.DeliverySpan);
+        spans.Add(item: span);
+        if (mirrorSpan is not null) {
+            spans.Add(item: mirrorSpan);
         }
     }
     // What a viewer's own residency may render: the install side of its access.

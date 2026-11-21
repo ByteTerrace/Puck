@@ -20,4 +20,11 @@ public interface IGpuWorkSource {
     /// <param name="totals">The counts and their process-local domain, or default when unavailable.</param>
     /// <returns>Whether this source exposes cumulative transfer accounting.</returns>
     bool TryReadTransfers(out GpuTransferTotals totals) { totals = default; return false; }
+
+    /// <summary>Asks the source to have its passes' kernels count their own work for a while, so a reading of the
+    /// per-pass counts finds them: a frame with no demand standing counts none, and its sample reads
+    /// <see cref="GpuWorkSample.KernelCountsIncluded"/> false. Every report that prints the counts calls this before it
+    /// reads, so the first reading after a quiet spell may show them off and a second, a few frames later, shows them.
+    /// A source whose counts are not gated ignores it.</summary>
+    void DemandKernelCounting() { }
 }

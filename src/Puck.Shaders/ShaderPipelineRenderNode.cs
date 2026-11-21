@@ -221,6 +221,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
 
     internal RenderGraphStandIns? SharedStandIns { get; init; }
     internal DeliveryLabel PublishedLabel => m_publishedLabel;
+    // The route the node renders under, which every frame it publishes carries with the labels it bound. The runtime
+    // sets it before each recording (RenderGraphRuntime.Bind); a node no runtime drives renders public content.
+    internal DeliveryLabel Route { get; set; } = DeliveryLabel.ForSource(source: DeliveryPublicSource.Host);
+    private readonly DeliveryLabelUnion m_bindingUnion = new();
 
     private readonly record struct BoundExternalImage(ShaderPipelineExternalImage Image);
     private RuntimeResource[] m_resources = [];
@@ -1603,17 +1607,21 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 m_externalBuffers.TryGetValue(key: declaration.Name, value: out var boundBuffer) &&
                 !boundBuffer.Binding.TryRead(latch: in latch, resolved: out _)
             ) {
+                // The binding stays, unreadable, so every frame until the host binds the buffer again is held back here
+                // rather than refused later as unbound.
                 ReleaseBindingHold(name: declaration.Name);
-                _ = m_externalBuffers.Remove(key: declaration.Name);
                 ready = false;
             }
         }
 
         return ready;
     }
+    // The label of the frame the node commits: its route, every external binding and every unbound read.
     private DeliveryLabel FrameBindingLabel() {
-        var label = DeliveryLabel.ForSource(source: DeliveryPublicSource.Host);
+        var union = m_bindingUnion;
 
+        union.Clear();
+        union.Add(label: Route);
         foreach (var resource in m_resources) {
             var declaration = resource.Spec;
 
@@ -1622,20 +1630,20 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             }
             if (declaration.Kind == ShaderPipelineResourceKind.Image) {
                 if (m_externalImages.TryGetValue(key: declaration.Name, value: out var bound)) {
-                    label = label.Union(other: bound.Image.Label);
+                    union.Add(label: bound.Image.Label);
                 }
             } else if (
                 !declaration.IsHostBuffer &&
                 m_externalBuffers.TryGetValue(key: declaration.Name, value: out var boundBuffer)
             ) {
-                label = label.Union(other: boundBuffer.Binding.Label);
+                union.Add(label: boundBuffer.Binding.Label);
             }
         }
         if (Reads is { } reads) {
-            label = label.Union(other: reads.Label);
+            union.Add(label: reads.Label);
         }
 
-        return label;
+        return union.Build();
     }
     private bool TryResolveExternalImage(string name, out ShaderPipelineResolvedImage resolved, out DeliveryLabel label) {
         if (

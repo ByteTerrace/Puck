@@ -81,23 +81,22 @@ uint sdfOcclusionNearTexel(uint2 dims, uint level, uint2 texel) {
 
 #include "../frame/sdf-caster-receivers.hlsli"
 
-// Adds a phase's commands, and their vertices, to the pass's drawn counts: the wave sums both, its first lane adds each.
+// Adds a phase's commands, and their vertices, to the pass's drawn counts: skips uniformly when counting is disabled,
+// otherwise reduces across the compute thread group in groupshared memory and adds once per group.
 void sdfOcclusionCount(uint draws, uint vertices) {
-    uint waveDraws = WaveActiveSum(draws);
-    uint waveVertices = WaveActiveSum(vertices);
-
-    if (WaveIsFirstLane()) {
-        uint words;
-        uint stride;
-
-        workCounters.GetDimensions(words, stride);
-
-        uint rows = (words / (PuckWorkRowWords + SdfOcclusionDrawnWords));
-        uint word = ((rows * PuckWorkRowWords) + (passGroup.workCounterRow * SdfOcclusionDrawnWords));
-
-        puckAddWork(word, waveDraws);
-        puckAddWork((word + 2u), waveVertices);
+    if (passGroup.workCounterRow == PuckWorkDisabledRow) {
+        return;
     }
+
+    uint words;
+    uint stride;
+
+    workCounters.GetDimensions(words, stride);
+
+    uint rows = (words / (PuckWorkRowWords + SdfOcclusionDrawnWords));
+    uint word = ((rows * PuckWorkRowWords) + (passGroup.workCounterRow * SdfOcclusionDrawnWords));
+
+    puckAddGroupWork(word, draws, (word + 2u), vertices);
 }
 // Writes a candidate's command into a phase's list at the candidate's own record, so each phase draws in the order the
 // host staged its draws. Coplanar ties across phases can depend on the prior visible set. A candidate the phase does not draw gets

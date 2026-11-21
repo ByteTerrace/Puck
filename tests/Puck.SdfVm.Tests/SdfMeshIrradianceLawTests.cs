@@ -207,7 +207,7 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         Assert.Equal(0f, volume.LightVisibility(new Vector3(x: 0f, y: 2f, z: 0f), Vector3.UnitY, 0));
     }
     /// <summary>A light change relights the probes' cached hits and traces nothing; a budget bounds the relights each
-    /// frame's grant makes, at most <see cref="SdfMeshIrradiance.MostGrantSeconds"/> of its rate a second.</summary>
+    /// frame's grant makes: one frame's count, whatever the wall time since the frame before.</summary>
     [Fact]
     public void ALightChangeRelightsWithoutATraceUnderTheFramesBudget() {
         var volume = Volume();
@@ -222,11 +222,11 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         lights.Count = 1;
         lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 0);
 
-        // Four hundred probes a second, granted after more than a grant's longest span: the grant covers
-        // MostGrantSeconds of the rate, a hundred probes.
-        var dimmed = frame with { Lights = lights, IndirectBudget = new SdfIndirectBudget(RelightPerSecond: 400, TracePerSecond: 0, Age: 0f) };
+        // A hundred probes a frame, granted after a long gap: the grant is the frame's, not the gap's, so a stalled
+        // frame owes no more than a prompt one.
+        var dimmed = frame with { Lights = lights, IndirectBudget = new SdfIndirectBudget(RelightPerFrame: 100, TracePerFrame: 0, Age: 0f) };
 
-        Step(volume: volume, span: TimeSpan.FromSeconds(value: (SdfMeshIrradiance.MostGrantSeconds + 0.05)));
+        Step(volume: volume, span: TimeSpan.FromSeconds(value: 0.3));
         _ = volume.Stage(bakePending: false, frame: dimmed, tier: SdfIndirectTier.Medium, write: _ => { });
         TestLiveness.Until(reason: () => $"relit {(volume.Counters.Read(kind: SdfMeshIrradiance.Relit) - relit)} of the 100 the grant funds", step: () => (volume.Counters.Read(kind: SdfMeshIrradiance.Relit) >= (relit + 100)));
         // One frame's grant bounds the relights before the next frame grants more.

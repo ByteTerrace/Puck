@@ -375,6 +375,66 @@ public sealed partial class RenderGraphRuntimeLawTests {
     }
 
     [Fact]
+    public void APausedViewWhoseRouteMovesShowsNoReaderItsPictureUnderTheNextRoute() {
+        // A view with two outputs, so a selection re-publishes a picture without rendering one.
+        var twoOutputs = Compile(definition: new RenderGraphDefinition(
+            Name: "camera",
+            Outputs: ["near", "far"],
+            Packages: [
+                new RenderGraphPackagePass(Name: "near-view", Outputs: ["near"], Package: Camera),
+                new RenderGraphPackagePass(Name: "far-view", Outputs: ["far"], Package: Camera),
+            ],
+            Resources: [Image(name: "near"), Image(name: "far")],
+            Schema: RenderGraphSchemas.Graph
+        ));
+        using var scene = new StandingScene(
+            [],
+            Set(
+                Instance(name: "camera"),
+                Instance("main", reads: new RenderGraphRead(Producer: "camera"))
+            ),
+            Graph(pipeline: twoOutputs),
+            Graph(ScreensGraph(false, "near"), ("near", "camera"))
+        );
+        var spans = new DeliverySpanSource();
+        var camera = scene.Runtime.Instances.IndexOf(name: "camera");
+        RenderGraphFootprint[] filmed = [
+            new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "camera", Width: 1.0),
+        ];
+
+        scene.Runtime.SetRoute(instance: camera, route: DeliveryLabel.Of(span: spans.Span));
+        TestLiveness.Until(
+            reason: () => "The camera and the root never settled.",
+            step: () => {
+                _ = scene.Produce(footprints: filmed, roots: MainRoot);
+
+                return (
+                    scene.Runtime.IsSettled &&
+                    scene.Runtime.TryLatestImage(image: out _, instance: "camera")
+                );
+            }
+        );
+
+        // Positive control: under its first route the camera's picture reaches its reader.
+        Assert.True(condition: scene.Runtime.TryLatestImage(image: out _, instance: "camera"));
+
+        // The view is paused, as a clock-held session view is, and its route moves the way the host moves it when the
+        // viewer's access narrows: the old span ends and the view renders under the next. A selection then re-publishes
+        // a picture the view made under the old span, which no frame may give out under the new one.
+        var node = scene.Node(instance: "camera");
+
+        node.Paused = true;
+        _ = spans.Advance();
+        scene.Runtime.SetRoute(instance: camera, route: DeliveryLabel.Of(span: spans.Span));
+        node.SelectOutput(name: "far");
+
+        for (var frame = 0; (frame < 4); frame++) {
+            _ = scene.Produce(footprints: filmed, roots: MainRoot);
+            Assert.False(condition: scene.Runtime.TryLatestImage(image: out _, instance: "camera"));
+        }
+    }
+
+    [Fact]
     public void ACutAcceptedBetweenTheLatchAndTheReturnChangesNothingInThatFrameAndEverythingInTheNext() {
         var gpu = new FakePipelineGpu {
             Recording = true,
