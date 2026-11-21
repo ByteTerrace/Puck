@@ -52,24 +52,30 @@ public sealed partial class WorldScreenBinder : IWorldBakeReadiness {
 
         var names = new List<string>();
 
-        if (world.MeshPathBake.Pending || !ReferenceEquals(objA: world.MeshPathBake.Program, objB: presenter.Composed.Program)) {
-            names.Add(item: world.MeshPathBake.Describe());
+        if (!ReferenceEquals(objA: world.MeshPathBake.Program, objB: presenter.Composed.Program)) {
+            names.Add(item: $"the world's bake holds another program than the presenter's ({Reasons(bake: world.MeshPathBake)}) {world.MeshPathBake.Describe()}");
+        } else if (world.MeshPathBake.Pending) {
+            names.Add(item: Named(bake: world.MeshPathBake));
         }
         foreach (var residency in m_routedResidencies.Values) {
-            if (Bakes(bake: residency.MeshPathBake)) { names.Add(item: residency.MeshPathBake.Describe()); }
+            if (Bakes(bake: residency.MeshPathBake)) { names.Add(item: Named(bake: residency.MeshPathBake)); }
         }
         foreach (var view in m_viewResidencies.Values) {
-            if (Bakes(bake: view.Residency.MeshPathBake)) { names.Add(item: view.Residency.MeshPathBake.Describe()); }
+            if (Bakes(bake: view.Residency.MeshPathBake)) { names.Add(item: Named(bake: view.Residency.MeshPathBake)); }
         }
         foreach (var entry in InfinityEntries()) {
-            if ((entry.Residency is { } residency) && Bakes(bake: residency.MeshPathBake)) { names.Add(item: residency.MeshPathBake.Describe()); }
+            if ((entry.Residency is { } residency) && Bakes(bake: residency.MeshPathBake)) { names.Add(item: Named(bake: residency.MeshPathBake)); }
         }
 
         if ((names.Count == 0) && !world.MeshPathBake.DetailSettled) {
-            return $"the world's meshes are still moving to the detail their demand asks: {world.MeshPathBake.Describe()}";
+            return $"the world's meshes are still moving to the detail their demand asks ({Reasons(bake: world.MeshPathBake)}): {world.MeshPathBake.Describe()}";
         }
 
         return $"still baking: {string.Join(separator: ", ", values: names)}";
+
+        // What holds a bake, then its report, which opens with its own tag ([sdf.mesh-bake]) that `puck world player` cuts at.
+        static string Named(SdfMeshPathBake bake) => $"({Reasons(bake: bake)}) {bake.Describe()}";
+        static string Reasons(SdfMeshPathBake bake) => ((bake.DescribeUnsettled() is { Length: > 0 } reasons) ? reasons : "no part holds now");
     }
 
     /// <inheritdoc/>

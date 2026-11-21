@@ -476,6 +476,35 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
+    /// <summary>Names what keeps the bake from settled: each part of <see cref="Pending"/> that holds (products landing
+    /// ahead of the draws, a landed product the dressed frame has not taken, a field slice, successors, first details
+    /// owed, groups still baking), then, when <see cref="DetailSettled"/> is false, what its latest tier decision found
+    /// keeping the detail moving. A wait that releases unsettled prints it.</summary>
+    /// <returns>The reasons, or an empty string when the bake is settled.</returns>
+    public string DescribeUnsettled() {
+        using (EnterGate(site: BakeGate.Read)) {
+            var parts = new List<string>();
+
+            if (m_ahead.Count > 0) { parts.Add(item: $"{m_ahead.Count} product(s) landing ahead of the draws"); }
+            if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { parts.Add(item: "a landed product the dressed frame has not taken"); }
+            if (m_slice is not null) { parts.Add(item: "a field slice sampling"); }
+            if (m_successors > 0) { parts.Add(item: $"{m_successors} successor(s) waiting"); }
+            if (m_firstDetailsOwed > 0) { parts.Add(item: $"{m_firstDetailsOwed} first detail(s) owed"); }
+
+            var baking = 0;
+            var live = 0;
+
+            for (var index = DoneThrough(); (index < m_groups.Count); index++) {
+                if (m_groups[index].Done) { continue; }
+                baking++;
+                if (m_groups[index].Live) { live++; }
+            }
+            if (baking > 0) { parts.Add(item: $"{baking} group(s) baking ({live} live)"); }
+            if (!DetailSettled && m_detailHold.Holds) { parts.Add(item: $"detail held: {m_detailHold}"); }
+            return string.Join(separator: "; ", values: parts);
+        }
+    }
+
     // Whether the bake still owes the dressed frame a mesh, a slice, a successor or the demanded tier of a floor planned
     // on arrival. Under the gate.
     private bool Owes() {
@@ -1410,12 +1439,26 @@ public sealed partial class SdfMeshPathBake {
 
     // Puts a group at an index of the list, under the gate: with Restart's clear, the list's one writer, so it moves the
     // product revision the dresser stands its group walk on (SdfMeshDresser).
+    //
+    // Invariant: a reader's newest plan (Group.Successor) and its liveness (Group.Live) belong to its place in the list,
+    // not to the group that held the place when Revisit planned it. A tier's replacement taking the place, the group it
+    // replaced taking it back (GiveBack) and an evicted floor all pass here, so each carries the successor and the
+    // liveness of the group it displaces, and m_successors counts only successors Promote can reach.
     private void Replace(int index, Group group) {
         var displaced = m_groups[index];
 
         m_allResident = false;
         m_floorRevision++;
         group.Owner = this;
+        if (!ReferenceEquals(objA: displaced, objB: group)) {
+            group.InheritLive(from: displaced);
+            if (displaced.Successor is { } successor) {
+                displaced.Successor = null;
+                // The displaced group's successor holds the newest inputs; one the incoming group held is older.
+                if (group.Successor is not null) { m_successors--; }
+                group.Successor = successor;
+            }
+        }
         // A group planned in a listed group's place ranks as that group last did, until a sweep measures it.
         if (!ReferenceEquals(objA: displaced, objB: group) && displaced.Listed) {
             group.Priority = displaced.Priority;
@@ -1603,6 +1646,8 @@ public sealed partial class SdfMeshPathBake {
         }
         group.Owner = this;
         group.TakeDemandBox();
+        // Before StoredRung asks whether the group may bake: a later program's plan of a moved sampled reader is live.
+        if (old is not null) { group.InheritLive(from: old); }
         if ((old is not null) && Keeps(group: group, identity: identity, old: old)) {
             old.AdoptSampled(planned: group);
             // A group kept mid-bake carries on under the new program: its checkpoints are keyed again under it, so the
@@ -3265,6 +3310,13 @@ public sealed partial class SdfMeshPathBake {
         public bool Live { get => (m_live || Geometry.ReadsOperands); set => m_live = value; }
 
         private bool m_live;
+
+        // Takes the liveness of a group planned at the same place: a sampled reader planned again at another tier, by a
+        // later program or in an evicted floor's place reads the moved snapshot its predecessor was planned again for, so
+        // it is live too (SdfMeshPathBake.Replace, Place, StartReplacement). An operand reader is live by its geometry.
+        public void InheritLive(Group from) {
+            if (from.m_live && Geometry.ReadsSampled) { m_live = true; }
+        }
         // The loads of the group the account has had no room for in a row (SdfMeshPathBake.Reload).
         public int LoadRetries { get; set; }
         // Whether the group is a tier's replacement whose stored mesh the account had no room to read
