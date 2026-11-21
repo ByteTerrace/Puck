@@ -515,15 +515,21 @@ public static class WorldStateDisclosure {
             }
             responsive |= placement.Respond is { Count: > 0 };
         }
-        if ((restricted is null) && !responsive) { return placements; }
-
-        bool Withheld(string name, string? key) {
+        return (((restricted is null) && !responsive) ? placements : DiscloseRestricted(arena: arena, definition: definition, observer: observer, reads: reads, restricted: restricted));
+    }
+    // The reading DisclosedPlacements makes when a row responds or a template is restricted, apart from it so the
+    // closure its withheld test captures is allocated only here, never on the scan every tick's reading runs. The test is
+    // one delegate for the whole reading, and the result list is made at the first placement the reading changes: until
+    // then every placement stands as itself, so the rows before it are the document's own.
+    private static IReadOnlyList<WorldPlacement> DiscloseRestricted(WorldDefinition definition, StateArena arena, Observer observer, HashSet<string>? reads, Dictionary<string, int>? restricted) {
+        var placements = definition.Placements;
+        Func<string, string?, bool> withheld = (name, key) => {
             if (!arena.Catalog.TryResolve(handle: out var row, lane: StateLane.Document, name: name) || observer.ReadsWhole(rowOrdinal: row.Ordinal)) {
                 return false;
             }
             reads?.Add(item: name);
             return !observer.Discloses(rowOrdinal: row.Ordinal, key: key);
-        }
+        };
         Dictionary<string, Dictionary<string, WorldPlacement>>? children = null;
         IReadOnlyDictionary<string, WorldPlacement>? byId = null;
 
@@ -556,49 +562,54 @@ public static class WorldStateDisclosure {
                     result: dealt,
                     rowOrdinal: rowOrdinal,
                     template: byId![templateId],
-                    withheld: Withheld,
+                    withheld: withheld,
                     worldSeed: worldSeed
                 );
                 (redeals ??= new(comparer: StringComparer.Ordinal))[templateId] = dealt;
                 foreach (var child in dealt) { (shown ??= new(comparer: StringComparer.Ordinal)).Add(item: child.Id); }
             }
         }
-        var result = new List<WorldPlacement>(capacity: placements.Count);
-        var changed = false;
+        List<WorldPlacement>? result = null;
 
-        foreach (var placement in placements) {
+        for (var index = 0; (index < placements.Count); index++) {
+            var placement = placements[index];
+
             if ((restricted is not null) && DealtKey(placement: placement, restricted: restricted, key: out var dealtKey)) {
                 var template = byId![placement.Parent!];
 
                 if (restricted[template.Id] >= 0) {
-                    changed = true;
+                    result ??= Prefix(placements: placements, count: index);
                     continue;
                 }
                 // Only the variant row withholds: the child keeps its slot, is shown as the deal holds it (a hidden
                 // variant cell can decide when the sweep next re-deals it), and shows its face only when the recipient
                 // may read the variant cell that selects it.
-                var masked = (placement.DealSlot is { } own) ? Shown(arena: arena, child: placement, key: dealtKey, slot: own, template: template, withheld: Withheld) : placement;
+                var masked = (placement.DealSlot is { } own) ? Shown(arena: arena, child: placement, key: dealtKey, slot: own, template: template, withheld: withheld) : placement;
 
                 masked = ((masked == placement) ? placement : masked);
-
-                changed |= !ReferenceEquals(objA: masked, objB: placement);
-                result.Add(item: masked);
+                if (!ReferenceEquals(objA: masked, objB: placement)) { result ??= Prefix(placements: placements, count: index); }
+                result?.Add(item: masked);
                 continue;
             }
             if ((restricted is not null) && Unshown(placement: placement, byId: byId!, restricted: restricted, shown: shown)) {
-                changed = true;
+                result ??= Prefix(placements: placements, count: index);
                 continue;
             }
-            var reading = WorldPlacementResponse.Disclosed(placement: placement, withheld: Withheld);
+            var reading = ((placement.Respond is { Count: > 0 }) ? WorldPlacementResponse.Disclosed(placement: placement, withheld: withheld) : placement);
+            var redealt = (((redeals is not null) && redeals.TryGetValue(key: placement.Id, value: out var dealtChildren)) ? dealtChildren : null);
 
-            changed |= !ReferenceEquals(objA: reading, objB: placement);
-            result.Add(item: reading);
-            if ((redeals is not null) && redeals.TryGetValue(key: placement.Id, value: out var redealt)) {
-                changed = true;
-                result.AddRange(collection: redealt);
-            }
+            if (!ReferenceEquals(objA: reading, objB: placement) || (redealt is not null)) { result ??= Prefix(placements: placements, count: index); }
+            result?.Add(item: reading);
+            if (redealt is not null) { result!.AddRange(collection: redealt); }
         }
-        return (changed ? result : placements);
+        return ((result is null) ? placements : result);
+    }
+    // A reading's result list once a placement changes: the placements before it, which stood as themselves.
+    private static List<WorldPlacement> Prefix(IReadOnlyList<WorldPlacement> placements, int count) {
+        var result = new List<WorldPlacement>(capacity: placements.Count);
+
+        for (var index = 0; (index < count); index++) { result.Add(item: placements[index]); }
+        return result;
     }
     // Whether placement is a dealt child of a restricted template, and the cell key it was dealt for.
     private static bool DealtKey(WorldPlacement placement, Dictionary<string, int> restricted, out string key) {
