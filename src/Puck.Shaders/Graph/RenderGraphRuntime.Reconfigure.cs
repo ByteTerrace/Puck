@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
 
@@ -132,7 +133,8 @@ public sealed partial class RenderGraphRuntime {
                             images: m_images,
                             inFlightFrames: m_inFlightFrames,
                             instance: set.Instances[index],
-                            packages: m_packages
+                            packages: m_packages,
+                            standIns: m_standIns
                         );
                         sources[index] = createdSources[index];
                     }
@@ -212,7 +214,8 @@ public sealed partial class RenderGraphRuntime {
                         inFlightFrames: m_inFlightFrames,
                         name: set.Instances[index].Name,
                         packages: m_packages,
-                        pipelines: m_pipelines
+                        pipelines: m_pipelines,
+                        standIns: m_standIns
                     ));
 
                 if (SwappedIn(
@@ -249,9 +252,10 @@ public sealed partial class RenderGraphRuntime {
         }
 
         // Nothing below fails before the new set runs.
-        var current = new Output[count];
-        var previous = new Output[count];
-        var producerTainted = new bool[count];
+        var hostLabel = DeliveryLabel.ForSource(source: DeliveryPublicSource.Host);
+        var producerLabels = new DeliveryLabel[count];
+        var routes = new DeliveryLabel[count];
+        var boundLabels = new DeliveryLabel[count];
         var unreadFrames = new long[count];
         // Each old instance's index in the new set, or -1 when it retires.
         var renumbered = new int[m_set.Instances.Count];
@@ -269,22 +273,13 @@ public sealed partial class RenderGraphRuntime {
         for (var index = 0; (index < count); index++) {
             var old = kept[index];
 
-            current[index] = ((old >= 0)
-                ? Renumbered(
-                    output: in m_current[old],
-                    renumbered: renumbered
-                )
-                : Output.None);
-            previous[index] = ((old >= 0)
-                ? Renumbered(
-                    output: in m_previous[old],
-                    renumbered: renumbered
-                )
-                : Output.None);
-            producerTainted[index] = (
-                (old >= 0) &&
-                m_producerTainted[old]
-            );
+            producerLabels[index] = ((old >= 0)
+                ? m_producerLabels[old]
+                : default);
+            routes[index] = ((old >= 0)
+                ? m_routes[old]
+                : hostLabel);
+            boundLabels[index] = routes[index];
             unreadFrames[index] = ((old >= 0)
                 ? m_unreadFrames[old]
                 : 0L);
@@ -327,7 +322,7 @@ public sealed partial class RenderGraphRuntime {
             m_captureInstance = rootIndex;
         }
 
-        m_current = current;
+        m_outputs.Reconfigure(count: count, kept: kept, renumbered: renumbered);
         m_graphs = effective;
         // A kept instance keeps its history: a reconfiguration that leaves it alone neither renders it again nor resets its
         // cadence.
@@ -336,9 +331,10 @@ public sealed partial class RenderGraphRuntime {
         m_latest = null;
         m_nodes = nodes;
         ResetOwedReadbacks();
-        m_previous = previous;
         m_producers = producers;
-        m_producerTainted = producerTainted;
+        m_producerLabels = producerLabels;
+        m_routes = routes;
+        m_boundLabels = boundLabels;
         m_root = rootIndex;
         m_sources = sources;
         m_schedules = [
@@ -630,6 +626,8 @@ public sealed partial class RenderGraphRuntime {
     // for every frame until the hold releases, and the hold retires that acquisition first; a producer with no output
     // leaves the consumer on a stand-in, as a frame binding it would, and holds nothing.
     private void PlanHolds(List<PlannedHold> holds, int[] kept, bool[] retired, RetiredProducer?[] retiring) {
+        var latch = ActiveLatch();
+
         foreach (var consumer in kept) {
             if (
                 (consumer < 0) ||
@@ -651,7 +649,12 @@ public sealed partial class RenderGraphRuntime {
                         continue;
                     }
                     if (
-                        !external.TryAcquireOutput(output: out var output) ||
+                        !TryAcquireProducer(
+                            acquired: out var output,
+                            label: out var outputLabel,
+                            latch: in latch,
+                            producer: binding.Producer
+                        ) ||
                         (output.Image.ImageHandle == 0) ||
                         (output.Image.ImageViewHandle == 0)
                     ) {
@@ -660,6 +663,7 @@ public sealed partial class RenderGraphRuntime {
                             acquired: default,
                             consumer: node,
                             image: StandInFor(format: binding.Format),
+                            imageViewHandle: 0,
                             name: binding.Version,
                             producer: null
                         ));
@@ -682,36 +686,47 @@ public sealed partial class RenderGraphRuntime {
                             Height: output.Image.Height,
                             ImageHandle: output.Image.ImageHandle,
                             ImageViewHandle: output.Image.ImageViewHandle,
+                            Label: outputLabel,
                             Layout: output.Layout,
                             Width: output.Image.Width
                         ),
+                        imageViewHandle: output.Image.ImageViewHandle,
                         name: binding.Version,
                         producer: hold
                     ));
                 } else if (binding.Kind != ShaderPipelineResourceKind.Buffer) {
-                    // A graph instance's image binding holds the image itself, leased from whichever node owns it: the
-                    // retired producer's own, or the image its output stood for, however many retired instances that
-                    // chain runs through. The producers themselves retire at once, and the image outlives them until
-                    // the hold releases. A binding to a stand-in holds nothing.
-                    if (
-                        node.TryGetBoundImage(
-                            image: out var bound,
-                            name: binding.Version
-                        ) &&
-                        m_images.TryLease(
-                            imageHandle: bound.ImageHandle,
+                    // A graph instance's image binding holds the image itself, leased from whichever node owns it. When
+                    // the bound image's delivery span has ended at the latch, replace the binding with a stand-in and
+                    // hold nothing of the retired producer.
+                    if (node.TryGetBoundImage(image: out var bound, name: binding.Version)) {
+                        if (!bound.TryRead(latch: in latch, image: out var resolvedBound)) {
+                            holds.Add(item: new PlannedHold(
+                                acquired: default,
+                                consumer: node,
+                                image: StandInFor(format: binding.Format),
+                                imageViewHandle: 0,
+                                name: binding.Version,
+                                producer: null
+                            ));
+                        } else if (m_images.TryLease(
+                            imageHandle: resolvedBound.ImageHandle,
                             lease: out var lease
-                        )
-                    ) {
-                        holds.Add(item: new PlannedHold(
-                            acquired: lease,
-                            consumer: node,
-                            image: bound,
-                            name: binding.Version,
-                            producer: null
-                        ));
+                        )) {
+                            holds.Add(item: new PlannedHold(
+                                acquired: lease,
+                                consumer: node,
+                                image: bound,
+                                imageViewHandle: resolvedBound.ImageViewHandle,
+                                name: binding.Version,
+                                producer: null
+                            ));
+                        }
                     }
-                } else if (m_nodes[binding.Producer] is { } producer) {
+                } else if (
+                    (m_nodes[binding.Producer] is { } producer) &&
+                    node.TryGetBoundBuffer(buffer: out var boundBuffer, name: binding.Version) &&
+                    boundBuffer.TryRead(latch: in latch, resolved: out _)
+                ) {
                     var instance = m_set.Instances[binding.Producer].Name;
                     var hold = (retiring[binding.Producer] ??= new RetiredProducer(
                         dispose: () => DisposeHeld(instance: instance, node: producer),
@@ -724,6 +739,7 @@ public sealed partial class RenderGraphRuntime {
                         acquired: default,
                         consumer: node,
                         image: null,
+                        imageViewHandle: 0,
                         name: binding.Version,
                         producer: hold
                     ));
@@ -754,7 +770,7 @@ public sealed partial class RenderGraphRuntime {
     }
 
     // A hold planned for a kept consumer, applied once the new set runs or abandoned with it.
-    private sealed class PlannedHold(ShaderPipelineRenderNode consumer, string name, RetiredProducer? producer, ShaderPipelineExternalImage? image, GpuImageLease acquired) {
+    private sealed class PlannedHold(ShaderPipelineRenderNode consumer, string name, RetiredProducer? producer, ShaderPipelineExternalImage? image, nint imageViewHandle, GpuImageLease acquired) {
         // Hands the consumer the hold: its binding held as it is, or rebound to the image acquired for it.
         public void Apply() {
             if (image is not { } bound) {
@@ -773,7 +789,7 @@ public sealed partial class RenderGraphRuntime {
                 image: bound,
                 lease: ((producer is { } held)
                     ? new GpuImageLease(
-                        ImageViewHandle: bound.ImageViewHandle,
+                        ImageViewHandle: imageViewHandle,
                         Release: token => {
                             acquired.Retire();
                             held.Release(token: token);

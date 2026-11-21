@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.World.Client;
 using Puck.World.Server;
@@ -6,8 +8,37 @@ using Puck.World.Server;
 namespace Puck.World;
 
 public sealed partial class WorldScreenBinder {
-    // One gated instance in the ordinal access cache: a session feed, an infinity layer, or both (nested camera owner).
-    private readonly record struct AccessBinding(int Index, SessionFeed? Feed, InfinityEntry? Infinity);
+    // One gated instance in the ordinal access cache: a session feed, an infinity layer, or both (nested camera owner),
+    // and the route its view was last given.
+    private readonly record struct AccessBinding(int Index, SessionFeed? Feed, InfinityEntry? Infinity, RouteCache Route);
+
+    // A view's route as last built and the spans it was built from. The route is a function of those spans alone, so a
+    // frame whose spans did not move reuses it and builds no label.
+    private sealed class RouteCache {
+        private List<DeliverySpan> m_spans = [];
+        private List<DeliverySpan> m_next = [];
+        private DeliveryLabel m_route;
+
+        // The list the frame's walk fills, empty.
+        public List<DeliverySpan> Next {
+            get {
+                m_next.Clear();
+                return m_next;
+            }
+        }
+
+        // The route of the spans the walk just filled into Next.
+        public DeliveryLabel Settle() {
+            // A span is compared by reference: it has no value equality.
+            if (!m_route.IsClassified || !((ReadOnlySpan<DeliverySpan>)CollectionsMarshal.AsSpan(list: m_next)).SequenceEqual(other: CollectionsMarshal.AsSpan(list: m_spans), comparer: null)) {
+                (m_spans, m_next) = (m_next, m_spans);
+                m_route = DeliveryLabel.Of(spans: CollectionsMarshal.AsSpan(list: m_spans));
+            }
+            return m_route;
+        }
+    }
+
+    private readonly RouteCache m_queryRoute = new();
 
     private RenderGraphInstanceSet? m_accessCacheSet;
     private int m_accessCacheVersion = -1;
@@ -19,15 +50,12 @@ public sealed partial class WorldScreenBinder {
     /// <remarks>Reads the access each session along the view's chain settled this frame
     /// (<see cref="WorldSessionRoute.Access"/>, settled in <see cref="Publish"/>): a session view, a nested camera or
     /// child of one and an infinity layer are available only while every session they are seen through may observe,
-    /// at the latest epoch among them.</remarks>
+    /// at the latest epoch among them, under a route of every one's span.</remarks>
     public WorldViewAccess AccessOf(string view) {
-        if (SessionFeedOf(view) is { } feed) { return Access(feed); }
-        if (m_infinityOutputs.TryGetValue(view, out var infinity)) { return Access(infinity.Entry); }
+        if (SessionFeedOf(view) is { } feed) { return Access(feed: feed, infinity: null, route: m_queryRoute); }
+        if (m_infinityOutputs.TryGetValue(view, out var infinity)) { return Access(feed: null, infinity: infinity.Entry, route: m_queryRoute); }
         if (NestedCameraLevel(view) is { } level && m_nestedOwners.TryGetValue(level, out var owner)) {
-            var access = WorldViewAccess.Open;
-            if (owner.Feed is { } nested) { access = access.Join(Access(nested)); }
-            if (owner.Infinity is { } layer) { access = access.Join(Access(layer)); }
-            return access;
+            return Access(feed: owner.Feed, infinity: owner.Infinity, route: m_queryRoute);
         }
         // Historical package entries can outlive the view roster. A retired generated observation is not a new
         // unnamed host view, and the session it showed is gone. Recognize the minted path grammar, not arbitrary
@@ -50,16 +78,8 @@ public sealed partial class WorldScreenBinder {
 
         for (var position = 0; (position < gated.Length); position++) {
             var slot = gated[position];
-            var value = WorldViewAccess.Open;
 
-            if (slot.Feed is { } feed) {
-                value = value.Join(other: Access(feed: feed));
-            }
-            if (slot.Infinity is { } infinity) {
-                value = value.Join(other: Access(infinity: infinity));
-            }
-
-            access[slot.Index] = value;
+            access[slot.Index] = Access(feed: slot.Feed, infinity: slot.Infinity, route: slot.Route);
         }
     }
     private void RebuildAccessBindings(RenderGraphInstanceSet set) {
@@ -77,14 +97,14 @@ public sealed partial class WorldScreenBinder {
 
             if (SessionFeedOf(name: view) is { } feed) {
                 m_accessBase[index] = WorldViewAccess.Open;
-                (gated ??= []).Add(item: new AccessBinding(Feed: feed, Index: index, Infinity: null));
+                (gated ??= []).Add(item: new AccessBinding(Feed: feed, Index: index, Infinity: null, Route: new RouteCache()));
             } else if (m_infinityOutputs.TryGetValue(key: view, value: out var infinity)) {
                 m_accessBase[index] = WorldViewAccess.Open;
-                (gated ??= []).Add(item: new AccessBinding(Feed: null, Index: index, Infinity: infinity.Entry));
+                (gated ??= []).Add(item: new AccessBinding(Feed: null, Index: index, Infinity: infinity.Entry, Route: new RouteCache()));
             } else if ((NestedCameraLevel(name: view) is { } level) && m_nestedOwners.TryGetValue(key: level, value: out var owner)) {
                 m_accessBase[index] = WorldViewAccess.Open;
                 if ((owner.Feed is not null) || (owner.Infinity is not null)) {
-                    (gated ??= []).Add(item: new AccessBinding(Feed: owner.Feed, Index: index, Infinity: owner.Infinity));
+                    (gated ??= []).Add(item: new AccessBinding(Feed: owner.Feed, Index: index, Infinity: owner.Infinity, Route: new RouteCache()));
                 }
             } else {
                 m_accessBase[index] = (ObservationName(name: view) ? WorldViewAccess.Retired : WorldViewAccess.Open);
@@ -150,23 +170,55 @@ public sealed partial class WorldScreenBinder {
         path = ((split < 0) ? [] : path[(split + 1)..]);
         return split < 0 || !path.IsEmpty;
     }
-    private static WorldViewAccess Access(InfinityEntry infinity) => new(
-        Available: (infinity.Access.Level != WorldSessionAccess.None),
-        Epoch: infinity.Access.Epoch
-    );
-    private static WorldViewAccess Access(SessionFeed feed) {
-        var access = WorldViewAccess.Open;
+    // A view's access through a session feed's chain and an infinity layer: available only while every session and layer
+    // it is seen through may observe, at the latest epoch among them, under the route of every one's viewer span and the
+    // delivery span of every mirror it reads (an ended span while any may not observe). A view gated by neither is open.
+    private static WorldViewAccess Access(SessionFeed? feed, InfinityEntry? infinity, RouteCache route) {
+        var spans = route.Next;
+        var available = true;
+        var epoch = 0L;
 
-        for (var current = feed; current is not null; current = current.ParentFeed) {
-            access = access.Join(other: new WorldViewAccess(
-                Available: (current.Route.Access.Level != WorldSessionAccess.None),
-                Epoch: current.Route.Access.Epoch
-            ));
-            if (current.ParentInfinity is { } infinity) { access = access.Join(other: Access(infinity: infinity)); }
+        WalkRoute(available: ref available, epoch: ref epoch, feed: feed, infinity: infinity, spans: spans);
+        if (spans.Count == 0) {
+            return WorldViewAccess.Open;
         }
-        return access;
+
+        return new WorldViewAccess(
+            Available: available,
+            Epoch: epoch,
+            Route: (available ? route.Settle() : DeliveryLabel.Of(span: DeliverySpan.Ended))
+        );
     }
-    private static bool Available(SessionFeed feed) => Access(feed: feed).Available;
+    private static bool Available(SessionFeed feed) {
+        var available = true;
+        var epoch = 0L;
+
+        WalkRoute(available: ref available, epoch: ref epoch, feed: feed, infinity: null, spans: null);
+        return available;
+    }
+    // Visits every session and layer a view is seen through, from the leaf up.
+    private static void WalkRoute(SessionFeed? feed, InfinityEntry? infinity, List<DeliverySpan>? spans, ref bool available, ref long epoch) {
+        for (var current = feed; current is not null; current = current.ParentFeed) {
+            Visit(access: current.Route.Access, available: ref available, epoch: ref epoch, mirror: current.Mirror, spans: spans);
+            if (current.ParentInfinity is { } parent) {
+                Visit(access: parent.Access, available: ref available, epoch: ref epoch, mirror: parent.Hosted?.Mirror, spans: spans);
+            }
+        }
+        if (infinity is not null) {
+            Visit(access: infinity.Access, available: ref available, epoch: ref epoch, mirror: infinity.Hosted?.Mirror, spans: spans);
+        }
+    }
+    private static void Visit(WorldViewerAccess access, WorldSessionMirror? mirror, List<DeliverySpan>? spans, ref bool available, ref long epoch) {
+        available &= (access.Level != WorldSessionAccess.None);
+        epoch = Math.Max(val1: epoch, val2: access.Epoch);
+        if (spans is null) {
+            return;
+        }
+        spans.Add(item: access.Span);
+        if (mirror is not null) {
+            spans.Add(item: mirror.DeliverySpan);
+        }
+    }
     // What a viewer's own residency may render: the install side of its access.
     //
     // Invariant: a residency that renders a session's mirror for its viewer holds nothing delivered under wider access

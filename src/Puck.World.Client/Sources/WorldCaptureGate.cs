@@ -11,8 +11,8 @@ namespace Puck.World.Client;
 /// and parity, fills always; a windowed host fills while a capture is armed on the render graph's runtime. Whether or not
 /// the gate fills, an external feed with no image of its own (a first frame not yet delivered, a window minimized since
 /// its capture opened, a target that is gone) resolves to its fill too, so a live source that has nothing to show stands
-/// its fill in rather than holding every frame that shows it. An image it resolves outside a fill is tainted
-/// (<see cref="RenderGraphExternalOutput.Tainted"/>), and the runtime renders every tainted instance a capture reads again
+/// its fill in rather than holding every frame that shows it. An image it resolves outside a fill carries external taint
+/// (<see cref="Puck.Abstractions.Presentation.DeliveryLabel.External"/> on <see cref="RenderGraphExternalOutput.Label"/>), and the runtime renders every tainted instance a capture reads again
 /// on the capture frame, so an image a slower instance rendered from the source earlier never reaches the capture.
 /// Deterministic and presentation content is never filled. The gate is presentation state: simulation never reads it.
 /// </summary>

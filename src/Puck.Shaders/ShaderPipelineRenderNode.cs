@@ -8,17 +8,150 @@ using Puck.Maths;
 
 namespace Puck.Shaders;
 
-/// <summary>Describes a host-owned same-device image supplied to a pipeline.</summary>
-public readonly record struct ShaderPipelineExternalImage(
+/// <summary>The handles, extent, format, layout and publication unlocked from a
+/// <see cref="ShaderPipelineExternalImage"/> at a <see cref="DeliveryLatch"/>.</summary>
+/// <param name="ImageHandle">The device image handle.</param>
+/// <param name="ImageViewHandle">The sampled or storage image-view handle.</param>
+/// <param name="Width">The image width, in pixels.</param>
+/// <param name="Height">The image height, in pixels.</param>
+/// <param name="Format">The image pixel format.</param>
+/// <param name="Layout">The layout the image rests in between its owner's submissions.</param>
+/// <param name="Publication">The image publication acquired with its lease and fence, retained when a pass forwards
+/// the image without drawing.</param>
+public readonly record struct ShaderPipelineResolvedImage(
     nint ImageHandle,
     nint ImageViewHandle,
     uint Width,
     uint Height,
     GpuPixelFormat Format,
-    GpuImageLayout Layout = GpuImageLayout.ShaderReadOnly) {
-    /// <summary>Gets the actual image publication acquired with its lease and fence, retained when a pass forwards
-    /// this image without drawing.</summary>
-    public ReferenceRevision Publication { get; init; }
+    GpuImageLayout Layout = GpuImageLayout.ShaderReadOnly,
+    ReferenceRevision Publication = default
+);
+
+/// <summary>Describes a host-owned same-device image supplied to a pipeline, paired with its
+/// <see cref="DeliveryLabel"/> so its handles can be obtained only through <see cref="TryRead"/>.
+/// <see langword="default"/> is unclassified and is refused at every bind.</summary>
+public readonly struct ShaderPipelineExternalImage {
+    private readonly DeliveryContent<ShaderPipelineResolvedImage> m_content;
+    private readonly bool m_hasHandles;
+    private readonly bool m_hasLeasePublication;
+    private readonly ReferenceRevision m_leasePublication;
+
+    private ShaderPipelineExternalImage(
+        DeliveryContent<ShaderPipelineResolvedImage> content,
+        bool hasHandles,
+        ReferenceRevision leasePublication
+    ) {
+        m_content = content;
+        m_hasHandles = hasHandles;
+        m_hasLeasePublication = true;
+        m_leasePublication = leasePublication;
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="ShaderPipelineExternalImage"/> struct.</summary>
+    /// <param name="ImageHandle">The device image handle.</param>
+    /// <param name="ImageViewHandle">The image-view handle.</param>
+    /// <param name="Width">The image width, in pixels.</param>
+    /// <param name="Height">The image height, in pixels.</param>
+    /// <param name="Format">The image pixel format.</param>
+    /// <param name="Label">The image's provenance and external-content classification.</param>
+    /// <param name="Layout">The layout the image rests in between its owner's submissions.</param>
+    /// <param name="Publication">The image's publication identity, when known.</param>
+    public ShaderPipelineExternalImage(
+        nint ImageHandle,
+        nint ImageViewHandle,
+        uint Width,
+        uint Height,
+        GpuPixelFormat Format,
+        DeliveryLabel Label,
+        GpuImageLayout Layout = GpuImageLayout.ShaderReadOnly,
+        ReferenceRevision Publication = default
+    ) {
+        m_hasHandles = ((ImageHandle != 0) && (ImageViewHandle != 0));
+        m_content = new DeliveryContent<ShaderPipelineResolvedImage>(
+            label: Label,
+            value: new ShaderPipelineResolvedImage(
+                Format: Format,
+                Height: Height,
+                ImageHandle: ImageHandle,
+                ImageViewHandle: ImageViewHandle,
+                Layout: Layout,
+                Publication: Publication,
+                Width: Width
+            )
+        );
+    }
+
+    /// <summary>Gets the image's provenance and external-content classification.</summary>
+    public DeliveryLabel Label => m_content.Label;
+    /// <summary>Gets whether the image carries a classified label.</summary>
+    public bool IsClassified => m_content.IsClassified;
+    internal bool HasHandles => m_hasHandles;
+
+    internal ShaderPipelineExternalImage WithLeasePublication(ReferenceRevision publication) => new(
+        content: m_content,
+        hasHandles: m_hasHandles,
+        leasePublication: publication
+    );
+
+    /// <summary>Reads the image handles, extent, format, layout and publication when <see cref="Label"/> allows
+    /// <paramref name="latch"/>.</summary>
+    /// <param name="latch">The frame's latch.</param>
+    /// <param name="image">The resolved image when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when <see cref="Label"/> is classified and every span in it is current at
+    /// <paramref name="latch"/>.</returns>
+    public bool TryRead(in DeliveryLatch latch, out ShaderPipelineResolvedImage image) {
+        if (!m_content.TryRead(latch: in latch, value: out image)) {
+            return false;
+        }
+        if (m_hasLeasePublication) {
+            image = (image with { Publication = m_leasePublication });
+        }
+
+        return true;
+    }
+}
+
+/// <summary>The buffer and publication unlocked from a <see cref="ShaderPipelineExternalBuffer"/> at a
+/// <see cref="DeliveryLatch"/>.</summary>
+/// <param name="Buffer">The acquired buffer.</param>
+/// <param name="Publication">Its actual produced content identity, or unknown when the host cannot supply one.</param>
+public readonly record struct ShaderPipelineResolvedBuffer(IGpuBuffer Buffer, ReferenceRevision Publication = default);
+
+/// <summary>Describes a host-owned buffer supplied to a pipeline, paired with its <see cref="DeliveryLabel"/> so the
+/// buffer can be obtained only through <see cref="TryRead"/>. <see langword="default"/> is unclassified and is refused
+/// at every bind.</summary>
+public readonly struct ShaderPipelineExternalBuffer {
+    private readonly DeliveryContent<ShaderPipelineResolvedBuffer> m_content;
+
+    /// <summary>Initializes a new instance of the <see cref="ShaderPipelineExternalBuffer"/> struct.</summary>
+    /// <param name="buffer">The acquired buffer.</param>
+    /// <param name="label">The buffer's provenance and external-content classification.</param>
+    /// <param name="publication">Its actual produced content identity, or unknown when the host cannot supply one.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is <see langword="null"/>.</exception>
+    public ShaderPipelineExternalBuffer(IGpuBuffer buffer, DeliveryLabel label, ReferenceRevision publication = default) {
+        ArgumentNullException.ThrowIfNull(argument: buffer);
+        m_content = new DeliveryContent<ShaderPipelineResolvedBuffer>(
+            label: label,
+            value: new ShaderPipelineResolvedBuffer(
+                Buffer: buffer,
+                Publication: publication
+            )
+        );
+    }
+
+    /// <summary>Gets the buffer's provenance and external-content classification.</summary>
+    public DeliveryLabel Label => m_content.Label;
+    /// <summary>Gets whether the buffer carries a classified label.</summary>
+    public bool IsClassified => m_content.IsClassified;
+
+    /// <summary>Reads the buffer and publication when <see cref="Label"/> allows <paramref name="latch"/>.</summary>
+    /// <param name="latch">The frame's latch.</param>
+    /// <param name="resolved">The resolved buffer and publication when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when <see cref="Label"/> is classified and every span in it is current at
+    /// <paramref name="latch"/>.</returns>
+    public bool TryRead(in DeliveryLatch latch, out ShaderPipelineResolvedBuffer resolved) =>
+        m_content.TryRead(latch: in latch, value: out resolved);
 }
 /// <summary>
 /// The node that renders one render graph instance: an ordered multi-pass shader graph and its package passes. All passes are recorded before one queue submission;
@@ -80,8 +213,16 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     private int m_steps;
     private uint m_width;
 
-    private readonly Dictionary<string, ShaderPipelineExternalImage> m_externalImages = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, BoundExternalImage> m_externalImages = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, ExternalBuffer> m_externalBuffers = new(comparer: StringComparer.Ordinal);
+    private DeliveryLatch m_frameLatch;
+    private DeliveryLabel m_publishedLabel;
+    private RenderGraphStandIns? m_ownedStandIns;
+
+    internal RenderGraphStandIns? SharedStandIns { get; init; }
+    internal DeliveryLabel PublishedLabel => m_publishedLabel;
+
+    private readonly record struct BoundExternalImage(ShaderPipelineExternalImage Image);
     private RuntimeResource[] m_resources = [];
     private IReadOnlyDictionary<string, RuntimeResource> m_resourceLookup = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
     private RuntimePass[] m_passes = [];
@@ -1365,6 +1506,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         }
         ReleaseGraph();
         RetireBindingHolds();
+        m_ownedStandIns?.Release(wait: wait);
         ReleaseRegions();
         ReleaseRegionCopy();
     }
@@ -1428,6 +1570,92 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_ready = false;
         m_work.Invalidate();
     }
+    private ShaderPipelineExternalImage StandInFor(GpuPixelFormat format) =>
+        (SharedStandIns ?? (m_ownedStandIns ??= new RenderGraphStandIns())).ImageFor(
+            format: format,
+            gpu: m_device.Services
+        );
+    // Validates every bound external resource against the frame's latch before a frame or output re-presentation
+    // records: an external image whose span ended releases its hold and is replaced by its declared format's stand-in;
+    // an external buffer whose span ended releases its hold and withholds the render, since buffers have no stand-in.
+    private bool ValidateBindingsForRecord(in DeliveryLatch latch) {
+        var ready = true;
+
+        foreach (var resource in m_resources) {
+            var declaration = resource.Spec;
+
+            if (!declaration.IsExternal) {
+                continue;
+            }
+            if (declaration.Kind == ShaderPipelineResourceKind.Image) {
+                if (
+                    m_externalImages.TryGetValue(key: declaration.Name, value: out var bound) &&
+                    !bound.Image.TryRead(latch: in latch, image: out _)
+                ) {
+                    ClearLease(name: declaration.Name);
+                    ReleaseBindingHold(name: declaration.Name);
+                    m_externalImages[declaration.Name] = new BoundExternalImage(
+                        Image: StandInFor(format: ParseFormat(format: declaration.Format))
+                    );
+                }
+            } else if (
+                !declaration.IsHostBuffer &&
+                m_externalBuffers.TryGetValue(key: declaration.Name, value: out var boundBuffer) &&
+                !boundBuffer.Binding.TryRead(latch: in latch, resolved: out _)
+            ) {
+                ReleaseBindingHold(name: declaration.Name);
+                _ = m_externalBuffers.Remove(key: declaration.Name);
+                ready = false;
+            }
+        }
+
+        return ready;
+    }
+    private DeliveryLabel FrameBindingLabel() {
+        var label = DeliveryLabel.ForSource(source: DeliveryPublicSource.Host);
+
+        foreach (var resource in m_resources) {
+            var declaration = resource.Spec;
+
+            if (!declaration.IsExternal) {
+                continue;
+            }
+            if (declaration.Kind == ShaderPipelineResourceKind.Image) {
+                if (m_externalImages.TryGetValue(key: declaration.Name, value: out var bound)) {
+                    label = label.Union(other: bound.Image.Label);
+                }
+            } else if (
+                !declaration.IsHostBuffer &&
+                m_externalBuffers.TryGetValue(key: declaration.Name, value: out var boundBuffer)
+            ) {
+                label = label.Union(other: boundBuffer.Binding.Label);
+            }
+        }
+        if (Reads is { } reads) {
+            label = label.Union(other: reads.Label);
+        }
+
+        return label;
+    }
+    private bool TryResolveExternalImage(string name, out ShaderPipelineResolvedImage resolved, out DeliveryLabel label) {
+        if (
+            m_externalImages.TryGetValue(key: name, value: out var bound) &&
+            bound.Image.TryRead(latch: in m_frameLatch, image: out resolved)
+        ) {
+            label = bound.Image.Label;
+
+            return true;
+        }
+
+        resolved = default;
+        label = DeliveryLabel.Unclassified;
+
+        return false;
+    }
+    private GpuImageLayout ResolveExternalLayout(string name) =>
+        (TryResolveExternalImage(label: out _, name: name, resolved: out var resolved)
+            ? resolved.Layout
+            : throw new InvalidDataException(message: $"External image '{name}' is not readable at the frame's latch."));
     private IGpuBuffer ResolveBuffer(RuntimeResource resource, string name, int index) {
         if (resource.Buffers is not null) {
             return resource.Buffers[InstanceAt(
@@ -1435,21 +1663,23 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 resource: resource
             )];
         }
-        if (m_externalBuffers.TryGetValue(
-            key: name,
-            value: out var buffer
-        )) {
-            return buffer.Buffer;
+        if (
+            m_externalBuffers.TryGetValue(
+                key: name,
+                value: out var buffer
+            ) &&
+            buffer.Binding.TryRead(latch: in m_frameLatch, resolved: out var resolved)
+        ) {
+            return resolved.Buffer;
         }
         throw new InvalidDataException(message: $"External buffer '{name}' is not bound.");
     }
-    private ShaderPipelineExternalImage ResolveImage(RuntimeResource resource, string name, int index) {
+    private ShaderPipelineResolvedImage ResolveImage(RuntimeResource resource, string name, int index) =>
+        ResolveImage(index: index, label: out _, name: name, resource: resource);
+    private ShaderPipelineResolvedImage ResolveImage(RuntimeResource resource, string name, int index, out DeliveryLabel label) {
         if (
             resource.Spec.IsExternal &&
-            m_externalImages.TryGetValue(
-            key: name,
-            value: out var external
-        )
+            TryResolveExternalImage(label: out label, name: name, resolved: out var external)
         ) {
             return external;
         }
@@ -1459,7 +1689,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 resource: resource
             )];
 
-            return new ShaderPipelineExternalImage(
+            label = DeliveryLabel.ForSource(source: DeliveryPublicSource.Host);
+
+            return new ShaderPipelineResolvedImage(
                 image.ImageHandle,
                 image.ImageViewHandle,
                 image.Width,
@@ -1511,9 +1743,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 continue;
             }
             if (declaration.Kind == ShaderPipelineResourceKind.Image) {
-                if (!m_externalImages.TryGetValue(
-                    key: declaration.Name,
-                    value: out var image
+                if (!TryResolveExternalImage(
+                    label: out _,
+                    name: declaration.Name,
+                    resolved: out var image
                 )) {
                     throw new InvalidDataException(message: $"External image '{declaration.Name}' has not been bound.");
                 }
@@ -1524,13 +1757,16 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 if (!Surface.IsImageFormat(format: image.Format)) {
                     throw new InvalidDataException(message: $"External image '{declaration.Name}' has format {image.Format}, which no pass samples.");
                 }
-            } else if (!m_externalBuffers.TryGetValue(
-                key: declaration.Name,
-                value: out var buffer
-            )) {
+            } else if (
+                !m_externalBuffers.TryGetValue(
+                    key: declaration.Name,
+                    value: out var buffer
+                ) ||
+                !buffer.Binding.TryRead(latch: in m_frameLatch, resolved: out var resolvedBuffer)
+            ) {
                 throw new InvalidDataException(message: $"External buffer '{declaration.Name}' has not been bound.");
-            } else if (buffer.Buffer.SizeBytes < declaration.SizeBytes.GetValueOrDefault()) {
-                throw new InvalidDataException(message: $"External buffer '{declaration.Name}' is {buffer.Buffer.SizeBytes} bytes; expected at least {declaration.SizeBytes}.");
+            } else if (resolvedBuffer.Buffer.SizeBytes < declaration.SizeBytes.GetValueOrDefault()) {
+                throw new InvalidDataException(message: $"External buffer '{declaration.Name}' is {resolvedBuffer.Buffer.SizeBytes} bytes; expected at least {declaration.SizeBytes}.");
             }
         }
     }
@@ -1585,16 +1821,22 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// <summary>Binds a host-owned buffer for a named external resource other than a host buffer port, which binds a
     /// region the node owns (<see cref="BindRegion"/>). The node never disposes it.</summary>
     /// <param name="name">The external buffer resource.</param>
-    /// <param name="buffer">The acquired buffer.</param>
-    /// <param name="publication">Its actual produced content identity, or unknown when the host cannot supply one.
-    /// Only known read-only imports may retain a pass's earlier result.</param>
-    public void BindBuffer(string name, IGpuBuffer buffer, ReferenceRevision publication = default) {
+    /// <param name="buffer">The classified external buffer and its optional content publication.</param>
+    /// <exception cref="ObjectDisposedException">The node is disposed.</exception>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is empty or names no declared external buffer, or
+    /// <paramref name="buffer"/> is unclassified.</exception>
+    public void BindBuffer(string name, ShaderPipelineExternalBuffer buffer) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentNullException.ThrowIfNull(buffer);
+        if (!buffer.IsClassified) {
+            throw new ArgumentException(
+                message: $"External buffer '{name}' has an unclassified delivery label.",
+                paramName: nameof(buffer)
+            );
+        }
         if (ValidateExternalBinding(
             kind: ShaderPipelineResourceKind.Buffer,
             name: name
@@ -1605,29 +1847,46 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             );
         }
         ReleaseBindingHold(name: name);
-        var generation = ((m_externalBuffers.TryGetValue(key: name, value: out var previous) &&
-            ReferenceEquals(objA: previous.Buffer, objB: buffer) && (previous.Publication == publication))
-            ? previous.Generation : ++m_contentGeneration);
-
-        m_externalBuffers[name] = new ExternalBuffer(Buffer: buffer, Generation: generation, Publication: publication);
+        _ = m_externalBuffers.TryGetValue(key: name, value: out var previous);
+        m_externalBuffers[name] = new ExternalBuffer(
+            Binding: buffer,
+            Generation: previous.Generation,
+            LastBuffer: previous.LastBuffer,
+            LastPublication: previous.LastPublication
+        );
     }
-    /// <summary>Binds a host-owned image for a named external resource. The node never disposes it. The image must have
-    /// the declared format and may have any extent: a pass samples it whole.</summary>
+    /// <summary>Binds a host-owned image for a named external resource. The node never disposes it. The image must be
+    /// classified, have non-zero handles, and may have any extent: a pass samples it whole.</summary>
+    /// <param name="name">The declared external image resource.</param>
+    /// <param name="image">The classified external image.</param>
+    /// <exception cref="ObjectDisposedException">The node is disposed.</exception>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is empty or names no declared external image, or
+    /// <paramref name="image"/> is unclassified or has a zero handle.</exception>
     public void BindImage(string name, ShaderPipelineExternalImage image) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentOutOfRangeException.ThrowIfZero(image.ImageHandle);
-        ArgumentOutOfRangeException.ThrowIfZero(image.ImageViewHandle);
+        if (!image.IsClassified) {
+            throw new ArgumentException(
+                message: $"External image '{name}' has an unclassified delivery label.",
+                paramName: nameof(image)
+            );
+        }
+        if (!image.HasHandles) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(image),
+                message: "External image handles must be non-zero."
+            );
+        }
         _ = ValidateExternalBinding(
             kind: ShaderPipelineResourceKind.Image,
             name: name
         );
         ClearLease(name: name);
         ReleaseBindingHold(name: name);
-        m_externalImages[name] = image;
+        m_externalImages[name] = new BoundExternalImage(Image: image);
     }
     /// <summary>Releases every graph, recorder and GPU object the node holds, waiting for its submissions, and refuses a
     /// capture still armed on it.</summary>
@@ -1662,13 +1921,18 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         // A caller that rendered the previous frame inside a batch settles it after the flush; one that did not is settled
         // here, before anything reads the history that frame committed.
         SettleHandOver();
+        var latch = (context.Latch.IsLatched ? context.Latch : DeliveryLatch.Capture());
+        var latched = (context.Latch.IsLatched ? context : (context with { Latch = latch }));
+
+        m_frameLatch = latch;
         try {
-            return Produce(context: in context);
+            return Produce(context: in latched);
         } catch {
             AbandonRecording();
             AbortCadenceFrame();
             throw;
         } finally {
+            m_frameLatch = default;
             ReleaseUnheldLeases();
         }
     }
@@ -1676,6 +1940,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     private Surface Produce(in FrameContext context) {
         if (m_disposed) {
             return default;
+        }
+        if (m_publishedLabel.IsClassified && !m_publishedLabel.Allows(latch: in m_frameLatch)) {
+            Unpublish();
+            m_publicationLost = true;
         }
         // Publishes the newest finished submission's counts, paused or not, so a held frame still completes them.
         PollReadbacks();
@@ -1743,12 +2011,17 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             m_outputRefreshRequested &&
             (m_frame != 0)
         ) {
-            PresentSelectedOutput();
-            CaptureIfPending();
+            if (ValidateBindingsForRecord(latch: in m_frameLatch)) {
+                PresentSelectedOutput();
+                CaptureIfPending();
+            }
             return m_lastSurface;
         }
         // A node shown at its own extent presents no frame rendered at an extent it was not asked for.
         if (ShownAtItsExtent && RendersAnotherExtent) {
+            return m_lastSurface;
+        }
+        if (!ValidateBindingsForRecord(latch: in m_frameLatch)) {
             return m_lastSurface;
         }
         if (stepping) {
@@ -1910,6 +2183,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         NoteRenderCompletion(fence: slot.Fence!, slot: slotIndex);
         PublishBuffers(slot: slotIndex);
         Publish(surface: Output(slot: slotIndex));
+        m_publishedLabel = FrameBindingLabel();
         m_publishedStateTick = Frame.StateTick;
         m_publishedAtRequestedExtent = !RendersAnotherExtent;
         m_outputRefreshRequested = false;
@@ -1965,7 +2239,9 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     // Publishes no image and no buffer, the state a reset and a withdrawal both leave the publication in.
     private void Unpublish() {
         ClearBufferPublications();
+        m_publishedBinding = null;
         Publish(surface: default);
+        m_publishedLabel = default;
         m_publishedStateTick = null;
         m_publishedFrame = null;
     }

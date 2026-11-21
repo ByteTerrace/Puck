@@ -1,4 +1,5 @@
 using Puck.Abstractions.Collections;
+using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.Shaders;
@@ -44,7 +45,7 @@ public sealed partial class SdfWorldPasses {
     };
 
     // The identity of the other instances' images a part samples this frame, or null when one carries no publication.
-    private ulong? ReadSignatureOf(Entry entry, SdfWorldView view, SdfFrame frame, SdfWorldTables tables, RenderGraphExternalReads? reads, string part) {
+    private ulong? ReadSignatureOf(Entry entry, SdfWorldView view, SdfFrame frame, SdfWorldTables tables, RenderGraphExternalReads? reads, in DeliveryLatch latch, string part) {
         var sampled = ReadsOf(part: part);
 
         if (sampled == ExternalReads.None) { return 0UL; }
@@ -52,7 +53,7 @@ public sealed partial class SdfWorldPasses {
 
         if (images.Frame != m_frame) {
             images.Frame = m_frame;
-            Observe(images: images, reads: reads);
+            Observe(images: images, latch: in latch, reads: reads);
         }
         Span<bool> screens = stackalloc bool[SdfWorldTables.MaxScreenSurfaces];
         Span<bool> sky = stackalloc bool[SdfWorldTables.MaxScreenSurfaces];
@@ -85,27 +86,27 @@ public sealed partial class SdfWorldPasses {
     }
     // Reads the image each read of the instance binds this frame, as its recorders bind it, without taking its lease: a
     // pass that stands samples nothing.
-    private void Observe(ReadImages images, RenderGraphExternalReads? reads) {
+    private void Observe(ReadImages images, RenderGraphExternalReads? reads, in DeliveryLatch latch) {
         var count = (reads?.Count ?? 0);
 
         if (images.Revisions.Length < count) {
             Array.Resize(array: ref images.Publications, newSize: count);
-            Array.Resize(array: ref images.Tainted, newSize: count);
+            Array.Resize(array: ref images.Labels, newSize: count);
             Array.Resize(array: ref images.Unknown, newSize: count);
             Array.Resize(array: ref images.Revisions, newSize: count);
         }
         for (var read = 0; (read < count); read++) {
             var input = reads![read];
-            var bound = (input.Lease.ImageViewHandle != 0);
-            var publication = (bound ? input.Publication : default);
-            var tainted = (bound && input.Tainted);
+            var bound = (input.TryRead(latch: in latch, read: out var resolved) && (resolved.ImageViewHandle != 0));
+            var publication = (bound ? resolved.Publication : default);
+            var label = (bound ? input.Label : default);
             var unknown = (bound && !publication.IsPublished());
 
-            if (unknown || (publication != images.Publications[read]) || (tainted != images.Tainted[read])) {
+            if (unknown || (publication != images.Publications[read]) || (label != images.Labels[read])) {
                 images.Revisions[read] = Interlocked.Increment(location: ref m_readRevision);
             }
             images.Publications[read] = publication;
-            images.Tainted[read] = tainted;
+            images.Labels[read] = label;
             images.Unknown[read] = unknown;
         }
     }
@@ -113,7 +114,7 @@ public sealed partial class SdfWorldPasses {
     // The image each read of an instance bound at its last observation (Observe), by its position in the instance's reads.
     private sealed class ReadImages {
         public ReferenceRevision[] Publications = [];
-        public bool[] Tainted = [];
+        public DeliveryLabel[] Labels = [];
         public bool[] Unknown = [];
         public long[] Revisions = [];
         public long Frame = -1;

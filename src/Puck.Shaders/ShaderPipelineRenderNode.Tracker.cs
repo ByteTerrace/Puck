@@ -260,7 +260,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // anything its host did between frames.
     private ShaderPipelineAccessState HostPrior(RuntimeResource resource) =>
         ((resource.Spec.Kind == ShaderPipelineResourceKind.Image)
-            ? ShaderPipelineAccessState.Handover(layout: m_externalImages[resource.Spec.Name].Layout)
+            ? ShaderPipelineAccessState.Handover(layout: ResolveExternalLayout(name: resource.Spec.Name))
             : ShaderPipelineAccessState.Host(layout: GpuImageLayout.Undefined));
     // The state this frame's instance is in once the frame's passes have run: an override, or the plan's frame end.
     private ShaderPipelineAccessState FrameEnd(RuntimeResource resource, int instance) =>
@@ -307,7 +307,7 @@ public sealed partial class ShaderPipelineRenderNode {
         var outputLayout = m_outputLayout;
 
         m_publishedLayout = (published.Spec.IsExternal
-            ? m_externalImages[published.Spec.Name].Layout
+            ? ResolveExternalLayout(name: published.Spec.Name)
             : outputLayout);
         // An external output that stands for nothing publishes the preview the node encodes it into, an image of its own.
         m_publishedBinding = (((selected.Alias.Target is not null) && published.Spec.IsExternal)
@@ -359,7 +359,7 @@ public sealed partial class ShaderPipelineRenderNode {
             ) {
                 continue;
             }
-            var host = ShaderPipelineAccessState.Host(layout: m_externalImages[resource.Spec.Name].Layout);
+            var host = ShaderPipelineAccessState.Host(layout: ResolveExternalLayout(name: resource.Spec.Name));
             var barrier = Present(
                 instance: 0,
                 resource: resource,
