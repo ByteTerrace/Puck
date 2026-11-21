@@ -28,7 +28,8 @@ public sealed partial class SdfWorldTables {
     /// <see cref="SdfSurfaceTextLayout.MaxGlyphs"/> glyphs are supplied.</exception>
     /// <exception cref="ArgumentException"><paramref name="glyphWords"/> is not a whole number of glyphs.</exception>
     public void SetSurfaceText(int slot, float distanceRange, ReadOnlySpan<uint> glyphWords) {
-        RequireSurfaceTextSlot(slot: slot);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: slot);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(other: SdfSurfaceTextLayout.MaxTexts, value: slot);
 
         var glyphs = (glyphWords.Length / SdfSurfaceTextLayout.WordsPerGlyph);
 
@@ -58,7 +59,8 @@ public sealed partial class SdfWorldTables {
     /// <param name="slot">The surface text slot (0..<see cref="SdfSurfaceTextLayout.MaxTexts"/>-1).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is out of range.</exception>
     public void ClearSurfaceText(int slot) {
-        RequireSurfaceTextSlot(slot: slot);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: slot);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(other: SdfSurfaceTextLayout.MaxTexts, value: slot);
         ClearDecal(descriptor: (MaxScreenSurfaces + slot));
     }
 
@@ -106,11 +108,7 @@ public sealed partial class SdfWorldTables {
         );
         m_decalRevision++;
     }
-    private static void RequireSurfaceTextSlot(int slot) {
-        if ((slot < 0) || (slot >= SdfSurfaceTextLayout.MaxTexts)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(slot), message: $"A surface text slot must be 0..{(SdfSurfaceTextLayout.MaxTexts - 1)}.");
-        }
-    }
+
     /// <summary>Uploads the single font atlas the <see cref="SdfShapeType.Glyph"/> primitive samples as a
     /// distance-level field, replacing any previously set atlas. Static: unlike a screen source (an external per-frame
     /// image-view handle), this copies the CPU pixels into a device image once and holds the sampleable view for the

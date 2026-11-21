@@ -52,12 +52,13 @@ on its front like any plaque.
    button's, in the bench's brass colour. A player with a lit keyboard is shown
    the one thing to do. A player without one has the binding bar, as at every
    table in the world.
-2. Seated, the first slug rises out of the bed and its word appears on the
-   panel. The word's first letter lights blue on the keyboard. The first press
-   is the lesson: the letter on the panel lifts, the key flashes white, the next
-   key lights, and the keys after it glow dimmer, so the hand is led one letter
-   ahead of the eye.
-3. A wrong key flashes every letter red and shakes the word.
+2. Seated, the camera leans in over the bed, the first slug rises out of it and
+   its word is on the slug's face. The word's first letter lights blue on the
+   keyboard. The first press is the lesson: the letter on the slug fades into
+   the brass and the next one lifts, the key flashes white, the next key lights,
+   and the keys after it glow dimmer, so the hand is led one letter ahead of
+   the eye.
+3. A wrong key flashes every letter red and shakes the word on its slug.
 4. Page one cannot be failed quickly: one short word at a time, ten seconds to
    set it. By the time two channels run, the lock on a word has been met a dozen
    times.
@@ -71,46 +72,50 @@ on its front like any plaque.
 |---|---|---|
 | Typed text as input | Every character is a Text event at the time it was typed, judged by one rule against the word's letters. A replay reproduces every keystroke. | `typingPlay` in `worlds/standard/typing.puck` |
 | Keyboard lamps | The `keyLights` section lights the next letter, the two after it, each waiting word's first letter and the stand-up key, from state cells and the active binding page, and flashes on a hit, a miss and a lost slug. | `worlds/debug/press.puck` |
-| Per-glyph text | The lane's word is marked-up HUD text: a `caret` effect dims the typed letters and lifts the next, and the rule swaps it for `shake` for a moment after a miss. | `press.puck`, drawn by the HUD writer through `TextGlyphChannel` |
+| Text on a part | Each slug carries its lane's word as a text paint on its top face: lettering laid out from the lane's state cells each frame, lit as the brass is, riding the slug down the bed, with no bake when the word changes. The proof pinned by the case is another, set from the run's page, score, best and slugs left. | `press.puck` (`paints[].text`), drawn through `WorldSurfaceTexts` |
+| Per-glyph text | A slug's word is marked up: a `caret` effect fades the typed letters into the brass and lifts the next, and the rule swaps it for `shake` for a moment after a miss. | `press.puck`, each glyph's channel from `TextGlyphChannel` |
+| Seated framing | Sitting eases the seat's camera onto a view of the bed and standing eases it back: a `views.framings` row that reads the play's `typingSeat` cell and names a camera program the place authors. | `press.puck` (`views.framings`, `views.programs`) |
 | Music direction | The score moves to the `press` segment when a run starts and `press-run` at the second page. Every voice joins on a bar line; a second and a third are layers held by cues the rules emit while the run of set words lasts, and a set word, a lost slug and a page turn are stingers. | `worlds/debug/score.music.json`, the rules' cues |
 | Frame capture | A `highlights` row keeps the frame half a second after a new best score, through the capture sink. | `press.puck` |
 | Speech | The run's last line, `OUT OF SORTS`, is spoken once by the HUD's text speech. | `press.puck` |
 | State-driven motion | The slugs are parts of the bench's creation. Two drivers on each read the lane's state cells: one lifts it out of the bed, one carries it down the slope, eased so it settles into each notch. | `press.puck` |
 
-The engine learned five things to make this possible, each general: the
+The engine learned seven things to make this possible, each general: the
 `keyLights` and `highlights` document sections with the loop that writes lamp
-arrays, HUD text markup, a `caret` text effect, and a `scalars` builtin that
-turns an authored string into the numbers a Text event carries. None of them
-knows the press exists.
+arrays, HUD text markup, a `caret` text effect, a `scalars` builtin that turns
+an authored string into the numbers a Text event carries, text paints
+(lettering on a creation's surface bound to state), and seat framings (a camera
+program a seat eases to while a state cell says so). None of them knows the
+press exists.
 
 ## What makes it Puck
 
 - **It is a place.** The game is not a mode or a menu entry. It has a spot in
   the lobby, a spawn point, a region other rules and the benchmark route can
   read, and a body that stands in front of it.
-- **It is documents.** The rules, the words, the bench, the panel, the lamps
-  and the sound are `.puck` and three small JSON assets. The reusable half, a
+- **It is documents.** The rules, the words, the bench, the lettering, the
+  seated view, the lamps and the sound are `.puck` and three small JSON assets. The reusable half, a
   typing game with no place or look, is in the standard package for any world
   to import with its own bench and word list.
 - **It runs where the world runs.** The judgement is simulation state, so it
   is the same on a remote authority as in one process, and a headless scenario
   plays a run by submitting text.
-- **The keyboard is part of the world.** Lamps, panel and sound are three
+- **The keyboard is part of the world.** Lamps, slugs and sound are three
   readings of the same state cells, so they cannot disagree, and another seat's
-  view of the bench shows the same slugs.
+  view of the bench shows the same words on the same slugs.
 
 ## What it does not do yet
 
-- The bench is a first shape: a cabinet, a tilted bed, four rails and three
-  brass slugs. It reads as a bench with a plaque, and it is below the visual
-  bar the rest of the lobby is held to.
-
-- The camera stays the chase camera. A seated framing of the bed, as the
-  board tables have, needs the bench to be a tabletop or a camera state of its
-  own.
-- The words ride the panel, not the slugs. Text on a moving creation part is
-  baked relief today, so a slug cannot carry a word that changes.
+- The bench reads as a typesetter's frame: a drawered cabinet, an iron bed
+  with steel rails, an upper case of type and a proof pinned beside it. It is
+  still built from boxes: its edges are hard, the case's type is one letter a
+  compartment, and nothing on it is worn.
 - A lost slug and a set one leave the bed the same way. The stick should fill
   with the set words.
-- One seat plays. The standard's play takes a seat number; a second bench or a
-  shared one needs the lanes keyed by seat.
+- One seat plays, and the seated view follows the play's one `typingSeat` cell,
+  so a second local seat would be framed with the first. The standard's play
+  takes a seat number; a second bench or a shared one needs the lanes and the
+  seat cell keyed by body, which the framing's `when` and the lamps' rows
+  already read (`$body`).
+- A shaken word smears for the third of a second it shakes: the view's
+  temporal reconstruction averages the moving glyphs.

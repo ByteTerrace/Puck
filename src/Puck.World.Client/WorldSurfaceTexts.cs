@@ -131,11 +131,12 @@ public sealed class WorldSurfaceTexts {
             fit = MathF.Min(x: 1f, y: MathF.Min(x: ((2f * half.X) / layout.Width), y: ((2f * half.Y) / layout.Height)));
         }
 
-        var width = (layout.Width * fit);
-        var left = (authored.Alignment switch {
+        // The layout's x origin is its alignment's anchor: a left-aligned line starts at it, a centred line is centred
+        // on it and a right-aligned line ends at it (TextLayout), so the anchor goes to the box's matching edge or middle.
+        var anchor = (authored.Alignment switch {
             TextAlignment.Left => -half.X,
-            TextAlignment.Right => (half.X - width),
-            _ => (-0.5f * width),
+            TextAlignment.Right => half.X,
+            _ => 0f,
         });
         // The first baseline stands at zero and the block runs from the ascender above it down its whole height.
         var top = (atlas.Metrics.Ascender * authored.EmHeight);
@@ -150,7 +151,7 @@ public sealed class WorldSurfaceTexts {
             moves |= effect.IsMotion;
         }
 
-        return new Laid(Fit: fit, Half: half, Layout: layout, Moves: moves, Origin: new Vector2(x: left, y: lift), Spans: spans);
+        return new Laid(Fit: fit, Half: half, Layout: layout, Moves: moves, Origin: new Vector2(x: anchor, y: lift), Spans: spans);
     }
     // Packs a laid-out text's glyph quads (SdfSurfaceTextLayout): each glyph's atlas cell about its laid-out centre,
     // then its effect's channel at the current content tick.
@@ -210,7 +211,7 @@ public sealed class WorldSurfaceTexts {
         public string? Text;
     }
     // A text laid out in its paint's box: the layout in the paint frame's units before the fit, the box's half-extents,
-    // the fitted block's origin (its first baseline's left end) about the box's centre, each glyph's ordinal within its
-    // effect's span, and whether any effect moves.
+    // where the fitted layout's origin (its alignment's anchor on the first baseline) stands about the box's centre,
+    // each glyph's ordinal within its effect's span, and whether any effect moves.
     private readonly record struct Laid(TextLayoutResult Layout, Vector2 Half, Vector2 Origin, float Fit, int[] Spans, bool Moves);
 }

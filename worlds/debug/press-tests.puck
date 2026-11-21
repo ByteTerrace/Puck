@@ -88,3 +88,25 @@ test "slugs left alone are lost and the run ends out of sorts" {
     typing.best == 0
   }
 }
+// A seat takes back its own edits and restores them: `world.undo` and `world.redo` answer the seat's own principal, and
+// the authority admits the step as it admitted the edits (the grant above).
+test "a seat undoes and redoes its own edits" {
+  when {
+    ticks 10
+    seat1: world.state.cell.set typingWord 0 3
+    ticks 2
+    seat1: world.state.cell.set typingWord 0 5
+    ticks 2
+    seat1: world.state.cell.set typingWord 0 7
+    ticks 2
+    seat1: world.undo
+    ticks 2
+    seat1: world.undo
+    ticks 2
+    seat1: world.redo
+    ticks 4
+  }
+  expect {
+    typingWord["0"] == 5
+  }
+}
