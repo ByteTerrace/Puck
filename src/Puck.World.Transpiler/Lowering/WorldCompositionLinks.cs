@@ -390,12 +390,12 @@ public static class WorldCompositionLinks {
         world[name] = rows;
         return rows;
     }
-    private static JsonObject? FindNamed(JsonArray? rows, string member, string name) => rows?.OfType<JsonObject>().FirstOrDefault(predicate: row => string.Equals(a: StringValue(node: row[member]), b: name, comparisonType: StringComparison.Ordinal));
+    internal static JsonObject? FindNamed(JsonArray? rows, string member, string name) => rows?.OfType<JsonObject>().FirstOrDefault(predicate: row => string.Equals(a: StringValue(node: row[member]), b: name, comparisonType: StringComparison.Ordinal));
     private static JsonNode? Copy(JsonNode? node, WorldCompositionLink link, DocumentEvaluationBudget? budget) => ((budget is null)
         ? node?.DeepClone()
         : budget.Copy(value: node, span: link.Span)
     );
-    private static string? StringValue(JsonNode? node) => (((node is JsonValue value) && value.TryGetValue<string>(value: out var text)) ? text : null);
+    internal static string? StringValue(JsonNode? node) => (((node is JsonValue value) && value.TryGetValue<string>(value: out var text)) ? text : null);
     private static bool HasValidSectionShapes(JsonObject world, out string reason) {
         foreach (var sectionName in new[] { "references", "destinations", "adjacencies", "prototypes", "spawnPoints" }) {
             if (world[sectionName] is not null and not JsonArray) {

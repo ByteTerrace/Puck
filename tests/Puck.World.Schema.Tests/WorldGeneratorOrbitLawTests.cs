@@ -29,12 +29,11 @@ public sealed class WorldGeneratorOrbitLawTests {
         GeneratorEngine.TryFire(
             generator: generator,
             targetKind: CellKind.Int,
-            seedState: GeneratorEngine.ComputeSeedState(
+            seed: GeneratorEngine.ComputeDrawSeed(
                 documentSeed: WorldSeed,
                 instanceIdentity: Instance,
                 site: Site
             ),
-            stream: GeneratorEngine.ComputeStreamId(site: Site),
             cursor: cursor,
             masks: masks,
             result: out result,

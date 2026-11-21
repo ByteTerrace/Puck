@@ -142,9 +142,8 @@ public static partial class GeneratorEngine {
                     cursor: cursor,
                     generator: generator,
                     reason: out reason,
-                    seedState: seed.State,
-                    skip: skip,
-                    stream: seed.Stream
+                    seed: seed,
+                    skip: skip
                 )) {
                     stream = default;
 

@@ -44,7 +44,7 @@ public static partial class WorldDocumentEmitter {
                 Refuse(message: $"spawn '{name}' cannot inspect a spawnPoints row whose id is not text.", node: block, scope: scope);
                 return true;
             }
-            if (FindNamed(member: "id", name: name, rows: spawnRows) is not null) {
+            if (WorldCompositionLinks.FindNamed(member: "id", name: name, rows: spawnRows) is not null) {
                 Refuse(message: $"spawn '{name}' is declared more than once.", node: block, scope: scope);
                 return true;
             }
@@ -82,7 +82,7 @@ public static partial class WorldDocumentEmitter {
             scope: scope
         );
 
-        if ((FindNamed(member: "id", name: prototypeId, rows: prototypes) is not null) || (FindNamed(member: "id", name: name, rows: placements) is not null)) {
+        if ((WorldCompositionLinks.FindNamed(member: "id", name: prototypeId, rows: prototypes) is not null) || (WorldCompositionLinks.FindNamed(member: "id", name: name, rows: placements) is not null)) {
             Refuse(message: $"ground '{name}' collides with an existing generated prototype or placement.", node: block, scope: scope);
             return true;
         }
@@ -269,13 +269,11 @@ public static partial class WorldDocumentEmitter {
             return;
         }
         foreach (var ground in grounds.OfType<JsonObject>()) {
-            if (StringValue(node: ground["name"]) is { } name) {
+            if (WorldCompositionLinks.StringValue(node: ground["name"]) is { } name) {
                 ground["name"] = GeneratedName.Qualify(head: alias, name: name);
             }
         }
     }
 
-    private static JsonObject? FindNamed(JsonArray rows, string member, string name) => rows.OfType<JsonObject>().FirstOrDefault(predicate: row => string.Equals(a: StringValue(node: row[member]), b: name, comparisonType: StringComparison.Ordinal));
-    private static bool HasMalformedName(JsonArray rows, string member) => rows.OfType<JsonObject>().Any(predicate: row => ((row[member] is not null) && (StringValue(node: row[member]) is null)));
-    private static string? StringValue(JsonNode? node) => (((node is JsonValue value) && value.TryGetValue<string>(value: out var text)) ? text : null);
+    private static bool HasMalformedName(JsonArray rows, string member) => rows.OfType<JsonObject>().Any(predicate: row => ((row[member] is not null) && (WorldCompositionLinks.StringValue(node: row[member]) is null)));
 }

@@ -150,26 +150,23 @@ public static partial class GeneratorEngine {
         // this declared source) rebuilds once. m_extendedValid alone gates matching, since a default Pcg32Extended
         // (an unallocated table) is never itself a valid cache entry.
         private Pcg32Extended m_extendedGenerator;
-        private ulong m_extendedSeedState;
+        private DrawSeed m_extendedSeed;
         private long m_extendedSkip;
-        private ulong m_extendedStream;
         private bool m_extendedValid;
 
         // The cache proves its own position: the generator's base state must equal the state a fresh generator
         // seeks to for the site's recorded cursor. A pass that consumed fewer or more draws than the cursor moved (a
         // refused walk, a pass that drew nothing) simply stops matching and rebuilds, so no separate cursor
         // bookkeeping can drift from the generator it describes.
-        public bool MatchesExtended(ulong seedState, ulong stream, long skip, ulong expectedBaseState) =>
+        public bool MatchesExtended(DrawSeed seed, long skip, ulong expectedBaseState) =>
             (m_extendedValid &&
-            (m_extendedSeedState == seedState) &&
-            (m_extendedStream == stream) &&
+            (m_extendedSeed == seed) &&
             (m_extendedSkip == skip) &&
             (m_extendedGenerator.State == expectedBaseState));
-        public void SetExtended(ulong seedState, ulong stream, long skip, Pcg32Extended generator) {
+        public void SetExtended(DrawSeed seed, long skip, Pcg32Extended generator) {
             m_extendedGenerator = generator;
             m_extendedValid = true;
-            m_extendedSeedState = seedState;
-            m_extendedStream = stream;
+            m_extendedSeed = seed;
             m_extendedSkip = skip;
         }
     }
@@ -425,6 +422,7 @@ public static partial class GeneratorEngine {
         var contexts = generator.Contexts!;
         var compiled = Compiled(generator: generator);
         var tokens = new List<string>(capacity: generator.Bound);
+        var length = 0;
         var context = generator.Start!.Value;
         var samples = 0L;
         var working = new ClosedBitset256[contexts.Count];
@@ -493,7 +491,14 @@ public static partial class GeneratorEngine {
                 drawn = true;
             }
 
-            tokens.Add(item: alternatives[picked].Token);
+            var token = alternatives[picked].Token;
+            length += token.Length + (tokens.Count == 0 ? 0 : 1);
+            if (length > StateCapacity.MaxTextValueLength) {
+                result = default;
+                reason = $"emission length {length} exceeds the {StateCapacity.MaxTextValueLength}-unit text bound";
+                return false;
+            }
+            tokens.Add(item: token);
             context = alternatives[picked].Next;
         }
 
@@ -515,18 +520,17 @@ public static partial class GeneratorEngine {
     // Leaves the site's cached extended generator positioned at (skip + cursor): reused in place when its base state
     // already equals the state a fresh seek lands on, rebuilt (one table allocation) otherwise — a reload, an undo, a
     // checkpoint restore, a refused draw that left the generator mid-sequence, or another site sharing the source.
-    private static bool TryPositionExtended(CompiledSource compiled, StateGenerator generator, ulong seedState, ulong stream, long skip, long cursor, out string reason) {
+    private static bool TryPositionExtended(CompiledSource compiled, StateGenerator generator, DrawSeed seed, long skip, long cursor, out string reason) {
         var advances = (((ulong)skip) + ((ulong)cursor));
         var expected = Pcg32XshRr.Create(
-            state: seedState,
-            stream: stream
+            state: seed.State,
+            stream: seed.Stream
         );
 
         expected.Advance(count: advances);
 
         if (compiled.MatchesExtended(
-            seedState: seedState,
-            stream: stream,
+            seed: seed,
             skip: skip,
             expectedBaseState: expected.State
         )) {
@@ -538,26 +542,24 @@ public static partial class GeneratorEngine {
         if (!TryBuildExtendedTable(
             generator: generator,
             reason: out reason,
-            seedState: seedState,
+            seed: seed,
             skip: skip,
-            stream: stream,
             table: out var table
         )) {
             return false;
         }
 
         var fresh = Pcg32Extended.CreateWithTable(
-            state: seedState,
-            stream: stream,
+            state: seed.State,
+            stream: seed.Stream,
             table: table
         );
 
         fresh.Advance(count: advances);
         compiled.SetExtended(
             generator: fresh,
-            seedState: seedState,
-            skip: skip,
-            stream: stream
+            seed: seed,
+            skip: skip
         );
 
         return true;
@@ -565,11 +567,11 @@ public static partial class GeneratorEngine {
     // Named rather than Enum.IsDefined, which reads a type cache the runtime holds only weakly and allocates it again
     // after every collection, on a check every firing makes.
     private static bool IsDefinedMode(GeneratorMode mode) => (mode is (GeneratorMode.WithReplacement or GeneratorMode.WithoutReplacement or GeneratorMode.RestartOnExhaustion));
-    private static bool TryRunBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out long advances, out string reason, long skip = 0L, PrivateDrawSample? secret = null) {
+    private static bool TryRunBatch(StateGenerator generator, CellKind targetKind, DrawSeed seed, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out long advances, out string reason, long skip = 0L, PrivateDrawSample? secret = null) {
         masksAfter = null;
         advances = 0;
         if (sampleCount < 0) { reason = $"sample count {sampleCount} is negative"; return false; }
-        if (!DrawStream.TryOpen(generator, targetKind, new DrawSeed(State: seedState, Stream: stream), cursor, masks, out var draws, out reason, skip: skip, secret: secret)) { return false; }
+        if (!DrawStream.TryOpen(generator, targetKind, seed, cursor, masks, out var draws, out reason, skip: skip, secret: secret)) { return false; }
         for (var sample = 0; (sample < sampleCount); sample++) {
             if (!draws.TryNext(reason: out reason, value: out var value)) { return false; }
             if (writeValues) { values[sample] = value; }
@@ -766,8 +768,7 @@ public static partial class GeneratorEngine {
     /// final mask while the apply side later emits the same pass directly into the live field.</summary>
     /// <param name="generator">The resolved source; a text source is refused.</param>
     /// <param name="targetKind">The cells' declared kind.</param>
-    /// <param name="seedState">The seed-ladder fold.</param>
-    /// <param name="stream">The site's stream id.</param>
+    /// <param name="seed">The site’s seed and stream id.</param>
     /// <param name="cursor">The site's current raw-word position.</param>
     /// <param name="masks">The site's current drawn masks.</param>
     /// <param name="secret">Optional authority key for an integer raw-stream batch.</param>
@@ -776,11 +777,10 @@ public static partial class GeneratorEngine {
     /// <param name="masksAfter">The drawn masks after the pass, or <see langword="null"/> when the source never exhausts.</param>
     /// <param name="reason">Why the pass was refused, on failure.</param>
     /// <returns><see langword="true"/> when all samples were consumed.</returns>
-    public static bool TryAdvanceBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, int sampleCount, out IReadOnlyList<ClosedBitset256>? masksAfter, out long advances, out string reason, PrivateDrawSample? secret = null) => TryRunBatch(
+    public static bool TryAdvanceBatch(StateGenerator generator, CellKind targetKind, DrawSeed seed, long cursor, IReadOnlyList<ClosedBitset256>? masks, int sampleCount, out IReadOnlyList<ClosedBitset256>? masksAfter, out long advances, out string reason, PrivateDrawSample? secret = null) => TryRunBatch(
         generator: generator,
         targetKind: targetKind,
-        seedState: seedState,
-        stream: stream,
+        seed: seed,
         cursor: cursor,
         masks: masks,
         values: Span<long>.Empty,
@@ -797,14 +797,13 @@ public static partial class GeneratorEngine {
     /// in order (see <see cref="GeneratorExtended"/>'s remarks). O(k), run only when a rebuild is needed — the
     /// per-tick cache (<see cref="CompiledSource"/>) never calls this on a cursor that matches its last build.</summary>
     /// <param name="generator">The source; its <see cref="StateGenerator.Extended"/> facet must be set.</param>
-    /// <param name="seedState">The seed-ladder fold (see <see cref="ComputeSeedState"/>).</param>
-    /// <param name="stream">The site's stream id (see <see cref="ComputeStreamId"/>).</param>
+    /// <param name="seed">The site’s seed and stream id.</param>
     /// <param name="skip">The site's authored seek — the script governs the draws at <c>skip, skip + 1, …</c>, not
     /// unconditionally at <c>0, 1, …</c>.</param>
     /// <param name="table">The compiled table, on success.</param>
     /// <param name="reason">Why the facet was refused, on failure.</param>
     /// <returns><see langword="true"/> when the facet compiled to a table.</returns>
-    public static bool TryBuildExtendedTable(StateGenerator generator, ulong seedState, ulong stream, long skip, out uint[] table, out string reason) {
+    public static bool TryBuildExtendedTable(StateGenerator generator, DrawSeed seed, long skip, out uint[] table, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         table = [];
@@ -834,8 +833,8 @@ public static partial class GeneratorEngine {
         // Words past the script are the self-seeded table's own.
         var selfSeeded = Pcg32Extended.Create(
             k: k,
-            state: seedState,
-            stream: stream
+            state: seed.State,
+            stream: seed.Stream
         );
 
         table = selfSeeded.Extension.ToArray();
@@ -844,8 +843,8 @@ public static partial class GeneratorEngine {
         // the index each of the first script.Count draws selects, and the base's own raw contribution to that draw,
         // are exactly what the real generator will see.
         var probe = Pcg32XshRr.Create(
-            state: seedState,
-            stream: stream
+            state: seed.State,
+            stream: seed.Stream
         );
 
         probe.Advance(count: unchecked((ulong)skip));
@@ -1305,8 +1304,7 @@ public static partial class GeneratorEngine {
     /// <paramref name="cursor"/>.</summary>
     /// <param name="generator">The resolved source.</param>
     /// <param name="targetKind">The site's declared cell kind; a mismatch refuses by name before any draw runs.</param>
-    /// <param name="seedState">The seed-ladder fold (see <see cref="ComputeSeedState"/>).</param>
-    /// <param name="stream">The site's stream id (see <see cref="ComputeStreamId"/>).</param>
+    /// <param name="seed">The site’s seed and stream id.</param>
     /// <param name="cursor">The site's current raw-word position.</param>
     /// <param name="masks">The site's current per-context drawn masks (may be empty).</param>
     /// <param name="result">The emission, on success.</param>
@@ -1315,7 +1313,7 @@ public static partial class GeneratorEngine {
     /// <param name="secret">Optional authority secret; admitted only for integer streamDraw sources.</param>
     /// <param name="skip">The site's authored seek (see <see cref="Draw.Skip"/>); a rebuild advances by
     /// <c>(skip + cursor)</c> raw advances rather than <c>cursor</c> alone. Never applied to a secret draw.</param>
-    public static bool TryFire(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason, PrivateDrawSample? secret = null, long skip = 0L) {
+    public static bool TryFire(StateGenerator generator, CellKind targetKind, DrawSeed seed, long cursor, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason, PrivateDrawSample? secret = null, long skip = 0L) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         result = default;
@@ -1332,7 +1330,7 @@ public static partial class GeneratorEngine {
         }
 
         if (!WritesText(source: generator.Source)) {
-            if (!DrawStream.TryOpen(generator, targetKind, new DrawSeed(State: seedState, Stream: stream), cursor, masks, out var draws, out reason, secret, skip) ||
+            if (!DrawStream.TryOpen(generator, targetKind, seed, cursor, masks, out var draws, out reason, secret, skip) ||
                 !draws.TryNext(reason: out reason, value: out var value)) { return false; }
             result = new FireResult(null, value, draws.Advances, draws.MasksAfter);
             return true;
@@ -1345,9 +1343,8 @@ public static partial class GeneratorEngine {
                 cursor: cursor,
                 generator: generator,
                 reason: out reason,
-                seedState: seedState,
-                skip: skip,
-                stream: stream
+                seed: seed,
+                skip: skip
             )) {
                 return false;
             }
@@ -1363,8 +1360,8 @@ public static partial class GeneratorEngine {
         }
 
         var rng = Pcg32XshRr.Create(
-            state: seedState,
-            stream: stream
+            state: seed.State,
+            stream: seed.Stream
         );
 
         // The seek: one jump to the site's recorded position. The cursor already counts raw words.
@@ -1385,8 +1382,7 @@ public static partial class GeneratorEngine {
     /// weighted source's mask threaded from cell to cell, so one pass over a field is one run of the site's stream.</summary>
     /// <param name="generator">The resolved source; a text source is refused.</param>
     /// <param name="targetKind">The cells' declared kind; a mismatch refuses by name before any draw runs.</param>
-    /// <param name="seedState">The seed-ladder fold (see <see cref="ComputeSeedState"/>).</param>
-    /// <param name="stream">The site's stream id (see <see cref="ComputeStreamId"/>).</param>
+    /// <param name="seed">The site’s seed and stream id.</param>
     /// <param name="cursor">The site's current raw-word position.</param>
     /// <param name="masks">The site's current drawn masks (may be empty).</param>
     /// <param name="secret">Optional authority key for an integer raw-stream batch.</param>
@@ -1397,11 +1393,10 @@ public static partial class GeneratorEngine {
     /// <param name="skip">The site's authored seek (see <see cref="Draw.Skip"/>); a rebuild advances by
     /// <c>(skip + cursor)</c> raw advances rather than <c>cursor</c> alone.</param>
     /// <returns><see langword="true"/> when every cell was filled.</returns>
-    public static bool TryFireBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, out IReadOnlyList<ClosedBitset256>? masksAfter, out long advances, out string reason, long skip = 0L, PrivateDrawSample? secret = null) => TryRunBatch(
+    public static bool TryFireBatch(StateGenerator generator, CellKind targetKind, DrawSeed seed, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, out IReadOnlyList<ClosedBitset256>? masksAfter, out long advances, out string reason, long skip = 0L, PrivateDrawSample? secret = null) => TryRunBatch(
         generator: generator,
         targetKind: targetKind,
-        seedState: seedState,
-        stream: stream,
+        seed: seed,
         cursor: cursor,
         masks: masks,
         values: values,

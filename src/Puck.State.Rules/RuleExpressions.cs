@@ -249,15 +249,11 @@ public static partial class RuleExpressions {
                     var minimum = stack[--top];
                     var input = stack[--top];
 
-                    if (minimum > maximum) {
+                    if (!ExpressionArithmetic.TryClamp(input, minimum, maximum, out var clamped)) {
                         return Outcome.Faulted(why: ExpressionFault.Domain);
                     }
 
-                    stack[top++] = Math.Clamp(
-                        max: maximum,
-                        min: minimum,
-                        value: input
-                    );
+                    stack[top++] = clamped;
 
                     continue;
                 }

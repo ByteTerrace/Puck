@@ -290,96 +290,12 @@ public static partial class RuleCompiler {
             space: space
         );
     }
-    private static (StateRowDeclaration Row, int RowOrdinal, CellKey Key, CompiledCellRef? KeyFrom, string Spelling) ResolveVectorDestination(string intoSpelling, RuleCompileContext context, string ruleName, string where) {
-        intoSpelling = intoSpelling.Trim();
+    private static CompiledVector ResolveVectorDestination(string intoSpelling, RuleCompileContext context, string ruleName, string where) =>
+        VectorOperand.CellOf(intoSpelling) is { } cell
+            ? ResolveVectorCellOperand(cell.Name, cell.Key, context, ruleName, where, expectedSpace: null)
+            : throw new RuleException(detail: $"{where} requires a vector cell destination, got '{intoSpelling}'",
+                refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName);
 
-        var bracketIndex = intoSpelling.IndexOf(value: '[');
-        string? key;
-        string rowName;
-
-        if (
-            (bracketIndex > 0) &&
-            intoSpelling.EndsWith(value: ']')
-        ) {
-            key = intoSpelling[(bracketIndex + 1)..^1].Trim();
-            rowName = intoSpelling[..bracketIndex].Trim();
-        } else {
-            key = null;
-            rowName = intoSpelling;
-        }
-
-        var row = (context.FindRow(name: rowName)
-            ?? throw new RuleException(
-            detail: $"{where} addresses unknown row '{rowName}'",
-            refusal: RuleRefusal.StateRowUnknown,
-            ruleName: ruleName
-        ));
-
-        if (row.Kind != CellKind.Vector) {
-            throw new RuleException(
-                detail: $"{where} destination row '{rowName}' is kind={StateSpelling.Kind(kind: row.Kind)}, not Vector",
-                refusal: RuleRefusal.VectorOperandNotVector,
-                ruleName: ruleName
-            );
-        }
-
-        var rowOrdinal = ResolveRowOrdinal(
-            context: context,
-            name: rowName
-        );
-
-        if (row.IsSlot) {
-            if (
-                (key is not null) &&
-                !string.Equals(
-                a: key,
-                b: StateRow.SlotKey.Value,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                throw new RuleException(
-                    detail: $"Slot row '{rowName}' cannot be indexed with key '{key}' in {where}",
-                    refusal: RuleRefusal.StateCellUnaddressable,
-                    ruleName: ruleName
-                );
-            }
-
-            return (row, rowOrdinal, InternKey(
-                context: context,
-                name: StateRow.SlotKey.Value
-            ), null, rowName);
-        }
-        if (key is null) {
-            throw new RuleException(
-                detail: $"Keyed vector destination '{rowName}' requires a cell key in {where}",
-                refusal: RuleRefusal.StateCellUnaddressable,
-                ruleName: ruleName
-            );
-        }
-        if (TryResolveDynamicKey(
-            cell: out var dynamicKey,
-            context: context,
-            reference: StateChannelRef.OfNullable(spelling: key),
-            keyFieldLabel: "key",
-            ruleName: ruleName,
-            verb: where
-        )) {
-            return (row, rowOrdinal, default, dynamicKey, $"{rowName}[{key}]");
-        }
-        if (!CellName.TryParse(
-            candidate: key,
-            name: out var parsed,
-            reason: out var reason
-        )) {
-            throw new RuleException(
-                detail: $"Invalid destination cell key '{key}' on row '{rowName}' in {where}: {reason}",
-                refusal: RuleRefusal.StateCellUnaddressable,
-                ruleName: ruleName
-            );
-        }
-
-        return (row, rowOrdinal, context.Catalog.Keys.Intern(name: parsed), null, $"{rowName}[{key}]");
-    }
     private static CompiledVector ResolveVectorLiteralOperand(string literal, RuleCompileContext context, string ruleName, string where, StateSpace? expectedSpace) {
         var space = (expectedSpace
             ?? (context.FindSpace(name: null)
@@ -438,12 +354,7 @@ public static partial class RuleCompiler {
             ruleName: ruleName,
             where: "mean into"
         );
-        var intoSpace = (context.FindSpace(name: into.Row.Space)
-            ?? throw new RuleException(
-            detail: $"Row '{into.Row.Name}' names undeclared vector space '{into.Row.Space}'",
-            refusal: RuleRefusal.VectorSpaceMismatch,
-            ruleName: ruleName
-        ));
+        var intoSpace = into.Space;
 
         if (
             !string.Equals(
@@ -461,7 +372,7 @@ public static partial class RuleCompiler {
         }
 
         return new VectorMeanEffect(
-            describe: $"mean {mean.From} -> {into.Spelling}",
+            describe: $"mean {mean.From} -> {into.Describe}",
             dimensions: space.Identity.Dimensions,
             fromCapacity: fromRow.Capacity.GetValueOrDefault(),
             fromRowOrdinal: ResolveRowOrdinal(
@@ -494,12 +405,7 @@ public static partial class RuleCompiler {
             ruleName: ruleName,
             where: "mix into"
         );
-        var space = (context.FindSpace(name: into.Row.Space)
-            ?? throw new RuleException(
-            detail: $"Row '{into.Row.Name}' names undeclared vector space '{into.Row.Space}'",
-            refusal: RuleRefusal.VectorSpaceMismatch,
-            ruleName: ruleName
-        ));
+        var space = into.Space;
         var terms = new MixTermFact[mix.Terms.Count];
 
         for (var index = 0; (index < mix.Terms.Count); index++) {
@@ -526,7 +432,7 @@ public static partial class RuleCompiler {
         }
 
         return new VectorMixEffect(
-            describe: $"mix {into.Spelling}",
+            describe: $"mix {into.Describe}",
             dimensions: space.Identity.Dimensions,
             key: into.Key,
             keyFrom: into.KeyFrom,
