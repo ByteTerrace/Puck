@@ -165,9 +165,78 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
         );
     }
 
+    // A first deployment whose candidate fails to start: recovery restores its protected roots, and the run's detail names
+    // the start failure whether recovery completes or stays pending behind a failed candidate stop.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("the worker refused to stop")]
+    public async Task EveryPreCommitRecoveryOutcomeNamesItsCause(string? stopFailure) {
+        const string Cause = "Deployment failed: The value of parameter spotRestorePolicy is invalid.";
+        var owner = Guid.NewGuid();
+        var groups = new WorldReleaseGroupStore(
+            new FakeObjectBlobStore(),
+            Target,
+            owner
+        );
+        var target = Manifest(image: 'b');
+        var group = Required(result: await groups.CreateAsync(
+            "primary",
+            null,
+            Token
+        ));
+
+        group = Required(result: await groups.BeginAsync(
+            group,
+            Guid.NewGuid(),
+            target.Identity,
+            Token
+        ));
+        group = Required(result: await groups.AdvanceAsync(
+            group,
+            group.Record with {
+                PendingPhase = WorldReleaseOperationPhase.Drain,
+                Admission = WorldReleaseAdmissionState.Closed,
+                RecoveryRoots = new Dictionary<string, string> { [$"{owner:D}/row"] = "protected-root" },
+                Revision = (group.Record.Revision + 1),
+            },
+            Token
+        ));
+        group = Required(result: await groups.AdvanceAsync(
+            group,
+            group.Record with { PendingPhase = WorldReleaseOperationPhase.Activate, Revision = (group.Record.Revision + 1) },
+            Token
+        ));
+        var runtime = new RecordingRuntime(owner: owner) { StartFailure = Cause, StopFailure = stopFailure };
+
+        var result = await new WorldReleaseCoordinator(groups: groups).ResumeAsync(
+            group,
+            target,
+            runtime,
+            Token
+        );
+
+        Assert.False(condition: result.Completed);
+        Assert.Equal(
+            (stopFailure is null),
+            result.SourceRecovered
+        );
+        Assert.Contains(
+            actualString: result.Detail,
+            expectedSubstring: Cause
+        );
+        if (stopFailure is not null) {
+            Assert.Contains(
+                actualString: result.Detail,
+                expectedSubstring: stopFailure
+            );
+        }
+    }
+
     private sealed class RecordingRuntime(Guid owner) : IWorldReleaseRuntime {
         public int Calls { get; private set; }
         public int RecoveryCalls { get; private set; }
+        public string? StartFailure { get; init; }
+        public string? StopFailure { get; init; }
 
         private Task<WorldReleaseRuntimeResult> Success() {
             Calls++;
@@ -184,11 +253,14 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
                 "unexpected drain"
             ));
         }
-        public Task<WorldReleaseRuntimePublication> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
+        public Task<WorldReleaseRuntimePublicationResult> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
             Calls++;
-            return Task.FromResult(result: WorldReleaseRuntimePublication.Opened);
+            return Task.FromResult(result: new WorldReleaseRuntimePublicationResult(
+                WorldReleaseRuntimePublication.Opened,
+                string.Empty
+            ));
         }
-        public Task<WorldReleaseRuntimePublication> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => PublishCandidateAsync(
+        public Task<WorldReleaseRuntimePublicationResult> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => PublishCandidateAsync(
             cancellationToken: cancellationToken,
             operation: operation
         );
@@ -209,9 +281,27 @@ public sealed class WorldReleaseCoordinatorSafetyLawTests {
             RecoveryCalls++;
             return Success();
         }
-        public Task<WorldReleaseRuntimeResult> StartCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => Success();
+        public Task<WorldReleaseRuntimeResult> StartCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
+            if (StartFailure is { } failure) {
+                Calls++;
+                return Task.FromResult(result: new WorldReleaseRuntimeResult(
+                    false,
+                    failure
+                ));
+            }
+            return Success();
+        }
         public Task<WorldReleaseRuntimeResult> StartRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => Success();
-        public Task<WorldReleaseRuntimeResult> StopCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => Success();
+        public Task<WorldReleaseRuntimeResult> StopCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
+            if (StopFailure is { } failure) {
+                Calls++;
+                return Task.FromResult(result: new WorldReleaseRuntimeResult(
+                    false,
+                    failure
+                ));
+            }
+            return Success();
+        }
         public Task<WorldReleaseRuntimeResult> VerifyCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => Success();
     }
     private sealed class LostCommitResponseStore : IObjectBlobStore {

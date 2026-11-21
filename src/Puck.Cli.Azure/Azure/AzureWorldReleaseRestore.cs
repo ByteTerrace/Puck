@@ -35,7 +35,11 @@ public static partial class AzureCommand {
                 if (workers.Length != 1) { throw new InvalidOperationException(message: "capture requires exactly one authoritative worker"); }
                 var response = await WorldGuestJsonAsync(
                     group: context.ResourceGroup,
-                    script: $"curl --fail --silent --show-error --max-time {source.ShutdownSeconds} -X POST http://127.0.0.1:{source.HealthPort}/release/fixture/{requestId:D}",
+                    script: WorldControlRequest(
+                        deployment: source,
+                        method: "POST",
+                        path: $"/release/fixture/{requestId:D}"
+                    ),
                     worker: Text(value: workers[0]!["name"])
                 ).ConfigureAwait(continueOnCapturedContext: false);
                 var point = (await context.Fixtures.LoadAsync(

@@ -31,7 +31,11 @@ public static partial class AzureCommand {
             }
             var exported = await WorldGuestJsonAsync(
                 group: context.ResourceGroup,
-                script: $"curl --fail --silent --show-error --max-time {source.ShutdownSeconds} -X POST http://127.0.0.1:{source.HealthPort}/release/fixture/{requestId:D}",
+                script: WorldControlRequest(
+                    deployment: source,
+                    method: "POST",
+                    path: $"/release/fixture/{requestId:D}"
+                ),
                 worker: worker
             ).ConfigureAwait(continueOnCapturedContext: false);
 

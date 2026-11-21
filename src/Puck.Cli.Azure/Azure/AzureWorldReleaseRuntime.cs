@@ -33,22 +33,23 @@ public static partial class AzureCommand {
                 (process["running"]?.GetValue<bool>() != true) ||
                 (process["image"]?.GetValue<string>() != deployment.Image)
             ) {
-                throw new InvalidDataException(message: "the running container does not match the retained exact image");
+                throw new InvalidDataException(message: $"the container on {worker} does not match the retained exact image {deployment.Image}: {process.ToJsonString()}");
             }
-            var status = (await RequestAsync(
+            var response = await RequestAsync(
                 worker,
                 deployment,
                 "GET",
                 "/release/status"
-            ).ConfigureAwait(continueOnCapturedContext: false)).Deserialize<WorldReleaseWorkerStatus>(options: Json);
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            var status = response.Deserialize<WorldReleaseWorkerStatus>(options: Json);
 
             if (
                 (status?.Release != deployment.Manifest.Identity) ||
                 (status.Group != scaleSet)
-            ) { throw new InvalidDataException(message: "the running worker does not match the retained release identity"); }
+            ) { throw new InvalidDataException(message: $"the worker on {worker} does not match the retained release {deployment.Manifest.Identity} in {scaleSet}: {response.ToJsonString()}"); }
             await WorldGuestAsync(
                 group: resourceGroup,
-                script: $"curl --fail --silent --show-error --max-time 30 http://127.0.0.1:{deployment.HealthPort}/private-healthz",
+                script: $"curl --fail-with-body --silent --show-error --max-time 30 http://127.0.0.1:{deployment.HealthPort}/private-healthz",
                 worker: worker
             ).ConfigureAwait(continueOnCapturedContext: false);
         }
@@ -154,7 +155,7 @@ public static partial class AzureCommand {
                 World: SafeName.Parse(candidate: pieces[1])
             );
         }
-        private async Task<WorldReleaseRuntimePublication> PublishAsync(WorldReleaseGroupRecord operation, AzureWorldReleaseDeployment deployment, WorldReleaseOperationPhase phase, CancellationToken cancellationToken) {
+        private async Task<WorldReleaseRuntimePublicationResult> PublishAsync(WorldReleaseGroupRecord operation, AzureWorldReleaseDeployment deployment, WorldReleaseOperationPhase phase, CancellationToken cancellationToken) {
             await RequireAsync(
                 cancellationToken: cancellationToken,
                 expected: operation,
@@ -174,14 +175,24 @@ public static partial class AzureCommand {
             var published = response.Deserialize<WorldReleaseWorkerStatus>(options: Json);
 
             return (((published is { AdmissionOpen: true }) && (published.Group == scaleSet) && (published.Release == deployment.Manifest.Identity) && (published.OperationId == operation.PendingOperationId))
-                ? WorldReleaseRuntimePublication.Opened
-                : WorldReleaseRuntimePublication.Refused
+                ? new(
+                    WorldReleaseRuntimePublication.Opened,
+                    "the worker opened admission"
+                )
+                : new(
+                    WorldReleaseRuntimePublication.Refused,
+                    $"the worker's status after publication is not open admission for release {deployment.Manifest.Identity} and operation {operation.PendingOperationId:D} in {scaleSet}: {response.ToJsonString()}"
+                )
             );
         }
         private Task<JsonNode> RequestAsync(string worker, AzureWorldReleaseDeployment deployment, string method, string path, string guard = "") =>
             WorldGuestJsonAsync(
                 group: resourceGroup,
-                script: (guard + $"curl --fail --silent --show-error --max-time {deployment.ShutdownSeconds} -X {method} http://127.0.0.1:{deployment.HealthPort}{path}"),
+                script: (guard + WorldControlRequest(
+                    deployment: deployment,
+                    method: method,
+                    path: path
+                )),
                 worker: worker
             );
         private async Task RequireAsync(WorldReleaseGroupRecord expected, WorldReleaseOperationPhase[] phases, CancellationToken cancellationToken) {
@@ -335,14 +346,14 @@ public static partial class AzureCommand {
                 Succeeded: true
             );
         }
-        public Task<WorldReleaseRuntimePublication> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) =>
+        public Task<WorldReleaseRuntimePublicationResult> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) =>
             PublishAsync(
                 cancellationToken: cancellationToken,
                 deployment: target,
                 operation: operation,
                 phase: WorldReleaseOperationPhase.Commit
             );
-        public Task<WorldReleaseRuntimePublication> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) =>
+        public Task<WorldReleaseRuntimePublicationResult> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) =>
             PublishAsync(
                 operation,
                 (source ?? throw new InvalidOperationException(message: "bootstrap has no source worker")),
@@ -544,49 +555,31 @@ public static partial class AzureCommand {
         }
     }
 
+    // The worker's loopback release-control request, bounded by the deployment's shutdown allowance. --fail-with-body keeps
+    // the worker's refusal reason, the 409 body WorldSiloReleaseControl writes, in a failed request's output.
+    private static string WorldControlRequest(AzureWorldReleaseDeployment deployment, string method, string path) =>
+        $"curl --fail-with-body --silent --show-error --max-time {deployment.ShutdownSeconds} -X {method} http://127.0.0.1:{deployment.HealthPort}{path}";
+    // A failed request prints the captured response (curl --fail-with-body keeps the worker's refusal reason) to stderr,
+    // which the run-command output carries back. The substitution runs under `||`, which suspends errexit inside it, so
+    // every step of a request script exits on its own failure: the lock and guard carry `|| exit`, and curl runs last.
     private static async Task<JsonNode> WorldGuestJsonAsync(string group, string script, string worker) {
         var marker = (("puck-json-" + Guid.NewGuid().ToString(format: "N")) + ":");
-        var path = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: (("puck-release-request-" + Guid.NewGuid().ToString(format: "N")) + ".sh")
+        var output = await WorldGuestOutputAsync(
+            contents: $"set -eu\nstatus=0\npayload=$(\n{script}\n) || status=$?\nif [ \"$status\" -ne 0 ]; then printf '%s\\n' \"$payload\" >&2; exit \"$status\"; fi\nprintf '%s' '{marker}'\nprintf '%s' \"$payload\" | base64 -w0\nprintf '\\n'\n",
+            group: group,
+            worker: worker
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        var start = output.IndexOf(
+            comparisonType: StringComparison.Ordinal,
+            value: marker
         );
 
-        try {
-            File.WriteAllText(
-                contents: $"set -eu\npayload=$(\n{script}\n)\nprintf '%s' '{marker}'\nprintf '%s' \"$payload\" | base64 -w0\nprintf '\\n'\n",
-                path: path
-            );
-            var response = await AzJsonAsync(
-                "vm",
-                "run-command",
-                "invoke",
-                "-g",
-                group,
-                "-n",
-                worker,
-                "--command-id",
-                "RunShellScript",
-                "--scripts",
-                ("@" + path),
-                "-o",
-                "json"
-            ).ConfigureAwait(continueOnCapturedContext: false);
-            var message = string.Join(
-                separator: "\n",
-                values: response["value"]!.AsArray().Select(selector: row => Text(value: row!["message"]))
-            );
-            var start = message.IndexOf(
-                comparisonType: StringComparison.Ordinal,
-                value: marker
-            );
+        if (start < 0) { throw new IOException(message: $"world worker {worker} did not return a complete release response: {output.Trim()}"); }
+        var encoded = output[(start + marker.Length)..].Split(
+            '\n',
+            2
+        )[0].Trim();
 
-            if (start < 0) { throw new IOException(message: "world worker did not return a complete release response"); }
-            var encoded = message[(start + marker.Length)..].Split(
-                '\n',
-                2
-            )[0].Trim();
-
-            return (JsonNode.Parse(Encoding.UTF8.GetString(bytes: Convert.FromBase64String(s: encoded))) ?? throw new InvalidDataException(message: "world worker returned an empty release response"));
-        } finally { File.Delete(path: path); }
+        return (JsonNode.Parse(Encoding.UTF8.GetString(bytes: Convert.FromBase64String(s: encoded))) ?? throw new InvalidDataException(message: $"world worker {worker} returned an empty release response"));
     }
 }
